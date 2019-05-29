@@ -1,4 +1,16 @@
-:- module(types, []).
+:- module(types, [
+              is_uri/1,
+              is_id/1,
+              is_prefixed_uri/1,
+              is_uri_or_id/1,
+              is_object/1,
+              is_object_or_id/1,
+              is_graph_identifier/1,
+              is_prefix_db/1,
+              is_collection_identifier/1,
+              is_empty_graph_name/1,
+              is_graph/1
+          ]).
 
 /** <module> Types
 
@@ -81,7 +93,7 @@ is_object_or_id(X) :-
 
 
 /** 
- * is_number_compat(X) is det.
+ * is_number_compat(X) is semidet.
  * 
  * Compatibility with number type. Needs to not supply bindings as it 
  * is not a constraint but a test of current groundness.
@@ -92,4 +104,75 @@ is_number_compat(X) :-
     (   var(X)
     ->  true
     ;   number(X)).
+
+
+/* 
+ * is_graph_identifier(X) is semidet.
+ *
+ * Type of a graph identifier object
+ */
+is_graph_identifier(GID) :-
+    atom(GID).
+is_graph_identifier(GIDs) :-
+    maplist(atom,GIDs).
+
+error:has_type(graph_identifier, X) :-
+    is_graph_identifier(X).
+
+/* 
+ * is_prefix_db(X) is semidet.
+ * 
+ * Tests to see if we have a valid prefix database. 
+ */
+is_prefix_db([]).
+is_prefix_db([A=B|Tail]) :-
+    atom(A),
+    atom(B),
+    is_prefix_db(Tail).
+
+error:has_type(prefix_db, X) :-
+    is_prefix_db(X).
+
+
+/* 
+ * is_collection_identifier(X) is semidet.
+ * 
+ * Type of a collection identifier
+ */ 
+is_collection_identifier(X) :-
+    atom(X).
+
+error:has_type(collection_identifier, X) :-
+    is_collection_identifier(X).
+
+/**
+ * is_empty_graph_name(+Graph_Id:graph_identifier) is semidet.
+ * 
+ * Sometimes we want to designate that there is no graph
+ * we can do this with none or false. JSON converts to @(false) 
+ * for a null object.
+ **/
+is_empty_graph_name(Graph_Id):-
+    member(Graph_Id, [false, @(false), none]),
+    !.
+
+error:has_type(rdf_object, Rdf_Object):-
+    is_rdf_object(Rdf_Object).
+
+/* 
+ * is_graph(Graph) is semidet.
+ * 
+ * 
+ */
+is_graph(graph(Prefix_DB,Collection,Instance,Inference,Schema,Error_Instance,Error_Schema)) :-
+    is_prefix_db(Prefix_DB),
+    is_graph_identifier(Collection),
+    is_graph_identifier(Instance),
+    is_graph_identifier(Inference),
+    is_graph_identifier(Schema),
+    is_graph_identifier(Error_Instance),
+    is_graph_identifier(Error_Schema).
+
+error:has_type(graph, X) :-
+    is_graph(X).
 
