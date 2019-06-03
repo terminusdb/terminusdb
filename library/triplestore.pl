@@ -236,19 +236,19 @@ hdt_transform_journals(Collection_ID,Graph_Name) :-
           ).
 
 /** 
- * xrdf_pos_trans(?X,?Y,?Z,+G) is nondet.
+ * xrdf_pos_trans(+C,+G,?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores positive updates for transactions.
  * This is thread local - it only functions in a transaction
  */
-:- thread_local xrdf_pos_trans/4.
+:- thread_local xrdf_pos_trans/5.
 
 /** 
- * xrdf_neg_trans(?X,?Y,?Z,+G) is nondet.
+ * xrdf_neg_trans(+C,+G,?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores negative updates for transactions.
  */
-:- thread_local xrdf_neg_trans/4.
+:- thread_local xrdf_neg_trans/5.
 
 /** 
  * xrdf_pos(?X,?Y,?Z,+G) is nondet.
@@ -555,3 +555,13 @@ import_graph(File, Collection_ID, Graph_Id) :-
         ntriples_to_hdt(File,NewFile)
     ),
     sync_from_journals(Collection_ID,Graph_Id).
+
+/** 
+ * rollback(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * 
+ * Rollback the current transaction state.
+ */
+rollback(Collection_Id,GName) :-
+    % graph_id_name(Graph_Id, GName),
+    retractall(xrdf_pos_trans(X,Y,Z,Collection_Id,GName)),
+    retractall(xrdf_neg_trans(X,Y,Z,Collection_Id,GName)). 

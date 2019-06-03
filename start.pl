@@ -8,6 +8,14 @@
 :- prolog_load_context(directory, Dir),
    asserta(user:file_search_path(terminus_home, Dir)).
 
+add_library_path :-
+    user:file_search_path(terminus_home, Dir),
+    writeq(Dir),
+    atom_concat(Dir,'/library',Library),
+    asserta(user:file_search_path(library, Library)).
+
+:- add_library_path.
+   
 initialise_server_settings :-
     file_search_path(terminus_home, BasePath),    
     !,
