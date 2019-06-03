@@ -21,8 +21,8 @@ initialise_server_settings :-
 
 :- initialise_server_settings.
 
-:- use_module(api).
-:- use_module(server).
+:- use_module(library(api)).
+:- use_module(library(server)).
 
 main(Argv) :-
     server(Argv).

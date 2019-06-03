@@ -13,8 +13,24 @@
                  drop/3,
                  truncate_list/4,
                  sfoldr/4,
-                 trim/2]).
- 
+                 trim/2,
+                 op(920,fy, *),
+                 '*'/1
+
+                ]).
+
+/** <module> Utils 
+ * 
+ * Utility predicates
+ */ 
+
+/*
+ * Forget the next phrase.
+ * 
+ * Ueful for declarative debugging. 
+ */ 
+*_.
+
 /** 
  * elt(+Key,+Set) is semidet.
  * 
