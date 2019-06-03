@@ -255,14 +255,16 @@ hdt_transform_journals(Collection_ID,Graph_Name) :-
  * 
  * The dynamic predicate which stores positive updates from the journal. 
  */
-:- dynamic xrdf_pos/4.
+% Deprecated
+%:- dynamic xrdf_pos/4.
 
 /** 
  * xrdf_neg(?X,?Y,?Z,+G) is nondet.
  * 
  * The dynamic predicate which stores negative updates from the journal. 
  */
-:- dynamic xrdf_neg/4.
+% Deprecated
+%:- dynamic xrdf_neg/4.
 
 /**
  * collections is det.
@@ -324,12 +326,12 @@ check_graph_exists(C,G):-
     !.  
 
 /** 
- * graph_checkpoint(+G,-HDT) is semidet.
+ * graph_checkpoint(+C,+G,-HDT) is semidet.
  * 
  * Returns the last checkpoint HDT associated with a given graph. 
  */
-graph_checkpoint(G, HDT) :-
-    graph_hdt_queue(G, Queue),
+graph_checkpoint(C, G, HDT) :-
+    graph_hdt_queue(C, G, Queue),
     graph_checkpoint_search(Queue, HDT).
 
 graph_checkpoint_search([], _) :- fail.
@@ -341,28 +343,28 @@ graph_checkpoint_search([neg(_)|Rest], Result) :-
     graph_checkpoint_search(Rest, Result).
 
 /**
- * graph_hdt_queue(+G, -HDTs) is semidet.
+ * graph_hdt_queue(+C, +G, -HDTs) is semidet.
  *
  * Returns a queue of hdt files up to and including the last checkpoint.
- * This is recalculated by sync_queue/2.
+ * This is recalculated by sync_queue/3.
  */
-:- dynamic graph_hdt_queue/2.
+:- dynamic graph_hdt_queue/3
 
 /** 
  * sync_queue(+Collection_ID,+G,+Queue) is det. % + exception
  * 
- * Update the xrdf_pos/4 and xrdf_neg/4 predicates and the 
+ * Update the xrdf_pos/5 and xrdf_neg/5 predicates and the 
  * graph_checkpoint/2 predicate from the current graph. 
  */
-sync_queue(G, Queue) :-
+sync_queue(C, G, Queue) :-
     (   check_queue(Queue)
     ->  true
     ;   throw(malformed_graph_journal_queue(G))),
-    (   graph_hdt_queue(G, Old_Queue)
+    (   graph_hdt_queue(C, G, Old_Queue)
     ->  close_all_handles(Old_Queue)
     ;   true),
-    retractall(graph_hdt_queue(G,_)),
-    asserta(graph_hdt_queue(G, Queue)).
+    retractall(graph_hdt_queue(C, G,_)),
+    asserta(graph_hdt_queue(C, G, Queue)).
 
 /**
  * close_all_handles(+Queue:list) is det.
@@ -396,18 +398,18 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
             catch(
                 (   
                     open(NewFile,write,Stream),
-                    set_graph_stream(G,Stream,Type,Ext),
-                    initialise_graph(G,Stream,Type,Ext),
+                    set_graph_stream(C,G,Stream,Type,Ext),
+                    initialise_graph(C,G,Stream,Type,Ext),
                     !, % Don't ever retreat!
                     (   once(call(Goal))
                     ->  true
                     ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
                         throw(transaction_error(Msg))
                     ),
-                    finalise_graph(G,Stream,Type,Ext)
+                    finalise_graph(C,G,Stream,Type,Ext)
                 ),
                 E,
-                (   finalise_graph(G,Stream,Type,Ext),
+                (   finalise_graph(C,G,Stream,Type,Ext),
                     throw(E)
                 )
             )
@@ -425,8 +427,8 @@ collapse_planes(Collection_Id,Graph_Id) :-
         graph(Collection_Id,Graph_Id,ckp,ttl),
         (
             forall(
-                xrdf(X,Y,Z,Graph_Id),
-                write_triple(X,Y,Z,Graph_Id)
+                xrdf(Collection_Id,Graph_id,X,Y,Z),
+                write_triple(Collection_Id,Graph_Id,X,Y,Z)
             )
         )
     ).
@@ -446,7 +448,7 @@ check_queue([ckp(_HDT)]).
 /** 
  * sync_from_journals is det.  
  * 
- * This predicate updates the xrdf_pos/4 and xrdf_neg/4 predicate so that 
+ * This predicate updates the xrdf_pos/5 and xrdf_neg/5 predicate so that 
  * it reflects the current state of the database on file. 
  */ 
 sync_from_journals :-
@@ -565,3 +567,46 @@ rollback(Collection_Id,GName) :-
     % graph_id_name(Graph_Id, GName),
     retractall(xrdf_pos_trans(X,Y,Z,Collection_Id,GName)),
     retractall(xrdf_neg_trans(X,Y,Z,Collection_Id,GName)). 
+
+/** 
+ * xrdf(+Collection_Id,+Graph_Id,?Subject,?Predicate,?Object) is nondet.
+ * 
+ * The basic predicate implementing the the RDF database.
+ * This layer has the transaction updates included.
+ *
+ * Graph is either an atom or a list of atoms, referring to the name(s) of the graph(s).
+ */
+% temporarily remove id behaviour.
+xrdf(C,G,X,Y,Z) :-
+    xrdfid(C,G,X,Y,Z).
+
+xrdfid(C,G,X0,Y0,Z0) :-
+    !,
+    (   xrdf_pos_trans(C,G,X0,Y0,Z0)     % If in positive graph, return results
+    ;   (   xrdf_neg_trans(C,G,X0,Y0,Z0) % If it's not negative
+        *-> false                      % If it *is* negative, fail		
+        ;   xrdfdb(C,G,X0,Y0,Z0))).      % Read in the permanent store
+
+/** 
+ * xrdfdb(+Collection_Id,+Graph_Id,?X,?Y,?Z) is nondet.
+ * 
+ * This layer has only those predicates with backing store.
+ */ 
+xrdfdb(C,G,X,Y,Z) :-
+    graph_hdt_queue(C,Graph_Name, Queue),
+    xrdf_search_queue(Queue,X,Y,Z).
+
+/* 
+ * xrdf_search_queue(Queue,X,Y,Z) is nondet.
+ * 
+ * Underlying planar access to hdts
+ */
+xrdf_search_queue([ckp(HDT)|_],X,Y,Z) :-
+    hdt_search_safe(HDT,X,Y,Z).
+xrdf_search_queue([pos(HDT)|Rest],X,Y,Z) :-
+    (   hdt_search_safe(HDT,X,Y,Z)
+    ;   xrdf_search_queue(X,Y,Z,Rest)).
+xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
+    (   hdt_search_safe(HDT,X,Y,Z)
+    *-> false
+    ;   xrdf_search_queue(X,Y,Z,Rest)).
