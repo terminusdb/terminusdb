@@ -278,7 +278,7 @@ collections :-
  * Probably need some sort of metadata. 
  */ 
 collections(Collections) :-
-    hdt_path(Collection_Dir), 
+    db_path(Collection_Dir), 
     subdirectories(Collection_Dir,Collection_Files),
     include({Collection_Dir}/[Collection_File]>>(
                 interpolate([Collection_Dir,Collection_File,'/COLLECTION'], Collection_Marker_Path),
@@ -298,7 +298,7 @@ graphs(Collection_ID,Graphs) :-
     collections(Collections),
     (   member(Collection_ID,Collections)
     ->  sanitise_file_name(Collection_ID,Collection_Name),
-        hdt_path(Path),
+        db_path(Path),
         interpolate([Path,Collection_Name], Collection_Path),
         subdirectories(Collection_Path,Graph_Names),
         include({Collection_Path}/[Name]>>(

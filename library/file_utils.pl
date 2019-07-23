@@ -1,6 +1,6 @@
 :- module(file_utils,[
-              hdt_relative_path/1,
-              hdt_path/1,
+              db_relative_path/1,
+              db_path/1,
               touch/1,
               ensure_directory/1,
               sanitise_file_name/2,
@@ -36,21 +36,21 @@
  */
 
 /** 
- * hdt_relative_path(-Path) is det.
+ * db_relative_path(-Path) is det.
  * 
  * Storage location for hdt files 
  */
-hdt_relative_path('/hdtdb/').
+db_relative_path('/storage/').
 
 /** 
- * hdt_path(-Path) is det.
+ * db_path(-Path) is det.
  * 
  */
-hdt_path(Path) :-
+db_path(Path) :-
     once(
-        file_search_path(cliopatria,BasePath)
+        file_search_path(regulum_home,BasePath)
     ), 
-    hdt_relative_path(RelPath),
+    db_relative_path(RelPath),
     interpolate([BasePath,RelPath],Path).
 
 /** 
@@ -88,7 +88,7 @@ sanitise_file_name(G,F) :-
  */
 collection_directory(Collection_ID,Path) :-
     once(file_search_path(cliopatria,BasePath)),
-    hdt_relative_path(RelPath),
+    db_relative_path(RelPath),
     sanitise_file_name(Collection_ID,CSafe),
     interpolate([BasePath,RelPath,CSafe],Path).
 
@@ -99,7 +99,7 @@ collection_directory(Collection_ID,Path) :-
  */
 graph_directory(Collection_ID,G,Path) :-
     once(file_search_path(cliopatria,BasePath)),
-    hdt_relative_path(RelPath),
+    db_relative_path(RelPath),
     sanitise_file_name(G,Gsafe),
     sanitise_file_name(Collection_ID,CSafe),
     interpolate([BasePath,RelPath,CSafe,'/',Gsafe],Path).
