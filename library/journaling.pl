@@ -1,4 +1,4 @@
-:- module(journaling,[write_triple/4,
+:- module(journaling,[write_triple/5,
                       initialise_graph/5,
                       finalise_graph/5,
                       set_graph_stream/5,
@@ -61,7 +61,7 @@ closeStreams :-
 initialise_graph(Collection_Id,Graph_Id,Stream,Type,Ext) :-
     graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
     (   Ext=ttl
-    ->  write_turtle_prelude(Stream)
+    ->  true % deprecated write_turtle_prelude(Stream)
     ;   Ext=ntr
     ->  throw(unimplemented_storage_type(ntr))
     ;   Ext=hdt
@@ -100,6 +100,18 @@ write_triple(C,G,PX,PY,PZ) :-
 
 
 /** 
+ * write_point_turtle(+Stream,+P) is det. 
+ * 
+ * Writes a single "point" out.  
+ */
+write_point_turtle(Stream, P) :-
+    (   atom(P) % Do we have a prefix yet? 
+    ->  write(Stream,'<'),write(Stream,P),write(Stream,'>')
+    ;   debug(journaling, 'Point: ~q~n', [P]), 
+        write(Stream,P)
+    ).
+
+/** 
  * write_triple_turtle(+X,+Y,+Z,+Stream) is det. 
  * 
  * Writes triple to stream in turtle format.
@@ -110,7 +122,6 @@ write_triple(C,G,PX,PY,PZ) :-
  * 
  * This allows the predicate to be used in multithreading
  */ 
-:- rdf_meta write_triple_turtle(r,r,r,o).
 write_triple_turtle(PX,PY,PZ,Stream) :-
     with_output_to(string(String),
 		           (current_output(Out),

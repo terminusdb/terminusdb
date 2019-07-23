@@ -13,6 +13,8 @@
           ]).
 
 :- use_module(utils).
+:- use_module(types).
+
 
 /** <module> Implementation of graph management
 

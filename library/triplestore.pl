@@ -1,16 +1,10 @@
 :- module(triplestore, [
               destroy_graph/2,
-              destroy_graphs/2,
-              create_graphs/2,
               make_empty_graph/2,
               destroy_indexes/0,
-              with_transaction/2,
               sync_from_journals/0,
               sync_from_journals/2,
               xrdf/5,
-              delete/5,
-              insert/5,
-              update/5,
               commit/2,
               rollback/2,
               collections/0,
@@ -348,7 +342,7 @@ graph_checkpoint_search([neg(_)|Rest], Result) :-
  * Returns a queue of hdt files up to and including the last checkpoint.
  * This is recalculated by sync_queue/3.
  */
-:- dynamic graph_hdt_queue/3
+:- dynamic graph_hdt_queue/3.
 
 /** 
  * sync_queue(+Collection_ID,+G,+Queue) is det. % + exception
@@ -427,7 +421,7 @@ collapse_planes(Collection_Id,Graph_Id) :-
         graph(Collection_Id,Graph_Id,ckp,ttl),
         (
             forall(
-                xrdf(Collection_Id,Graph_id,X,Y,Z),
+                xrdf(Collection_Id,Graph_Id,X,Y,Z),
                 write_triple(Collection_Id,Graph_Id,X,Y,Z)
             )
         )
@@ -473,23 +467,6 @@ sync_from_journals :-
             
         )
     ).
-
-/** 
- * current_checkpoint_directory(+Collection_ID,+Graph_Id:graph_identifer,-Path) is semidet. 
- * 
- * Return the latest checkpoint directory.
- */
-current_checkpoint_directory(Collection_ID,Graph_Id, Path) :-
-    graph_directory(Collection_ID,Graph_Id, GraphPath),
-    subdirectories(GraphPath,AllCheckpoints),
-    (   predsort([Delta,X,Y]>>
-             (   atom_number(X,XN), atom_number(Y,YN), XN < YN
-             ->  Delta=(>)
-             ;   Delta=(<)
-             ),
-             AllCheckpoints,[File|_Rest])
-    ->  interpolate([GraphPath,'/',File],Path)
-    ;   throw(no_checkpoint_directory(Graph_Id,Path))). 
 
 /** 
  * make_checkpoint_directory(+Collection_ID,+Graph_ID:graph_identifer,-CPD) is det. 
@@ -559,14 +536,55 @@ import_graph(File, Collection_ID, Graph_Id) :-
     sync_from_journals(Collection_ID,Graph_Id).
 
 /** 
+ * commit(+C:collection_id,+G:graph_id) is det.
+ * 
+ * Commits the current transaction state to backing store and dynamic predicate
+ * for a given collection and graph.
+ */
+commit(CName,GName) :-
+    % Time order here is critical as we actually have a time stamp for ordering.
+    % negative before positive
+    % graph_id_name(G,GName),
+    with_output_graph(
+            graph(CName,GName,neg,ttl),
+            (   forall(
+                     xrdf_neg_trans(CName,GName,X,Y,Z),
+                     (   % journal
+                         write_triple(CName,GName,X,Y,Z),
+                         % dynamic 
+                         retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                         retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                         asserta(xrdf_neg(CName,GName,X,Y,Z))
+                     ))
+            )
+    ),
+    retractall(xrdf_neg_trans(X,Y,Z,GName)),
+    
+    with_output_graph(
+            graph(CName,GName,pos,ttl),
+            (   forall(
+                    xrdf_pos_trans(CName,GName,X,Y,Z),
+                     
+                    (% journal
+                        write_triple(CName,GName,X,Y,Z),
+                        % dynamic
+                        retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                        retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                        asserta(xrdf_pos(CName,GName,X,Y,Z))
+                    ))
+            )
+    ),
+    retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
+
+/** 
  * rollback(+Collection_Id,+Graph_Id:graph_identifier) is det.
  * 
  * Rollback the current transaction state.
  */
 rollback(Collection_Id,GName) :-
     % graph_id_name(Graph_Id, GName),
-    retractall(xrdf_pos_trans(X,Y,Z,Collection_Id,GName)),
-    retractall(xrdf_neg_trans(X,Y,Z,Collection_Id,GName)). 
+    retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
+    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)). 
 
 /** 
  * xrdf(+Collection_Id,+Graph_Id,?Subject,?Predicate,?Object) is nondet.
@@ -593,7 +611,7 @@ xrdfid(C,G,X0,Y0,Z0) :-
  * This layer has only those predicates with backing store.
  */ 
 xrdfdb(C,G,X,Y,Z) :-
-    graph_hdt_queue(C,Graph_Name, Queue),
+    graph_hdt_queue(C,G, Queue),
     xrdf_search_queue(Queue,X,Y,Z).
 
 /* 

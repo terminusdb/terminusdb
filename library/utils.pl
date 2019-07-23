@@ -1,6 +1,7 @@
 :- module(utils,[elt/2,
                  get_key/4,
                  get_key/3,
+                 get_dict_default/4,
                  zip/3,
                  intersperse/3,
                  interpolate/2,
@@ -14,9 +15,9 @@
                  truncate_list/4,
                  sfoldr/4,
                  trim/2,
+                 split_atom/3,
                  op(920,fy, *),
                  '*'/1
-
                 ]).
 
 /** <module> Utils 
@@ -46,7 +47,7 @@ elt(Key,Set) :-
  * 
  * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we 
  * assume Val=Default.
- */ 
+ */
 get_key(Key,Object,Val,Default) :- 
     (   member(Key=Val, Object)
     ->  true 
@@ -58,26 +59,27 @@ get_key(Key,Object,Val,Default) :-
  * 
  * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we 
  * throw an error. 
- */ 
-get_key(Key,Data,Value) :-
-	(   \+ ground(Data)
+ */
+get_key(Key,Object,Value) :-
+	(   \+ ground(Object)
     ->  format(atom(M),'Arguments are not sufficiently bound for get_key/3 ~q=~q in ~q~n',
-               [Key,Value,Data]),
+               [Key,Value,Object]),
         throw(http_reply(bad_request(M)))
-    ;   member(Key=Value, Data)
+    ;   member(Key=Value, Object)
     ->  true
-	;   interpolate(['No "', Key,'" field specified as parameter in ', Data],M),
+	;   interpolate(['No "', Key,'" field specified as parameter in ', Object],M),
 	    throw(http_reply(bad_request(M)))
     ).
 
 /** 
- * zip(+A:list,+B:list,-C:list) is det.
- * zip(+A:list,-B:list,+C:list) is det.
- * zip(-A:list,+B:list,+C:list) is det.
+ * zip(+A:list(T),+B:list(S),-C:list(pair(T,S))) is det.
+ * zip(+A:list(T),-B:list(S),+C:list(pair(T,S))) is det.
+ * zip(-A:list(T),+B:list(S),+C:list(pair(T,S))) is det.
  * 
  * Zip two lists into a list of pairs (or unzip, in the other two modes)
  */
-zip([A|RestA],[B|RestB],[(A,B)|Zip]) :-
+%:- pred zip(list(T),list(V),list(pair(T,V))).
+zip([A|RestA],[B|RestB],[(A-B)|Zip]) :-
     zip(RestA,RestB,Zip).
 zip([],[],[]).
 
@@ -117,7 +119,6 @@ interpolate([H|T],S) :-
  * This implements the CORRECT semantics for setof. 
  * i.e. returns an empty list for failure to find solutions, rather than failing.
  */
-:- meta_predicate unique_solutions(?, 0, ?).
 unique_solutions(Template,Goal,Collection) :-
     (   setof(Template, Goal, CollectionX)
     ->  Collection=CollectionX
@@ -210,7 +211,7 @@ truncate_list(Offset,Limit,Input,Output) :-
     ;   length(Input,N),
         Top is Offset + Limit,
         min_list([N,Top],Final),
-        fromTo(Offset,Final,Input,Output)).
+        from_to(Offset,Final,Input,Output)).
 
 /**
  * sfoldr(+P,+Gen,+Z,-Result) is det.
@@ -239,3 +240,19 @@ sfoldr(Pred,Generator,Zero,Result) :-
  */
 trim(String,Trimmed) :-
     re_replace('^\\s*(.*?)\\s*$','\\1', String, Trimmed).
+
+/* 
+ * get_dict_default(Key,Dict,Value,Default)
+ */ 
+get_dict_default(Key,Dict,Value,Default) :-
+    (   get_dict(Key,Dict,Value)
+    ->  true
+    ;   Value = Default).
+
+/* 
+ * split_atom(Atom:atom,Delimiter:atom,Result:list(atom)) is det.
+ */
+split_atom(Atom,Delimiter,Result) :-
+    split_string(Atom,Delimiter,'',Strings),
+    maplist([S,A]>>(atom_string(A,S)), Strings, Result).
+
