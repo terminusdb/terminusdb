@@ -15,17 +15,17 @@
 % Set base location
 http:location(api, '/api', []).
 
-:- http_handler('/', regulus_reply, []). 
+:- http_handler('/', regulum_reply, []). 
 :- http_handler(api(.), api_reply, []). 
 
 /** 
  * api_reply(+Request:http_request) is det.
  */ 
-regulus_reply(_) :- 
+regulum_reply(_) :- 
     reply_html_page(
-		[ title(['RegulusDB'])
+		[ title(['RegulumDB'])
 		], 
-		[ h2('Welcome to RegulusDB - the most powerful an flexible linked-data DB in the world!'), 
+		[ h2('Welcome to RegulumDB - the most powerful an flexible linked-data DB in the world!'), 
 		  p('We hope you will enjoy reaing our extensive documentation so you can know why you should not be here.')
 		]).
 
@@ -35,8 +35,8 @@ regulus_reply(_) :-
  */ 
 api_reply(_) :- 
     reply_html_page(
-		[ title(['Regulus API top-level'])
+		[ title(['Regulum API top-level'])
 		], 
-		[ h2('This is the root directory for the RegulusDB API.'), 
+		[ h2('This is the root directory for the RegulumDB API.'), 
 		  p('Please read the documention included with terminus in order to interact with the graph.')
 		]).
