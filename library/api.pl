@@ -38,5 +38,5 @@ api_reply(_) :-
 		[ title(['Regulum API top-level'])
 		], 
 		[ h2('This is the root directory for the RegulumDB API.'), 
-		  p('Please read the documention included with terminus in order to interact with the graph.')
+		  p('Please read the documention included with RegulumDB in order to interact with the graph.')
 		]).
