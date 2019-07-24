@@ -1,0 +1,5 @@
+# RegulumDB gitignore defaults
+*~
+\#*\#
+.\#*
+config.pl
