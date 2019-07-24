@@ -1,4 +1,4 @@
-:- module(json_ld, [expand/2, expand/3]).
+:- module(json_ld, [expand/2, expand/3, compress/3]).
 
 :- use_module(library(pairs)).
 :- use_module(utils).
@@ -42,8 +42,6 @@ expand(JSON_LD, Context, JSON) :-
                 ->  Key = K,
                     Value = V
                 ;   expand_key(K,Local_Context,Key_Candidate,Key_Context),
-                    %format('~nKey_Candidate ~q', [Key_Candidate]),
-                    %format('~nKey_Context ~q', [Key_Context]),
                     expand(V,Local_Context,Expanded),
                     (   is_dict(Expanded)
                     ->  merge_dictionaries(Key_Context,Expanded,Value),

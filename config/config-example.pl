@@ -9,8 +9,9 @@
           ]).
 
 http_blob_user_auth('a username').
-
 http_blob_pass_auth('A password').
+
+root_passwd_hash('63a9f0ea7bb98050796b649e85481845').
 
 server_name('http://localhost/dcog/').
 

@@ -1,10 +1,10 @@
 :- module(woql_compile,[compile_query/3, run_query/2, is_new/2,
                         connect/2, ask/2, ask/1]).
 
-:- use_module(graph_management).
+:- use_module(collection).
 :- use_module(woql_term).
-:- use_module(dqs_utils, except([elt/2])).
-:- use_module(hdt_transaction_graph, [xrdf/4,with_output_graph/2,sync_from_journals/2]).
+:- use_module(utils, except([elt/2])).
+:- use_module(triplestore, [xrdf/4,with_output_graph/2,sync_from_journals/2]).
 :- use_module(schema, [subsumptionOf/3]).
 :- use_module(relationships, [
                   relationship_source_property/3,

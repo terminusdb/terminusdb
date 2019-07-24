@@ -7,7 +7,7 @@ This module implements the database server. It is primarily composed of a number
 */ 
 
 % configuration predicates
-:- use_module(config,[]).
+:- use_module(config(config),[]).
 
 % http server
 :- use_module(library(http/thread_httpd)).

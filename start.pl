@@ -28,19 +28,25 @@
 
 add_library_path :-
     user:file_search_path(regulum_home, Dir),
-    writeq(Dir),
     atom_concat(Dir,'/library',Library),
     asserta(user:file_search_path(library, Library)).
 
 :- add_library_path.
-   
+
+add_config_path :- 
+    user:file_search_path(regulum_home, Dir),
+    atom_concat(Dir,'/config',Config),
+    asserta(user:file_search_path(config, Config)).
+
+:- add_config_path.
+
 initialise_server_settings :-
     file_search_path(regulum_home, BasePath),    
     !,
-    atom_concat(BasePath, '/config.pl', Settings_Path),
+    atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
-    ;   atom_concat(BasePath, '/config-example.pl',
+    ;   atom_concat(BasePath, '/config/config-example.pl',
                     Example_Settings_Path),
         copy_file(Example_Settings_Path,Settings_Path)
     ).
@@ -49,7 +55,9 @@ initialise_server_settings :-
 
 :- use_module(library(api)).
 :- use_module(library(server)).
-
+:- use_module(library(upgrade_db)).
+ 
 main(Argv) :-
+    maybe_upgrade,
     server(Argv).
  
