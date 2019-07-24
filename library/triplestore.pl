@@ -29,6 +29,18 @@ collections, graphs and syncing from journals.
 
 
 /** 
+ * retract_graph(+G) is det. 
+ * 
+ * Retract all dynamic elements of graph. 
+ */
+retract_graph(Graph_Name) :-
+    schema:cleanup_schema_module(Graph_Name),
+    retractall(xrdf_pos(_,_,_,Graph_Name)),
+    retractall(xrdf_neg(_,_,_,Graph_Name)),
+    retractall(xrdf_pos_trans(_,_,_,Graph_Name)),
+    retractall(xrdf_neg_trans(_,_,_,Graph_Name)).
+
+/** 
  * destroy_graph(+Collection,+Graph_Id:graph_identifier) is det. 
  * 
  * Completely remove a graph from disk.
