@@ -5,11 +5,10 @@
               graph_error_instance/2,
               graph_error_schema/2,
               graph_inference/2,
-              graph_prefix_database/2,
               make_graph/2,
               make_raw_graph/2,
               graph_identifiers/2,
-              make_graph_from_collection/3
+              make_graph_from_collection/2
           ]).
 
 /** <module> Implementation of graph management
@@ -107,7 +106,7 @@ graph_identifiers(Graph,Names) :-
  * 
  * Use a base uri to 
  */ 
-make_graph_from_collection(Name,Ctx,Graph) :-
+make_graph_from_collection(Name,Graph) :-
     interpolate([Name,'/graph/main'],Instance),
     interpolate([Name,'/graph/main/schema'],Schema),
     interpolate([Name,'/graph/main/inference'],Inference),

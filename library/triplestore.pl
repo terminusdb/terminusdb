@@ -16,6 +16,7 @@
               last_checkpoint_number/2
           ]).
 
+:- use_module(library(hdt)). 
 :- use_module(file_utils).
 :- use_module(journaling).
 :- use_module(utils).
@@ -45,18 +46,18 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-
 /** 
  * retract_graph(+G:atom) is det. 
  * 
  * Retract all dynamic elements of graph. 
  */
-retract_graph(Graph_Name) :-
-    schema:cleanup_schema_module(Graph_Name),
-    retractall(xrdf_pos(_,_,_,Graph_Name)),
-    retractall(xrdf_neg(_,_,_,Graph_Name)),
-    retractall(xrdf_pos_trans(_,_,_,Graph_Name)),
-    retractall(xrdf_neg_trans(_,_,_,Graph_Name)).
+retract_graph(Collection,Graph_Name) :-
+    schema:collection_graph_module(Collection,Graph_Name,Module), 
+    schema:cleanup_schema_module(Module),
+    retractall(xrdf_pos(Collection,Graph_Name,_,_,_)),
+    retractall(xrdf_neg(Collection,Graph_Name,_,_,_)),
+    retractall(xrdf_pos_trans(Collection,Graph_Name,_,_,_)),
+    retractall(xrdf_neg_trans(Collection,Graph_Name,_,_,_)).
 
 /** 
  * destroy_graph(+Collection,+Graph_Id:graph_identifier) is det. 
@@ -98,14 +99,14 @@ destroy_indexes :-
  */
 sync_from_journals(Collection,Graph_Name) :-
     % First remove everything in the dynamic predicates.
-    (   retract_graph(Graph_Name),
+    (   retract_graph(Collection,Graph_Name),
         hdt_transform_journals(Collection,Graph_Name),
         get_truncated_queue(Collection,Graph_Name,Queue),
-        sync_queue(Graph_Name, Queue)
+        sync_queue(Collection,Graph_Name, Queue)
     ->  true
     % in case anything failed, retract the graph
-    ;   retract_graph(Graph_Name),
-        throw(graph_sync_error(Graph_Name))
+    ;   retract_graph(Collection,Graph_Name),
+        throw(graph_sync_error(Collection-Graph_Name))
     ).
 
 /** 
@@ -260,7 +261,7 @@ hdt_transform_journals(Collection_ID,Graph_Name) :-
           ).
 
 /** 
- * xrdf_pos_trans(+C,+G,?X,?Y,?Z) is nondet.
+ * xrdf_pos_trans(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores positive updates for transactions.
  * This is thread local - it only functions in a transaction
@@ -268,27 +269,25 @@ hdt_transform_journals(Collection_ID,Graph_Name) :-
 :- thread_local xrdf_pos_trans/5.
 
 /** 
- * xrdf_neg_trans(+C,+G,?X,?Y,?Z) is nondet.
+ * xrdf_neg_trans(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores negative updates for transactions.
  */
 :- thread_local xrdf_neg_trans/5.
 
 /** 
- * xrdf_pos(?X,?Y,?Z,+G) is nondet.
+ * xrdf_pos(+C, +G, ?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores positive updates from the journal. 
  */
-% Deprecated
-%:- dynamic xrdf_pos/4.
+:- dynamic xrdf_pos/5.
 
 /** 
- * xrdf_neg(?X,?Y,?Z,+G) is nondet.
+ * xrdf_neg(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
  * 
  * The dynamic predicate which stores negative updates from the journal. 
  */
-% Deprecated
-%:- dynamic xrdf_neg/4.
+:- dynamic xrdf_neg/5.
 
 /**
  * collections is det.
@@ -481,20 +480,13 @@ sync_from_journals :-
     forall(
         (   member(Collection,Collections),
             graphs(Collection,Graphs),
-            member(Graph_Name, Graphs),
-            * length(Graphs, G),
-            * Count = count(0)
+            member(Graph_Name, Graphs)
         ),
         (
             format("~n ** Syncing ~q in collection ~q ~n", [Graph_Name,Collection]),
-            * Count = count(N),
-            * C is N + 1,
-            * nb_setarg(1, Count, C),
             catch(sync_from_journals(Collection,Graph_Name),
-                  graph_sync_error(_Name),
-                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.", [Graph_Name,Collection])),
-            * format("~n ** Synced ~q of ~q ** ~n", [C, G])
-            
+                  graph_sync_error(Graph_Name),
+                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.", [Graph_Name,Collection]))      
         )
     ).
 
@@ -588,7 +580,7 @@ commit(CName,GName) :-
                      ))
             )
     ),
-    retractall(xrdf_neg_trans(X,Y,Z,GName)),
+    retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
     
     with_output_graph(
             graph(CName,GName,pos,ttl),

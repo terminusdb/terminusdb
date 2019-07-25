@@ -117,7 +117,7 @@ collection_directory(Collection_ID,Path) :-
  * Returns the path for a given graph 
  */
 graph_directory(Collection_ID,G,Path) :-
-    once(file_search_path(cliopatria,BasePath)),
+    once(file_search_path(regulum_home,BasePath)),
     db_relative_path(RelPath),
     sanitise_file_name(G,Gsafe),
     sanitise_file_name(Collection_ID,CSafe),
