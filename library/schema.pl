@@ -3,12 +3,36 @@
            compile_schema_to_module/2,
            ensure_schema_in_module/2]).
 
+/** <module> Schema 
+ * 
+ * The schema module deals with compilation and clearing of ontology 
+ * compilation to predicates. 
+ * 
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of RegulumDB.                                      *
+ *                                                                       *
+ *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, either version 3 of the License, or    *
+ *  (at your option) any later version.                                  *
+ *                                                                       *
+ *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 :- use_module(library(semweb/rdf_db), [rdf_global_id/2]). 
-:- use_module(graph_management).
-:- use_module(hdt_transaction_graph).
+:- use_module(collection).
+:- use_module(triplestore).
 :- use_module(schema_definitions).
 :- use_module(schema_util).
-:- use_module(dqs_utils).
+:- use_module(utils).
 
 :- reexport(schema_util).
 

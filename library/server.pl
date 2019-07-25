@@ -1,10 +1,31 @@
 :- module(server, [server/1]).
 
 /** <module> HTTP server module
-
-This module implements the database server. It is primarily composed of a number of restful APIs which exchange information in JSON format over HTTP.
-
-*/ 
+ *
+ * This module implements the database server. It is primarily composed 
+ * of a number of RESTful APIs which exchange information in JSON format 
+ * over HTTP. This is intended as a mechanism for interprocess 
+ * communication via *API* and not as a fully fledged high performance 
+ * server.
+ *
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of RegulumDB.                                      *
+ *                                                                       *
+ *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, either version 3 of the License, or    *
+ *  (at your option) any later version.                                  *
+ *                                                                       *
+ *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 % configuration predicates
 :- use_module(config(config),[]).

@@ -1,6 +1,29 @@
 :- module(woql_compile,[compile_query/3, run_query/2, is_new/2,
                         connect/2, ask/2, ask/1]).
 
+/** <module> WOQL Compile 
+ * 
+ * Core compiler for the WOQL query language. 
+ * 
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of RegulumDB.                                      *
+ *                                                                       *
+ *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, either version 3 of the License, or    *
+ *  (at your option) any later version.                                  *
+ *                                                                       *
+ *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 :- use_module(collection).
 :- use_module(woql_term).
 :- use_module(utils, except([elt/2])).

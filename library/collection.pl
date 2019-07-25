@@ -12,33 +12,48 @@
               make_graph_from_collection/3
           ]).
 
+/** <module> Implementation of graph management
+ * 
+ * This module helps other modules with the representation of graphs and collections 
+ * by bundling them as objects with some convenience operators.
+ * 
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of RegulumDB.                                      *
+ *                                                                       *
+ *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, either version 3 of the License, or    *
+ *  (at your option) any later version.                                  *
+ *                                                                       *
+ *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 :- use_module(utils).
 :- use_module(types).
 
 
-/** <module> Implementation of graph management
-
-This module helps other modules with the representation of graphs and collections 
-by bundling them as objects with some convenience operators.
-
-*/
-
 /* 
  * Graph term accessors.
  */ 
-graph_collection(graph(_, Collection, _ , _ ,_, _, _),Collection).
+graph_collection(graph(Collection, _ , _ ,_, _, _),Collection).
 
-graph_instance(graph(_, _, Instance, _ ,_, _, _),Instance).
+graph_instance(graph(_, Instance, _ ,_, _, _),Instance).
 
-graph_inference(graph(_, _, _,Inference,_,_,_),Inference).
+graph_inference(graph(_, _,Inference,_,_,_),Inference).
 
-graph_schema(graph(_, _, _,_,Schema,_,_),Schema).
+graph_schema(graph(_, _,_,Schema,_,_),Schema).
 
-graph_error_instance(graph(_,_,_,_,_,Error_Instance,_), Error_Instance).
+graph_error_instance(graph(_,_,_,_,Error_Instance,_), Error_Instance).
 
-graph_error_schema(graph(_,_,_,_,_,_,Error_Schema), Error_Schema).
-
-graph_prefix_database(graph(Prefix_Database,_,_,_,_,_,_), Prefix_Database).
+graph_error_schema(graph(_,_,_,_,_,Error_Schema), Error_Schema).
 
 /** 
  * make_graph(+GraphList:list,-Graph:graph) is det.
@@ -47,8 +62,7 @@ graph_prefix_database(graph(Prefix_Database,_,_,_,_,_,_), Prefix_Database).
  * [instance=Instance,schema=Schema...]
  */ 
 make_graph(GraphList, Graph) :-
-    Graph = graph(Prefix_Database,Collection,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(prefix_database,GraphList,Prefix_Database,[]),
+    Graph = graph(Collection,Instance,Inference,Schema,Error_Instance,Error_Schema),
     get_key(collection,GraphList,Collection,none),
     get_key(schema,GraphList,Schema,none),
     get_key(instance,GraphList,Instance,none),
@@ -67,8 +81,7 @@ make_graph(GraphList, Graph) :-
  * This does NO schema compilation and is only used during initial pre-testing for cycles.
  */ 
 make_raw_graph(GraphList, Graph) :-
-    Graph = graph(Prefix_Database,Collection,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(prefix_database,GraphList,Prefix_Database,[]),
+    Graph = graph(Collection,Instance,Inference,Schema,Error_Instance,Error_Schema),
     get_key(collection,GraphList,Collection,none),
     get_key(schema,GraphList,Schema,none),
     get_key(instance,GraphList,Instance,none),
@@ -90,7 +103,7 @@ graph_identifiers(Graph,Names) :-
     exclude(is_empty_graph_name,[GI,Inf,GS,EI,ES], Names).
 
 /** 
- * make_graph_from_collection(+URI,+CTX,-Graph) is det.
+ * make_graph_from_collection(+URI,-Graph) is det.
  * 
  * Use a base uri to 
  */ 
@@ -100,8 +113,7 @@ make_graph_from_collection(Name,Ctx,Graph) :-
     interpolate([Name,'/graph/main/inference'],Inference),
     interpolate([Name,'/graph/main/error'],Error_Instance),
     interpolate([Name,'/graph/main/error/schema'],Error_Schema),
-    make_graph([prefix_database=Ctx,
-                collection=Name,
+    make_graph([collection=Name,
                 schema=Schema,instance=Instance,inference=Inference,
                 error_instance=Error_Instance, error_schema=Error_Schema], Graph).
 

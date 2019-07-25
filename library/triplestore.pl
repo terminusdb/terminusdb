@@ -19,17 +19,35 @@
 :- use_module(file_utils).
 :- use_module(journaling).
 :- use_module(utils).
+:- use_module(schema, [cleanup_schema_module/1]).
 
 /** <module> Triplestore
-
-This module contains the database management predicates responsible for creating 
-collections, graphs and syncing from journals.
-
-**/
+ * 
+ * This module contains the database management predicates responsible 
+ * for creating collections, graphs and syncing from journals.
+ * 
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of RegulumDB.                                      *
+ *                                                                       *
+ *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, either version 3 of the License, or    *
+ *  (at your option) any later version.                                  *
+ *                                                                       *
+ *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
 /** 
- * retract_graph(+G) is det. 
+ * retract_graph(+G:atom) is det. 
  * 
  * Retract all dynamic elements of graph. 
  */
