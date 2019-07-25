@@ -7,6 +7,10 @@ RegulumDB features a RESTful API for interacting with knowledge graphs via the J
 format. This means you can easily string together applications within your own toolchain which 
 utilise the powerful features of graph search and graph storage. 
 
+# Latest Version 
+
+v0.1.0
+
 # Getting Started
 
 To use RegulumDB, you will need the SWIPL installation of prolog. To install this in Debian variants
