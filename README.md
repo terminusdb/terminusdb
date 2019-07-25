@@ -7,11 +7,11 @@ RegulumDB features a RESTful API for interacting with knowledge graphs via the J
 format. This means you can easily string together applications within your own toolchain which 
 utilise the powerful features of graph search and graph storage. 
 
-# Latest Version 
+## Latest Version 
 
 v0.1.0
 
-# Getting Started
+## Getting Started
 
 To use RegulumDB, you will need the SWIPL installation of prolog. To install this in Debian variants
 simply use the apt package manager: 
@@ -38,13 +38,13 @@ At this point you can enter the regulumDB directory and start the server:
 
 Now you are ready to interact with the HTTP server. 
 
-# Documentation 
+## Documentation 
 
 The Server API is documented here: TBD
 
 WOQL Syntax is documented here: TBD
 
-# Why 
+## Why 
 
 RegulumDB will: 
 
@@ -55,7 +55,7 @@ RegulumDB will:
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
-# Issues 
+## Issues 
 
 We currently have no client, so you'll have to use the RESTful API directly. You can find 
 examples at the RegulumDB repositories...
@@ -65,16 +65,16 @@ In Python: https://github.com/regulumdb/regulum-python-sdk
 In JavaScript: 
 AND here: 
 
-# Changes in this Version 
+## Changes in this Version 
 
 * Added additional typing information and documentation. 
 * Added database bootsrapping for access permissions and controls using the capabilities ontology.
 
-# TODO
+## TODO
 
 * Need to finish porting of all XSD and OWL constraint checking. 
 
-# Authors
+## Authors
 
 Gavin Mendel-Gleason <gavin@datachemist.com>
 
@@ -82,7 +82,7 @@ Matthijs van Otterdijk <matthijs@datachemist.com>
 
 Put your Name here by contributing!
 
-# Copyright
+## Copyright
 
 This file is part of RegulumDB.
 
