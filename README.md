@@ -73,7 +73,10 @@ AND here:
 # Authors
 
 Gavin Mendel-Gleason <gavin@datachemist.com>
+
 Matthijs van Otterdijk <matthijs@datachemist.com>
+
+Put your Name here by contributing!
 
 # Copyright
 
