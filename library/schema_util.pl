@@ -27,6 +27,7 @@
 
 
 :- use_module(collection).
+:- use_module(types).
 :- use_module(schema_definitions).
 
 calculate_subsumptionOf(CC, CP, Graph) :-

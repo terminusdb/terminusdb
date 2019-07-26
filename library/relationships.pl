@@ -28,19 +28,21 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(dqs_utils).
-:- use_module(tbox).
-:- use_module(graph_management).
-:- use_module(hdt_transaction_graph).
+:- use_module(utils).
+:- use_module(validate_schema).
+:- use_module(collection).
+:- use_module(triplestore).
 :- use_module(library(semweb/rdf_db)).
 
 relationship_source_property(Relationship,Property,Graph) :-
+    graph_collection(Graph,Collection),        
     graph_schema(Graph,Schema),
-    xrdf(Relationship,dcog:source_property,Property,Schema).
+    xrdf(Collection,Schema,Relationship,dcog:source_property,Property).
 
 relationship_target_property(Relationship,Property,Graph) :-
+    graph_collection(Graph,Collection),        
     graph_schema(Graph,Schema),
-    xrdf(Relationship,dcog:target_property,Property,Schema).
+    xrdf(Collection,Schema,Relationship,dcog:target_property,Property).
 
 pseudo_domain(Relationship,Domain,Graph) :-
     relationship_source_property(Relationship,Property,Graph), 

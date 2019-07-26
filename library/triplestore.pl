@@ -51,7 +51,7 @@
  * Retract all dynamic elements of graph. 
  */
 retract_graph(Collection,Graph_Name) :-
-    schema:collection_graph_module(Collection,Graph_Name,Module), 
+    schema:collection_schema_module(Collection,Graph_Name,Module), 
     schema:cleanup_schema_module(Module),
     retractall(xrdf_pos(Collection,Graph_Name,_,_,_)),
     retractall(xrdf_neg(Collection,Graph_Name,_,_,_)),

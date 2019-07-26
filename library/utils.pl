@@ -137,6 +137,7 @@ interpolate([H|T],S) :-
  * This implements the CORRECT semantics for setof. 
  * i.e. returns an empty list for failure to find solutions, rather than failing.
  */
+:- meta_predicate unique_solutions(?,0,?).
 unique_solutions(Template,Goal,Collection) :-
     (   setof(Template, Goal, CollectionX)
     ->  Collection=CollectionX

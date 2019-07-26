@@ -37,14 +37,14 @@
 		      annotationOverloadSC/2, 
 		      propertyTypeOverloadSC/2,
 		
-		% OWL DL (Constraint)
-		orphanClassSC/2,              % OWL
-		orphanPropertySC/2,           % OWL
-		invalidDomainSC/2, invalidRangeSC/2,         % OWL
-		domainNotSubsumedSC/2, rangeNotSubsumedSC/2  % OWL
-	       ]).
+		      % OWL DL (Constraint)
+		      orphanClassSC/2,              % OWL
+		      orphanPropertySC/2,           % OWL
+		      invalidDomainSC/2, invalidRangeSC/2,         % OWL
+		      domainNotSubsumedSC/2, rangeNotSubsumedSC/2  % OWL
+	      ]).
 
-/** <module> The Tbox module of semantics level checks
+/** <module> The Schema validation module
  *
  * This module deals with schema validation predicates as well as queries
  * for subsumption, domains, ranges, classes etc.
@@ -68,14 +68,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-%:- use_module(library(semweb/rdf_db), except([rdf/4, rdf_retractall/4])).
-%:- use_module(library(semweb/turtle)).
-%:- use_module(library(mavis)).
-:- use_module(management).
+:- use_module(collection).
 :- use_module(triplestore).
 :- use_module(utils). 
 :- use_module(types).
-
 
 /*
 OWL DL Syntactic correctness
@@ -235,11 +231,10 @@ noImmediateClassSC(Graph, Reason) :-
 % @param CR A restriction class specified as a URI_OR_ID
 % @param P A property specified as a URI_OR_ID
 % @param Graph the current graph
-%% :- rdf_meta restrictionOnProperty(r, r, o).
 restrictionOnProperty(CR,P,Graph) :-
     graph_collection(Graph,Collection),
     graph_schema(Graph,Schema),
-	xrdf(Collection,Schema,CR,'http://www.w3.org/2002/07/owl#onProperty'),
+	xrdf(Collection,Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
 	restriction(CR,Graph).
 restrictionOnProperty(CR,P,Graph) :-
 	strictSubsumptionPropertiesOf(P,Q,Graph),
@@ -284,7 +279,6 @@ notUniqueClassSC(Graph,Reason) :- notUniqueClass(_,Graph,Reason).
 % @param X The URI_OR_ID of an RDF list
 % @param L Term
 % @param Graph The current graph
-%% :- rdf_meta collect(r,t,o).
 collect(X,[],_) :-
     rdf_global_id('http://www.w3.org/1999/02/22-rdf-syntax-ns#nil',X),
     !.
@@ -313,11 +307,10 @@ subClassOf(Child,Parent,Graph) :-
 % @param Super The class URI_OR_ID which is the union of other classes.
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Graph The current graph
-%% :- rdf_meta unionOf(r,r,o).
 unionOf(C,U,Graph) :-
     graph_collection(Graph,Collection),
     graph_schema(Graph,Schema),
-    xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj ),
+    xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
     collect(ListObj,L,Schema),
     member(U,L).
 
@@ -328,10 +321,13 @@ unionOf(C,U,Graph) :-
 % @param Super The class URI_OR_ID which is the union of other classes.
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Graph The current graph
-%% :- rdf_meta unionOfList(r,r,o).
 unionOfList(C,UList,Graph) :-
-    xrCollection,Graph,df(C,'http://www.w3.org/2002/07/owl#unionOf',ListOb),
-    collect(ListObj,UList,Schema), !.
+    graph_collection(Graph,Collection),
+    graph_schema(Graph,Schema),
+    xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
+    collect(ListObj,UList,Schema),
+    % This looks so dubious, I hope I didn't write it.
+    !.
 
 %% disjointUnionOf(?Super:uri_or_id,?Sub:uri_or_id,+Graph:graph) is nondet
 %
@@ -358,7 +354,9 @@ disjointUnionOf(C,U,Graph) :-
 disjointUnionOfList(C,UList,Graph) :-
     graph_schema(Graph,Schema),
     xrdf(C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj, Schema),
-    collect(ListObj,UList,Schema), !.
+    collect(ListObj,UList,Schema),
+    % DUBIOUS
+    !.
 
 %% intersectionOf(?Inter:uri_or_id,?Class:uri_or_id,+Graph:graph) is nondet
 %
@@ -383,24 +381,25 @@ intersectionOf(C,I,Graph) :-
 % @param Graph The current schema graph.
 %% :- rdf_meta intersectionOfList(r,r,o).
 intersectionOfList(C,IList,Graph) :-
+    graph_collection(Graph,Collection),
     graph_schema(Graph,Schema),
- Collection, Schema,    xrdf(C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
+    xrdf(Collection, Schema, C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
     collect(ListObj,IList,Schema), !.
 
 %% oneOf(?CC:uri_or_id,?X:uri_or_id,+Graph:graph) is det
 %
 % Gives elements which are members of a class by enumeration.
-%% :- rdf_meta unionOfList(r,r,o).
-unionOfList(C,UList,Graph) :-
+%
 % @param Collection,Schema,CC The class URI_OR_ID of which X isr.
 % @param X The URI_OR_ID of the element which is a member of CC.
 % @param Graph The current schema graph.
 %% :- rdf_meta oneOf(r,r,o).
 oneOf(CC,X,Graph) :-
+    graph_schema(Graph,Collection),
     graph_schema(Graph,Schema),
     xrdf(Collection,Schema,CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj,Schema),
-    collect(ListObj,L,,
-    member(X,L).
+    collect(ListObj,OneList,Schema),
+    member(X,OneList).
 
 %% oneOfList(+CC:uri_or_id,-OneList:list(uri_or_id),+Graph:graph) is det
 %

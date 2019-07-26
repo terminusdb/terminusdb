@@ -36,10 +36,10 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
-:- use_module(query, [enrich_graph_fragment/5]).
-:- use_module(tbox, [datatypeProperty/2, objectProperty/2]).
-:- use_module(map_compile, [typecast/4,hash/3]).
-:- use_module(journaling, [write_triple/4]).
+%:- use_module(query, [enrich_graph_fragment/5]).
+:- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
+:- use_module(casting, [typecast/4,hash/3]).
+:- use_module(journaling, [write_triple/5]).
 
 % is this actually needed?
 :- op(2, xfx, :).
@@ -213,19 +213,17 @@ return(S0,_,S0).
  */ 
 empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
            current_output_graph=default,
-           write_graph=IG,
+           write_graph=_,
            prefixes=[rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#',
                      rdfs='http://www.w3.org/2000/01/rdf-schema#'],
            definitions=[],
            collection='https://example.org',
-           graph=Graph,
+           graph=_,
            used=_Used,
            bound=3,
            module=M,
            bindings=[]]) :-
-    gensym(module_,M),
-    make_graph_from_name('https://example.org',[],Graph),
-    graph_instance(Graph,IG).
+    gensym(module_,M).
 
 empty_ctx(S0,S6) :-
     empty_ctx(S),
@@ -353,6 +351,11 @@ nonground_elts([_|Rest_In],Rest_Out) :-
     nonground_elts(Rest_In,Rest_Out).
 nonground_elts([],[]).
 
+/* 
+ * enrich_graphs(Graphs,Graph,Enriched) is det.
+ * 
+ * DDD enrich_graph_fragment currently unimplemented...
+ */
 enrich_graphs(Graphs,Graph,Enriched) :-
     convlist({Graph}/[G=g(L,H-[],F-[]),
                       G=Result]>>(
@@ -506,8 +509,10 @@ compile_wf(output(X,P,Y),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
+    view(graph=Graph), 
     view(write_graph=WG), 
     {
+        graph_collection(Graph,WC),
         Goal = write_triple(WC, WG, XE, PE, YE)
     }.
 compile_wf(X:C,Goal) -->
@@ -701,7 +706,7 @@ compile_wf(r(X,R,Y,G),Goal) -->
            output_graphs=OGS2),
     view(current_output_graph=OG),
     {
-        make_graph_from_name(G,[],Graph),
+        make_graph_from_collection(G,Graph),
         graph_collection(Graph,C),
         graph_instance(Graph,I),
 
@@ -815,7 +820,7 @@ compile_wf(all(P), Prog) -->
     }.
 compile_wf(from(G,P),Goal) -->
     resolve(G,GName),
-    { make_graph_from_name(GName,[],Graph) },
+    { make_graph_from_collection(GName,Graph) },
     update(graph=Old_Graph,
            graph=Graph),
     compile_wf(P, Goal),
@@ -1006,7 +1011,7 @@ connect(DB,New_Ctx) :-
     select(prefixes=_,Ctx,
            prefixes=Prefixes, Ctx1),
 
-    make_graph_from_name(DB,[],Graph),
+    make_graph_from_collection(DB,Graph),
 
     graph_instance(Graph,I),
     
