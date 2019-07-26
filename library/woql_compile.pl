@@ -27,7 +27,7 @@
 :- use_module(collection).
 :- use_module(woql_term).
 :- use_module(utils, except([elt/2])).
-:- use_module(triplestore, [xrdf/4,with_output_graph/2,sync_from_journals/2]).
+:- use_module(triplestore, [xrdf/5,with_output_graph/2,sync_from_journals/2]).
 :- use_module(schema, [subsumptionOf/3]).
 :- use_module(relationships, [
                   relationship_source_property/3,
@@ -460,8 +460,9 @@ compile_node(X:C,XE,Goals) -->
     expand(C,CE),
     view(graph=G),
     {
+        graph_collection(G,C),
         graph_instance(G,I),
-        Goals = [xrdf(XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D,I),
+        Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                  once(subsumptionOf(D,CE,G))
                 ]
     }.
@@ -485,17 +486,18 @@ compile_node_or_lit(_,X,XE,[]) -->
     resolve(X,XE).
 
 /* currently the same as compile node */
-compile_relation(X:C,XE,C,Goals) -->
+compile_relation(X:C,XE,Class,Goals) -->
     resolve(X,XE),
     %expand(C,CE),
-    resolve(C,CE),
+    resolve(Class,ClassE),
     view(graph=G),
     {
         (   X=ignore
         ->  Goals=[]
-        ;   graph_instance(G,I),
-            Goals = [xrdf(XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D,I),
-                     once(subsumptionOf(D,CE,G))
+        ;   graph_collection(G,C),
+            graph_instance(G,I),
+            Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
+                     once(subsumptionOf(D,ClassE,G))
                     ]
         )
     }.
@@ -506,7 +508,7 @@ compile_wf(output(X,P,Y),Goal) -->
     resolve(Y,YE),
     view(write_graph=WG), 
     {
-        Goal = write_triple(XE, PE, YE, WG)
+        Goal = write_triple(WC, WG, XE, PE, YE)
     }.
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
@@ -629,10 +631,11 @@ compile_wf(t(X,P,Y),Goal) -->
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {
+        graph_collection(G,C),            
         graph_instance(G,I),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        append([[xrdf(XE,PE,YE,I)],XGoals,YGoals],
+        append([[xrdf(C,I,XE,PE,YE)],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
@@ -641,13 +644,15 @@ compile_wf(t(X,P,Y,G),Goal) -->
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
     resolve(G,GE),
+    view(graph=Graph),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {        
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        append([[xrdf(XE,PE,YE,GE)],XGoals,YGoals],
+        graph_collection(Graph,C),
+        append([[xrdf(C,GE,XE,PE,YE)],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
@@ -661,6 +666,7 @@ compile_wf(r(X,R,Y),Goal) -->
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     {
+        graph_collection(G,C),                
         graph_instance(G,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
@@ -676,10 +682,10 @@ compile_wf(r(X,R,Y),Goal) -->
         ;   format(atom(M), 'No relationship target property ~q in ~q', [RClassID,G]),
             throw(error(M))),
 
-        append([[xrdf(RE,P,XE,I),
-                 xrdf(RE,Q,YE,I),
-                 is_new(triple(XE,RE,YE,G,'==>'),Full_G),
-                 T0=[triple(XE,RE,YE,G,'==>')|T1]
+        append([[xrdf(C,I,RE,P,XE),
+                 xrdf(C,I,RE,Q,YE),
+                 is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
+                 T0=[triple(C,I,XE,RE,YE,'==>')|T1]
                 ],XGoals,RGoals,YGoals],
                GoalList),
         
@@ -696,6 +702,7 @@ compile_wf(r(X,R,Y,G),Goal) -->
     view(current_output_graph=OG),
     {
         make_graph_from_name(G,[],Graph),
+        graph_collection(Graph,C),
         graph_instance(Graph,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
@@ -706,10 +713,10 @@ compile_wf(r(X,R,Y,G),Goal) -->
 
         %format('***************~nRelation:~n~q-~q~n',[T0,T1]),
 
-        append([[xrdf(RE,P,XE,I),
-                 xrdf(RE,Q,YE,I),
-                 is_new(triple(XE,RE,YE,G,'==>'),Full_G),
-                 T0=[triple(XE,RE,YE,G,'==>')|T1]
+        append([[xrdf(C,I,RE,P,XE),
+                 xrdf(C,I,RE,Q,YE,I),
+                 is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
+                 T0=[triple(C,I,XE,RE,YE,'==>')|T1]
                 ],XGoals,RGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
@@ -901,8 +908,7 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
                        )
                    ),
                    close(Out)
-               ),
-        nl, writeq(Prog), nl
+               )
     }.
 compile_wf(where(P), Prog) -->
     compile_wf(P, Prog).
