@@ -14,8 +14,11 @@
                  drop/3,
                  truncate_list/4,
                  sfoldr/4,
+                 foldm/6,
+                 mapm/5,
                  trim/2,
                  split_atom/3,
+                 count/3,
                  op(920,fy, *),
                  '*'/1
                 ]).
@@ -138,7 +141,7 @@ interpolate([H|T],S) :-
  * i.e. returns an empty list for failure to find solutions, rather than failing.
  */
 :- meta_predicate unique_solutions(?,0,?).
-unique_solutions(Template,Goal,Collection) :-
+unique_solutions(Template, Goal, Collection) :-
     (   setof(Template, Goal, CollectionX)
     ->  Collection=CollectionX
     ;   Collection=[]).
@@ -275,3 +278,31 @@ split_atom(Atom,Delimiter,Result) :-
     split_string(Atom,Delimiter,'',Strings),
     maplist([S,A]>>(atom_string(A,S)), Strings, Result).
 
+
+/* 
+ * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.
+ *
+ * Monadic fold over state 
+ */
+foldm(_P,[],Base,Base,S,S).
+foldm(P,[H|T],Base,Result,S0,SN) :-
+    foldm(P,T,Base,LastResult,S0,S1),
+    call(P,H,LastResult,Result,S1,SN).
+
+/*
+ * mapm(P:predicate,L:list,O:list,S0:any,SN:any) is det.
+ * 
+ * Monadic map over state 
+ */
+mapm(_P,[],[],S,S).
+mapm(P,[H|T],[HP|TP],S0,SN) :-
+    call(P,H,HP,S0,S1),
+    mapm(P,T,TP,S1,SN).
+
+/** 
+ * count(+A:atom,+L:list,-C:int) is det. 
+ * 
+ * Counts occurences of A in L. 
+ */ 
+count(_,[], 0).
+count(A,[B|L],C) :- count(A,L,K), (A=B -> C is K+1 ; C=K).

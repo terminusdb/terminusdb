@@ -375,7 +375,7 @@ wf(into(G,S)) :-
     wf(S).
 wf(hash(G,HL,v(_V))) :-
     % something for HL
-    list(HL),
+    is_list(HL),
     % nothing for _V?
     graph_term(G).
 wf(concat(L,A)) :-

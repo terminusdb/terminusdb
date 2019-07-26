@@ -111,7 +111,7 @@ owl_types([allDifferent,
            transitiveProperty,
            namedIndividual]).
 
-metadata_predicates([schema/1]).
+metadata_predicates([schema/2]).
 calculated_predicates([subsumptionOf/2]).
 util_predicates([entity/1]).
 

@@ -149,7 +149,7 @@ user:term_expansion((run_upgrade_step(X,Y):-Body),
  */ 
 :- discontiguous run_upgrade_step/2.
 run_upgrade_step(none,'0.1.0') :-
-    hdt_path(Path), 
+    db_path(Path), 
     subdirectories(Path,Graph_Names),
     forall(
         member(Graph_Name,Graph_Names),

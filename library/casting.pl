@@ -26,6 +26,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(library(utils)).
+:- use_module(library(prefixes)).
+:- use_module(library(speculative_parse)).
+
 /* 
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.
  * 
@@ -46,7 +50,7 @@ hash(Base,Args,Output) :-
  * Presumably this should record into prov on failure. 
  */ 
 typecast(Val, Type, Hint, Cast) :-
-    rdf_global_id(Type,Type_URI),
+    global_prefix_expand(Type,Type_URI),
     typecast_switch(Val,Type_URI,Hint,Cast).
 
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-

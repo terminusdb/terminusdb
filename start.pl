@@ -57,6 +57,8 @@ initialise_server_settings :-
 :- use_module(library(server)).
 :- use_module(library(upgrade_db)).
 :- use_module(library(prefixes)).
+% We only need this if we are interactive...
+:- use_module(library(sdk)).
 
 main(Argv) :-
     maybe_upgrade,

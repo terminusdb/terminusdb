@@ -29,6 +29,7 @@
 
 :- use_module(config(config),[]).
 :- use_module(library(utils)).
+:- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
 
 capability_database('capability/').

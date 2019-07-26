@@ -1,6 +1,7 @@
 :- module(types, [
               is_uri/1,
               is_id/1,
+              is_bnode/1,
               is_prefixed_uri/1,
               is_uri_or_id/1,
               is_object/1,
@@ -15,7 +16,7 @@
 /** <module> Types
  * 
  * This module implements pervasive types which can be used for type 
- * checking.
+ * checking. Works particularly well in conjunction with Mavis.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
@@ -37,9 +38,22 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 /** 
+ * is_literal(+X) is semidet.
+ *  
+ */
+is_literal(literal(lang(Lang,Data))) :-
+    atom(Lang),
+    atom(Data).
+is_literal(literal(type(Type,_Data))) :-
+    % this should probably have the full xsd build out.
+    atom(Type).
+
+error:has_type(literal,X) :-
+    is_literal(X).
+
+/** 
  * is_uri(+X) is semidet.
  * 
- * Mavis type checking.
  */ 
 is_uri(X) :-
     atom(X).
@@ -73,7 +87,6 @@ error:has_type(id,X) :-
     is_id(X).
 
 
-
 /** 
  * is_uri_or_id(+X) is semidet.
  * 
@@ -93,9 +106,9 @@ error:has_type(uri_or_id,X) :-
  * 
  **/ 
 is_object(X) :-
-    (   is_prefixed_uri(X)
+    (   is_prefixed_uri(X) % DDD maybe not anymore...
     ->  true        
-    ;   rdf_is_literal(X)
+    ;   is_literal(X)
     ->  true
     ;   is_uri(X)).
 
@@ -109,6 +122,12 @@ is_object_or_id(X) :-
     ->  true
     ;   is_id(X)).
 
+
+/** 
+ * is_bnode(+X) is semidet.
+ */
+is_bnode(X) :-
+    atom_prefix(X,'_:').
 
 /** 
  * is_number_compat(X) is semidet.

@@ -5,7 +5,8 @@
               set_collection_prefixes/2,
               delete_collection_prefixes/1,
               get_collection_prefixes/2,
-              get_collection_prefix_list/2
+              get_collection_prefix_list/2,
+              global_prefix_expand/2
           ]).
 
 /** <module> Prefixes
@@ -42,6 +43,19 @@
 :- use_module(library(file_utils)).
 :- use_module(library(utils)).
 
+% internal
+global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
+global_prefixes(dcogbox,'https://datachemist.net/ontology/dcogbox#').
+global_prefixes(xdd,'https://datachemist.net/ontology/xdd#').
+global_prefixes(rvo,'https://datachemist.net/ontology/rvo#').
+global_prefixes(reg,'https://regulumdb.com/ontology/regulum#').
+% common
+global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
+global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
+global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
+global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
+global_prefixes(ex,'http://example.org/').
+
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
  */
@@ -51,16 +65,15 @@ default_prefixes(C,doc,U) :-
 default_prefixes(C,scm,U) :-
     interpolate([C,'/',schema], U).
 % internal
-default_prefixes(_,dcog,'https://datachemist.net/ontology/dcog#').
-default_prefixes(_,dcogbox,'https://datachemist.net/ontology/dcogbox#').
-default_prefixes(_,xdd,'https://datachemist.net/ontology/xdd#').
-default_prefixes(_,rvo,'https://datachemist.net/ontology/rvo#').
-% common
-default_prefixes(_,xsd,'http://www.w3.org/2001/XMLSchema#').
-default_prefixes(_,rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
-default_prefixes(_,rdfs,'http://www.w3.org/2000/01/rdf-schema#').
-default_prefixes(_,owl,'http://www.w3.org/2002/07/owl#').
-default_prefixes(_,ex,'http://example.org/').
+default_prefixes(_,Pre,URI) :-
+    global_prefixes(Pre,URI).
+
+/* 
+ * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
+ */
+global_prefix_expand(Prefix:X, URI) :-
+    global_prefixes(Prefix,Base),
+    interpolate([Base,X],URI).
 
 /*
  * initialise_prefix_db(+Collection) is det.

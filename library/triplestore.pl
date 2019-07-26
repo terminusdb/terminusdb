@@ -64,7 +64,7 @@ retract_graph(Collection,Graph_Name) :-
  * Completely remove a graph from disk.
  */ 
 destroy_graph(Collection,Graph_Name) :-
-    retract_graph(Graph_Name),
+    retract_graph(Collection, Graph_Name),
     graph_directory(Collection, Graph_Name, GraphPath),
     delete_directory_and_contents(GraphPath).
 
@@ -600,3 +600,20 @@ xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
     (   hdt_search_safe(HDT,X,Y,Z)
     *-> false
     ;   xrdf_search_queue(X,Y,Z,Rest)).
+
+/* 
+ * hdt_search_safe(HDT,X,P,Y) is nondet.
+ * 
+ * Add some marshalling.
+ */ 
+hdt_search_safe(HDT,X,Y,literal(type(T,Z))) :-
+	hdt_search(HDT,X,Y,Z^^T).
+hdt_search_safe(HDT,X,Y,literal(lang(L,Z))) :-
+	hdt_search(HDT,X,Y,Z@L).
+hdt_search_safe(HDT,X,Y,Z) :-
+	atom(Z),
+	hdt_search(HDT,X,Y,Z).
+hdt_search_safe(HDT,X,Y,Z) :-
+	var(Z),
+	hdt_search(HDT,X,Y,Z),
+	atom(Z).

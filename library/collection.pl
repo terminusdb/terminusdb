@@ -107,12 +107,10 @@ graph_identifiers(Graph,Names) :-
  * Use a base uri to 
  */ 
 make_graph_from_collection(Name,Graph) :-
-    interpolate([Name,'/graph/main'],Instance),
-    interpolate([Name,'/graph/schema'],Schema),
-    interpolate([Name,'/graph/inference'],Inference),
-    interpolate([Name,'/graph/error'],Error_Instance),
-    interpolate([Name,'/graph/error_schema'],Error_Schema),
     make_graph([collection=Name,
-                schema=Schema,instance=Instance,inference=Inference,
-                error_instance=Error_Instance, error_schema=Error_Schema], Graph).
+                schema=schema,
+                instance=main,
+                inference=inference,
+                error_instance=error_instance,
+                error_schema=error_schema], Graph).
 

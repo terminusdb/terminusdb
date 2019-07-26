@@ -1,5 +1,11 @@
-:- module(woql_compile,[compile_query/3, run_query/2, is_new/2,
-                        connect/2, ask/2, ask/1]).
+:- module(woql_compile,[
+              compile_query/3,
+              compile_query/4,
+              run_query/2,
+              is_new/2,
+              empty_ctx/1,
+              empty_ctx/2
+          ]).
 
 /** <module> WOQL Compile 
  * 
@@ -178,18 +184,6 @@ is_new(Elt,TDB) :-
     ->  false
     ;   TDB=[_|Rest],
         is_new(Elt,Rest)).
-
-/* Monadic fold over state */
-foldm(_P,[],Base,Base,S,S).
-foldm(P,[H|T],Base,Result,S0,SN) :-
-    foldm(P,T,Base,LastResult,S0,S1),
-    call(P,H,LastResult,Result,S1,SN).
-
-/* Monadic map over state */
-mapm(_P,[],[],S,S).
-mapm(P,[H|T],[HP|TP],S0,SN) :-
-    call(P,H,HP,S0,S1),
-    mapm(P,T,TP,S1,SN).
 
 /* Monadic selection */
 update(C0,C1,S0,S1) :-
@@ -964,13 +958,17 @@ compile_wf(true,true) -->
     [].
 
 compile_arith(Exp,ExpE) -->
-    Exp =.. [Functor|Args],
-    % lazily snarf everything named...
-    % probably need to add stuff here.
-    member(Functor, ['*','-','div','/']),
+    {
+        Exp =.. [Functor|Args],
+        % lazily snarf everything named...
+        % probably need to add stuff here.
+        member(Functor, ['*','-','div','/'])
+    },
     !,
     mapm(compile_arith,Args,ArgsE),
-    ExpE =.. [Functor|ArgsE].
+    {
+        ExpE =.. [Functor|ArgsE]
+    }.
 compile_arith(Exp,ExpE) -->
     resolve(Exp,ExpE).
     
@@ -987,65 +985,3 @@ list_conjunction(L,Goal) :-
     reverse(L,R),
     R = [A|Rest],
     foldl( [X,Y,(X,Y)]>>(true), Rest, A, Goal).
-
-
-
-/**************************
-
-Prolog centric predicates 
-
-***************************/
-
-default_prefixes([rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-                  rdfs='http://www.w3.org/2000/01/rdf-schema#',
-                  xsd='http://www.w3.org/2001/XMLSchema#',
-                  xdd='https://datachemist.net/ontology/xdd#',
-                  dcog='https://datachemist.net/ontology/dcog#',
-                  owl='http://www.w3.org/2002/07/owl#']).
-
-connect(DB,New_Ctx) :-
-    empty_ctx(Ctx),
-
-    get_collection_prefix_list(DB, Prefixes),
-    
-    select(prefixes=_,Ctx,
-           prefixes=Prefixes, Ctx1),
-
-    make_graph_from_collection(DB,Graph),
-
-    graph_instance(Graph,I),
-    
-    select(graph=_,Ctx1,
-           graph=Graph,Ctx2),
-    select(write_graph=_,Ctx2,
-           write_graph=I,Ctx3),
-    select(collection=_,Ctx3,
-           collection=DB,New_Ctx).
-
-pre_term_to_term_and_bindings(Pre_Term,Term,Bindings_In,Bindings_Out) :-
-    (   var(Pre_Term)
-    ->  (   member(V=X,Bindings_In),
-            Pre_Term == X
-        ->  Bindings_In = Bindings_Out,
-            Term = v(V)            
-        ;   gensym('Var',G),
-            Bindings_Out = [G=Pre_Term|Bindings_In],
-            Term = v(G)
-        )
-    ;   Pre_Term =.. [F|Args],
-        mapm(pre_term_to_term_and_bindings,Args,New_Args,Bindings_In,Bindings_Out),
-        Term =.. [F|New_Args]
-    ).
-
-ask(Server,Pre_Term) :- 
-    pre_term_to_term_and_bindings(Pre_Term,Term,[],Bindings_Out),
-    select(bindings=_,Server,
-           bindings=Bindings_Out,New_Ctx),
-    % nl,writeq(Term),nl,
-    compile_query(Term,Prog,New_Ctx,_),
-    nl,writeq(Prog),nl,
-    call(Prog).
-
-ask(Pre_Term) :-
-    empty_ctx(Ctx),
-    ask(Ctx,Pre_Term).
