@@ -1001,15 +1001,10 @@ default_prefixes([rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#',
 connect(DB,New_Ctx) :-
     empty_ctx(Ctx),
 
-    atomic_list_concat([DB,'/ontology/main#'], Graph_Schema),
-
-    default_prefixes(Default_Prefixes),
-
-    atomic_list_concat([DB,'/'],Base_URI),
+    get_collection_prefix_list(DB, Prefixes),
     
     select(prefixes=_,Ctx,
-           prefixes=[g=Base_URI,
-                     s=Graph_Schema|Default_Prefixes], Ctx1),
+           prefixes=Prefixes, Ctx1),
 
     make_graph_from_name(DB,[],Graph),
 

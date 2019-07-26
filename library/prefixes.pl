@@ -4,7 +4,8 @@
               update_collection_prefixes/2,
               set_collection_prefixes/2,
               delete_collection_prefixes/1,
-              get_collection_prefixes/2
+              get_collection_prefixes/2,
+              get_collection_prefix_list/2
           ]).
 
 /** <module> Prefixes
@@ -134,12 +135,30 @@ delete_collection_prefixes(Collection_Id):-
     retractall_prefix(Collection_Id,_,_).
 
 /* 
- * get_collection_prefixes(Prefixes:dict,Collection:atom) is det.
+ * get_collection_prefixes(Collection:atom,Prefixes:dict) is det.
  * 
  * Return a dictionary of prefixes for the current collection. 
  */
-get_collection_prefixes(Prefixes, Collection_Id) :-
-    setof(Prefix=Uri,
-          prefix(Collection_Id, Prefix, Uri),
-          Prefix_List),
+get_collection_prefixes(Collection_Id,Prefixes) :-
+    get_collection_prefix_pairs(Collection_Id,Prefix_List),
     dict_pairs(Prefixes, _, Prefix_List).
+
+/* 
+ * get_collection_prefix_pairs(Collection:atom,Prefixes:dict) is det.
+ * 
+ * return a list of pairs of prefixes.
+ */
+get_collection_prefix_pairs(Collection,List) :-
+    setof(Prefix-Uri,
+          prefix(Collection, Prefix, Uri),
+          List).
+
+/* 
+ * get_collection_prefixes_list(Collection:atom,Prefixes:dict) is det.
+ * 
+ * return a list of pairs of prefixes.
+ */
+get_collection_prefix_list(Collection,List) :-
+    get_collection_prefix_pairs(Collection,Pairs),
+    maplist([A-B,A=B]>>(true), Pairs, List).
+
