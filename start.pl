@@ -60,5 +60,6 @@ initialise_server_settings :-
 
 main(Argv) :-
     maybe_upgrade,
+    initialise_prefix_db,
     server(Argv).
  

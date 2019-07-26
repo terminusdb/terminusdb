@@ -39,15 +39,16 @@
 :- persistent prefix(collection:atom,prefix:atom,uri:atom).
 
 :- use_module(library(file_utils)).
+:- use_module(library(utils)).
 
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
  */
 % per database shorthands
 default_prefixes(C,doc,U) :-
-    interpolate([C/main], U).
+    interpolate([C,'/',main], U).
 default_prefixes(C,scm,U) :-
-    interpolate([C/schema], U).
+    interpolate([C,'/',schema], U).
 % internal
 default_prefixes(_,dcog,'https://datachemist.net/ontology/dcog#').
 default_prefixes(_,dcogbox,'https://datachemist.net/ontology/dcogbox#').
@@ -62,6 +63,11 @@ default_prefixes(_,ex,'http://example.org/').
 
 /*
  * initialise_prefix_db(+Collection) is det.
+ * 
+ * Set up default prefixes for a new collection. 
+ * The semantics of this is quite different from initialise_prefix_db/2, 
+ * because it doesn't cause a re-attache of the database. Perhaps we 
+ * should use a different name?
  */
 initialise_prefix_db(C) :-
     forall(
@@ -76,17 +82,17 @@ initialise_prefix_db(C) :-
  */
 initialise_prefix_db :- 
     once(file_search_path(regulum_home,BasePath)),
-    interpolate([BasePath/storage/'prefix.db'],File),
+    interpolate([BasePath,'/',storage,'/','prefix.db'],File),
     (   \+ exists_file(File)
         % create the file
     ->  touch(File),
         db_attach(File, []),
         % Add default prefixes to all collections
         % (prefixes are collection dependent)
-        collections(C),
+        collections(Collections),
         forall(
             member(C,Collections),
-            initalise_prefix_db(Collection)
+            initialise_prefix_db(C)
         )
         % Attach to the already existing file.
     ;   db_attach(File, [])

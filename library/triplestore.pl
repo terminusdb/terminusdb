@@ -7,8 +7,6 @@
               xrdf/5,
               commit/2,
               rollback/2,
-              collections/0,
-              collections/1,
               check_graph_exists/2,
               last_plane_number/2,
               graph_checkpoint/3,
@@ -288,55 +286,6 @@ hdt_transform_journals(Collection_ID,Graph_Name) :-
  * The dynamic predicate which stores negative updates from the journal. 
  */
 :- dynamic xrdf_neg/5.
-
-/**
- * collections is det.
- *
- * Writes a list of the current collections. 
- **/
-collections :-
-    collections(Cs),
-    format('Current Collections: ~q~n', [Cs]).
-    
-/** 
- * collections(-Collections:list(uri)) is det.
- * 
- * Return a list of all current graphs. 
- * FIX: This is probably a bit dangerous as newly constructed 
- * directories in the hdt dir will *look* like new graphs. 
- * Probably need some sort of metadata. 
- */ 
-collections(Collections) :-
-    db_path(Collection_Dir), 
-    subdirectories(Collection_Dir,Collection_Files),
-    include({Collection_Dir}/[Collection_File]>>(
-                interpolate([Collection_Dir,Collection_File,'/COLLECTION'], Collection_Marker_Path),
-                exists_file(Collection_Marker_Path)
-            ), Collection_Files, Valid_Collection_Files), 
-    maplist(sanitise_file_name,Collections,Valid_Collection_Files).
-
-/*
- * graphs(?Collection_ID,-Graphs:list(uri)) is nondet.
- * 
- * Return a list of all current graphs. 
- * FIX: This is probably a bit dangerous as newly constructed 
- * directories in the hdt dir will *look* like new graphs. 
- * Probably need some sort of metadata. 
- */
-graphs(Collection_ID,Graphs) :-
-    collections(Collections),
-    (   member(Collection_ID,Collections)
-    ->  sanitise_file_name(Collection_ID,Collection_Name),
-        db_path(Path),
-        interpolate([Path,Collection_Name], Collection_Path),
-        subdirectories(Collection_Path,Graph_Names),
-        include({Collection_Path}/[Name]>>(
-                    interpolate([Collection_Path,'/',Name],X),
-                    exists_directory(X)
-                ),Graph_Names,Valid_Graph_Names),
-        maplist([N,S]>>sanitise_file_name(N,S),Graphs,Valid_Graph_Names)
-    ;   Graphs = []).
-
 
 /**
  * check_graph_exists(+Collection_ID,+G:graph_identifier) is semidet.

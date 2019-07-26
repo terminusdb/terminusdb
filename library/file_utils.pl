@@ -24,7 +24,10 @@
               turtle_file_type/1,
               graph_file_timestamp_compare/3,
               graph_dir_timestamp_gt/2,
-              current_checkpoint_directory/3
+              current_checkpoint_directory/3,
+              collections/0,
+              collections/1,
+              graphs/2
           ]).
 
 :- use_module(utils).
@@ -363,3 +366,53 @@ current_checkpoint_directory(Collection_ID,Graph_Id, Path) :-
              AllCheckpoints,[File|_Rest])
     ->  interpolate([GraphPath,'/',File],Path)
     ;   throw(no_checkpoint_directory(Graph_Id,Path))). 
+
+
+/**
+ * collections is det.
+ *
+ * Writes a list of the current collections. 
+ **/
+collections :-
+    collections(Cs),
+    format('Current Collections: ~q~n', [Cs]).
+    
+/** 
+ * collections(-Collections:list(uri)) is det.
+ * 
+ * Return a list of all current graphs. 
+ * FIX: This is probably a bit dangerous as newly constructed 
+ * directories in the hdt dir will *look* like new graphs. 
+ * Probably need some sort of metadata. 
+ */ 
+collections(Collections) :-
+    db_path(Collection_Dir), 
+    subdirectories(Collection_Dir,Collection_Files),
+    include({Collection_Dir}/[Collection_File]>>(
+                interpolate([Collection_Dir,Collection_File,'/COLLECTION'], Collection_Marker_Path),
+                exists_file(Collection_Marker_Path)
+            ), Collection_Files, Valid_Collection_Files), 
+    maplist(sanitise_file_name,Collections,Valid_Collection_Files).
+
+/*
+ * graphs(?Collection_ID,-Graphs:list(uri)) is nondet.
+ * 
+ * Return a list of all current graphs. 
+ * FIX: This is probably a bit dangerous as newly constructed 
+ * directories in the hdt dir will *look* like new graphs. 
+ * Probably need some sort of metadata. 
+ */
+graphs(Collection_ID,Graphs) :-
+    collections(Collections),
+    (   member(Collection_ID,Collections)
+    ->  sanitise_file_name(Collection_ID,Collection_Name),
+        db_path(Path),
+        interpolate([Path,Collection_Name], Collection_Path),
+        subdirectories(Collection_Path,Graph_Names),
+        include({Collection_Path}/[Name]>>(
+                    interpolate([Collection_Path,'/',Name],X),
+                    exists_directory(X)
+                ),Graph_Names,Valid_Graph_Names),
+        maplist([N,S]>>sanitise_file_name(N,S),Graphs,Valid_Graph_Names)
+    ;   Graphs = []).
+
