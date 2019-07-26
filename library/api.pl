@@ -28,6 +28,7 @@
  */
 
 % http libraries
+:- use_module(library(http/http_log)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
@@ -40,12 +41,13 @@
 :- use_module(library(http/json)). 
 :- use_module(library(http/json_convert)).
 
-% Load capabilities 
+% Load capabilities library
 :- use_module(library(capabilities)).
 
 % woql libraries
-%:- use_module(library(woql_compile)).
+:- use_module(library(woql_compile)).
 
+% Default utils
 :- use_module(library(utils)).
 
 %% Set base location

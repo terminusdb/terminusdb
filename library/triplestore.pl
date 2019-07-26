@@ -11,7 +11,8 @@
               last_plane_number/2,
               graph_checkpoint/3,
               current_checkpoint_directory/3,
-              last_checkpoint_number/2
+              last_checkpoint_number/2,
+              with_output_graph/2
           ]).
 
 :- use_module(library(hdt)). 
