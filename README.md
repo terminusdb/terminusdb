@@ -62,8 +62,7 @@ examples at the RegulumDB repositories...
 
 In Python: https://github.com/regulumdb/regulum-python-sdk
 
-In JavaScript: 
-AND here: 
+In JavaScript: https://github.com/regulumdb/regulum-javascript-sdk
 
 ## Changes in this Version 
 
