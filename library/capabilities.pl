@@ -40,16 +40,13 @@ capability_database('capability/').
  * JSON-LD capability access context. 
  */ 
 capability_context(_{
-                       cap : 'https://regulumdb.com/ontology/capability#'
+                       reg : 'https://regulumdb.com/ontology/regulum#'
                    }).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
  */
-root_user_id(Root_User_ID) :-
-    config:server_name(Server),
-    capability_database(Cap_DB),
-    interpolate([Server,Cap_DB,user/root],Root_User_ID).
+root_user_id('https://localhost/masterdb/candidate/admin').
 
 /** 
  * key_user(Key,User) is det.
@@ -60,8 +57,7 @@ key_user(Key, Root_User) :-
     config:root_password_hash(Key),
     !,
     root_user_id(Root_User_ID),
-    Root_User = _{ 'cap:id' : Root_User_ID,
-                   'cap:name' : root }.
+    entity_object(Root_User).
 
 /** 
  * key_capabilities(Key,Capabilities) is det. 
@@ -75,47 +71,22 @@ key_capabilities(Key, Capabilities) :-
     capability_context(Capability_Context),
     Capabilities = _{
         '@context' : Capability_Context,               
-        'cap:server_key' : Key,
-        'cap:user' : User,
-        'cap:access' : Access
-    }.
+        'reg:server_key' : Key,
+        'reg:user' : User,
+        'reg:access' : Access
+    },
+    compress(Capabilities,Capability_Context,CC).
                  
 /* 
- * user_access(User,Access) is det.
+ * user_capabilities(User,Access_Object) is det.
  */
-user_access(Root_User, Access) :-
-    % Root User is special
-    root_user_id(Root_User_ID),
-    get_dict('cap:id', Root_User, Root_User_ID),
-    !,
-
-    collections(DBs),
-    config:server_name(Server_Name),
-    Server_Capability = (
-        Server_Name - [_{
-                           action : create, 
-                           class : 'Database'},
-                       _{
-                           action : list, 
-                           class : 'Database'}]
-    ),
-    findall([DB - Access],
-            (   member(DB,DBs),
-                db_meta_data(DB,Meta_Data),
-                put_dict(_{
-                             capabilities : [ createdb, connect ]
-                         },
-                         Meta_Data,
-                         Access)
-            ),
-            Objs),
-    dict_pairs(Access, _, [Server_Capability|Objs]).
-user_access(_User, _Access) :-
-    % Query other users here. 
-    fail.
+user_capabilities(User, Accesses) :-
+    setof(Access,
+          user_capability(User,Access),
+          Accesses).
 
 user_capability(User,Action) :-
-    connect('http://localhost/capability',DBOJ),
+    connect('http://localhost/capability',DB),
     ask(DB, 
         select([User, Action], 
 		       (
