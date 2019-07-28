@@ -13,10 +13,10 @@ by a given user:
 ```
 connect('http://localhost/capability', DB),
 ask(DB, 
-    select([User, UserClass, P, Q], 
+    select([User, P, Q], 
 		(
 			t( User , rdf/type , reg/'User' ), 
-			t( User , P , Q ), 
+			t( User , reg/authority' , Q ), 
 			t( Q , rdf/type, reg/'ServerCapability' )
 		)
 	)

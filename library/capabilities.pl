@@ -114,3 +114,15 @@ user_access(_User, _Access) :-
     % Query other users here. 
     fail.
 
+user_capability(User,Action) :-
+    connect('http://localhost/capability',DBOJ),
+    ask(DB, 
+        select([User, Action], 
+		       (
+			       t( User , rdf/type , reg/'User' ), 
+			       t( User , reg/authority, Auth ), 
+			       t( Auth , reg/action, Action)
+		       )
+	          )
+       ).
+
