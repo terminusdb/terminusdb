@@ -6,7 +6,8 @@
               delete_collection_prefixes/1,
               get_collection_prefixes/2,
               get_collection_prefix_list/2,
-              global_prefix_expand/2
+              global_prefix_expand/2,
+              literal_expand/2
           ]).
 
 /** <module> Prefixes
@@ -74,6 +75,10 @@ default_prefixes(_,Pre,URI) :-
 global_prefix_expand(Prefix:X, URI) :-
     global_prefixes(Prefix,Base),
     interpolate([Base,X],URI).
+
+literal_expand(literal(type(T,D)), literal(type(E,D))) :-
+    global_prefix_expand(T,E).
+literal_expand(literal(lang(L,D)), literal(lang(L,D))).
 
 /*
  * initialise_prefix_db(+Collection) is det.

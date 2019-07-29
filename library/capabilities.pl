@@ -1,4 +1,6 @@
-:- module(capabilities,[key_capabilities/2]).
+:- module(capabilities,[
+              key_auth/2
+          ]).
                  
 /** <module> Capabilities
  * 
@@ -31,8 +33,11 @@
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
+:- use_module(library(frame)).
+:- use_module(library(json_ld)).
+:- use_module(library(collection)).
 
-capability_database('capability/').
+capability_collection('http://localhost/capability').
 
 /** 
  * capability_context(Context : dictionary) is det.
@@ -40,6 +45,7 @@ capability_database('capability/').
  * JSON-LD capability access context. 
  */ 
 capability_context(_{
+                       doc : 'https://localhost/masterdb/candidate/', 
                        reg : 'https://regulumdb.com/ontology/regulum#'
                    }).
 
@@ -53,40 +59,49 @@ root_user_id('https://localhost/masterdb/candidate/admin').
  * 
  * Key user association
  */ 
-key_user(Key, Root_User) :-
+key_user(Key, Root_User_ID) :-
     config:root_password_hash(Key),
     !,
-    root_user_id(Root_User_ID),
-    entity_object(Root_User).
+    root_user_id(Root_User_ID).
 
 /** 
- * key_capabilities(Key,Capabilities) is det. 
+ * key_auth(Key,Auth) is det. 
  *  
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */ 
-key_capabilities(Key, Capabilities) :-
-    key_user(Key,User),
-    user_access(User, Access),
-    capability_context(Capability_Context),
-    Capabilities = _{
-        '@context' : Capability_Context,               
-        'reg:server_key' : Key,
-        'reg:user' : User,
-        'reg:access' : Access
-    },
-    compress(Capabilities,Capability_Context,CC).
-                 
+key_auth(Key, Auth) :-
+    key_user(Key,User_ID),
+
+    capability_collection(C),
+    make_collection_graph(C,Graph),
+    capability_context(Ctx),
+
+    user_auth_id(User_ID, Auth_ID),
+    
+    entity_jsonld(Auth_ID,Ctx,Graph,Auth).
+
 /* 
- * user_capabilities(User,Access_Object) is det.
+ * user_auth_id(User,Auth_id) is det.
+ * 
+ * Maybe should return the auth object - as soon as we have 
+ * obj embedded in woql.
  */
-user_capabilities(User, Accesses) :-
-    setof(Access,
-          user_capability(User,Access),
-          Accesses).
+user_auth_id(User_ID, Auth_ID) :-
+    capability_collection(Collection),
+    connect(Collection,DB),
+    ask(DB, 
+        select([Auth_ID], 
+		       (
+			       t( User_ID , rdf/type , reg/'User' ), 
+			       t( User_ID , reg/authority, Auth_ID )
+		       )
+	          )
+       ).
 
 user_capability(User,Action) :-
-    connect('http://localhost/capability',DB),
+    capability_collection(Collection),
+    connect(Collection,DB),
     ask(DB, 
         select([User, Action], 
 		       (

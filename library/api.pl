@@ -24,8 +24,7 @@
  *  You should have received a copy of the GNU General Public License    *
  *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
  *                                                                       *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- */
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 % http libraries
 :- use_module(library(http/http_log)).
@@ -78,11 +77,11 @@ connect_handler(Request) :-
     http_parameters(Request, [], [form_data(Data)]),
 
     get_key(key, Data, Connection_Key),
-    key_capabilities(Connection_Key,Capabilities),
+    key_auth(Connection_Key,Auth),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out, Capabilities).
+	json_write_dict(Out,Auth).
 
 
 /** 

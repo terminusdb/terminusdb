@@ -12,7 +12,9 @@
               all_entity_instances/2,
               all_entity_iris/2,
               % Get an object as described by a frame.
-              entity_object/3
+              entity_object/3,
+              entity_jsonld/3,
+              entity_jsonld/4
           ]).
 
 /** <module> Frames
@@ -41,14 +43,16 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(utils)).
-:- use_module(library(datatypes)).
+:- use_module(library(base_type)).
 :- use_module(library(validate_schema), except([entity/2])).
-% TODO this must be replaced with validate_intance predicates
-%:- use_module(abox).
-:- use_module(library(collections)).
+:- use_module(library(validate_instance)).
+:- use_module(library(inferrence)).
+:- use_module(library(collection)).
 :- use_module(library(triplestore)).
 :- use_module(library(schema), []).
-:- use_module(library(frame)).
+:- use_module(library(types)).
+:- use_module(library(frame_types)).
+:- use_module(library(json_ld)).
 
 class_record(Graph,Class,[class=Class|L]) :-
     maybe_meta(Class,Graph,L).
@@ -73,7 +77,7 @@ get_label(Entity,Graph,Label) :-
     global_prefix_expand(rdfs:label,LabelProp),
     xrdf(Collection,Instance,Entity,LabelProp,literal(lang(_,Label))),
     !.
-get_label(Entity,Graph_ID,Label) :-
+get_label(Entity,Graph,Label) :-
     graph_instance(Graph,Collection),
     graph_instance(Graph,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
@@ -96,7 +100,7 @@ all_entity_instances(Graph,AE) :-
     graph_instance(Graph,Instance),
     unique_solutions(E=[type=C,label=L],
                      (   xrdf(Collection,Instance,
-                              E,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',C),
+                              E,rdf:type,C),
                          schema_util:entity(C,Graph),
                          get_some_label(E,Graph,L)),
                      AE).
@@ -106,7 +110,7 @@ all_entity_iris(Graph, IRIs) :-
     graph_instance(Graph, Instance),
     findall(IRI,
             (   xrdf(Collection,Instance,
-                     IRI,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',C),
+                     IRI,rdf:type,C),
                 schema_util:entity(C, Graph)
             ),
             IRIs).
@@ -133,16 +137,18 @@ class_properties(Class, Graph, PropertiesPrime) :-
                           'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   EntityProperties=[]),
     (   setof(Super,schema:subsumptionOf(Class,Super,Graph),Classes),
-        setof(P,S^(member(S,Classes),tbox:domain(P,S,Graph)),Properties)        
+        setof(P,
+              S^(member(S,Classes),
+                 validate_schema:domain(P,S,Graph)),
+              Properties)        
     ->  most_specific_properties(Graph,Properties,MSProperties),
         append(MSProperties,EntityProperties,PropertiesWithAbstract),
         graph_collection(Graph,Collection),                
         graph_schema(Graph,Schema),
-        exclude({Schema}/[X]>>(xrdf(Collection,
-                                    Schema,
-                                    X,
-                                    'https://datachemist.net/ontology/dcog#tag',
-                                    'https://datachemist.net/ontology/dcog#abstract')),
+        exclude({Schema,Collection}/[X]>>(
+                    xrdf(Collection,
+                         Schema,
+                         X,dcog:tag,dcog:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
     ;   PropertiesPrime=EntityProperties).
@@ -338,6 +344,7 @@ property_restriction(P,Graph,R) :-
     ;   R=true
     ).
 
+
 /** 
  * classes_below(+Class:uri, +Graph, -Below:list(uri)) is det.
  * 
@@ -347,10 +354,13 @@ property_restriction(P,Graph,R) :-
 classes_below(Class,Graph,BelowList) :-
     unique_solutions(Below,schema:subsumptionOf(Below,Class,Graph),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
+    graph_collection(Graph,Collection),
     graph_schema(Graph,Schema),
-    exclude({Schema}/[X]>>(xrdf(Collection,Schema,X,'https://datachemist.net/ontology/dcog#tag',
-                                'https://datachemist.net/ontology/dcog#abstract')),
-            ClassesNoBottom, BelowList).
+    exclude({Collection, Schema}/[X]>>(
+                xrdf(Collection, Schema,
+                     X,dcog:tag,dcog:abstract)),
+            ClassesNoBottom,
+            BelowList).
                                    
 simplify_restriction_list(T,R,S) :-
     (   R = [S]
@@ -690,8 +700,7 @@ entity_filled_frame(Entity,Graph,Filled) :-
  * 
  * Does not actually appear to be det!
  */
-%:- rdf_meta realiser(r,t,o,t).
-realiser(Elt,Frame,Graph,[Elt=['http://www.w3.org/1999/02/22-rdf-syntax-ns#type'=Class
+realiser(Elt,Frame,Graph,[Elt=['@type'=Class
                                |Realisers]]) :-
     instanceClass(Elt,Class,Graph),
     realise_frame(Elt,Frame,Graph,Realisers).
@@ -760,3 +769,37 @@ entity_object(Entity,Graph,Realiser) :-
     most_specific_type(Entity,Class,Graph),
     class_frame(Class,Graph,Frame),
     realiser(Entity,Frame,Graph,Realiser).
+
+/* 
+ * get_collection_jsonld_context(Collection,Ctx) is det. 
+ * 
+ * Get a JSON-LD dictonary holding the context for this db.
+ */
+get_collection_jsonld_context(Collection, Ctx) :-
+    get_collection_prefix_list(Collection,Ctx_Obj),
+    term_jsonld(Ctx_Obj, Ctx).
+
+/*
+ * entity_jsonld(+Entity:uri,+Ctx:any,+Graph:graph,-Realiser) is semidet.
+ * 
+ * Gets the realiser for the frame associated with the class of 
+ * Entity in a JSON_LD format using a supplied context.
+ */ 
+entity_jsonld(Entity,Ctx,Graph,JSON_LD) :-
+    entity_object(Entity, Graph, Realiser),
+    term_jsonld(Realiser, JSON_Ex),
+    
+    graph_collection(Graph, Collection),
+    get_collection_jsonld_context(Collection,Ctx_Graph),
+    merge_dictionaries(Ctx,Ctx_Graph,Ctx_Total),
+
+    compress(JSON_Ex,Ctx_Total,JSON_LD).
+
+/*
+ * entity_jsonld(+Entity:uri,+Graph:graph,-Realiser) is semidet.
+ * 
+ * Gets the realiser for the frame associated with the class of 
+ * Entity in a JSON_LD format.
+ */ 
+entity_jsonld(Entity,Graph,JSON_LD) :-
+    entity_jsonld(Entity,_{},Graph,JSON_LD).

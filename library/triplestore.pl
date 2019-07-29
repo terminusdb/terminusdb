@@ -16,10 +16,11 @@
           ]).
 
 :- use_module(library(hdt)). 
-:- use_module(file_utils).
-:- use_module(journaling).
-:- use_module(utils).
-:- use_module(schema, [cleanup_schema_module/1]).
+:- use_module(library(file_utils)).
+:- use_module(library(journaling)).
+:- use_module(library(utils)).
+:- use_module(library(schema), [cleanup_schema_module/1]).
+:- use_module(library(prefixes)).
 
 /** <module> Triplestore
  * 
@@ -569,6 +570,20 @@ rollback(Collection_Id,GName) :-
 % temporarily remove id behaviour.
 xrdf(C,G,X,Y,Z) :-
     xrdfid(C,G,X,Y,Z).
+
+user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-
+    \+ var(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(xrdf(DB,G,X,B,Z),xrdf(DB,G,X,Y,Z)) :-
+    \+ var(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(xrdf(DB,G,X,Y,C),xrdf(DB,G,X,Y,Z)) :-
+    \+ var(C),
+    \+ C = literal(_),
+    global_prefix_expand(C,Z).
+user:goal_expansion(xrdf(DB,G,X,Y,literal(L)),xrdf(DB,G,X,Y,Object)) :-
+    \+ var(L),
+    literal_expand(literal(L),Object).
 
 xrdfid(C,G,X0,Y0,Z0) :-
     !,

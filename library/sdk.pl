@@ -42,7 +42,7 @@ connect(DB,New_Ctx) :-
     select(prefixes=_,Ctx,
            prefixes=Prefixes, Ctx1),
 
-    make_graph_from_collection(DB,Graph),
+    make_collection_graph(DB,Graph),
 
     graph_instance(Graph,I),
     

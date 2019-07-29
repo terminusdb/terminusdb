@@ -8,7 +8,7 @@
               make_graph/2,
               make_raw_graph/2,
               graph_identifiers/2,
-              make_graph_from_collection/2              
+              make_collection_graph/2
           ]).
 
 /** <module> Implementation of graph management
@@ -69,7 +69,8 @@ make_graph(GraphList, Graph) :-
     get_key(error_schema,GraphList,Error_Schema,none),
     get_key(error_instance,GraphList,Error_Instance,none),
 
-    schema:ensure_schema_in_module(Graph, Schema).
+    schema:graph_module(Graph,Module),
+    schema:ensure_schema_in_module(Graph,Module).
 
 /** 
  * make_graph(+GraphList:list,-Graph:graph) is det.
@@ -106,8 +107,8 @@ graph_identifiers(Graph,Names) :-
  * 
  * Use a base uri to 
  */ 
-make_graph_from_collection(Name,Graph) :-
-    make_graph([collection=Name,
+make_collection_graph(Collection,Graph) :-
+    make_graph([collection=Collection,
                 schema=schema,
                 instance=main,
                 inference=inference,

@@ -73,7 +73,7 @@
               rangeNotSubsumedSC/2          % OWL
 	      ]).
 
-/** <module> The Schema validation module
+/** <module> Schema Validation
  *
  * This module deals with schema validation predicates as well as queries
  * for subsumption, domains, ranges, classes etc.
@@ -118,7 +118,7 @@ Classes
  * immediateClass(?X:uri_or_id, +Graph:graph) is nondet.
  * immediateClass(+X:uri_or_id, +Graph:graph) is det.
  *
- * Check to see if class definitions are immediate (best practices).
+ * Check to see if class definitions are immediate (best practices) rather than inferred.
  * 
  * @param X URI_OR_ID identifier for which to check if the schema has recorded a 
  *        a non-inferred rfds or owl Class.
@@ -135,6 +135,8 @@ immediateClass(X,Graph) :-
     xrdf(Collection, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
 immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
 immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
+% Should this be here?
+immediateClass('https://datachemist.net/ontology/dcog#Entity', _).
 
 %% class(?X:uri_or_id, +Schema:graph) is nondet
 % class(+X:uri_or_id, +Schema:graph) is det
@@ -288,7 +290,8 @@ classOrRestriction(X,Graph) :- restriction(X,Graph).
 % @param Y A class specified as a URI_OR_ID
 % @param Schema The current schema graph
 notUniqueClass(Y, Graph, Reason) :-
-    classOrRestriction(Y, Graph), setof(X, classOrRestriction(X,Graph), L),
+    classOrRestriction(Y, Graph),
+    setof(X, classOrRestriction(X,Graph), L),
     \+ count(Y,L,1),
     interpolate(['The class or restriction ',Y,
 		 ' is not a unique. Some existing class has this identifier']

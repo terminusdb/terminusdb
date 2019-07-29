@@ -1,9 +1,9 @@
-:- module(frame_type, [
+:- module(frame_types, [
               is_property_restriction/1,
               is_property_frame/1,
               is_class_choice_frame/1,
               is_logical_frame/1,
-              is_oneof_frame/1,
+              is_one_of_frame/1,
               is_and_frame/1,
               is_xor_frame/1,
               is_entity_frame/1,
@@ -49,7 +49,7 @@ is_property_restriction(true).
 is_property_restriction(L) :-
     member(type=Type,L),
     member(Type,[and,or,not,xor,sub]), % [type=xor,Ops=[....]]
-    member(operands=Ops,R),
+    member(operands=Ops,L),
     exclude(is_property_restriction,Ops,[]).
 is_property_restriction(L) :- % [mincard=?,valuesFrom=?, ...]
     member(minCardinality=_,L).

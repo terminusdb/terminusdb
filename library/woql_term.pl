@@ -5,7 +5,7 @@
               op(1050, xfx, =>)
           ]).
 
-/** WOQL Term 
+/** <module> WOQL Term 
  * 
  * Term syntax checking for WOQL.
  *  

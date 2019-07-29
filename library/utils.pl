@@ -1,27 +1,29 @@
-:- module(utils,[elt/2,
-                 get_key/4,
-                 get_key/3,
-                 get_dict_default/4,
-                 zip/3,
-                 intersperse/3,
-                 interpolate/2,
-                 unique_solutions/3,
-                 repeat_atom/3,
-                 zero_pad/3,
-                 exhaust/1,
-                 take/3,
-                 from_to/4,
-                 drop/3,
-                 truncate_list/4,
-                 sfoldr/4,
-                 foldm/6,
-                 mapm/5,
-                 trim/2,
-                 split_atom/3,
-                 count/3,
-                 op(920,fy, *),
-                 '*'/1
-                ]).
+:- module(utils,[
+              elt/2,
+              get_key/4,
+              get_key/3,
+              get_dict_default/4,
+              zip/3,
+              intersperse/3,
+              interpolate/2,
+              unique_solutions/3,
+              repeat_atom/3,
+              zero_pad/3,
+              exhaust/1,
+              take/3,
+              from_to/4,
+              drop/3,
+              truncate_list/4,
+              sfoldr/4,
+              foldm/6,
+              mapm/5,
+              trim/2,
+              split_atom/3,
+              count/3,
+              merge_dictionaries/3,
+              op(920,fy, *),
+              '*'/1
+          ]).
 
 /** <module> Utils 
  * 
@@ -306,3 +308,19 @@ mapm(P,[H|T],[HP|TP],S0,SN) :-
  */ 
 count(_,[], 0).
 count(A,[B|L],C) :- count(A,L,K), (A=B -> C is K+1 ; C=K).
+
+/* 
+ * merge_dictionaries(+Dict1,+Dict2,-Dict3) is det.
+ *
+ * Merge favouring left. 
+ */ 
+merge_dictionaries(Dict1,Dict2,Dict3) :-
+    dict_pairs(Dict1, _, Pairs1),
+    dict_pairs(Dict2, _, Pairs2),
+    findall(A-B, 
+            (   member(A-B, Pairs1)
+            ;   member(A-B, Pairs2),
+                \+ member(A-_, Pairs1)
+            ),
+            Pairs3),
+    dict_create(Dict3, _, Pairs3).

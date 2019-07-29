@@ -1,4 +1,9 @@
-:- module(json_ld, [expand/2, expand/3, compress/3]).
+:- module(json_ld, [
+              expand/2,
+              expand/3,
+              compress/3,
+              term_jsonld/2
+          ]).
 
 /** <module> JSON_LD
  * 
@@ -24,7 +29,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(pairs)).
-:- use_module(utils).
+:- use_module(library(utils)).
 :- use_module(library(http/json)).
 :- use_module(library(mavis)).
 
@@ -56,8 +61,6 @@ expand(JSON_LD, Context, JSON) :-
                 member(K,Keys),
                 get_dict(K,JSON_LD,V),
 
-                * format('~nKey ~q', [K]),
-                
                 (   member(K,['@id','@type'])
                 ->  prefix_expand(V,Local_Context,Value),
                     Key = K
@@ -80,15 +83,18 @@ expand(JSON_LD, Context, JSON) :-
                         Key = Key_Candidate,
                         Value = _{'@value' : Expanded,
                                   '@type' : EType}
+                    ;   _{'@language' : Lang} = Key_Context
+                    ->  prefix_expand(Lang,Local_Context,EType),
+                        Key = Key_Candidate,
+                        Value = _{'@value' : Expanded,
+                                  '@language' : EType}
                     ;   _{} = Key_Context
                     ->  Key = Key_Candidate,
                         Value = Expanded
                     ;   format(atom(M),'Unknown key context ~q', [Key_Context]),
                         throw(error(M))
                     )
-                ),
-
-                * format('~nValue ~q', [Value])
+                )                
             ),
             Data),
     dict_create(JSON,_,Data).
@@ -96,10 +102,11 @@ expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
     maplist({Context}/[JL,J]>>(expand(JL,Context,J)),JSON_LD,JSON).
-expand(JSON, _Context, JSON) :-
-    string(JSON),
-    !,
-    true.
+expand(JSON, _, JSON) :-
+    atom(JSON),
+    !.
+expand(JSON, _, JSON) :-
+    string(JSON).
 
 prefix_expand(K,Context,Key) :-
     (   split_atom(K,':',[Prefix,Suffix]),
@@ -132,170 +139,75 @@ expand_key(K,Context,Key,Value) :-
         Value = _{}).
 
 /* 
- * merge_dictionaries(+Dict1,+Dict2,-Dict3) is det.
- *
- * Merge favouring left. 
- */ 
-merge_dictionaries(Dict1,Dict2,Dict3) :-
-    dict_pairs(Dict1,_,Dict1_Pairs),
-    dict_pairs(Dict2,_,Dict2_Pairs),
-    merge_set(Dict2_Pairs,Dict1_Pairs,Sorted),
-    group_pairs_by_key(Sorted,Grouped),
-    maplist([Key-[Value|_],Key-Value]>>(true),Grouped,Data),
-    dict_create(Dict3,_,Data).
-
-
-
-/* 
- * compress_step(Ctx,Step) is det.
- */
-compress_step(Ctx,Step) :-
-    dict_keys(Ctx,Keys),
-    include(
-    findall(Key-Value,
-            (
-                true
-            ),
-            Data),
-    dict_create(Step,_,Data).
-
-/* 
- * compress_context(Ctx,Comp) is det. 
+ * compress_uri(URI, Key, Prefix, Compressed) is det. 
  * 
- * Compresses a context until it reaches a fixed point. 
- */ 
-compress_context(Ctx,Comp) :-
-    compress_step(Ctx,Step),
-    (   Ctx = Step
-    ->  Comp = Step
-    ;   compress_context(Ctx,Comp)
-    ).
+ * Take a URI and a context and compress uris such that
+ * Ctx = { foo : 'http://example.com/' }
+ * URI = 'http://example.com/bar' 
+ * compresses to => foo:bar
+ */
+compress_uri(URI, Key, Prefix, Comp) :-
+    sub_atom(URI, _, Length, After, Prefix),
+    sub_atom(URI, Length, After, _, Rest),
+    atomic_list_concat([Key,':',Rest], Comp).
 
-compress_context(Context,Context_Comp) :-
-    compress_fixed_point(Context,Compressed),
-    dict_create(Context_Comp,_,Compressed).
+compress_pairs_uri(URI, Pairs, Folded_URI) :-
+    (   member(Prefix-Expanded, Pairs),
+        compress_uri(URI, Prefix, Expanded, Folded_URI)
+    ->  true
+    ;   URI = Folded_URI).
 
+/* 
+ * compress(JSON,Context,JSON_LD) is det.
+ * 
+ * Replace expanded URIs using Context.
+ */
 compress(JSON,Context,JSON_LD) :-
-    compress_context(Context,Compressed),
-    compress_aux(JSON,Compressed,JSON_LD).
+    dict_pairs(Context, _, Pairs),
+    include([_A-B]>>(atom(B)), Pairs, Valid_Pairs),
+    compress_aux(JSON,Valid_Pairs,JSON_Pre),
+    merge_dictionaries(_{'@context' : Context}, JSON_Pre, JSON_LD).
     
-compress_aux(JSON,Context,JSON_LD) :-
+compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_dict(JSON),
     !,
-    
-    true.
-compress_aux(JSON,Context,JSON_LD) :-
+    dict_pairs(JSON, _, JSON_Pairs),
+    maplist({Ctx_Pairs}/[Key-Value,Folded_Key-Folded_Value]>>(
+                compress_pairs_uri(Key, Ctx_Pairs, Folded_Key),
+                compress_aux(Value, Ctx_Pairs, Folded_Value)
+            ),
+            JSON_Pairs,
+            Folded_JSON_Pairs),
+    dict_create(JSON_LD, _,Folded_JSON_Pairs).
+compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_list(JSON),
     !,
-    true.
-compress_aux(JSON,Context,JSON_LD) :-
+    maplist({Ctx_Pairs}/[Obj,Transformed]>>( compress_aux(Obj,Ctx_Pairs,Transformed)), JSON, JSON_LD).
+compress_aux(JSON,_Ctx_Pairs,JSON) :-
     string(JSON),
-    !,
-    true.
-
+    !.
+compress_aux(JSON,_Ctx_Pairs,JSON) :-
+    number(JSON),
+    !.
+compress_aux(URI,Ctx_Pairs,Folded_URI) :-
+    atom(URI),
+    compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
 
 /* 
-Atom='
-{
-  "@context": {
-    "ical": "http://www.w3.org/2002/12/cal/ical#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "ical:dtstart": {
-      "@type": "xsd:dateTime"
-    }
-  },
-  "ical:summary": "Lady Gaga Concert",
-  "ical:location": "New Orleans Arena, New Orleans, Louisiana, USA",
-  "ical:dtstart": "2011-04-09T20:00:00Z"
-}',
-atom_json_dict(Atom, JSON,[]).
-
-Atom='
-[
-  {
-    "http://www.w3.org/2002/12/cal/ical#dtstart": [
-      {
-        "@type": "http://www.w3.org/2001/XMLSchema#dateTime",
-        "@value": "2011-04-09T20:00:00Z"
-      }
-    ],
-    "http://www.w3.org/2002/12/cal/ical#location": [
-      {
-        "@value": "New Orleans Arena, New Orleans, Louisiana, USA"
-      }
-    ],
-    "http://www.w3.org/2002/12/cal/ical#summary": [
-      {
-        "@value": "Lady Gaga Concert"
-      }
-    ]
-  }
-]',
-atom_json_dict(Atom, JSON,[]).
-
-
-    Atom='
-{
-  "@context": {
-    "ical": "http://www.w3.org/2002/12/cal/ical#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "ical:dtstart": {
-      "@type": "xsd:dateTime"
-    }
-  },
-  "ical:summary": "Lady Gaga Concert",
-  "ical:location": "New Orleans Arena, New Orleans, Louisiana, USA",
-  "ical:dtstart": "2011-04-09T20:00:00Z"
-}',
-atom_json_dict(Atom, JSON,[]).
-
-
-
-Atom = ' 
-
-{
-  "@context": {
-    "@version": 1.1,
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "foaf": "http://xmlns.com/foaf/0.1/",
-    "foaf:homepage": { "@type": "@id" },
-    "picture": { "@id": "foaf:depiction", "@type": "@id" }
-  },
-  "@id": "http://me.markus-lanthaler.com/",
-  "@type": "foaf:Person",
-  "foaf:name": "Markus Lanthaler",
-  "foaf:homepage": "http://www.markus-lanthaler.com/",
-  "picture": "http://twitter.com/account/profile_image/markuslanthaler"
-}', 
-atom_json_dict(Atom,JSON, []), 
-expand(JSON,JSON_Ex).
-
-
-expand_key(picture, _4830{'@version':1.1, foaf:"http://xmlns.com/foaf/0.1/", 
-                          'foaf:homepage':_4194{'@type':"@id"}, 
-                          picture:_4238{'@id':"foaf:depiction", '@type':"@id"}, 
-                          xsd:"http://www.w3.org/2001/XMLSchema#"}, 
-           X, D).
-
-
-
-Atom = '{
-  "@context": {
-    "ical": "http://www.w3.org/2002/12/cal/ical#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "ical:dtstart": {
-      "@type": "xsd:dateTime"
-    }
-  },
-  "ical:summary": "Lady Gaga Concert",
-  "ical:location": "New Orleans Arena, New Orleans, Louisiana, USA",
-  "ical:dtstart": "2011-04-09T20:00:00Z"
-}',
-atom_json_dict(Atom,JSON, []), 
-expand(JSON,JSON_Ex).
-
-
-
-{'@context':_4078{'http://www.w3.org/2002/12/cal/ical#dtstart':_4086{'@type':"xsd:dateTime"}}
-
-*/
+ * term_jsonld(Term,JSON) is det.
+ * 
+ * expand a prolog internal json representation to dicts. 
+ */
+term_jsonld(literal(type(T,D)),_{'@type' : T, '@value' : D}).
+term_jsonld(literal(lang(L,D)),_{'@language' : L, '@value' : D}).
+term_jsonld(Term,JSON) :-
+    is_list(Term),
+    maplist([A=B,A-JSON_B]>>(term_jsonld(B,JSON_B)), Term, JSON_List),
+    % We are a dictionary not a list.
+    !,
+    dict_pairs(JSON, _, JSON_List).
+term_jsonld(Term,JSON) :-
+    is_list(Term),
+    !,
+    maplist([Obj,JSON]>>(term_jsonld(Obj,JSON)), Term, JSON).
+term_jsonld(JSON,JSON).

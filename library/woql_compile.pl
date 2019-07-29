@@ -700,7 +700,7 @@ compile_wf(r(X,R,Y,G),Goal) -->
            output_graphs=OGS2),
     view(current_output_graph=OG),
     {
-        make_graph_from_collection(G,Graph),
+        make_collection_graph(G,Graph),
         graph_collection(Graph,C),
         graph_instance(Graph,I),
 
@@ -814,7 +814,7 @@ compile_wf(all(P), Prog) -->
     }.
 compile_wf(from(G,P),Goal) -->
     resolve(G,GName),
-    { make_graph_from_collection(GName,Graph) },
+    { make_collection_graph(GName,Graph) },
     update(graph=Old_Graph,
            graph=Graph),
     compile_wf(P, Goal),

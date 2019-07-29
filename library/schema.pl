@@ -1,8 +1,8 @@
-:- module(schema,
-          [collection_schema_module/3,
-           cleanup_schema_module/1,
-           compile_schema_to_module/2,
-           ensure_schema_in_module/2]).
+:- module(schema, [
+              cleanup_schema_module/1,
+              compile_schema_to_module/2,
+              ensure_schema_in_module/2
+          ]).
 
 /** <module> Schema 
  * 
@@ -36,15 +36,6 @@
 :- use_module(utils).
 
 :- reexport(schema_util).
-
-/* 
- * collection_schema_module(+Collection:atom,+Schema:atom,-Module:atom) is det.
- * 
- * Construct a canonical module name for the current collection. 
- * 
- */ 
-collection_schema_module(Collection,Graph,Module) :-
-    atomic_list_concat([Collection,'/',Graph],Module).
 
 cleanup_schema_module(Module) :-
     forall(schema_predicate(Predicate/Arity),
@@ -169,7 +160,11 @@ schema_defined(Module) :-
 schema_metadata(Module, Collection, Schema) :-
     Module:schema(Collection, Schema).
 
+/* 
+ * ensure_schema_in_module(+Graph,-Module) is det.
+ */ 
 ensure_schema_in_module(Graph, Module) :-
+    graph_module(Graph, Module),            
     graph_collection(Graph, Collection),
     graph_schema(Graph, Schema),
     (   (   schema_defined(Module),
