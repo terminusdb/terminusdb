@@ -83,34 +83,24 @@ connect_handler(Request) :-
     current_output(Out),
 	json_write_dict(Out,Auth).
 
-
 /** 
- * api_reply(+Request:http_request) is det.
- */ 
-regulum_reply(_) :- 
-    reply_html_page(
-		[ title(['RegulumDB'])
-		], 
-		[ h2('Welcome to RegulumDB - the most powerful an flexible linked-data DB in the world!'), 
-		  p('We hope you will enjoy reaing our extensive documentation so you can know why you should not be here.')
-		]).
+ * db_handler(Request:http_request,Method:atom,DB:atom) is det.
+ */
+db_handler(Request,post,DB) :-
+    
+    format('Content-type: application/json~n~n'),
+    current_output(Out),
+	json_write_dict(Out,Auth).
+db_handler(Request,delete,DB) :-
+    format('Content-type: application/json~n~n'),
+    current_output(Out),
+	json_write_dict(Out,Auth).
 
-
+    
 /** 
- * api_reply(+Request:http_request) is det.
+ * woql_handler(+Request:http_request) is det.
  */ 
-api_reply(_) :- 
-    reply_html_page(
-		[ title(['Regulum API top-level'])
-		], 
-		[ h2('This is the root directory for the RegulumDB API.'), 
-		  p('Please read the documention included with RegulumDB in order to interact with the graph.')
-		]).
-
-/** 
- * api_woql(+Request:http_request) is det.
- */ 
-api_woql(Request) :-
+woql_handler(Request) :-
     http_parameters(Request, [], [form_data(Data)]),
     
     get_key(query,Data,Query),
@@ -120,4 +110,7 @@ api_woql(Request) :-
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write(Out,JSON).
+
+
+document_handler(Request, Method, DB, Docid).
 

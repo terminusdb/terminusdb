@@ -73,8 +73,8 @@ get_ordered_instance_classes(Entity, Sorted, Graph) :-
 instanceClass(X, Y, Graph) :-
     graph_collection(Graph,Collection),
     graph_instance(Graph,Instance),
-    xrdf(Collection,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Collection,Instance, X, rdf:type, Y).
 instanceClass(X, Y, Graph) :-
     graph_collection(Graph,Collection),
     graph_schema(Graph,Schema), % instances can also exist in the schema
-    xrdf(Collection,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Collection,Schema, X, rdf:type, Y).

@@ -36,6 +36,7 @@
 :- use_module(library(frame)).
 :- use_module(library(json_ld)).
 :- use_module(library(collection)).
+:- use_module(library(md5)).
 
 capability_collection('http://localhost/capability').
 
@@ -59,10 +60,19 @@ root_user_id('https://localhost/masterdb/candidate/admin').
  * 
  * Key user association
  */ 
-key_user(Key, Root_User_ID) :-
-    config:root_password_hash(Key),
-    !,
-    root_user_id(Root_User_ID).
+key_user(Key, Auth_ID) :-
+    md5_hash(Key, Hash, []),
+    
+    capability_collection(Collection),
+    connect(Collection,DB),
+    ask(DB, 
+        select([Auth_ID], 
+		       (
+			       t( User_ID , rdf/type , reg/'User' ), 
+			       t( User_ID , reg/user_key_hash, Hash )
+		       )
+	          )
+       ).
 
 /** 
  * key_auth(Key,Auth) is det. 
@@ -82,7 +92,7 @@ key_auth(Key, Auth) :-
     entity_jsonld(Auth_ID,Ctx,Graph,Auth).
 
 /* 
- * user_auth_id(User,Auth_id) is det.
+ * user_auth_id(User,Auth_id) is semidet.
  * 
  * Maybe should return the auth object - as soon as we have 
  * obj embedded in woql.
@@ -99,6 +109,26 @@ user_auth_id(User_ID, Auth_ID) :-
 	          )
        ).
 
+/* 
+ * key_capability(Key,Auth) is nondet. 
+ * 
+ * Used internally for seeing if certain operations are allowed. 
+ */ 
+key_capability(Key, Auth) :-
+    key_user(Key, User_ID),
+    
+    capability_collection(Collection),
+    connect(Collection,DB),
+    ask(DB, 
+        select([User, Action], 
+		       (
+			       t( User , rdf/type , reg/'User' ), 
+			       t( User , reg/authority, Auth ), 
+			       t( Auth , reg/action, Action)
+		       )
+	          )
+       ).
+
 user_capability(User,Action) :-
     capability_collection(Collection),
     connect(Collection,DB),
@@ -111,4 +141,5 @@ user_capability(User,Action) :-
 		       )
 	          )
        ).
+
 

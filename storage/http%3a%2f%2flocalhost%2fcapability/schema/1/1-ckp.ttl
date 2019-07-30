@@ -112,6 +112,13 @@ main:email_address
   rdfs:domain main:User ;
   rdfs:range xdd:email .
 
+main:user_key_hash
+  rdfs:label "User Key Hash"@en ;
+  rdfs:comment "A user access key hash"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain main:User ;
+  rdfs:range xsd:string .
+
 main:ActionList
   rdfs:label "Action"@en ;
   a owl:Class ;
