@@ -1,27 +1,27 @@
-<https://localhost/masterdb/candidate/access_all_areas> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://regulumdb.com/ontology/regulum#ServerCapability> .
+<https://localhost/masterdb/candidate/access_all_areas> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#ServerCapability> .
 <https://localhost/masterdb/candidate/access_all_areas> <http://www.w3.org/2000/01/rdf-schema#comment> "Access all server functions"@en .
 <https://localhost/masterdb/candidate/access_all_areas> <http://www.w3.org/2000/01/rdf-schema#label> "All Capabilities"@en .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#classframe> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#createdatabase> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#createdocument> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#deletedatabase> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#deletedocument> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#getdocument> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#getschema> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#updatedocument> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#updateschema> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#woqlselect> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#action> <https://regulumdb.com/ontology/regulum#woqlupdate> .
-<https://localhost/masterdb/candidate/access_all_areas> <https://regulumdb.com/ontology/regulum#authority_scope> <https://localhost/masterdb/candidate/server> .
-<https://localhost/masterdb/candidate/server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://regulumdb.com/ontology/regulum#Server> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#classframe> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#createdatabase> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#createdocument> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#deletedatabase> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#deletedocument> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#getdocument> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#getschema> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#updatedocument> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#updateschema> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#woqlselect> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#woqlupdate> .
+<https://localhost/masterdb/candidate/access_all_areas> <https://terminusdb.com/ontology/terminus#authority_scope> <https://localhost/masterdb/candidate/server> .
+<https://localhost/masterdb/candidate/server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#Server> .
 <https://localhost/masterdb/candidate/server> <http://www.w3.org/2000/01/rdf-schema#comment> "The current Database Server itself"@en .
 <https://localhost/masterdb/candidate/server> <http://www.w3.org/2000/01/rdf-schema#label> "The DB server"@en .
-<https://localhost/masterdb/candidate/admin> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://regulumdb.com/ontology/regulum#User> .
+<https://localhost/masterdb/candidate/admin> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#User> .
 <https://localhost/masterdb/candidate/admin> <http://www.w3.org/2000/01/rdf-schema#comment> "This is the server super user account"@en .
 <https://localhost/masterdb/candidate/admin> <http://www.w3.org/2000/01/rdf-schema#label> "Server Admin User"@en .
-<https://localhost/masterdb/candidate/admin> <https://regulumdb.com/ontology/regulum#authority> <https://localhost/masterdb/candidate/access_all_areas> .
-<https://localhost/masterdb/candidate/admin> <https://regulumdb.com/ontology/regulum#email_address> "admin@localhost"^^<https://datachemist.net/ontology/xdd#email> .
-<https://localhost/masterdb/candidate/master> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://regulumdb.com/ontology/regulum#Database> .
+<https://localhost/masterdb/candidate/admin> <https://terminusdb.com/ontology/terminus#authority> <https://localhost/masterdb/candidate/access_all_areas> .
+<https://localhost/masterdb/candidate/admin> <https://terminusdb.com/ontology/terminus#email_address> "admin@localhost"^^<https://datachemist.net/ontology/xdd#email> .
+<https://localhost/masterdb/candidate/master> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#Database> .
 <https://localhost/masterdb/candidate/master> <http://www.w3.org/2000/01/rdf-schema#comment> "The master database contains the meta-data about databases, users and roles"@en .
 <https://localhost/masterdb/candidate/master> <http://www.w3.org/2000/01/rdf-schema#label> "Master Database"@en .
-<https://localhost/masterdb/candidate/master> <https://regulumdb.com/ontology/regulum#id> "master"@en .
+<https://localhost/masterdb/candidate/master> <https://terminusdb.com/ontology/terminus#id> "master"@en .

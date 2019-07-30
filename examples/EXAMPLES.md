@@ -1,7 +1,7 @@
 
 # WOQL in prolog
 
-When using RegulumDB directly from prolog the ast syntax enables us to
+When using TerminusDB directly from prolog the ast syntax enables us to
 embed queries directly in our prolog predicates.
 
 This syntax is used internally to the database to leverage metalogical

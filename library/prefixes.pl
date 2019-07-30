@@ -17,20 +17,20 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of RegulumDB.                                      *
+ *  This file is part of TerminusDB.                                      *
  *                                                                       *
- *  RegulumDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify    *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  RegulumDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,         *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with RegulumDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -49,7 +49,7 @@ global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
 global_prefixes(dcogbox,'https://datachemist.net/ontology/dcogbox#').
 global_prefixes(xdd,'https://datachemist.net/ontology/xdd#').
 global_prefixes(rvo,'https://datachemist.net/ontology/rvo#').
-global_prefixes(reg,'https://regulumdb.com/ontology/regulum#').
+global_prefixes(reg,'https://terminusdb.com/ontology/terminus#').
 % common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
@@ -100,7 +100,7 @@ initialise_prefix_db(C) :-
  * Set up the prefix database. 
  */
 initialise_prefix_db :- 
-    once(file_search_path(regulum_home,BasePath)),
+    once(file_search_path(terminus_home,BasePath)),
     interpolate([BasePath,'/',storage,'/','prefix.db'],File),
     (   \+ exists_file(File)
         % create the file
