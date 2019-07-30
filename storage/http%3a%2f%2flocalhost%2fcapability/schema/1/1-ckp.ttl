@@ -1,0 +1,203 @@
+@prefix main: <https://regulumdb.com/ontology/regulum#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dcog: <https://datachemist.net/ontology/dcog#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <https://datachemist.net/ontology/xdd#> .
+
+main:Agent
+  rdfs:label "Agent"@en ;
+  rdfs:comment "An agent is an abstraction of a thing with a capability"@en ;
+  a owl:Class ;
+  dcog:tag dcog:abstract ;
+  rdfs:subClassOf dcog:Entity .
+
+main:Capability
+  rdfs:label "Database Capability"@en ;
+  rdfs:comment "A capability permits a user to access a database"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:RestrictDBActions, main:RestrictDBAuthority, main:GenericCapability .
+
+main:GenericCapability
+  rdfs:label "Generic Capability"@en ;
+  rdfs:comment "A generic (abstract) capability"@en ;
+  a owl:Class ;
+  dcog:tag dcog:abstract ;
+  rdfs:subClassOf dcog:Entity .
+
+main:Database
+  rdfs:label "Database"@en ;
+  rdfs:comment "A database"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:Resource .
+
+main:Resource
+  rdfs:label "Resource"@en ;
+  rdfs:comment "A resource is a thing that can be accessed and given instructions and for which capabilities can be allocated"@en ;
+  a owl:Class ;
+  dcog:tag dcog:abstract ;
+  rdfs:subClassOf dcog:Entity .
+
+main:Role
+  rdfs:label "Role"@en ;
+  rdfs:comment "A role is a collection of capabilities that can be allocated to any user"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:Agent .
+
+main:Server
+  rdfs:label "Server"@en ;
+  rdfs:comment "The Database Server itself"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:Resource .
+
+main:ServerCapability
+  rdfs:label "Server Capability"@en ;
+  rdfs:comment "A capability to carry out some action on the server"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:RestrictServerAuthority, main:GenericCapability .
+
+main:User
+  rdfs:label "User"@en ;
+  rdfs:comment "A user of the database"@en ;
+  a owl:Class ;
+  rdfs:subClassOf main:Agent .
+
+main:authority
+  rdfs:label "Has Capability"@en ;
+  rdfs:comment "A property that links an agent to a capability that they possess"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain main:Agent ;
+  rdfs:range main:GenericCapability .
+
+main:RestrictServerAuthority
+  a owl:Restriction ;
+  owl:onProperty main:authority ;
+  owl:allValuesFrom main:Server .
+
+main:RestrictDBAuthority
+  a owl:Restriction ;
+  owl:onProperty main:authority ;
+  owl:allValuesFrom main:Database .
+
+main:action
+  rdfs:label "Action"@en ;
+  rdfs:comment "Refers to a specific API access call"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain main:GenericCapability ;
+  rdfs:range main:ActionList .
+
+main:RestrictDBActions
+  a owl:Restriction ;
+  owl:onProperty main:action ;
+  owl:allValuesFrom main:DBActionList .
+
+main:authority_scope
+  rdfs:label "Capability Scope"@en ;
+  rdfs:comment "The scope of the capability (DB / Server...)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain main:GenericCapability ;
+  rdfs:range main:Resource .
+
+main:id
+  rdfs:label "ID"@en ;
+  rdfs:comment "The id of this DB"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain main:Database ;
+  rdfs:range xsd:string .
+
+main:email_address
+  rdfs:label "Email Address"@en ;
+  rdfs:comment "A user's primary identification on the system"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain main:User ;
+  rdfs:range xdd:email .
+
+main:ActionList
+  rdfs:label "Action"@en ;
+  a owl:Class ;
+  owl:oneOf (
+   main:deletedatabase
+   main:updateschema
+   main:getschema
+   main:createdocument
+   main:getdocument
+   main:updatedocument
+   main:deletedocument
+   main:classframe
+   main:createdatabase
+   main:woqlselect
+   main:woqlupdate
+ ) .
+
+main:DBActionList
+  rdfs:label "DB Action"@en ;
+  rdfs:subClassOf main:ActionList ;
+  a owl:Class ;
+  owl:oneOf (
+   main:deletedatabase
+   main:updateschema
+   main:getschema
+   main:createdocument
+   main:getdocument
+   main:updatedocument
+   main:deletedocument
+   main:classframe
+   main:woqlselect
+   main:woqlupdate
+ ) .
+
+main:deletedatabase
+  rdfs:label "deleteDatabase"@en ;
+  rdfs:comment "Delete an entire database"@en ;
+  a main:ActionList .
+
+main:updateschema
+  rdfs:label "updateSchema"@en ;
+  rdfs:comment "Update the DB schema"@en ;
+  a main:ActionList .
+
+main:getschema
+  rdfs:label "getSchema"@en ;
+  rdfs:comment "View the DB Schema"@en ;
+  a main:ActionList .
+
+main:createdocument
+  rdfs:label "createDocument"@en ;
+  rdfs:comment "Create a new document"@en ;
+  a main:ActionList .
+
+main:getdocument
+  rdfs:label "getDocument"@en ;
+  rdfs:comment "Retrieve a document"@en ;
+  a main:ActionList .
+
+main:updatedocument
+  rdfs:label "updateDocument"@en ;
+  rdfs:comment "Update the contents of a docoument"@en ;
+  a main:ActionList .
+
+main:deletedocument
+  rdfs:label "deleteDocument"@en ;
+  rdfs:comment "Delete a document from the DB"@en ;
+  a main:ActionList .
+
+main:classframe
+  rdfs:label "classFrame"@en ;
+  rdfs:comment "Return a Frame JSON for the appropriate Class"@en ;
+  a main:ActionList .
+
+main:createdatabase
+  rdfs:label "createDatabase"@en ;
+  rdfs:comment "Create a new database"@en ;
+  a main:ActionList .
+
+main:woqlselect
+  rdfs:label "woqlSelect"@en ;
+  rdfs:comment "A read-only query"@en ;
+  a main:ActionList .
+
+main:woqlupdate
+  rdfs:label "woqlUpdate"@en ;
+  rdfs:comment "A read-write WOQL query"@en ;
+  a main:ActionList .
+
