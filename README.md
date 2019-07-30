@@ -13,12 +13,26 @@ v0.1.0
 
 ## Getting Started
 
+### SWIPL 
+
 To use TerminusDB, you will need the SWIPL installation of prolog. To install this in Debian variants
 simply use the apt package manager: 
 
 ```
 apt install swi-prolog
 ```
+
+### HDT Library 
+
+We also need to install `hdt-cpp`. You can git clone the source tree from this repository: 
+
+```
+git clone https://github.com/rdfhdt/hdt-cpp
+```
+
+And follow the directions contained there for building.
+
+### TerminusDB
 
 The TerminusDB source tree should then be cloned from GitHub: 
 
@@ -29,6 +43,15 @@ git clone https://github.com/terminusdb/terminusdb
 You should copy `config/config-example.pl` to `config/config.pl` and then 
 edit the values there to set things such as server name and server 
 port. 
+
+You also need to update the admin user password which is used as a
+super-user API key for access. This can be done with the
+`set_admin_key` script.
+
+```
+utils/set_admin_key -k "my_password_here"
+```
+
 
 At this point you can enter the terminusDB directory and start the server: 
 
