@@ -87,11 +87,22 @@ connect_handler(Request) :-
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
  */
 db_handler(Request,post,DB) :-
-    
+    /* POST: Create database */
+    http_parameters(Request, [], [form_data(Data)]),
+
+    get_key(key, Data, Connection_Key),
+    key_auth(Connection_Key,Auth),
+
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,Auth).
 db_handler(Request,delete,DB) :-
+    /* DELETE: Delete database */
+    http_parameters(Request, [], [form_data(Data)]),
+
+    get_key(key, Data, Connection_Key),
+    key_auth(Connection_Key,Auth),
+
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,Auth).

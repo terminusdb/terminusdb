@@ -30,6 +30,9 @@
 :- use_module(library(utils)). 
 :- use_module(library(collection)).
 :- use_module(library(woql_compile)).
+:- use_module(library(woql_term)).
+
+:- reexport(woql_term).
 
 /* 
  * connect(+DB:uri -Ctx:context) is det.

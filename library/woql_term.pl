@@ -2,7 +2,9 @@
               wf/1,
               op(600, xfx, <:),
               op(600, xfx, as),
-              op(1050, xfx, =>)
+              op(1050, xfx, =>),
+              op(2, xfx, @),
+              op(2, xfx, ^^)
           ]).
 
 /** <module> WOQL Term 
@@ -37,6 +39,7 @@
 :- op(600, xfx, as).
 :- op(1050, xfx, =>).
 :- op(2, xfx, @).
+:- op(2, xfx, ^^).
 
 /*
  * Variables
@@ -109,6 +112,9 @@ lit(l(Type,S)) :-
 lit(S@L) :-
     identifier(S),
     atom(L).
+lit(S^^T) :-
+    identifier(S),
+    identifier(T).
 
 /*
  * OL := O | L

@@ -37,6 +37,7 @@
 :- use_module(library(json_ld)).
 :- use_module(library(collection)).
 :- use_module(library(md5)).
+:- use_module(library(sdk)).
 
 capability_collection('http://localhost/capability').
 
@@ -47,7 +48,7 @@ capability_collection('http://localhost/capability').
  */ 
 capability_context(_{
                        doc : 'https://localhost/masterdb/candidate/', 
-                       reg : 'https://terminusdb.com/ontology/terminus#'
+                       terminus : 'https://terminusdb.com/ontology/terminus#'
                    }).
 
 /** 
@@ -60,16 +61,16 @@ root_user_id('https://localhost/masterdb/candidate/admin').
  * 
  * Key user association
  */ 
-key_user(Key, Auth_ID) :-
+key_user(Key, User_ID) :-
     md5_hash(Key, Hash, []),
     
     capability_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
-        select([Auth_ID], 
+        select([User_ID], 
 		       (
-			       t( User_ID , rdf/type , reg/'User' ), 
-			       t( User_ID , reg/user_key_hash, Hash )
+			       t( User_ID , rdf/type , terminus/'User' ), 
+			       t( User_ID , terminus/user_key_hash, Hash^^_ )
 		       )
 	          )
        ).
@@ -103,8 +104,8 @@ user_auth_id(User_ID, Auth_ID) :-
     ask(DB, 
         select([Auth_ID], 
 		       (
-			       t( User_ID , rdf/type , reg/'User' ), 
-			       t( User_ID , reg/authority, Auth_ID )
+			       t( User_ID , rdf/type , terminus/'User' ), 
+			       t( User_ID , terminus/authority, Auth_ID )
 		       )
 	          )
        ).
@@ -115,16 +116,16 @@ user_auth_id(User_ID, Auth_ID) :-
  * Used internally for seeing if certain operations are allowed. 
  */ 
 key_capability(Key, Auth) :-
-    key_user(Key, User_ID),
+    key_user(Key, User),
     
     capability_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([User, Action], 
 		       (
-			       t( User , rdf/type , reg/'User' ), 
-			       t( User , reg/authority, Auth ), 
-			       t( Auth , reg/action, Action)
+			       t( User , rdf/type , terminus/'User' ), 
+			       t( User , terminus/authority, Auth ), 
+			       t( Auth , terminus/action, Action)
 		       )
 	          )
        ).
@@ -135,9 +136,9 @@ user_capability(User,Action) :-
     ask(DB, 
         select([User, Action], 
 		       (
-			       t( User , rdf/type , reg/'User' ), 
-			       t( User , reg/authority, Auth ), 
-			       t( Auth , reg/action, Action)
+			       t( User , rdf/type , terminus/'User' ), 
+			       t( User , terminus/authority, Auth ), 
+			       t( Auth , terminus/action, Action)
 		       )
 	          )
        ).

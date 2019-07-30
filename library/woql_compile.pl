@@ -54,6 +54,7 @@
 :- op(2, xfx, :=).
 :- op(1050, xfx, =>).
 :- op(2, xfx, @).
+:- op(2, xfx, ^^).
 
 merge_output_graphs(OGs1,OGs2,OGs3) :-
     merge_output_graphs_aux(OGs1,OGs2,[],OGs3).
@@ -306,6 +307,9 @@ resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
 resolve(X@L,literal(lang(LE,XE))) -->
     resolve(X,XE),
     resolve(L,LE).
+resolve(X^^T,literal(type(TE,XE))) -->
+    resolve(X,XE),
+    resolve(T,TE).
     
 /* 
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.

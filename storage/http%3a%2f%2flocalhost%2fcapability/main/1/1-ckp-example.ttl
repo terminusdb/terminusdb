@@ -21,6 +21,7 @@
 <https://localhost/masterdb/candidate/admin> <http://www.w3.org/2000/01/rdf-schema#label> "Server Admin User"@en .
 <https://localhost/masterdb/candidate/admin> <https://terminusdb.com/ontology/terminus#authority> <https://localhost/masterdb/candidate/access_all_areas> .
 <https://localhost/masterdb/candidate/admin> <https://terminusdb.com/ontology/terminus#email_address> "admin@localhost"^^<https://datachemist.net/ontology/xdd#email> .
+<https://localhost/masterdb/candidate/admin> <https://terminusdb.com/ontology/terminus#user_key_hash> "SEKRET_ADMIN_KEY"^^<http://www.w3.org/2001/XMLSchema#string> .    
 <https://localhost/masterdb/candidate/master> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#Database> .
 <https://localhost/masterdb/candidate/master> <http://www.w3.org/2000/01/rdf-schema#comment> "The master database contains the meta-data about databases, users and roles"@en .
 <https://localhost/masterdb/candidate/master> <http://www.w3.org/2000/01/rdf-schema#label> "Master Database"@en .
