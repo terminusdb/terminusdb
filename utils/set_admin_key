@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 if ! type rdf2hdt > /dev/null; then
 	printf "We can't proceed without rdf2hdt but it's not installed.  Aborting.\n";
@@ -13,16 +13,22 @@ fi
 usage="$(basename "$0") [-h] [-k KEY] -- program to set admin KEY
 
 where:
-    -h  show this help text
-    KEY set the admin key value"
+    -h		show this help text
+    -k KEY	set the admin key value"
 
 # Get the current script directory
 dir=$(dirname "$0")
 
 # The database to update
-examplettl="$dir/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp-example.ttl"
+examplettl="$dir/../config/capability_instance_template.ttl"
 instancettl="$dir/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.ttl"
 instancedb="$dir/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.hdt"
+
+if [ "$1" == "" ] ; then
+	printf "Need more than no arguments!\n\n" >&2
+	echo "$usage" >&2;
+    exit 1;
+fi
 
 while getopts ':hk:' option; do
   case "$option" in
@@ -30,14 +36,19 @@ while getopts ':hk:' option; do
        exit
        ;;
     k) KEY=${OPTARG}
-	   HASH=$(swipl -g "use_module(library(md5)),md5_hash($KEY,Res,[]),write(Res),nl,halt.")
+	   HASH=$(swipl -g "use_module(library(md5)),md5_hash('$KEY',Res,[]),write(Res),nl,halt.")
 	   cp "$examplettl" "$instancettl";
 	   sed -i "s/SEKRET_ADMIN_KEY/$HASH/" "$instancettl";
 	   rdf2hdt "$instancettl" "$instancedb";
-	   rm "$instancedb.index.*";
-	   printf "Key updated\n" >&2
+	   rm -f "$instancedb.index.*";
+	   printf "Key updated successfully!\n" >&2;
+	   exit
        ;;
-    *) printf "missing argument for -%s\n" "$OPTARG" >&2
+#    :) printf "Option -%s requires an argument." "$OPTARG" >&2
+#       echo "$usage" >&2
+#       exit 1
+#       ;;
+	?) printf "Not valid options %s" "$OPTARG" >&2
        echo "$usage" >&2
        exit 1
        ;;
