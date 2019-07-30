@@ -57,9 +57,9 @@ capability_context(_{
 root_user_id('https://localhost/masterdb/candidate/admin').
 
 /** 
- * key_user(Key,User) is det.
+ * key_user(+Key,-User) is det.
  * 
- * Key user association
+ * Key user association - goes only one way
  */ 
 key_user(Key, User_ID) :-
     md5_hash(Key, Hash, []),
@@ -110,31 +110,14 @@ user_auth_id(User_ID, Auth_ID) :-
 	          )
        ).
 
-/* 
- * key_capability(Key,Auth) is nondet. 
- * 
- * Used internally for seeing if certain operations are allowed. 
- */ 
-key_capability(Key, Auth) :-
-    key_user(Key, User),
-    
+/*
+ * user_action(+User,-Action) is nondet.
+ */
+user_action(User,Action) :-
     capability_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
-        select([User, Action], 
-		       (
-			       t( User , rdf/type , terminus/'User' ), 
-			       t( User , terminus/authority, Auth ), 
-			       t( Auth , terminus/action, Action)
-		       )
-	          )
-       ).
-
-user_capability(User,Action) :-
-    capability_collection(Collection),
-    connect(Collection,DB),
-    ask(DB, 
-        select([User, Action], 
+        select([Action], 
 		       (
 			       t( User , rdf/type , terminus/'User' ), 
 			       t( User , terminus/authority, Auth ), 

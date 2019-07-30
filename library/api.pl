@@ -53,6 +53,8 @@
 % We may want to allow this as a setting...
 http:location(root, '/', []).
 
+%%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 :- http_handler(root(.), connect_handler, []). 
 :- http_handler(root(DB), db_handler(Method,DB),
                 [method(Method),
@@ -70,14 +72,45 @@ http:location(root, '/', []).
                 [method(Method),
                  methods([get,post,delete])]). 
 
+%%%%%%%%%%%%%%%%%%%% Custom Errors %%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+/* 
+ * verify_capability(+Data,+Capability) is det. 
+ * 
+ * This should either be true or throw an http_status_reply/4 message. 
+ */
+verify_capability(Data,Capability) :-
+
+    (   member(key, Data, Connection_Key)
+    ->  true
+    ;   throw(http_reply(authorise('No key supplied')))),
+
+    (   key_user(Key, User),
+    ->  true
+    ;   throw(http_reply(authorise('Not a valid key')))),
+
+    (   user_action(User,Capability)
+    ->  true
+    ;   throw(http_reply(method(Capability)))).
+
+authenticate(Data, Auth) :-
+    (   member(key, Data, Connection_Key)
+    ->  true
+    ;   throw(http_reply(authorise('No key supplied')))),
+
+    (   key_auth(Key, Auth),
+    ->  true
+    ;   throw(http_reply(authorise('Not a valid key')))).
+
+    
 /** 
  * connect_handler(Request:http_request) is det.
  */
 connect_handler(Request) :-
     http_parameters(Request, [], [form_data(Data)]),
 
-    get_key(key, Data, Connection_Key),
-    key_auth(Connection_Key,Auth),
+    authenticate(Data,Auth),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -90,15 +123,16 @@ db_handler(Request,post,DB) :-
     /* POST: Create database */
     http_parameters(Request, [], [form_data(Data)]),
 
-    get_key(key, Data, Connection_Key),
-    key_auth(Connection_Key,Auth),
-
+    verify_capability(Data,terminus/createdatabase).
+    
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,Auth).
 db_handler(Request,delete,DB) :-
     /* DELETE: Delete database */
     http_parameters(Request, [], [form_data(Data)]),
+
+    verify_capability(Data,terminus/deletedatabase).
 
     get_key(key, Data, Connection_Key),
     key_auth(Connection_Key,Auth),

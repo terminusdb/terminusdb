@@ -1,5 +1,8 @@
 #!/bin/bash
 
+## This should probably be replaced by swipl code
+## as it would be more portable and less insane.
+
 if ! type rdf2hdt > /dev/null; then
 	printf "We can't proceed without rdf2hdt but it's not installed.  Aborting.\n";
 	exit 1;
