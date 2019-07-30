@@ -13,6 +13,9 @@ v0.1.0
 
 ## Getting Started
 
+Before you can begin modeling and manipulating data in TerminusDB, you
+need to get some required libraries and software.
+
 ### SWIPL 
 
 To use TerminusDB, you will need the SWIPL installation of prolog. To install this in Debian variants
@@ -24,13 +27,14 @@ apt install swi-prolog
 
 ### HDT Library 
 
-We also need to install `hdt-cpp`. You can git clone the source tree from this repository: 
+You will also need to install `hdt-cpp`. You can git clone the source tree from this repository: 
 
 ```
 git clone https://github.com/rdfhdt/hdt-cpp
 ```
 
-And follow the directions contained there for building.
+... and follow the directions contained in the repostiory for the
+pre-requisites and building the code.
 
 ### TerminusDB
 
