@@ -1,28 +1,35 @@
-<http://localhost/capability/document/access_all_areas> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#ServerCapability> .
-<http://localhost/capability/document/access_all_areas> <http://www.w3.org/2000/01/rdf-schema#comment> "Access all server functions"@en .
-<http://localhost/capability/document/access_all_areas> <http://www.w3.org/2000/01/rdf-schema#label> "All Capabilities"@en .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#classframe> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#createdatabase> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#createdocument> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#deletedatabase> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#deletedocument> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#getdocument> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#getschema> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#updatedocument> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#updateschema> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#woqlselect> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#action> <https://terminusdb.com/ontology/terminus#woqlupdate> .
-<http://localhost/capability/document/access_all_areas> <https://terminusdb.com/ontology/terminus#authority_scope> <https://localhost/capability/document/server> .
-<http://localhost/capability/document/server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#Server> .
-<http://localhost/capability/document/server> <http://www.w3.org/2000/01/rdf-schema#comment> "The current Database Server itself"@en .
-<http://localhost/capability/document/server> <http://www.w3.org/2000/01/rdf-schema#label> "The DB server"@en .
-<http://localhost/capability/document/admin> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#User> .
-<http://localhost/capability/document/admin> <http://www.w3.org/2000/01/rdf-schema#comment> "This is the server super user account"@en .
-<http://localhost/capability/document/admin> <http://www.w3.org/2000/01/rdf-schema#label> "Server Admin User"@en .
-<http://localhost/capability/document/admin> <https://terminusdb.com/ontology/terminus#authority> <https://localhost/capability/document/access_all_areas> .
-<http://localhost/capability/document/admin> <https://terminusdb.com/ontology/terminus#email_address> "admin@localhost"^^<https://datachemist.net/ontology/xdd#email> .
-<http://localhost/capability/document/admin> <https://terminusdb.com/ontology/terminus#user_key_hash> "SEKRET_ADMIN_KEY"^^<http://www.w3.org/2001/XMLSchema#string> .    
-<http://localhost/capability/document/master> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://terminusdb.com/ontology/terminus#Database> .
-<http://localhost/capability/document/master> <http://www.w3.org/2000/01/rdf-schema#comment> "The master database contains the meta-data about databases, users and roles"@en .
-<http://localhost/capability/document/master> <http://www.w3.org/2000/01/rdf-schema#label> "Master Database"@en .
-<http://localhost/capability/document/master> <https://terminusdb.com/ontology/terminus#id> "master"@en .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix terminus: <https://terminusdb.com/ontology/terminus#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dcog: <https://datachemist.net/ontology/dcog#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <https://datachemist.net/ontology/xdd#> .
+@prefix doc: <http://localhost/capability/document/> .
+
+doc:access_all_areas
+    a terminus:ServerCapability ;
+    rdfs:comment "Access all server functions"@en ;
+    rdfs:label "All Capabilities"@en ;
+    terminus:action terminus:classframe, terminus:createdatabase, terminus:createdocument, terminus:deletedatabase, terminus:deletedocument, terminus:getdocument, terminus:getschema, terminus:updatedocument, terminus:updateschema, terminus:woqlselect, terminus:woqlupdate ;
+    terminus:authority_scope doc:server .
+
+doc:admin
+    a terminus:User ;
+    rdfs:comment "This is the server super user account"@en ;
+    rdfs:label "Server Admin User"@en ;
+    terminus:authority doc:access_all_areas ;
+    terminus:email_address "admin@localhost"^^xdd:email ;
+    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+
+doc:master
+    a terminus:Database ;
+    rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
+    rdfs:label "Master Database"@en ;
+    terminus:id "master"@en .
+
+doc:server
+    a terminus:Server ;
+    rdfs:comment "The current Database Server itself"@en ;
+    rdfs:label "The DB server"@en .
+

@@ -81,15 +81,15 @@ http:location(root, '/', []).
                 [method(Method),
                  methods([get,post,delete])]). 
 
-%%%%%%%%%%%%%%%%%%%% Custom Errors %%%%%%%%%%%%%%%%%%%%%%%%%
-
+%%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /* 
- * verify_capability(+Data,+Capability) is det. 
+ * verify_capability(+Request:http_request,+Capability) is det. 
  * 
  * This should either be true or throw an http_reply message. 
  */
-verify_capability(Data,Capability) :-
+verify_capability(Request,Capability) :-
+    http_parameters(Request, [], [form_data(Data)]),
 
     (   member(key=Key, Data)
     ->  true
@@ -108,7 +108,9 @@ verify_capability(Data,Capability) :-
  * 
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
-authenticate(Data, Auth) :-
+authenticate(Request, Auth) :-
+    http_parameters(Request, [], [form_data(Data)]),
+    
     (   member(key=Key, Data)
     ->  true
     ;   throw(http_reply(authorise('No key supplied')))),
@@ -116,7 +118,12 @@ authenticate(Data, Auth) :-
     (   key_auth(Key, Auth)
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
-    
+
+verify_access(Request, Action, Scope).
+
+
+%%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+
 /** 
  * connect_handler(Request:http_request) is det.
  */
@@ -132,11 +139,11 @@ connect_handler(Request) :-
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
  */
-db_handler(Request,post,DB) :-
+db_handler(post,DB,Request) :-
     /* POST: Create database */
     http_parameters(Request, [], [form_data(Data)]),
 
-    verify_capability(Data,terminus/createdatabase),
+    verify_capability(Request,terminus/createdatabase),
 
     create_db(DB),
     
@@ -144,11 +151,9 @@ db_handler(Request,post,DB) :-
     
     current_output(Out),
 	json_write_dict(Out,_{'terminus:status' : 'success'}).
-db_handler(Request,delete,DB) :-
+db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    http_parameters(Request, [], [form_data(Data)]),
-
-    verify_capability(Data,terminus/deletedatabase),
+    verify_capability(Request,terminus/deletedatabase),
 
     delete_db(DB),
     
@@ -174,7 +179,11 @@ woql_handler(Request) :-
 document_handler(get, DB, Doc_ID, _Request) :-
     /* Create Document */ 
     config:server_name(Server_Name),
-    interpolate([Server_Name,DB],DB_URI),    
+    interpolate([Server_Name,DB],DB_URI),
+
+    % check access rights
+    verify_access(read,Request,DB_URI)
+    
     make_collection_graph(DB_URI,Graph),
     interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI),
     format('Content-type: application/json~n~n'),    
@@ -183,7 +192,13 @@ document_handler(get, DB, Doc_ID, _Request) :-
         json_write_dict(Out,JSON)
     ;   writeq(entity_jsonld(Doc_URI,Graph,_))).
 document_handler(post, DB, Doc_ID, _Request) :-
-    /* Update document */
+    /* Update Document */
+    config:server_name(Server_Name),
+    interpolate([Server_Name,DB],DB_URI),
+
+    % check access rights
+    verify_access(write,Request,DB_URI)
+
     make_collection_graph(DB,Graph),
     entity_jsonld(Doc_ID,Graph,JSON),
     
@@ -192,6 +207,12 @@ document_handler(post, DB, Doc_ID, _Request) :-
 	json_write_dict(Out,JSON).
 document_handler(delete, DB, Doc_ID, _Request) :-
     /* Delete Document */
+    config:server_name(Server_Name),
+    interpolate([Server_Name,DB],DB_URI),
+    
+    % check access rights
+    verify_access(write,Request,DB_URI)
+
     make_collection_graph(DB,Graph),
     entity_jsonld(Doc_ID,Graph,JSON),
     

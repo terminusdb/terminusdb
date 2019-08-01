@@ -325,3 +325,18 @@ merge_dictionaries(Dict1,Dict2,Dict3) :-
             ),
             Pairs3),
     dict_create(Dict3, _, Pairs3).
+
+/*
+ * command(Cmd) is semidet. 
+ * 
+ * True if Cmd exists. 
+ */
+command(Cmd) :-
+    catch(
+        (   process_create(path(Cmd), [], [ stderr(null),
+                                            stdout(null),
+                                            process(PID)
+                                          ]),
+            process_wait(PID,_Status)),
+        error(existence_error(source_sink,path(Cmd)),_),
+        fail).

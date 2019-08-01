@@ -153,57 +153,57 @@ main:DBActionList
    main:woqlupdate
  ) .
 
-main:deletedatabase
+main:delete_database
   rdfs:label "deleteDatabase"@en ;
   rdfs:comment "Delete an entire database"@en ;
   a main:ActionList .
 
-main:updateschema
+main:update_schema
   rdfs:label "updateSchema"@en ;
   rdfs:comment "Update the DB schema"@en ;
   a main:ActionList .
 
-main:getschema
+main:get_schema
   rdfs:label "getSchema"@en ;
   rdfs:comment "View the DB Schema"@en ;
   a main:ActionList .
 
-main:createdocument
+main:create_document
   rdfs:label "createDocument"@en ;
   rdfs:comment "Create a new document"@en ;
   a main:ActionList .
 
-main:getdocument
+main:get_document
   rdfs:label "getDocument"@en ;
   rdfs:comment "Retrieve a document"@en ;
   a main:ActionList .
 
-main:updatedocument
+main:update_document
   rdfs:label "updateDocument"@en ;
   rdfs:comment "Update the contents of a docoument"@en ;
   a main:ActionList .
 
-main:deletedocument
+main:delete_document
   rdfs:label "deleteDocument"@en ;
   rdfs:comment "Delete a document from the DB"@en ;
   a main:ActionList .
 
-main:classframe
+main:class_frame
   rdfs:label "classFrame"@en ;
   rdfs:comment "Return a Frame JSON for the appropriate Class"@en ;
   a main:ActionList .
 
-main:createdatabase
+main:create_database
   rdfs:label "createDatabase"@en ;
   rdfs:comment "Create a new database"@en ;
   a main:ActionList .
 
-main:woqlselect
+main:woql_select
   rdfs:label "woqlSelect"@en ;
   rdfs:comment "A read-only query"@en ;
   a main:ActionList .
 
-main:woqlupdate
+main:woql_update
   rdfs:label "woqlUpdate"@en ;
   rdfs:comment "A read-write WOQL query"@en ;
   a main:ActionList .
