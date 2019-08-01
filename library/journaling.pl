@@ -32,7 +32,8 @@
 :- use_module(types).
 :- use_module(utils).
 :- use_module(collection).
-
+:- use_module(prefixes).
+ 
 /** 
  * graph_stream(+C:collection_identifier,+G:graph_identifier,-Stream,-Type,-Ext) is det.  
  *
@@ -116,6 +117,24 @@ write_triple(C,G,PX,PY,PZ) :-
     ->  throw(unimplemented_storage_type(hdt))
     ;   throw(unimplemented_storage_type(Ext))
     ).
+
+/* 
+ * Goal expansion for write_triple in order to 
+ * make static code references to ontologies less painful.
+ */
+user:goal_expansion(write_triple(DB,G,A,Y,Z),write_triple(DB,G,X,Y,Z)) :-
+    \+ var(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(write_triple(DB,G,X,B,Z),write_triple(DB,G,X,Y,Z)) :-
+    \+ var(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(write_triple(DB,G,X,Y,C),write_triple(DB,G,X,Y,Z)) :-
+    \+ var(C),
+    \+ C = literal(_),
+    global_prefix_expand(C,Z).
+user:goal_expansion(write_triple(DB,G,X,Y,literal(L)),write_triple(DB,G,X,Y,Object)) :-
+    \+ var(L),
+    literal_expand(literal(L),Object).
 
 
 /** 

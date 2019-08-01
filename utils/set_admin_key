@@ -1,60 +1,100 @@
-#!/bin/bash
+#!/usr/bin/env swipl
 
-## This should probably be replaced by swipl code
-## as it would be more portable and less insane.
+:- initialization(main).
 
-if ! type rdf2hdt > /dev/null; then
-	printf "We can't proceed without rdf2hdt but it's not installed.  Aborting.\n";
-	exit 1;
-fi
+:- use_module(library(process)).
+:- use_module(library(optparse)).
+:- use_module(library(md5)).
 
-if ! type swipl > /dev/null; then
-	printf "We can't proceed without swipl but it's not installed.  Aborting.\n";
-	exit 1;
-fi
+/*
+ * command(Cmd) is semidet. 
+ * 
+ * True if Cmd exists. 
+ */
+command(Cmd) :-
+    catch(
+        (   process_create(path(Cmd), [], [ stderr(null),
+                                            stdout(null),
+                                            process(PID)
+                                          ]),
+            process_wait(PID,_Status)),
+        error(existence_error(source_sink,path(Cmd)),_),
+        fail).
 
-usage="$(basename "$0") [-h] [-k KEY] -- program to set admin KEY
+opt_spec([[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]), 
+           default(false),
+           help('print this help')],
+          
+          [opt(key),
+           type(atom),
+           shortflags([k]),
+           longflags([key]),
+           default(admin),
+           help('key of amin user')]]).
 
-where:
-    -h		show this help text
-    -k KEY	set the admin key value"
+/* 
+ * help(+Cmd:atom,-Help:atom) is det.
+ */
+help(Cmd,Spec,Help) :-
+    file_base_name(Cmd,Name),
+    opt_help(Spec,Help_Text),
+    format(atom(Help),'Usage: ~s [OPTIONS]
 
-# Get the current script directory
-dir=$(dirname "$0")
+Set the administrative key - necessary before superuser can begin to set other permissions
 
-# The database to update
-examplettl="$dir/../config/capability_instance_template.ttl"
-instancettl="$dir/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.ttl"
-instancedb="$dir/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.hdt"
+~s', [Name,Help_Text]).
 
-if [ "$1" == "" ] ; then
-	printf "Need more than no arguments!\n\n" >&2
-	echo "$usage" >&2;
-    exit 1;
-fi
+example_ttl(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../config/capability_instance_template.ttl'], Path).
 
-while getopts ':hk:' option; do
-  case "$option" in
-    h) echo "$usage"
-       exit
-       ;;
-    k) KEY=${OPTARG}
-	   HASH=$(swipl -g "use_module(library(md5)),md5_hash('$KEY',Res,[]),write(Res),nl,halt.")
-	   cp "$examplettl" "$instancettl";
-	   sed -i "s/SEKRET_ADMIN_KEY/$HASH/" "$instancettl";
-	   rdf2hdt "$instancettl" "$instancedb";
-	   rm -f "$instancedb.index.*";
-	   printf "Key updated successfully!\n" >&2;
-	   exit
-       ;;
-#    :) printf "Option -%s requires an argument." "$OPTARG" >&2
-#       echo "$usage" >&2
-#       exit 1
-#       ;;
-	?) printf "Not valid options %s" "$OPTARG" >&2
-       echo "$usage" >&2
-       exit 1
-       ;;
-  esac
-done
-shift $((OPTIND - 1))
+instance_ttl(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.ttl'], Path).
+
+instance_hdt(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.hdt'], Path).
+
+program(Prog) :-
+    current_prolog_flag(associated_file,Prog).
+    
+main(Args) :-
+    (   command(rdf2hdt)    
+    ->  true
+    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n')),
+
+    program(Prog),
+    opt_spec(Spec),
+    opt_parse(Spec,Args,Opts,_),
+    help(Prog,Spec,Help_Text),
+    
+    (   memberchk(help(true), Opts)
+    ->  write(Help_Text),
+        halt
+    ;   memberchk(key(admin), Opts)
+    ->  format('~nThink of a better administrator key please...~n~n'),
+        write(Help_Text),
+        halt
+    ;   memberchk(key(Key), Opts)        
+    ->  file_directory_name(Prog, Dir),
+        example_ttl(Dir,Example_TTL),
+        instance_ttl(Dir,Instance_TTL),
+        instance_hdt(Dir,Instance_HDT),
+        md5_hash(Key,Hash,[]),
+        atomic_list_concat(['
+cp "',Example_TTL,'" "',Instance_TTL,'";
+sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_TTL,'";
+rdf2hdt "',Instance_TTL,'" "',Instance_HDT,'";
+rm -f "',Instance_HDT,'.index.*";
+'],
+                           Cmd),
+        shell(Cmd),
+        format('Successfully updated admin key!!~n'),
+        halt
+    ;   write(Help_Text),
+        halt),
+
+    halt.
+
+    

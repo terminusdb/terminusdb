@@ -1,5 +1,7 @@
 :- module(capabilities,[
-              key_auth/2
+              key_auth/2,
+              key_user/2,
+              user_action/2
           ]).
                  
 /** <module> Capabilities

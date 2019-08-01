@@ -9,20 +9,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -48,6 +48,15 @@
 
 % Default utils
 :- use_module(library(utils)).
+
+% Database utils
+:- use_module(library(database_utils)).
+
+% Graph construction utils
+:- use_module(library(collection)).
+
+% Frame and entity processing
+:- use_module(library(frame)).
 
 %% Set base location
 % We may want to allow this as a setting...
@@ -78,31 +87,35 @@ http:location(root, '/', []).
 /* 
  * verify_capability(+Data,+Capability) is det. 
  * 
- * This should either be true or throw an http_status_reply/4 message. 
+ * This should either be true or throw an http_reply message. 
  */
 verify_capability(Data,Capability) :-
 
-    (   member(key, Data, Connection_Key)
+    (   member(key=Key, Data)
     ->  true
     ;   throw(http_reply(authorise('No key supplied')))),
 
-    (   key_user(Key, User),
+    (   key_user(Key, User)
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))),
 
     (   user_action(User,Capability)
     ->  true
-    ;   throw(http_reply(method(Capability)))).
+    ;   throw(http_reply(method_not_allowed(Capability)))).
 
+/* 
+ * authenticate(+Data,+Auth_Obj) is det. 
+ * 
+ * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
+ */
 authenticate(Data, Auth) :-
-    (   member(key, Data, Connection_Key)
+    (   member(key=Key, Data)
     ->  true
     ;   throw(http_reply(authorise('No key supplied')))),
 
-    (   key_auth(Key, Auth),
+    (   key_auth(Key, Auth)
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
-
     
 /** 
  * connect_handler(Request:http_request) is det.
@@ -123,24 +136,25 @@ db_handler(Request,post,DB) :-
     /* POST: Create database */
     http_parameters(Request, [], [form_data(Data)]),
 
-    verify_capability(Data,terminus/createdatabase).
+    verify_capability(Data,terminus/createdatabase),
+
+    create_db(DB),
     
     format('Content-type: application/json~n~n'),
+    
     current_output(Out),
-	json_write_dict(Out,Auth).
+	json_write_dict(Out,_{'terminus:status' : 'success'}).
 db_handler(Request,delete,DB) :-
     /* DELETE: Delete database */
     http_parameters(Request, [], [form_data(Data)]),
 
-    verify_capability(Data,terminus/deletedatabase).
+    verify_capability(Data,terminus/deletedatabase),
 
-    get_key(key, Data, Connection_Key),
-    key_auth(Connection_Key,Auth),
-
+    delete_db(DB),
+    
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out,Auth).
-
+	json_write_dict(Out,_{'terminus:status' : 'success'}).
     
 /** 
  * woql_handler(+Request:http_request) is det.
@@ -151,11 +165,36 @@ woql_handler(Request) :-
     get_key(query,Data,Query),
     http_log_stream(Log),
     run_query(Query, JSON),
+    
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write(Out,JSON).
+	json_write_dict(Out,JSON).
 
-
-document_handler(Request, Method, DB, Docid).
-
+document_handler(get, DB, Doc_ID, _Request) :-
+    /* Create Document */ 
+    config:server_name(Server_Name),
+    interpolate([Server_Name,DB],DB_URI),    
+    make_collection_graph(DB_URI,Graph),
+    interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI),
+    format('Content-type: application/json~n~n'),    
+    (   entity_jsonld(Doc_URI,Graph,JSON)
+    ->  current_output(Out),
+        json_write_dict(Out,JSON)
+    ;   writeq(entity_jsonld(Doc_URI,Graph,_))).
+document_handler(post, DB, Doc_ID, _Request) :-
+    /* Update document */
+    make_collection_graph(DB,Graph),
+    entity_jsonld(Doc_ID,Graph,JSON),
+    
+    format('Content-type: application/json~n~n'),
+    current_output(Out),
+	json_write_dict(Out,JSON).
+document_handler(delete, DB, Doc_ID, _Request) :-
+    /* Delete Document */
+    make_collection_graph(DB,Graph),
+    entity_jsonld(Doc_ID,Graph,JSON),
+    
+    format('Content-type: application/json~n~n'),
+    current_output(Out),
+	json_write_dict(Out,JSON).

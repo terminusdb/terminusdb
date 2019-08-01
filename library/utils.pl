@@ -21,6 +21,7 @@
               split_atom/3,
               count/3,
               merge_dictionaries/3,
+              command/1,
               op(920,fy, *),
               '*'/1
           ]).
