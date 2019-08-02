@@ -42,10 +42,15 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
+
+% We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
+
 :- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
 :- use_module(casting, [typecast/4,hash/3]).
-:- use_module(journaling, [write_triple/5]).
+
+% This should really not be used... it is too low level - Gavin
+%:- use_module(journaling, [write_triple/5]).
 
 % is this actually needed?
 :- op(2, xfx, :).
@@ -283,10 +288,13 @@ resolve(v(X),Xe) -->
         ->  B1=B0
         ;   B1=[X=Xe|B0])
     }.
-resolve(X,X) -->
-    [],
+resolve(X,Xe) -->
+    view(prefixes=Prefixes), 
     {
-        atom(X)
+        atom(X),
+        (   once(member(X=URI,Prefixes))
+        ->  Xe=URI
+        ;   X=Xe)
     }.
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
     [],
@@ -503,16 +511,31 @@ compile_relation(X:C,XE,Class,Goals) -->
         )
     }.
 
-compile_wf(output(X,P,Y),Goal) -->
+compile_wf(delete_object(X),delete_object(URI,Graph)) -->
+    view(graph=Graph),
+    resolve(X,URI).
+compile_wf(delete(WG,X,P,Y),delete(WC,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(graph=Graph), 
-    view(write_graph=WG), 
-    {
-        graph_collection(Graph,WC),
-        Goal = write_triple(WC, WG, XE, PE, YE)
-    }.
+    view(collection=WC).
+compile_wf(insert(WG,X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(collection=WC).
+compile_wf(delete(X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(collection=WC),
+    view(write_graph=WG).
+compile_wf(insert(X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(collection=WC),
+    view(write_graph=WG).
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
     { list_conjunction(Goals,Goal) }.
@@ -755,20 +778,19 @@ compile_wf((A => B),Goal) -->
     % This second one should be simpler, to reflect that only writes are allowed on the right. 
     compile_wf(B,ProgB),
     view(collection=C),
+    % This definitely needs to be a collection of all actual graphs written to...
+    % should be easy to extract from B
     view(write_graph=WG),
     {
         %format('***************~nImplicative Program: ~n~q~n',[(ProgA,ProgB)])
         Goal = (
-            with_output_graph(
-                graph(C,WG, pos, ttl),
+            with_transction(
+                [collection(C),graphs([WG])],
                 exhaust(
-                    (
-                        ProgA,
+                    (   ProgA,
                         ProgB
-                    )
-                )
-            ),
-            sync_from_journals(C,WG)
+                    ))
+            )
         )
     }.
 compile_wf(select(VL,P), Prog) -->

@@ -27,7 +27,11 @@
               current_checkpoint_directory/3,
               collections/0,
               collections/1,
-              graphs/2
+              graphs/2,
+              make_checkpoint_directory/3,
+              ttl_to_hdt/2,
+              ntriples_to_hdt/2,
+              cleanup_edinburgh_escapes/1
           ]).
 
 :- use_module(utils).
@@ -416,3 +420,73 @@ graphs(Collection_ID,Graphs) :-
         maplist([N,S]>>sanitise_file_name(N,S),Graphs,Valid_Graph_Names)
     ;   Graphs = []).
 
+/** 
+ * make_checkpoint_directory(+Collection_ID,+Graph_ID:graph_identifer,-CPD) is det. 
+ * 
+ * Create the current checkpoint directory
+ */
+make_checkpoint_directory(Collection_ID, Graph_Id, CPD) :-
+    graph_directory(Collection_ID,Graph_Id, Graph_Path),
+    ensure_directory(Graph_Path),
+    last_checkpoint_number(Graph_Path,M),
+    N is M+1,
+    %get_time(T),floor(T,N),
+    interpolate([Graph_Path,'/',N],CPD),
+    make_directory(CPD).
+
+
+/** 
+ * cleanup_edinburgh_escapes(+File) is det.
+ * 
+ * Removes character escapes of the form '\ddd\' and replaces them 
+ * with the re-readable '\ddd'.
+ * 
+ * Currently does an "in-place" replace.
+ */ 
+cleanup_edinburgh_escapes(File) :-
+    process_create(path(sed), ['-i','s/\\\\\\([0-9][0-9][0-9]\\)\\\\/ /g',File],
+                   [ stdout(pipe(Out)),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["sed killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    close(Out).
+    
+
+/** 
+ * ttl_to_hdt(+FileIn,-FileOut) is det.
+ * 
+ * Create a hdt file from ttl using the rdf2hdt tool.
+ */
+ttl_to_hdt(FileIn,FileOut) :-
+    cleanup_edinburgh_escapes(FileIn),
+    process_create(path(rdf2hdt), ['-f','turtle',FileIn,FileOut],
+                   [ stdout(pipe(Out)),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["rdf2hdt killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    close(Out).
+
+/** 
+ * ntriples_to_hdt(+File) is det.
+ * 
+ * Create a hdt file from ttl using the rdf2hdt tool.
+ */
+ntriples_to_hdt(FileIn,FileOut) :-
+    process_create(path(rdf2hdt), ['-f','ntriples',FileIn,FileOut],
+                   [ stdout(pipe(Out)),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["rdf2hdt killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    close(Out).

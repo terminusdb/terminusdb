@@ -308,11 +308,20 @@ source(file(Id,Type)) :-
 output_pattern((P,Q)) :-
     output_pattern(P),
     output_pattern(Q).
-output_pattern(output(A,B,Z)) :-
+output_pattern(insert(A,B,Z)) :-
     obj(A),
     obj(B),
     obj_or_lit(Z).
-output_pattern(output(A,B,Z,G)) :-
+output_pattern(insert(G,A,B,Z)) :-
+    obj(A),
+    obj(B), 
+    obj_or_lit(Z),
+    graph_term(G).
+output_pattern(delete(A,B,Z)) :-
+    obj(A),
+    obj(B),
+    obj_or_lit(Z).
+output_pattern(delete(G,A,B,Z)) :-
     obj(A),
     obj(B), 
     obj_or_lit(Z),

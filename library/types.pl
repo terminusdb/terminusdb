@@ -1,4 +1,5 @@
 :- module(types, [
+              is_literal/1,
               is_uri/1,
               is_id/1,
               is_bnode/1,

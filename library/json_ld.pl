@@ -31,8 +31,11 @@
 :- use_module(library(pairs)).
 :- use_module(library(utils)).
 :- use_module(library(http/json)).
-:- use_module(library(mavis)).
+% Currently a bug in groundedness checking.
+%:- use_module(library(mavis)).
+:- use_module(library(collection)).
 
+       
 /** 
  * expand(+JSON_LD, -JSON) is det.
  * 
@@ -211,3 +214,137 @@ term_jsonld(Term,JSON) :-
     !,
     maplist([Obj,JSON]>>(term_jsonld(Obj,JSON)), Term, JSON).
 term_jsonld(JSON,JSON).
+
+/* 
+ * Get the ID a json objct
+ * 
+ */ 
+jsonld_id(Obj,_Graph,ID) :-
+    is_dict(Obj),
+    !,
+    get_dict('@id',Obj,ID).
+jsonld_id(_Obj,Graph,ID) :-
+    graph_collection(Graph,Collection),
+    interpolate([Collection,'/document'],Base),
+    gensym(Base,ID).
+    
+/* Debug
+ * This should not exist.... We should already be expanded.  
+ *
+ * jsonld_predicate_value(P,Val,Ctx,Expanded_Value) is det.
+ * 
+ * Look up the predicate in the context to see if we should expand our information
+ * about the value.
+ */ 
+jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
+    get_dict(P,Ctx,Expanded),
+
+    (   is_dict(Expanded)
+    ->  (   is_dict(Val)
+        ->  merge_dictionaries(Expanded,Val,Expanded_Value)
+        ;   is_list(Val)
+        % definitely do something here which isn't this!!
+        ->  true
+        ;   get_dict('@type', Expanded, '@id')
+        ->  (   \+ atom(Val)
+            ->  format(atom(Msg),'Not a well formed JSON id: ~q~n', [Val]),
+                throw(syntax_error(Msg))),
+            (   get_dict('@id', Expanded, Type)
+            ->  Expanded_Value = _{'@id' : Val,
+                                   '@type' : Type}
+            ;   Expanded_Value = _{'@id' : Val})
+        ;   merge_dictionaries(Expanded, _{'@value' : Val}, Expanded_Value))
+    ;   Val = Expanded_Value).
+jsonld_predicate_value(_P,Val,_Ctx,Val).
+    
+/* 
+ * jsonld_triples(+Dict,+Graph,-Triples) is det. 
+ * 
+ * Return the triples associated with a JSON-LD structure.
+ */
+jsonld_triples(JSON, Graph, Triples) :-
+    jsonld_triples(JSON, _{}, Graph, Triples).
+
+jsonld_triples(JSON, Ctx, Graph, Triples) :-
+    get_dict('@context', JSON, Internal),
+    merge_dictionaries(Ctx, Internal, New_Ctx),
+    expand_context(New_Ctx,New_Expanded),
+    expand(JSON,New_Expanded,JSON_Ex),
+    jsonld_triples_aux(JSON_Ex, New_Ctx, Graph, Triples).
+    
+/* 
+ * jsonld_triples_aux(Dict, Ctx, Graph, Tuples) is det.
+ * 
+ * Create the n-triple format of the given json triples 
+ * suitable for use with delete/5 or insert/5
+ */
+jsonld_triples_aux(Dict, Ctx, Graph, Triples) :-
+    is_dict(Dict),
+    !,
+
+    (   get_dict('@id', Dict, ID)
+    ->  jsonld_id_triples(ID,Dict,Ctx,Graph,Triples)
+    ;   dict_pairs(Dict, _, JSON_Pairs),
+        maplist({Graph,Ctx}/[ID-PV,Triples]>>(
+                    (   memberchk(ID,['@context','@id'])
+                    ->  Triples = []
+                    ;   jsonld_id_triples(ID,PV,Ctx,Graph,Triples))
+                ),
+                JSON_Pairs, Triples_List),
+        append(Triples_List,Triples)).
+% what could this be? A list?
+jsonld_triples_aux(List, Ctx, Graph, Triples) :-
+    is_list(List),
+    !,
+    
+    maplist({Ctx,Graph}/[Obj,Ts]>>(
+                jsonld_triples_aux(Obj,Ctx,Graph,Ts)
+            ),
+            List,
+            Ts_List),
+    append(Ts_List, Triples).
+    
+/* 
+ * jsonld_id_triples(ID,PV,Ctx,Graph,Triples) is det. 
+ *
+ * We have the id and are looking for the edge and values. 
+ */
+jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
+    is_dict(PV),
+    !,    
+
+    dict_pairs(PV, _, JSON_Pairs),
+    maplist({ID,Ctx,Graph}/[P-V,Triples]>>(
+                graph_collection(Graph,C),
+                graph_instance(Graph,G),
+
+                * format('Incoming P-V: ~q~n',[P-V]),
+                (   memberchk(P,['@context','@id'])
+                ->  Triples = []
+                ;   P = '@type'
+                ->  Pred = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                    Triples = []
+                ;   P = Pred,
+                    Triples = [(C,G,ID,Pred,Val)|Rest],
+                    %jsonld_predicate_value(P,V,Ctx,EV),
+                    (   is_dict(V)
+                    ->  (   V = _{'@type' : Type,
+                                  '@value' : Data
+                                 }
+                        ->  Val = literal(type(Type,Data)),
+                            Rest = []
+                        ;   V = _{'@language' : Lang,
+                                  '@value' : Data}
+                        ->  Val = literal(lang(Lang,Data)),
+                            Rest = []
+                        ;   jsonld_id(V,Graph,Val),
+                            jsonld_triples_aux(V,Ctx,Graph,Rest))
+                    ;   Val = literal(type('http://www.w3.org/2001/XMLSchema#string',V)),
+                        Rest = []
+                    )
+                )                
+            ),
+            JSON_Pairs, Triples_List),
+    
+    append(Triples_List, Triples).
+    

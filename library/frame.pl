@@ -14,7 +14,8 @@
               % Get an object as described by a frame.
               entity_object/3,
               entity_jsonld/3,
-              entity_jsonld/4
+              entity_jsonld/4,
+              object_edges/3
           ]).
 
 /** <module> Frames
@@ -609,6 +610,12 @@ class_frame_aux(Class, Graph, Frame) :-
         calculate_frame(Class,Properties,RestrictionFormula,Graph,Frame)
     ;   Frame = [type=failure, message='No Class Formula!', class=Class]).
 
+
+/********************************************************************
+ * Warning - Filled Class Frames are unlikely to work at the moment.*
+ * They are left as documentation.                                  *
+ ********************************************************************/
+
 /** 
  * fill_class_frame_aux(+Elt,+Graph,-Frame,-Filled) is det.
  * 
@@ -700,11 +707,17 @@ entity_filled_frame(Entity,Graph,Filled) :-
  * 
  * Does not actually appear to be det!
  */
-realiser(Elt,Frame,Graph,[Elt=['@type'=Class
-                               |Realisers]]) :-
+realiser(Elt,Frame,Graph,['@type'=Class,
+                          '@id'=Elt
+                          |Realisers]) :-
     instanceClass(Elt,Class,Graph),
     realise_frame(Elt,Frame,Graph,Realisers).
-    
+
+/* 
+ * realise_frame(Elt,Frame,Graph,Quasi_JSONLD) is det.
+ * 
+ * Traverse frame synthesising realisers.
+ */
 realise_frame(_,[],_,[]) :-
     !.
 realise_frame(Elt,[[type=objectProperty|P]|Rest],Graph,Realisers) :-
@@ -742,7 +755,7 @@ realise_frame(Elt,[[type=restriction|_R]|Rest],Graph,Realisers) :-
     !, 
     realise_frame(Elt,Rest,Graph,Realisers).
 realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Graph,[Realiser|Realisers]) :-
-    % We are a bare restriction, not applied to any property
+    % We are a bare class_choice, not applied to any property
     !,
     entity_object(Elt,Graph,Realiser),
     realise_frame(Elt,Rest,Graph,Realisers).
@@ -758,13 +771,86 @@ realise_frame(_Elt,F,_Graph,[]) :-
     member(Type,[oneOf,entity]),
     % is a one-of or entity (don't backtrack over member)
     !.
+
+/* 
+ * realise_triples(Elt,Frame,Graph,Realiser) is det.
+ *
+ * The triple realiser must be kept in complete lock step with the definition above. 
+ * This makes me wonder if we shouldn't keep the method fused or derived!
+ */ 
+realise_triples(_,[],_,[]) :-
+    !.
+realise_triples(Elt,[[type=objectProperty|P]|Rest],Graph,Realiser) :-
+    !, % no turning back if we are an object property
+    graph_collection(Graph,C),
+    graph_instance(Graph,G),
     
+    member(property=Prop, P),
+    select(frame=Frame,P,_FrameLessP),
+    (   setof(NewRealiser,
+              V^(inferredEdge(Elt, Prop, V, Graph),
+                 (   schema:entity(V,Graph)
+                 ->  NewRealiser=[(C,G,Elt,Prop,V)]
+                 ;   realise_triples(V,Frame,Graph,Below),
+                     NewRealiser=[(C,G,Elt,Prop,V)|Below])),
+              RealiserLists)
+    ->  append(RealiserLists,Realisers_on_P),
+        realise_triples(Elt,Rest,Graph,Realiser_Tail),
+        append(Realisers_on_P, Realiser_Tail, Realiser)
+    ;   realise_triples(Elt,Rest,Graph,Realiser)
+    ).
+realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Graph,Realiser) :-
+    !, % no turning back if we are a datatype property
+    graph_collection(Graph,C),
+    graph_instance(Graph,G),
+
+    member(property=Prop, P),
+    (   setof((C,G,Elt,Prop,V),
+              inferredEdge(Elt, Prop, V, Graph),
+              Realisers_on_P)
+    ->  realise_triples(Elt,Rest,Graph,Realiser_Tail),
+        append(Realisers_on_P,Realiser_Tail,Realiser)
+    ;   realise_triples(Elt,Rest,Graph,Realiser)
+    ).
+realise_triples(Elt,[[type=restriction|_R]|Rest],Graph,Realiser) :-
+    % We are a bare restriction, not applied to any property
+    !, 
+    realise_triples(Elt,Rest,Graph,Realiser).
+realise_triples(Elt,[[type=class_choice,operands=_]|Rest],Graph,Realiser) :-
+    % We are a bare class choice, not applied to any property
+    !,
+    object_edges(Elt,Graph,Edges),
+    realise_triples(Elt,Rest,Graph,Realiser_Tail),
+    append(Edges,Realiser_Tail,Realiser).
+realise_triples(Elt,Frame,Graph,Realisers) :-
+    % We should be able to assume correctness of operator here...
+    % member(type=Type, Frame), 
+    member(operands=Fs, Frame),
+    !, % We're an operator, so stick with it
+    maplist({Elt,Graph}/[TheFrame,NewRealiser]
+            >>(realise_triples(Elt,TheFrame,Graph,NewRealiser)),Fs,Realiser_List),
+    append(Realiser_List,Realisers).
+realise_triples(_Elt,F,_Graph,[]) :-
+    member(type=Type, F),
+    member(Type,[oneOf,entity]),
+    % is a one-of or entity (don't backtrack over member)
+    !.
+
 /*
  * entity_object(+Entity:uri,+Graph:graph,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity
  */ 
+entity_object(Entity,Graph,Realiser) :-
+    most_specific_type(Entity,Class,Graph),
+    class_frame(Class,Graph,Frame),
+    realiser(Entity,Frame,Graph,Realiser).
+
+/* 
+ * delete_entity_object(+Entity_uri, +Graph
+ * 
+ */
 entity_object(Entity,Graph,Realiser) :-
     most_specific_type(Entity,Class,Graph),
     class_frame(Class,Graph,Frame),
@@ -803,3 +889,49 @@ entity_jsonld(Entity,Ctx,Graph,JSON_LD) :-
  */ 
 entity_jsonld(Entity,Graph,JSON_LD) :-
     entity_jsonld(Entity,_{},Graph,JSON_LD).
+
+/* 
+ * object_edges(URI,Graph,Edges) is det.
+ * 
+ * Is there any way to make this so that everyting is derived from 
+ * the same source? 
+ */ 
+object_edges(URI,Graph,Edges) :-
+    most_specific_type(URI,Class,Graph),
+    class_frame(Class,Graph,Frame),
+    realise_triples(URI,Frame,Graph,Edges).
+
+/* 
+ * object_references(URI,Graph,Edges) is det.
+ * 
+ * Get the set of references to a given object.
+ */ 
+object_references(URI,Graph,Edges) :-
+    graph_collection(Graph,C),
+    graph_instance(Graph,G),
+
+    findall((C,G,Elt,Prop,URI),
+            inferredEdge(Elt, Prop, URI, Graph),
+            Edges).
+
+/* 
+ * delete_object(URI,Graph) is det.
+ * 
+ */
+delete_object(URI,Graph) :-
+    object_edges(URI,Graph,Object_Edges),
+    object_references(URI,Graph,References),
+    append(Object_Edges,References,Edges),
+    
+    maplist([(C,G,X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
+
+/* 
+ * update_object(Obj,Graph) is det.
+ * 
+ * This should extract the object from the database
+ * and set up deletes for 
+ * 
+ * Inserts := triples(Obj) / triples(Old)
+ * Deletes := triples(Old) / triples(Obj)
+ */
+update_object(_Obj,_Graph).

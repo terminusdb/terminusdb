@@ -1,7 +1,10 @@
 :- module(capabilities,[
               key_auth/2,
               key_user/2,
-              user_action/2
+              user_action/2,
+              auth_action_scope/3,
+              add_database_resource/1,
+              delete_database_resource/1
           ]).
                  
 /** <module> Capabilities
@@ -40,6 +43,7 @@
 :- use_module(library(collection)).
 :- use_module(library(md5)).
 :- use_module(library(sdk)).
+:- op(1050, xfx, =>).
 
 capability_collection('http://localhost/capability').
 
@@ -128,4 +132,60 @@ user_action(User,Action) :-
 	          )
        ).
 
+/* 
+ * auth_action_scop(Auth,Action,Scope) is nondet.
+ * 
+ * Does Auth object have capability Action on scope Scope.
+ * 
+ * This needs to implement some of the logical character of scope subsumption.
+ */
+auth_action_scope(Auth, Action, Scope) :-
+    connect('http://localhost/capability', DB),
+    ask(DB, 
+	    where(t( Auth , Action , Scope ))
+	   ).
+auth_action_scope(Auth, Action, _Scope) :-
+    % Don't need to know the scope if it is the whole server...
+    connect('http://localhost/capability', DB),
+    ask(DB, 
+	    where(t( Auth , Action , doc/server))
+	   ).
+
+/*  
+ * add_database_resource(DB) is det.
+ * 
+ * Adds a database resource object to the capability instance database for the purpose of 
+ * authority reference.
+ */
+add_database_resource(URI) :-
+    connect('http://localhost/capability', DB),
+    ask(DB, 
+	    (
+            hash(doc, [URI], DB_URI)
+        =>
+            insert(DB_URI, rdf/type, terminus/'Database'),
+            insert(DB_URI, terminus/id, URI^^xsd/string)
+        )
+       ).
+
+/*  
+ * delete_database_resource(URI) is det.
+ * 
+ * Deletes a database resource object to the capability instance database for the purpose of 
+ * removing the authority reference.
+ */
+delete_database_resource(URI) :-
+    % hmmm... this is going to be tricky... We need to delete all references to the object.
+    % but are those references then going to be "naked" having no other reference?
+    %
+    % Supposing we have only one scope for an auth, do we delete the auth? 
+    connect('http://localhost/capability', DB),
+    % delete the object
+    ask(DB, 
+        (
+            t(DB_URI, terminus/id, URI^^xsd/string),
+            t(DB_URI, terminus/id, terminus/'Database')
+        =>  
+            delete_object(DB_URI)
+        )).
 

@@ -1,4 +1,4 @@
-:- module(journaling,[write_triple/5,
+:- module(journaling,[write_triple/6,
                       initialise_graph/5,
                       finalise_graph/5,
                       set_graph_stream/5,
@@ -102,13 +102,14 @@ finalise_graph(Colection_Id,Graph,Stream,Type,Ext) :-
     ).
 
 /** 
- * write_triple(+PX,+PY,+PZ,+Graph_Id:graph_identifier) is det.
+ * write_triple(+C,+G,+Type,+PX,+PY,+PZ) is det.
  * 
  * Write a triple to graph G where Ext is one of {ttl,ntl,hdt}
+ * and Type is one of {pos,neg,chk}
  */ 
-write_triple(C,G,PX,PY,PZ) :-
+write_triple(C,G,Type,PX,PY,PZ) :-
     debug(write_triple, 'PX ~q      PY ~q      PZ ~q', [PX, PY,PZ]),
-    graph_stream(C,G,Stream,_Type,Ext),
+    graph_stream(C,G,Stream,Type,Ext),
     (   Ext=ttl
     ->  write_triple_turtle(PX,PY,PZ,Stream)
     ;   Ext=ntr
@@ -122,17 +123,17 @@ write_triple(C,G,PX,PY,PZ) :-
  * Goal expansion for write_triple in order to 
  * make static code references to ontologies less painful.
  */
-user:goal_expansion(write_triple(DB,G,A,Y,Z),write_triple(DB,G,X,Y,Z)) :-
+user:goal_expansion(write_triple(DB,G,T,A,Y,Z),write_triple(DB,G,T,X,Y,Z)) :-
     \+ var(A),
     global_prefix_expand(A,X).
-user:goal_expansion(write_triple(DB,G,X,B,Z),write_triple(DB,G,X,Y,Z)) :-
+user:goal_expansion(write_triple(DB,G,T,X,B,Z),write_triple(DB,G,T,X,Y,Z)) :-
     \+ var(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(write_triple(DB,G,X,Y,C),write_triple(DB,G,X,Y,Z)) :-
+user:goal_expansion(write_triple(DB,G,T,X,Y,C),write_triple(DB,G,T,X,Y,Z)) :-
     \+ var(C),
     \+ C = literal(_),
     global_prefix_expand(C,Z).
-user:goal_expansion(write_triple(DB,G,X,Y,literal(L)),write_triple(DB,G,X,Y,Object)) :-
+user:goal_expansion(write_triple(DB,G,T,X,Y,literal(L)),write_triple(DB,G,T,X,Y,Object)) :-
     \+ var(L),
     literal_expand(literal(L),Object).
 

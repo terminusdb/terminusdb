@@ -5,6 +5,9 @@
               sync_from_journals/0,
               sync_from_journals/2,
               xrdf/5,
+              insert/5,
+              delete/5,
+              update/6,
               commit/2,
               rollback/2,
               check_graph_exists/2,
@@ -12,7 +15,8 @@
               graph_checkpoint/3,
               current_checkpoint_directory/3,
               last_checkpoint_number/2,
-              with_output_graph/2
+              with_output_graph/2,
+              ttl_to_hdt/2
           ]).
 
 :- use_module(library(hdt)). 
@@ -21,6 +25,7 @@
 :- use_module(library(utils)).
 :- use_module(library(schema), [cleanup_schema_module/1]).
 :- use_module(library(prefixes)).
+:- use_module(library(types)).
 
 /** <module> Triplestore
  * 
@@ -108,62 +113,6 @@ sync_from_journals(Collection,Graph_Name) :-
     ;   retract_graph(Collection,Graph_Name),
         throw(graph_sync_error(Collection-Graph_Name))
     ).
-
-/** 
- * cleanup_edinburgh_escapes(+File) is det.
- * 
- * Removes character escapes of the form '\ddd\' and replaces them 
- * with the re-readable '\ddd'.
- * 
- * Currently does an "in-place" replace.
- */ 
-cleanup_edinburgh_escapes(File) :-
-    process_create(path(sed), ['-i','s/\\\\\\([0-9][0-9][0-9]\\)\\\\/ /g',File],
-                   [ stdout(pipe(Out)),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["sed killed with signal ",Signal], M),
-        throw(error(M))
-    ;   true),
-    close(Out).
-    
-
-/** 
- * ttl_to_hdt(+File) is det.
- * 
- * Create a hdt file from ttl using the rdf2hdt tool.
- */
-ttl_to_hdt(FileIn,FileOut) :-
-    cleanup_edinburgh_escapes(FileIn),
-    process_create(path(rdf2hdt), ['-f','turtle',FileIn,FileOut],
-                   [ stdout(pipe(Out)),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["rdf2hdt killed with signal ",Signal], M),
-        throw(error(M))
-    ;   true),
-    close(Out).
-
-/** 
- * ntriples_to_hdt(+File) is det.
- * 
- * Create a hdt file from ttl using the rdf2hdt tool.
- */
-ntriples_to_hdt(FileIn,FileOut) :-
-    process_create(path(rdf2hdt), ['-f','ntriples',FileIn,FileOut],
-                   [ stdout(pipe(Out)),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["rdf2hdt killed with signal ",Signal], M),
-        throw(error(M))
-    ;   true),
-    close(Out).
 
 /** 
  * cut_queue_at_checkpoint(+Sorted,-RelevantQueue) is det.
@@ -402,7 +351,7 @@ collapse_planes(Collection_Id,Graph_Id) :-
         (
             forall(
                 xrdf(Collection_Id,Graph_Id,X,Y,Z),
-                write_triple(Collection_Id,Graph_Id,X,Y,Z)
+                write_triple(Collection_Id,Graph_Id,ckp,X,Y,Z)
             )
         )
     ).
@@ -434,26 +383,12 @@ sync_from_journals :-
             member(Graph_Name, Graphs)
         ),
         (
-            format("~n ** Syncing ~q in collection ~q ~n", [Graph_Name,Collection]),
+            format("~n ** Syncing ~q in collection ~q ~n~n", [Graph_Name,Collection]),
             catch(sync_from_journals(Collection,Graph_Name),
                   graph_sync_error(Graph_Name),
-                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.", [Graph_Name,Collection]))      
+                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.~n~n", [Graph_Name,Collection]))      
         )
     ).
-
-/** 
- * make_checkpoint_directory(+Collection_ID,+Graph_ID:graph_identifer,-CPD) is det. 
- * 
- * Create the current checkpoint directory
- */
-make_checkpoint_directory(Collection_ID, Graph_Id, CPD) :-
-    graph_directory(Collection_ID,Graph_Id, Graph_Path),
-    ensure_directory(Graph_Path),
-    last_checkpoint_number(Graph_Path,M),
-    N is M+1,
-    %get_time(T),floor(T,N),
-    interpolate([Graph_Path,'/',N],CPD),
-    make_directory(CPD).
 
 /** 
  * make_empty_graph(+Collection_ID,+Graph) is det.
@@ -509,6 +444,118 @@ import_graph(File, Collection_ID, Graph_Id) :-
     sync_from_journals(Collection_ID,Graph_Id).
 
 /** 
+ * literal_to_canonical(+Lit,-Can) is det. 
+ * 
+ * Converts a literal to canonical form. Currently 
+ * we are only canonicalising booleans. We may extend as necessary.
+ */
+literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit)),
+                     literal(type('http://www.w3.org/2001/XMLSchema#boolean',Can))) :-
+    !,
+    (   member(Lit, ['1',true])
+    ->  Can=true
+    ;   (   member(Lit, ['0',false]) 
+        ->  Can=false
+        ;   fail)             
+    ).
+literal_to_canonical(X,X).
+
+/** 
+ * canonicalise_object(+O,-C) is det. 
+ * 
+ * Finds the canonical form for an object
+ */
+canonicalise_object(O,C) :-
+    (   is_literal(O)
+    ->  literal_to_canonical(O,C)
+    ;   O=C).
+
+/** 
+ * insert(+DB:atom,+G:graph_identifier,+X,+Y,+Z) is det.
+ * 
+ * Insert quint into transaction predicates.
+ */
+insert(DB,G,X,Y,O) :-
+    canonicalise_object(Z,O),
+    (   xrdf(DB,G,X,Y,Z)
+    ->  true
+    ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
+        (   xrdf_neg_trans(DB,G,X,Y,Z)
+        ->  retractall(xrdf_neg_trans(DB,G,X,Y,Z))
+        ;   true)).
+
+user:goal_expansion(insert(DB,G,A,Y,Z),insert(DB,G,X,Y,Z)) :-
+    \+ var(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(insert(DB,G,X,B,Z),insert(DB,G,X,Y,Z)) :-
+    \+ var(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(insert(DB,G,X,Y,C),insert(DB,G,X,Y,Z)) :-
+    \+ var(C),
+    \+ C = literal(_),        
+    global_prefix_expand(C,Z).
+user:goal_expansion(insert(DB,G,X,Y,literal(L)),insert(DB,G,X,Y,Object)) :-
+    \+ var(L),
+    literal_expand(literal(L),Object).
+
+
+/** 
+ * delete(+DB,+G,+X,+Y,+Z) is det.
+ * 
+ * Delete quad from transaction predicates.
+ */
+delete(DB,G,X,Y,O) :-
+    canonicalise_object(Z,O),
+    (   xrdf_pos_trans(DB,G,X,Y,Z)
+    ->  retractall(xrdf_pos_trans(DB,G,X,Y,Z))        
+    ;   true),
+    (   xrdfdb(DB,G,X,Y,Z)
+    ->  asserta(xrdf_neg_trans(DB,G,X,Y,Z))
+    ;   true).
+
+user:goal_expansion(delete(DB,G,A,Y,Z),delete(DB,G,X,Y,Z)) :-
+    \+ var(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(delete(DB,G,X,B,Z),delete(DB,G,X,Y,Z)) :-
+    \+ var(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(delete(DB,G,X,Y,C),delete(DB,G,X,Y,Z)) :-
+    \+ var(C),
+    \+ C = literal(_),                
+    global_prefix_expand(C,Z).
+user:goal_expansion(delete(DB,G,X,Y,literal(L)),delete(DB,G,X,Y,Object)) :-
+    \+ var(L),
+    literal_expand(literal(L),Object).
+
+new_triple(_,Y,Z,subject(X2),X2,Y,Z).
+new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
+new_triple(X,Y,_,object(Z2),X,Y,Z2).
+
+/** 
+ * update(+DB,+G,+X,+Y,+Z,+G,+Action) is det.
+ * 
+ * Update transaction graphs
+ */ 
+update(DB,G,X,Y,Z,Action) :-
+    delete(DB,G,X,Y,Z),
+    new_triple(X,Y,Z,Action,X1,Y1,Z1),
+    insert(DB,G,X1,Y1,Z1).
+
+user:goal_expansion(update(DB,G,A,Y,Z,Act),update(DB,G,X,Y,Z,Act)) :-
+    \+ var(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(update(DB,G,X,B,Z,Act),update(DB,G,X,Y,Z,Act)) :-
+    \+ var(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(update(DB,G,X,Y,C,Act),update(DB,G,X,Y,Z,Act)) :-
+    \+ var(C),
+    \+ C = literal(_),
+    global_prefix_expand(C,Z).
+user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act)) :-
+    \+ var(L),
+    literal_expand(literal(L),Object).
+
+/** 
  * commit(+C:collection_id,+G:graph_id) is det.
  * 
  * Commits the current transaction state to backing store and dynamic predicate
@@ -523,7 +570,7 @@ commit(CName,GName) :-
             (   forall(
                      xrdf_neg_trans(CName,GName,X,Y,Z),
                      (   % journal
-                         write_triple(CName,GName,X,Y,Z),
+                         write_triple(CName,GName,neg,X,Y,Z),
                          % dynamic 
                          retractall(xrdf_pos(CName,GName,X,Y,Z)),
                          retractall(xrdf_neg(CName,GName,X,Y,Z)),
@@ -539,7 +586,7 @@ commit(CName,GName) :-
                     xrdf_pos_trans(CName,GName,X,Y,Z),
                      
                     (% journal
-                        write_triple(CName,GName,X,Y,Z),
+                        write_triple(CName,GName,pos,X,Y,Z),
                         % dynamic
                         retractall(xrdf_pos(CName,GName,X,Y,Z)),
                         retractall(xrdf_neg(CName,GName,X,Y,Z)),

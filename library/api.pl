@@ -111,7 +111,7 @@ verify_capability(Request,Capability) :-
 authenticate(Request, Auth) :-
     http_parameters(Request, [], [form_data(Data)]),
     
-    (   member(key=Key, Data)
+    (   memberchk(key=Key, Data)        
     ->  true
     ;   throw(http_reply(authorise('No key supplied')))),
 
@@ -119,7 +119,10 @@ authenticate(Request, Auth) :-
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
 
-verify_access(Request, Action, Scope).
+verify_access(Auth, Action, Scope) :-
+    (   auth_action_scope(Auth, Action, Scope)
+    ->  true
+    ;   throw(http_reply(method_not_allowed(Action,Scope)))).
 
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -128,9 +131,7 @@ verify_access(Request, Action, Scope).
  * connect_handler(Request:http_request) is det.
  */
 connect_handler(Request) :-
-    http_parameters(Request, [], [form_data(Data)]),
-
-    authenticate(Data,Auth),
+    authenticate(Request,Auth),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -141,9 +142,9 @@ connect_handler(Request) :-
  */
 db_handler(post,DB,Request) :-
     /* POST: Create database */
-    http_parameters(Request, [], [form_data(Data)]),
-
-    verify_capability(Request,terminus/createdatabase),
+    authenticate(Request, Auth),
+    
+    verify_access(Auth,terminus/create_database,terminus/server),
 
     create_db(DB),
     
@@ -153,8 +154,10 @@ db_handler(post,DB,Request) :-
 	json_write_dict(Out,_{'terminus:status' : 'success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    verify_capability(Request,terminus/deletedatabase),
-
+    authenticate(Request, Auth),
+    
+    verify_access(Auth,terminus/delete_database,terminus/server),
+    
     delete_db(DB),
     
     format('Content-type: application/json~n~n'),
@@ -165,6 +168,8 @@ db_handler(delete,DB,Request) :-
  * woql_handler(+Request:http_request) is det.
  */ 
 woql_handler(Request) :-
+    authenticate(Request, Auth),
+
     http_parameters(Request, [], [form_data(Data)]),
     
     get_key(query,Data,Query),
@@ -176,43 +181,50 @@ woql_handler(Request) :-
     current_output(Out),
 	json_write_dict(Out,JSON).
 
-document_handler(get, DB, Doc_ID, _Request) :-
-    /* Create Document */ 
+document_handler(get, DB, Doc_ID, Request) :-
+    /* Read Document */
+    authenticate(Request, Auth),
+    
     config:server_name(Server_Name),
     interpolate([Server_Name,DB],DB_URI),
-
+    
     % check access rights
-    verify_access(read,Request,DB_URI)
+    verify_access(Auth,terminus/get_document,DB_URI),
     
     make_collection_graph(DB_URI,Graph),
     interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI),
     format('Content-type: application/json~n~n'),    
     (   entity_jsonld(Doc_URI,Graph,JSON)
     ->  current_output(Out),
-        json_write_dict(Out,JSON)
+        json_write_dict(Out,JSON),
+        writeq(Request)
     ;   writeq(entity_jsonld(Doc_URI,Graph,_))).
-document_handler(post, DB, Doc_ID, _Request) :-
+document_handler(post, DB, Doc_ID, Request) :-
     /* Update Document */
+    authenticate(Request, Auth),
+
     config:server_name(Server_Name),
     interpolate([Server_Name,DB],DB_URI),
 
     % check access rights
-    verify_access(write,Request,DB_URI)
-
+    verify_access(terminus/create_document,Auth,DB_URI),
+    
     make_collection_graph(DB,Graph),
     entity_jsonld(Doc_ID,Graph,JSON),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,JSON).
-document_handler(delete, DB, Doc_ID, _Request) :-
+document_handler(delete, DB, Doc_ID, Request) :-
     /* Delete Document */
+    authenticate(Request, Auth),
+
     config:server_name(Server_Name),
     interpolate([Server_Name,DB],DB_URI),
     
     % check access rights
-    verify_access(write,Request,DB_URI)
-
+    verify_access(terminus/delete_document,Auth,DB_URI),
+    
     make_collection_graph(DB,Graph),
     entity_jsonld(Doc_ID,Graph,JSON),
     

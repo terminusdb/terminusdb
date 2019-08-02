@@ -24,6 +24,24 @@ simply use the apt package manager:
 ```
 apt install swi-prolog
 ```
+Once installed, you will have to install two library dependencies from SWIPL. 
+
+This can be done by typing: 
+
+```
+$ swipl
+Welcome to SWI-Prolog (threaded, 64 bits, version 8.1.10-28-g8a26a53c1)
+SWI-Prolog comes with ABSOLUTELY NO WARRANTY. This is free software.
+Please run ?- license. for legal details.
+
+For online help and background, visit http://www.swi-prolog.org
+For built-in help, use ?- help(Topic). or ?- apropos(Word).
+
+1 ?- pack_install(hdt).
+% Contacting server ....
+2 ?- pack_install(mavis). 
+% Contacting server ....
+```
 
 ### HDT Library 
 

@@ -62,9 +62,9 @@ global_prefixes(ex,'http://example.org/').
  */
 % per database shorthands
 default_prefixes(C,doc,U) :-
-    interpolate([C,'/',main], U).
+    interpolate([C,'/',document,'/'], U).
 default_prefixes(C,scm,U) :-
-    interpolate([C,'/',schema], U).
+    interpolate([C,'/',schema,'/'], U).
 % internal
 default_prefixes(_,Pre,URI) :-
     global_prefixes(Pre,URI).
