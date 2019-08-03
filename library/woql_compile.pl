@@ -272,12 +272,8 @@ resolve(ignore,_Something) -->
 resolve(ID / Suf,U) -->
     !,
     resolve(ID,ID_res),
-    view(prefixes=Prefixes), 
     {
-        (   once(member(ID_res=URI,Prefixes))
-        ->  atomic_list_concat([URI,Suf],U)
-        ;   atomic_list_concat([ID_res,'/',Suf],U)
-        )
+        atomic_list_concat([ID_res,Suf],U)
     }.
 resolve(v(X),Xe) -->
     !,

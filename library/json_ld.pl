@@ -2,7 +2,9 @@
               expand/2,
               expand/3,
               compress/3,
-              term_jsonld/2
+              term_jsonld/2,
+              jsonld_triples/3,
+              jsonld_id/2
           ]).
 
 /** <module> JSON_LD
@@ -219,15 +221,20 @@ term_jsonld(JSON,JSON).
  * Get the ID a json objct
  * 
  */ 
-jsonld_id(Obj,_Graph,ID) :-
+jsonld_id(Obj,ID) :-
     is_dict(Obj),
     !,
     get_dict('@id',Obj,ID).
+
+/*
+This should be more explicit and separate....
+
 jsonld_id(_Obj,Graph,ID) :-
     graph_collection(Graph,Collection),
     interpolate([Collection,'/document'],Base),
     gensym(Base,ID).
-    
+  */
+
 /* Debug
  * This should not exist.... We should already be expanded.  
  *
@@ -323,7 +330,7 @@ jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
                 ->  Triples = []
                 ;   P = '@type'
                 ->  Pred = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                    Triples = []
+                    Triples = [(C,G,ID,Pred,V)]
                 ;   P = Pred,
                     Triples = [(C,G,ID,Pred,Val)|Rest],
                     %jsonld_predicate_value(P,V,Ctx,EV),
@@ -337,7 +344,7 @@ jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
                                   '@value' : Data}
                         ->  Val = literal(lang(Lang,Data)),
                             Rest = []
-                        ;   jsonld_id(V,Graph,Val),
+                        ;   jsonld_id(V,Val),
                             jsonld_triples_aux(V,Ctx,Graph,Rest))
                     ;   Val = literal(type('http://www.w3.org/2001/XMLSchema#string',V)),
                         Rest = []

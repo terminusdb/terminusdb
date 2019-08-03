@@ -15,7 +15,9 @@
               entity_object/3,
               entity_jsonld/3,
               entity_jsonld/4,
-              object_edges/3
+              object_edges/3,
+              delete_object/2,
+              update_object/2
           ]).
 
 /** <module> Frames
@@ -926,12 +928,21 @@ delete_object(URI,Graph) :-
     maplist([(C,G,X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
 
 /* 
- * update_object(Obj,Graph) is det.
+ * update_object(Obj:dict,Graph) is det.
  * 
  * This should extract the object from the database
  * and set up deletes for 
  * 
- * Inserts := triples(Obj) / triples(Old)
- * Deletes := triples(Old) / triples(Obj)
+ * Inserts := triples(New) / triples(Old)
+ * Deletes := triples(New) / triples(New)
  */
-update_object(_Obj,_Graph).
+update_object(Obj, Graph) :-
+    jsonld_triples(Obj,Graph,New),
+    jsonld_id(Obj,ID),
+    object_edges(ID,Graph,Old),
+    
+    subtract(New,Old,Inserts),
+    subtract(Old,New,Deletes),
+    
+    maplist([(C,G,Z,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts), 
+    maplist([(C,G,Z,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).

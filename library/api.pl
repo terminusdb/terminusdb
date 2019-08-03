@@ -58,6 +58,9 @@
 % Frame and entity processing
 :- use_module(library(frame)).
 
+% JSON manipulation
+:- use_module(library(json_ld)).
+
 %% Set base location
 % We may want to allow this as a setting...
 http:location(root, '/', []).
@@ -88,20 +91,25 @@ http:location(root, '/', []).
  * 
  * This should either be true or throw an http_reply message. 
  */
-verify_capability(Request,Capability) :-
+% verify_capability(Request,Capability) :-
+%     request_key_hash(Request,Key)
+
+%     (   key_user(Key_Hash, User)
+%     ->  true
+%     ;   throw(http_reply(authorise('Not a valid key')))),
+
+%     (   user_action(User,Capability)
+%     ->  true
+%     ;   throw(http_reply(method_not_allowed(Capability)))).
+
+request_key_hash(Request,Key_Hash) :-
     http_parameters(Request, [], [form_data(Data)]),
 
-    (   member(key=Key, Data)
+    (   memberchk('terminus:user_key'=Atom_Key, Data),
+        atom_string(Atom_Key,Key),
+        md5_hash(Key,Key_Hash,[])
     ->  true
-    ;   throw(http_reply(authorise('No key supplied')))),
-
-    (   key_user(Key, User)
-    ->  true
-    ;   throw(http_reply(authorise('Not a valid key')))),
-
-    (   user_action(User,Capability)
-    ->  true
-    ;   throw(http_reply(method_not_allowed(Capability)))).
+    ;   throw(http_reply(authorise('No key supplied')))).
 
 /* 
  * authenticate(+Data,+Auth_Obj) is det. 
@@ -109,13 +117,11 @@ verify_capability(Request,Capability) :-
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    http_parameters(Request, [], [form_data(Data)]),
-    
-    (   memberchk(key=Key, Data)        
-    ->  true
-    ;   throw(http_reply(authorise('No key supplied')))),
+    request_key_hash(Request,Key_Hash),
 
-    (   key_auth(Key, Auth)
+    http_log_stream(Log),
+    (   key_auth(Key_Hash, Auth),
+        format(Log, 'Key ~q', [Key_Hash])
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
 
@@ -151,7 +157,7 @@ db_handler(post,DB,Request) :-
     format('Content-type: application/json~n~n'),
     
     current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'success'}).
+	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
     authenticate(Request, Auth),
@@ -162,7 +168,7 @@ db_handler(delete,DB,Request) :-
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'success'}).
+	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
     
 /** 
  * woql_handler(+Request:http_request) is det.
@@ -170,64 +176,168 @@ db_handler(delete,DB,Request) :-
 woql_handler(Request) :-
     authenticate(Request, Auth),
 
-    http_parameters(Request, [], [form_data(Data)]),
-    
-    get_key(query,Data,Query),
+    verify_access(Auth,terminus/delete_database,terminus/server),
+
+    try_get_param(query,Request,Query),
+
     http_log_stream(Log),
     run_query(Query, JSON),
-    
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
+
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,JSON).
 
+/** 
+ * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
+ */ 
 document_handler(get, DB, Doc_ID, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
-    
-    config:server_name(Server_Name),
-    interpolate([Server_Name,DB],DB_URI),
+
+    try_db_uri(DB,DB_URI),
     
     % check access rights
     verify_access(Auth,terminus/get_document,DB_URI),
     
-    make_collection_graph(DB_URI,Graph),
-    interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI),
-    format('Content-type: application/json~n~n'),    
-    (   entity_jsonld(Doc_URI,Graph,JSON)
-    ->  current_output(Out),
-        json_write_dict(Out,JSON),
-        writeq(Request)
-    ;   writeq(entity_jsonld(Doc_URI,Graph,_))).
+    try_db_graph(DB_URI,Graph),
+
+    try_doc_uri(DB_URI,Doc_ID,Doc_URI),
+
+    try_get_document(Doc_URI,Graph,JSON),
+
+    format('Content-type: application/json~n~n'),
+
+    current_output(Out),
+    json_write_dict(Out,JSON).
 document_handler(post, DB, Doc_ID, Request) :-
     /* Update Document */
     authenticate(Request, Auth),
 
-    config:server_name(Server_Name),
-    interpolate([Server_Name,DB],DB_URI),
+    try_db_uri(DB,DB_URI),
 
     % check access rights
     verify_access(terminus/create_document,Auth,DB_URI),
+
+    try_db_graph(DB_URI, Graph),
     
-    make_collection_graph(DB,Graph),
-    entity_jsonld(Doc_ID,Graph,JSON),
+    try_get_param(document,Request,Doc),
+        
+    try_update_document(Doc_ID,Doc,Graph),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out,JSON).
+	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
 document_handler(delete, DB, Doc_ID, Request) :-
     /* Delete Document */
     authenticate(Request, Auth),
 
-    config:server_name(Server_Name),
-    interpolate([Server_Name,DB],DB_URI),
+    try_db_uri(DB,DB_URI),
     
     % check access rights
     verify_access(terminus/delete_document,Auth,DB_URI),
-    
-    make_collection_graph(DB,Graph),
-    entity_jsonld(Doc_ID,Graph,JSON),
+
+    try_db_graph(DB_URI,Graph),
+
+    try_doc_uri(DB_URI,Doc_ID,Doc_URI),
+
+    try_delete_document(Doc_URI,Graph),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out,JSON).
+	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
+
+/* 
+ * try_get_document(ID, Graph) is det.
+ * 
+ * Actually has determinism: det + error
+ * 
+ * Gets document associated with ID
+ */
+try_get_document(ID,Graph,Object) :-
+    (   entity_jsonld(ID,Graph,Object)
+    ->  true
+    ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
+        throw(http_reply(not_found(ID,MSG)))).
+
+/* 
+ * try_delete_document(ID, Graph) is det.
+ * 
+ * Actually has determinism: det + error
+ * 
+ * Deletes the object associated with ID, and throws an 
+ * http error otherwise.
+ */
+try_delete_document(Doc_ID, Graph) :-
+    (   delete_object(Doc_ID,Graph)
+    ->  true
+    ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
+        throw(http_reply(not_found(Doc_ID,MSG)))).
+
+/* 
+ * try_update_document(ID, Doc, Graph) is det.
+ * 
+ * Actually has determinism: det + error
+ * 
+ * Updates the object associated with ID, and throws an 
+ * http error otherwise.
+ */
+try_update_document(Doc_ID, Doc_In, Graph) :-
+    % if there is no id, we'll use the requested one.
+    (   jsonld_id(Doc_In,Doc_ID_Match)
+    ->  true
+    ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
+    
+    (   Doc_ID_Match = Doc_ID
+    ->  true
+    ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
+        throw(http_reply(not_found(Doc_ID,MSG)))),
+        
+    (   update_object(Doc, Graph)    
+    ->  true
+    ;   throw(http_reply(not_found(Doc_ID,'Unable to get object at Doc_ID')))).
+
+/* 
+ * try_db_uri(DB,DB_URI) is det. 
+ * 
+ * Die if we can't form a document uri. 
+ */
+try_db_uri(DB,DB_URI) :- 
+    (   config:server_name(Server_Name),
+        interpolate([Server_Name,DB],DB_URI)
+    ->  true
+    ;   throw(http_reply(not_found(DB,'Database resource can not be found')))).
+
+/* 
+ * try_doc_uri(DB,Doc,Doc_URI) is det. 
+ * 
+ * Die if we can't form a document uri. 
+ */
+try_doc_uri(DB_URI,Doc_ID,Doc_URI) :- 
+    (   interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI)
+    ->  true
+    ;   format(atom(MSG), 'Document resource ~s can not be constructed in ~s', [DB_URI,Doc_ID]),
+        throw(http_reply(not_found(Doc_ID,MSG)))).
+    
+/* 
+ * try_db_graph(+DB:uri,-Graph:graph) is det. 
+ * 
+ * Die if we can't form a graph
+ */
+try_db_graph(DB_URI,Graph) :-
+    (   make_collection_graph(DB_URI,Graph)
+    ->  true
+    ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
+        throw(http_reply(not_found(DB_URI,MSG)))).
+
+/* 
+ * try_get_param(Key,Request:request,Value) is det.
+ * 
+ */
+try_get_param(Key,Request,Value) :-
+    http_parameters(Request, [], [form_data(Data)]),
+    
+    (   memberchk(Key=Value,Data)
+    ->  true
+    ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
+        throw(http_reply(not_found(Data,MSG)))).
