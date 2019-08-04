@@ -102,12 +102,10 @@ http:location(root, '/', []).
 %     ->  true
 %     ;   throw(http_reply(method_not_allowed(Capability)))).
 
-request_key_hash(Request,Key_Hash) :-
+request_key(Request,Key) :-
     http_parameters(Request, [], [form_data(Data)]),
 
-    (   memberchk('terminus:user_key'=Atom_Key, Data),
-        atom_string(Atom_Key,Key),
-        md5_hash(Key,Key_Hash,[])
+    (   memberchk('terminus:user_key'=Key, Data)
     ->  true
     ;   throw(http_reply(authorise('No key supplied')))).
 
@@ -117,11 +115,8 @@ request_key_hash(Request,Key_Hash) :-
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    request_key_hash(Request,Key_Hash),
-
-    http_log_stream(Log),
-    (   key_auth(Key_Hash, Auth),
-        format(Log, 'Key ~q', [Key_Hash])
+    request_key(Request,Key),
+    (   key_auth(Key, Auth)
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
 
@@ -195,11 +190,14 @@ document_handler(get, DB, Doc_ID, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
 
+    % We should make it so we can pun documents and IDs
+    get_dict('@id',Auth,Auth_ID),
+    
     try_db_uri(DB,DB_URI),
-    
+
     % check access rights
-    verify_access(Auth,terminus/get_document,DB_URI),
-    
+    verify_access(Auth_ID,terminus/get_document,DB_URI),
+
     try_db_graph(DB_URI,Graph),
 
     try_doc_uri(DB_URI,Doc_ID,Doc_URI),

@@ -142,14 +142,24 @@ user_action(User,Action) :-
 auth_action_scope(Auth, Action, Scope) :-
     connect('http://localhost/capability', DB),
     ask(DB, 
-	    where(t( Auth , Action , Scope ))
+	    where(
+            (
+                t(Auth, terminus/action, Action),
+                t(Auth, terminus/authority_scope, Scope)
+            )
+        )
 	   ).
 auth_action_scope(Auth, Action, _Scope) :-
     % Don't need to know the scope if it is the whole server...
     connect('http://localhost/capability', DB),
-    ask(DB, 
-	    where(t( Auth , Action , doc/server))
-	   ).
+    ask(DB,
+        where(
+            (   
+                t(Auth, terminus/action, Action),
+                t(Auth, terminus/authority_scope, doc/server)
+            )
+	    )
+       ).
 
 /*  
  * add_database_resource(DB) is det.
