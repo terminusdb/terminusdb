@@ -30,15 +30,16 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(collection).
-:- use_module(woql_term).
-:- use_module(utils, except([elt/2])).
-:- use_module(triplestore, [xrdf/5,with_output_graph/2,sync_from_journals/2]).
-:- use_module(schema, [subsumptionOf/3]).
-:- use_module(relationships, [
+:- use_module(library(collection)).
+:- use_module(library(woql_term)).
+:- use_module(library(utils), except([elt/2])).
+:- use_module(library(triplestore), [xrdf/5,with_output_graph/2,sync_from_journals/2]).
+:- use_module(library(schema), [subsumptionOf/3]).
+:- use_module(library(relationships), [
                   relationship_source_property/3,
                   relationship_target_property/3
               ]).
+:- use_module(library(inference)).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
@@ -314,7 +315,7 @@ resolve(X@L,literal(lang(LE,XE))) -->
 resolve(X^^T,literal(type(TE,XE))) -->
     resolve(X,XE),
     resolve(T,TE).
-    
+
 /* 
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
@@ -655,9 +656,12 @@ compile_wf(t(X,P,Y),Goal) -->
     {
         graph_collection(G,C),            
         graph_instance(G,I),
+        (   I = main
+        ->  Search=inferredEdge(XE,PE,YE,G)
+        ;   Search=xrdf(C,I,XE,PE,YE)),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        append([[xrdf(C,I,XE,PE,YE)],XGoals,YGoals],
+        append([[Search],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
@@ -674,7 +678,11 @@ compile_wf(t(X,P,Y,G),Goal) -->
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         graph_collection(Graph,C),
-        append([[xrdf(C,GE,XE,PE,YE)],XGoals,YGoals],
+        (   GE = main
+        ->  Search=inferredEdge(XE,PE,YE,Graph)
+        ;   Search=xrdf(C,GE,XE,PE,YE)),
+        
+        append([[Search],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.

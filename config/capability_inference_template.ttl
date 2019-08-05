@@ -1,0 +1,11 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix terminus: <https://terminusdb.com/ontology/terminus#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dcog: <https://datachemist.net/ontology/dcog#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <https://datachemist.net/ontology/xdd#> .
+@prefix doc: <http://localhost/capability/document/> .
+
+terminus:authority_scope owl:propertyChainAxiom
+    ( terminus:authority_scope terminus:resource_includes ) .

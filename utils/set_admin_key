@@ -47,14 +47,23 @@ Set the administrative key - necessary before superuser can begin to set other p
 
 ~s', [Name,Help_Text]).
 
-example_ttl(Dir,Path) :- 
+example_instance_ttl(Dir,Path) :- 
     atomic_list_concat([Dir,'/../config/capability_instance_template.ttl'], Path).
 
-instance_ttl(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.ttl'], Path).
+example_inference_ttl(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../config/capability_inference_template.ttl'], Path).
 
-instance_hdt(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/1-ckp.hdt'], Path).
+example_schema_ttl(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../config/capability_schema_template.ttl'], Path).
+
+instance_path(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/'], Path).
+
+inference_path(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/inference/1/'], Path).
+
+schema_path(Dir,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/schema/1/'], Path).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -78,17 +87,30 @@ main(Args) :-
         halt
     ;   memberchk(key(Key), Opts)        
     ->  file_directory_name(Prog, Dir),
-        example_ttl(Dir,Example_TTL),
-        instance_ttl(Dir,Instance_TTL),
-        instance_hdt(Dir,Instance_HDT),
+
+        example_instance_ttl(Dir,Example_Instance_TTL),
+        example_inference_ttl(Dir,Example_Inference_TTL),
+        example_schema_ttl(Dir,Example_Schema_TTL),
+        
+        instance_path(Dir,Instance_Path),
+        inference_path(Dir,Inference_Path),
+        schema_path(Dir,Schema_Path),
+        
         md5_hash(Key,Hash,[]),
         atomic_list_concat(['
-cp "',Example_TTL,'" "',Instance_TTL,'";
-sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_TTL,'";
-rdf2hdt "',Instance_TTL,'" "',Instance_HDT,'";
-rm -f "',Instance_HDT,'.index.*";
+mkdir -p "',Instance_Path,'";
+mkdir -p "',Inference_Path,'";
+mkdir -p "',Schema_Path,'";
+rm -f ',Instance_Path,'* ;
+rm -f ',Inference_Path,'* ;
+rm -f ',Schema_Path,'* ;
+cp "',Example_Instance_TTL,'" "',Instance_Path,'1-ckp.ttl";
+cp "',Example_Inference_TTL,'" "',Inference_Path,'1-ckp.ttl";
+cp "',Example_Schema_TTL,'" "',Schema_Path,'1-ckp.ttl";
+sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_Path,'1-ckp.ttl";
 '],
                            Cmd),
+        % format('Running Cmd:~s~n',[Cmd]),
         shell(Cmd),
         format('Successfully updated admin key!!~n'),
         halt

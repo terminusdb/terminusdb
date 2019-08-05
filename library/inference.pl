@@ -1,10 +1,10 @@
-:- module(inferrence,[
+:- module(inference,[
               inferredEdge/4
           ]).
 
-/** <module> Inferrence
+/** <module> Inference
  * 
- * Inference information
+ * Predicates for inferring additional triples from the Inference ontology.
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
@@ -34,10 +34,13 @@
  * 
  * Run a property axiom chain PropList from X to Y.
  */
+%:- table runChain/4.
 runChain(X,[P],Y,Graph) :-
     inferredEdge(X,P,Y,Graph).
 runChain(X,[P|PropList],Z,Graph) :-
-    inferredEdge(X,P,Y,Graph),
+    graph_collection(Graph,C),
+    graph_instance(Graph,I),
+    xrdf(C,I,X,P,Y),
     runChain(Y,PropList,Z,Graph).
 
 /** 
@@ -78,7 +81,7 @@ inferredEdge(X,OP,Y,Graph) :-
 inferredEdge(X,OP,Y,Graph) :-
     graph_collection(Graph,Collection),
     graph_inference(Graph,Inference),
-    xrdf(Collection,Inference,OP,owl:propertyChain,ListObj),
+    xrdf(Collection,Inference,OP,owl:propertyChainAxiom,ListObj),
     collect(Collection,Inference,ListObj,PropList),
     runChain(X,PropList,Y,Graph).
 inferredEdge(X,OP,Y,Graph) :-

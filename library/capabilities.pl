@@ -151,6 +151,7 @@ auth_action_scope(Auth, Action, Scope) :-
 	   ).
 auth_action_scope(Auth, Action, _Scope) :-
     % Don't need to know the scope if it is the whole server...
+    % This should be encoded in the inference ontology instead.
     connect('http://localhost/capability', DB),
     ask(DB,
         where(
