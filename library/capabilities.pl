@@ -3,7 +3,7 @@
               key_user/2,
               user_action/2,
               auth_action_scope/3,
-              add_database_resource/1,
+              add_database_resource/2,
               delete_database_resource/1
           ]).
                  
@@ -149,6 +149,10 @@ auth_action_scope(Auth, Action, Scope) :-
             )
         )
 	   ).
+
+/*
+Try inference ontology experimentally for now. 
+
 auth_action_scope(Auth, Action, _Scope) :-
     % Don't need to know the scope if it is the whole server...
     % This should be encoded in the inference ontology instead.
@@ -161,6 +165,7 @@ auth_action_scope(Auth, Action, _Scope) :-
             )
 	    )
        ).
+*/
 
 /*  
  * add_database_resource(DB) is det.
@@ -168,16 +173,27 @@ auth_action_scope(Auth, Action, _Scope) :-
  * Adds a database resource object to the capability instance database for the purpose of 
  * authority reference.
  */
-add_database_resource(URI) :-
+add_database_resource(URI,Doc) :-
+    capability_context(Ctx),
+    compress(Doc,Ctx,Min),
+    /* This check is required to cary out appropriate auth restriction */
+    (   get_dict('@type', Min, 'terminus:Database')
+    ->  true
+    ;   format(atom(MSG),'Unable to create a non-database document due to capabilities authorised.'),
+        throw(http_reply(method_not_allowed(URI,MSG)))),
+
     connect('http://localhost/capability', DB),
     ask(DB, 
 	    (
             hash(doc, [URI], DB_URI)
         =>
             insert(DB_URI, rdf/type, terminus/'Database'),
-            insert(DB_URI, terminus/id, URI^^xsd/string)
+            insert(DB_URI, terminus/id, URI^^xsd/string),
+            insert(doc/server, terminus/resource_includes, doc/master),
+            update_document(DB,Doc)
         )
        ).
+
 
 /*  
  * delete_database_resource(URI) is det.

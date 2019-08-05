@@ -326,8 +326,10 @@ output_pattern(delete(G,A,B,Z)) :-
     obj(B), 
     obj_or_lit(Z),
     graph_term(G).
-
-
+output_pattern(delete_object(URI)) :-
+    obj(URI).
+output_pattern(update_object(URI,_Doc)) :-
+    obj(URI).
 
 
 /*

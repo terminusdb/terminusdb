@@ -147,7 +147,10 @@ db_handler(post,DB,Request) :-
     
     verify_access(Auth,terminus/create_database,terminus/server),
 
-    create_db(DB),
+    try_get_param(document,Request,Doc),
+
+    try_db_uri(DB,DB_URI),
+    try_create_db(DB_URI,Doc),
     
     format('Content-type: application/json~n~n'),
     
@@ -159,7 +162,8 @@ db_handler(delete,DB,Request) :-
     
     verify_access(Auth,terminus/delete_database,terminus/server),
     
-    delete_db(DB),
+    try_db_uri(DB,DB_URI),
+    try_delete_db(DB_URI),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -339,3 +343,33 @@ try_get_param(Key,Request,Value) :-
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))).
+
+/* 
+ * try_create_db(DB_URI,Object) is det.
+ * 
+ */
+try_create_db(DB_URI,Doc) :-
+    (   create_db(DB_URI)
+    ->  true
+    ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
+        throw(http_reply(not_found(DB_URI,MSG)))),
+
+    (   add_database_resource(DB_URI,Doc)
+    ->  true
+    ;   format(atom(MSG), 'Database metadata could not be created: ~s', [DB_URI]),
+        throw(http_reply(not_found(DB_URI,MSG)))).
+
+
+/* 
+ * try_create_db(DB_URI,Object) is det.
+ * 
+ */
+try_delete_db(DB_URI) :-
+    (   delete_db(DB_URI)
+    ->  true
+    ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
+        throw(http_reply(not_found(DB_URI,MSG)))).
+
+
+
+    

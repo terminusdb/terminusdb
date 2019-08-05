@@ -508,6 +508,9 @@ compile_relation(X:C,XE,Class,Goals) -->
         )
     }.
 
+compile_wf(update_object(X,Doc),update_object(URI,Doc,Graph)) -->
+    view(graph=Graph),
+    resolve(X,URI).
 compile_wf(delete_object(X),delete_object(URI,Graph)) -->
     view(graph=Graph),
     resolve(X,URI).
