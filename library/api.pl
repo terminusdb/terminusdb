@@ -123,8 +123,8 @@ authenticate(Request, Auth) :-
 verify_access(Auth, Action, Scope) :-
     (   auth_action_scope(Auth, Action, Scope)
     ->  true
-    ;   throw(http_reply(method_not_allowed(Action,Scope)))).
-
+    ;   format(atom(M),'~q', [Action]),
+        throw(http_reply(method_not_allowed(M,Scope)))).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -196,7 +196,7 @@ document_handler(get, DB, Doc_ID, Request) :-
 
     % We should make it so we can pun documents and IDs
     get_dict('@id',Auth,Auth_ID),
-    
+
     try_db_uri(DB,DB_URI),
 
     % check access rights
@@ -215,11 +215,13 @@ document_handler(get, DB, Doc_ID, Request) :-
 document_handler(post, DB, Doc_ID, Request) :-
     /* Update Document */
     authenticate(Request, Auth),
+    % We should make it so we can pun documents and IDs
+    get_dict('@id',Auth,Auth_ID),
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(terminus/create_document,Auth,DB_URI),
+    verify_access(Auth_ID,terminus/create_document,DB_URI),
 
     try_db_graph(DB_URI, Graph),
     
@@ -233,11 +235,13 @@ document_handler(post, DB, Doc_ID, Request) :-
 document_handler(delete, DB, Doc_ID, Request) :-
     /* Delete Document */
     authenticate(Request, Auth),
+    % We should make it so we can pun documents and IDs
+    get_dict('@id',Auth,Auth_ID),
 
     try_db_uri(DB,DB_URI),
     
     % check access rights
-    verify_access(terminus/delete_document,Auth,DB_URI),
+    verify_access(Auth_ID,terminus/delete_document,DB_URI),
 
     try_db_graph(DB_URI,Graph),
 

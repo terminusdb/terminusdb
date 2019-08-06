@@ -139,13 +139,14 @@ user_action(User,Action) :-
  * 
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(Auth, Action, Scope) :-
+auth_action_scope(Auth, Action, Resource_ID) :-
     connect('http://localhost/capability', DB),
     ask(DB, 
 	    where(
             (
                 t(Auth, terminus/action, Action),
-                t(Auth, terminus/authority_scope, Scope)
+                t(Auth, terminus/authority_scope, Scope),
+                t(Scope, terminus/id, Resource_ID ^^ (xsd/anyURI))
             )
         )
 	   ).
