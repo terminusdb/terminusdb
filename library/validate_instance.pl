@@ -9,20 +9,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -79,8 +79,6 @@ instanceClass(X, Y, Graph) :-
     graph_schema(Graph,Schema), % instances can also exist in the schema
     xrdf(Collection,Schema, X, rdf:type, Y).
 
-/* 
-
 % X has cardinality N at property OP
 card(X,OP,Y,Graph,N) :-
     (setof(Y,inferredEdge(X,OP,Y,Graph), ListX) *-> ListX = L ; L = []),
@@ -93,55 +91,90 @@ qualifiedCard(X,OP,Y,C,Graph,N) :-
 	   ListX) *-> ListX = L ; L = []),
     length(L,N).
 
+/*
+inserts: 
+
+forall (x p y) \in Inserts. 
+  p = 'rdf:type' => S,G |- x : y 
+  p /= 'rdf:type' => 
+    S,G |- x : dom(p) /\ rng(p)
+
+  forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
+    S,G' |- Ca(x p y)
+
+deletes: 
+
+forall (x p y) \in Deletes. 
+  p = 'rdf:type' => S,G |- x : y 
+  p /= 'rdf:type' => 
+    S,G |- x : dom(p) /\ rng(p)
+
+  forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
+    S,G' |- Ca(x p y)
+
+*/ 
+
+
+
+/*
+
 /** 
  * edge_orphan_instance(?X,?P,?Y,+Graph:graph,-Reason:rvo) is nondet.
  * 
  * Detects the existence of instance who are orphaned from a well defined class.
  * i.e. X(/Y) has no class in the instance AND schema OR has a class that is not in the schema 
  */
-:- rdf_meta edge_orphan_instance(r,r,r,o,t).
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
+    graph_collection(Graph,Collection),
     graph_instance(Graph,Instance), 
-    xrdf(X,P,Y,Instance), % Added
-    \+ instanceClass(X, _, Graph),          % no type in Instance OR Schema
-    Reason=[rdf:type=rvo:'EdgeOrphanInstanceViolation',
-	        rvo:message='Instance has no class',
-	    rvo:subject=X,
-	    rvo:predicate=P,
-	    rvo:object=Y].
+    xrdf(Collection,Instance,X,P,Y), % edge exists 
+    \+ instanceClass(X, _, Graph),   % no type in Instance OR Schema
+    Reason=_{
+               '@type' : 'rvo:EdgeOrphanInstanceViolation',
+	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
+	           'rvo:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+               'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
+               'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'}
+           }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
     graph_instance(Graph,Instance),
     xrdf(X,P,Y,Instance), % Added
     orphanInstance(X,C,Graph),            % checks if X has a type that isn't in the Schema
-    Reason=[rdf:type=rvo:'EdgeOrphanInstanceViolation',
-	    rvo:message='Instance domain class is not valid',
-	    rvo:subject=X,
-	    rvo:predicate=P,
-	    rvo:object=Y,
-	    rvo:class=C].
+    Reason=_{
+               '@type' : 'rvo:EdgeOrphanInstanceViolation',
+	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
+	           'rvo:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+               'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
+               'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'},
+               'rvo:class' :  _{ '@value' : C, '@type' : 'xsd:anyURI'},
+           }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
     objectProperty(P,Graph),
     graph_instance(Graph,Instance),
     xrdf(X,P,Y,Instance),
     rdf_is_iri(Y), % no point in checking if it is a literal
     \+ instanceClass(Y, _, Graph),        % no type in Instance OR Schema
-    Reason=[rdf:type=rvo:'EdgeOrphanInstanceViolation',
-	    rvo:message='Instance has no class',
-	    rvo:subject=X,
-	    rvo:predicate=P,
-	    rvo:object=Y].
+    Reason=_{
+               '@type' : 'rvo:EdgeOrphanInstanceViolation',
+	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
+	           'rvo:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+               'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
+               'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'},
+           }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
     objectProperty(P,Graph),
     graph_instance(Graph,Instance),
     xrdf(X,P,Y,Instance), % Added
     rdf_is_iri(Y), % no point in checking if it is a literal
-    orphanInstance(Y,C,Graph),           % checks other side of triple to see does it have a type not in the schema                   
-    Reason=[rdf:type=rvo:'EdgeOrphanInstanceViolation',
-	    rvo:message='Instance has no class',
-	    rvo:subject=X,
-	    rvo:predicate=P,
-	    rvo:object=Y,
-	    rvo:class=C].
+    orphanInstance(Y,C,Graph), % checks other side of triple to see does it have a type not in the schema
+    Reason=_{
+               '@type' : 'rvo:EdgeOrphanInstanceViolation',
+	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
+	           'rvo:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+               'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
+               'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'},
+               'rvo:class' :  _{ '@value' : C, '@type' : 'xsd:anyURI'},
+           }.
 
 /** 
  * noPropertyRangeIC(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
@@ -153,16 +186,20 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
 :- rdf_meta noPropertyRangeIC(r,r,r,o,o,t).
 noPropertyRangeIC(X,P,Y,Graph,Reason) :-
     property(P,Graph),
-    graph_instance(Graph,Instance),
+    graph_collection(Graph,Collection),
+    graph_instance(Graph,Instance),    
     xrdf(X,P,Y,Instance), % Added
     %subsumptionPropertiesOf(P,SuperP,Schema),
     \+ anyRange(P,_,Graph),
-    Reason = ['rdf:type'='NoPropertyRangeViolation',
-	      bestPractice=literal(type('xsd:boolean',false)),
-	      message='Property has no well defined range.',
-	      subject=X,
-	      predicate=P,
-	      object=Y].
+    Reason=_{
+               '@type' : 'rvo:NoPropertyRangeViolation',
+	           'rvo:message' : _{ '@value' : 'Property has no well defined range',
+                                  '@type' : 'xsd:string'},
+	           'rvo:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+               'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
+               'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'}
+           }.
+
 /** 
  * notFunctionalPropertyIC(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
  * 
@@ -850,5 +887,4 @@ n_basetype_elt(X,rdfs:anySimpleType,Reason) :-
 			  rvo:message='Not a well formed xsd:anySimpleType',
 			  rvo:literal=T,
 			  rvo:type=xsd:anySimpleType].
-
 */

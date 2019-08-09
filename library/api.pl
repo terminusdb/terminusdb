@@ -67,7 +67,7 @@ http:location(root, '/', []).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(.), connect_handler, []). 
+:- http_handler(root(.), connect_handler, [get]). 
 :- http_handler(root(DB), db_handler(Method,DB),
                 [method(Method),
                  methods([post,delete])]).

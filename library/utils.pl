@@ -60,6 +60,8 @@
  * elt(+Key,+Set) is semidet.
  * 
  * This predicate is true when Key is in Set
+ * 
+ * depricated - use memberchk
  */
 elt(Key,Set) :-
     (   member(Key,Set)
@@ -340,3 +342,18 @@ command(Cmd) :-
             process_wait(PID,_Status)),
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
+
+
+/* 
+ * debug(+Topic, +Stream, +Format, :Args) is det.
+ *
+ * Format a message if debug topic is enabled. Similar to format/3.
+ *
+ * This is debug/3 with a specified stream.
+ */
+
+debug(Topic, Format, Args) :-
+    debugging(Topic, true, To),
+    !,
+    print_debug(Topic, To, Format, Args).
+debug(_, _, _).
