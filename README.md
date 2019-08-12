@@ -7,9 +7,17 @@ TerminusDB features a RESTful API for interacting with knowledge graphs via the 
 format. This means you can easily string together applications within your own toolchain which 
 utilise the powerful features of graph search and graph storage. 
 
+## Release Schedule 
+
+We have a v1.0.0 release schedule for October 1st, 2019. This means
+that the current codebase is in a very high level of flux, and as we
+have never had a prior release, there are no release labels to pull. 
+
+Caveat Puller! 
+
 ## Latest Version 
 
-v0.1.0
+v0.1.1
 
 ## Getting Started
 
@@ -71,9 +79,8 @@ super-user API key for access. This can be done with the
 `set_admin_key` script.
 
 ```
-utils/set_admin_key -k "my_password_here"
+utils/initialize_database -k "my_password_here" -s "my_server_name_here"
 ```
-
 
 At this point you can enter the terminusDB directory and start the server: 
 
@@ -111,8 +118,10 @@ In JavaScript: https://github.com/terminusdb/terminus-javascript-sdk
 
 ## Changes in this Version 
 
-* Added additional typing information and documentation. 
-* Added database bootsrapping for access permissions and controls using the capabilities ontology.
+* Added additional typing information and documentation
+* Added database bootsrapping for access permissions and controls using the capabilities ontology
+* Added database initialisation utility 
+* Added code for instance and schema checking
 
 ## TODO
 
