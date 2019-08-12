@@ -13,8 +13,7 @@ http_blob_pass_auth('A password').
 
 root_passwd_hash('63a9f0ea7bb98050796b649e85481845').
 
-server_name('http://localhost/dcog/').
-
+server_name('http://localhost/').
 server_port(6363).
 
 server_workers(8).

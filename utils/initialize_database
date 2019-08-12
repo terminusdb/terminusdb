@@ -21,7 +21,6 @@ command(Cmd) :-
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
 
-
 hostname(Hostname) :-
     (   command(hostname)
     ->  process_create(path(hostname), ['-f'], [ stderr(null),
@@ -76,14 +75,14 @@ example_inference_ttl(Dir,Path) :-
 example_schema_ttl(Dir,Path) :- 
     atomic_list_concat([Dir,'/../config/capability_schema_template.ttl'], Path).
 
-instance_path(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/main/1/'], Path).
+instance_path(Dir,Host,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/main/1/'], Path).
 
-inference_path(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/inference/1/'], Path).
+inference_path(Dir,Host,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/inference/1/'], Path).
 
-schema_path(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2flocalhost%2fcapability/schema/1/'], Path).
+schema_path(Dir,Host,Path) :- 
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/schema/1/'], Path).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -117,9 +116,9 @@ main(Args) :-
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
         
-        instance_path(Dir,Instance_Path),
-        inference_path(Dir,Inference_Path),
-        schema_path(Dir,Schema_Path),
+        instance_path(Dir,Server,Instance_Path),
+        inference_path(Dir,Server,Inference_Path),
+        schema_path(Dir,Server,Schema_Path),
         
         md5_hash(Key,Hash,[]),
         atomic_list_concat(['
