@@ -45,7 +45,9 @@
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
 
-capability_collection('http://localhost/capability').
+capability_collection(Collection) :-
+    config:server(Server),
+    atomic_list_concat([Server,'/capability'],Collection).
 
 /** 
  * capability_context(Context : dictionary) is det.
@@ -53,14 +55,18 @@ capability_collection('http://localhost/capability').
  * JSON-LD capability access context. 
  */ 
 capability_context(_{
-                       doc : 'https://localhost/masterdb/candidate/', 
+                       doc : Doc, 
                        terminus : 'https://terminusdb.com/ontology/terminus#'
-                   }).
+                   }) :-
+    config:server(Server),
+    atomic_list_concat([Server,'/capability/document/'],Doc).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
  */
-root_user_id('https://localhost/masterdb/candidate/admin').
+root_user_id(Root) :-
+    config:server(Server),
+    atomic_list_concat([Server,'/capability/document/admin'],Root).
 
 /** 
  * key_user(+Key,-User) is det.
