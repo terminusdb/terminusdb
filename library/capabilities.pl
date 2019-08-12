@@ -46,7 +46,7 @@
 :- op(1050, xfx, =>).
 
 capability_collection(Collection) :-
-    config:server(Server),
+    config:server_name(Server),
     atomic_list_concat([Server,'/capability'],Collection).
 
 /** 
@@ -58,14 +58,14 @@ capability_context(_{
                        doc : Doc, 
                        terminus : 'https://terminusdb.com/ontology/terminus#'
                    }) :-
-    config:server(Server),
+    config:server_name(Server),
     atomic_list_concat([Server,'/capability/document/'],Doc).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
  */
 root_user_id(Root) :-
-    config:server(Server),
+    config:server_name(Server),
     atomic_list_concat([Server,'/capability/document/admin'],Root).
 
 /** 
