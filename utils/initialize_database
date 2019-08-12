@@ -75,14 +75,20 @@ example_inference_ttl(Dir,Path) :-
 example_schema_ttl(Dir,Path) :- 
     atomic_list_concat([Dir,'/../config/capability_schema_template.ttl'], Path).
 
-instance_path(Dir,Host,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/main/1/'], Path).
+database_path(Dir,Host,Path) :-
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/'], Path).
 
-inference_path(Dir,Host,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/inference/1/'], Path).
+instance_path(Dir,Host,Path) :-
+    database_path(Dir,Host,DB),
+    atomic_list_concat([DB,'main/1/'], Path).
 
-schema_path(Dir,Host,Path) :- 
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/schema/1/'], Path).
+inference_path(Dir,Host,Path) :-
+    database_path(Dir,Host,DB),
+    atomic_list_concat([DB,'inference/1/'], Path).
+
+schema_path(Dir,Host,Path) :-
+    database_path(Dir,Host,DB),
+    atomic_list_concat([DB,'schema/1/'], Path).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -118,7 +124,8 @@ main(Args) :-
         example_instance_ttl(Dir,Example_Instance_TTL),
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
-        
+
+        database_path(Dir,Server,DB_Path),
         instance_path(Dir,Server,Instance_Path),
         inference_path(Dir,Server,Inference_Path),
         schema_path(Dir,Server,Schema_Path),
@@ -131,6 +138,7 @@ mkdir -p "',Schema_Path,'";
 rm -f ',Instance_Path,'* ;
 rm -f ',Inference_Path,'* ;
 rm -f ',Schema_Path,'* ;
+touch ',DB_Path,'COLLECTION;
 cp "',Example_Instance_TTL,'" "',Instance_Path,'1-ckp.ttl";
 cp "',Example_Inference_TTL,'" "',Inference_Path,'1-ckp.ttl";
 cp "',Example_Schema_TTL,'" "',Schema_Path,'1-ckp.ttl";
