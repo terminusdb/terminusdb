@@ -115,7 +115,10 @@ main(Args) :-
 
         memberchk(server(Server_Arg), Opts),
         (   Server_Arg = ''
-        ->  hostname(Server)
+        ->  (   hostname(Server)
+            ->  true
+            ;   Server = localhost
+            )
         ;   Server = localhost),
         
         format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
