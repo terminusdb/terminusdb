@@ -310,7 +310,7 @@ try_update_document(Doc_ID, Doc_In, Graph) :-
  */
 try_db_uri(DB,DB_URI) :- 
     (   config:server_name(Server_Name),
-        interpolate([Server_Name,DB],DB_URI)
+        interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
     ;   throw(http_reply(not_found(DB,'Database resource can not be found')))).
 
