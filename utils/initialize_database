@@ -119,7 +119,7 @@ main(Args) :-
             ->  true
             ;   Server = localhost
             )
-        ;   Server = localhost),
+        ;   Server = Server_Arg),
         
         format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
                [Server]),
