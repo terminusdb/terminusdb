@@ -21,12 +21,32 @@ command(Cmd) :-
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
 
+
+hostname(Hostname) :-
+    (   command(hostname)
+    ->  process_create(path(hostname), ['-f'], [ stderr(null),
+                                                 stdout(pipe(Out)),
+                                                 process(PID)
+                                               ]),
+        process_wait(PID,_Status),
+        (   read_string(Out, '\n', '\r', _, Hostname_String)
+        ->  atom_string(Hostname,Hostname_String)
+        ;   Hostname = localhost)
+    ;   Hostname = localhost).
+
 opt_spec([[opt(help),
            type(boolean),
            shortflags([h]),
            longflags([help]), 
            default(false),
            help('print this help')],
+
+          [opt(server),
+           type(atom),
+           shortflags([s]),
+           longflags([server]),
+           default(localhost),
+           help('set the server name')],
           
           [opt(key),
            type(atom),
@@ -85,9 +105,14 @@ main(Args) :-
     ->  format('~nThink of a better administrator key please...~n~n'),
         write(Help_Text),
         halt
-    ;   memberchk(key(Key), Opts)        
-    ->  file_directory_name(Prog, Dir),
+    ;   memberchk(key(Key), Opts),
+        file_directory_name(Prog, Dir),
 
+        memberchk(server(Server_Arg), Opts),
+        (   Server_Arg = localhost
+        ->  hostname(Server)
+        ;   Server = Server_Arg),
+        
         example_instance_ttl(Dir,Example_Instance_TTL),
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
@@ -108,15 +133,13 @@ cp "',Example_Instance_TTL,'" "',Instance_Path,'1-ckp.ttl";
 cp "',Example_Inference_TTL,'" "',Inference_Path,'1-ckp.ttl";
 cp "',Example_Schema_TTL,'" "',Schema_Path,'1-ckp.ttl";
 sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_Path,'1-ckp.ttl";
+sed -i "s/localhost/',Server,'/" "',Instance_Path,'1-ckp.ttl";
+sed -i "s/localhost/',Server,'/" "',Schema_Path,'1-ckp.ttl";
 '],
                            Cmd),
         % format('Running Cmd:~s~n',[Cmd]),
         shell(Cmd),
         format('Successfully updated admin key!!~n'),
-        halt
-    ;   write(Help_Text),
-        halt),
-
-    halt.
+        halt).
 
     
