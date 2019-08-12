@@ -44,7 +44,7 @@ opt_spec([[opt(help),
            type(atom),
            shortflags([s]),
            longflags([server]),
-           default(localhost),
+           default(''),
            help('set the server name')],
           
           [opt(key),
@@ -108,9 +108,9 @@ main(Args) :-
         file_directory_name(Prog, Dir),
 
         memberchk(server(Server_Arg), Opts),
-        (   Server_Arg = localhost
+        (   Server_Arg = ''
         ->  hostname(Server)
-        ;   Server = Server_Arg),
+        ;   Server = localhost),
         
         format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
                [Server]),
