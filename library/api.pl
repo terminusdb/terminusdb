@@ -289,6 +289,7 @@ try_update_document(Doc_ID, Doc_In, Graph) :-
     % if there is no id, we'll use the requested one.
     (   jsonld_id(Doc_In,Doc_ID_Match)
     ->  true
+    %   This is wrong - we need to have the base path here as well. 
     ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
     
     (   Doc_ID_Match = Doc_ID

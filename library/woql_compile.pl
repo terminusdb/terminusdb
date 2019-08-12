@@ -300,8 +300,7 @@ resolve(X,Xe) -->
         is_dict(X),
         !,
         expand(X,XEx), % also need to use the prefixes here.
-        jsonld_id(XEx,XI),
-        writeq(XI)
+        jsonld_id(XEx,XI)      
     },
     resolve(XI,Xe).
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
