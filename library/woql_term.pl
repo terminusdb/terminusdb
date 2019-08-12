@@ -92,7 +92,9 @@ obj(ID:Class) :-
 obj(ID) :-
     \+ ID = _:_,
     identifier(ID).
-
+obj(ID) :-
+    is_dict(ID).
+    
 /* 
  * Graph 
  * 

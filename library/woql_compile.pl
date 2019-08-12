@@ -44,6 +44,8 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 
+:- use_module(library(json_ld)).
+ 
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
@@ -293,6 +295,15 @@ resolve(X,Xe) -->
         ->  Xe=URI
         ;   X=Xe)
     }.
+resolve(X,Xe) -->
+    {
+        is_dict(X),
+        !,
+        expand(X,XEx), % also need to use the prefixes here.
+        jsonld_id(XEx,XI),
+        writeq(XI)
+    },
+    resolve(XI,Xe).
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
     [],
     {

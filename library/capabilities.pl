@@ -146,7 +146,8 @@ user_action(User,Action) :-
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(Auth, Action, Resource_ID) :-
-    connect('http://localhost/capability', DB),
+    capability_collection(Collection),
+    connect(Collection, DB),
     ask(DB, 
 	    where(
             (
@@ -189,7 +190,8 @@ add_database_resource(URI,Doc) :-
     ;   format(atom(MSG),'Unable to create a non-database document due to capabilities authorised.'),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
-    connect('http://localhost/capability', DB),
+    capability_collection(Collection),
+    connect(Collection, DB),
     ask(DB, 
 	    (
             hash(doc, [URI], DB_URI)
@@ -213,7 +215,8 @@ delete_database_resource(URI) :-
     % but are those references then going to be "naked" having no other reference?
     %
     % Supposing we have only one scope for an auth, do we delete the auth? 
-    connect('http://localhost/capability', DB),
+    capability_collection(Collection),
+    connect(Collection, DB),
     % delete the object
     ask(DB, 
         (

@@ -66,6 +66,9 @@ pre_term_to_term_and_bindings(Pre_Term,Term,Bindings_In,Bindings_Out) :-
             Bindings_Out = [G=Pre_Term|Bindings_In],
             Term = v(G)
         )
+    ;   is_dict(Pre_Term)
+    ->  Term = Pre_Term,
+        Bindings_In=Bindings_Out
     ;   Pre_Term =.. [F|Args],
         mapm(sdk:pre_term_to_term_and_bindings,Args,New_Args,Bindings_In,Bindings_Out),
         Term =.. [F|New_Args]

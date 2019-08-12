@@ -44,9 +44,21 @@
  * Expands from JSON_LD prefixed format to fully expanded form.
  */ 
 expand(JSON_LD, JSON) :-
+    is_dict(JSON_LD),
+    !, 
     get_dict_default('@context', JSON_LD, Context, _{}),
     expand_context(Context,Context_Expanded),
     expand(JSON_LD, Context_Expanded, JSON).
+expand(JSON_LD, JSON) :-
+    is_list(JSON_LD),
+    !,
+    maplist(expand,JSON_LD,JSON).
+expand(JSON, JSON) :-
+    is_atom(JSON),
+    !.
+expand(JSON_LD, JSON) :-
+    is_string(JSON_LD),
+    atom_string(JSON,JSON_LD).
 
 /** 
  * expand(+JSON_LD, +Context:dict, -JSON) is det.
