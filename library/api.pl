@@ -126,17 +126,25 @@ verify_access(Auth, Action, Scope) :-
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
         throw(http_reply(method_not_allowed(M,Scope)))).
 
+connection_authorised_user(Request, User) :-
+    request_key(Request,Key),
+    (   key_user(Key, User_ID)
+    ->  (   get_user(User_ID, User)
+        ->  true
+        ;   throw(http_reply(method_not_allowed('Bad user object', User_ID))))
+    ;   throw(http_reply(authorise('Not a valid key')))).
+
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /** 
  * connect_handler(Request:http_request) is det.
  */
 connect_handler(Request) :-
-    authenticate(Request,Auth),
+    connection_authorised_user(Request,User),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
-	json_write_dict(Out,Auth).
+	json_write_dict(Out,User).
 
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.

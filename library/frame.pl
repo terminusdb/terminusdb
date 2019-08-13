@@ -12,9 +12,14 @@
               all_entity_instances/2,
               all_entity_iris/2,
               % Get an object as described by a frame.
-              entity_object/3,
+              % (should this be exported?)
+              entity_object/4,
+              % As JSON-LD
               entity_jsonld/3,
+              % As JSON-LD with a context 
               entity_jsonld/4,
+              % As JSON-LD with a context and depth parameter
+              entity_jsonld/5,
               object_edges/3,
               delete_object/2,
               update_object/2
@@ -709,37 +714,41 @@ entity_filled_frame(Entity,Graph,Filled) :-
  * 
  * Does not actually appear to be det!
  */
-realiser(Elt,Frame,Graph,['@type'=Class,
-                          '@id'=Elt
-                          |Realisers]) :-
+realiser(Elt,Frame,Graph,Depth,['@type'=Class,
+                                '@id'=Elt
+                                |Realisers]) :-
     instanceClass(Elt,Class,Graph),
-    realise_frame(Elt,Frame,Graph,Realisers).
+    realise_frame(Elt,Frame,Graph,Depth,Realisers).
 
 /* 
  * realise_frame(Elt,Frame,Graph,Quasi_JSONLD) is det.
  * 
  * Traverse frame synthesising realisers.
  */
-realise_frame(_,[],_,[]) :-
+realise_frame(_,[],_,_,[]) :-
     !.
-realise_frame(Elt,[[type=objectProperty|P]|Rest],Graph,Realisers) :-
+realise_frame(Elt,[[type=objectProperty|P]|Rest],Graph,Depth,Realisers) :-
     !, % no turning back if we are an object property
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
-    (   setof(NewRealiser,
+    (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Graph),
                  (   schema:entity(V,Graph)
-                 ->  NewRealiser=[V]
-                 ;   realiser(V,Frame,Graph,NewRealiser))),
+                 ->  (   Depth =< 1
+                     ->  New_Realiser=[V]
+                     ;   New_Depth is Depth-1,
+                         entity_object(V,Graph,New_Depth,Object),
+                         Object = [_Type,_Id|New_Realiser])
+                 ;   realiser(V,Frame,Graph,Depth,New_Realiser))),
               RealiserValues)
     ->  (   RealiserValues = [Val]
         ->  Realisers = [Prop=Val|RealiserTail]
         ;   Realisers = [Prop=RealiserValues|RealiserTail]
         ),
-        realise_frame(Elt,Rest,Graph,RealiserTail)
-    ;   realise_frame(Elt,Rest,Graph,Realisers)
+        realise_frame(Elt,Rest,Graph,Depth,RealiserTail)
+    ;   realise_frame(Elt,Rest,Graph,Depth,Realisers)
     ).
-realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Graph,Realisers) :-
+realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Graph,Depth,Realisers) :-
     !, % no turning back if we are a datatype property
     member(property=Prop, P),
     (   setof(V,
@@ -749,30 +758,36 @@ realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Graph,Realisers) :-
         ->  Realisers = [Prop=Val|RealiserTail]
         ;   Realisers = [Prop=RealiserValues|RealiserTail]
         ),
-        realise_frame(Elt,Rest,Graph,RealiserTail)
-    ;   realise_frame(Elt,Rest,Graph,Realisers)
+        realise_frame(Elt,Rest,Graph,Depth,RealiserTail)
+    ;   realise_frame(Elt,Rest,Graph,Depth,Realisers)
     ).
-realise_frame(Elt,[[type=restriction|_R]|Rest],Graph,Realisers) :-
+realise_frame(Elt,[[type=restriction|_R]|Rest],Graph,Depth,Realisers) :-
     % We are a bare restriction, not applied to any property
     !, 
-    realise_frame(Elt,Rest,Graph,Realisers).
-realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Graph,[Realiser|Realisers]) :-
+    realise_frame(Elt,Rest,Graph,Depth,Realisers).
+realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Graph,Depth,[Realiser|Realisers]) :-
     % We are a bare class_choice, not applied to any property
     !,
-    entity_object(Elt,Graph,Realiser),
-    realise_frame(Elt,Rest,Graph,Realisers).
-realise_frame(Elt,Frame,Graph,Realisers) :-
+    entity_object(Elt,Graph,Depth,Realiser),
+    realise_frame(Elt,Rest,Graph,Depth,Realisers).
+realise_frame(Elt,Frame,Graph,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
     % member(type=Type, Frame), 
     member(operands=Fs, Frame),
     !, % We're an operator, so stick with it
-    maplist({Elt,Graph}/[TheFrame,NewRealiser]
-            >>(realiser(Elt,TheFrame,Graph,NewRealiser)),Fs,Realisers).
-realise_frame(_Elt,F,_Graph,[]) :-
-    member(type=Type, F),
-    member(Type,[oneOf,entity]),
-    % is a one-of or entity (don't backtrack over member)
+    maplist({Elt,Graph,Depth}/[TheFrame,New_Realiser]
+            >>(realiser(Elt,TheFrame,Graph,Depth,New_Realiser)),Fs,Realisers).
+realise_frame(_Elt,F,_Graph,_Depth,[]) :-
+    memberchk(type=oneOf, F),
     !.
+realise_frame(Elt, Frame, Graph, Depth, New_Realiser) :-
+    memberchk(type=entity, Frame),
+    (   Depth =< 1
+    ->  New_Realiser=[]
+    ;   New_Depth is Depth-1,
+        entity_object(Elt,Graph,New_Depth,Object),
+        Object = [_Type,_Id|New_Realiser]).
+
 
 /* 
  * realise_triples(Elt,Frame,Graph,Realiser) is det.
@@ -789,12 +804,12 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Graph,Realiser) :-
     
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
-    (   setof(NewRealiser,
+    (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Graph),
                  (   schema:entity(V,Graph)
-                 ->  NewRealiser=[(C,G,Elt,Prop,V)]
+                 ->  New_Realiser=[(C,G,Elt,Prop,V)]
                  ;   realise_triples(V,Frame,Graph,Below),
-                     NewRealiser=[(C,G,Elt,Prop,V)|Below])),
+                     New_Realiser=[(C,G,Elt,Prop,V)|Below])),
               RealiserLists)
     ->  append(RealiserLists,Realisers_on_P),
         realise_triples(Elt,Rest,Graph,Realiser_Tail),
@@ -829,8 +844,8 @@ realise_triples(Elt,Frame,Graph,Realisers) :-
     % member(type=Type, Frame), 
     member(operands=Fs, Frame),
     !, % We're an operator, so stick with it
-    maplist({Elt,Graph}/[TheFrame,NewRealiser]
-            >>(realise_triples(Elt,TheFrame,Graph,NewRealiser)),Fs,Realiser_List),
+    maplist({Elt,Graph}/[TheFrame,New_Realiser]
+            >>(realise_triples(Elt,TheFrame,Graph,New_Realiser)),Fs,Realiser_List),
     append(Realiser_List,Realisers).
 realise_triples(_Elt,F,_Graph,[]) :-
     member(type=Type, F),
@@ -839,24 +854,15 @@ realise_triples(_Elt,F,_Graph,[]) :-
     !.
 
 /*
- * entity_object(+Entity:uri,+Graph:graph,-Realiser) is semidet.
+ * entity_object(+Entity:uri,+Graph:graph,+Depth,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity
  */ 
-entity_object(Entity,Graph,Realiser) :-
+entity_object(Entity,Graph,Depth,Realiser) :-
     most_specific_type(Entity,Class,Graph),
     class_frame(Class,Graph,Frame),
-    realiser(Entity,Frame,Graph,Realiser).
-
-/* 
- * delete_entity_object(+Entity_uri, +Graph
- * 
- */
-entity_object(Entity,Graph,Realiser) :-
-    most_specific_type(Entity,Class,Graph),
-    class_frame(Class,Graph,Frame),
-    realiser(Entity,Frame,Graph,Realiser).
+    realiser(Entity,Frame,Graph,Depth,Realiser).
 
 /* 
  * get_collection_jsonld_context(Collection,Ctx) is det. 
@@ -874,7 +880,7 @@ get_collection_jsonld_context(Collection, Ctx) :-
  * Entity in a JSON_LD format using a supplied context.
  */ 
 entity_jsonld(Entity,Ctx,Graph,JSON_LD) :-
-    entity_object(Entity, Graph, Realiser),
+    entity_object(Entity, Graph, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
     graph_collection(Graph, Collection),
@@ -882,6 +888,24 @@ entity_jsonld(Entity,Ctx,Graph,JSON_LD) :-
     merge_dictionaries(Ctx,Ctx_Graph,Ctx_Total),
 
     compress(JSON_Ex,Ctx_Total,JSON_LD).
+
+/*
+ * entity_jsonld(+Entity:uri,+Ctx:any,+Graph:graph,+Depth,-Realiser) is semidet.
+ * 
+ * Gets the realiser for the frame associated with the class of 
+ * Entity in a JSON-LD format using a supplied context and unfolding 
+ * up to depth Depth
+ */ 
+entity_jsonld(Entity,Ctx,Graph,Depth,JSON_LD) :-
+    entity_object(Entity, Graph, Depth, Realiser),
+    term_jsonld(Realiser, JSON_Ex),
+    
+    graph_collection(Graph, Collection),
+    get_collection_jsonld_context(Collection,Ctx_Graph),
+    merge_dictionaries(Ctx,Ctx_Graph,Ctx_Total),
+
+    compress(JSON_Ex,Ctx_Total,JSON_LD).
+
 
 /*
  * entity_jsonld(+Entity:uri,+Graph:graph,-Realiser) is semidet.

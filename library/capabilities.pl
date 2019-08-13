@@ -1,6 +1,7 @@
 :- module(capabilities,[
               key_auth/2,
               key_user/2,
+              get_user/2,
               user_action/2,
               auth_action_scope/3,
               add_database_resource/2,
@@ -86,6 +87,19 @@ key_user(Key, User_ID) :-
 		       )
 	          )
        ).
+
+/** 
+ * get_user(+User_ID, -User) is det.
+ * 
+ * Gets back a full user object which includes all authorities
+ */
+get_user(User_ID, User) :-
+    capability_collection(C),
+    make_collection_graph(C,Graph),
+    capability_context(Ctx),
+    
+    entity_jsonld(User_ID,Ctx,Graph,3,User).
+
 
 /** 
  * key_auth(Key,Auth) is det. 
