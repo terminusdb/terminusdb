@@ -120,7 +120,7 @@ In Python: https://github.com/terminusdb/terminus-python-sdk
 ## Changes in this Version 
 
 * Added additional typing information and documentation
-* Added database bootsrapping for access permissions and controls using the capabilities ontology
+* Added database bootstrapping for access permissions and controls using the capabilities ontology
 * Added database initialisation utility 
 * Added code for instance and schema checking
 
