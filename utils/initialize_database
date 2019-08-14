@@ -67,16 +67,16 @@ Set the administrative key - necessary before superuser can begin to set other p
 ~s', [Name,Help_Text]).
 
 example_instance_ttl(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../config/capability_instance_template.ttl'], Path).
+    atomic_list_concat([Dir,'/../config/terminus_instance_template.ttl'], Path).
 
 example_inference_ttl(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../config/capability_inference_template.ttl'], Path).
+    atomic_list_concat([Dir,'/../config/terminus_inference_template.ttl'], Path).
 
 example_schema_ttl(Dir,Path) :- 
     atomic_list_concat([Dir,'/../terminus-ontologies/terminus.owl.ttl'], Path).
 
 database_path(Dir,Host,Path) :-
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fcapability/'], Path).
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fterminus/'], Path).
 
 instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
