@@ -112,9 +112,9 @@ TerminusDB will:
 We currently have no client, so you'll have to use the RESTful API directly. You can find 
 examples at the TerminusDB repositories...
 
-In Python: https://github.com/terminusdb/terminus-python-sdk
-
 In JavaScript: https://github.com/terminusdb/terminus-javascript-sdk
+
+In Python: https://github.com/terminusdb/terminus-python-sdk
 
 ## Changes in this Version 
 

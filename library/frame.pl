@@ -13,7 +13,7 @@
               all_entity_iris/2,
               % Get an object as described by a frame.
               % (should this be exported?)
-              entity_object/4,
+              % entity_object/4,
               % As JSON-LD
               entity_jsonld/3,
               % As JSON-LD with a context 
@@ -33,20 +33,20 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -707,10 +707,10 @@ entity_filled_frame(Entity,Graph,Filled) :-
     fill_class_frame(Entity,Graph,Frame,Filled).
 
 /*
- * realiser(+Entity:uri,+Frame:frame,+Graph:graph,-Realiser:any) is det.
+ * realiser(+Entity:uri,+Frame:frame,+Graph:graph,+Depth:number,-Realiser:any) is det.
  * 
  * Synthesise the concrete representative of the schema class, 
- * showing inhabitation. 
+ * showing inhabitation unfolding entities up to a depth of Depth. 
  * 
  * Does not actually appear to be det!
  */
@@ -721,7 +721,7 @@ realiser(Elt,Frame,Graph,Depth,['@type'=Class,
     realise_frame(Elt,Frame,Graph,Depth,Realisers).
 
 /* 
- * realise_frame(Elt,Frame,Graph,Quasi_JSONLD) is det.
+ * realise_frame(Elt,Frame,Graph,Depth,Quasi_JSONLD) is det.
  * 
  * Traverse frame synthesising realisers.
  */
@@ -794,6 +794,8 @@ realise_frame(Elt, Frame, Graph, Depth, New_Realiser) :-
  *
  * The triple realiser must be kept in complete lock step with the definition above. 
  * This makes me wonder if we shouldn't keep the method fused or derived!
+ * 
+ * It may be desirable to have a depth parameter here as well?
  */ 
 realise_triples(_,[],_,[]) :-
     !.
