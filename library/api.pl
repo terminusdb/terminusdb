@@ -142,7 +142,7 @@ connection_authorised_user(Request, User) :-
 connect_handler(Request) :-
     connection_authorised_user(Request,User),
 
-    config:server(SURI),
+    config:server_name(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -162,7 +162,7 @@ db_handler(post,DB,Request) :-
     try_db_uri(DB,DB_URI),
     try_create_db(DB_URI,Doc),
 
-    config:server(SURI),
+    config:server_name(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     
@@ -177,7 +177,7 @@ db_handler(delete,DB,Request) :-
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    config:server(SURI),
+    config:server_name(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -197,7 +197,7 @@ woql_handler(Request) :-
     run_query(Query, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 
-    config:server(SURI),
+    config:server_name(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
