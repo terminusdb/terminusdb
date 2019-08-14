@@ -1,0 +1,3 @@
+[submodule "terminus-ontologies"]
+	path = terminus-ontologies
+	url = https://github.com/terminusdb/terminus-ontologies
