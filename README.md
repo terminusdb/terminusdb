@@ -68,6 +68,7 @@ The TerminusDB source tree should then be cloned from GitHub:
 
 ```
 git clone https://github.com/terminusdb/terminusdb
+git submodule init
 ```
 
 You should copy `config/config-example.pl` to `config/config.pl` and then 
@@ -76,7 +77,7 @@ port.
 
 You also need to update the admin user password which is used as a
 super-user API key for access. This can be done with the
-`set_admin_key` script.
+`initialize_database` script.
 
 ```
 utils/initialize_database -k "my_password_here" -s "my_server_name_here"
