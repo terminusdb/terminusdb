@@ -49,7 +49,7 @@ global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
 global_prefixes(dcogbox,'https://datachemist.net/ontology/dcogbox#').
 global_prefixes(xdd,'https://datachemist.net/ontology/xdd#').
 global_prefixes(rvo,'https://datachemist.net/ontology/rvo#').
-global_prefixes(terminus,'https://terminusdb.com/ontology/terminus#').
+global_prefixes(terminus,'https://datachemist.net/ontology/terminus#').
 % common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
