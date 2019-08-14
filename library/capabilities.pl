@@ -46,28 +46,28 @@
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
 
-capability_collection(Collection) :-
+terminus_collection(Collection) :-
     config:server_name(Server),
-    atomic_list_concat([Server,'/capability'],Collection).
+    atomic_list_concat([Server,'/terminus'],Collection).
 
 /** 
- * capability_context(Context : dictionary) is det.
+ * terminus_context(Context : dictionary) is det.
  * 
- * JSON-LD capability access context. 
+ * JSON-LD of terminus context. 
  */ 
-capability_context(_{
+terminus_context(_{
                        doc : Doc, 
-                       terminus : 'https://terminusdb.com/ontology/terminus#'
+                       terminus : 'https://datachemist.net/ontology/terminus#'
                    }) :-
     config:server_name(Server),
-    atomic_list_concat([Server,'/capability/document/'],Doc).
+    atomic_list_concat([Server,'/terminus/document/'],Doc).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
  */
 root_user_id(Root) :-
     config:server_name(Server),
-    atomic_list_concat([Server,'/capability/document/admin'],Root).
+    atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /** 
  * key_user(+Key,-User) is det.
@@ -77,7 +77,7 @@ root_user_id(Root) :-
 key_user(Key, User_ID) :-
     md5_hash(Key, Hash, []),
     
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([User_ID], 
@@ -94,9 +94,9 @@ key_user(Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(User_ID, User) :-
-    capability_collection(C),
+    terminus_collection(C),
     make_collection_graph(C,Graph),
-    capability_context(Ctx),
+    terminus_context(Ctx),
     
     entity_jsonld(User_ID,Ctx,Graph,3,User).
 
@@ -110,9 +110,9 @@ get_user(User_ID, User) :-
 key_auth(Key, Auth) :-
     key_user(Key,User_ID),
 
-    capability_collection(C),
+    terminus_collection(C),
     make_collection_graph(C,Graph),
-    capability_context(Ctx),
+    terminus_context(Ctx),
 
     user_auth_id(User_ID, Auth_ID),
     
@@ -125,7 +125,7 @@ key_auth(Key, Auth) :-
  * obj embedded in woql.
  */
 user_auth_id(User_ID, Auth_ID) :-
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Auth_ID], 
@@ -140,7 +140,7 @@ user_auth_id(User_ID, Auth_ID) :-
  * user_action(+User,-Action) is nondet.
  */
 user_action(User,Action) :-
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Action], 
@@ -160,7 +160,7 @@ user_action(User,Action) :-
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(Auth, Action, Resource_ID) :-
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    where(
@@ -172,23 +172,6 @@ auth_action_scope(Auth, Action, Resource_ID) :-
         )
 	   ).
 
-/*
-Try inference ontology experimentally for now. 
-
-auth_action_scope(Auth, Action, _Scope) :-
-    % Don't need to know the scope if it is the whole server...
-    % This should be encoded in the inference ontology instead.
-    connect('http://localhost/capability', DB),
-    ask(DB,
-        where(
-            (   
-                t(Auth, terminus/action, Action),
-                t(Auth, terminus/authority_scope, doc/server)
-            )
-	    )
-       ).
-*/
-
 /*  
  * add_database_resource(DB) is det.
  * 
@@ -196,7 +179,7 @@ auth_action_scope(Auth, Action, _Scope) :-
  * authority reference.
  */
 add_database_resource(URI,Doc) :-
-    capability_context(Ctx),
+    terminus_context(Ctx),
     compress(Doc,Ctx,Min),
     /* This check is required to cary out appropriate auth restriction */
     (   get_dict('@type', Min, 'terminus:Database')
@@ -204,7 +187,7 @@ add_database_resource(URI,Doc) :-
     ;   format(atom(MSG),'Unable to create a non-database document due to capabilities authorised.'),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    (
@@ -229,7 +212,7 @@ delete_database_resource(URI) :-
     % but are those references then going to be "naked" having no other reference?
     %
     % Supposing we have only one scope for an auth, do we delete the auth? 
-    capability_collection(Collection),
+    terminus_collection(Collection),
     connect(Collection, DB),
     % delete the object
     ask(DB, 
