@@ -5,7 +5,8 @@
               user_action/2,
               auth_action_scope/3,
               add_database_resource/2,
-              delete_database_resource/1
+              delete_database_resource/1,
+              write_cors_headers/1
           ]).
                  
 /** <module> Capabilities
@@ -194,7 +195,7 @@ add_database_resource(URI,Doc) :-
             hash(doc, [URI], DB_URI)
         =>
             insert(DB_URI, rdf/type, terminus/'Database'),
-            insert(DB_URI, terminus/id, URI^^xsd/string),
+            insert(DB_URI, terminus/id, URI^^(xsd/string)),
             insert(doc/server, terminus/resource_includes, doc/master),
             update_document(DB,Doc)
         )
@@ -217,9 +218,43 @@ delete_database_resource(URI) :-
     % delete the object
     ask(DB, 
         (
-            t(DB_URI, terminus/id, URI^^xsd/string),
-            t(DB_URI, terminus/id, terminus/'Database')
+            t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+            t(DB_URI, rdf/type, terminus/'Database')
         =>  
             delete_object(DB_URI)
         )).
 
+/*  
+ * write_cors_headers(Resource_URI) is det.
+ * 
+ * Writes cors headers associated with Resource_URI
+ */
+write_cors_headers(Resource_URI) :-
+    terminus_collection(Collection),
+    connect(Collection, DB),
+    % delete the object
+    findall(Origin,
+            ask(DB, 
+                where(   
+                    (   t(Internal_Resource_URI, terminus/allow_origin, Origin^^(xsd/string)),
+                        t(Internal_Resource_URI, terminus/id, Resource_URI^^(xsd/anyURI))
+                    )
+                )),
+            Origins),
+    current_output(Out),
+    format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
+    format(Out,'Access-Control-Allow-Credentials: true\n',[]),
+    format(Out,'Access-Control-Max-Age: 1728000\n',[]),
+    format(Out,'Access-Control-Allow-Headers: Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]), 
+    format(Out,'Access-Control-Allow-Origin: ',[]),
+    write_domains(Out,Origins),
+    format(Out,'\n',[]).
+
+write_domains(_,[]).
+write_domains(Out,[H|T]) :-
+    write(Out,H),
+    (   T == []
+    ->  true
+    ;   write(' '),
+        write_domains(Out,T)
+    ).

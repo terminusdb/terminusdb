@@ -141,7 +141,9 @@ connection_authorised_user(Request, User) :-
  */
 connect_handler(Request) :-
     connection_authorised_user(Request,User),
-    
+
+    config:server(SURI),
+    write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,User).
@@ -159,7 +161,9 @@ db_handler(post,DB,Request) :-
 
     try_db_uri(DB,DB_URI),
     try_create_db(DB_URI,Doc),
-    
+
+    config:server(SURI),
+    write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     
     current_output(Out),
@@ -172,7 +176,9 @@ db_handler(delete,DB,Request) :-
     
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
-    
+
+    config:server(SURI),
+    write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
@@ -191,6 +197,8 @@ woql_handler(Request) :-
     run_query(Query, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 
+    config:server(SURI),
+    write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,JSON).
@@ -215,6 +223,7 @@ document_handler(get, DB, Doc_ID, Request) :-
 
     try_get_document(Doc_URI,Graph,JSON),
 
+    write_cors_headers(DB_URI),
     format('Content-type: application/json~n~n'),
 
     current_output(Out),
@@ -234,7 +243,8 @@ document_handler(post, DB, Doc_ID, Request) :-
     try_get_param(document,Request,Doc),
         
     try_update_document(Doc_ID,Doc,Graph),
-    
+
+    write_cors_headers(DB_URI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
@@ -253,7 +263,8 @@ document_handler(delete, DB, Doc_ID, Request) :-
     try_doc_uri(DB_URI,Doc_ID,Doc_URI),
 
     try_delete_document(Doc_URI,Graph),
-    
+
+    write_cors_headers(DB_URI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
 	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).

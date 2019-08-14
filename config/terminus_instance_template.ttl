@@ -26,11 +26,13 @@ doc:master
     a terminus:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
+    terminus:allow_origin "*"^^xsd:string ;    
     terminus:id "http://localhost/terminus"^^xsd:anyURI .
 
 doc:server
     a terminus:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
-    terminus:id "http://localhost"^^xsd:anyURI ;    
+    terminus:id "http://localhost"^^xsd:anyURI ;
+    terminus:allow_origin "*"^^xsd:string ;
     terminus:resource_includes doc:master .
