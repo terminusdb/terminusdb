@@ -67,22 +67,24 @@ http:location(root, '/', []).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(.), connect_handler, [methods([get,post])]). 
+:- http_handler(root(.), connect_handler(Method),
+                [method(Method),
+                 methods([get,post])]). 
 :- http_handler(root(DB), db_handler(Method,DB),
                 [method(Method),
-                 methods([post,delete])]).
+                 methods([options,post,delete])]).
 :- http_handler(root(DB/schema), schema_handler(Method,DB), 
                 [method(Method),
-                 methods([get,post])]).
+                 methods([options,get,post])]).
 :- http_handler(root(DB/document/DocID), document_handler(Method,DB,DocID),
                 [method(Method),
-                 methods([get,post,delete])]). 
+                 methods([options,get,post,delete])]). 
 :- http_handler(root(DB/woql), woql_handler(Method,DB),
                 [method(Method),
-                 methods([get,post,delete])]). 
+                 methods([options,get,post,delete])]). 
 :- http_handler(root(DB/search), search_handler(Method,DB),
                 [method(Method),
-                 methods([get,post,delete])]). 
+                 methods([options,get,post,delete])]). 
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -139,7 +141,10 @@ connection_authorised_user(Request, User) :-
 /** 
  * connect_handler(Request:http_request) is det.
  */
-connect_handler(Request) :-
+connect_handler(options,_Request) :-
+    config:server_name(SURI),
+    write_cors_headers(SURI).
+connect_handler(get,Request) :-
     connection_authorised_user(Request,User),
 
     config:server_name(SURI),
@@ -151,6 +156,10 @@ connect_handler(Request) :-
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
  */
+db_handler(options,_DB,_Request) :-
+    % database may not exist - use server for CORS
+    config:server_name(SURI),
+    write_cors_headers(SURI).
 db_handler(post,DB,Request) :-
     /* POST: Create database */
     authenticate(Request, Auth),
@@ -185,8 +194,11 @@ db_handler(delete,DB,Request) :-
     
 /** 
  * woql_handler(+Request:http_request) is det.
- */ 
-woql_handler(Request) :-
+ */
+woql_handler(options,_Request) :-
+    config:server_name(SURI),
+    write_cors_headers(SURI).
+woql_handler(get,Request) :-
     authenticate(Request, Auth),
 
     verify_access(Auth,terminus/woql_select,terminus/server),
@@ -205,7 +217,10 @@ woql_handler(Request) :-
 
 /** 
  * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
- */ 
+ */
+document_handler(options,DB,_Doc_ID,_Request) :-
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI).
 document_handler(get, DB, Doc_ID, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
