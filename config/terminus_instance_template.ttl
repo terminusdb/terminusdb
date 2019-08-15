@@ -22,7 +22,7 @@ doc:admin
     terminus:email_address "admin@localhost"^^xdd:email ;
     terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
-doc:master
+doc:terminus
     a terminus:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;

@@ -57,11 +57,13 @@ create_db(DB) :-
     graph_directory(DB,schema,Schema_Path),
     ensure_directory(Schema_Path),
     
-    make_checkpoint_directory(DB, main, _Main_CPD),
+    make_checkpoint_directory(DB, main, Main_CPD),
     make_checkpoint_directory(DB, schema, Schema_CPD),
     
-    %get_time(T),floor(T,N),
+    % The version count is one indexed ;D
     N=1,
+
+    % setup schema graph
     interpolate([Schema_CPD,'/',N,'-ckp.ttl'],TTLFile),
     touch(TTLFile),
     interpolate([Schema_CPD,'/',N,'-ckp.hdt'],CKPFile),
@@ -77,6 +79,13 @@ create_db(DB) :-
             write_triple(DB,schema,ckp,DB,rdfs:comment,literal(lang(en,Comment)))
         )
     ),
+
+    % setup main graph
+    interpolate([Main_CPD,'/',N,'-ckp.ttl'],Main_TTLFile),
+    touch(Main_TTLFile),
+    interpolate([Main_CPD,'/',N,'-ckp.hdt'],Main_CKPFile),
+    ttl_to_hdt(Main_TTLFile,Main_CKPFile),    
+    
     sync_from_journals(DB,main),
     sync_from_journals(DB,schema).
     

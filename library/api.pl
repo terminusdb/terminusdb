@@ -189,11 +189,11 @@ db_handler(delete,DB,Request) :-
 woql_handler(Request) :-
     authenticate(Request, Auth),
 
-    verify_access(Auth,terminus/delete_database,terminus/server),
+    verify_access(Auth,terminus/woql_select,terminus/server),
 
     try_get_param(query,Request,Query),
 
-    http_log_stream(Log),
+    * http_log_stream(Log),
     run_query(Query, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 

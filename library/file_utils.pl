@@ -113,7 +113,7 @@ sanitise_file_name(G,F) :-
  * Returns the path for a given graph 
  */
 collection_directory(Collection_ID,Path) :-
-    once(file_search_path(cliopatria,BasePath)),
+    once(file_search_path(terminus_home,BasePath)),
     db_relative_path(RelPath),
     sanitise_file_name(Collection_ID,CSafe),
     interpolate([BasePath,RelPath,CSafe],Path).
