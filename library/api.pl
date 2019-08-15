@@ -117,7 +117,8 @@ request_key(Request,Key) :-
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    request_key(Request,Key),
+    try_get_param('terminus:user_key',Request,Key),
+    
     (   key_auth(Key, Auth)
     ->  true
     ;   throw(http_reply(authorise('Not a valid key')))).
@@ -129,7 +130,8 @@ verify_access(Auth, Action, Scope) :-
         throw(http_reply(method_not_allowed(M,Scope)))).
 
 connection_authorised_user(Request, User) :-
-    request_key(Request,Key),
+    try_get_param('terminus:user_key',Request,Key),
+    
     (   key_user(Key, User_ID)
     ->  (   get_user(User_ID, User)
         ->  true
@@ -162,13 +164,16 @@ db_handler(options,_DB,_Request) :-
     config:server_name(SURI),
     write_cors_headers(SURI),
     format('~n').
-db_handler(post,DB,Request) :-
+db_handler(post,DB,R) :-
+    add_payload_to_request(R,Request),
+    
     /* POST: Create database */
     authenticate(Request, Auth),
     
     verify_access(Auth,terminus/create_database,terminus/server),
 
-    try_get_param(document,Request,Doc),
+    try_get_param('terminus:document',Request,Doc_Atom),
+    try_atom_json(Doc_Atom,Doc),
 
     try_db_uri(DB,DB_URI),
     try_create_db(DB_URI,Doc),
@@ -206,7 +211,7 @@ woql_handler(get,Request) :-
 
     verify_access(Auth,terminus/woql_select,terminus/server),
 
-    try_get_param(query,Request,Query),
+    try_get_param('terminus:query',Request,Query),
 
     * http_log_stream(Log),
     run_query(Query, JSON),
@@ -247,7 +252,9 @@ document_handler(get, DB, Doc_ID, Request) :-
 
     current_output(Out),
     json_write_dict(Out,JSON).
-document_handler(post, DB, Doc_ID, Request) :-
+document_handler(post, DB, Doc_ID, R) :-
+    add_payload_to_request(R,Request),
+    
     /* Update Document */
     authenticate(Request, Auth),
     % We should make it so we can pun documents and IDs
@@ -259,7 +266,7 @@ document_handler(post, DB, Doc_ID, Request) :-
 
     try_db_graph(DB_URI, Graph),
     
-    try_get_param(document,Request,Doc),
+    try_get_param('terminus:document',Request,Doc),
         
     try_update_document(Doc_ID,Doc,Graph),
 
@@ -377,13 +384,36 @@ try_db_graph(DB_URI,Graph) :-
  * 
  */
 try_get_param(Key,Request,Value) :-
+    % GET
+    memberchk(method(get), Request),
+    !,
+    
     http_parameters(Request, [], [form_data(Data)]),
     
     (   memberchk(Key=Value,Data)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))).
-
+try_get_param(Key,Request,Value) :-
+    % POST
+    memberchk(method(post), Request),
+    !,
+    (   memberchk(payload(Document), Request)
+    ->  true
+    ;   format(atom(MSG), 'No JSON payload for POST ~s', [Key,Data]),
+        throw(http_reply(not_found(Data,MSG)))),
+    
+    (   get_dict(Key, Document, Value)
+    ->  true
+    ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
+        throw(http_reply(not_found(Data,MSG)))).
+try_get_param(Key,Request,_Value) :-
+    % OTHER
+    memberchk(method(Method), Request),
+    
+    format(atom(MSG), 'Method ~s has no parameter key transport for key ~s', [Key,Method]),
+    throw(http_reply(not_found(Key,MSG))).
+    
 /* 
  * try_create_db(DB_URI,Object) is det.
  * 
@@ -416,6 +446,29 @@ try_delete_db(DB_URI) :-
         ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
             throw(http_reply(not_found(DB_URI,MSG))))).
 
+/* 
+ * try_atom_json(Atom,JSON) is det.
+ */
+try_atom_json(Atom,JSON) :-
+    (   atom_json_dict(Atom, JSON, [])
+    ->  true
+    ;   format(atom(MSG), 'Malformed JSON Object', []),
+        % Give a better error code etc. This is silly.
+        throw(http_reply(not_found(Atom,MSG)))).
 
-
+/* 
+ * add_payload_to_request(Request:request,JSON:json) is det.
+ * 
+ * Updates request with JSON-LD payload in payload(Document). 
+ * This should really be done automatically at request time 
+ * using the endpoint wrappers so we don't forget to do it.
+ */
+add_payload_to_request(Request,[payload(Document)|Request]) :-
+    member(method(post), Request),
+    !,
     
+    http_read_data(Request, Data, []),
+    try_atom_json(Data,Document).
+add_payload_to_request(Request,Request).
+
+
