@@ -370,26 +370,32 @@ try_get_param(Key,Request,Value) :-
  * 
  */
 try_create_db(DB_URI,Doc) :-
-    (   create_db(DB_URI)
-    ->  true
-    ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
-        throw(http_reply(not_found(DB_URI,MSG)))),
-
-    (   add_database_resource(DB_URI,Doc)
-    ->  true
-    ;   format(atom(MSG), 'Database metadata could not be created: ~s', [DB_URI]),
-        throw(http_reply(not_found(DB_URI,MSG)))).
-
+    with_mutex(
+        DB_URI,
+        (   (   create_db(DB_URI)
+            ->  true
+            ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
+                throw(http_reply(not_found(DB_URI,MSG)))),
+            
+            (   add_database_resource(DB_URI,Doc)
+            ->  true
+            ;   (   delete_db(DB_URI)
+                ->  format(atom(MSG), 'Database metadata could not be created: ~s', [DB_URI]),
+                    throw(http_reply(not_found(DB_URI,MSG)))
+                ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
+                    throw(http_reply(not_found(DB_URI,MSG))))))).
 
 /* 
  * try_create_db(DB_URI,Object) is det.
  * 
  */
 try_delete_db(DB_URI) :-
-    (   delete_db(DB_URI)
-    ->  true
-    ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
-        throw(http_reply(not_found(DB_URI,MSG)))).
+    with_mutex(
+        DB_URI, 
+        (   delete_db(DB_URI)
+        ->  true
+        ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
+            throw(http_reply(not_found(DB_URI,MSG))))).
 
 
 
