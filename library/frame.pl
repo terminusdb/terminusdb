@@ -20,6 +20,7 @@
               entity_jsonld/4,
               % As JSON-LD with a context and depth parameter
               entity_jsonld/5,
+              class_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
               update_object/2
@@ -917,6 +918,20 @@ entity_jsonld(Entity,Ctx,Graph,Depth,JSON_LD) :-
  */ 
 entity_jsonld(Entity,Graph,JSON_LD) :-
     entity_jsonld(Entity,_{},Graph,JSON_LD).
+
+
+/* 
+ * class_frame_jsonld(Class,Graph,JSON_Frame) is det.
+ * 
+ */
+class_frame_jsonld(Class,Graph,JSON_Frame) :-
+    class_frame(Class,Graph,Frame),
+    term_jsonld(Frame,JSON_LD),
+    
+    graph_collection(Graph, Collection),
+    get_collection_jsonld_context(Collection,Ctx),
+    
+    compress(JSON_LD,Ctx,JSON_Frame).
 
 /* 
  * object_edges(URI,Graph,Edges) is det.

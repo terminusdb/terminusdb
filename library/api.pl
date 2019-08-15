@@ -76,6 +76,9 @@ http:location(root, '/', []).
 :- http_handler(root(DB/schema), schema_handler(Method,DB), 
                 [method(Method),
                  methods([options,get,post])]).
+:- http_handler(root(DB/schema/ClassID), class_frame_handler(Method,DB,ClassID), 
+                [method(Method),
+                 methods([options,get])]).
 :- http_handler(root(DB/document/DocID), document_handler(Method,DB,DocID),
                 [method(Method),
                  methods([options,get,post,delete])]). 
@@ -295,6 +298,36 @@ document_handler(delete, DB, Doc_ID, Request) :-
     current_output(Out),
 	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
 
+/** 
+ * class_frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
+ * 
+ * Establishes frame responses 
+ */
+class_frame_handler(options,DB,_Class_ID,_Request) :-
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI),
+    format('~n'). % send headers
+class_frame_handler(get, DB, Class_ID, Request) :-
+    /* Read Document */
+    authenticate(Request, Auth),
+
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,terminus/class_frame,DB_URI),
+
+    try_db_graph(DB_URI,Graph),
+
+    try_class_uri(DB_URI,Class_ID,Class_URI),
+
+    try_class_frame(Class,Graph,Frame),
+    
+    format('Content-type: application/json~n~n'),
+    current_output(Out),
+	json_write_dict(Out,Frame).
+
 /* 
  * try_get_document(ID, Graph) is det.
  * 
@@ -471,4 +504,13 @@ add_payload_to_request(Request,[payload(Document)|Request]) :-
     try_atom_json(Data,Document).
 add_payload_to_request(Request,Request).
 
-
+/* 
+ * try_class_frame(Class,Graph,Frame) is det. 
+ */ 
+try_class_frame(Class,Graph,Frame) :-
+    (   class_frame_jsonld(Class,Graph,Frame),
+    ->  true
+    ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
+        % Give a better error code etc. This is silly.
+        throw(http_reply(not_found(Class,MSG)))).
+    
