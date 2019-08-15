@@ -143,7 +143,8 @@ connection_authorised_user(Request, User) :-
  */
 connect_handler(options,_Request) :-
     config:server_name(SURI),
-    write_cors_headers(SURI).
+    write_cors_headers(SURI),
+    format('~n').
 connect_handler(get,Request) :-
     connection_authorised_user(Request,User),
 
@@ -159,7 +160,8 @@ connect_handler(get,Request) :-
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
     config:server_name(SURI),
-    write_cors_headers(SURI).
+    write_cors_headers(SURI),
+    format('~n').
 db_handler(post,DB,Request) :-
     /* POST: Create database */
     authenticate(Request, Auth),
@@ -197,7 +199,8 @@ db_handler(delete,DB,Request) :-
  */
 woql_handler(options,_Request) :-
     config:server_name(SURI),
-    write_cors_headers(SURI).
+    write_cors_headers(SURI),
+    format('~n').
 woql_handler(get,Request) :-
     authenticate(Request, Auth),
 
@@ -220,7 +223,8 @@ woql_handler(get,Request) :-
  */
 document_handler(options,DB,_Doc_ID,_Request) :-
     try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI).
+    write_cors_headers(DB_URI),
+    format('~n').
 document_handler(get, DB, Doc_ID, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
