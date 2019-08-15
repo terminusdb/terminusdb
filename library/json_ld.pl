@@ -143,6 +143,9 @@ expand_context(Context,Context_Expanded) :-
 
 /* 
  * expand_key(+K,+Context,-Key,-Value) is det.
+ * 
+ * Need to expand value from context information in the event 
+ * that typing/language information is contained there.
  */
 expand_key(K,Context,Key,Value) :-
     prefix_expand(K,Context,Key_Candidate),
@@ -366,4 +369,4 @@ jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
             JSON_Pairs, Triples_List),
     
     append(Triples_List, Triples).
-    
+

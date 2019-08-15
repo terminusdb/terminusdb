@@ -403,8 +403,6 @@ try_get_param(Key,Request,Value) :-
     ;   format(atom(MSG), 'No JSON payload for POST ~s', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))),
 
-    % This actually needs a bit more sophistication around @context expansion
-    % ... a predicate which should go in json-ld library
     (   get_dict(Key, Document, Value)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
