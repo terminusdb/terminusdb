@@ -322,7 +322,7 @@ class_frame_handler(get, DB, Class_ID, Request) :-
 
     try_class_uri(DB_URI,Class_ID,Class_URI),
 
-    try_class_frame(Class,Graph,Frame),
+    try_class_frame(Class_URI,Graph,Frame),
     
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -508,7 +508,7 @@ add_payload_to_request(Request,Request).
  * try_class_frame(Class,Graph,Frame) is det. 
  */ 
 try_class_frame(Class,Graph,Frame) :-
-    (   class_frame_jsonld(Class,Graph,Frame),
+    (   class_frame_jsonld(Class,Graph,Frame)
     ->  true
     ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
         % Give a better error code etc. This is silly.
