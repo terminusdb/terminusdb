@@ -40,6 +40,13 @@ add_config_path :-
 
 :- add_config_path.
 
+add_test_path :- 
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/test',Config),
+    asserta(user:file_search_path(test, Config)).
+
+:- add_test_path.
+
 initialise_server_settings :-
     file_search_path(terminus_home, BasePath),    
     !,
@@ -59,6 +66,8 @@ initialise_server_settings :-
 :- use_module(library(prefixes)).
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
+% Might be sensible to trigger tests with an Argv switch
+% :- use_module(test(api_test)).
 
 main(Argv) :-
     maybe_upgrade,
