@@ -89,6 +89,12 @@ http:location(root, '/', []).
                 [method(Method),
                  methods([options,get,post,delete])]). 
 
+%%%%%%%%%%%%%%%%%%%% JSON Boilerplate %%%%%%%%%%%%%%%%%%%%%%
+
+%http_client:http_convert_data(+In, +Fields, -Data, [json_object()]) :-
+%json_object(+As)
+
+
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /* 
@@ -127,10 +133,12 @@ authenticate(Request, Auth) :-
     ;   throw(http_reply(authorise('Not a valid key')))).
 
 verify_access(Auth, Action, Scope) :-
+    http_log_stream(Log),
+    format(Log,'Goal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
     (   auth_action_scope(Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
-        throw(http_reply(method_not_allowed(M,Scope)))).
+        throw(http_reply(method_not_allowed(M,verify_access)))).
 
 connection_authorised_user(Request, User) :-
     try_get_param('terminus:user_key',Request,Key),
@@ -168,19 +176,31 @@ db_handler(options,_DB,_Request) :-
     write_cors_headers(SURI),
     format('~n').
 db_handler(post,DB,R) :-
-    add_payload_to_request(R,Request),
-    
+    add_payload_to_request(R,Request), % this should be automatic.
+
+    http_log_stream(Log),
+    format(Log,'About to authenticate~n',[]),
+
     /* POST: Create database */
     authenticate(Request, Auth),
-    
-    verify_access(Auth,terminus/create_database,terminus/server),
 
-    try_get_param('terminus:document',Request,Doc_Atom),
-    try_atom_json(Doc_Atom,Doc),
+    format(Log,'Authenticaticated~n',[]),
+
+    config:server_name(Server),
+    
+    verify_access(Auth,terminus/create_database,Server),
+
+    format(Log,'Access verified~n',[]),
+    
+    try_get_param('terminus:document',Request,Doc),
+
+    format(Log,'Doc ~q~n',[Doc]),
 
     try_db_uri(DB,DB_URI),
-    try_create_db(DB_URI,Doc),
+    try_create_db(DB,DB_URI,Doc),
 
+    format(Log,'Databsae_Constructed ~q~n',[DB_URI]),
+        
     config:server_name(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
@@ -190,8 +210,10 @@ db_handler(post,DB,R) :-
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
     authenticate(Request, Auth),
+
+    config:server_name(Server),
     
-    verify_access(Auth,terminus/delete_database,terminus/server),
+    verify_access(Auth,terminus/delete_database,Server),
     
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
@@ -212,7 +234,9 @@ woql_handler(options,_Request) :-
 woql_handler(get,Request) :-
     authenticate(Request, Auth),
 
-    verify_access(Auth,terminus/woql_select,terminus/server),
+    config:server_name(Server),
+    
+    verify_access(Auth,terminus/woql_select,Server),
 
     try_get_param('terminus:query',Request,Query),
 
@@ -260,7 +284,6 @@ document_handler(post, DB, Doc_ID, R) :-
     
     /* Update Document */
     authenticate(Request, Auth),
-    % We should make it so we can pun documents and IDs
 
     try_db_uri(DB,DB_URI),
 
@@ -417,8 +440,11 @@ try_db_graph(DB_URI,Graph) :-
  * 
  */
 try_get_param(Key,Request,Value) :-
-    % GET
-    memberchk(method(get), Request),
+    % GET or POST (but not application/json)
+    (   memberchk(method(get), Request)
+    ->  true
+    ;   memberchk(method(post), Request)),
+    \+ memberchk(content_type('application/json'), Request),
     !,
     
     http_parameters(Request, [], [form_data(Data)]),
@@ -428,8 +454,9 @@ try_get_param(Key,Request,Value) :-
     ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))).
 try_get_param(Key,Request,Value) :-
-    % POST
+    % POST with JSON package
     memberchk(method(post), Request),
+    memberchk(content_type('application/json'), Request),
     !,
     (   memberchk(payload(Document), Request)
     ->  true
@@ -448,10 +475,10 @@ try_get_param(Key,Request,_Value) :-
     throw(http_reply(not_found(Key,MSG))).
     
 /* 
- * try_create_db(DB_URI,Object) is det.
+ * try_create_db(DB,DB_URI,Object) is det.
  * 
  */
-try_create_db(DB_URI,Doc) :-
+try_create_db(DB,DB_URI,Doc) :-
     with_mutex(
         DB_URI,
         (   (   create_db(DB_URI)
@@ -459,7 +486,7 @@ try_create_db(DB_URI,Doc) :-
             ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
                 throw(http_reply(not_found(DB_URI,MSG)))),
             
-            (   add_database_resource(DB_URI,Doc)
+            (   add_database_resource(DB,DB_URI,Doc)
             ->  true
             ;   (   delete_db(DB_URI)
                 ->  format(atom(MSG), 'Database metadata could not be created: ~s', [DB_URI]),
@@ -498,10 +525,10 @@ try_atom_json(Atom,JSON) :-
  */
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     member(method(post), Request),
+    member(content_type('application/json'), Request),
     !,
     
-    http_read_data(Request, Data, []),
-    try_atom_json(Data,Document).
+    http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,Request).
 
 /* 

@@ -23,7 +23,8 @@
               class_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
-              update_object/2
+              update_object/2,
+              update_object/3
           ]).
 
 /** <module> Frames
@@ -972,16 +973,27 @@ delete_object(URI,Graph) :-
  * update_object(Obj:dict,Graph) is det.
  * 
  * This should extract the object from the database
- * and set up deletes for 
+ * and set up inserts / deletes as:
  * 
  * Inserts := triples(New) / triples(Old)
  * Deletes := triples(New) / triples(New)
  */
 update_object(Obj, Graph) :-
-    jsonld_triples(Obj,Graph,New),
     jsonld_id(Obj,ID),
+    update_object(ID,Obj,Graph).
+
+
+/* 
+ * update_object(ID:url,Obj:dict,Graph) is det.
+ * 
+ * Does the actual updating using ID. 
+ */
+update_object(ID, Obj, Graph) :-
+    put_dict('@id', Obj, ID, New_Obj),
+    jsonld_triples(New_Obj,Graph,New),
     object_edges(ID,Graph,Old),
-    
+    % Don't back out now.  both above should be det so we don't have to do this. 
+    !,
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
     

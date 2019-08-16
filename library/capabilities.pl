@@ -4,7 +4,7 @@
               get_user/2,
               user_action/2,
               auth_action_scope/3,
-              add_database_resource/2,
+              add_database_resource/3,
               delete_database_resource/1,
               write_cors_headers/1
           ]).
@@ -179,25 +179,25 @@ auth_action_scope(Auth, Action, Resource_ID) :-
  * Adds a database resource object to the capability instance database for the purpose of 
  * authority reference.
  */
-add_database_resource(URI,Doc) :-
-    terminus_context(Ctx),
-    compress(Doc,Ctx,Min),
+add_database_resource(DB_Name,URI,Doc) :-
+    %terminus_context(Ctx),
+    %compress(Doc,Ctx,Min),
     /* This check is required to cary out appropriate auth restriction */
-    (   get_dict('@type', Min, 'terminus:Database')
+    (   get_dict('@type', Doc, "terminus:Database")
     ->  true
-    ;   format(atom(MSG),'Unable to create a non-database document due to capabilities authorised.'),
+    ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
     terminus_collection(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    (
-            hash(doc, [URI], DB_URI)
+            true
         =>
-            insert(DB_URI, rdf/type, terminus/'Database'),
-            insert(DB_URI, terminus/id, URI^^(xsd/string)),
+            insert(doc/DB_Name, rdf/type, terminus/'Database'),
+            insert(doc/DB_Name, terminus/id, URI^^(xsd/string)),
             insert(doc/server, terminus/resource_includes, doc/master),
-            update_document(DB,Doc)
+            update_object(doc/DB_Name,Doc)
         )
        ).
 

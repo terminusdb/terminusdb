@@ -26,6 +26,13 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- use_module(library(database_utils)).
+
+/* 
+ * run_api_tests is det. 
+ *
+ * Run all structured tests of the API
+ */ 
 run_api_tests :-
     try(run_db_create_test).
 
@@ -40,22 +47,13 @@ run_db_create_test :-
     config:server_name(Server_Name),
     config:server_port(Port),
     % Need to set the user key correctly here or we will get a spurious error...
-    Payload = '{"terminus:document": \
- {"@type":"terminus:Database", \
-  "rdfs:label":{"@language":"en","@value":"asdsda"}, \
-  "rdfs:comment":{"@language":"en","@value":"dasd"}, \
-  "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, \
-  "@id":"http://195.201.12.87:6363/asd"}, \
- "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", \
-             "terminus":"https://datachemist.net/ontology/terminus#"}, \
- "@type":"terminus:APIUpdate", \
- "terminus:user_key":"root"}',
-    atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST http://',Server_Name,':',Port,'/test'], Cmd),
+    Payload = '{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"http://localhost/test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}',
+    atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server_Name,':',Port,'/test'], Cmd),
     
-    format('Running command: "~s"',[Cmd]),        
+    format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd),
 
     % cleanup
-    interpolate([Server_Name,'/test'],DB_URI),
+    atomic_list_concat([Server_Name,'/test'],DB_URI),
     ignore(delete_db(DB_URI)).
 

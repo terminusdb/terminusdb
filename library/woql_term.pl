@@ -334,6 +334,10 @@ output_pattern(update_object(URI,_Doc)) :-
     obj(URI).
 
 
+/* This entire show needs to be updated to use the 
+ * metainterpretation method. 
+ */ 
+
 /*
  * Well formed term
  * 
@@ -410,3 +414,4 @@ wf(format(A,B,C)) :-
     obj_or_lit(A),
     atom(B),
     is_list(C).
+wf(true).

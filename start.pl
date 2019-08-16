@@ -67,7 +67,7 @@ initialise_server_settings :-
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
 % Might be sensible to trigger tests with an Argv switch
-% :- use_module(test(api_test)).
+:- use_module(test(api_test)).
 
 main(Argv) :-
     maybe_upgrade,

@@ -33,7 +33,12 @@
 :- use_module(library(collection)).
 :- use_module(library(woql_term)).
 :- use_module(library(utils), except([elt/2])).
-:- use_module(library(triplestore), [xrdf/5,with_output_graph/2,sync_from_journals/2]).
+:- use_module(library(triplestore), [
+                  xrdf/5,
+                  with_output_graph/2,
+                  sync_from_journals/2,
+                  with_transaction/2
+              ]).
 :- use_module(library(schema), [subsumptionOf/3]).
 :- use_module(library(relationships), [
                   relationship_source_property/3,
@@ -45,6 +50,11 @@
 :- use_module(library(solution_sequences)).
 
 :- use_module(library(json_ld)).
+
+:- use_module(library(frame), [
+                  update_object/3,
+                  delete_object/2
+              ]).
  
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
@@ -518,10 +528,10 @@ compile_relation(X:C,XE,Class,Goals) -->
         )
     }.
 
-compile_wf(update_object(X,Doc),update_object(URI,Doc,Graph)) -->
+compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Graph)) -->
     view(graph=Graph),
     resolve(X,URI).
-compile_wf(delete_object(X),delete_object(URI,Graph)) -->
+compile_wf(delete_object(X),frame:delete_object(URI,Graph)) -->
     view(graph=Graph),
     resolve(X,URI).
 compile_wf(delete(WG,X,P,Y),delete(WC,WG,XE,PE,YE)) -->
@@ -801,7 +811,7 @@ compile_wf((A => B),Goal) -->
     {
         %format('***************~nImplicative Program: ~n~q~n',[(ProgA,ProgB)])
         Goal = (
-            with_transction(
+            with_transaction(
                 [collection(C),graphs([WG])],
                 exhaust(
                     (   ProgA,

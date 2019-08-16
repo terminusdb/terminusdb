@@ -288,7 +288,7 @@ jsonld_triples(JSON, Graph, Triples) :-
     jsonld_triples(JSON, _{}, Graph, Triples).
 
 jsonld_triples(JSON, Ctx, Graph, Triples) :-
-    get_dict('@context', JSON, Internal),
+    get_dict_default('@context', JSON, Internal,_{}),
     merge_dictionaries(Ctx, Internal, New_Ctx),
     expand_context(New_Ctx,New_Expanded),
     expand(JSON,New_Expanded,JSON_Ex),

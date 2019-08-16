@@ -16,7 +16,8 @@
               current_checkpoint_directory/3,
               last_checkpoint_number/2,
               with_output_graph/2,
-              ttl_to_hdt/2
+              ttl_to_hdt/2,
+              with_transaction/2
           ]).
 
 :- use_module(library(hdt)). 
@@ -34,20 +35,20 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -679,3 +680,63 @@ hdt_search_safe(HDT,X,Y,Z) :-
 	var(Z),
 	hdt_search(HDT,X,Y,Z),
 	atom(Z).
+
+
+/** 
+ * with_transaction(+Options,:Goal) is semidet.
+ * 
+ * Executes goal, commits if successful, and rolls back if not.
+ * 
+ * Options is a list which contains any of:
+ * 
+ *  graphs([Graph0,Graph1,...,Graphn])
+ * 
+ *  Specifying each of the graphs which is in the transaction
+ * 
+ *  success(SuccessFlag)
+ *  
+ *  which gives a way to make the transaction fail, even if goal succeeds 
+ * 
+ * TODO: We should perhaps have an additional structure witness(Witness) which 
+ *       returns the witnesses of failure
+ *
+ */
+with_transaction(Options,Goal) :-
+    % some crazy heavy locking here!
+    with_mutex(transaction,
+               (   member(graphs(Graph_Id_Bag),Options),
+                   !,
+                   member(collection(C),Options),
+                   !,
+                   sort(Graph_Id_Bag,Graph_Ids),
+                   !,
+                   % if we can't get graphs, there is nothing interesting to do anyhow. 
+                   (
+                       % select success flag from
+                       ignore(
+                           member(success(SuccessFlag),Options)
+                       ),
+                       % Call the goal
+                       call(Goal),
+                       
+                       (   (   
+                               (   var(SuccessFlag)
+                               % If the goal succeeds but there is no success flag, set to true
+                               ->  SuccessFlag = true
+                               ;   true)
+                           ->  true
+                           % If the goal fails, we want to signal failure and rollback
+                           ;   SuccessFlag = false
+                           ),
+                           SuccessFlag = true
+                       ->  forall(member(G,Graph_Ids),commit(C,G))
+                       % We have succeeded in running the goal but Success is false
+                       ;   forall(member(G,Graph_Ids),rollback(C,G))
+                       )
+                   ->  true
+                   % We have not succeeded in running goal, so we need to cleanup
+                   ;   forall(member(G,Graph_Ids),rollback(C,G)),
+                       fail
+                   )
+               )
+              ).
