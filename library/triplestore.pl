@@ -635,11 +635,11 @@ user:goal_expansion(xrdf(DB,G,X,Y,literal(L)),xrdf(DB,G,X,Y,Object)) :-
 
 xrdfid(C,G,X0,Y0,Z0) :-
     !,
-    (   xrdf_pos_trans(C,G,X0,Y0,Z0)     % If in positive graph, return results
-    ;   (   xrdf_neg_trans(C,G,X0,Y0,Z0) % If it's not negative
-        *-> false                      % If it *is* negative, fail		
-        ;   xrdfdb(C,G,X0,Y0,Z0))).      % Read in the permanent store
-
+    (   xrdf_pos_trans(C,G,X0,Y0,Z0)      % If in positive graph, return results
+    ;   xrdfdb(C,G,X0,Y0,Z0),             % or a lower plane
+        \+ xrdf_neg_trans(C,G,X0,Y0,Z0)   % but only if it's not negative
+    ). 
+        
 /** 
  * xrdfdb(+Collection_Id,+Graph_Id,?X,?Y,?Z) is nondet.
  * 
@@ -660,9 +660,8 @@ xrdf_search_queue([pos(HDT)|Rest],X,Y,Z) :-
     (   hdt_search_safe(HDT,X,Y,Z)
     ;   xrdf_search_queue(X,Y,Z,Rest)).
 xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
-    (   hdt_search_safe(HDT,X,Y,Z)
-    *-> false
-    ;   xrdf_search_queue(X,Y,Z,Rest)).
+    xrdf_search_queue(X,Y,Z,Rest),
+    \+ hdt_search_safe(HDT,X,Y,Z).
 
 /* 
  * hdt_search_safe(HDT,X,P,Y) is nondet.
