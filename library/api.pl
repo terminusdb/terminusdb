@@ -354,6 +354,36 @@ class_frame_handler(get, DB, Class_ID, Request) :-
 	json_write_dict(Out,Frame).
 
 /* 
+ * schema_handler(Mode,DB,Request) is det. 
+ * 
+ * Get or update a schema.
+ */ 
+schema_handler(options,DB,_Request) :-
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI),
+    format('~n'). % send headers
+schema_handler(get,DB,Request) :-
+    /* Read Document */
+    authenticate(Request, Auth),
+
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,terminus/get_schema,DB_URI),
+
+    try_dump_schema(Request,DB_URI).
+
+
+/********************************************************
+ * Determinising predicates used in handlers            *
+ *                                                      *
+ * It's not fun to fail, so don't!                      *
+ ********************************************************/
+
+
+/* 
  * try_get_document(ID, Graph) is det.
  * 
  * Actually has determinism: det + error
@@ -549,3 +579,22 @@ try_class_frame(Class,Graph,Frame) :-
         % Give a better error code etc. This is silly.
         throw(http_reply(not_found(Class,MSG)))).
     
+/* 
+ * try_dump_schema(DB_URI, Request) is det. 
+ * 
+ * This should write out to the current stream in the appropriate format.
+ */ 
+try_dump_schema(DB_URI, Request) :-
+    with_mutex(
+        DB_URI, 
+        (
+            try_get_param('terminus:encoding', Request, Encoding),
+            (   Encoding = 'terminus:turtle'
+            ->  true
+            ;   Encoding = 'terminus:json_ld'
+            ->  true
+            ;   true
+            )
+        )
+    ).
+

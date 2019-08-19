@@ -457,7 +457,7 @@ cleanup_edinburgh_escapes(File) :-
     
 
 /** 
- * ttl_to_hdt(+FileIn,-FileOut) is det.
+ * ttl_to_hdt(+FileIn,+FileOut) is det.
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
@@ -475,7 +475,7 @@ ttl_to_hdt(FileIn,FileOut) :-
     close(Out).
 
 /** 
- * ntriples_to_hdt(+File) is det.
+ * ntriples_to_hdt(+FileIn,-FileOut) is det.
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
@@ -490,3 +490,26 @@ ntriples_to_hdt(FileIn,FileOut) :-
         throw(error(M))
     ;   true),
     close(Out).
+
+
+/** 
+ * hdt_to_turtle(+FileIn,+FileOut) is det.
+ * 
+ * Create a hdt file from ttl using the rdf2hdt tool.
+ */
+/*
+This does not generate a reasonable header at all. 
+We can probably do better by dumping to ntriples and then piping through rapper/raptor. 
+ 
+hdt_to_turtle(FileIn,FileOut) :-
+    process_create(path(hdt2rdf), ['-f','turtle',FileIn,FileOut],
+                   [ stdout(pipe(Out)),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["hdt2rdf killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    close(Out).
+*/
