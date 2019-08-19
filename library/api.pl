@@ -76,7 +76,7 @@ http:location(root, '/', []).
 :- http_handler(root(DB/schema), schema_handler(Method,DB), 
                 [method(Method),
                  methods([options,get,post])]).
-:- http_handler(root(DB/schema/ClassID), class_frame_handler(Method,DB,ClassID), 
+:- http_handler(root(DB/class_frame), class_frame_handler(Method,DB), 
                 [method(Method),
                  methods([options,get])]).
 :- http_handler(root(DB/document/DocID), document_handler(Method,DB,DocID),
@@ -328,7 +328,7 @@ document_handler(delete, DB, Doc_ID, Request) :-
  * 
  * Establishes frame responses 
  */
-class_frame_handler(options,DB,_Class_ID,_Request) :-
+class_frame_handler(options,DB,_Request) :-
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI),
     format('~n'). % send headers
@@ -345,7 +345,7 @@ class_frame_handler(get, DB, Class_ID, Request) :-
 
     try_db_graph(DB_URI,Graph),
 
-    try_class_uri(DB_URI,Class_ID,Class_URI),
+    try_get_param('terminus:class',Request,Class_URI),
 
     try_class_frame(Class_URI,Graph,Frame),
     
