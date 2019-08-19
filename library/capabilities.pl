@@ -196,7 +196,7 @@ add_database_resource(DB_Name,URI,Doc) :-
         =>
             insert(doc/DB_Name, rdf/type, terminus/'Database'),
             insert(doc/DB_Name, terminus/id, URI^^(xsd/string)),
-            insert(doc/server, terminus/resource_includes, doc/master),
+            insert(doc/server, terminus/resource_includes, doc/DB_Name),
             update_object(doc/DB_Name,Doc)
         )
        ).
