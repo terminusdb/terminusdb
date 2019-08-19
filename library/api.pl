@@ -501,10 +501,17 @@ try_create_db(DB,DB_URI,Doc) :-
 try_delete_db(DB_URI) :-
     with_mutex(
         DB_URI, 
-        (   delete_db(DB_URI)
-        ->  true
-        ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
-            throw(http_reply(not_found(DB_URI,MSG))))).
+        (   (   delete_database_resource(URI)
+            ->  true
+            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
+                throw(http_reply(not_found(DB_URI,MSG)))),
+
+            (   delete_db(DB_URI)
+            ->  true
+            ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
+                throw(http_reply(not_found(DB_URI,MSG)))
+            )
+        )).
 
 /* 
  * try_atom_json(Atom,JSON) is det.

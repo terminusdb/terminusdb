@@ -729,7 +729,9 @@ with_transaction(Options,Goal) :-
                            ;   SuccessFlag = false
                            ),
                            SuccessFlag = true
-                       ->  forall(member(G,Graph_Ids),commit(C,G))
+                       ->  forall(member(G,Graph_Ids),
+                                  (   commit(C,G),
+                                      sync_from_graph(C,G)))
                        % We have succeeded in running the goal but Success is false
                        ;   forall(member(G,Graph_Ids),rollback(C,G))
                        )

@@ -27,6 +27,7 @@
  */
 
 :- use_module(library(database_utils)).
+:- use_module(library(api)).
 
 /* 
  * run_api_tests is det. 
@@ -56,4 +57,28 @@ run_db_create_test :-
     % cleanup
     atomic_list_concat([Server_Name,'/test'],DB_URI),
     ignore(delete_db(DB_URI)).
+
+
+run_db_delete_test :-
+    % create DB
+    config:server_name(Server_Name),
+    config:server_port(Port),
+    atomic_list_concat([Server_Name,'/test'], DB_URI),
+
+    Doc = _17614{'@id':"http://localhost/test",
+                 '@type':"terminus:Database",
+                 'rdfs:comment':_17542{'@language':"en",
+                                       '@value':"dasd"},
+                 'rdfs:label':_17494{'@language':"en",
+                                     '@value':"asdsda"},
+                 'terminus:allow_origin':_17590{'@type':"xsd:string",
+                                                '@value':"*"}},
+    
+    api:try_create_db(test,DB_URI,Doc),
+    
+    % Need to set the user key correctly here or we will get a spurious error...
+    atomic_list_concat(['curl -H "Content-Type: application/json" -X DELETE ',Server_Name,':',Port,'/test?terminus:user_key=root'], Cmd),
+    
+    format('~nRunning command: "~s"~n',[Cmd]),        
+    shell(Cmd).
 
