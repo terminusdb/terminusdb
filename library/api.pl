@@ -332,7 +332,7 @@ class_frame_handler(options,DB,_Request) :-
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI),
     format('~n'). % send headers
-class_frame_handler(get, DB, Class_ID, Request) :-
+class_frame_handler(get, DB, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
 
