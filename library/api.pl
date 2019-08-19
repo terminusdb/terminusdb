@@ -199,7 +199,7 @@ db_handler(post,DB,R) :-
     try_db_uri(DB,DB_URI),
     try_create_db(DB,DB_URI,Doc),
 
-    format(Log,'Databsae_Constructed ~q~n',[DB_URI]),
+    format(Log,'Database Constructed ~q~n',[DB_URI]),
         
     config:server_name(SURI),
     write_cors_headers(SURI),
@@ -227,19 +227,21 @@ db_handler(delete,DB,Request) :-
 /** 
  * woql_handler(+Request:http_request) is det.
  */
-woql_handler(options,_Request) :-
+woql_handler(options,_DB,_Request) :-
     config:server_name(SURI),
     write_cors_headers(SURI),
     format('~n').
-woql_handler(get,Request) :-
-    authenticate(Request, Auth),
+woql_handler(get,DB,Request) :-
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, Auth),    
 
-    config:server_name(Server),
-    
-    verify_access(Auth,terminus/woql_select,Server),
+    try_db_uri(DB,DB_URI),
+
+    verify_access(Auth,terminus/woql_select,DB_URI),
 
     try_get_param('terminus:query',Request,Query),
-
+    
     * http_log_stream(Log),
     run_query(Query, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
