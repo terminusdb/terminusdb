@@ -11,7 +11,6 @@
               commit/2,
               rollback/2,
               check_graph_exists/2,
-              last_plane_number/2,
               graph_checkpoint/3,
               current_checkpoint_directory/3,
               last_checkpoint_number/2,
@@ -341,11 +340,11 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
     ).
 
 /** 
- * collapse_planes(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * checkpoint(+Collection_Id,+Graph_Id:graph_identifier) is det.
  * 
  * Create a new graph checkpoint from our current dynamic triple state
  */
-collapse_planes(Collection_Id,Graph_Id) :-
+checkpoint(Collection_Id,Graph_Id) :-
     make_checkpoint_directory(Collection_Id,Graph_Id, _),
     with_output_graph(
         graph(Collection_Id,Graph_Id,ckp,ttl),

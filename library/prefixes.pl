@@ -7,7 +7,8 @@
               get_collection_prefixes/2,
               get_collection_prefix_list/2,
               global_prefix_expand/2,
-              literal_expand/2
+              literal_expand/2,
+              prefix_list_to_rapper_args/2
           ]).
 
 /** <module> Prefixes
@@ -172,7 +173,7 @@ get_collection_prefix_pairs(Collection,List) :-
           List).
 
 /* 
- * get_collection_prefixes_list(Collection:atom,Prefixes:dict) is det.
+ * get_collection_prefix_list(Collection:atom,Prefixes:dict) is det.
  * 
  * return a list of pairs of prefixes.
  */
@@ -180,3 +181,12 @@ get_collection_prefix_list(Collection,List) :-
     get_collection_prefix_pairs(Collection,Pairs),
     maplist([A-B,A=B]>>(true), Pairs, List).
 
+/* 
+ * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
+ * 
+ * return a list of arguments for rapper.
+ */
+prefix_list_to_rapper_args([],[]).
+prefix_list_to_rapper_args([P=U|Rest],['-f',Arg|Arg_Rest]) :-
+    interpolate(['xmlns:',P,'="',U,'"'],Arg),
+    prefix_list_to_rapper_args(Rest,Arg_Rest).

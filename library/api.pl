@@ -61,11 +61,14 @@
 % JSON manipulation
 :- use_module(library(json_ld)).
 
+% File processing - especially for turtle
+:- use_module(library(file_utils), [checkpoint_to_turtle/3]).
+
+%%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% Set base location
 % We may want to allow this as a setting...
 http:location(root, '/', []).
-
-%%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- http_handler(root(.), connect_handler(Method),
                 [method(Method),
@@ -583,6 +586,8 @@ try_class_frame(Class,Graph,Frame) :-
  * try_dump_schema(DB_URI, Request) is det. 
  * 
  * This should write out to the current stream in the appropriate format.
+ *
+ * This is structured in such a way that  
  */ 
 try_dump_schema(DB_URI, Request) :-
     with_mutex(
@@ -590,10 +595,13 @@ try_dump_schema(DB_URI, Request) :-
         (
             try_get_param('terminus:encoding', Request, Encoding),
             (   Encoding = 'terminus:turtle'
-            ->  true
-            ;   Encoding = 'terminus:json_ld'
-            ->  true
-            ;   true
+            ->  current_output(Out),
+                checkpoint_to_turtle(DB_URI, schema, TTL_File),
+                read_file_to_string(TTL_File, String, []),
+                format('Content-type: application/turtle~n~n~s', [String])
+            ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
+                % Give a better error code etc. This is silly.
+                throw(http_reply(method_not_allowed('try_dump_schema', MSG)))
             )
         )
     ).

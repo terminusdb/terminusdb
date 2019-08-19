@@ -31,7 +31,9 @@
               make_checkpoint_directory/3,
               ttl_to_hdt/2,
               ntriples_to_hdt/2,
-              cleanup_edinburgh_escapes/1
+              cleanup_edinburgh_escapes/1,
+              last_checkpoint_file/3,
+              checkpoint_to_turtle/3
           ]).
 
 :- use_module(utils).
@@ -491,19 +493,29 @@ ntriples_to_hdt(FileIn,FileOut) :-
     ;   true),
     close(Out).
 
+/* 
+ * last_checkpoint_file(Collection,File) is det. 
+ * 
+ * Give the file location of the last checkpoint for 
+ * transformation (to turtle json-ld etc). 
+ */ 
+last_checkpoint_file(C,G,File) :-
+    current_checkpoint_directory(C,G,CPD),
+    interpolate([CPD,'/1-ckp.hdt'],File).
 
 /** 
- * hdt_to_turtle(+FileIn,+FileOut) is det.
+ * checkpoint_to_turtle(+C,+G,-Output_File) is det.
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
-/*
-This does not generate a reasonable header at all. 
-We can probably do better by dumping to ntriples and then piping through rapper/raptor. 
- 
-hdt_to_turtle(FileIn,FileOut) :-
-    process_create(path(hdt2rdf), ['-f','turtle',FileIn,FileOut],
-                   [ stdout(pipe(Out)),
+checkpoint_to_turtle(Collection,Graph,Output_File) :-
+    
+    last_checkpoint_file(Collection,Graph,FileIn), 
+    user:file_search_path(terminus_home, Dir),
+    get_time(T),floor(T,N),
+    interpolate([Dir,'/tmp/',N,'.ntriples'],NTriples_File),
+    process_create(path(hdt2rdf), ['-f','ntriples',FileIn,NTriples_File],
+                   [ stdout(pipe(NT_Out)),
                      process(PID)
                    ]),
     process_wait(PID,Status),
@@ -511,5 +523,24 @@ hdt_to_turtle(FileIn,FileOut) :-
     ->  interpolate(["hdt2rdf killed with signal ",Signal], M),
         throw(error(M))
     ;   true),
+    close(NT_Out),
+    
+    get_collection_prefix_list(Collection,List),
+    prefix_list_to_rapper_args(List,Prefix_Args),
+    append([['-i','ntriples','-o','turtle'],Prefix_Args,[NTriples_File]], Args),
+
+    interpolate([Dir,'/tmp/',N,'.ttl'],Output_File),
+    open(Output_File, write, Out),
+
+    process_create(path(rapper), Args,
+                   [ stderr(null),
+                     stdout(stream(Out)),
+                     process(Rapper_PID)
+                   ]),
+    process_wait(Rapper_PID,Rapper_Status),
+    (   Rapper_Status=killed(Rapper_Signal)
+    ->  interpolate(["hdt2rdf killed with signal ",Rapper_Signal], M),
+        throw(error(M))
+    ;   true),
+
     close(Out).
-*/
