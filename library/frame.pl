@@ -990,12 +990,17 @@ update_object(Obj, Graph) :-
  */
 update_object(ID, Obj, Graph) :-
     put_dict('@id', Obj, ID, New_Obj),
-    jsonld_triples(New_Obj,Graph,New),
+
+    graph_collection(Graph,Collection),
+    get_collection_jsonld_context(Collection,Ctx),
+    
+    jsonld_triples(New_Obj,Ctx,Graph,New),
     object_edges(ID,Graph,Old),
     % Don't back out now.  both above should be det so we don't have to do this. 
     !,
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
+
+    maplist([(C,G,X,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts),
     
-    maplist([(C,G,Z,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts), 
-    maplist([(C,G,Z,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
+    maplist([(C,G,X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
