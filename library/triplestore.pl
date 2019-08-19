@@ -658,9 +658,9 @@ xrdf_search_queue([ckp(HDT)|_],X,Y,Z) :-
     hdt_search_safe(HDT,X,Y,Z).
 xrdf_search_queue([pos(HDT)|Rest],X,Y,Z) :-
     (   hdt_search_safe(HDT,X,Y,Z)
-    ;   xrdf_search_queue(X,Y,Z,Rest)).
+    ;   xrdf_search_queue(Rest,X,Y,Z)).
 xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
-    xrdf_search_queue(X,Y,Z,Rest),
+    xrdf_search_queue(Rest,X,Y,Z),
     \+ hdt_search_safe(HDT,X,Y,Z).
 
 /* 
