@@ -595,8 +595,7 @@ try_dump_schema(DB_URI, Request) :-
         (
             try_get_param('terminus:encoding', Request, Encoding),
             (   Encoding = 'terminus:turtle'
-            ->  current_output(Out),
-                checkpoint_to_turtle(DB_URI, schema, TTL_File),
+            ->  checkpoint_to_turtle(DB_URI, schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 format('Content-type: application/turtle~n~n~s', [String])
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
