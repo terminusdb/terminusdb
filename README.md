@@ -1,6 +1,6 @@
 # TerminusDB
 
-TerminusDB open source model driven graph database for knowledge graph representation designed 
+TerminusDB is an open source model driven graph database for knowledge graph representation designed 
 specifically for the web-age. 
 
 TerminusDB features a RESTful API for interacting with knowledge graphs via the JSON-LD exchange 
