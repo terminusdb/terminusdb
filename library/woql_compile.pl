@@ -680,7 +680,7 @@ compile_wf(t(X,P,Y),Goal) -->
         graph_collection(G,C),            
         graph_instance(G,I),
         (   I = main
-        ->  Search=inferredEdge(XE,PE,YE,G)
+        ->  Search=inference:inferredEdge(XE,PE,YE,G)
         ;   Search=xrdf(C,I,XE,PE,YE)),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -702,7 +702,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         graph_collection(Graph,C),
         (   GE = main
-        ->  Search=inferredEdge(XE,PE,YE,Graph)
+        ->  Search=inference:inferredEdge(XE,PE,YE,Graph)
         ;   Search=xrdf(C,GE,XE,PE,YE)),
         
         append([[Search],XGoals,YGoals],

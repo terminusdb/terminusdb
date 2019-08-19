@@ -32,6 +32,7 @@
 :- use_module(utils). 
 :- use_module(types).
 :- use_module(base_type).
+:- use_module(inference).
 
 /**
  * most_specific_type(+Entity, -Sorted, +Graph)

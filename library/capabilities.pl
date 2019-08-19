@@ -218,8 +218,11 @@ delete_database_resource(URI) :-
     % delete the object
     ask(DB, 
         (
-            t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
-            t(DB_URI, rdf/type, terminus/'Database')
+            where(
+                (
+                    t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+                    t(DB_URI, rdf/type, terminus/'Database')
+                ))
         =>  
             delete_object(DB_URI)
         )).

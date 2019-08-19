@@ -441,9 +441,8 @@ try_db_graph(DB_URI,Graph) :-
  */
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
-    (   memberchk(method(get), Request)
-    ->  true
-    ;   memberchk(method(post), Request)),
+    memberchk(method(Method), Request),
+    memberchk(Method, [get,delete,post]),
     \+ memberchk(content_type('application/json'), Request),
     !,
     
