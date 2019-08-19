@@ -35,4 +35,4 @@ doc:server
     rdfs:label "The DB server"@en ;
     terminus:id "http://localhost"^^xsd:anyURI ;
     terminus:allow_origin "*"^^xsd:string ;
-    terminus:resource_includes doc:master .
+    terminus:resource_includes doc:terminus .
