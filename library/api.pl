@@ -597,6 +597,7 @@ try_dump_schema(DB_URI, Request) :-
             (   Encoding = 'terminus:turtle'
             ->  checkpoint_to_turtle(DB_URI, schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
+                delete_file(TTL_File),
                 format('Content-type: application/turtle~n~n~s', [String])
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
                 % Give a better error code etc. This is silly.

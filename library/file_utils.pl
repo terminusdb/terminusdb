@@ -542,5 +542,7 @@ checkpoint_to_turtle(Collection,Graph,Output_File) :-
     ->  interpolate(["hdt2rdf killed with signal ",Rapper_Signal], M),
         throw(error(M))
     ;   true),
-
+    
+    delete_file(NTriples_File),
+    
     close(Out).
