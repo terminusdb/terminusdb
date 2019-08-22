@@ -87,13 +87,13 @@ set_db_version(Version) :-
     ).
 
 /* 
- * guess_collection_name(+Graph_Name,-Collection) is semidet.
+ * guess_collection_name(+Database_Name,-Collection) is semidet.
  *
  * Try to guess the collection name of graph
  */
-guess_collection_name(Graph_Name,Collection) :-
+guess_collection_name(Database_Name,Collection) :-
     re_matchsub('(?<Collection>(.*))%2fgraph%2f(main|model|import|error).*',
-                Graph_Name,
+                Database_Name,
                 Dict, []),
     get_dict('Collection',Dict,Collection).
 
@@ -150,15 +150,15 @@ user:term_expansion((run_upgrade_step(X,Y):-Body),
 :- discontiguous run_upgrade_step/2.
 run_upgrade_step(none,'0.1.0') :-
     db_path(Path), 
-    subdirectories(Path,Graph_Names),
+    subdirectories(Path,Database_Names),
     forall(
-        member(Graph_Name,Graph_Names),
+        member(Database_Name,Database_Names),
         (
-            (   guess_collection_name(Graph_Name,Collection_Name)
+            (   guess_collection_name(Database_Name,Collection_Name)
             ->  interpolate([Path,Collection_Name], Collection_Path),
-                interpolate([Path,Graph_Name], Graph_Path),
+                interpolate([Path,Database_Name], Database_Path),
                 ensure_directory(Collection_Path), 
-                mv(Graph_Path,Collection_Path),
+                mv(Database_Path,Collection_Path),
                 interpolate([Collection_Path,'/COLLECTION'], Collection_Marker),
                 touch(Collection_Marker)
             ;   true % not really a graph 

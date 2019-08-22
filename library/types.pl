@@ -191,14 +191,14 @@ error:has_type(database_identifier, X) :-
     is_database_identifier(X).
 
 /**
- * is_empty_graph_name(+Graph_Id:graph_identifier) is semidet.
+ * is_empty_graph_name(+Database_Id:graph_identifier) is semidet.
  * 
  * Sometimes we want to designate that there is no graph
  * we can do this with none or false. JSON converts to @(false) 
  * for a null object.
  **/
-is_empty_graph_name(Graph_Id):-
-    member(Graph_Id, [false, @(false), none]),
+is_empty_graph_name(Database_Id):-
+    member(Database_Id, [false, @(false), none]),
     !.
 
 % Why is this alone?

@@ -35,31 +35,31 @@
 :- use_module(library(inference)).
 
 /**
- * most_specific_type(+Entity, -Sorted, +Graph)
+ * most_specific_type(+Entity, -Sorted, +Database)
  *
  * Gets the most specific type for a class 
  **/
-most_specific_type(Entity, Entity_Type, Graph):-
-    get_ordered_instance_classes(Entity, [Entity_Type|_], Graph).
+most_specific_type(Entity, Entity_Type, Database):-
+    get_ordered_instance_classes(Entity, [Entity_Type|_], Database).
 
 /**
- * get_ordered_instance_classes(+Entity, -Sorted, +Graph)
+ * get_ordered_instance_classes(+Entity, -Sorted, +Database)
  *
  * Gets all classes for a specific entity and returns
  * them ordered by subsumption.  
  **/
-get_ordered_instance_classes(Entity, Sorted, Graph) :-
+get_ordered_instance_classes(Entity, Sorted, Database) :-
     findall(
         Class,
-        instanceClass(Entity, Class, Graph),
+        instanceClass(Entity, Class, Database),
         Classes
     ),
 
     predsort(
-        {Graph}/[Delta,C1,C2]>>
-        (   strictSubsumptionOf(C1, C2, Graph)
+        {Database}/[Delta,C1,C2]>>
+        (   strictSubsumptionOf(C1, C2, Database)
         ->  Delta = (<)
-        ;   strictSubsumptionOf(C2, C1, Graph)
+        ;   strictSubsumptionOf(C2, C1, Database)
         ->  Delta = (>)
         ;   C1 = C2
         ->  Delta = (=)
@@ -67,28 +67,28 @@ get_ordered_instance_classes(Entity, Sorted, Graph) :-
     ).
 
 /** 
- * instanceClass(?X:uri, ?C:uri, +Graph:graph) is nondet.
+ * instanceClass(?X:uri, ?C:uri, +Database:graph) is nondet.
  * 
  * Determines the class C identified with the instance X.
  */
-instanceClass(X, Y, Graph) :-
-    database_name(Graph,Collection),
-    database_instance(Graph,Instance),
+instanceClass(X, Y, Database) :-
+    database_name(Database,Collection),
+    database_instance(Database,Instance),
     xrdf(Collection,Instance, X, rdf:type, Y).
-instanceClass(X, Y, Graph) :-
-    database_name(Graph,Collection),
-    database_schema(Graph,Schema), % instances can also exist in the schema
+instanceClass(X, Y, Database) :-
+    database_name(Database,Collection),
+    database_schema(Database,Schema), % instances can also exist in the schema
     xrdf(Collection,Schema, X, rdf:type, Y).
 
 % X has cardinality N at property OP
-card(X,OP,Y,Graph,N) :-
-    (setof(Y,inferredEdge(X,OP,Y,Graph), ListX) *-> ListX = L ; L = []),
+card(X,OP,Y,Database,N) :-
+    (setof(Y,inferredEdge(X,OP,Y,Database), ListX) *-> ListX = L ; L = []),
     length(L,N).
 
 % X has qualified cardinality N at property OP and class C
-qualifiedCard(X,OP,Y,C,Graph,N) :-
-    (setof(Y,(inferredEdge(X,OP,Y,Graph),
-	      \+ nelt(Y,C,Graph,_)),
+qualifiedCard(X,OP,Y,C,Database,N) :-
+    (setof(Y,(inferredEdge(X,OP,Y,Database),
+	      \+ nelt(Y,C,Database,_)),
 	   ListX) *-> ListX = L ; L = []),
     length(L,N).
 
@@ -120,16 +120,16 @@ forall (x p y) \in Deletes.
 /*
 
 /** 
- * edge_orphan_instance(?X,?P,?Y,+Graph:graph,-Reason:rvo) is nondet.
+ * edge_orphan_instance(?X,?P,?Y,+Database:graph,-Reason:rvo) is nondet.
  * 
  * Detects the existence of instance who are orphaned from a well defined class.
  * i.e. X(/Y) has no class in the instance AND schema OR has a class that is not in the schema 
  */
-edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    database_name(Graph,Collection),
-    database_instance(Graph,Instance), 
+edge_orphan_instance(X,P,Y,Database,Reason) :-
+    database_name(Database,Collection),
+    database_instance(Database,Instance), 
     xrdf(Collection,Instance,X,P,Y), % edge exists 
-    \+ instanceClass(X, _, Graph),   % no type in Instance OR Schema
+    \+ instanceClass(X, _, Database),   % no type in Instance OR Schema
     Reason=_{
                '@type' : 'rvo:EdgeOrphanInstanceViolation',
 	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
@@ -137,10 +137,10 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
                'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
                'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'}
            }.
-edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    database_instance(Graph,Instance),
+edge_orphan_instance(X,P,Y,Database,Reason) :-
+    database_instance(Database,Instance),
     xrdf(X,P,Y,Instance), % Added
-    orphanInstance(X,C,Graph),            % checks if X has a type that isn't in the Schema
+    orphanInstance(X,C,Database),            % checks if X has a type that isn't in the Schema
     Reason=_{
                '@type' : 'rvo:EdgeOrphanInstanceViolation',
 	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
@@ -149,12 +149,12 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
                'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'},
                'rvo:class' :  _{ '@value' : C, '@type' : 'xsd:anyURI'},
            }.
-edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    objectProperty(P,Graph),
-    database_instance(Graph,Instance),
+edge_orphan_instance(X,P,Y,Database,Reason) :-
+    objectProperty(P,Database),
+    database_instance(Database,Instance),
     xrdf(X,P,Y,Instance),
     rdf_is_iri(Y), % no point in checking if it is a literal
-    \+ instanceClass(Y, _, Graph),        % no type in Instance OR Schema
+    \+ instanceClass(Y, _, Database),        % no type in Instance OR Schema
     Reason=_{
                '@type' : 'rvo:EdgeOrphanInstanceViolation',
 	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
@@ -162,12 +162,12 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
                'rvo:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI'},
                'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'},
            }.
-edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    objectProperty(P,Graph),
-    database_instance(Graph,Instance),
+edge_orphan_instance(X,P,Y,Database,Reason) :-
+    objectProperty(P,Database),
+    database_instance(Database,Instance),
     xrdf(X,P,Y,Instance), % Added
     rdf_is_iri(Y), % no point in checking if it is a literal
-    orphanInstance(Y,C,Graph), % checks other side of triple to see does it have a type not in the schema
+    orphanInstance(Y,C,Database), % checks other side of triple to see does it have a type not in the schema
     Reason=_{
                '@type' : 'rvo:EdgeOrphanInstanceViolation',
 	           'rvo:message' : _{ '@value' : 'Instance has no class', '@type' : 'xsd:string'},
@@ -185,13 +185,13 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
  * The triple (X,P,Y) comes from the Herbrand base. 
  */
 :- rdf_meta noPropertyRangeIC(r,r,r,o,o,t).
-noPropertyRangeIC(X,P,Y,Graph,Reason) :-
-    property(P,Graph),
-    database_name(Graph,Collection),
-    database_instance(Graph,Instance),    
+noPropertyRangeIC(X,P,Y,Database,Reason) :-
+    property(P,Database),
+    database_name(Database,Collection),
+    database_instance(Database,Instance),    
     xrdf(X,P,Y,Instance), % Added
     %subsumptionPropertiesOf(P,SuperP,Schema),
-    \+ anyRange(P,_,Graph),
+    \+ anyRange(P,_,Database),
     Reason=_{
                '@type' : 'rvo:NoPropertyRangeViolation',
 	           'rvo:message' : _{ '@value' : 'Property has no well defined range',
@@ -206,11 +206,11 @@ noPropertyRangeIC(X,P,Y,Graph,Reason) :-
  * 
  * Determines of ?P is actually a functional property or not. 
  */
-notFunctionalPropertyIC(X,P,_,Graph,Reason) :-
-    functionalProperty(P,Graph),
-    database_instance(Graph,Instance),
+notFunctionalPropertyIC(X,P,_,Database,Reason) :-
+    functionalProperty(P,Database),
+    database_instance(Database,Instance),
     xrdf(X,P,_,Instance),
-    card(X,P,_,Graph,N),
+    card(X,P,_,Database,N),
     N \= 1,
     interpolate(['Functional Property ',P,' is not functional.'],Message),
     Reason = ['rdf:type'='NotFunctionalPropertyViolation',
@@ -224,11 +224,11 @@ notFunctionalPropertyIC(X,P,_,Graph,Reason) :-
  * 
  * Determines of ?P is actually an inverse functional property or not. 
  */
-notInverseFunctionalPropertyIC(X,P,Y,Graph,Reason) :-
-    database_instance(Graph,Instance),
-    inverseFunctionalProperty(P,Graph),
+notInverseFunctionalPropertyIC(X,P,Y,Database,Reason) :-
+    database_instance(Database,Instance),
+    inverseFunctionalProperty(P,Database),
     xrdf(_,P,Y,Instance),
-    card(_,P,Y,Graph,N),
+    card(_,P,Y,Database,N),
     N \= 1,
     interpolate(['Functional Property ',P,' is not functional.'],Message),
     Reason = ['rdf:type'='NotInverseFunctionalPropertyViolation',
@@ -245,22 +245,22 @@ notInverseFunctionalPropertyIC(X,P,Y,Graph,Reason) :-
  * is defined as a subproperty but is not actually defined as a property in the 
  * schema.
  **/
-localOrphanPropertyIC(X,P,Y,Graph,[rvo:subject=X,rvo:object=Y|Reason]) :-
-    database_instance(Graph,Instance),
+localOrphanPropertyIC(X,P,Y,Database,[rvo:subject=X,rvo:object=Y|Reason]) :-
+    database_instance(Database,Instance),
 	xrdf(X,P,Y,Instance),
     \+ P='http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-	orphanProperty(P,_,Graph,Reason).
+	orphanProperty(P,_,Database,Reason).
 
-instanceSubjectBlankNode(X,Graph) :-
-    database_instance(Graph,Instance),
+instanceSubjectBlankNode(X,Database) :-
+    database_instance(Database,Instance),
     xrdf(X,_,_,Instance),
     rdf_is_bnode(X).
-instancePredicateBlankNode(Y,Graph) :-
-    database_instance(Graph,Instance),
+instancePredicateBlankNode(Y,Database) :-
+    database_instance(Database,Instance),
     xrdf(_,Y,_,Instance),
     rdf_is_bnode(Y).
-instanceObjectBlankNode(Z,Graph) :-
-    database_instance(Graph,Instance),
+instanceObjectBlankNode(Z,Database) :-
+    database_instance(Database,Instance),
     xrdf(_,_,Z,Instance),
     rdf_is_bnode(Z).
 
@@ -269,22 +269,22 @@ instanceObjectBlankNode(Z,Graph) :-
  * 
  * Determines Any of X, P or Y are blank nodes and gives a best practice Reason for failure.
  */    
-instanceBlankNodeIC(X,_P,_Y,Graph,Reason) :-
-    instanceSubjectBlankNode(X,Graph),
+instanceBlankNodeIC(X,_P,_Y,Database,Reason) :-
+    instanceSubjectBlankNode(X,Database),
     interpolate(['The subject ', X, ' is a blank node'],Message),
     Reason=['rdf:type'='InstanceBlankNodeViolation',
 	    bestPractice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    subject=X].
-instanceBlankNodeIC(_,X,_,Graph,Reason) :-
-    instancePredicateBlankNode(X,Graph),
+instanceBlankNodeIC(_,X,_,Database,Reason) :-
+    instancePredicateBlankNode(X,Database),
     interpolate(['The predicate ', X, ' is a blank node'],Message),
     Reason=['rdf:type'='InstanceBlankNodeViolation',
 	    bestPractice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    predicate=X].
-instanceBlankNodeIC(_,_,X,Graph,Reason) :-
-    instanceObjectBlankNode(X,Graph),
+instanceBlankNodeIC(_,_,X,Database,Reason) :-
+    instanceObjectBlankNode(X,Database),
     interpolate(['The object ', X, ' is a blank node'],Message),
     Reason=['rdf:type'='InstanceBlankNodeViolation',
 	    bestPractice=literal(type('xsd:boolean',true)),

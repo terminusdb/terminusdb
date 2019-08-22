@@ -96,7 +96,7 @@ obj(ID) :-
     is_dict(ID).
     
 /* 
- * Graph 
+ * Database 
  * 
  * G := I
  */

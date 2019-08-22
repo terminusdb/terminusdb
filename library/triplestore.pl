@@ -56,23 +56,23 @@
  * 
  * Retract all dynamic elements of graph. 
  */
-retract_graph(Collection,Graph_Name) :-
-    schema:collection_schema_module(Collection,Graph_Name,Module), 
+retract_graph(Collection,Database_Name) :-
+    schema:collection_schema_module(Collection,Database_Name,Module), 
     schema:cleanup_schema_module(Module),
-    retractall(xrdf_pos(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_neg(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_pos_trans(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_neg_trans(Collection,Graph_Name,_,_,_)).
+    retractall(xrdf_pos(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_neg(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_pos_trans(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_neg_trans(Collection,Database_Name,_,_,_)).
 
 /** 
- * destroy_graph(+Collection,+Graph_Id:graph_identifier) is det. 
+ * destroy_graph(+Collection,+Database_Id:graph_identifier) is det. 
  * 
  * Completely remove a graph from disk.
  */ 
-destroy_graph(Collection,Graph_Name) :-
-    retract_graph(Collection, Graph_Name),
-    graph_directory(Collection, Graph_Name, GraphPath),
-    delete_directory_and_contents(GraphPath).
+destroy_graph(Collection,Database_Name) :-
+    retract_graph(Collection, Database_Name),
+    graph_directory(Collection, Database_Name, DatabasePath),
+    delete_directory_and_contents(DatabasePath).
 
 /** 
  * destroy_indexes(+C,+G) is det.
@@ -102,16 +102,16 @@ destroy_indexes :-
  * 
  * Sync journals for a graph and collection
  */
-sync_from_journals(Collection,Graph_Name) :-
+sync_from_journals(Collection,Database_Name) :-
     % First remove everything in the dynamic predicates.
-    (   retract_graph(Collection,Graph_Name),
-        hdt_transform_journals(Collection,Graph_Name),
-        get_truncated_queue(Collection,Graph_Name,Queue),
-        sync_queue(Collection,Graph_Name, Queue)
+    (   retract_graph(Collection,Database_Name),
+        hdt_transform_journals(Collection,Database_Name),
+        get_truncated_queue(Collection,Database_Name,Queue),
+        sync_queue(Collection,Database_Name, Queue)
     ->  true
     % in case anything failed, retract the graph
-    ;   retract_graph(Collection,Graph_Name),
-        throw(graph_sync_error(Collection-Graph_Name))
+    ;   retract_graph(Collection,Database_Name),
+        throw(graph_sync_error(Collection-Database_Name))
     ).
 
 /** 
@@ -137,7 +137,7 @@ type_compare(neg,ckp,(<)).
 type_compare(neg,pos,(>)).
 
 /** 
- * get_truncated_queue(+Collection,+Graph,-Queue) is semidet. 
+ * get_truncated_queue(+Collection,+Database,-Queue) is semidet. 
  * 
  * Get the queue associated with a graph up to the first checkpoint if it exists. 
  */
@@ -174,14 +174,14 @@ get_truncated_queue(C,G,Queue) :-
             Queue).
     
 /** 
- * hdt_tranform_journals(+Collection_ID,+Graph_ID) is det.
+ * hdt_tranform_journals(+Collection_ID,+Database_ID) is det.
  * 
  * Transform all oustanding journals to hdt files for graph G. 
  * 
  * TODO: This has never been tested.
  */
-hdt_transform_journals(Collection_ID,Graph_Name) :-
-    graph_directory(Collection_ID,Graph_Name,DirPath),
+hdt_transform_journals(Collection_ID,Database_Name) :-
+    graph_directory(Collection_ID,Database_Name,DirPath),
     subdirectories(DirPath,Entries),
     forall(member(Entry,Entries),
            (   interpolate([DirPath,'/',Entry],Directory),
@@ -303,7 +303,7 @@ close_all_handles([Head|Rest]) :-
 /** 
  * with_output_graph(+Template,:Goal) is det. 
  * 
- * Template is graph(Collection_ID,Graph_Id,Type,Ext) where Type is one of {ckp,neg,pos}
+ * Template is graph(Collection_ID,Database_Id,Type,Ext) where Type is one of {ckp,neg,pos}
  * and Ext is one of {ttl,hdt,ntr}
  *
  * ckp is for new graph (initial checkpoint) or any thereafter. 
@@ -340,18 +340,18 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
     ).
 
 /** 
- * checkpoint(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
  * 
  * Create a new graph checkpoint from our current dynamic triple state
  */
-checkpoint(Collection_Id,Graph_Id) :-
-    make_checkpoint_directory(Collection_Id,Graph_Id, _),
+checkpoint(Collection_Id,Database_Id) :-
+    make_checkpoint_directory(Collection_Id,Database_Id, _),
     with_output_graph(
-        graph(Collection_Id,Graph_Id,ckp,ttl),
+        graph(Collection_Id,Database_Id,ckp,ttl),
         (
             forall(
-                xrdf(Collection_Id,Graph_Id,X,Y,Z),
-                write_triple(Collection_Id,Graph_Id,ckp,X,Y,Z)
+                xrdf(Collection_Id,Database_Id,X,Y,Z),
+                write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
             )
         )
     ).
@@ -379,32 +379,32 @@ sync_from_journals :-
 
     forall(
         (   member(Collection,Collections),
-            graphs(Collection,Graphs),
-            member(Graph_Name, Graphs)
+            graphs(Collection,Databases),
+            member(Database_Name, Databases)
         ),
         (
-            format("~n ** Syncing ~q in collection ~q ~n~n", [Graph_Name,Collection]),
-            catch(sync_from_journals(Collection,Graph_Name),
-                  graph_sync_error(Graph_Name),
-                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.~n~n", [Graph_Name,Collection]))      
+            format("~n ** Syncing ~q in collection ~q ~n~n", [Database_Name,Collection]),
+            catch(sync_from_journals(Collection,Database_Name),
+                  graph_sync_error(Database_Name),
+                  format("~n ** ERROR: Database ~s in Collection ~s failed to sync.~n~n", [Database_Name,Collection]))      
         )
     ).
 
 /** 
- * make_empty_graph(+Collection_ID,+Graph) is det.
+ * make_empty_graph(+Collection_ID,+Database) is det.
  * 
  * Create a new empty graph
  */
-make_empty_graph(Collection_ID,Graph_Id) :-
+make_empty_graph(Collection_ID,Database_Id) :-
     % create the collection if it doesn't exist
     collection_directory(Collection_ID,Collection_Path),
     ensure_directory(Collection_Path),
     interpolate([Collection_Path,'/COLLECTION'],Collection_File),
     touch(Collection_File),
     % create the graph if it doesn't exist
-    graph_directory(Collection_ID,Graph_Id,Graph_Path),
-    ensure_directory(Graph_Path),
-    make_checkpoint_directory(Collection_ID,Graph_Id, CPD),
+    graph_directory(Collection_ID,Database_Id,Database_Path),
+    ensure_directory(Database_Path),
+    make_checkpoint_directory(Collection_ID,Database_Id, CPD),
     %get_time(T),floor(T,N),
     N=1,
     interpolate([CPD,'/',N,'-ckp.ttl'],TTLFile),
@@ -413,35 +413,35 @@ make_empty_graph(Collection_ID,Graph_Id) :-
     ttl_to_hdt(TTLFile,CKPFile).
 
 /** 
- * import_graph(+File,+Collection_ID,+Graph) is det.
+ * import_graph(+File,+Collection_ID,+Database) is det.
  * 
- * This predicate imports a given File as the latest checkpoint of Graph_Name
+ * This predicate imports a given File as the latest checkpoint of Database_Name
  * 
  * File will be in either ntriples, turtle or hdt format. 
  */
-import_graph(File, Collection_ID, Graph_Id) :-    
+import_graph(File, Collection_ID, Database_Id) :-    
     graph_file_extension(File,Ext),
     (   Ext = hdt,
         hdt_open(_, File, [access(map), indexed(false)]), % make sure this is a proper HDT file
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         copy_file(File,NewFile)
     ;   Ext = ttl,
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,                
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         ttl_to_hdt(File,NewFile)
     ;   Ext = ntr,
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,                
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         ntriples_to_hdt(File,NewFile)
     ),
-    sync_from_journals(Collection_ID,Graph_Id).
+    sync_from_journals(Collection_ID,Database_Id).
 
 /** 
  * literal_to_canonical(+Lit,-Can) is det. 
@@ -597,22 +597,22 @@ commit(CName,GName) :-
     retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
 
 /** 
- * rollback(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * rollback(+Collection_Id,+Database_Id:graph_identifier) is det.
  * 
  * Rollback the current transaction state.
  */
 rollback(Collection_Id,GName) :-
-    % graph_id_name(Graph_Id, GName),
+    % graph_id_name(Database_Id, GName),
     retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
     retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)). 
 
 /** 
- * xrdf(+Collection_Id,+Graph_Ids,?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Collection_Id,+Database_Ids,?Subject,?Predicate,?Object) is nondet.
  * 
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
- * Graph is either an atom or a list of atoms, referring to the name(s) of the graph(s).
+ * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
 % temporarily remove id behaviour.
 xrdf(C,Gs,X,Y,Z) :-
@@ -641,7 +641,7 @@ xrdfid(C,G,X0,Y0,Z0) :-
     ). 
         
 /** 
- * xrdfdb(+Collection_Id,+Graph_Id,?X,?Y,?Z) is nondet.
+ * xrdfdb(+Collection_Id,+Database_Id,?X,?Y,?Z) is nondet.
  * 
  * This layer has only those predicates with backing store.
  */ 
@@ -688,7 +688,7 @@ hdt_search_safe(HDT,X,Y,Z) :-
  * 
  * Options is a list which contains any of:
  * 
- *  graphs([Graph0,Graph1,...,Graphn])
+ *  graphs([Database0,Database1,...,Databasen])
  * 
  *  Specifying each of the graphs which is in the transaction
  * 
@@ -703,11 +703,11 @@ hdt_search_safe(HDT,X,Y,Z) :-
 with_transaction(Options,Goal) :-
     % some crazy heavy locking here!
     with_mutex(transaction,
-               (   member(graphs(Graph_Id_Bag),Options),
+               (   member(graphs(Database_Id_Bag),Options),
                    !,
                    member(collection(C),Options),
                    !,
-                   sort(Graph_Id_Bag,Graph_Ids),
+                   sort(Database_Id_Bag,Database_Ids),
                    !,
                    % if we can't get graphs, there is nothing interesting to do anyhow. 
                    (
@@ -728,15 +728,15 @@ with_transaction(Options,Goal) :-
                            ;   SuccessFlag = false
                            ),
                            SuccessFlag = true
-                       ->  forall(member(G,Graph_Ids),
+                       ->  forall(member(G,Database_Ids),
                                   (   commit(C,G),
                                       sync_from_journals(C,G)))
                        % We have succeeded in running the goal but Success is false
-                       ;   forall(member(G,Graph_Ids),rollback(C,G))
+                       ;   forall(member(G,Database_Ids),rollback(C,G))
                        )
                    ->  true
                    % We have not succeeded in running goal, so we need to cleanup
-                   ;   forall(member(G,Graph_Ids),rollback(C,G)),
+                   ;   forall(member(G,Database_Ids),rollback(C,G)),
                        fail
                    )
                )

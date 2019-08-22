@@ -79,10 +79,10 @@ key_user(Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(User_ID, User) :-
-    terminus_database(Graph),
+    terminus_database(Database),
     terminus_context(Ctx),
     
-    entity_jsonld(User_ID,Ctx,Graph,3,User).
+    entity_jsonld(User_ID,Ctx,Database,3,User).
 
 
 /** 
@@ -94,12 +94,12 @@ get_user(User_ID, User) :-
 key_auth(Key, Auth) :-
     key_user(Key,User_ID),
 
-    terminus_database(Graph),
+    terminus_database(Database),
     terminus_context(Ctx),
 
     user_auth_id(User_ID, Auth_ID),
     
-    entity_jsonld(Auth_ID,Ctx,Graph,Auth).
+    entity_jsonld(Auth_ID,Ctx,Database,Auth).
 
 /* 
  * user_auth_id(User,Auth_id) is semidet.

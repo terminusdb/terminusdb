@@ -47,10 +47,10 @@
  * Stores the currently associated stream with graph G and its type. 
  * Raises an error if there is already an associated stream for graph G.
  */
-set_graph_stream(Collection_Id,Graph_Id,S,Type,Ext) :-
-    (   graph_stream(Collection_Id,Graph_Id,S0,Type,Ext)
-    ->  throw(graph_stream_already_set(Collection_Id,Graph_Id,S0,Type,Ext))
-    ;   assertz(graph_stream(Collection_Id,Graph_Id,S,Type,Ext))
+set_graph_stream(Collection_Id,Database_Id,S,Type,Ext) :-
+    (   graph_stream(Collection_Id,Database_Id,S0,Type,Ext)
+    ->  throw(graph_stream_already_set(Collection_Id,Database_Id,S0,Type,Ext))
+    ;   assertz(graph_stream(Collection_Id,Database_Id,S,Type,Ext))
     ).
 
 
@@ -59,9 +59,9 @@ set_graph_stream(Collection_Id,Graph_Id,S,Type,Ext) :-
  *
  * Close stream associated with a given graph.
  */ 
-close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext) :-
-    forall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
-           (   retractall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext)),
+close_graph_stream(Collection_Id,Database_Id,Stream,Type,Ext) :-
+    forall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
+           (   retractall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext)),
                flush_output(Stream),
                close(Stream)
            )).
@@ -72,14 +72,14 @@ close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext) :-
  * Close all streams associated with all graphs.
  */ 
 closeStreams :-
-    forall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
-           close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext)).
+    forall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
+           close_graph_stream(Collection_Id,Database_Id,Stream,Type,Ext)).
 
 /* 
- * initialise_graph(Collection_ID,Graph_ID,Stream,Type,Ext) is semidet.
+ * initialise_graph(Collection_ID,Database_ID,Stream,Type,Ext) is semidet.
  */
-initialise_graph(Collection_Id,Graph_Id,Stream,Type,Ext) :-
-    graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
+initialise_graph(Collection_Id,Database_Id,Stream,Type,Ext) :-
+    graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
     (   Ext=ttl
     ->  true % deprecated write_turtle_prelude(Stream)
     ;   Ext=ntr
@@ -89,12 +89,12 @@ initialise_graph(Collection_Id,Graph_Id,Stream,Type,Ext) :-
     ).
 
 /* 
- * initialise_graph(Collection_ID,Graph_ID,Stream,Type,Ext) is semidet.
+ * initialise_graph(Collection_ID,Database_ID,Stream,Type,Ext) is semidet.
  */
-finalise_graph(Colection_Id,Graph,Stream,Type,Ext) :-
-    graph_stream(Colection_Id,Graph,Stream,Type,Ext),
+finalise_graph(Colection_Id,Database,Stream,Type,Ext) :-
+    graph_stream(Colection_Id,Database,Stream,Type,Ext),
     (   Ext=ttl
-    ->  close_graph_stream(Colection_Id,Graph,Stream,Type,Ext)
+    ->  close_graph_stream(Colection_Id,Database,Stream,Type,Ext)
     ;   Ext=ntr
     ->  throw(unimplemented_storage_type(ntr))
     ;   Ext=hdt

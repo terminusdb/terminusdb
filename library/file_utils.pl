@@ -121,7 +121,7 @@ collection_directory(Collection_ID,Path) :-
     interpolate([BasePath,RelPath,CSafe],Path).
 
 /** 
- * graph_directory(+Collection_ID,+Graph_Id:graph_identifier,-Path) is det. 
+ * graph_directory(+Collection_ID,+Database_Id:graph_identifier,-Path) is det. 
  * 
  * Returns the path for a given graph 
  */
@@ -229,7 +229,7 @@ graph_file_sequence_number(FilePath,Seq) :-
 
 
 /** 
- * last_checkpoint_number(+GraphName_Dir_Path,-Number) is det. 
+ * last_checkpoint_number(+DatabaseName_Dir_Path,-Number) is det. 
  *
  * Number of last checkpoint.
  */ 
@@ -357,21 +357,21 @@ graph_dir_timestamp_gt(Dir1,Dir2) :-
     Number1 > Number2. 
 
 /** 
- * current_checkpoint_directory(+Collection_ID,+Graph_Id:graph_identifer,-Path) is semidet. 
+ * current_checkpoint_directory(+Collection_ID,+Database_Id:graph_identifer,-Path) is semidet. 
  * 
  * Return the latest checkpoint directory.
  */
-current_checkpoint_directory(Collection_ID,Graph_Id, Path) :-
-    graph_directory(Collection_ID,Graph_Id, GraphPath),
-    subdirectories(GraphPath,AllCheckpoints),
+current_checkpoint_directory(Collection_ID,Database_Id, Path) :-
+    graph_directory(Collection_ID,Database_Id, DatabasePath),
+    subdirectories(DatabasePath,AllCheckpoints),
     (   predsort([Delta,X,Y]>>
              (   atom_number(X,XN), atom_number(Y,YN), XN < YN
              ->  Delta=(>)
              ;   Delta=(<)
              ),
              AllCheckpoints,[File|_Rest])
-    ->  interpolate([GraphPath,'/',File],Path)
-    ;   throw(no_checkpoint_directory(Graph_Id,Path))). 
+    ->  interpolate([DatabasePath,'/',File],Path)
+    ;   throw(no_checkpoint_directory(Database_Id,Path))). 
 
 
 /**
@@ -401,39 +401,39 @@ collections(Collections) :-
     maplist(sanitise_file_name,Collections,Valid_Collection_Files).
 
 /*
- * graphs(?Collection_ID,-Graphs:list(uri)) is nondet.
+ * graphs(?Collection_ID,-Databases:list(uri)) is nondet.
  * 
  * Return a list of all current graphs. 
  * FIX: This is probably a bit dangerous as newly constructed 
  * directories in the hdt dir will *look* like new graphs. 
  * Probably need some sort of metadata. 
  */
-graphs(Collection_ID,Graphs) :-
+graphs(Collection_ID,Databases) :-
     collections(Collections),
     (   member(Collection_ID,Collections)
     ->  sanitise_file_name(Collection_ID,Collection_Name),
         db_path(Path),
         interpolate([Path,Collection_Name], Collection_Path),
-        subdirectories(Collection_Path,Graph_Names),
+        subdirectories(Collection_Path,Database_Names),
         include({Collection_Path}/[Name]>>(
                     interpolate([Collection_Path,'/',Name],X),
                     exists_directory(X)
-                ),Graph_Names,Valid_Graph_Names),
-        maplist([N,S]>>sanitise_file_name(N,S),Graphs,Valid_Graph_Names)
-    ;   Graphs = []).
+                ),Database_Names,Valid_Database_Names),
+        maplist([N,S]>>sanitise_file_name(N,S),Databases,Valid_Database_Names)
+    ;   Databases = []).
 
 /** 
- * make_checkpoint_directory(+Collection_ID,+Graph_ID:graph_identifer,-CPD) is det. 
+ * make_checkpoint_directory(+Collection_ID,+Database_ID:graph_identifer,-CPD) is det. 
  * 
  * Create the current checkpoint directory
  */
-make_checkpoint_directory(Collection_ID, Graph_Id, CPD) :-
-    graph_directory(Collection_ID,Graph_Id, Graph_Path),
-    ensure_directory(Graph_Path),
-    last_checkpoint_number(Graph_Path,M),
+make_checkpoint_directory(Collection_ID, Database_Id, CPD) :-
+    graph_directory(Collection_ID,Database_Id, Database_Path),
+    ensure_directory(Database_Path),
+    last_checkpoint_number(Database_Path,M),
     N is M+1,
     %get_time(T),floor(T,N),
-    interpolate([Graph_Path,'/',N],CPD),
+    interpolate([Database_Path,'/',N],CPD),
     make_directory(CPD).
 
 
@@ -508,9 +508,9 @@ last_checkpoint_file(C,G,File) :-
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
-checkpoint_to_turtle(Collection,Graph,Output_File) :-
+checkpoint_to_turtle(Collection,Database,Output_File) :-
     
-    last_checkpoint_file(Collection,Graph,FileIn), 
+    last_checkpoint_file(Collection,Database,FileIn), 
     user:file_search_path(terminus_home, Dir),
     get_time(T),floor(T,N),
     interpolate([Dir,'/tmp/',N,'.ntriples'],NTriples_File),

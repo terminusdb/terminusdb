@@ -245,8 +245,8 @@ jsonld_id(Obj,ID) :-
 /*
 This should be more explicit and separate....
 
-jsonld_id(_Obj,Graph,ID) :-
-    database_name(Graph,Collection),
+jsonld_id(_Obj,Database,ID) :-
+    database_name(Database,Collection),
     interpolate([Collection,'/document'],Base),
     gensym(Base,ID).
   */
@@ -281,65 +281,65 @@ jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
 jsonld_predicate_value(_P,Val,_Ctx,Val).
     
 /* 
- * jsonld_triples(+Dict,+Graph,-Triples) is det. 
+ * jsonld_triples(+Dict,+Database,-Triples) is det. 
  * 
  * Return the triples associated with a JSON-LD structure.
  */
-jsonld_triples(JSON, Graph, Triples) :-
-    jsonld_triples(JSON, _{}, Graph, Triples).
+jsonld_triples(JSON, Database, Triples) :-
+    jsonld_triples(JSON, _{}, Database, Triples).
 
-jsonld_triples(JSON, Ctx, Graph, Triples) :-
+jsonld_triples(JSON, Ctx, Database, Triples) :-
     get_dict_default('@context', JSON, Internal,_{}),
     merge_dictionaries(Ctx, Internal, New_Ctx),
     expand_context(New_Ctx,New_Expanded),
     expand(JSON,New_Expanded,JSON_Ex),
-    jsonld_triples_aux(JSON_Ex, New_Ctx, Graph, Triples).
+    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples).
     
 /* 
- * jsonld_triples_aux(Dict, Ctx, Graph, Tuples) is det.
+ * jsonld_triples_aux(Dict, Ctx, Database, Tuples) is det.
  * 
  * Create the n-triple format of the given json triples 
  * suitable for use with delete/5 or insert/5
  */
-jsonld_triples_aux(Dict, Ctx, Graph, Triples) :-
+jsonld_triples_aux(Dict, Ctx, Database, Triples) :-
     is_dict(Dict),
     !,
 
     (   get_dict('@id', Dict, ID)
-    ->  jsonld_id_triples(ID,Dict,Ctx,Graph,Triples)
+    ->  jsonld_id_triples(ID,Dict,Ctx,Database,Triples)
     ;   dict_pairs(Dict, _, JSON_Pairs),
-        maplist({Graph,Ctx}/[ID-PV,Triples]>>(
+        maplist({Database,Ctx}/[ID-PV,Triples]>>(
                     (   memberchk(ID,['@context','@id'])
                     ->  Triples = []
-                    ;   jsonld_id_triples(ID,PV,Ctx,Graph,Triples))
+                    ;   jsonld_id_triples(ID,PV,Ctx,Database,Triples))
                 ),
                 JSON_Pairs, Triples_List),
         append(Triples_List,Triples)).
 % what could this be? A list?
-jsonld_triples_aux(List, Ctx, Graph, Triples) :-
+jsonld_triples_aux(List, Ctx, Database, Triples) :-
     is_list(List),
     !,
     
-    maplist({Ctx,Graph}/[Obj,Ts]>>(
-                jsonld_triples_aux(Obj,Ctx,Graph,Ts)
+    maplist({Ctx,Database}/[Obj,Ts]>>(
+                jsonld_triples_aux(Obj,Ctx,Database,Ts)
             ),
             List,
             Ts_List),
     append(Ts_List, Triples).
     
 /* 
- * jsonld_id_triples(ID,PV,Ctx,Graph,Triples) is det. 
+ * jsonld_id_triples(ID,PV,Ctx,Database,Triples) is det. 
  *
  * We have the id and are looking for the edge and values. 
  */
-jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
+jsonld_id_triples(ID,PV,Ctx,Database,Triples) :-
     is_dict(PV),
     !,    
 
     dict_pairs(PV, _, JSON_Pairs),
-    maplist({ID,Ctx,Graph}/[P-V,Triples]>>(
-                database_name(Graph,C),
-                database_instance(Graph,G),
+    maplist({ID,Ctx,Database}/[P-V,Triples]>>(
+                database_name(Database,C),
+                database_instance(Database,G),
 
                 * format('Incoming P-V: ~q~n',[P-V]),
                 (   memberchk(P,['@context','@id'])
@@ -361,7 +361,7 @@ jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
                         ->  Val = literal(lang(Lang,Data)),
                             Rest = []
                         ;   jsonld_id(V,Val),
-                            jsonld_triples_aux(V,Ctx,Graph,Rest))
+                            jsonld_triples_aux(V,Ctx,Database,Rest))
                     ;   Val = literal(type('http://www.w3.org/2001/XMLSchema#string',V)),
                         Rest = []
                     )

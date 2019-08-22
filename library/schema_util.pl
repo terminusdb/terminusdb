@@ -36,11 +36,11 @@
 :- use_module(library(schema_definitions)).
 
 /* 
- * database_module(+Graph:graph, -Module:atom) is det. 
+ * database_module(+Database:graph, -Module:atom) is det. 
  */
-database_module(Graph,Module) :-
-    database_name(Graph,C),
-    database_schema(Graph,S),
+database_module(Database,Module) :-
+    database_name(Database,C),
+    database_schema(Database,S),
     collection_schema_module(C,S,Module).
 
 /* 
@@ -49,14 +49,14 @@ database_module(Graph,Module) :-
  * Construct a canonical module name for the current collection. 
  * 
  */ 
-collection_schema_module(Collection,Graph_ID,Module) :-
-    atomic_list_concat([Collection,'/',Graph_ID],Module).
+collection_schema_module(Collection,Database_ID,Module) :-
+    atomic_list_concat([Collection,'/',Database_ID],Module).
 
 
-calculate_subsumptionOf(CC, CP, Graph) :-
-    is_graph(Graph),
+calculate_subsumptionOf(CC, CP, Database) :-
+    is_graph(Database),
     !,
-    database_module(Graph, Module),
+    database_module(Database, Module),
     calculate_subsumptionOf(CC, CP, Module).
 
 calculate_subsumptionOf(CC, CC, Module) :-
@@ -99,13 +99,13 @@ term_expansion(generate_owl_predicates, Terms) :-
                 functor(Inner_Fn, Predicate, Arity),
                 Inner_Fn =.. [_|Inner_Arguments],
                 append(Inner_Arguments, [Module], Arguments),
-                append(Inner_Arguments, [Graph_Module], GraphVersion_Arguments),
+                append(Inner_Arguments, [Database_Module], DatabaseVersion_Arguments),
                 Fn =.. [Predicate|Arguments],
-                Graph_Fn =.. [Predicate|GraphVersion_Arguments],
+                Database_Fn =.. [Predicate|DatabaseVersion_Arguments],
                 Definition1 = (Fn :- is_graph(Module),
                                      !,
-                                     database_module(Module, Graph_Module),
-                                     Graph_Fn),
+                                     database_module(Module, Database_Module),
+                                     Database_Fn),
                 Definition2 = (Fn :- Module:Inner_Fn),
                 Pair = [Definition1, Definition2],
                 Arity_Plus1 is Arity + 1,
@@ -116,10 +116,10 @@ term_expansion(generate_owl_predicates, Terms) :-
 
 generate_owl_predicates.
 
-entity(Class, Graph) :-
-    is_graph(Graph),
+entity(Class, Database) :-
+    is_graph(Database),
     !,
-    database_module(Graph, Module),
+    database_module(Database, Module),
     Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Entity').
 
 entity(Class, Module) :-

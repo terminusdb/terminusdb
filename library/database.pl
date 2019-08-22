@@ -44,7 +44,7 @@
 :- use_module(library(sdk)).
 
 /* 
- * Graph term accessors.
+ * Database term accessors.
  */ 
 database_name(database(Name, _ , _ ,_, _, _),Name).
 

@@ -30,62 +30,62 @@
 :- use_module(library(triplestore)).
 
 /** 
- * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Graph:graph) is nondet.
+ * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:graph) is nondet.
  * 
  * Run a property axiom chain PropList from X to Y.
  */
 %:- table runChain/4.
-runChain(X,[P],Y,Graph) :-
-    inferredEdge(X,P,Y,Graph).
-runChain(X,[P|PropList],Z,Graph) :-
-    database_name(Graph,C),
-    database_instance(Graph,I),
+runChain(X,[P],Y,Database) :-
+    inferredEdge(X,P,Y,Database).
+runChain(X,[P|PropList],Z,Database) :-
+    database_name(Database,C),
+    database_instance(Database,I),
     xrdf(C,I,X,P,Y),
-    runChain(Y,PropList,Z,Graph).
+    runChain(Y,PropList,Z,Database).
 
 /** 
- * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Graph:graph) is nondet.
+ * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:graph) is nondet.
  * 
  * We impose an ordering to avoid non-termination (subproperty ordering)
  * Concrete links are already in InferredEdge
  */ 
-inferredTransitiveEdge(X,OP,Z,Graph) :-
-    database_name(Graph,Collection),
-    database_inference(Graph,Inference),
+inferredTransitiveEdge(X,OP,Z,Database) :-
+    database_name(Database,Collection),
+    database_inference(Database,Inference),
     xrdf(Collection, Inference,
          SOP,rdfs:subPropertyOf,OP),
-    inferredEdge(X,SOP,Y,Graph),
-    inferredEdge(Y,OP,Z,Graph).
+    inferredEdge(X,SOP,Y,Database),
+    inferredEdge(Y,OP,Z,Database).
 
 /** 
- * inferredEdge(?X,?OP,?Y,+Graph:graph) is nondet.
+ * inferredEdge(?X,?OP,?Y,+Database:graph) is nondet.
  * 
  * Calculates all available triples under inference
  * 
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
-inferredEdge(X,OP,Y,Graph) :-
-    database_name(Graph,Collection),
-    database_instance(Graph,Instance),
+inferredEdge(X,OP,Y,Database) :-
+    database_name(Database,Collection),
+    database_instance(Database,Instance),
     xrdf(Collection,Instance,X,OP,Y).
-inferredEdge(X,OP,Y,Graph) :-
-    database_name(Graph,Collection),
-    database_inference(Graph,Inference),
+inferredEdge(X,OP,Y,Database) :-
+    database_name(Database,Collection),
+    database_inference(Database,Inference),
     xrdf(Collection,Inference,OP,rdf:type,owl:'TransitiveProperty'),
-    inferredTransitiveEdge(X,OP,Y,Graph).
-inferredEdge(X,OP,Y,Graph) :-
-    database_name(Graph,Collection),
-    database_inference(Graph,Inference),
+    inferredTransitiveEdge(X,OP,Y,Database).
+inferredEdge(X,OP,Y,Database) :-
+    database_name(Database,Collection),
+    database_inference(Database,Inference),
     xrdf(Collection,Inference,OP,owl:'inverseOf',P),
-    inferredEdge(Y,P,X,Graph).
-inferredEdge(X,OP,Y,Graph) :-
-    database_name(Graph,Collection),
-    database_inference(Graph,Inference),
+    inferredEdge(Y,P,X,Database).
+inferredEdge(X,OP,Y,Database) :-
+    database_name(Database,Collection),
+    database_inference(Database,Inference),
     xrdf(Collection,Inference,OP,owl:propertyChainAxiom,ListObj),
     collect(Collection,Inference,ListObj,PropList),
-    runChain(X,PropList,Y,Graph).
-inferredEdge(X,OP,Y,Graph) :-
-    database_name(Graph,Collection),
-    database_inference(Graph,Inference),
+    runChain(X,PropList,Y,Database).
+inferredEdge(X,OP,Y,Database) :-
+    database_name(Database,Collection),
+    database_inference(Database,Inference),
     xrdf(Collection,Inference,SOP,rdfs:subPropertyOf,OP),
-    inferredEdge(X,SOP,Y,Graph).
+    inferredEdge(X,SOP,Y,Database).

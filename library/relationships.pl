@@ -34,38 +34,38 @@
 :- use_module(library(triplestore)).
 :- use_module(library(semweb/rdf_db)).
 
-relationship_source_property(Relationship,Property,Graph) :-
-    database_name(Graph,Collection),        
-    database_schema(Graph,Schema),
+relationship_source_property(Relationship,Property,Database) :-
+    database_name(Database,Collection),        
+    database_schema(Database,Schema),
     xrdf(Collection,Schema,Relationship,dcog:source_property,Property).
 
-relationship_target_property(Relationship,Property,Graph) :-
-    database_name(Graph,Collection),        
-    database_schema(Graph,Schema),
+relationship_target_property(Relationship,Property,Database) :-
+    database_name(Database,Collection),        
+    database_schema(Database,Schema),
     xrdf(Collection,Schema,Relationship,dcog:target_property,Property).
 
-pseudo_domain(Relationship,Domain,Graph) :-
-    relationship_source_property(Relationship,Property,Graph), 
-    range(Property,Domain,Graph).
+pseudo_domain(Relationship,Domain,Database) :-
+    relationship_source_property(Relationship,Property,Database), 
+    range(Property,Domain,Database).
 
-pseudo_range(Relationship,Range,Graph) :-
-    relationship_target_property(Relationship,Property,Graph), 
-    range(Property,Range,Graph).
+pseudo_range(Relationship,Range,Database) :-
+    relationship_target_property(Relationship,Property,Database), 
+    range(Property,Range,Database).
 
 /** 
- * relationship_to_pseudoedges_and_classes(+Relationship:uri,+Graph:graph,-PseudoEdge:pseudoEdge,Classes:list(uri)) is det.
+ * relationship_to_pseudoedges_and_classes(+Relationship:uri,+Database:graph,-PseudoEdge:pseudoEdge,Classes:list(uri)) is det.
  * 
  * Calculate the pseudoedge and classes associated with a given relationship class
  */
-relationship_to_pseudoedges_and_classes(Relationship,Graph,
+relationship_to_pseudoedges_and_classes(Relationship,Database,
                                         pseudoEdge(SourceP,Relationship,TargetP),
                                         [Domain,Range]) :-
     % We really only want one solution.
     once(
-        (   relationship_source_property(Relationship,SourceP,Graph),
-            relationship_target_property(Relationship,TargetP,Graph),
-            pseudo_domain(Relationship,Domain,Graph),
-            pseudo_range(Relationship,Range,Graph)
+        (   relationship_source_property(Relationship,SourceP,Database),
+            relationship_target_property(Relationship,TargetP,Database),
+            pseudo_domain(Relationship,Domain,Database),
+            pseudo_range(Relationship,Range,Database)
         )
     ).
 
