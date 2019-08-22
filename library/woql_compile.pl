@@ -30,7 +30,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(collection)).
+:- use_module(library(database)).
 :- use_module(library(woql_term)).
 :- use_module(library(utils), except([elt/2])).
 :- use_module(library(triplestore), [
@@ -486,8 +486,8 @@ compile_node(X:C,XE,Goals) -->
     expand(C,CE),
     view(graph=G),
     {
-        graph_collection(G,C),
-        graph_instance(G,I),
+        database_name(G,C),
+        database_instance(G,I),
         Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                  once(subsumptionOf(D,CE,G))
                 ]
@@ -520,8 +520,8 @@ compile_relation(X:C,XE,Class,Goals) -->
     {
         (   X=ignore
         ->  Goals=[]
-        ;   graph_collection(G,C),
-            graph_instance(G,I),
+        ;   database_name(G,C),
+            database_instance(G,I),
             Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                      once(subsumptionOf(D,ClassE,G))
                     ]
@@ -677,8 +677,8 @@ compile_wf(t(X,P,Y),Goal) -->
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {
-        graph_collection(G,C),            
-        graph_instance(G,I),
+        database_name(G,C),            
+        database_instance(G,I),
         (   I = main
         ->  Search=inference:inferredEdge(XE,PE,YE,G)
         ;   Search=xrdf(C,I,XE,PE,YE)),
@@ -700,7 +700,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
     {        
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        graph_collection(Graph,C),
+        database_name(Graph,C),
         (   GE = main
         ->  Search=inference:inferredEdge(XE,PE,YE,Graph)
         ;   Search=xrdf(C,GE,XE,PE,YE)),
@@ -719,8 +719,8 @@ compile_wf(r(X,R,Y),Goal) -->
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     {
-        graph_collection(G,C),                
-        graph_instance(G,I),
+        database_name(G,C),                
+        database_instance(G,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -755,8 +755,8 @@ compile_wf(r(X,R,Y,G),Goal) -->
     view(current_output_graph=OG),
     {
         make_collection_graph(G,Graph),
-        graph_collection(Graph,C),
-        graph_instance(Graph,I),
+        database_name(Graph,C),
+        database_instance(Graph,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),

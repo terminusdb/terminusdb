@@ -9,9 +9,9 @@
               is_object_or_id/1,
               is_graph_identifier/1,
               is_prefix_db/1,
-              is_collection_identifier/1,
+              is_database_identifier/1,
               is_empty_graph_name/1,
-              is_graph/1
+              is_database/1
           ]).
 
 /** <module> Types
@@ -21,22 +21,31 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+
+
+/************************************************************************* 
+
+This file deliberately has no dependencies - please do not introduce them. 
+
+**************************************************************************/
+
 
 /** 
  * is_literal(+X) is semidet.
@@ -151,8 +160,6 @@ is_number_compat(X) :-
  */
 is_graph_identifier(GID) :-
     atom(GID).
-is_graph_identifier(GIDs) :-
-    maplist(atom,GIDs).
 
 error:has_type(graph_identifier, X) :-
     is_graph_identifier(X).
@@ -173,15 +180,15 @@ error:has_type(prefix_db, X) :-
 
 
 /* 
- * is_collection_identifier(X) is semidet.
+ * is_database_identifier(X) is semidet.
  * 
- * Type of a collection identifier
+ * Type of a database identifier
  */ 
-is_collection_identifier(X) :-
+is_database_identifier(X) :-
     atom(X).
 
-error:has_type(collection_identifier, X) :-
-    is_collection_identifier(X).
+error:has_type(database_identifier, X) :-
+    is_database_identifier(X).
 
 /**
  * is_empty_graph_name(+Graph_Id:graph_identifier) is semidet.
@@ -194,22 +201,22 @@ is_empty_graph_name(Graph_Id):-
     member(Graph_Id, [false, @(false), none]),
     !.
 
+% Why is this alone?
 error:has_type(rdf_object, Rdf_Object):-
     is_rdf_object(Rdf_Object).
 
 /* 
- * is_graph(Graph) is semidet.
- * 
+ * is_database(Database) is semidet.
  * 
  */
-is_graph(graph(Collection,Instance,Inference,Schema,Error_Instance,Error_Schema)) :-
-    is_graph_identifier(Collection),
-    is_graph_identifier(Instance),
-    is_graph_identifier(Inference),
-    is_graph_identifier(Schema),
-    is_graph_identifier(Error_Instance),
-    is_graph_identifier(Error_Schema).
+is_database(database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema)) :-
+    atom(Name),
+    maplist(is_graph_identifier,Instance),
+    maplist(is_graph_identifier,Inference),
+    maplist(is_graph_identifier,Schema),
+    maplist(is_graph_identifier,Error_Instance),
+    maplist(is_graph_identifier,Error_Schema).
 
-error:has_type(graph, X) :-
-    is_graph(X).
+error:has_type(database, X) :-
+    is_database(X).
 

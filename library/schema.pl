@@ -11,29 +11,29 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(prefixes, [global_prefix_expand/2]). 
-:- use_module(collection).
-:- use_module(triplestore).
-:- use_module(schema_definitions).
-:- use_module(schema_util).
-:- use_module(utils).
+:- use_module(library(prefixes), [global_prefix_expand/2]). 
+:- use_module(library(database)).
+:- use_module(library(triplestore)).
+:- use_module(library(schema_definitions)).
+:- use_module(library(schema_util)).
+:- use_module(library(utils)).
 
 :- reexport(schema_util).
 
@@ -112,8 +112,8 @@ compile_schema_list_properties_to_module(Collection, Schema, Module) :-
            compile_schema_list_property_to_module(Collection, Schema, owl, Property, Module)).
 
 add_metadata_to_module(Graph, Module) :-
-    graph_collection(Graph, Collection),
-    graph_schema(Graph, Schema),
+    database_name(Graph, Collection),
+    database_schema(Graph, Schema),
     Module:asserta(schema(Collection, Schema)).
 
 precalculate_subsumptions(Graph, Module) :-
@@ -141,8 +141,8 @@ compile_util_predicates(Module) :-
 compile_schema_to_module(Graph, Module) :-
     % use the transaction mutex to ensure that no transaction is running while a schema module is updated.
     with_mutex(transaction,
-               (   graph_collection(Graph, Collection),
-                   graph_schema(Graph, Schema),                   
+               (   database_name(Graph, Collection),
+                   database_schema(Graph, Schema),                   
                    cleanup_schema_module(Module),
                    compile_schema_types_to_module(Collection, Schema, Module),
                    compile_schema_basic_properties_to_module(Collection, Schema, Module),
@@ -164,9 +164,9 @@ schema_metadata(Module, Collection, Schema) :-
  * ensure_schema_in_module(+Graph,-Module) is det.
  */ 
 ensure_schema_in_module(Graph, Module) :-
-    graph_module(Graph, Module),            
-    graph_collection(Graph, Collection),
-    graph_schema(Graph, Schema),
+    database_module(Graph, Module),            
+    database_name(Graph, Collection),
+    database_schema(Graph, Schema),
     (   (   schema_defined(Module),
             schema_metadata(Module, Collection, Schema))
     ->  true

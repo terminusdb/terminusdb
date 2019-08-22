@@ -1,6 +1,6 @@
 :- module(schema_util, [
               % module construction
-              graph_module/2,
+              database_module/2,
               collection_schema_module/3,
               % utils
               calculate_subsumptionOf/3,
@@ -13,34 +13,34 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
-:- use_module(collection).
-:- use_module(types).
-:- use_module(schema_definitions).
+:- use_module(library(database)).
+:- use_module(library(types)).
+:- use_module(library(schema_definitions)).
 
 /* 
- * graph_module(+Graph:graph, -Module:atom) is det. 
+ * database_module(+Graph:graph, -Module:atom) is det. 
  */
-graph_module(Graph,Module) :-
-    graph_collection(Graph,C),
-    graph_schema(Graph,S),
+database_module(Graph,Module) :-
+    database_name(Graph,C),
+    database_schema(Graph,S),
     collection_schema_module(C,S,Module).
 
 /* 
@@ -56,7 +56,7 @@ collection_schema_module(Collection,Graph_ID,Module) :-
 calculate_subsumptionOf(CC, CP, Graph) :-
     is_graph(Graph),
     !,
-    graph_module(Graph, Module),
+    database_module(Graph, Module),
     calculate_subsumptionOf(CC, CP, Module).
 
 calculate_subsumptionOf(CC, CC, Module) :-
@@ -104,7 +104,7 @@ term_expansion(generate_owl_predicates, Terms) :-
                 Graph_Fn =.. [Predicate|GraphVersion_Arguments],
                 Definition1 = (Fn :- is_graph(Module),
                                      !,
-                                     graph_module(Module, Graph_Module),
+                                     database_module(Module, Graph_Module),
                                      Graph_Fn),
                 Definition2 = (Fn :- Module:Inner_Fn),
                 Pair = [Definition1, Definition2],
@@ -119,7 +119,7 @@ generate_owl_predicates.
 entity(Class, Graph) :-
     is_graph(Graph),
     !,
-    graph_module(Graph, Module),
+    database_module(Graph, Module),
     Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Entity').
 
 entity(Class, Module) :-

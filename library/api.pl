@@ -53,7 +53,7 @@
 :- use_module(library(database_utils)).
 
 % Graph construction utils
-:- use_module(library(collection)).
+:- use_module(library(database)).
 
 % Frame and entity processing
 :- use_module(library(frame)).
@@ -465,7 +465,7 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
  * Die if we can't form a graph
  */
 try_db_graph(DB_URI,Graph) :-
-    (   make_collection_graph(DB_URI,Graph)
+    (   make_database_from_database_name(DB_URI,Graph)
     ->  true
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
         throw(http_reply(not_found(DB_URI,MSG)))).

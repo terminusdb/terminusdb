@@ -607,7 +607,7 @@ rollback(Collection_Id,GName) :-
     retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)). 
 
 /** 
- * xrdf(+Collection_Id,+Graph_Id,?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Collection_Id,+Graph_Ids,?Subject,?Predicate,?Object) is nondet.
  * 
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
@@ -615,7 +615,8 @@ rollback(Collection_Id,GName) :-
  * Graph is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
 % temporarily remove id behaviour.
-xrdf(C,G,X,Y,Z) :-
+xrdf(C,Gs,X,Y,Z) :-
+    member(G,Gs),
     xrdfid(C,G,X,Y,Z).
 
 user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-

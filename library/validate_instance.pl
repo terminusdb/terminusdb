@@ -26,13 +26,13 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(validate_schema).
-:- use_module(collection).
-:- use_module(triplestore).
-:- use_module(utils). 
-:- use_module(types).
-:- use_module(base_type).
-:- use_module(inference).
+:- use_module(library(validate_schema)).
+:- use_module(library(database)).
+:- use_module(library(triplestore)).
+:- use_module(library(utils)). 
+:- use_module(library(types)).
+:- use_module(library(base_type)).
+:- use_module(library(inference)).
 
 /**
  * most_specific_type(+Entity, -Sorted, +Graph)
@@ -72,12 +72,12 @@ get_ordered_instance_classes(Entity, Sorted, Graph) :-
  * Determines the class C identified with the instance X.
  */
 instanceClass(X, Y, Graph) :-
-    graph_collection(Graph,Collection),
-    graph_instance(Graph,Instance),
+    database_name(Graph,Collection),
+    database_instance(Graph,Instance),
     xrdf(Collection,Instance, X, rdf:type, Y).
 instanceClass(X, Y, Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema), % instances can also exist in the schema
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema), % instances can also exist in the schema
     xrdf(Collection,Schema, X, rdf:type, Y).
 
 % X has cardinality N at property OP
@@ -126,8 +126,8 @@ forall (x p y) \in Deletes.
  * i.e. X(/Y) has no class in the instance AND schema OR has a class that is not in the schema 
  */
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    graph_collection(Graph,Collection),
-    graph_instance(Graph,Instance), 
+    database_name(Graph,Collection),
+    database_instance(Graph,Instance), 
     xrdf(Collection,Instance,X,P,Y), % edge exists 
     \+ instanceClass(X, _, Graph),   % no type in Instance OR Schema
     Reason=_{
@@ -138,7 +138,7 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
                'rvo:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI'}
            }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(X,P,Y,Instance), % Added
     orphanInstance(X,C,Graph),            % checks if X has a type that isn't in the Schema
     Reason=_{
@@ -151,7 +151,7 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
            }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
     objectProperty(P,Graph),
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(X,P,Y,Instance),
     rdf_is_iri(Y), % no point in checking if it is a literal
     \+ instanceClass(Y, _, Graph),        % no type in Instance OR Schema
@@ -164,7 +164,7 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
            }.
 edge_orphan_instance(X,P,Y,Graph,Reason) :-
     objectProperty(P,Graph),
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(X,P,Y,Instance), % Added
     rdf_is_iri(Y), % no point in checking if it is a literal
     orphanInstance(Y,C,Graph), % checks other side of triple to see does it have a type not in the schema
@@ -187,8 +187,8 @@ edge_orphan_instance(X,P,Y,Graph,Reason) :-
 :- rdf_meta noPropertyRangeIC(r,r,r,o,o,t).
 noPropertyRangeIC(X,P,Y,Graph,Reason) :-
     property(P,Graph),
-    graph_collection(Graph,Collection),
-    graph_instance(Graph,Instance),    
+    database_name(Graph,Collection),
+    database_instance(Graph,Instance),    
     xrdf(X,P,Y,Instance), % Added
     %subsumptionPropertiesOf(P,SuperP,Schema),
     \+ anyRange(P,_,Graph),
@@ -208,7 +208,7 @@ noPropertyRangeIC(X,P,Y,Graph,Reason) :-
  */
 notFunctionalPropertyIC(X,P,_,Graph,Reason) :-
     functionalProperty(P,Graph),
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(X,P,_,Instance),
     card(X,P,_,Graph,N),
     N \= 1,
@@ -225,7 +225,7 @@ notFunctionalPropertyIC(X,P,_,Graph,Reason) :-
  * Determines of ?P is actually an inverse functional property or not. 
  */
 notInverseFunctionalPropertyIC(X,P,Y,Graph,Reason) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     inverseFunctionalProperty(P,Graph),
     xrdf(_,P,Y,Instance),
     card(_,P,Y,Graph,N),
@@ -246,21 +246,21 @@ notInverseFunctionalPropertyIC(X,P,Y,Graph,Reason) :-
  * schema.
  **/
 localOrphanPropertyIC(X,P,Y,Graph,[rvo:subject=X,rvo:object=Y|Reason]) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
 	xrdf(X,P,Y,Instance),
     \+ P='http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 	orphanProperty(P,_,Graph,Reason).
 
 instanceSubjectBlankNode(X,Graph) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(X,_,_,Instance),
     rdf_is_bnode(X).
 instancePredicateBlankNode(Y,Graph) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(_,Y,_,Instance),
     rdf_is_bnode(Y).
 instanceObjectBlankNode(Z,Graph) :-
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Instance),
     xrdf(_,_,Z,Instance),
     rdf_is_bnode(Z).
 

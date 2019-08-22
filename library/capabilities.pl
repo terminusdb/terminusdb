@@ -42,26 +42,10 @@
 :- use_module(library(triplestore)).
 :- use_module(library(frame)).
 :- use_module(library(json_ld)).
-:- use_module(library(collection)).
+:- use_module(library(database)).
 :- use_module(library(md5)).
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
-
-terminus_collection(Collection) :-
-    config:server_name(Server),
-    atomic_list_concat([Server,'/terminus'],Collection).
-
-/** 
- * terminus_context(Context : dictionary) is det.
- * 
- * JSON-LD of terminus context. 
- */ 
-terminus_context(_{
-                       doc : Doc, 
-                       terminus : 'https://datachemist.net/ontology/terminus#'
-                   }) :-
-    config:server_name(Server),
-    atomic_list_concat([Server,'/terminus/document/'],Doc).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
@@ -78,7 +62,7 @@ root_user_id(Root) :-
 key_user(Key, User_ID) :-
     md5_hash(Key, Hash, []),
     
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([User_ID], 
@@ -95,8 +79,7 @@ key_user(Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(User_ID, User) :-
-    terminus_collection(C),
-    make_collection_graph(C,Graph),
+    terminus_database(Graph),
     terminus_context(Ctx),
     
     entity_jsonld(User_ID,Ctx,Graph,3,User).
@@ -111,8 +94,7 @@ get_user(User_ID, User) :-
 key_auth(Key, Auth) :-
     key_user(Key,User_ID),
 
-    terminus_collection(C),
-    make_collection_graph(C,Graph),
+    terminus_database(Graph),
     terminus_context(Ctx),
 
     user_auth_id(User_ID, Auth_ID),
@@ -126,7 +108,7 @@ key_auth(Key, Auth) :-
  * obj embedded in woql.
  */
 user_auth_id(User_ID, Auth_ID) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Auth_ID], 
@@ -141,7 +123,7 @@ user_auth_id(User_ID, Auth_ID) :-
  * user_action(+User,-Action) is nondet.
  */
 user_action(User,Action) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Action], 
@@ -161,7 +143,7 @@ user_action(User,Action) :-
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(Auth, Action, Resource_ID) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    where(
@@ -188,7 +170,7 @@ add_database_resource(DB_Name,URI,Doc) :-
     ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    (
@@ -213,7 +195,7 @@ delete_database_resource(URI) :-
     % but are those references then going to be "naked" having no other reference?
     %
     % Supposing we have only one scope for an auth, do we delete the auth? 
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     % delete the object
     ask(DB, 
@@ -233,7 +215,7 @@ delete_database_resource(URI) :-
  * Writes cors headers associated with Resource_URI
  */
 write_cors_headers(Resource_URI) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     % delete the object
     findall(Origin,

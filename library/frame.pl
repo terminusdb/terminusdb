@@ -57,7 +57,7 @@
 :- use_module(library(validate_schema), except([entity/2])).
 :- use_module(library(validate_instance)).
 :- use_module(library(inference)).
-:- use_module(library(collection)).
+:- use_module(library(database)).
 :- use_module(library(triplestore)).
 :- use_module(library(schema), []).
 :- use_module(library(types)).
@@ -82,14 +82,14 @@ all_classes(Graph,ACR) :-
  * get_label(Entity,Graph,Label) is semidet.
  */
 get_label(Entity,Graph,Label) :-
-    graph_instance(Graph,Collection),
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Collection),
+    database_instance(Graph,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
     xrdf(Collection,Instance,Entity,LabelProp,literal(lang(_,Label))),
     !.
 get_label(Entity,Graph,Label) :-
-    graph_instance(Graph,Collection),
-    graph_instance(Graph,Instance),
+    database_instance(Graph,Collection),
+    database_instance(Graph,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
     xrdf(Collection,Instance,Entity,LabelProp,literal(type(_,Label))),
     !.
@@ -106,8 +106,8 @@ get_some_label(E,Graph,L) :-
  * Class is an entity class and Label is a string.
  */
 all_entity_instances(Graph,AE) :-
-    graph_collection(Graph,Collection),    
-    graph_instance(Graph,Instance),
+    database_name(Graph,Collection),    
+    database_instance(Graph,Instance),
     unique_solutions(E=[type=C,label=L],
                      (   xrdf(Collection,Instance,
                               E,rdf:type,C),
@@ -116,8 +116,8 @@ all_entity_instances(Graph,AE) :-
                      AE).
 
 all_entity_iris(Graph, IRIs) :-
-    graph_collection(Graph,Collection),            
-    graph_instance(Graph, Instance),
+    database_name(Graph,Collection),            
+    database_instance(Graph, Instance),
     findall(IRI,
             (   xrdf(Collection,Instance,
                      IRI,rdf:type,C),
@@ -153,8 +153,8 @@ class_properties(Class, Graph, PropertiesPrime) :-
               Properties)        
     ->  most_specific_properties(Graph,Properties,MSProperties),
         append(MSProperties,EntityProperties,PropertiesWithAbstract),
-        graph_collection(Graph,Collection),                
-        graph_schema(Graph,Schema),
+        database_name(Graph,Collection),                
+        database_schema(Graph,Schema),
         exclude({Schema,Collection}/[X]>>(
                     xrdf(Collection,
                          Schema,
@@ -178,57 +178,57 @@ has_formula(Class,Graph) :-
 %
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:someValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:allValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:minCardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:maxCardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:cardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:minQualifiedCardinality,literal(type(_Type, CardStr))),
     xrdf(Collection,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:maxQualifiedCardinality,literal(type(_Type,CardStr))),
     xrdf(Collection,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:qualifiedCardinality,literal(type(_Type,CardStr))),
     xrdf(Collection,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CR,owl:onProperty,OP),
     xrdf(Collection,Schema,CR,owl:hasValue,V).
 
@@ -364,8 +364,8 @@ property_restriction(P,Graph,R) :-
 classes_below(Class,Graph,BelowList) :-
     unique_solutions(Below,schema:subsumptionOf(Below,Class,Graph),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     exclude({Collection, Schema}/[X]>>(
                 xrdf(Collection, Schema,
                      X,dcog:tag,dcog:abstract)),
@@ -803,8 +803,8 @@ realise_triples(_,[],_,[]) :-
     !.
 realise_triples(Elt,[[type=objectProperty|P]|Rest],Graph,Realiser) :-
     !, % no turning back if we are an object property
-    graph_collection(Graph,C),
-    graph_instance(Graph,G),
+    database_name(Graph,C),
+    database_instance(Graph,G),
     
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
@@ -822,8 +822,8 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Graph,Realiser) :-
     ).
 realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Graph,Realiser) :-
     !, % no turning back if we are a datatype property
-    graph_collection(Graph,C),
-    graph_instance(Graph,G),
+    database_name(Graph,C),
+    database_instance(Graph,G),
 
     member(property=Prop, P),
     (   setof((C,G,Elt,Prop,V),
@@ -887,7 +887,7 @@ entity_jsonld(Entity,Ctx,Graph,JSON_LD) :-
     entity_object(Entity, Graph, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
-    graph_collection(Graph, Collection),
+    database_name(Graph, Collection),
     get_collection_jsonld_context(Collection,Ctx_Graph),
     merge_dictionaries(Ctx,Ctx_Graph,Ctx_Total),
 
@@ -904,7 +904,7 @@ entity_jsonld(Entity,Ctx,Graph,Depth,JSON_LD) :-
     entity_object(Entity, Graph, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
-    graph_collection(Graph, Collection),
+    database_name(Graph, Collection),
     get_collection_jsonld_context(Collection,Ctx_Graph),
     merge_dictionaries(Ctx,Ctx_Graph,Ctx_Total),
 
@@ -929,7 +929,7 @@ class_frame_jsonld(Class,Graph,JSON_Frame) :-
     class_frame(Class,Graph,Frame),
     term_jsonld(Frame,JSON_LD),
     
-    graph_collection(Graph, Collection),
+    database_name(Graph, Collection),
     get_collection_jsonld_context(Collection,Ctx),
     
     compress(JSON_LD,Ctx,JSON_Frame).
@@ -951,8 +951,8 @@ object_edges(URI,Graph,Edges) :-
  * Get the set of references to a given object.
  */ 
 object_references(URI,Graph,Edges) :-
-    graph_collection(Graph,C),
-    graph_instance(Graph,G),
+    database_name(Graph,C),
+    database_instance(Graph,G),
 
     findall((C,G,Elt,Prop,URI),
             inferredEdge(Elt, Prop, URI, Graph),
@@ -991,7 +991,7 @@ update_object(Obj, Graph) :-
 update_object(ID, Obj, Graph) :-
     put_dict('@id', Obj, ID, New_Obj),
 
-    graph_collection(Graph,Collection),
+    database_name(Graph,Collection),
     get_collection_jsonld_context(Collection,Ctx),
     
     jsonld_triples(New_Obj,Ctx,Graph,New),

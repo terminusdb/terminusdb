@@ -14,20 +14,20 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -36,7 +36,7 @@
 :- use_module(library(http/json)).
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
-:- use_module(library(collection)).
+:- use_module(library(database)).
 
        
 /** 
@@ -55,10 +55,10 @@ expand(JSON_LD, JSON) :-
     !,
     maplist(expand,JSON_LD,JSON).
 expand(JSON, JSON) :-
-    is_atom(JSON),
+    atom(JSON),
     !.
 expand(JSON_LD, JSON) :-
-    is_string(JSON_LD),
+    string(JSON_LD),
     atom_string(JSON,JSON_LD).
 
 /** 
@@ -246,7 +246,7 @@ jsonld_id(Obj,ID) :-
 This should be more explicit and separate....
 
 jsonld_id(_Obj,Graph,ID) :-
-    graph_collection(Graph,Collection),
+    database_name(Graph,Collection),
     interpolate([Collection,'/document'],Base),
     gensym(Base,ID).
   */
@@ -338,8 +338,8 @@ jsonld_id_triples(ID,PV,Ctx,Graph,Triples) :-
 
     dict_pairs(PV, _, JSON_Pairs),
     maplist({ID,Ctx,Graph}/[P-V,Triples]>>(
-                graph_collection(Graph,C),
-                graph_instance(Graph,G),
+                database_name(Graph,C),
+                database_instance(Graph,G),
 
                 * format('Incoming P-V: ~q~n',[P-V]),
                 (   memberchk(P,['@context','@id'])

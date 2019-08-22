@@ -97,11 +97,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(collection).
-:- use_module(triplestore).
-:- use_module(utils). 
-:- use_module(types).
-:- use_module(base_type).
+:- use_module(library(database)).
+:- use_module(library(triplestore)).
+:- use_module(library(utils)).
+:- use_module(library(types)).
+:- use_module(library(base_type)).
 
 /*
 OWL DL Syntactic correctness
@@ -126,12 +126,12 @@ Classes
 */
 % :- rdf_meta immediateClass(r,o).
 immediateClass(X,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Class').
 immediateClass(X,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
 immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
 immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
@@ -160,8 +160,8 @@ class(X,Graph) :- equivalentClass(X,Y,Graph), class(Y,Graph).
 % @param Graph identifying the current schema graph.
 %% :- rdf_meta restriction(r,o).
 restriction(R,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection, Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
 restriction(R,Graph) :-
     subClassOf(R,R2,Graph),
@@ -178,8 +178,8 @@ restriction(R,Graph) :-
 % @param Reason A prolog representation of a JSON Linked Data structure 
 %               detailing the violation.
 noImmediateClassSC(Graph, Reason) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
     domain(P,X,Graph),
     \+ immediateClass(X,Graph), \+ restriction(X,Graph),
@@ -190,8 +190,8 @@ noImmediateClassSC(Graph, Reason) :-
 	      class=X,
 	      property=P].
 noImmediateClassSC(Graph, Reason) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
     range(P,X,Graph),
     \+ immediateClass(X,Graph), \+ restriction(X,Graph),
@@ -264,8 +264,8 @@ noImmediateClassSC(Graph, Reason) :-
 % @param P A property specified as a URI_OR_ID
 % @param Graph the current graph
 restrictionOnProperty(CR,P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
 	xrdf(Collection,Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
 	restriction(CR,Graph).
 restrictionOnProperty(CR,P,Graph) :-
@@ -328,8 +328,8 @@ collect(Collection,GraphAtom,X,[H|T]) :-
 % @param Child Child class URI_OR_ID
 % @param Parent Parent class URI_OR_ID.
 subClassOf(Child,Parent,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent).
 
 %% unionOf(?Super:uri_or_id,?Sub:uri_or_id,+Graph:graph) is nondet
@@ -340,8 +340,8 @@ subClassOf(Child,Parent,Graph) :-
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Graph The current graph
 unionOf(C,U,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
     collect(Collection,Schema,ListObj,L),
     member(U,L).
@@ -354,8 +354,8 @@ unionOf(C,U,Graph) :-
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Graph The current graph
 unionOfList(C,UList,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
     collect(Collection,Schema,ListObj,UList),
     % This looks so dubious, I hope I didn't write it.
@@ -370,8 +370,8 @@ unionOfList(C,UList,Graph) :-
 % @param Graph The current graph
 %% :- rdf_meta disjointUnionOf(r,r,o).
 disjointUnionOf(C,U,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),    
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),    
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
     collect(Collection,Schema,ListObj,L),
     member(U,L).
@@ -385,8 +385,8 @@ disjointUnionOf(C,U,Graph) :-
 % @param Graph The current schema graph.
 %% :- rdf_meta disjointUnionOfList(r,r,o).
 disjointUnionOfList(C,UList,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
     collect(Collection,Schema,ListObj,UList),
     % DUBIOUS
@@ -401,8 +401,8 @@ disjointUnionOfList(C,UList,Graph) :-
 % @param Graph The current schema graph
 %% :- rdf_meta intersectionOf(r,r,o).
 intersectionOf(C,I,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
     collect(Collection,Schema,ListObj,L),
     member(I,L).
@@ -416,8 +416,8 @@ intersectionOf(C,I,Graph) :-
 % @param Graph The current schema graph.
 %% :- rdf_meta intersectionOfList(r,r,o).
 intersectionOfList(C,IList,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection, Schema, C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
     collect(Collection,Schema,ListObj,IList),
     !.
@@ -431,8 +431,8 @@ intersectionOfList(C,IList,Graph) :-
 % @param Graph The current schema graph.
 %% :- rdf_meta oneOf(r,r,o).
 oneOf(CC,X,Graph) :-
-    graph_schema(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_schema(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
     collect(Collection,Schema,ListObj,OneList),
     member(X,OneList).
@@ -446,27 +446,27 @@ oneOf(CC,X,Graph) :-
 % @param Graph The current schema graph.
 %% :- rdf_meta oneOfList(r,r,o).
 oneOfList(C,OneList,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,C,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
     collect(Collection,Schema,ListObj,OneList).
 
 %% :- rdf_meta complementOf(r,r,o).
 complementOf(CC,CN,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CC,'http://www.w3.org/2002/07/owl#complementOf',CN).
 
 %% :- rdf_meta datatypeComplementOf(r,r,o).
 datatypeComplementOf(CC,CN,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CC,'http://www.w3.org/2002/07/owl#datatypeComplementOf',CN).
 
 %% :- rdf_meta equivalentClass(r,r,o).
 equivalentClass(CC,CE,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,CC,'http://www.w3.org/2002/07/owl#equivalentClass',CE).
 
 /*  Previous code for equivalent class.
@@ -476,8 +476,8 @@ equivalentClass(CC,CE,Graph) :-
 
 %% :- rdf_meta equivalentClass(r,r,o).
 anonymousEquivalentClass(C,CE,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     equivalentClass(C,CE,Schema),
     % Exactly one reference to this class, or everything will go to hell.
     (setof(X,xrdf(Collection,Schema,X,_,CE), ListX) *-> ListX = L ; L = []),
@@ -521,8 +521,8 @@ subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
 
 %% :- rdf_meta customDatatype(r,o).
 customDatatype(X,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
 
 /** 
@@ -708,21 +708,21 @@ rdfsProperty(P) :- rdfsObjectProperty(P).
 
 %:- rdf_meta rdfProperty(r,o).
 rdfProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#Property').
 
 %:- rdf_meta datatypeProperty(r,o).
 datatypeProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
 datatypeProperty(P,_) :- rdfsDatatypeProperty(P).
 
 %:- rdf_meta annotationProperty(r,o).
 annotationProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
 annotationProperty(P,Graph) :-
     subsumptionPropertiesOf(P,'https://datachemist.net/ontology/dcog#pseudo_property', Graph).
@@ -730,20 +730,20 @@ annotationProperty(P,Graph) :-
 
 %:- rdf_meta functionalProperty(r,o).
 functionalProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#FunctionalProperty').
 
 %:- rdf_meta inverseFunctionalProperty(r,o).
 inverseFunctionalProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#InverseFunctionalProperty').
 
 %:- rdf_meta objectProperty(r,o).
 objectProperty(P,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
 objectProperty(P,_) :- rdfsObjectProperty(P).
 
@@ -803,8 +803,8 @@ notUniquePropertySC(Graph,Reason) :-
 % One step subproperty relation
 %:- rdf_meta subPropertyOf(r,r,o).
 subPropertyOf(X,Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
 
 /** 
@@ -905,8 +905,8 @@ propertyCycleSC(Graph,Reason) :- propertyCycle(_,_,Graph,Reason).
  * Actually specified range for P.
  */
 range(P,R,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/2000/01/rdf-schema#range',R).
 
 /** 
@@ -935,8 +935,8 @@ anyRange(P,R,Graph) :-
     strictSubsumptionPropertiesOf(P,P2,Graph),
     anyRange(P2,R,Graph).
 anyRange(OP,R,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_inference(Graph,Inference),
+    database_name(Graph,Collection),
+    database_inference(Graph,Inference),
     xrdf(Collection,Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     anyDomain(P,R,Graph).
 
@@ -949,8 +949,8 @@ mostSpecificRange(P,R,Graph) :- anyRange(P,R,Graph), !.
  * Actually specified domain in the database.
  */ 
 domain(P,D,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /** 
@@ -970,8 +970,8 @@ anyDomain('http://www.w3.org/2000/01/rdf-schema#comment',D,Graph) :-
 anyDomain(P,R,Graph) :-
     domain(P,R,Graph).
 anyDomain(OP,R,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_inference(Graph,Inference),
+    database_name(Graph,Collection),
+    database_inference(Graph,Inference),
     xrdf(Collection,Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     anyRange(P,R,Graph).
 anyDomain(P,R,Graph) :-
@@ -1131,20 +1131,20 @@ rangeNotSubsumedSC(Graph,Reason) :-
 	      parentRange=R2].
 
 schemaSubjectBlankNode(X,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X,_,_),
     is_bnode(X).
 
 schemaPredicateBlankNode(Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,_,Y,_),
     is_bnode(Y).
 
 schemaObjectBlankNode(Z,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,_,_,Z),
     is_bnode(Z).
 
@@ -1181,12 +1181,12 @@ schemaBlankNodeSC(Graph,Reason) :-
  * Get the rdfs:label for X as Y.
  */
 label(X,Y,Graph) :-
-    graph_collection(Graph,Collection),        
-    graph_instance(Graph,Instance),
+    database_name(Graph,Collection),        
+    database_instance(Graph,Instance),
     xrdf(Collection,Instance,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
 label(X,Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
 
 /** 
@@ -1195,12 +1195,12 @@ label(X,Y,Graph) :-
  * Get the rdfs:comment for X as Y.
  */
 comment(X,Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_instance(Graph,Instance),
+    database_name(Graph,Collection),
+    database_instance(Graph,Instance),
     xrdf(Collection,Instance,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 comment(X,Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /** 
@@ -1210,8 +1210,8 @@ comment(X,Y,Graph) :-
  * Get the dcog:tag for X as Y.
  */
 dcog_tag(X,Y,Graph) :-
-    graph_collection(Graph,Collection),
-    graph_schema(Graph,Schema),
+    database_name(Graph,Collection),
+    database_schema(Graph,Schema),
     xrdf(Collection,Schema,X, 'https://datachemist.net/ontology/dcog#tag', Y).
 
 classHasLabel(X,Y,Graph) :- class(X,Graph), label(X,Y,Graph).
