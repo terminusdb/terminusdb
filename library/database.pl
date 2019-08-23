@@ -173,7 +173,7 @@ database_record_instance_list(Database_Name,Instances) :-
                     (
                         t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
                         t( DB_Resource , rdf/type , terminus/'Database'),
-                        t( DB_Resource , terminus/instance, Instance ^^ (xsd/string))
+                        t( DB_Resource , terminus/document, Instance ^^ (xsd/string))
                     )
                 )
                ),
