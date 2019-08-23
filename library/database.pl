@@ -70,12 +70,12 @@ database_error_schema(database(_,_,_,_,_,Error_Schema), Error_Schema).
  */ 
 make_database(DatabaseList, Database) :-
     Database = database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(name,DatabaseList,Name,none),
-    get_key(schema,DatabaseList,Schema,none),
-    get_key(instance,DatabaseList,Instance,none),
-    get_key(inference,DatabaseList,Inference,none),
-    get_key(error_schema,DatabaseList,Error_Schema,none),
-    get_key(error_instance,DatabaseList,Error_Instance,none),
+    get_key(name,DatabaseList,Name,[]),
+    get_key(schema,DatabaseList,Schema,[]),
+    get_key(instance,DatabaseList,Instance,[]),
+    get_key(inference,DatabaseList,Inference,[]),
+    get_key(error_schema,DatabaseList,Error_Schema,[]),
+    get_key(error_instance,DatabaseList,Error_Instance,[]),
 
     schema:database_module(Database,Module),
     schema:ensure_schema_in_module(Database,Module).
@@ -90,12 +90,12 @@ make_database(DatabaseList, Database) :-
  */ 
 make_raw_database(DatabaseList, Database) :-
     Database = database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(name,DatabaseList,Name,none),
-    get_key(schema,DatabaseList,Schema,none),
-    get_key(instance,DatabaseList,Instance,none),
-    get_key(inference,DatabaseList,Inference,none),
-    get_key(error_schema,DatabaseList,Error_Schema,none),
-    get_key(error_instance,DatabaseList,Error_Instance,none).
+    get_key(name,DatabaseList,Name,[]),
+    get_key(schema,DatabaseList,Schema,[]),
+    get_key(instance,DatabaseList,Instance,[]),
+    get_key(inference,DatabaseList,Inference,[]),
+    get_key(error_schema,DatabaseList,Error_Schema,[]),
+    get_key(error_instance,DatabaseList,Error_Instance,[]).
 
 /** 
  * database_identifiers(+Database:database -DatabaseList:list(database_identifier)) is det.

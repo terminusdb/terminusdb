@@ -56,7 +56,7 @@ collection_schema_module(Collection,_,Collection).
 
 
 calculate_subsumptionOf(CC, CP, Database) :-
-    is_graph(Database),
+    is_database(Database),
     !,
     database_module(Database, Module),
     calculate_subsumptionOf(CC, CP, Module).
@@ -104,7 +104,7 @@ term_expansion(generate_owl_predicates, Terms) :-
                 append(Inner_Arguments, [Database_Module], DatabaseVersion_Arguments),
                 Fn =.. [Predicate|Arguments],
                 Database_Fn =.. [Predicate|DatabaseVersion_Arguments],
-                Definition1 = (Fn :- is_graph(Module),
+                Definition1 = (Fn :- is_database(Module),
                                      !,
                                      database_module(Module, Database_Module),
                                      Database_Fn),
@@ -119,7 +119,7 @@ term_expansion(generate_owl_predicates, Terms) :-
 generate_owl_predicates.
 
 entity(Class, Database) :-
-    is_graph(Database),
+    is_database(Database),
     !,
     database_module(Database, Module),
     Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Entity').
