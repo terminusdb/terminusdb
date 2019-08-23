@@ -30,7 +30,7 @@
 :- use_module(library(triplestore)).
 
 /** 
- * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:graph) is nondet.
+ * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database is nondet.
  * 
  * Run a property axiom chain PropList from X to Y.
  */
@@ -44,7 +44,7 @@ runChain(X,[P|PropList],Z,Database) :-
     runChain(Y,PropList,Z,Database).
 
 /** 
- * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:graph) is nondet.
+ * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:database is nondet.
  * 
  * We impose an ordering to avoid non-termination (subproperty ordering)
  * Concrete links are already in InferredEdge
@@ -58,7 +58,7 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
     inferredEdge(Y,OP,Z,Database).
 
 /** 
- * inferredEdge(?X,?OP,?Y,+Database:graph) is nondet.
+ * inferredEdge(?X,?OP,?Y,+Database:database is nondet.
  * 
  * Calculates all available triples under inference
  * 

@@ -115,8 +115,8 @@ Classes
 */
 
 /** 
- * immediateClass(?X:uri_or_id, +Database:graph) is nondet.
- * immediateClass(+X:uri_or_id, +Database:graph) is det.
+ * immediateClass(?X:uri_or_id, +Database:database is nondet.
+ * immediateClass(+X:uri_or_id, +Database:database is det.
  *
  * Check to see if class definitions are immediate (best practices) rather than inferred.
  * 
@@ -138,8 +138,8 @@ immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
 % Should this be here?
 immediateClass('https://datachemist.net/ontology/dcog#Entity', _).
 
-%% class(?X:uri_or_id, +Schema:graph) is nondet
-% class(+X:uri_or_id, +Schema:graph) is det
+%% class(?X:uri_or_id, +Schema:database is nondet
+% class(+X:uri_or_id, +Schema:database is det
 %
 % All class designations - with inferences.
 % 
@@ -151,7 +151,7 @@ class(X,Database) :- immediateClass(X,Database).
 class(X,Database) :- subClassOf(X,Y,Database), class(Y,Database).
 class(X,Database) :- equivalentClass(X,Y,Database), class(Y,Database).
 
-% restriction(+R:uri_or_id, +Database:graph) is nondet.
+% restriction(+R:uri_or_id, +Database:database is nondet.
 %
 % All restriction designations - with inferences.
 % 
@@ -170,7 +170,7 @@ restriction(R,Database) :-
     equivalentClass(R,R2,Database),
     restriction(R2,Database).
 
-%% noImmediateClassSC(+Database:graph, -Reason:any) is nondet
+%% noImmediateClassSC(+Database:database -Reason:any) is nondet
 %
 % Check to see if a class is used without a class definition.
 % 
@@ -256,7 +256,7 @@ noImmediateClassSC(Database, Reason) :-
 	      child=X,
 	      parent=Y].
 
-%% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:graph) is nondet
+%% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:database is nondet
 %
 % Defines the relation between properties and their restrictions.
 %
@@ -272,7 +272,7 @@ restrictionOnProperty(CR,P,Database) :-
 	strictSubsumptionPropertiesOf(P,Q,Database),
 	restrictionOnProperty(CR,Q,Database).
 	
-%% classOrRestriction(?X:uri_or_id, +Database:graph) is nondet
+%% classOrRestriction(?X:uri_or_id, +Database:database is nondet
 %
 % All URI_OR_IDs which are either a class or restriction.
 %
@@ -283,7 +283,7 @@ classOrRestriction(X,Database) :- restriction(X,Database).
 
 % TODO: compound is vague, reasons should have a specification.
 
-%% notUniqueClass(+Y:uri_or_id, +Database:graph, -Reason:any) is nondet
+%% notUniqueClass(+Y:uri_or_id, +Database:database -Reason:any) is nondet
 %
 % Is a class multiply defined?
 %
@@ -321,7 +321,7 @@ collect(Collection,DatabaseAtom,X,[H|T]) :-
     !, % assume one result
     collect(Collection,DatabaseAtom,Y,T).
 
-%% subClassOf(?Child:uri_or_id,?Parent:uri_or_id,+Database:graph) is nondet
+%% subClassOf(?Child:uri_or_id,?Parent:uri_or_id,+Database:database is nondet
 %
 % One step subclassing (only gives the immediate child-parent class relationship)
 %
@@ -332,7 +332,7 @@ subClassOf(Child,Parent,Database) :-
     database_schema(Database,Schema),
     xrdf(Collection,Schema,Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent).
 
-%% unionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:graph) is nondet
+%% unionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be a union of.
 %
@@ -346,7 +346,7 @@ unionOf(C,U,Database) :-
     collect(Collection,Schema,ListObj,L),
     member(U,L).
 
-%% unionOfList(+Super:uri_or_id,-Sub:list(uri_or_id),+Database:graph) is det
+%% unionOfList(+Super:uri_or_id,-Sub:list(uri_or_id),+Database:database is det
 %
 % Gives a list of URI_OR_IDs which are solutions for which the Super URI_OR_ID is determined to be a union of.
 %
@@ -361,7 +361,7 @@ unionOfList(C,UList,Database) :-
     % This looks so dubious, I hope I didn't write it.
     !.
 
-%% disjointUnionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:graph) is nondet
+%% disjointUnionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be a union of.
 %
@@ -376,7 +376,7 @@ disjointUnionOf(C,U,Database) :-
     collect(Collection,Schema,ListObj,L),
     member(U,L).
 
-%% disjointUnionOfList(+Super:uri_or_id,-SubList:list(uri_or_id),+Database:graph) is det
+%% disjointUnionOfList(+Super:uri_or_id,-SubList:list(uri_or_id),+Database:database is det
 %
 % Gives URI_OR_ID solutions as a list for which the Super URI_OR_ID is determined to be a djsoint union of.
 %
@@ -392,7 +392,7 @@ disjointUnionOfList(C,UList,Database) :-
     % DUBIOUS
     !.
 
-%% intersectionOf(?Inter:uri_or_id,?Class:uri_or_id,+Database:graph) is nondet
+%% intersectionOf(?Inter:uri_or_id,?Class:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be an intersection.
 %
@@ -407,7 +407,7 @@ intersectionOf(C,I,Database) :-
     collect(Collection,Schema,ListObj,L),
     member(I,L).
 
-%% disjointUnionOfList(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:graph) is det
+%% disjointUnionOfList(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:database is det
 %
 % Gives URI_OR_ID solutions as a list for which the Super URI_OR_ID is determined to be an intersection.
 %
@@ -422,7 +422,7 @@ intersectionOfList(C,IList,Database) :-
     collect(Collection,Schema,ListObj,IList),
     !.
 
-%% oneOf(?CC:uri_or_id,?X:uri_or_id,+Database:graph) is det
+%% oneOf(?CC:uri_or_id,?X:uri_or_id,+Database:database is det
 %
 % Gives elements which are members of a class by enumeration.
 %
@@ -437,7 +437,7 @@ oneOf(CC,X,Database) :-
     collect(Collection,Schema,ListObj,OneList),
     member(X,OneList).
 
-%% oneOfList(+CC:uri_or_id,-OneList:list(uri_or_id),+Database:graph) is det
+%% oneOfList(+CC:uri_or_id,-OneList:list(uri_or_id),+Database:database is det
 %
 % Gives a prolog list of elements associated with an enumerated class.
 %
@@ -526,8 +526,8 @@ customDatatype(X,Database) :-
     xrdf(Collection,Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
 
 /** 
- * datatype(-X:uri_or_id,+Database:graph) is nondet.
- * datatype(-X:uri_or_id,+Database:graph) is det.
+ * datatype(-X:uri_or_id,+Database:database is nondet.
+ * datatype(-X:uri_or_id,+Database:database is det.
  */
 %% :- rdf_meta datatype(r,o).
 datatype(X,Database) :- customDatatype(X,Database).
@@ -578,7 +578,7 @@ basetypeSubsumptionOf(Sub,Super) :-
     baseTypeParent(Sub,Parent), basetypeSubsumptionOf(Parent,Super).
 
 /** 
- * datatypeSubsumptionOf(?Sub,?Super,+Database:graph) is nondet. 
+ * datatypeSubsumptionOf(?Sub,?Super,+Database:database is nondet. 
  * 
  * Implements the subsumption latice for datatypes by making use of reflexivity and 
  * baseTypeParent\2.
@@ -600,7 +600,7 @@ datatypeSubsumptionOf(Sub,Super,Database) :-
     baseTypeParent(Sub,Parent), datatypeSubsumptionOf(Parent,Super,Database).
 
 /**
- * datatypeSubsumptionOf(?Sub,?Super,+Database:graph) is nondet. 
+ * datatypeSubsumptionOf(?Sub,?Super,+Database:database is nondet. 
  * 
  * Implements strict (non reflexive) subsumption latice for datatypes by 
  * baseTypeParent\2.
@@ -614,7 +614,7 @@ datatypeStrictSubsumptionOf(Sub,Super,Database) :-
     datatypeSubsumptionOf(Parent,Super,Database).
 
 /**
- * orphanClassSC(+Database:graph,-Reason:rvo) is nondet. 
+ * orphanClassSC(+Database:database-Reason:rvo) is nondet. 
  * 
  * Find all orphaned classes in Schema.
  */
@@ -748,7 +748,7 @@ objectProperty(P,Database) :-
 objectProperty(P,_) :- rdfsObjectProperty(P).
 
 /** 
- * property(?P,+Database:graph) is nondet. 
+ * property(?P,+Database:database is nondet. 
  * 
  * ?P is a valid property in the schema. 
  */
@@ -793,7 +793,7 @@ annotationOverloadSC(Database,Reason) :-
 	    message=Message].
 
 /** 
- * notUniquePropertySC(+Database:graph,-Reason:any) is nondet. 
+ * notUniquePropertySC(+Database:database-Reason:any) is nondet. 
  * 
  * All redundantly defined properties.
  */
@@ -808,7 +808,7 @@ subPropertyOf(X,Y,Database) :-
     xrdf(Collection,Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
 
 /** 
- * subsumptionPropertiesOf(?PChild,?PParent,+Database:graph) is nondet. 
+ * subsumptionPropertiesOf(?PChild,?PParent,+Database:database is nondet. 
  * 
  * Transitive reflexive closure of Subproperty relation.
  */
@@ -823,7 +823,7 @@ subsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Datab
     datatypeProperty(PC,Database).
 
 /** 
- * strictSubsumptionPropertiesOf(?PChild,?PParent,-Database:graph) is nondet. 
+ * strictSubsumptionPropertiesOf(?PChild,?PParent,-Database:database is nondet. 
  * 
  * Non-reflexive subsumption relation for properties in Database. 
  */
@@ -869,7 +869,7 @@ orphanProperty(P,D,Database,Reason) :-     %% property has a domain but it is no
 			message=Message].
 
 /** 
- * orphanPropertySC(+Database:graph,-Reason:any) is nondet. 
+ * orphanPropertySC(+Database:database-Reason:any) is nondet. 
  *  
  * All properties which are referred to, but which do not have definitions. 
  */ 
@@ -893,14 +893,14 @@ propertyCycle(P,PC,Database,Reason) :-
 	    message=Message].
 
 /** 
- * propertyCycleSC(+Database:graph,-Reason:any) is nondet. 
+ * propertyCycleSC(+Database:database-Reason:any) is nondet. 
  *  
  * All property subsumption cycles in Database.
  */ 
 propertyCycleSC(Database,Reason) :- propertyCycle(_,_,Database,Reason).
 
 /** 
- * range(?P:uri, ?R:uri, +Database:graph) is nondet. 
+ * range(?P:uri, ?R:uri, +Database:database is nondet. 
  *
  * Actually specified range for P.
  */
@@ -919,7 +919,7 @@ entity(Class,Database) :-
 	subsumptionOf(Class,'https://datachemist.net/ontology/dcog#Entity', Database). 
 
 /** 
- * anyRange(?P,?R,+Database:graph) is nondet. 
+ * anyRange(?P,?R,+Database:database is nondet. 
  * 
  * Determine if R is a viable range for P. 
  * This must be ordered according to Hasse diagram!
@@ -944,7 +944,7 @@ anyRange(OP,R,Database) :-
 mostSpecificRange(P,R,Database) :- anyRange(P,R,Database), !.
 
 /** 
- * domain(P:uri,D:uri,Database:graph) is nondet.
+ * domain(P:uri,D:uri,Database:database is nondet.
  *
  * Actually specified domain in the database.
  */ 
@@ -954,7 +954,7 @@ domain(P,D,Database) :-
     xrdf(Collection,Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /** 
- * anyDomain(?P,?R,+Database:graph) is nondet. 
+ * anyDomain(?P,?R,+Database:database is nondet. 
  * 
  * Determine if R is a viable domain for P. 
  */ 
@@ -984,7 +984,7 @@ anyDomain(P,R,Database) :-
 mostSpecificDomain(P,R,Database) :- anyDomain(P,R,Database), !.
 
 /** 
- * noImmediateDomainSC(+Database:graph,-Reason:rvo) is nondet. 
+ * noImmediateDomainSC(+Database:database-Reason:rvo) is nondet. 
  *
  * All properties which do not have a specified domain.
  */
@@ -1007,7 +1007,7 @@ noImmediateDomainSC(Database,Reason) :-
 	      message = Message].
 
 /** 
- * noImmediateRangeSC(+Database:graph,-Reason:rvo) is nondet. 
+ * noImmediateRangeSC(+Database:database-Reason:rvo) is nondet. 
  *
  * All properties which do not have a specified range.
  */
@@ -1030,7 +1030,7 @@ noImmediateRangeSC(Database,Reason) :-
 	      message = Message].
 
 /** 
- * invalidDomainSC(+Database:graph,-Reason:any) is nondet. 
+ * invalidDomainSC(+Database:database-Reason:any) is nondet. 
  *
  * Finds all domains that are not valid classes for a given property in Database. 
  */
@@ -1046,7 +1046,7 @@ invalidDomainSC(Database,Reason) :-
 	    domain=D].
 
 /** 
- * invalidRangeSC(+Database:graph,-Reason:any) is nondet. 
+ * invalidRangeSC(+Database:database-Reason:any) is nondet. 
  *
  * Finds all ranges that are not valid classes for a given property in Database. 
  */
@@ -1084,7 +1084,7 @@ invalidRangeSC(Database,Reason) :-
 % Logging / Turn off for production
 :- use_module(library(http/http_log)).
 /** 
- * domainNotSubsumedsC(+Database:graph,-Reason:any) is nondet. 
+ * domainNotSubsumedsC(+Database:database-Reason:any) is nondet. 
  *
  * All domains which can not validly be subsumed within a property subsumption hierarchy for 
  * the Database .
@@ -1110,7 +1110,7 @@ domainNotSubsumedSC(Database,Reason) :-
 	      parentDomain=D2].
 
 /** 
- * rangeNotSubsumedSC(+Database:graph,-Reason:any) is nondet. 
+ * rangeNotSubsumedSC(+Database:database-Reason:any) is nondet. 
  * 
  * Database constraint determining that ranges must be valid 
  * a property through its entire subsumption chain. 
@@ -1149,7 +1149,7 @@ schemaObjectBlankNode(Z,Database) :-
     is_bnode(Z).
 
 /** 
- * schemaBlankNodeSC(+Database:graph,-Reason:any) is nondet. 
+ * schemaBlankNodeSC(+Database:database-Reason:any) is nondet. 
  * 
  * Is this a blank node in the schema.
  */ 
@@ -1176,7 +1176,7 @@ schemaBlankNodeSC(Database,Reason) :-
 	    object=X].
 
 /** 
- * label(?X,?Y,+Database:graph) is det. 
+ * label(?X,?Y,+Database:database is det. 
  * 
  * Get the rdfs:label for X as Y.
  */
@@ -1190,7 +1190,7 @@ label(X,Y,Database) :-
     xrdf(Collection,Schema,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
 
 /** 
- * comment(?X,?Y,+Database:graph) is det. 
+ * comment(?X,?Y,+Database:database is det. 
  * 
  * Get the rdfs:comment for X as Y.
  */
@@ -1204,7 +1204,7 @@ comment(X,Y,Database) :-
     xrdf(Collection,Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /** 
- * dcog_tag(?X:uri_or_id,?Y:any,+Database:graph) is det. 
+ * dcog_tag(?X:uri_or_id,?Y:any,+Database:database is det. 
  * 
  * TODO: Rename!
  * Get the dcog:tag for X as Y.
@@ -1230,7 +1230,7 @@ notUniqueClassLabel(X,Database,Reason) :-
 	      message=Message].
 
 /**
- * notUniqueClassLabelSC(+Database:graph, -Reason:rvo) is nondet. 
+ * notUniqueClassLabelSC(+Database:database -Reason:rvo) is nondet. 
  * 
  * What it says on the tin: every non unique label in Database as a schema constraint. 
  */ 

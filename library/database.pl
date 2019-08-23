@@ -98,7 +98,7 @@ make_raw_database(DatabaseList, Database) :-
     get_key(error_instance,DatabaseList,Error_Instance,none).
 
 /** 
- * database_identifiers(+Database:graph, -DatabaseList:list(database_identifier)) is det.
+ * database_identifiers(+Database:database -DatabaseList:list(database_identifier)) is det.
  * 
  * Create a list of names of the graphs elements contained in a graph structure. 
  */ 

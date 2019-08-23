@@ -460,7 +460,7 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
         throw(http_reply(not_found(Doc_ID,MSG)))).
     
 /* 
- * try_db_graph(+DB:uri,-Database:graph) is det. 
+ * try_db_graph(+DB:uri,-Database:database is det. 
  * 
  * Die if we can't form a graph
  */

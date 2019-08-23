@@ -53,7 +53,7 @@ pseudo_range(Relationship,Range,Database) :-
     range(Property,Range,Database).
 
 /** 
- * relationship_to_pseudoedges_and_classes(+Relationship:uri,+Database:graph,-PseudoEdge:pseudoEdge,Classes:list(uri)) is det.
+ * relationship_to_pseudoedges_and_classes(+Relationship:uri,+Database:database-PseudoEdge:pseudoEdge,Classes:list(uri)) is det.
  * 
  * Calculate the pseudoedge and classes associated with a given relationship class
  */

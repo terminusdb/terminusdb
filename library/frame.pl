@@ -172,7 +172,7 @@ has_formula(Class,Database) :-
     ;   oneOfList(Class,_,Database)
     ).
 
-% restriction_type(+Class:uri, -Restriction:restriction_formula, +Database:graph) is nondet.
+% restriction_type(+Class:uri, -Restriction:restriction_formula, +Database:database is nondet.
 %
 % Get the restriction formula for a restriction class.
 %
@@ -260,7 +260,7 @@ error:has_type(class_formula,X) :-
     is_class_formula(X).
 
 /* 
- * class_assertion(+Database:graph, +Class:uri, -Formula:class_formula) is nondet.
+ * class_assertion(+Database:database +Class:uri, -Formula:class_formula) is nondet.
  *
  * Get one solution of the OWL class assertions
  * 
@@ -302,7 +302,7 @@ class_assertion(Database,Class,class(Class)) :-
     \+ has_formula(Class,Database).
 
 /* 
- * class_formula(+Class:uri, +Database:graph, -Formula:class_formula) is semidet.
+ * class_formula(+Class:uri, +Database:database -Formula:class_formula) is semidet.
  * 
  * Create a formula describing the manner in which the class is
  * defined.
@@ -343,7 +343,7 @@ decorate_elements([Elt|Rest],Database,[MLC|Restp]) :-
     decorate_elements(Rest,Database,Restp).
 
 /**
- * property_restriction(+Property:uri,+Database:graph,PR:property_restriction) is det. 
+ * property_restriction(+Property:uri,+Database:databasePR:property_restriction) is det. 
  * 
  * Obtains a property restriction which is intrinsic to the property rather than 
  * a result of a restriction class.
@@ -418,7 +418,7 @@ normalise_restriction(true,true) :-
     !.
 
 /* 
- * restriction_formula(+Formula:class_formula,+Database:graph,
+ * restriction_formula(+Formula:class_formula,+Database:database
  *                     -RestrictionFormula:property_restriction) is det.
  * 
  * Calculate the formula of restrictions for a class.
@@ -451,7 +451,7 @@ restriction_formula(_=oneOf(_),_,true) :-
     !.
 
 /** 
- * select_restriction(+P:uri,+R:property_restriction,+Database:graph,-S:property_restriction) is det.
+ * select_restriction(+P:uri,+R:property_restriction,+Database:database-S:property_restriction) is det.
  */ 
 select_restriction(P,[type=or,operands=Operands],G,Restriction) :-
     !,
@@ -479,7 +479,7 @@ select_restriction(_,true,_,true).
 
 /** 
  * calculate_property_restriction(+Property:uri,+Restriction_Formula:property_restriction, 
- *                                +Database:graph,-Restriction:property_restriction)  is det.
+ *                                +Database:database-Restriction:property_restriction)  is det.
  * 
  * Calculate the full restriction on a given property, from the formula and 
  * constraints directly on the property.
@@ -491,7 +491,7 @@ calculate_property_restriction(Property,Restriction_Formula,Database,Restriction
                           Restriction).
 
 /** 
- * apply_restriction(+Class:uri,+Property:uri,+Database:graph,
+ * apply_restriction(+Class:uri,+Property:uri,+Database:database
  *                   +RestrictionFormula:property_restriction,Frame) is semidet.
  * 
  * 
@@ -586,7 +586,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
 
 /* 
  * calculate_frame(+Class:uri,+Properties:list(uri),
- *                 +Restriction_Formula:property_restriction, Database:graph, -Frame) is det.
+ *                 +Restriction_Formula:property_restriction, Database:database -Frame) is det.
  * 
  * Calculate the application of the restriction formula to the properties. 
 333 */
@@ -599,7 +599,7 @@ calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
  * We can't actually check types here because tabling doesn't work with 
  * attributed variables.
  * 
- * class_frame_aux(+Class:uri,Database:graph,OutputFrame:frame) is semidet. 
+ * class_frame_aux(+Class:uri,Database:databaseOutputFrame:frame) is semidet. 
  * Generate the frame associated with a given class. 
  *
  * Fails if the class doesn't exist.
@@ -709,7 +709,7 @@ entity_filled_frame(Entity,Database,Filled) :-
     fill_class_frame(Entity,Database,Frame,Filled).
 
 /*
- * realiser(+Entity:uri,+Frame:frame,+Database:graph,+Depth:number,-Realiser:any) is det.
+ * realiser(+Entity:uri,+Frame:frame,+Database:database+Depth:number,-Realiser:any) is det.
  * 
  * Synthesise the concrete representative of the schema class, 
  * showing inhabitation unfolding entities up to a depth of Depth. 
@@ -858,7 +858,7 @@ realise_triples(_Elt,F,_Database,[]) :-
     !.
 
 /*
- * entity_object(+Entity:uri,+Database:graph,+Depth,-Realiser) is semidet.
+ * entity_object(+Entity:uri,+Database:database+Depth,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity
@@ -878,7 +878,7 @@ get_collection_jsonld_context(Collection, Ctx) :-
     term_jsonld(Ctx_Obj, Ctx).
 
 /*
- * entity_jsonld(+Entity:uri,+Ctx:any,+Database:graph,-Realiser) is semidet.
+ * entity_jsonld(+Entity:uri,+Ctx:any,+Database:database-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity in a JSON_LD format using a supplied context.
@@ -894,7 +894,7 @@ entity_jsonld(Entity,Ctx,Database,JSON_LD) :-
     compress(JSON_Ex,Ctx_Total,JSON_LD).
 
 /*
- * entity_jsonld(+Entity:uri,+Ctx:any,+Database:graph,+Depth,-Realiser) is semidet.
+ * entity_jsonld(+Entity:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity in a JSON-LD format using a supplied context and unfolding 
@@ -912,7 +912,7 @@ entity_jsonld(Entity,Ctx,Database,Depth,JSON_LD) :-
 
 
 /*
- * entity_jsonld(+Entity:uri,+Database:graph,-Realiser) is semidet.
+ * entity_jsonld(+Entity:uri,+Database:database-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
  * Entity in a JSON_LD format.

@@ -67,7 +67,7 @@ get_ordered_instance_classes(Entity, Sorted, Database) :-
     ).
 
 /** 
- * instanceClass(?X:uri, ?C:uri, +Database:graph) is nondet.
+ * instanceClass(?X:uri, ?C:uri, +Database:database is nondet.
  * 
  * Determines the class C identified with the instance X.
  */
@@ -120,7 +120,7 @@ forall (x p y) \in Deletes.
 /*
 
 /** 
- * edge_orphan_instance(?X,?P,?Y,+Database:graph,-Reason:rvo) is nondet.
+ * edge_orphan_instance(?X,?P,?Y,+Database:database-Reason:rvo) is nondet.
  * 
  * Detects the existence of instance who are orphaned from a well defined class.
  * i.e. X(/Y) has no class in the instance AND schema OR has a class that is not in the schema 
