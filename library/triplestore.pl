@@ -517,55 +517,59 @@ update(DB,G,X,Y,Z,Action) :-
     insert(DB,G,X1,Y1,Z1).
 
 /** 
- * commit(+C:collection_id,+G:graph_identifier) is det.
+ * commit(+C:collection_id,+Gs:list(graph_identifier)) is det.
  * 
  * Commits the current transaction state to backing store and dynamic predicate
  * for a given collection and graph.
  */
-commit(CName,GName) :-
+commit(CName,GNames) :-
     % Time order here is critical as we actually have a time stamp for ordering.
     % negative before positive
     % graph_id_name(G,GName),
-    with_output_graph(
-            graph(CName,GName,neg,ttl),
-            (   forall(
-                     xrdf_neg_trans(CName,GName,X,Y,Z),
-                     (   % journal
-                         write_triple(CName,GName,neg,X,Y,Z),
-                         % dynamic 
-                         retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                         retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                         asserta(xrdf_neg(CName,GName,X,Y,Z))
-                     ))
-            )
-    ),
-    retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
-    
-    with_output_graph(
-            graph(CName,GName,pos,ttl),
-            (   forall(
-                    xrdf_pos_trans(CName,GName,X,Y,Z),
-                     
-                    (% journal
-                        write_triple(CName,GName,pos,X,Y,Z),
-                        % dynamic
-                        retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                        retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                        asserta(xrdf_pos(CName,GName,X,Y,Z))
-                    ))
-            )
-    ),
-    retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
+    forall(member(GName, GNames),
+           (   
+               with_output_graph(
+                   graph(CName,GName,neg,ttl),
+                   (   forall(
+                           xrdf_neg_trans(CName,GName,X,Y,Z),
+                           (   % journal
+                               write_triple(CName,GName,neg,X,Y,Z),
+                               % dynamic 
+                               retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                               retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                               asserta(xrdf_neg(CName,GName,X,Y,Z))
+                           ))
+                   )
+               ),
+               retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
+
+               with_output_graph(
+                   graph(CName,GName,pos,ttl),
+                   (   forall(
+                           xrdf_pos_trans(CName,GName,X,Y,Z),
+                           
+                           (% journal
+                               write_triple(CName,GName,pos,X,Y,Z),
+                               % dynamic
+                               retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                               retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                               asserta(xrdf_pos(CName,GName,X,Y,Z))
+                           ))
+                   )
+               ),
+               
+               retractall(xrdf_pos_trans(CName,GName,X,Y,Z)))).
 
 /** 
- * rollback(+Collection_Id,+Database_Id:graph_identifier) is det.
+ * rollback(+Collection_Id,+Database_Ids:list(graph_identifier)) is det.
  * 
  * Rollback the current transaction state.
  */
-rollback(Collection_Id,GName) :-
-    % graph_id_name(Database_Id, GName),
-    retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
-    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)). 
+rollback(Collection_Id,GNames) :-
+    forall(member(GName,GNames),
+           (   retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
+               retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z))
+           )). 
 
 /** 
  * xrdf(+Collection_Id,+Database_Ids,?Subject,?Predicate,?Object) is nondet.

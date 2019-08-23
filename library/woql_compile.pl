@@ -812,7 +812,7 @@ compile_wf((A => B),Goal) -->
         %format('***************~nImplicative Program: ~n~q~n',[(ProgA,ProgB)])
         Goal = (
             with_transaction(
-                [collection(C),graphs([WG])],
+                [collection(C),graphs(WG)],
                 exhaust(
                     (   ProgA,
                         ProgB

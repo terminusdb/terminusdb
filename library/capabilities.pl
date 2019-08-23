@@ -162,8 +162,6 @@ auth_action_scope(Auth, Action, Resource_ID) :-
  * authority reference.
  */
 add_database_resource(DB_Name,URI,Doc) :-
-    %terminus_context(Ctx),
-    %compress(Doc,Ctx,Min),
     /* This check is required to cary out appropriate auth restriction */
     (   get_dict('@type', Doc, "terminus:Database")
     ->  true
