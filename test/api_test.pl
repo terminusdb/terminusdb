@@ -48,7 +48,7 @@ run_db_create_test :-
     config:server_name(Server_Name),
     config:server_port(Port),
     % Need to set the user key correctly here or we will get a spurious error...
-    Payload = '{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"http://localhost/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}',
+    Payload = '{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:schema":{"@type":"xsd:string","@value":"schema"}, "terminus:document":{"@type":"xsd:string","@value":"document"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"http://localhost/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}',
     atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server_Name,':',Port,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
@@ -87,4 +87,5 @@ run_db_delete_test :-
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
+
 

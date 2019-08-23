@@ -26,7 +26,9 @@
 :- use_module(library(schema), [cleanup_schema_module/1]).
 :- use_module(library(prefixes)).
 :- use_module(library(types)).
-
+% feeling very circular :(
+:- use_module(library(database)).
+ 
 /** <module> Triplestore
  * 
  * This module contains the database management predicates responsible 
@@ -57,8 +59,10 @@
  * Retract all dynamic elements of graph. 
  */
 retract_graph(Collection,Database_Name) :-
-    schema:collection_schema_module(Collection,Database_Name,Module), 
-    schema:cleanup_schema_module(Module),
+    (   is_schema_graph(Collection,Database_Name)
+    ->  schema:collection_schema_module(Collection,Database_Name,Module),
+        schema:cleanup_schema_module(Module)
+    ;   true),
     retractall(xrdf_pos(Collection,Database_Name,_,_,_)),
     retractall(xrdf_neg(Collection,Database_Name,_,_,_)),
     retractall(xrdf_pos_trans(Collection,Database_Name,_,_,_)),
@@ -556,7 +560,7 @@ user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act))
     literal_expand(literal(L),Object).
 
 /** 
- * commit(+C:collection_id,+G:graph_id) is det.
+ * commit(+C:collection_id,+G:graph_identifier) is det.
  * 
  * Commits the current transaction state to backing store and dynamic predicate
  * for a given collection and graph.

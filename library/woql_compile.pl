@@ -157,7 +157,7 @@ merge(S0,S1,SM) :-
     merge_output_bindings(B0,B1,Bindings),
 
     member(prefixes=Prefixes,S0),
-    memberdatabase=Database,S0),
+    member(database=Database,S0),
     member(write_graph=Write_Graph,S0),
     member(definitions=Definitions,S0),    
     member(bound=Bound,S1),
@@ -241,14 +241,14 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
 empty_ctx(S0,S6) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
-    eltdatabase=Database,S0),
-    eltdatabase=Write_Graph,S0),
+    elt(database=Database,S0),
+    elt(database=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
-    selectdatabase=_,S1,
+    select(database=_,S1,
           database=Database,S2),
     select(module=_,S2,
            module=M,S3),
@@ -261,14 +261,14 @@ empty_ctx(S0,S6) :-
 
 empty_ctx(Prefixes,S0,S6) :-
     empty_ctx(S),
-    eltdatabase=Database,S0),
+    elt(database=Database,S0),
     elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
-    selectdatabase=_,S1,
+    select(database=_,S1,
           database=Database,S2),
     select(module=_,S2,
            module=M,S3),
@@ -406,7 +406,7 @@ run_term(Query,JSON) :-
     %format('~n***********~nProgram: ~q~n',[Prog]),
     %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
-    eltdatabase=Database,Ctx_Out),
+    elt(database=Database,Ctx_Out),
     assert_program(Definitions),
     findall((B,OGs),
             (   elt(output_graphs=OGs,Ctx_Out),
@@ -431,7 +431,7 @@ run_term(Query,JSON) :-
     %format('~n***********~nProgram: ~q~n',[Prog]),
     %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
-    eltdatabase=Database,Ctx_Out),
+    elt(database=Database,Ctx_Out),
     assert_program(Definitions),
     findall((B,Gs),
             (   elt(output_graphs=OGs,Ctx_Out),
@@ -484,7 +484,7 @@ compile_node(X:C,XE,Goals) -->
     !,
     resolve(X,XE),
     expand(C,CE),
-    viewdatabase=G),
+    view(database=G),
     {
         database_name(G,C),
         database_instance(G,I),
@@ -498,7 +498,7 @@ compile_node(X,XE,[]) -->
 
 compile_node_or_lit(PE,X:C,XE,XGoals) -->
     !,
-    viewdatabase=G),
+    view(database=G),
     (   { datatypeProperty(PE,G) }
     ->  resolve(X,XE),
         { XGoals=[] }
@@ -516,7 +516,7 @@ compile_relation(X:C,XE,Class,Goals) -->
     resolve(X,XE),
     %expand(C,CE),
     resolve(Class,ClassE),
-    viewdatabase=G),
+    view(database=G),
     {
         (   X=ignore
         ->  Goals=[]
@@ -529,10 +529,10 @@ compile_relation(X:C,XE,Class,Goals) -->
     }.
 
 compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
-    viewdatabase=Database),
+    view(database=Database),
     resolve(X,URI).
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
-    viewdatabase=Database),
+    view(database=Database),
     resolve(X,URI).
 compile_wf(delete(WG,X,P,Y),delete(WC,WG,XE,PE,YE)) -->
     resolve(X,XE),
@@ -581,7 +581,7 @@ compile_wf(like(A,B,F), Goal) -->
 compile_wf(A << B,subsumptionOf(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
-    viewdatabase=G).
+    view(database=G).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(let(P,Args,Def,Query),Goal) -->
@@ -672,7 +672,7 @@ compile_wf(t(X,P,Y),Goal) -->
     compile_node(X,XE,XGoals),
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
-    viewdatabase=G),
+    view(database=G),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
@@ -693,7 +693,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
     resolve(G,GE),
-    viewdatabase=Database),
+    view(database=Database),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
@@ -714,7 +714,7 @@ compile_wf(r(X,R,Y),Goal) -->
     compile_relation(R,RE,RClass,RGoals),
     expand(RClass,RClassID),    
     compile_node(Y,YE,YGoals),
-    viewdatabase=G),
+    view(database=G),
     view(current_output_graph=OG),
     update(output_graphs=OGS1,
            output_graphs=OGS2),
@@ -749,12 +749,12 @@ compile_wf(r(X,R,Y,G),Goal) -->
     compile_relation(R,RE,RClass,RGoals),
     expand(RClass,RClassID),
     compile_node(Y,YE,YGoals),
-    %viewdatabase=G),
+    %view(database=G),
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     view(current_output_graph=OG),
     {
-        make_collection_graph(G,Database),
+        make_database_from_database_name(G,Database),
         database_name(Database,C),
         database_instance(Database,I),
 
@@ -867,12 +867,12 @@ compile_wf(all(P), Prog) -->
     }.
 compile_wf(from(G,P),Goal) -->
     resolve(G,GName),
-    { make_collection_graph(GName,Database) },
-    updatedatabase=Old_Database,
-          database=Database),
+    { make_database_from_database_name(GName,Database) },
+    update(database=Old_Database,
+           database=Database),
     compile_wf(P, Goal),
-    updatedatabase=_,
-          database=Old_Database).
+    update(database=_,
+           database=Old_Database).
 compile_wf(depth(N,P), Prog) -->
     update(bound=D,
            bound=N),

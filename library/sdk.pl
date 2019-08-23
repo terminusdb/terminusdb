@@ -49,8 +49,8 @@ connect(DB,New_Ctx) :-
 
     database_instance(DB_Obj,I),
     
-    selectdatabase=_,Ctx1,
-          database=DB_Obj,Ctx2),
+    select(database=_,Ctx1,
+           database=DB_Obj,Ctx2),
     select(write_graph=_,Ctx2,
            write_graph=I,Ctx3),
     select(collection=_,Ctx3,

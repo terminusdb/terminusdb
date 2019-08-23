@@ -31,12 +31,13 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
+:- use_module(library(utils), [intersperse/3]).
 :- use_module(library(database)).
 :- use_module(library(types)).
 :- use_module(library(schema_definitions)).
 
 /* 
- * database_module(+Database:graph, -Module:atom) is det. 
+ * database_module(+Database:database, -Module:atom) is det. 
  */
 database_module(Database,Module) :-
     database_name(Database,C),
@@ -44,13 +45,14 @@ database_module(Database,Module) :-
     collection_schema_module(C,S,Module).
 
 /* 
- * collection_schema_module(+Collection:atom,+Schema:atom,-Module:atom) is det.
+ * collection_schema_module(+Collection:atom,+Schema,-Module:atom) is det.
  * 
  * Construct a canonical module name for the current collection. 
  * 
  */ 
-collection_schema_module(Collection,Database_ID,Module) :-
-    atomic_list_concat([Collection,'/',Database_ID],Module).
+collection_schema_module(Collection,_,Collection).
+    % Actually we only want one per collection, so we will not do any
+    % fine grained graph based cache coherence for now.
 
 
 calculate_subsumptionOf(CC, CP, Database) :-

@@ -11,7 +11,11 @@
               terminus_database_name/1,
               terminus_database/1,
               terminus_context/1,
-              make_database_from_database_name/2
+              make_database_from_database_name/2,
+              database_record_instance_list/2,
+              database_record_schema_list/2,
+              database_record_inference_list/2,
+              is_schema_graph/2
           ]).
 
 /** <module> Implementation of database graph management
@@ -146,6 +150,57 @@ terminus_database(Database) :-
                    inference=[Inference],
                    instance=[Instance]], Database).
 
+
+database_record_schema_list(Database_Name, Schemata) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name,Terminus_DB),
+    
+    findall(Schema, 
+            ask(Terminus_DB,
+                where(
+                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                        t( DB_Resource , rdf/type , terminus/'Database'),
+                        t( DB_Resource , terminus/schema, Schema ^^ (xsd/string))
+                    )
+                )
+               ),
+            Schemata).
+
+database_record_instance_list(Database_Name,Instances) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name,Terminus_DB),
+    
+    findall(Instance, 
+            ask(Terminus_DB,
+                where(
+                    (
+                        t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                        t( DB_Resource , rdf/type , terminus/'Database'),
+                        t( DB_Resource , terminus/instance, Instance ^^ (xsd/string))
+                    )
+                )
+               ),
+            Instances).
+
+    
+database_record_inference_list(Database_Name,Inferences) :-
+
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name,Terminus_DB),
+    
+    findall(Inference, 
+            ask(Terminus_DB,
+                where(
+                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                        t( DB_Resource , rdf/type , terminus/'Database'),
+                        t( DB_Resource , terminus/inference, Inference ^^ (xsd/string))
+                    )
+                )
+               ),
+            Inferences).
+
+
+
 /** 
  * make_database_from_database_name(+URI,-Database) is det.
  * 
@@ -154,37 +209,9 @@ make_database_from_database_name(Database_Name,Database) :-
     % Need a special case for the master database
     (   terminus_database_name(Database_Name)
     ->  terminus_database(Database)
-    ;   terminus_database_name(Terminus_Name),
-        % this appears at first to be circular, but we never call
-        % connect inside of the connect for terminus because we
-        % call terminus_database/1 instead.
-        connect(Terminus_Name,Terminus_DB),
-        
-        ask(Terminus_DB,
-            where(
-                (
-                    t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
-                    t( DB_Resource , rdf/type , terminus/'Database')
-                )
-            )),
-        
-        findall(Schema, 
-                ask(Terminus_DB,
-                    where(t( DB_Resource , terminus/schema, Schema ^^ (xsd/anyURI)))
-                   ),
-                Schemata),
-        
-        findall(Instance, 
-                ask(Terminus_DB,
-                    where(t( DB_Resource , terminus/instance, Instance ^^ (xsd/anyURI)))
-                   ),
-                Instances),
-
-        findall(Inference, 
-                ask(Terminus_DB,
-                    where(t( DB_Resource , terminus/instance, Inference ^^ (xsd/anyURI)))
-                   ),
-                Inferences),
+    ;   database_record_schema_list(Database_Name,Schemata),
+        database_record_inference_list(Database_Name,Inferences),
+        database_record_instance_list(Database_Name,Instances),
         
         make_database([name=Database_Name,
                        schema=Schemata,
@@ -194,3 +221,14 @@ make_database_from_database_name(Database_Name,Database) :-
     ).
 
         
+/* 
+ * is_schema_graph(Collection,Schema) is det.
+ * 
+ *
+ */ 
+is_schema_graph(C,schema) :-
+    terminus_database_name(C),
+    !.
+is_schema_graph(C,S) :-
+    database_record_schema_list(C,Schemata),
+    member(S,Schemata).
