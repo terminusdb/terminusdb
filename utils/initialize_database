@@ -80,7 +80,7 @@ database_path(Dir,Host,Path) :-
 
 instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'main/1/'], Path).
+    atomic_list_concat([DB,'document/1/'], Path).
 
 inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),

@@ -33,6 +33,7 @@
 :- use_module(library(types)).
 :- use_module(library(base_type)).
 :- use_module(library(inference)).
+:- use_module(library(expansions)).
 
 /**
  * most_specific_type(+Entity, -Sorted, +Database)
@@ -74,11 +75,11 @@ get_ordered_instance_classes(Entity, Sorted, Database) :-
 instanceClass(X, Y, Database) :-
     database_name(Database,Collection),
     database_instance(Database,Instance),
-    xrdf(Collection,Instance, X, rdf:type, Y).
+    xrdf(Collection,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 instanceClass(X, Y, Database) :-
     database_name(Database,Collection),
     database_schema(Database,Schema), % instances can also exist in the schema
-    xrdf(Collection,Schema, X, rdf:type, Y).
+    xrdf(Collection,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 
 % X has cardinality N at property OP
 card(X,OP,Y,Database,N) :-

@@ -488,21 +488,6 @@ insert(DB,G,X,Y,O) :-
         ->  retractall(xrdf_neg_trans(DB,G,X,Y,Z))
         ;   true)).
 
-user:goal_expansion(insert(DB,G,A,Y,Z),insert(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(insert(DB,G,X,B,Z),insert(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(insert(DB,G,X,Y,C),insert(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),        
-    global_prefix_expand(C,Z).
-user:goal_expansion(insert(DB,G,X,Y,literal(L)),insert(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
-
-
 /** 
  * delete(+DB,+G,+X,+Y,+Z) is det.
  * 
@@ -517,20 +502,6 @@ delete(DB,G,X,Y,O) :-
     ->  asserta(xrdf_neg_trans(DB,G,X,Y,Z))
     ;   true).
 
-user:goal_expansion(delete(DB,G,A,Y,Z),delete(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(delete(DB,G,X,B,Z),delete(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(delete(DB,G,X,Y,C),delete(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),                
-    global_prefix_expand(C,Z).
-user:goal_expansion(delete(DB,G,X,Y,literal(L)),delete(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
-
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
 new_triple(X,Y,_,object(Z2),X,Y,Z2).
@@ -544,20 +515,6 @@ update(DB,G,X,Y,Z,Action) :-
     delete(DB,G,X,Y,Z),
     new_triple(X,Y,Z,Action,X1,Y1,Z1),
     insert(DB,G,X1,Y1,Z1).
-
-user:goal_expansion(update(DB,G,A,Y,Z,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(update(DB,G,X,B,Z,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(update(DB,G,X,Y,C,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(C),
-    \+ C = literal(_),
-    global_prefix_expand(C,Z).
-user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
 
 /** 
  * commit(+C:collection_id,+G:graph_identifier) is det.
@@ -618,24 +575,9 @@ rollback(Collection_Id,GName) :-
  *
  * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
-% temporarily remove id behaviour.
 xrdf(C,Gs,X,Y,Z) :-
     member(G,Gs),
     xrdfid(C,G,X,Y,Z).
-
-user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(xrdf(DB,G,X,B,Z),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(xrdf(DB,G,X,Y,C),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),
-    global_prefix_expand(C,Z).
-user:goal_expansion(xrdf(DB,G,X,Y,literal(L)),xrdf(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
 
 xrdfid(C,G,X0,Y0,Z0) :-
     !,

@@ -130,8 +130,8 @@ terminus_context(_{
                      terminus : 'https://datachemist.net/ontology/terminus#'
                    }) :-
     config:server_name(Server),
-    atomic_list_concat([Server,'/document/'],Doc),
-    atomic_list_concat([Server,'/schema/'],Schema).
+    atomic_list_concat([Server,'/terminus/document/'],Doc),
+    atomic_list_concat([Server,'/terminus/schema/'],Schema).
 
 
 /* 
@@ -142,13 +142,10 @@ terminus_context(_{
  */ 
 terminus_database(Database) :-
     terminus_database_name(Database_Name),
-    interpolate([Database_Name,'/terminus/document'],Instance),
-    interpolate([Database_Name,'/terminus/inference'],Inference),
-    interpolate([Database_Name,'/terminus/schema'],Schema),
     make_database([name=Database_Name,
-                   schema=[Schema],
-                   inference=[Inference],
-                   instance=[Instance]], Database).
+                   schema=[schema],
+                   inference=[inference],
+                   instance=[document]], Database).
 
 
 database_record_schema_list(Database_Name, Schemata) :-

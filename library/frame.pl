@@ -54,15 +54,17 @@
 
 :- use_module(library(utils)).
 :- use_module(library(base_type)).
+:- use_module(library(triplestore)).
 :- use_module(library(validate_schema), except([entity/2])).
 :- use_module(library(validate_instance)).
 :- use_module(library(inference)).
 :- use_module(library(database)).
-:- use_module(library(triplestore)).
 :- use_module(library(schema), []).
 :- use_module(library(types)).
 :- use_module(library(frame_types)).
 :- use_module(library(json_ld)).
+:- use_module(library(prefixes)).
+:- use_module(library(expansions)).
 
 class_record(Database,Class,[class=Class|L]) :-
     maybe_meta(Class,Database,L).
