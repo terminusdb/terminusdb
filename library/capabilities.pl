@@ -18,20 +18,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
@@ -43,6 +43,7 @@
 :- use_module(library(frame)).
 :- use_module(library(json_ld)).
 :- use_module(library(database)).
+:- use_module(library(database_utils)).
 :- use_module(library(md5)).
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
@@ -156,12 +157,20 @@ auth_action_scope(Auth, Action, Resource_ID) :-
 	   ).
 
 /*  
- * add_database_resource(DB) is det.
+ * add_database_resource(DB,URI,Doc) is det.
  * 
  * Adds a database resource object to the capability instance database for the purpose of 
  * authority reference.
+ * 
+ * DB is the name of the database, URI is its identifier and Doc is a document which 
+ * describes all of its metadata properties.
  */
 add_database_resource(DB_Name,URI,Doc) :-
+    /* Don't create database resources if they already exist */
+    (   database_exists(URI)
+    ->  throw(http_reply(method_not_allowed('terminus:create_database')))
+    ;   true),
+    
     /* This check is required to cary out appropriate auth restriction */
     (   get_dict('@type', Doc, "terminus:Database")
     ->  true
@@ -174,10 +183,9 @@ add_database_resource(DB_Name,URI,Doc) :-
 	    (
             true
         =>
-            insert(doc/DB_Name, rdf/type, terminus/'Database'),
-            insert(doc/DB_Name, terminus/id, URI^^(xsd/string)),
             insert(doc/server, terminus/resource_includes, doc/DB_Name),
-            update_object(doc/DB_Name,Doc)
+            insert(doc/DB_Name, terminus/id, URI^^(xsd/anyURI)),
+            update_object(doc/DB_Name,Doc)            
         )
        ).
 

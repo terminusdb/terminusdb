@@ -453,6 +453,12 @@ import_graph(File, Collection_ID, Database_Id) :-
  * Converts a literal to canonical form. Currently 
  * we are only canonicalising booleans. We may extend as necessary.
  */
+literal_to_canonical(A^^Ty) :-
+    !,
+    literal_to_canonical(literal(Ty,A)).
+literal_to_canonical(A@Lang) :-
+    !,
+    literal_to_canonical(lang(Lang,A)).
 literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit)),
                      literal(type('http://www.w3.org/2001/XMLSchema#boolean',Can))) :-
     !,
@@ -517,59 +523,56 @@ update(DB,G,X,Y,Z,Action) :-
     insert(DB,G,X1,Y1,Z1).
 
 /** 
- * commit(+C:collection_id,+Gs:list(graph_identifier)) is det.
+ * commit(+C:collection_id,+G:graph_identifier) is det.
  * 
  * Commits the current transaction state to backing store and dynamic predicate
  * for a given collection and graph.
  */
-commit(CName,GNames) :-
+commit(CName,GName) :-
     % Time order here is critical as we actually have a time stamp for ordering.
     % negative before positive
     % graph_id_name(G,GName),
-    forall(member(GName, GNames),
-           (   
-               with_output_graph(
-                   graph(CName,GName,neg,ttl),
-                   (   forall(
-                           xrdf_neg_trans(CName,GName,X,Y,Z),
-                           (   % journal
-                               write_triple(CName,GName,neg,X,Y,Z),
-                               % dynamic 
-                               retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                               retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                               asserta(xrdf_neg(CName,GName,X,Y,Z))
-                           ))
-                   )
-               ),
-               retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
+    with_output_graph(
+        graph(CName,GName,neg,ttl),
+        (   forall(
+                xrdf_neg_trans(CName,GName,X,Y,Z),
+                (   % journal
+                    write_triple(CName,GName,neg,X,Y,Z),
+                    % dynamic 
+                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                    asserta(xrdf_neg(CName,GName,X,Y,Z))
+                ))
+        )
+    ),
 
-               with_output_graph(
-                   graph(CName,GName,pos,ttl),
-                   (   forall(
-                           xrdf_pos_trans(CName,GName,X,Y,Z),
-                           
-                           (% journal
-                               write_triple(CName,GName,pos,X,Y,Z),
-                               % dynamic
-                               retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                               retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                               asserta(xrdf_pos(CName,GName,X,Y,Z))
-                           ))
-                   )
-               ),
-               
-               retractall(xrdf_pos_trans(CName,GName,X,Y,Z)))).
+    retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
+    
+    with_output_graph(
+        graph(CName,GName,pos,ttl),
+        (   forall(
+                xrdf_pos_trans(CName,GName,X,Y,Z),
+                
+                (% journal
+                    write_triple(CName,GName,pos,X,Y,Z),
+                    % dynamic
+                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                    asserta(xrdf_pos(CName,GName,X,Y,Z))
+                ))
+        )
+    ),
+    
+    retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
 
 /** 
  * rollback(+Collection_Id,+Database_Ids:list(graph_identifier)) is det.
  * 
  * Rollback the current transaction state.
  */
-rollback(Collection_Id,GNames) :-
-    forall(member(GName,GNames),
-           (   retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
-               retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z))
-           )). 
+rollback(Collection_Id,GName) :-
+    retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
+    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)).
 
 /** 
  * xrdf(+Collection_Id,+Database_Ids,?Subject,?Predicate,?Object) is nondet.

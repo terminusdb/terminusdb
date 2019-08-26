@@ -377,8 +377,21 @@ schema_handler(get,DB,Request) :-
     verify_access(Auth,terminus/get_schema,DB_URI),
 
     try_dump_schema(Request,DB_URI).
+schema_handler(post,DB,Request) :- % should this be put?
+    /* Read Document */
+    authenticate(Request, Auth),
 
+    % We should make it so we can pun documents and IDs
+    try_db_uri(DB,DB_URI),
 
+    % check access rights
+    verify_access(Auth,terminus/get_schema,DB_URI),
+
+    try_get_param('terminus:schema_name',Request,Name),
+    try_get_param('terminus:turtle',Request,TTL),
+
+    try_update_schema(DB_URI,Name,TTL).
+    
 /********************************************************
  * Determinising predicates used in handlers            *
  *                                                      *

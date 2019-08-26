@@ -1,6 +1,7 @@
 :- module(database_utils,[
               create_db/1,
-              delete_db/1
+              delete_db/1,
+              database_exists/1
           ]).
 
 /** <module> Database Utilities
@@ -34,6 +35,14 @@
 :- use_module(library(journaling)).
 :- use_module(library(database)).
 
+
+/* 
+ * database_exists(DB_URI) is semidet.
+ */ 
+database_exists(DB_URI) :-
+    collection_directory(DB_URI,DB_Path),
+    exists_directory(DB_Path).
+
 /** 
  * create_db(+DB:atom) is semidet.
  * 
@@ -42,11 +51,11 @@
 create_db(DB_URI) :-
 
     % create the collection if it doesn't exist
-    collection_directory(DB_URI,DB_Path),
-    (   exists_directory(DB_Path)
+    (   database_exists(DB_URI)
     ->  throw(http_reply(method_not_allowed('terminus:createdatabase')))
     ;   true),
-    
+
+    collection_directory(DB_URI,DB_Path),
     ensure_directory(DB_Path),
     interpolate([DB_Path,'/COLLECTION'],DB_File),
     touch(DB_File),

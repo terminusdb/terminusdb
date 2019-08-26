@@ -148,7 +148,7 @@ terminus_database(Database) :-
                    instance=[document]], Database).
 
 
-database_record_schema_list(Database_Name, Schemata) :-
+database_record_schema_list(Database_Name, Schemas) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name,Terminus_DB),
     
@@ -161,7 +161,10 @@ database_record_schema_list(Database_Name, Schemata) :-
                     )
                 )
                ),
-            Schemata).
+            Schema_Strings),
+
+    maplist(atom_string, Schemas, Schema_Strings).
+
 
 database_record_instance_list(Database_Name,Instances) :-
     terminus_database_name(Terminus_Name),
@@ -177,11 +180,14 @@ database_record_instance_list(Database_Name,Instances) :-
                     )
                 )
                ),
-            Instances).
+            Instance_Strings),
 
-    
+    maplist(atom_string, Instances, Instance_Strings).
+
+%database_record_inference_list(Database_Name,[inference]) :-
+%    terminus_database_name(Database_Name),
+%    !.
 database_record_inference_list(Database_Name,Inferences) :-
-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name,Terminus_DB),
     
@@ -194,8 +200,9 @@ database_record_inference_list(Database_Name,Inferences) :-
                     )
                 )
                ),
-            Inferences).
+            Inference_Strings),
 
+    maplist(atom_string, Inferences, Inference_Strings).
 
 
 /** 

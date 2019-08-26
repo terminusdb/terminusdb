@@ -943,9 +943,12 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
  * the same source? 
  */ 
 object_edges(URI,Database,Edges) :-
-    most_specific_type(URI,Class,Database),
-    class_frame(Class,Database,Frame),
-    realise_triples(URI,Frame,Database,Edges).
+    (   most_specific_type(URI,Class,Database)
+    ->  class_frame(Class,Database,Frame),
+        realise_triples(URI,Frame,Database,Edges)
+    % There is no type in the database, so it doesn't exist...
+    ;   Edges=[]).
+    
 
 /* 
  * object_references(URI,Database,Edges) is det.
@@ -969,7 +972,7 @@ delete_object(URI,Database) :-
     object_references(URI,Database,References),
     append(Object_Edges,References,Edges),
     
-    maplist([(C,G,X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
+    maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
 
 /* 
  * update_object(Obj:dict,Database) is det.
@@ -1003,6 +1006,6 @@ update_object(ID, Obj, Database) :-
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
-    maplist([(C,G,X,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts),
+    maplist([(C,[G],X,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts),
     
-    maplist([(C,G,X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
+    maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).

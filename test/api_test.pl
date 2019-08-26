@@ -26,6 +26,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- use_module(library(utils)).
 :- use_module(library(database_utils)).
 :- use_module(library(api)).
 
@@ -35,7 +36,8 @@
  * Run all structured tests of the API
  */ 
 run_api_tests :-
-    try(run_db_create_test).
+    try(run_db_create_test),
+    try(run_db_delete_test).
 
 try(Goal) :- 
     (   call(Goal)
@@ -87,5 +89,3 @@ run_db_delete_test :-
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
-
-
