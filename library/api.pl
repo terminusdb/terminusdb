@@ -605,12 +605,13 @@ try_class_frame(Class,Database,Frame) :-
  *
  * This is structured in such a way that  
  */ 
-try_dump_schema(DB_URI, Request) :-
+try_dump_schema(DB_Maybe_String_URI, Request) :-
+    interpolate([DB_Maybe_String_URI], DB_URI),
     with_mutex(
         DB_URI, 
         (
             try_get_param('terminus:encoding', Request, Encoding),
-            (   Encoding = 'terminus:turtle'
+            (   atom_string('terminus:turtle',Encoding)
             ->  checkpoint_to_turtle(DB_URI, schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 delete_file(TTL_File),
