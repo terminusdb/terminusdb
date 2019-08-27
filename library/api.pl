@@ -622,3 +622,7 @@ try_dump_schema(DB_URI, Request) :-
         )
     ).
 
+/* 
+ * 
+ * Need a try_update_schema here...
+ */ 

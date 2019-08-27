@@ -143,7 +143,11 @@ user_action(User,Action) :-
  * 
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(Auth, Action, Resource_ID) :-
+auth_action_scope(Auth, Action, Resource_ID_Rep) :-
+    (   atom(Resource_ID_Rep)
+    ->  atom_string(Resource_ID_Rep,Resource_ID)
+    ;   Resource_ID=Resource_ID_Rep),
+    
     terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
