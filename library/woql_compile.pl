@@ -423,7 +423,7 @@ run_term(Query,JSON) :-
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
     maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
 
-    jsonify([bindings=Patched_Bindings,graphs=E_Databases],JSON),
+    term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
  
 run_term(Query,JSON) :-
@@ -446,7 +446,7 @@ run_term(Query,JSON) :-
 
     zip(Bindings,Databases,BGs),
     
-    jsonify([bindings=Bindings,graphs=Databases],JSON),
+    term_jsonld([bindings=Bindings,graphs=Databases],JSON),
     ignore(retract_program(Definitions)).
 
 literal_string(literal(type(_,Val)), Val).

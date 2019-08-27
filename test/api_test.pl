@@ -67,6 +67,8 @@ run_db_delete_test :-
     config:server_port(Port),
     atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
 
+    atomic_list_concat(['curl -X GET ',Server_Name,':',Port,'terminus/schema?'], Cmd),
+
     % in case test already exists...
     catch(
         ignore(delete_db(DB_URI)),
@@ -89,3 +91,19 @@ run_db_delete_test :-
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
+
+run_get_doc_test :-
+    % create DB
+    %config:server_name(Server_Name),
+    %config:server_port(Port),
+    %atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
+    true.
+    
+run_woql_test :-
+    config:server_name(Server_Name),
+    config:server_port(Port),
+    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/woql?terminus%3Aquery=prefixes(%5B%20s%3D%27http%3A%2F%2F195.201.12.87%3A6363%2Fterminus%2Fschema%23%27%2Cdg%3D%27http%3A%2F%2F195.201.12.87%3A6363%2Fterminus%2Fschema%27%2Cdoc%3D%27http%3A%2F%2F195.201.12.87%3A6363%2Fterminus%2Fdocument%2F%27%2Cdb%3D%27http%3A%2F%2F195.201.12.87%3A6363%2Fterminus%2F%27%2Cg%3D%27http%3A%2F%2F195.201.12.87%3A6363%2F%27%2Crdf%3D%27http%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%27%2Crdfs%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%27%2Cxdd%3D%27https%3A%2F%2Fdatachemist.net%2Fontology%2Fxdd%23%27%2Cxsd%3D%27http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%27%2Cdcog%3D%27https%3A%2F%2Fdatachemist.net%2Fontology%2Fdcog%23%27%2Cowl%3D%27http%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%27%2Cdcogbox%3D%27https%3A%2F%2Fdatachemist.net%2Fontology%2Fdcogbox%23%27%5D%2C%20from(g%2F%27terminus%27%2Cselect(%5Bv(%27Class%27)%2C%20v(%27Label%27)%2C%20v(%27Comment%27)%2C%20v(%27Abstract%27)%5D%2C(t(v(%27Class%27)%2C%20rdf%2Ftype%2C%20owl%2F%27Class%27%2C%20dg%2Fschema)%2C%20not(t(v(%27Class%27)%2C%20dcog%2Ftag%2C%20dcog%2Fabstract%2C%20dg%2Fschema))%2C%20opt(t(v(%27Class%27)%2C%20rdfs%2Flabel%2C%20v(%27Label%27)%2C%20dg%2Fschema))%2C%20opt(t(v(%27Class%27)%2C%20rdfs%2Fcomment%2C%20v(%27Comment%27)%2C%20dg%2Fschema))%2C%20opt(t(v(%27Class%27)%2C%20dcog%2Ftag%2C%20v(%27Abstract%27)%2C%20dg%2Fschema))))))&terminus%3Auser_key=root\''], Cmd),
+    shell(Cmd).
+
+
+    

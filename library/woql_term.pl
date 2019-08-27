@@ -60,8 +60,6 @@ rigid_identifier(ID / Suffix) :-
     atom(Suffix).
 rigid_identifier(ID) :-
     atom(ID).
-rigid_identifier(ID) :-
-    string(ID).
     
 /*
  * Identifiers 
