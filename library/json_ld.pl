@@ -187,7 +187,20 @@ compress(JSON,Context,JSON_LD) :-
     dict_pairs(Context, _, Pairs),
     include([_A-B]>>(atom(B)), Pairs, Valid_Pairs),
     compress_aux(JSON,Valid_Pairs,JSON_Pre),
+
+    extend_with_context(JSON_Pre,Context,JSON_LD).
+
+extend_with_context(JSON_Pre,Context,JSON_LD) :-
+    is_dict(JSON_Pre),
+    !,
     merge_dictionaries(_{'@context' : Context}, JSON_Pre, JSON_LD).
+extend_with_context(JSON_Pre,Context,JSON_LD) :-
+    is_list(JSON_Pre),
+    
+    maplist({Context}/[JSON,JSON_Out]>>extend_with_context(JSON,Context,JSON_Out),
+            JSON_Pre,
+            JSON_LD).
+
     
 compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_dict(JSON),

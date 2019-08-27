@@ -277,13 +277,21 @@ document_handler(get, DB, Doc_ID, Request) :-
 
     try_doc_uri(DB_URI,Doc_ID,Doc_URI),
 
-    try_get_document(Doc_URI,Database,JSON),
+    % This feels a bit ugly... but perhaps not
+    (   get_param('terminus:encoding',Request,'terminus:frame')
+    ->  try_get_filled_frame(Doc_URI,Database,JSON),        
+        %http_log_stream(Log),
+        %format(Log, 'Writing Frame JSON-LD:', []),
+        %json_write_dict(Log,JSON),
+        true
+    ;   try_get_document(Doc_URI,Database,JSON)),
 
     write_cors_headers(DB_URI),
     format('Content-type: application/json~n~n'),
-
     current_output(Out),
-    json_write_dict(Out,JSON).
+    json_write_dict(Out,JSON),
+    true.
+
 document_handler(post, DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
     
@@ -400,14 +408,27 @@ schema_handler(post,DB,Request) :- % should this be put?
 
 
 /* 
+ * try_get_document(ID, Database, Object) is det.
+ * 
+ * Actually has determinism: det + error
+ * 
+ * Gets document (JSON-LD) associated with ID
+ */
+try_get_document(ID,Database,Object) :-
+    (   entity_jsonld(ID,Database,Object)
+    ->  true
+    ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
+        throw(http_reply(not_found(ID,MSG)))).
+
+/* 
  * try_get_document(ID, Database) is det.
  * 
  * Actually has determinism: det + error
  * 
- * Gets document associated with ID
+ * Gets document as filled frame (JSON-LD) associated with ID
  */
-try_get_document(ID,Database,Object) :-
-    (   entity_jsonld(ID,Database,Object)
+try_get_filled_frame(ID,Database,Object) :-
+    (   entity_filled_class_frame_jsonld(ID,_{},Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
         throw(http_reply(not_found(ID,MSG)))).
@@ -520,7 +541,32 @@ try_get_param(Key,Request,_Value) :-
     
     format(atom(MSG), 'Method ~s has no parameter key transport for key ~s', [Key,Method]),
     throw(http_reply(not_found(Key,MSG))).
+
+
+/* 
+ * get_param_default(Key,Request:request,Value,Default) is semidet.
+ * 
+ * We can fail with this one, so you better do your own checking.
+ */
+get_param(Key,Request,Value) :-
+    % GET or POST (but not application/json)
+    memberchk(method(Method), Request),
+    memberchk(Method, [get,delete,post]),
+    % The agent is not sending a JSON request type
+    \+ memberchk(content_type('application/json'), Request),
+    !,
     
+    http_parameters(Request, [], [form_data(Data)]),
+    memberchk(Key=Value,Data).
+get_param(Key,Request,Value) :-
+    % POST with JSON package
+    memberchk(method(post), Request),
+    memberchk(content_type('application/json'), Request),
+    
+    memberchk(payload(Document), Request),
+    get_dict(Key, Document, Value).
+
+
 /* 
  * try_create_db(DB,DB_URI,Object) is det.
  * 

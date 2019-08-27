@@ -92,13 +92,20 @@ run_db_delete_test :-
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
 
+run_get_filled_frame_test :-
+    % create DB
+    config:server_name(Server_Name),
+    config:server_port(Port),
+    atomic_list_concat(['curl -v -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
+    shell(Cmd).
+
 run_get_doc_test :-
     % create DB
-    %config:server_name(Server_Name),
-    %config:server_port(Port),
-    %atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
-    true.
-    
+    config:server_name(Server_Name),
+    config:server_port(Port),
+    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
+    shell(Cmd).
+
 run_woql_test :-
     config:server_name(Server_Name),
     config:server_port(Port),

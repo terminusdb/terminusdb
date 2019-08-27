@@ -24,7 +24,8 @@
               object_edges/3,
               delete_object/2,
               update_object/2,
-              update_object/3
+              update_object/3,
+              entity_filled_class_frame_jsonld/4
           ]).
 
 /** <module> Frames
@@ -1009,3 +1010,20 @@ update_object(ID, Obj, Database) :-
     maplist([(C,[G],X,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts),
     
     maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
+
+/*
+ * entity_filled_class_frame_jsonld(+Entity:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 
+ *    is semidet.
+ * 
+ * Gets the realiser for the frame associated with the class of 
+ * Entity in a JSON_LD format using a supplied context.
+ */ 
+entity_filled_class_frame_jsonld(Entity,Ctx,Database,JSON_LD) :-
+    entity_filled_frame(Entity, Database, FCF),
+    term_jsonld(FCF, JSON_Ex),
+    
+    database_name(Database, Name),
+    get_collection_jsonld_context(Name,Ctx_Database),
+    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
+
+    compress(JSON_Ex,Ctx_Total,JSON_LD).
