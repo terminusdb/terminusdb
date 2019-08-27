@@ -73,8 +73,6 @@ run_db_delete_test :-
     config:server_port(Port),
     atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
 
-    atomic_list_concat(['curl -X GET ',Server_Name,':',Port,'terminus/schema?'], Cmd),
-
     % in case test already exists...
     catch(
         api:try_delete_db(DB_URI),
