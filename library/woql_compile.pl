@@ -679,7 +679,7 @@ compile_wf(t(X,P,Y),Goal) -->
     {
         database_name(G,C),            
         database_instance(G,I),
-        (   I = main
+        (   I = [document]
         ->  Search=inference:inferredEdge(XE,PE,YE,G)
         ;   Search=xrdf(C,I,XE,PE,YE)),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
@@ -701,7 +701,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         database_name(Database,C),
-        (   GE = main
+        (   GE = [document]
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(C,GE,XE,PE,YE)),
         

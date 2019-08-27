@@ -59,7 +59,7 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
     inferredEdge(Y,OP,Z,Database).
 
 /** 
- * inferredEdge(?X,?OP,?Y,+Database:database is nondet.
+ * inferredEdge(?X,?OP,?Y,+Database:database) is nondet.
  * 
  * Calculates all available triples under inference
  * 
