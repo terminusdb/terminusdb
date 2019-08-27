@@ -37,18 +37,25 @@
  */ 
 run_api_tests :-
     try(run_db_create_test),
-    try(run_db_delete_test).
+    try(run_db_delete_test),
+    try(run_get_filled_frame_test),
+    try(run_woql_test).
 
 try(Goal) :- 
     (   call(Goal)
     ->  true
-    ;   format(atom(Msg),'Could not run ~s', [Goal]),
-        throw(error(Msg))).
+    ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n', [Goal])).
 
 run_db_create_test :-
     % create DB
     config:server_name(Server_Name),
     config:server_port(Port),
+    atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
+    catch(
+        api:try_delete_db(DB_URI),
+        _,
+        true),
+
     % Need to set the user key correctly here or we will get a spurious error...
     Payload = '{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:schema":{"@type":"xsd:string","@value":"schema"}, "terminus:document":{"@type":"xsd:string","@value":"document"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"http://localhost/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}',
     atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server_Name,':',Port,'/terminus_qa_test'], Cmd),
@@ -57,8 +64,7 @@ run_db_create_test :-
     shell(Cmd),
 
     % cleanup
-    atomic_list_concat([Server_Name,'/terminus_qa_test'],DB_URI),
-    ignore(delete_db(DB_URI)).
+    delete_db(DB_URI).
 
 
 run_db_delete_test :-
@@ -71,7 +77,7 @@ run_db_delete_test :-
 
     % in case test already exists...
     catch(
-        ignore(delete_db(DB_URI)),
+        api:try_delete_db(DB_URI),
         _,
         true),
     
@@ -96,7 +102,7 @@ run_get_filled_frame_test :-
     % create DB
     config:server_name(Server_Name),
     config:server_port(Port),
-    atomic_list_concat(['curl -v -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_get_doc_test :-
