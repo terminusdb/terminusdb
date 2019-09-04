@@ -68,6 +68,7 @@ The TerminusDB source tree should then be cloned from GitHub:
 
 ```
 git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
 git submodule init
 ```
 
