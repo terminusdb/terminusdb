@@ -70,6 +70,7 @@ The TerminusDB source tree should then be cloned from GitHub:
 git clone https://github.com/terminusdb/terminusdb
 cd terminusdb
 git submodule init
+git submodule update
 ```
 
 You should copy `config/config-example.pl` to `config/config.pl` and then 
