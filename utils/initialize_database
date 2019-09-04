@@ -94,14 +94,17 @@ program(Prog) :-
     current_prolog_flag(associated_file,Prog).
     
 main(Args) :-
-    (   command(rdf2hdt)    
-    ->  true
-    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n')),
 
     program(Prog),
     opt_spec(Spec),
     opt_parse(Spec,Args,Opts,_),
     help(Prog,Spec,Help_Text),
+
+    (   command(rdf2hdt)
+    ->  true
+    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n'),
+        write(Help_Text),
+	halt),
     
     (   memberchk(help(true), Opts)
     ->  write(Help_Text),
