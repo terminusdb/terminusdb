@@ -7,9 +7,9 @@
 :- use_module(library(md5)).
 
 /*
- * command(Cmd) is semidet. 
- * 
- * True if Cmd exists. 
+ * command(Cmd) is semidet.
+ *
+ * True if Cmd exists.
  */
 command(Cmd) :-
     catch(
@@ -36,7 +36,7 @@ hostname(Hostname) :-
 opt_spec([[opt(help),
            type(boolean),
            shortflags([h]),
-           longflags([help]), 
+           longflags([help]),
            default(false),
            help('print this help')],
 
@@ -46,15 +46,15 @@ opt_spec([[opt(help),
            longflags([server]),
            default(''),
            help('set the server name')],
-          
+
           [opt(key),
            type(atom),
            shortflags([k]),
            longflags([key]),
            default(admin),
-           help('key of amin user')]]).
+           help('key of admin user')]]).
 
-/* 
+/*
  * help(+Cmd:atom,-Help:atom) is det.
  */
 help(Cmd,Spec,Help) :-
@@ -66,13 +66,13 @@ Set the administrative key - necessary before superuser can begin to set other p
 
 ~s', [Name,Help_Text]).
 
-example_instance_ttl(Dir,Path) :- 
+example_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_instance_template.ttl'], Path).
 
-example_inference_ttl(Dir,Path) :- 
+example_inference_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_inference_template.ttl'], Path).
 
-example_schema_ttl(Dir,Path) :- 
+example_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../terminus-ontologies/terminus.owl.ttl'], Path).
 
 database_path(Dir,Host,Path) :-
@@ -92,7 +92,7 @@ schema_path(Dir,Host,Path) :-
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
-    
+
 main(Args) :-
 
     program(Prog),
@@ -104,8 +104,8 @@ main(Args) :-
     ->  true
     ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n'),
         write(Help_Text),
-	halt),
-    
+        halt),
+
     (   memberchk(help(true), Opts)
     ->  write(Help_Text),
         halt
@@ -123,10 +123,10 @@ main(Args) :-
             ;   Server = localhost
             )
         ;   Server = Server_Arg),
-        
+
         format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
                [Server]),
-        
+
         example_instance_ttl(Dir,Example_Instance_TTL),
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
@@ -135,7 +135,7 @@ main(Args) :-
         instance_path(Dir,Server,Instance_Path),
         inference_path(Dir,Server,Inference_Path),
         schema_path(Dir,Server,Schema_Path),
-        
+
         md5_hash(Key,Hash,[]),
         atomic_list_concat(['
 mkdir -p "',Instance_Path,'";
@@ -158,4 +158,4 @@ sed -i "s/localhost/',Server,'/" "',Schema_Path,'1-ckp.ttl";
         format('Successfully updated admin key!!~n'),
         halt).
 
-    
+
