@@ -21,10 +21,29 @@ v0.1.1
 
 ## Getting Started
 
+### Running the Docker image
+
+The automated build of the master branch can be run easily with:
+
+`docker run --name terminusdb -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminusdb:latest`
+
+There will be tagged versions upon release.
+
+#### Env variables
+
+| Env variable | Description            | Default   |
+|--------------|------------------------|-----------|
+| SERVER_NAME  | Location of the server | localhost |
+| ADMIN_PASS   | Administrator password | root      |
+| HTTP_USER    | HTTP user              | root      |
+| HTTP_PASS    | HTTP password          | root      |
+
+### Running from source
+
 Before you can begin modeling and manipulating data in TerminusDB, you
 need to get some required libraries and software.
 
-### SWIPL 
+#### SWIPL 
 
 To use TerminusDB, you will need the SWIPL installation of prolog. To install this in Debian variants
 simply use the apt package manager: 
@@ -51,7 +70,7 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 % Contacting server ....
 ```
 
-### HDT Library 
+#### HDT Library 
 
 You will also need to install `hdt-cpp`. You can git clone the source tree from this repository: 
 
@@ -62,7 +81,7 @@ git clone https://github.com/rdfhdt/hdt-cpp
 ... and follow the directions contained in the repostiory for the
 pre-requisites and building the code.
 
-### TerminusDB
+#### TerminusDB
 
 The TerminusDB source tree should then be cloned from GitHub: 
 
