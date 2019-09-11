@@ -8,17 +8,10 @@
               http_options/1
           ]).
 
-http_blob_user_auth('a username').
-http_blob_pass_auth('A password').
+server_name('http://~s').
+server_port(~d).
 
-root_passwd_hash('63a9f0ea7bb98050796b649e85481845').
-
-server_name('http://localhost').
-server_port(6363).
-
-server_workers(8).
-
-server_worker_options([]).
+server_workers(~d).
 
 http_options([]).
 

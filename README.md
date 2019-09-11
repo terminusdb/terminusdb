@@ -31,12 +31,12 @@ There will be tagged versions upon release.
 
 #### Env variables
 
-| Env variable | Description            | Default   |
-|--------------|------------------------|-----------|
-| SERVER_NAME  | Location of the server | localhost |
-| ADMIN_PASS   | Administrator password | root      |
-| HTTP_USER    | HTTP user              | root      |
-| HTTP_PASS    | HTTP password          | root      |
+| Env variable   | Description                      | Default   |
+|----------------|----------------------------------|-----------|
+| SERVER_NAME    | Location of the server           | localhost |
+| SERVER_PORT    | Port of the server               | 6363      |
+| WORKERS_AMOUNT | Amount of workers for the server | 8         |
+| ADMIN_PASS     | Administrator password           | root      |
 
 ### Running from source
 
@@ -92,13 +92,10 @@ git submodule init
 git submodule update
 ```
 
-You should copy `config/config-example.pl` to `config/config.pl` and then 
-edit the values there to set things such as server name and server 
-port. 
-
-You also need to update the admin user password which is used as a
+You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`initialize_database` script.
+`initialize_database` script. The script should also be used to
+configure the server name, as shown in the example.
 
 ```
 utils/initialize_database -k "my_password_here" -s "my_server_name_here"

@@ -47,6 +47,20 @@ opt_spec([[opt(help),
            default(''),
            help('set the server name')],
 
+	  [opt(workers_amount),
+	   type(integer),
+           shortflags([w]),
+           longflags([workers]),
+           default(8),
+           help('set the amount of server workers')],
+
+	  [opt(port),
+	   type(integer),
+           shortflags([p]),
+           longflags([port]),
+           default(6363),
+           help('set the server port')],
+
           [opt(key),
            type(atom),
            shortflags([k]),
@@ -82,6 +96,12 @@ instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat([DB,'document/1/'], Path).
 
+config_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../config/config.pl'], Path).
+
+config_template_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../config/config-template.tpl'], Path).
+
 inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat([DB,'inference/1/'], Path).
@@ -89,6 +109,14 @@ inference_path(Dir,Host,Path) :-
 schema_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat([DB,'schema/1/'], Path).
+
+write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount) :-
+    open(Config_Tpl_Path, read, Tpl_Stream),
+    read_string(Tpl_Stream, _, Tpl_String),
+    close(Tpl_Stream),
+    open(Config_Path, write, Stream),
+    format(Stream, Tpl_String, [Server_Name, Port, Worker_Amount]),
+    close(Stream).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -124,9 +152,6 @@ main(Args) :-
             )
         ;   Server = Server_Arg),
 
-        format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
-               [Server]),
-
         example_instance_ttl(Dir,Example_Instance_TTL),
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
@@ -135,7 +160,13 @@ main(Args) :-
         instance_path(Dir,Server,Instance_Path),
         inference_path(Dir,Server,Inference_Path),
         schema_path(Dir,Server,Schema_Path),
+	config_template_path(Dir, Config_Tpl_Path),
+	config_path(Dir,Config_Path),
 
+	memberchk(port(Port_Arg), Opts),
+	memberchk(workers_amount(Workers_Arg), Opts),
+	write_config_file(Config_Tpl_Path, Config_Path, Server,
+			  Port_Arg, Workers_Arg),
         md5_hash(Key,Hash,[]),
         atomic_list_concat(['
 mkdir -p "',Instance_Path,'";
