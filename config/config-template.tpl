@@ -12,6 +12,7 @@ server_name('http://~s').
 server_port(~d).
 
 server_workers(~d).
+server_worker_options([]).
 
 http_options([]).
 
