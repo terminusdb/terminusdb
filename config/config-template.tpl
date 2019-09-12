@@ -1,6 +1,4 @@
 :- module(config,[
-              http_blob_user_auth/1,
-              http_blob_pass_auth/1,
               server_name/1,
               server_port/1,
               server_workers/1,
