@@ -2,6 +2,7 @@
 
 :- initialization(main).
 
+:- use_module(library(filesex)).
 :- use_module(library(process)).
 :- use_module(library(optparse)).
 :- use_module(library(md5)).
@@ -106,9 +107,18 @@ inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat([DB,'inference/1/'], Path).
 
+ttl_path(Dir, Path) :-
+    atomic_list_concat([Dir,'1-ckp.ttl'], Path).
+
 schema_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat([DB,'schema/1/'], Path).
+
+replace_in_file(Path, Pattern, With) :-
+    read_file_to_string(Path, FileString, []),
+    re_replace(Pattern, With, FileString, NewFileString),
+    open(Path, write, FileStream),
+    write(FileStream, NewFileString).
 
 write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount) :-
     open(Config_Tpl_Path, read, Tpl_Stream),
@@ -158,8 +168,11 @@ main(Args) :-
 
         database_path(Dir,Server,DB_Path),
         instance_path(Dir,Server,Instance_Path),
+	ttl_path(Instance_Path, Instance_TTL_Path),
         inference_path(Dir,Server,Inference_Path),
+	ttl_path(Inference_Path, Inference_TTL_Path),
         schema_path(Dir,Server,Schema_Path),
+	ttl_path(Schema_Path, Schema_TTL_Path),
 	config_template_path(Dir, Config_Tpl_Path),
 	config_path(Dir,Config_Path),
 
@@ -168,24 +181,22 @@ main(Args) :-
 	write_config_file(Config_Tpl_Path, Config_Path, Server,
 			  Port_Arg, Workers_Arg),
         md5_hash(Key,Hash,[]),
-        atomic_list_concat(['
-mkdir -p "',Instance_Path,'";
-mkdir -p "',Inference_Path,'";
-mkdir -p "',Schema_Path,'";
-rm -f ',Instance_Path,'* ;
-rm -f ',Inference_Path,'* ;
-rm -f ',Schema_Path,'* ;
-touch ',DB_Path,'COLLECTION;
-cp "',Example_Instance_TTL,'" "',Instance_Path,'1-ckp.ttl";
-cp "',Example_Inference_TTL,'" "',Inference_Path,'1-ckp.ttl";
-cp "',Example_Schema_TTL,'" "',Schema_Path,'1-ckp.ttl";
-sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_Path,'1-ckp.ttl";
-sed -i "s/localhost/',Server,'/" "',Instance_Path,'1-ckp.ttl";
-sed -i "s/localhost/',Server,'/" "',Schema_Path,'1-ckp.ttl";
-'],
-                           Cmd),
-        % format('Running Cmd:~s~n',[Cmd]),
-        shell(Cmd),
+
+	make_directory_path(Instance_Path),
+	make_directory_path(Inference_Path),
+	make_directory_path(Schema_Path),
+	delete_directory_contents(Instance_Path),
+	delete_directory_contents(Inference_Path),
+	delete_directory_contents(Schema_Path),
+	atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
+	open(Collection_File, write, Collection_Stream),
+	close(Collection_Stream),
+	copy_file(Example_Instance_TTL, Instance_TTL_Path),
+	copy_file(Example_Inference_TTL, Inference_TTL_Path),
+	copy_file(Example_Schema_TTL, Schema_TTL_Path),
+	replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
+	replace_in_file(Instance_TTL_Path, "localhost", Server),
+	replace_in_file(Schema_TTL_Path, "localhost", Server),
         format('Successfully updated admin key!!~n'),
         halt).
 
