@@ -118,7 +118,8 @@ replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
     re_replace(Pattern, With, FileString, NewFileString),
     open(Path, write, FileStream),
-    write(FileStream, NewFileString).
+    write(FileStream, NewFileString),
+    close(FileStream).
 
 write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount) :-
     open(Config_Tpl_Path, read, Tpl_Stream),
