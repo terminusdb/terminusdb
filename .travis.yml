@@ -4,4 +4,4 @@ before_script:
   - sudo apt-get install swi-prolog-nox
 
 script:
-  - swipl -g main ./utils/iniatialize_database -k root -s localhost
+  - swipl -g main ./utils/initialize_database -k root -s localhost
