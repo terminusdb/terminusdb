@@ -703,7 +703,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         database_name(Database,C),
         (   GE = [document]
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
-        ;   Search=xrdf(C,GE,XE,PE,YE)),
+        ;   Search=xrdf(C,[GE],XE,PE,YE)),
         
         append([[Search],XGoals,YGoals],
                GoalList),
