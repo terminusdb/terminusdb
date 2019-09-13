@@ -8,7 +8,7 @@
               get_collection_prefix_list/2,
               global_prefix_expand/2,
               literal_expand/2,
-              prefix_list_to_rapper_args/2
+              prefix_list_to_serdi_args/2
           ]).
 
 /** <module> Prefixes
@@ -182,11 +182,11 @@ get_collection_prefix_list(Collection,List) :-
     maplist([A-B,A=B]>>(true), Pairs, List).
 
 /* 
- * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
+ * prefix_list_to_serdi_args(Collection:atom,Prefixes:dict) is det.
  * 
- * return a list of arguments for rapper.
+ * return a list of arguments for serdi.
  */
-prefix_list_to_rapper_args([],[]).
-prefix_list_to_rapper_args([P=U|Rest],['-f',Arg|Arg_Rest]) :-
+prefix_list_to_serdi_args([],[]).
+prefix_list_to_serdi_args([P=U|Rest],['-p',Arg|Arg_Rest]) :-
     interpolate(['xmlns:',P,'="',U,'"'],Arg),
-    prefix_list_to_rapper_args(Rest,Arg_Rest).
+    prefix_list_to_serdi_args(Rest,Arg_Rest).
