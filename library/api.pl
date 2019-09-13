@@ -158,13 +158,13 @@ connection_authorised_user(Request, User) :-
  * connect_handler(Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('~n').
 connect_handler(get,Request) :-
     connection_authorised_user(Request,User),
 
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -175,7 +175,7 @@ connect_handler(get,Request) :-
  */
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('~n').
 db_handler(post,DB,R) :-
@@ -189,7 +189,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Authenticaticated~n',[]),
 
-    config:server_name(Server),
+    config:server(Server),
     
     verify_access(Auth,terminus/create_database,Server),
 
@@ -204,7 +204,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Database Constructed ~q~n',[DB_URI]),
         
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     
@@ -214,14 +214,14 @@ db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
     authenticate(Request, Auth),
 
-    config:server_name(Server),
+    config:server(Server),
     
     verify_access(Auth,terminus/delete_database,Server),
     
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -231,7 +231,7 @@ db_handler(delete,DB,Request) :-
  * woql_handler(+Request:http_request) is det.
  */
 woql_handler(options,_DB,_Request) :-
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('~n').
 woql_handler(get,DB,Request) :-
@@ -249,7 +249,7 @@ woql_handler(get,DB,Request) :-
     run_query(Query, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 
-    config:server_name(SURI),
+    config:server(SURI),
     write_cors_headers(SURI),
     format('Content-type: application/json~n~n'),
     current_output(Out),
@@ -477,7 +477,7 @@ try_update_document(Doc_ID, Doc_In, Database) :-
  * Die if we can't form a document uri. 
  */
 try_db_uri(DB,DB_URI) :- 
-    (   config:server_name(Server_Name),
+    (   config:server(Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
     ;   throw(http_reply(not_found(DB,'Database resource can not be found')))).

@@ -397,6 +397,8 @@ run_query(Atom, JSON) :-
     read_term_from_atom(Atom,Query,[]),
     run_term(Query,JSON).
 
+:- use_module(library(http/http_log)).
+
 run_term(Query,JSON) :-
     (   \+ ground(Query)
     ->  format(atom(M), 'Arguments are insufficiently instantiated for Query ~q', [Query]),
@@ -407,8 +409,15 @@ run_term(Query,JSON) :-
     %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=Database,Ctx_Out),
+
+    http_log_stream(Log),
+    format(Log,'~n~nWe are here -1 ~n~n',[]),
+    
     assert_program(Definitions),
-    findall((B,OGs),
+
+    format(Log,'~n~nWe are here -0.5 ~n~n',[]),
+
+    findall((B-OGs),
             (   elt(output_graphs=OGs,Ctx_Out),
                 % sets head to graph start and tail to the empty list.
                 bookend_graphs(OGs),
@@ -418,11 +427,14 @@ run_term(Query,JSON) :-
             BGs),
 
     zip(Bindings,Database_List_List,BGs),
+
     merge_graphs(Database_List_List,Database_List),
-    
+
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
     maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
 
+    %format(Log,'~n~nWe are here 1 ~n~n',[]),
+    
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
  

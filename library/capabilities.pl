@@ -52,7 +52,7 @@
  * root_user_id(Root_User_ID : uri) is det.
  */
 root_user_id(Root) :-
-    config:server_name(Server),
+    config:server(Server),
     atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /** 

@@ -116,7 +116,7 @@ database_identifiers(Database,Names) :-
  * The name of the current terminus database.
  */ 
 terminus_database_name(Database_Name) :-
-    config:server_name(Server),
+    config:server(Server),
     atomic_list_concat([Server,'/terminus'],Database_Name).
 
 /** 
@@ -129,7 +129,7 @@ terminus_context(_{
                      schema : Schema,
                      terminus : 'https://datachemist.net/ontology/terminus#'
                    }) :-
-    config:server_name(Server),
+    config:server(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),
     atomic_list_concat([Server,'/terminus/schema/'],Schema).
 

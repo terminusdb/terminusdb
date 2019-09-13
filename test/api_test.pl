@@ -48,17 +48,17 @@ try(Goal) :-
 
 run_db_create_test :-
     % create DB
-    config:server_name(Server_Name),
-    config:server_port(Port),
-    atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
+    config:server(Server),
+    atomic_list_concat([Server,'/terminus_qa_test'], DB_URI),
     catch(
         api:try_delete_db(DB_URI),
         _,
         true),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    Payload = '{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:schema":{"@type":"xsd:string","@value":"schema"}, "terminus:document":{"@type":"xsd:string","@value":"document"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"http://localhost/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}',
-    atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server_Name,':',Port,'/terminus_qa_test'], Cmd),
+    atomic_list_concat(['{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:schema":{"@type":"xsd:string","@value":"schema"}, "terminus:document":{"@type":"xsd:string","@value":"document"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"',Server,'/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}'], Payload),
+    
+    atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd),
@@ -69,17 +69,19 @@ run_db_create_test :-
 
 run_db_delete_test :-
     % create DB
-    config:server_name(Server_Name),
-    config:server_port(Port),
-    atomic_list_concat([Server_Name,'/terminus_qa_test'], DB_URI),
+    config:server(Server),
+
+    atomic_list_concat([Server,'/terminus_qa_test'], DB_URI),
 
     % in case test already exists...
     catch(
         api:try_delete_db(DB_URI),
         _,
         true),
+
+    format(string(DBID), '~s', [DB_URI]),
     
-    Doc = _17614{'@id':"http://localhost/terminus_qa_test",
+    Doc = _17614{'@id': DBID,
                  '@type':"terminus:Database",
                  'rdfs:comment':_17542{'@language':"en",
                                        '@value':"dasd"},
@@ -91,33 +93,30 @@ run_db_delete_test :-
     api:try_create_db(terminus_qa_test,DB_URI,Doc),
     
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat(['curl -X DELETE ',Server_Name,':',Port,'/terminus_qa_test?terminus:user_key=root'], Cmd),
+    atomic_list_concat(['curl -X DELETE ',Server,'/terminus_qa_test?terminus:user_key=root'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
 
 run_get_filled_frame_test :-
     % create DB
-    config:server_name(Server_Name),
-    config:server_port(Port),
-    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
+    config:server(Server),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_get_doc_test :-
     % create DB
-    config:server_name(Server_Name),
-    config:server_port(Port),
-    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
+    config:server(Server),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_woql_test :-
-    config:server_name(Server_Name),
-    config:server_port(Port),
+    config:server(Server),
     atomic_list_concat(
-        ['prefixes([ s=\'',Server_Name,':',Port,'/terminus/schema#\',
-                     doc=\'',Server_Name,':',Port,'/terminus/document/\',
-                     db=\'',Server_Name,':',Port,'/terminus/\',
-                     g=\'',Server_Name,':',Port,'/\',
+        ['prefixes([ s=\'',Server,'/terminus/schema#\',
+                     doc=\'',Server,'/terminus/document/\',
+                     db=\'',Server,'/terminus/\',
+                     g=\'',Server,'/\',
                      rdf=\'http://www.w3.org/1999/02/22-rdf-syntax-ns#\',
                      rdfs=\'http://www.w3.org/2000/01/rdf-schema#\',
                      xdd=\'https://datachemist.net/ontology/xdd#\',
@@ -134,7 +133,7 @@ run_woql_test :-
                  opt(t(v(\'Class\'), dcog/tag, v(\'Abstract\'), schema))))))'],Query),
     www_form_encode(Query,Encoded),
     
-    atomic_list_concat(['curl -X GET \'',Server_Name,':',Port,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 

@@ -1,4 +1,5 @@
 :- module(config,[
+              server/1,
               server_name/1,
               server_port/1,
               server_workers/1,
@@ -8,6 +9,11 @@
 
 server_name('http://~s').
 server_port(~d).
+
+server(Server) :-
+    server_name(Name),
+	server_port(Port),
+	atomic_list_concat([Name,':',Port],Server).
 
 server_workers(~d).
 server_worker_options([]).

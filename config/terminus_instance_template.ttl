@@ -20,7 +20,7 @@ doc:admin
     rdfs:label "Server Admin User"@en ;
     terminus:authority doc:access_all_areas ;
     terminus:email_address "admin@SERVER_NAME"^^xdd:email ;
-    terminus:user_key_hash "[SEKRET_ADMIN_KEY]"^^xsd:string .
+    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
 doc:terminus
     a terminus:Database ;

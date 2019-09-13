@@ -91,7 +91,8 @@ example_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../terminus-ontologies/terminus.owl.ttl'], Path).
 
 database_path(Dir,Host,Path) :-
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fterminus/'], Path).
+    www_form_encode(Host,Safe_Host),
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Safe_Host,'%2fterminus/'], Path).
 
 instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
@@ -169,6 +170,7 @@ main(Args) :-
 
         memberchk(port(Port_Arg), Opts),
         atomic_list_concat([Server, ":", Port_Arg], ServerPort),
+        
         database_path(Dir,ServerPort,DB_Path),
         instance_path(Dir,ServerPort,Instance_Path),
         ttl_path(Instance_Path, Instance_TTL_Path),
