@@ -5,7 +5,7 @@
 @prefix dcog: <https://datachemist.net/ontology/dcog#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <https://datachemist.net/ontology/xdd#> .
-@prefix doc: <http://localhost/capability/document/> .
+@prefix doc: <http://SERVER_NAME/capability/document/> .
 
 terminus:authority_scope owl:propertyChainAxiom
     ( terminus:authority_scope terminus:resource_includes ) .

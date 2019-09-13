@@ -5,7 +5,7 @@
 @prefix dcog: <https://datachemist.net/ontology/dcog#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <https://datachemist.net/ontology/xdd#> .
-@prefix doc: <http://localhost/terminus/document/> .
+@prefix doc: <http://SERVER_NAME/terminus/document/> .
 
 doc:access_all_areas
     a terminus:ServerCapability ;
@@ -19,20 +19,20 @@ doc:admin
     rdfs:comment "This is the server super user account"@en ;
     rdfs:label "Server Admin User"@en ;
     terminus:authority doc:access_all_areas ;
-    terminus:email_address "admin@localhost"^^xdd:email ;
-    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+    terminus:email_address "admin@SERVER_NAME"^^xdd:email ;
+    terminus:user_key_hash "[SEKRET_ADMIN_KEY]"^^xsd:string .
 
 doc:terminus
     a terminus:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
     terminus:allow_origin "*"^^xsd:string ;    
-    terminus:id "http://localhost/terminus"^^xsd:anyURI .
+    terminus:id "http://SERVER_NAME/terminus"^^xsd:anyURI .
 
 doc:server
     a terminus:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
-    terminus:id "http://localhost"^^xsd:anyURI ;
+    terminus:id "http://SERVER_NAME"^^xsd:anyURI ;
     terminus:allow_origin "*"^^xsd:string ;
     terminus:resource_includes doc:terminus .

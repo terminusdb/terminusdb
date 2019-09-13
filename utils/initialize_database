@@ -116,7 +116,7 @@ schema_path(Dir,Host,Path) :-
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
-    re_replace(Pattern, With, FileString, NewFileString),
+    re_replace(Pattern/g, With, FileString, NewFileString),
     open(Path, write, FileStream),
     write(FileStream, NewFileString),
     close(FileStream).
@@ -190,14 +190,16 @@ main(Args) :-
 	    delete_directory_contents(Inference_Path),
 	    delete_directory_contents(Schema_Path),
 	    atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
+	    atomic_list_concat([Server, ":", Port_Arg], ServerPort),
 	    open(Collection_File, write, Collection_Stream),
 	    close(Collection_Stream),
 	    copy_file(Example_Instance_TTL, Instance_TTL_Path),
 	    copy_file(Example_Inference_TTL, Inference_TTL_Path),
 	    copy_file(Example_Schema_TTL, Schema_TTL_Path),
 	    replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-	    replace_in_file(Instance_TTL_Path, "localhost", Server),
-	    replace_in_file(Schema_TTL_Path, "localhost", Server),
+	    replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
+	    replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
+	    replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
         format('Successfully updated admin key!!~n'),        
         halt
     ).
