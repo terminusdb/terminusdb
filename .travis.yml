@@ -1,3 +1,6 @@
+env:
+  - PKG_DIR=/usr/lib/swipl/pack
+
 before_script:
   - sudo apt-add-repository ppa:swi-prolog/stable -y
   - sudo apt-get update -q
@@ -6,9 +9,9 @@ before_script:
   - git clone --branch v0.30.0 https://github.com/drobilla/serd.git
   - cd serd && ./waf configure && ./waf && sudo ./waf install
   - cd ../hdt-cpp && ./autogen.sh && ./configure && make -j4 && sudo make install && sudo ldconfig
-  - cd ../ && PKG_DIR=/usr/lib/swipl/pack && echo "pack_remove('hdt').\
-                 pack_install('https://github.com/GavinMendelGleason/hdt.git',[package_directory('$PKG_DIR'),interactive(false)]).\
-                 pack_install(mavis,[package_directory('$PKG_DIR'),interactive(false)])."  | swipl
+  - cd ../ && echo "pack_remove('hdt')." | swipl
+  - echo "pack_install('https://github.com/GavinMendelGleason/hdt.git',[package_directory('$PKG_DIR'),interactive(false)])." | swipl
+  - echo "pack_install(mavis,[package_directory('$PKG_DIR'),interactive(false)])." | swipl
 
 script:
   - swipl -g main ./utils/initialize_database -k root -s localhost
