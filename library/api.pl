@@ -384,7 +384,7 @@ schema_handler(get,DB,Request) :-
     % check access rights
     verify_access(Auth,terminus/get_schema,DB_URI),
 
-    try_dump_schema(Request,DB_URI).
+    try_dump_schema(DB_URI, Request).
 schema_handler(post,DB,Request) :- % should this be put?
     /* Read Document */
     authenticate(Request, Auth),
@@ -651,10 +651,9 @@ try_class_frame(Class,Database,Frame) :-
  *
  * This is structured in such a way that  
  */ 
-try_dump_schema(DB_Maybe_String_URI, Request) :-
-    interpolate([DB_Maybe_String_URI], DB_URI),
+try_dump_schema(DB_URI, Request) :-
     with_mutex(
-        DB_URI, 
+        DB_URI,
         (
             try_get_param('terminus:encoding', Request, Encoding),
             (   atom_string('terminus:turtle',Encoding)

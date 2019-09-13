@@ -39,7 +39,8 @@ run_api_tests :-
     try(run_db_create_test),
     try(run_db_delete_test),
     try(run_get_filled_frame_test),
-    try(run_woql_test).
+    try(run_woql_test),
+    try(run_schema_get_test).
 
 try(Goal) :- 
     (   call(Goal)
@@ -137,4 +138,7 @@ run_woql_test :-
     shell(Cmd).
 
 
-    
+run_schema_get_test :-
+    config:server(Server),
+    atomic_list_concat(['curl \'',Server,'/terminus/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle\''], Cmd),
+    shell(Cmd).
