@@ -526,20 +526,20 @@ checkpoint_to_turtle(Collection,Database,Output_File) :-
     close(NT_Out),
     
     get_collection_prefix_list(Collection,List),
-    prefix_list_to_serdi_args(List,Prefix_Args),
+    prefix_list_to_rapper_args(List,Prefix_Args),
     append([['-i','ntriples','-o','turtle'],Prefix_Args,[NTriples_File]], Args),
+
     interpolate([Dir,'/tmp/',N,'.ttl'],Output_File),
     open(Output_File, write, Out),
-    process_create(path(serdi), Args,
+
+    process_create(path(rapper), Args,
                    [ stderr(null),
-                     stdout(pipe(PipeStream)),
-                     process(Serdi_PID)
+                     stdout(stream(Out)),
+                     process(Rapper_PID)
                    ]),
-    process_wait(Serdi_PID,Serdi_Status),
-    copy_stream_data(PipeStream, Out),
-    close(PipeStream),
-    (   Serdi_Status=killed(Serdi_Signal)
-    ->  interpolate(["serdi killed with signal ",Serdi_Signal], M),
+    process_wait(Rapper_PID,Rapper_Status),
+    (   Rapper_Status=killed(Rapper_Signal)
+    ->  interpolate(["hdt2rdf killed with signal ",Rapper_Signal], M),
         throw(error(M))
     ;   true),
     
