@@ -12,7 +12,8 @@ RUN apt-get update \
 	python \
 	git \
 	automake \
-	make
+    make \
+    raptor2-utils
 RUN cd /app \
         && git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git \
         && git clone --branch v0.30.0 https://github.com/drobilla/serd.git \
