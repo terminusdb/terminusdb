@@ -528,7 +528,7 @@ try_get_param(Key,Request,Value) :-
     !,
     (   memberchk(payload(Document), Request)
     ->  true
-    ;   format(atom(MSG), 'No JSON payload for POST ~s', [Key,Data]),
+    ;   format(atom(MSG), 'No JSON payload resource ~s for POST ~s', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))),
 
     (   get_dict(Key, Document, Value)
