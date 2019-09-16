@@ -64,6 +64,9 @@
 % File processing - especially for turtle
 :- use_module(library(file_utils), [checkpoint_to_turtle/3]).
 
+% Validaton
+:- use_module(library(validate)).
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
