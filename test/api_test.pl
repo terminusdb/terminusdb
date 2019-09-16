@@ -36,6 +36,7 @@
  * Run all structured tests of the API
  */ 
 run_api_tests :-
+    try(run_connect_test),
     try(run_db_create_test),
     try(run_db_delete_test),
     try(run_get_filled_frame_test),
@@ -46,6 +47,12 @@ try(Goal) :-
     (   call(Goal)
     ->  true
     ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n', [Goal])).
+
+run_connect_test :-
+    config:server(Server),
+
+    atomic_list_concat(['curl -X GET ',Server,'/?terminus:user_key=root'], Cmd),
+    shell(Cmd).
 
 run_db_create_test :-
     % create DB

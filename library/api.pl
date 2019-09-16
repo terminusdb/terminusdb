@@ -166,9 +166,8 @@ connect_handler(get,Request) :-
 
     config:server(SURI),
     write_cors_headers(SURI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,User).
+    reply_json(User).
+
 
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
@@ -206,10 +205,7 @@ db_handler(post,DB,R) :-
         
     config:server(SURI),
     write_cors_headers(SURI),
-    format('Content-type: application/json~n~n'),
-    
-    current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
     authenticate(Request, Auth),
@@ -223,9 +219,8 @@ db_handler(delete,DB,Request) :-
 
     config:server(SURI),
     write_cors_headers(SURI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
+    
+    reply_json(_{'terminus:status' : 'terminus:success'}).
     
 /** 
  * woql_handler(+Request:http_request) is det.
@@ -251,9 +246,7 @@ woql_handler(get,DB,Request) :-
 
     config:server(SURI),
     write_cors_headers(SURI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,JSON).
+    reply_json(JSON).
 
 /** 
  * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
@@ -287,10 +280,8 @@ document_handler(get, DB, Doc_ID, Request) :-
     ;   try_get_document(Doc_URI,Database,JSON)),
 
     write_cors_headers(DB_URI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-    json_write_dict(Out,JSON),
-    true.
+
+    reply_json(JSON).
 
 document_handler(post, DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
@@ -310,9 +301,8 @@ document_handler(post, DB, Doc_ID, R) :-
     try_update_document(Doc_ID,Doc,Database),
 
     write_cors_headers(DB_URI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
 document_handler(delete, DB, Doc_ID, Request) :-
     /* Delete Document */
     authenticate(Request, Auth),
@@ -330,9 +320,8 @@ document_handler(delete, DB, Doc_ID, Request) :-
     try_delete_document(Doc_URI,Database),
 
     write_cors_headers(DB_URI),
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,_{'terminus:status' : 'terminus:success'}).
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
 
 /** 
  * class_frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
@@ -360,9 +349,7 @@ class_frame_handler(get, DB, Request) :-
 
     try_class_frame(Class_URI,Database,Frame),
     
-    format('Content-type: application/json~n~n'),
-    current_output(Out),
-	json_write_dict(Out,Frame).
+    reply_json(Frame).
 
 /* 
  * schema_handler(Mode,DB,Request) is det. 
@@ -398,7 +385,15 @@ schema_handler(post,DB,Request) :- % should this be put?
     try_get_param('terminus:schema_name',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
 
-    try_update_schema(DB_URI,Name,TTL).
+    try_update_schema(DB_URI,Name,TTL,Witnesses),
+    
+    (   Witnesses = []
+    ->  reply_json(_{'terminus:status' : 'terminus:success'})
+    ;   reply_json(_{'terminus:status' : 'terminus:failure',
+                     'terminus:witnesses' : Witnesses},
+                   [code(406)])
+    ).
+
     
 /********************************************************
  * Determinising predicates used in handlers            *
@@ -647,9 +642,7 @@ try_class_frame(Class,Database,Frame) :-
 /* 
  * try_dump_schema(DB_URI, Request) is det. 
  * 
- * This should write out to the current stream in the appropriate format.
- *
- * This is structured in such a way that  
+ * Write schema to current stream
  */ 
 try_dump_schema(DB_URI, Request) :-
     with_mutex(
@@ -671,4 +664,11 @@ try_dump_schema(DB_URI, Request) :-
 /* 
  * 
  * Need a try_update_schema here...
- */ 
+ */
+try_update_schema(DB_URI,Name,TTL,Witnesses) :-
+    make_database_from_database_name(DB_URI, Database),
+    setup_call_cleanup(
+        open_string(TTL, TTLStream),
+        schema_update(Database, Name, TTL, Witnesses),
+        close(TTLStream)
+    ).     
