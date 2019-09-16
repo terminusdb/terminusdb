@@ -519,7 +519,7 @@ try_get_param(Key,Request,Value) :-
     
     (   memberchk(Key=Value,Data)
     ->  true
-    ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
+    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))).
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
@@ -528,18 +528,18 @@ try_get_param(Key,Request,Value) :-
     !,
     (   memberchk(payload(Document), Request)
     ->  true
-    ;   format(atom(MSG), 'No JSON payload resource ~s for POST ~s', [Key,Data]),
+    ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))),
 
     (   get_dict(Key, Document, Value)
     ->  true
-    ;   format(atom(MSG), 'Parameter resource ~s can not be found in ~s', [Key,Data]),
+    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
         throw(http_reply(not_found(Data,MSG)))).
 try_get_param(Key,Request,_Value) :-
     % OTHER
     memberchk(method(Method), Request),
     
-    format(atom(MSG), 'Method ~s has no parameter key transport for key ~s', [Key,Method]),
+    format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
     throw(http_reply(not_found(Key,MSG))).
 
 
