@@ -534,10 +534,12 @@ checkpoint_to_turtle(Collection,Database,Output_File) :-
 
     process_create(path(rapper), Args,
                    [ stderr(null),
-                     stdout(stream(Out)),
+                     stdout(pipe(PipeStream)),
                      process(Rapper_PID)
                    ]),
     process_wait(Rapper_PID,Rapper_Status),
+    copy_stream_data(PipeStream, Out),
+    close(PipeStream),
     (   Rapper_Status=killed(Rapper_Signal)
     ->  interpolate(["hdt2rdf killed with signal ",Rapper_Signal], M),
         throw(error(M))
