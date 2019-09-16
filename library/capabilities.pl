@@ -37,6 +37,7 @@
  */
 
 :- use_module(config(config),[]).
+:- use_module(library(crypto)).
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
@@ -44,7 +45,6 @@
 :- use_module(library(json_ld)).
 :- use_module(library(database)).
 :- use_module(library(database_utils)).
-:- use_module(library(md5)).
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
 
@@ -61,8 +61,6 @@ root_user_id(Root) :-
  * Key user association - goes only one way
  */ 
 key_user(Key, User_ID) :-
-    md5_hash(Key, Hash, []),
-    
     terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
@@ -72,7 +70,9 @@ key_user(Key, User_ID) :-
 			       t( User_ID , terminus/user_key_hash, Hash^^_ )
 		       )
 	          )
-       ).
+       ),
+    atom_string(Hash_Atom, Hash),
+    crypto_password_hash(Key, Hash_Atom).
 
 /** 
  * get_user(+User_ID, -User) is det.
