@@ -1,4 +1,5 @@
 :- module(file_utils,[
+              terminus_path/1,
               db_relative_path/1,
               db_path/1,
               touch/1,
@@ -71,13 +72,21 @@
 db_relative_path('/storage/').
 
 /** 
+ * terminus_path(-Path) is det. 
+ * 
+ * Fully qualified path name to current terminus installation.
+ */ 
+terminus_path(Path) :-
+    once(
+        file_search_path(terminus_home,Path)
+    ).
+
+/** 
  * db_path(-Path) is det.
  * 
  */
 db_path(Path) :-
-    once(
-        file_search_path(terminus_home,BasePath)
-    ), 
+    terminus_path(BasePath),
     db_relative_path(RelPath),
     interpolate([BasePath,RelPath],Path).
 

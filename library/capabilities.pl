@@ -61,7 +61,8 @@ root_user_id(Root) :-
  * Key user association - goes only one way
  */ 
 key_user(Key, User_ID) :-
-    md5_hash(Key, Hash, []),
+    coerce_literal_string(Key,K),
+    md5_hash(K, Hash, []),
     
     terminus_database_name(Collection),
     connect(Collection,DB),

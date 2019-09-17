@@ -27,8 +27,11 @@
  */
 
 :- use_module(library(utils)).
+:- use_module(library(file_utils)).
 :- use_module(library(database_utils)).
 :- use_module(library(api)).
+:- use_module(library(http/json)).
+
 
 /* 
  * run_api_tests is det. 
@@ -37,11 +40,14 @@
  */ 
 run_api_tests :-
     try(run_connect_test),
+    % ( Creates DB for other tests
     try(run_db_create_test),
+    try(run_schema_update_test),
+    try(run_schema_get_test),
     try(run_db_delete_test),
+    %   grouped )
     try(run_get_filled_frame_test),
-    try(run_woql_test),
-    try(run_schema_get_test).
+    try(run_woql_test).
 
 try(Goal) :- 
     (   call(Goal)
@@ -69,37 +75,54 @@ run_db_create_test :-
     atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
-    shell(Cmd),
+    shell(Cmd).
 
-    % cleanup
-    delete_db(DB_URI).
+run_schema_update_test :-
+    config:server(Server),
+    run_db_create_test,
 
+    terminus_path(Path),
+    interpolate([Path, '/test/geo.ttl'], TTL_File),
+
+    read_file_to_string(TTL_File, String, []),
+    Doc = _{'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
+            'terminus:schema' : _{'@value': "schema", '@type' : "xsd:string"},
+            'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
+           },
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])        
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
+
+    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl "~q"~n',[Args]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(std),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    * close(_Result).
+    
+run_schema_get_test :-
+    config:server(Server),
+    atomic_list_concat(['curl \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle\''], Cmd),
+    shell(Cmd).
 
 run_db_delete_test :-
     % create DB
     config:server(Server),
 
-    atomic_list_concat([Server,'/terminus_qa_test'], DB_URI),
-
-    % in case test already exists...
-    catch(
-        api:try_delete_db(DB_URI),
-        _,
-        true),
-
-    format(string(DBID), '~s', [DB_URI]),
-    
-    Doc = _17614{'@id': DBID,
-                 '@type':"terminus:Database",
-                 'rdfs:comment':_17542{'@language':"en",
-                                       '@value':"dasd"},
-                 'rdfs:label':_17494{'@language':"en",
-                                     '@value':"asdsda"},
-                 'terminus:allow_origin':_17590{'@type':"xsd:string",
-                                                '@value':"*"}},
-    
-    api:try_create_db(terminus_qa_test,DB_URI,Doc),
-    
     % Need to set the user key correctly here or we will get a spurious error...
     atomic_list_concat(['curl -X DELETE ',Server,'/terminus_qa_test?terminus:user_key=root'], Cmd),
     
@@ -142,10 +165,4 @@ run_woql_test :-
     www_form_encode(Query,Encoded),
     
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root\''], Cmd),
-    shell(Cmd).
-
-
-run_schema_get_test :-
-    config:server(Server),
-    atomic_list_concat(['curl \'',Server,'/terminus/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle\''], Cmd),
     shell(Cmd).

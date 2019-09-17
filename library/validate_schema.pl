@@ -56,7 +56,7 @@
 		      % Best practice
 		      noImmediateDomainSC/2,
               noImmediateRangeSC/2,         % Best Practice
-		      schemaBlankNodeSC/2,
+		      % schemaBlankNodeSC/2,
               notUniqueClassLabelSC/2,      % Best Practice
 		      notUniqueClassSC/2,
               notUniquePropertySC/2,        % Best Practice
@@ -102,6 +102,20 @@
 :- use_module(library(utils)).
 :- use_module(library(types)).
 :- use_module(library(base_type)).
+
+/* 
+ * Vio JSON util
+ */
+pathify(L, JSON) :-
+    pathify(L, 0, JSON).
+    
+pathify([],_N,[]).
+pathify([URI|Rest],N,[JSON|JSON_Rest]) :-
+    JSON = _{ 'vio:index' : _{ '@value' : N, '@type' : 'xsd:nonNegativeInteger' },
+              'vio:path_component' : _{ '@value' : URI, '@type' : 'xsd:string' }
+            },
+    M is N + 1,
+    pathify(Rest,M, JSON_Rest).
 
 /*
 OWL DL Syntactic correctness
@@ -184,11 +198,12 @@ noImmediateClassSC(Database, Reason) :-
     domain(P,X,Database),
     \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a domain for property ',P,' but is not defined'], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',  
-	      message=Message,
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      class=X,
-	      property=P].
+    Reason = _{
+                 '@type' : 'vio:InvalidClassInDomain',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     database_name(Database,Collection),
     database_schema(Database,Schema),
@@ -196,65 +211,72 @@ noImmediateClassSC(Database, Reason) :-
     range(P,X,Database),
     \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a range for property ',P,' but is not defined'], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      class=X,
-	      property=P].
+    Reason = _{
+                 '@type' : 'vio:InvalidClassInRange',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     subClassOf(X,Y,Database),
     \+ customDatatype(X,Database), \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',Y,' is not a superclass of a defined class ',X], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),		      
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     subClassOf(X,Y,Database), 
     \+ customDatatype(Y,Database), \+ immediateClass(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a subclass of a defined class ',Y], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     intersectionOf(X,Y,Database),
     \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',X,' is an intersection of ', Y,' but not a defined class'], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     intersectionOf(X,Y,Database),
     \+ immediateClass(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not an intersection of a defined class ',Y], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),	      
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     unionOf(X,Y,Database),
     \+ immediateClass(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a defined class ',Y], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 noImmediateClassSC(Database, Reason) :-
     unionOf(X,Y,Database),
     \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',X,' is a union of ', Y,' but not a defined class'], Message),
-    Reason = ['rdf:type'='NoImmediateClassViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 
 %% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:database is nondet
 %
@@ -294,12 +316,13 @@ notUniqueClass(Y, Database, Reason) :-
     setof(X, classOrRestriction(X,Database), L),
     \+ count(Y,L,1),
     interpolate(['The class or restriction ',Y,
-		 ' is not a unique. Some existing class has this identifier']
-		,Message),
-    Reason = ['rdf:type'='NotUniqueClassNameViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),
-	      message=Message,
-	      class=Y].
+		         ' is not a unique. Some existing class has this identifier'],
+		        Message),
+    Reason = _{
+                 '@type' : 'vio:InvalidClassViolation', 
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' }
+             }.
 notUniqueClassSC(Database,Reason) :- notUniqueClass(_,Database,Reason).
 
 
@@ -621,31 +644,33 @@ datatypeStrictSubsumptionOf(Sub,Super,Database) :-
 orphanClassSC(Database, Reason) :-
     subClassOf(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
-    interpolate(['The class ',X,' is not a subclass of a valid class ',Y], Message),
-    Reason = ['rdf:type'='NotSubClassofClassViolation',
-	      bestPractice=literal(type('xsd:boolean',false)),	      
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    interpolate(['The class ',X,' is not a subclass of a valid class ',Y], Message),    
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 orphanClassSC(Database, Reason) :-
     intersectionOf(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X, ' is not an intersection of a valid class ',Y], Message),
-    Reason = ['rdf:type'='NotIntersectionOfClassViolation',
-	      bestPractice=literal(type('xsd:boolean',false)),	      	      
-	      message=Message,
-	      child=X,
-	      parent=Y].
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 orphanClassSC(Database, Reason) :-
     unionOf(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a valid class ',Y], Message),
-    Reason = ['rdf:type'='NotUnionOfClassViolation',
-	      bestPractice=literal(type('xsd:boolean',false)),
-	      message=Message,
-	      child=X,
-	      parent=Y].
-
+    Reason = _{
+                 '@type' : 'vio:ClassInheritanceVioltion',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 
 % Cycles in subsumption diagram
 classCycleHelp(C,S,[],_) :- get_assoc(C,S,true), !.
@@ -674,11 +699,13 @@ classCycleHelp(C,S,[K|P],Database) :-
 classCycle(C,P,Database,Reason) :-
     empty_assoc(S), classCycleHelp(C,S,P,Database),
     interpolate(['Class, ',C,' has a class cycle with path: ', P], Message),
-    Reason = ['rdf:type'='ClassCycleViolation',
-	      bestPractice=literal(type('xsd:boolean',false)),
-	      message=Message,
-	      class=C,
-	      path=P].
+    pathify(P,JSON),
+    Reason = _{
+                 '@type' : 'vio:ClassCycle',
+                 'vio:path' : JSON,
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:class' : _{ '@value' : C, '@type' : 'xsd:anyURI' }
+             }.
 
 classCycleSC(Database,Reason) :- classCycle(_,_,Database,Reason), !. 
 
@@ -769,28 +796,31 @@ notUniqueProperty(P,Database,Reason) :-
     property(P,Database), bagof(P2, property(P2,Database), L),
     \+ count(P,L,1),
     interpolate([P,' is not a unique property name, some property with this name already exists'],
-		Message),
-    Reason=['rdf:type'='NotUniquePropertyNameViolation',
-	    bestPractice=literal(type('xsd:boolean',true)),
-	    property=P,
-	    message=Message].
+		        Message),
+    Reason = _{
+                 '@type' : 'vio:NonUniquePropertyName',
+	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
+             }.
 
 propertyTypeOverloadSC(Database,Reason) :- 
     datatypeProperty(P,Database), objectProperty(P,Database),
     interpolate([P,' is an objectProperty and a datatypeProperty'], Message),
-    Reason=['rdf:type'='PropertyTypeOverloadViolation',
-	    bestPractice=literal(type('xsd:boolean',false)),
-	    property=P,
-	    message=Message].
+    Reason= _{
+                '@type' : 'vio:PropertyTypeOverload',
+                'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' }
+            }.
 
 annotationOverloadSC(Database,Reason) :-
     (datatypeProperty(P,Database) ; objectProperty(P,Database) ; rdfProperty(P,Database)),
     annotationProperty(P,Database),
     interpolate([P,' is defined as a property and defined as an annotationProperty'], Message),
-    Reason=['rdf:type'='annotationOverloadViolation',
-	    bestPractice=literal(type('xsd:boolean',true)),
-	    property=P,
-	    message=Message].
+    Reason= _{
+                '@type' : 'vio:PropertyTypeOverload',
+                'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' }
+            }.
 
 /** 
  * notUniquePropertySC(+Database:database-Reason:any) is nondet. 
@@ -843,30 +873,33 @@ strictSubsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topDataProperty'
 orphanProperty(X,Y,Database,Reason) :-     % is a subproperty of Y but Y is not a valid property 
     subPropertyOf(X,Y,Database),
     \+ property(Y,Database), \+ annotationProperty(Y,Database),
-     interpolate([X,' is a sub-property of', Y,' which is not designated as a property of any type in the schema!' ], Message),
-    Reason=['rdf:type'='OrphanPropertyViolation',
-	    bestPractice=literal(type('xsd:boolean',false)),
-	    child=X,
-	    parent=Y,
-	    message=Message].
+    interpolate([X,' is a sub-property of', Y,' which is not designated as a property of any type in the schema!' ], Message),
+    Reason= _{
+                '@type' : 'vio:PropertyInheritanceViolation',
+                'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+	            'vio:property' :  _{ '@value' : X, '@type' : 'xsd:anyURI' },
+                'vio:parent_property' :  _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+            }.
 orphanProperty(P,R,Database,Reason) :-  % property has a range but it is not the property of a Classs
 	range(P,R,Database),
     \+ property(P,Database), \+ annotationProperty(P,Database),
 	interpolate([P,' has a range, but is not designated as a property of any type in the schema!'],Message),
-	Reason=['rdf:type'='OrphanPropertyViolation',
-			bestPractice=literal(type('xsd:boolean',false)),
-			range=R,
-			property=P,
-			message=Message].
+    Reason= _{
+                '@type' : 'vio:UntypedPropertyWithRange',
+                'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                'vio:range' :  _{ '@value' : R, '@type' : 'xsd:anyURI' }
+            }.
 orphanProperty(P,D,Database,Reason) :-     %% property has a domain but it is not the property of a Classs
 	domain(P,D,Database),
     \+ property(P,Database), \+ annotationProperty(P,Database),
     interpolate([P,' has a domain, but is not designated as a property of any type in the schema!'],Message),
-	Reason=['rdf:type'='OrphanPropertyViolation',
-			bestPractice=literal(type('xsd:boolean',false)),
-			domain=D,
-			property=P,
-			message=Message].
+    Reason= _{
+                '@type' : 'vio:UntypedPropertyWithDomain',
+                'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                'vio:domain' :  _{ '@value' : D, '@type' : 'xsd:anyURI' }
+            }.
 
 /** 
  * orphanPropertySC(+Database:database-Reason:any) is nondet. 
@@ -886,12 +919,14 @@ propertyCycleHelp(P,S,[Q|T],Database) :-
 propertyCycle(P,PC,Database,Reason) :-
     empty_assoc(S), propertyCycleHelp(P,S,PC,Database),
     interpolate(['Property class ', P, ' has a cycle with path: ', PC], Message),
-    Reason=['rdf:type'='PropertyClassCycleViolation',
-	    bestPractice=literal(type('xsd:boolean',false)),
-	    property=P,
-	    path=PC,
-	    message=Message].
-
+    jsonify(PC, JSON),
+    Reason = _{
+                 '@type' : 'vio:ClassCycle',
+                 'vio:property_cycle' : JSON,
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
+             }.
+ 
 /** 
  * propertyCycleSC(+Database:database-Reason:any) is nondet. 
  *  
@@ -1002,9 +1037,11 @@ noImmediateDomainSC(Database,Reason) :-
     ->  M='Rdf Property '
     ;   M='Unknown Property '),
     interpolate([M, P, ' has no specified domain.'], Message),
-    Reason = ['rdf:type'=noImmediateDomain,
-	      property=P,
-	      message = Message].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithNoDomain',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
+             }.
 
 /** 
  * noImmediateRangeSC(+Database:database-Reason:rvo) is nondet. 
@@ -1025,9 +1062,11 @@ noImmediateRangeSC(Database,Reason) :-
     ->  M='Rdf Property '
     ;   M='Unknown Property '),
     interpolate([M, P, ' has no specified range.'], Message),
-    Reason = ['rdf:type'=noImmediateRange,
-	      property=P,
-	      message = Message].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithNoRange',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
+             }.
 
 /** 
  * invalidDomainSC(+Database:database-Reason:any) is nondet. 
@@ -1039,11 +1078,12 @@ invalidDomainSC(Database,Reason) :-
     domain(P,D,Database),
     \+ class(D,Database),
     interpolate(['The property ', P,' has an undefined domain.'],Message),
-    Reason=['rdf:type'='InvalidDomainViolation',
-	    bestPractice=literal(type('xsd:boolean',false)),
-	    message=Message,
-	    property=P,
-	    domain=D].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithUndefinedDomain',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:domain' : _{ '@value' : D, '@type' : 'xsd:anyURI'}
+             }.
 
 /** 
  * invalidRangeSC(+Database:database-Reason:any) is nondet. 
@@ -1055,31 +1095,34 @@ invalidRangeSC(Database,Reason) :-
     range(P,R,Database),
     \+ datatype(R,Database), \+ rdfsProperty(P),
     interpolate(['DataProperty Range ', R, ' is not a valid (or implemented) datatype for property ', P,'.'], Message),
-    Reason=['rdf:type'='InvalidRangeViolation',
-	    bestPractice=literal(type('xsd:boolean', false)),
-	    message=Message,
-	    property=P,
-	    range=R].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithUndefinedRange',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
+             }.
 invalidRangeSC(Database,Reason) :-
     objectProperty(P,Database),
     range(P,R,Database),
     \+ class(R,Database), \+ rdfsProperty(P),
     interpolate(['ObjectProperty Range ',R,' is not a valid range for property ',P,'.'],Message),
-    Reason=['rdf:type'='InvalidRangeViolation',
-	    bestPractice=literal(type('xsd:boolean', false)),
-	    message=Message,
-	    property=P,
-	    range=R].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithUndefinedRange',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
+             }.
 invalidRangeSC(Database,Reason) :-
     rdfProperty(P,Database),
     range(P,R,Database),
     \+ class(R,Database), \+ baseType(R),
     interpolate(['rdf:Property range ',R,' is not a valid range for property ',P,'.'],Message),
-    Reason=['rdf:type'='InvalidRangeViolation',
-	    bestPractice=literal(type('xsd:boolean', false)),
-	    message=Message,
-	    property=P,
-	    range=R].
+    Reason = _{
+                 '@type' : 'vio:PropertyWithUndefinedRange',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                 'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
+             }.
 
 % Logging / Turn off for production
 :- use_module(library(http/http_log)).
@@ -1100,14 +1143,15 @@ domainNotSubsumedSC(Database,Reason) :-
     %nl(Log), nl(Log), write(Log, 'Listing: '), write_canonical(Log, L), nl(Log), nl(Log),    
     \+ subsumptionOf(D, D2, Database),
     interpolate(['Invalid domain on property ', P,
-		 ', due to failure of domain subsumption.'], Message),
-    Reason = ['rdf:type'='DomainNotSubsumedViolation',
-	      bestPractice=literal(type('xsd:boolean', false)),
-	      message=Message,
-	      property=P,
-	      parentProperty=P2,
-	      domain=D,
-	      parentDomain=D2].
+		         ', due to failure of domain subsumption.'], Message),
+    Reason = _{
+                 '@type' : 'vio:PropertyDomainNotSubsumed',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:parent_property' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
+                 'vio:class' : _{ '@value' : D, '@type' : 'xsd:anyURI'},
+                 'vio:parent' : _{ '@value' : D2, '@type' : 'xsd:anyURI'},                
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
+             }.
 
 /** 
  * rangeNotSubsumedSC(+Database:database-Reason:any) is nondet. 
@@ -1121,14 +1165,15 @@ rangeNotSubsumedSC(Database,Reason) :-
     range(P,R,Database), range(P2,R2,Database), % DDD too many solutions
     \+ subsumptionOf(R, R2, Database), 
     interpolate(['Invalid range on property ', P,
-		 ', due to failure of range subsumption.'], Message),
-    Reason = ['rdf:type'='RangeNotSubsumedViolation',
-	      bestPractice=literal(type('xsd:boolean', false)),
-	      message=Message,
-	      property=P,
-	      parentProperty=P2,
-	      range=R,
-	      parentRange=R2].
+		         ', due to failure of range subsumption.'], Message),
+    Reason = _{
+                 '@type' : 'vio:PropertyRangeNotSubsumed',
+                 'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:parent_property' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
+                 'vio:class' : _{ '@value' : R, '@type' : 'xsd:anyURI'},
+                 'vio:parent' : _{ '@value' : R2, '@type' : 'xsd:anyURI'},                
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
+             }.
 
 schemaSubjectBlankNode(X,Database) :-
     database_name(Database,Collection),
@@ -1152,7 +1197,8 @@ schemaObjectBlankNode(Z,Database) :-
  * schemaBlankNodeSC(+Database:database-Reason:any) is nondet. 
  * 
  * Is this a blank node in the schema.
- */ 
+ */
+/*
 schemaBlankNodeSC(Database,Reason) :-
     schemaSubjectBlankNode(X,Database),
     interpolate(['The subject ', X, ' is a blank node'],Message),
@@ -1174,6 +1220,7 @@ schemaBlankNodeSC(Database,Reason) :-
 	    bestPractice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    object=X].
+*/
 
 /** 
  * label(?X,?Y,+Database:database is det. 
@@ -1224,10 +1271,11 @@ classHasOneLabel(X,Database) :-
 notUniqueClassLabel(X,Database,Reason) :- 
     \+ classHasOneLabel(X,Database),
     interpolate(['Class ', X,' does not have exactly one lable.'], Message),
-    Reason = ['rdf:type'='NotUniqueClassLabelViolation',
-	      bestPractice=literal(type('xsd:boolean',true)),	    
-	      class=X,
-	      message=Message].
+    Reason = _{
+                 '@type' : 'vio:DuplicateClassLabelViolation',
+                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI'},
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
+             }.
 
 /**
  * notUniqueClassLabelSC(+Database:database -Reason:rvo) is nondet. 

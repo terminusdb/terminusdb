@@ -804,10 +804,13 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
  */ 
 realise_triples(_,[],_,[]) :-
     !.
-realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,Realiser) :-
+realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are an object property
     database_name(Database,C),
     database_instance(Database,G),
+    
+    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+    xrdf(C,G,Elt,RDFType,Type),
     
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
@@ -823,10 +826,13 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,Realiser) :-
         append(Realisers_on_P, Realiser_Tail, Realiser)
     ;   realise_triples(Elt,Rest,Database,Realiser)
     ).
-realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,Realiser) :-
+realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
     database_name(Database,C),
     database_instance(Database,G),
+        
+    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+    xrdf(C,G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     (   setof((C,G,Elt,Prop,V),

@@ -33,6 +33,7 @@
 :- use_module(library(validate_instance)).
 :- use_module(library(frame)).
 :- use_module(library(json_ld)).
+:- use_module(library(semweb/turtle)).
 
 % Required for consistency
 pre_test_schema(classCycleSC).
@@ -50,7 +51,7 @@ test_schema(noImmediateRangeSC).
 test_schema(notUniqueClassLabelSC).
 test_schema(notUniqueClassSC).
 test_schema(notUniquePropertySC). % still useful with annotationOverloadSC?
-test_schema(schemaBlankNodeSC).
+%test_schema(schemaBlankNodeSC). % should never be used.
 test_schema(annotationOverloadSC).
 % OWL DL constraints
 test_schema(orphanClassSC).
@@ -67,7 +68,7 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
         [collection(Database_Name),
          graphs([Schema]),
          success(Success_Flag)],
-        (
+        validate:(
             % deletes (everything)
             forall( xrdf(Database_Name, [Schema], A, B, C),
                     delete(Database_Name, Schema, A,B,C)),
@@ -75,30 +76,40 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
             % inserts (everything)
             rdf_process_turtle(New_Schema_Stream,
                                {Database_Name, Schema}/
-                               [rdf(X,P,Y),_Resource]>>(
-                                   (   X = node(N)
-                                   ->  interpolate(['_:',N], XF)
-                                   ;   X = XF),
-                                   (   Y = node(N)
-                                   ->  interpolate(['_:',N], YF)
-                                   ;   Y = YF),
-                                   insert(Database_Name,Schema,XF,P,YF)
+                               [Triples,_Resource]>>(
+                                   forall(member(rdf(X,P,Y), Triples),
+                                          (   (   X = node(N)
+                                              ->  interpolate(['_:',N], XF)
+                                              ;   X = XF),
+                                              (   Y = node(N)
+                                              ->  interpolate(['_:',N], YF)
+                                              ;   Y = literal(L),
+                                                  atom(L)
+                                              ->  YF = literal(lang(en,L))
+                                              ;   Y = YF),
+                                              %nl,nl,writeq(rdf(X,P,Y)),nl,nl,
+                                              insert(Database_Name,Schema,XF,P,YF)
+                                          )
+                                         )
                                ), []),
             
             % First, Check pre tests. 
-            (   findall(Pre_Witness,
-                        (   pre_test_schema(Pre_Check),
-                            call(Pre_Check,Database,Pre_Witness)),
-                        Pre_Witnesses)
+            findall(Pre_Witness,
+                    (   pre_test_schema(Pre_Check),
+                        call(Pre_Check,Database,Pre_Witness)),
+                    Pre_Witnesses),
+            (   \+ Pre_Witnesses = []
+            % We have witnesses of failure and must bail
             ->  Success_Flag = false,
                 Witnesses = Pre_Witnesses
-                % We survived the pre_tests, better check schema constriants
-            ;   (   findall(Schema_Witness,
-                            (   test_schema(Check),
-                                call(Check,Database,Schema_Witness)),
-                            Schema_Witnesses)
+            % We survived the pre_tests, better check schema constriants
+            ;   findall(Schema_Witness,
+                        (   test_schema(Check),
+                            call(Check,Database,Schema_Witness)),
+                        Schema_Witnesses),
+                (   \+ Schema_Witnesses = []
                 ->  Success_Flag = false,
-                    append(Pre_Witnesses, Schema_Witnesses, Witnesses)
+                    Witnesses = Schema_Witnesses
                     % Winning!
                 ;   Success_Flag = true,
                     Witnesses = []
@@ -106,4 +117,5 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
             )
         )
     ).
+
 

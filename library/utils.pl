@@ -22,6 +22,7 @@
               count/3,
               merge_dictionaries/3,
               command/1,
+              coerce_literal_string/2,
               op(920,fy, *),
               '*'/1
           ]).
@@ -358,3 +359,19 @@ debug(Topic, Format, Args) :-
     print_debug(Topic, To, Format, Args).
 debug(_, _, _).
 */
+
+
+/* 
+ * coerce_literal_string(+S_or_L, -S) is det.
+ * 
+ * We pun GET and POST parameters in requests but
+ * to do this we need to be able to conflate literals
+ * with strings.
+ */
+coerce_literal_string(SL,S) :-
+    is_dict(SL),
+    !,
+    get_dict('@value',SL, S).
+coerce_literal_string(SL,S) :-
+    % \+ is_dict(SL),
+    SL = S.

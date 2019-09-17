@@ -104,29 +104,6 @@ http:location(root, '/', []).
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /* 
- * verify_capability(+Request:http_request,+Capability) is det. 
- * 
- * This should either be true or throw an http_reply message. 
- */
-% verify_capability(Request,Capability) :-
-%     request_key_hash(Request,Key)
-
-%     (   key_user(Key_Hash, User)
-%     ->  true
-%     ;   throw(http_reply(authorise('Not a valid key')))),
-
-%     (   user_action(User,Capability)
-%     ->  true
-%     ;   throw(http_reply(method_not_allowed(Capability)))).
-
-request_key(Request,Key) :-
-    http_parameters(Request, [], [form_data(Data)]),
-
-    (   memberchk('terminus:user_key'=Key, Data)
-    ->  true
-    ;   throw(http_reply(authorise('No key supplied')))).
-
-/* 
  * authenticate(+Data,+Auth_Obj) is det. 
  * 
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
@@ -148,8 +125,9 @@ verify_access(Auth, Action, Scope) :-
 
 connection_authorised_user(Request, User) :-
     try_get_param('terminus:user_key',Request,Key),
+    coerce_literal_string(Key, KS),
     
-    (   key_user(Key, User_ID)
+    (   key_user(KS, User_ID)
     ->  (   get_user(User_ID, User)
         ->  true
         ;   throw(http_reply(method_not_allowed('Bad user object', User_ID))))
@@ -242,9 +220,10 @@ woql_handler(get,DB,Request) :-
     verify_access(Auth,terminus/woql_select,DB_URI),
 
     try_get_param('terminus:query',Request,Query),
+    coerce_literal_string(Query, QS),
     
     * http_log_stream(Log),
-    run_query(Query, JSON),
+    run_query(QS, JSON),
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 
     config:server(SURI),
@@ -375,7 +354,9 @@ schema_handler(get,DB,Request) :-
     verify_access(Auth,terminus/get_schema,DB_URI),
 
     try_dump_schema(DB_URI, Request).
-schema_handler(post,DB,Request) :- % should this be put?
+schema_handler(post,DB,R) :- % should this be put?
+    add_payload_to_request(R,Request), % this should be automatic.
+    
     /* Read Document */
     authenticate(Request, Auth),
 
@@ -387,7 +368,7 @@ schema_handler(post,DB,Request) :- % should this be put?
 
     try_get_param('terminus:schema_name',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
-
+    
     try_update_schema(DB_URI,Name,TTL,Witnesses),
     
     (   Witnesses = []
@@ -511,19 +492,19 @@ try_get_param(Key,Request,Value) :-
     memberchk(method(Method), Request),
     memberchk(Method, [get,delete,post]),
     \+ memberchk(content_type('application/json'), Request),
-    !,
     
     http_parameters(Request, [], [form_data(Data)]),
     
-    (   memberchk(Key=Value,Data)
+    (   memberchk(Key=Value,Data)        
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data,MSG)))).
+        throw(http_reply(not_found(Data,MSG)))),
+    !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
     memberchk(method(post), Request),
     memberchk(content_type('application/json'), Request),
-    !,
+
     (   memberchk(payload(Document), Request)
     ->  true
     ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Data]),
@@ -532,7 +513,8 @@ try_get_param(Key,Request,Value) :-
     (   get_dict(Key, Document, Value)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data,MSG)))).
+        throw(http_reply(not_found(Data,MSG)))),
+    !.
 try_get_param(Key,Request,_Value) :-
     % OTHER
     memberchk(method(Method), Request),
@@ -652,7 +634,8 @@ try_dump_schema(DB_URI, Request) :-
         DB_URI,
         (
             try_get_param('terminus:encoding', Request, Encoding),
-            (   atom_string('terminus:turtle',Encoding)
+            (   coerce_literal_string(Encoding, ES),
+                atom_string('terminus:turtle',ES)
             ->  checkpoint_to_turtle(DB_URI, schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 delete_file(TTL_File),
@@ -671,9 +654,11 @@ try_dump_schema(DB_URI, Request) :-
  * Need a try_update_schema here...
  */
 try_update_schema(DB_URI,Name,TTL,Witnesses) :-
+    coerce_literal_string(Name, NS),
+    coerce_literal_string(TTL, TTLS),
     make_database_from_database_name(DB_URI, Database),
     setup_call_cleanup(
-        open_string(TTL, TTLStream),
-        schema_update(Database, Name, TTL, Witnesses),
+        open_string(TTLS, TTLStream),
+        schema_update(Database, NS, TTLStream, Witnesses),
         close(TTLStream)
     ).     
