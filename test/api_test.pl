@@ -112,6 +112,8 @@ run_schema_update_test :-
     ->  interpolate(["curl killed with signal ",Signal], M),
         throw(error(M))
     ;   true),
+
+    % We need to test the response here! It should be a vio witness list.
     * close(_Result).
     
 run_schema_get_test :-
