@@ -655,10 +655,11 @@ try_dump_schema(DB_URI, Request) :-
  */
 try_update_schema(DB_URI,Name,TTL,Witnesses) :-
     coerce_literal_string(Name, NS),
+    atom_string(NA, NS),
     coerce_literal_string(TTL, TTLS),
     make_database_from_database_name(DB_URI, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        schema_update(Database, NS, TTLStream, Witnesses),
+        schema_update(Database, NA, TTLStream, Witnesses),
         close(TTLStream)
     ).     
