@@ -522,7 +522,7 @@ try_get_param(Key,Request,_Value) :-
     
     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
     throw(http_reply(not_found(Key,MSG))).
-try_get_param(Key,Request,_Value) :-
+try_get_param(Key,_Request,_Value) :-
     % Catch all. 
     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
     throw(http_reply(not_found(Key,MSG))).

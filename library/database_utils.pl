@@ -1,7 +1,8 @@
 :- module(database_utils,[
               create_db/1,
               delete_db/1,
-              database_exists/1
+              database_exists/1,
+              extend_database_defaults/2
           ]).
 
 /** <module> Database Utilities
@@ -115,3 +116,29 @@ create_db(DB_URI) :-
 delete_db(DB) :-
     collection_directory(DB,DB_Path),
     delete_directory_and_contents(DB_Path).
+
+/* 
+ * should probably go in JSON-LD
+ */
+add_dictionary_default(Doc, Key, Default, New_Doc) :-
+    % hairy logic - can this be simplified?
+    (   get_dict(Key, Doc, Result)
+    ->  (   is_list(Result)
+        ->  (   member(Res, Result),
+                select_dict(Res, Default, _Rest)
+            ->  Doc = New_Doc
+            ;   put_dict(Key, Doc, [Default|Result], New_Doc)
+            )
+        ;   (   select_dict(Result, Default, _Rest)
+            ->  Doc = New_Doc
+            ;   Doc = [Default,Result]))
+    ;   put_dict(Key, Doc, Default, New_Doc)
+    ).
+
+extend_database_defaults(Doc,Ext) :-
+    add_dictionary_default(Doc, 'terminus:document',
+                           _{'@value':"document", '@type':"xsd:string"},
+                           Doc1),
+    add_dictionary_default(Doc1, 'terminus:schema',
+                           _{'@value':"schema", '@type':"xsd:string"},
+                           Ext).

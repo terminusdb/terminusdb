@@ -69,9 +69,25 @@ run_db_create_test :-
         _,
         true),
 
-    % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat(['{"terminus:document": {"@type":"terminus:Database", "rdfs:label":{"@language":"en","@value":"asdsda"}, "rdfs:comment":{"@language":"en","@value":"dasd"}, "terminus:schema":{"@type":"xsd:string","@value":"schema"}, "terminus:document":{"@type":"xsd:string","@value":"document"}, "terminus:allow_origin":{"@type":"xsd:string","@value":"*"}, "@id":"',Server,'/terminus_qa_test"}, "@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#", "terminus":"https://datachemist.net/ontology/terminus#"}, "@type":"terminus:APIUpdate", "terminus:user_key":"root"}'], Payload),
+    Doc = _{'@context': _{
+                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                            terminus:"https://datachemist.net/ontology/terminus#"
+                        },
+            '@type':"terminus:APIUpdate",
+            'terminus:document' : _{'@id': DB_URI, '@type':"terminus:Database",
+                                    'rdfs:comment':_{'@language':"en", '@value':"dasd"},
+                                    'rdfs:label':_{'@language':"en", '@value':"asdsda"},
+                                    'terminus:allow_origin':_{'@type':"xsd:string", '@value':"*"},
+                                    'terminus:document':_{'@type':"xsd:string", '@value':"document"},
+                                    'terminus:schema':_{'@type':"xsd:string", '@value':"schema"}
+                                   },
+            'terminus:user_key':"root"},
     
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])        
+    ),
+
     atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        

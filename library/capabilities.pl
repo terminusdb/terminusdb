@@ -178,6 +178,9 @@ add_database_resource(DB_Name,URI,Doc) :-
     ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
+    /* Extend Doc with default databases */ 
+    extend_database_defaults(Doc, Ext),
+    
     terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
@@ -186,7 +189,7 @@ add_database_resource(DB_Name,URI,Doc) :-
         =>
             insert(doc/server, terminus/resource_includes, doc/DB_Name),
             insert(doc/DB_Name, terminus/id, URI^^(xsd/anyURI)),
-            update_object(doc/DB_Name,Doc)            
+            update_object(doc/DB_Name,Ext)
         )
        ).
 
