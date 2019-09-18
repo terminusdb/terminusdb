@@ -79,7 +79,6 @@ run_db_create_test :-
 
 run_schema_update_test :-
     config:server(Server),
-    run_db_create_test,
 
     terminus_path(Path),
     interpolate([Path, '/test/geo.ttl'], TTL_File),
