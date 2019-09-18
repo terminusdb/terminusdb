@@ -2,10 +2,10 @@
 
 :- initialization(main).
 
+:- use_module(library(crypto)).
 :- use_module(library(filesex)).
 :- use_module(library(process)).
 :- use_module(library(optparse)).
-:- use_module(library(md5)).
 
 /*
  * command(Cmd) is semidet.
@@ -117,7 +117,8 @@ schema_path(Dir,Host,Path) :-
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
-    re_replace(Pattern/g, With, FileString, NewFileString),
+    atomic_list_concat(Split, Pattern, FileString),
+    atomic_list_concat(Split, With, NewFileString),
     open(Path, write, FileStream),
     write(FileStream, NewFileString),
     close(FileStream).
@@ -184,7 +185,7 @@ main(Args) :-
         memberchk(workers_amount(Workers_Arg), Opts),
         write_config_file(Config_Tpl_Path, Config_Path, Server,
                           Port_Arg, Workers_Arg),
-        md5_hash(Key,Hash,[]),
+        crypto_password_hash(Key,Hash, [cost(15)]),
         
         make_directory_path(Instance_Path),
         make_directory_path(Inference_Path),
