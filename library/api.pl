@@ -516,12 +516,16 @@ try_get_param(Key,Request,Value) :-
         throw(http_reply(not_found(Data,MSG)))),
     !.
 try_get_param(Key,Request,_Value) :-
-    % OTHER
+    % OTHER with method
     memberchk(method(Method), Request),
+    !,
     
     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
     throw(http_reply(not_found(Key,MSG))).
-
+try_get_param(Key,Request,_Value) :-
+    % Catch all. 
+    format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
+    throw(http_reply(not_found(Key,MSG))).
 
 /* 
  * get_param_default(Key,Request:request,Value,Default) is semidet.
