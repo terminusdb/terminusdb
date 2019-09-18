@@ -60,6 +60,8 @@ create_db(DB_URI) :-
     interpolate([DB_Path,'/COLLECTION'],DB_File),
     touch(DB_File),
 
+    initialise_prefix_db(DB_URI),
+    
     % Set up schemata
     forall(
         (
