@@ -1,5 +1,7 @@
 # TerminusDB
 
+[![Build Status](https://travis-ci.com/terminusdb/terminusdb.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb)
+
 TerminusDB is an open source model driven graph database for knowledge graph representation designed 
 specifically for the web-age. 
 
