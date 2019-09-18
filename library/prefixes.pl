@@ -168,9 +168,9 @@ get_collection_prefixes(Collection_Id,Prefixes) :-
  * return a list of pairs of prefixes.
  */
 get_collection_prefix_pairs(Collection,List) :-
-    setof(Prefix-Uri,
-          prefix(Collection, Prefix, Uri),
-          List).
+    findall(Prefix-Uri,
+            prefix(Collection, Prefix, Uri),
+            List).
 
 /* 
  * get_collection_prefix_list(Collection:atom,Prefixes:dict) is det.
