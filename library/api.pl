@@ -333,7 +333,9 @@ frame_handler(get, DB, Request) :-
     try_get_param('terminus:class',Request,Class_URI),
 
     try_class_frame(Class_URI,Database,Frame),
-    
+
+    config:server(SURI),
+    write_cors_headers(SURI),
     reply_json(Frame).
 
 /* 
