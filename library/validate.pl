@@ -118,4 +118,41 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
         )
     ).
 
+/* 
+ * document_update(Database:database, Graph:graph_identifier, 
+ *                 Document:json_ld, Witnesses:json_ld) is det.
+ * 
+ * Update the database with a document, or fail with a constraint witness. 
+ * 
+ */
+document_update(Database, Graph, Document, Witnesses) :-
+    database_name(Database,Database_Name),
+    with_transaction(
+        [collection(Database_Name),
+         graphs([Graph]),
+         success(Success_Flag)],
+        validate:(
+            update_object(Document,Database),
 
+            findall(Pos_Witness,
+                    (
+                        xrdf_pos(Database,Graph, X, P, Y),
+                        validate_insertion(Database, X, P, Y, Pos_Witness)
+                    ),
+                    Pos_Witnesses),
+            
+            findall(Neg_Witness,
+                    (   
+                        xrdf_neg(Database,Graph, X, P, Y),
+                        validate_deletion(Database, X, P, Y, Neg_Witness)
+                    ),
+                    Neg_Witnesses),
+            
+            append(Pos_Witnesses, Neg_Witnesses, Witnesses),
+            
+            (   Witnesses = []
+            ->  Success_Flag = true
+            ;   Success_Flag = false
+            )
+        )
+    ).

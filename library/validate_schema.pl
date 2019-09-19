@@ -129,8 +129,8 @@ Classes
 */
 
 /** 
- * immediateClass(?X:uri_or_id, +Database:database is nondet.
- * immediateClass(+X:uri_or_id, +Database:database is det.
+ * immediateClass(?X:uri_or_id, +Database:database) is nondet.
+ * immediateClass(+X:uri_or_id, +Database:database) is det.
  *
  * Check to see if class definitions are immediate (best practices) rather than inferred.
  * 
@@ -280,7 +280,7 @@ noImmediateClassSC(Database, Reason) :-
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 
-%% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:database is nondet
+%% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:database) is nondet
 %
 % Defines the relation between properties and their restrictions.
 %
@@ -982,7 +982,7 @@ anyRange(OP,R,Database) :-
 mostSpecificRange(P,R,Database) :- anyRange(P,R,Database), !.
 
 /** 
- * domain(P:uri,D:uri,Database:database is nondet.
+ * domain(P:uri,D:uri,Database:database) is nondet.
  *
  * Actually specified domain in the database.
  */ 
@@ -992,7 +992,7 @@ domain(P,D,Database) :-
     xrdf(Collection,Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /** 
- * anyDomain(?P,?R,+Database:database is nondet. 
+ * anyDomain(?P,?R,+Database:database) is nondet. 
  * 
  * Determine if R is a viable domain for P. 
  */ 
