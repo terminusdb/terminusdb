@@ -16,7 +16,8 @@
               last_checkpoint_number/2,
               with_output_graph/2,
               ttl_to_hdt/2,
-              with_transaction/2
+              with_transaction/2,
+              checkpoint/2
           ]).
 
 :- use_module(library(hdt)). 
@@ -358,7 +359,8 @@ checkpoint(Collection_Id,Database_Id) :-
                 write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
             )
         )
-    ).
+    ),
+    sync_from_journals(Collection_Id, Database_Id).
 
 
 /** 

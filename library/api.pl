@@ -64,8 +64,11 @@
 % File processing - especially for turtle
 :- use_module(library(file_utils), [checkpoint_to_turtle/3]).
 
-% Validaton
+% Validation
 :- use_module(library(validate)).
+
+% Checkpointing...
+:- use_module(library(triplestore), [checkpoint/2]).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -640,7 +643,8 @@ try_dump_schema(DB_URI, Request) :-
             try_get_param('terminus:encoding', Request, Encoding),
             (   coerce_literal_string(Encoding, ES),
                 atom_string('terminus:turtle',ES)
-            ->  checkpoint_to_turtle(DB_URI, schema, TTL_File),
+            ->  checkpoint(DB_URI, schema),
+                checkpoint_to_turtle(DB_URI, schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 delete_file(TTL_File),
                 config:server(SURI),

@@ -518,7 +518,6 @@ last_checkpoint_file(C,G,File) :-
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
 checkpoint_to_turtle(Collection,Database,Output_File) :-
-    
     last_checkpoint_file(Collection,Database,FileIn), 
     user:file_search_path(terminus_home, Dir),
     get_time(N),
