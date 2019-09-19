@@ -103,7 +103,11 @@ forall (x p y) \in Inserts.
 
   forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
     S,G' |- Ca(x p y)
+*/
 
+
+
+/* 
 deletes: 
 
 forall (x p y) \in Deletes. 

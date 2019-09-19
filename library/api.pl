@@ -375,7 +375,10 @@ schema_handler(post,DB,R) :- % should this be put?
     try_get_param('terminus:turtle',Request,TTL),
     
     try_update_schema(DB_URI,Name,TTL,Witnesses),
-    
+
+    config:server(SURI),
+    write_cors_headers(SURI),
+
     (   Witnesses = []
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
     ;   reply_json(_{'terminus:status' : 'terminus:failure',
