@@ -97,7 +97,7 @@ run_schema_update_test :-
     config:server(Server),
 
     terminus_path(Path),
-    interpolate([Path, '/test/geo.ttl'], TTL_File),
+    interpolate([Path, '/test/blank.ttl'], TTL_File),
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
@@ -118,7 +118,7 @@ run_schema_update_test :-
 
     % process_create avoids shell escaping complexities. 
     process_create(path(curl), Args,
-                   [ stdout(std),
+                   [ stdout(pipe(Out)),
                      stderr(null),
                      process(PID)
                    ]),
@@ -128,8 +128,9 @@ run_schema_update_test :-
         throw(error(M))
     ;   true),
 
-    % We need to test the response here! It should be a vio witness list.
-    * close(_Result).
+    json_read(Out, Term),
+    Term = json(['terminus:status'='terminus:success']),
+    close(Out).
     
 run_schema_get_test :-
     config:server(Server),
