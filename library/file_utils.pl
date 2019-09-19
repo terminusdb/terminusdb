@@ -521,7 +521,7 @@ checkpoint_to_turtle(Collection,Database,Output_File) :-
     
     last_checkpoint_file(Collection,Database,FileIn), 
     user:file_search_path(terminus_home, Dir),
-    get_time(T),floor(T,N),
+    get_time(N),
     interpolate([Dir,'/tmp/',N,'.ntriples'],NTriples_File),
     process_create(path(hdt2rdf), ['-f','ntriples',FileIn,NTriples_File],
                    [ stdout(pipe(NT_Out)),
