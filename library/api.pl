@@ -85,7 +85,7 @@ http:location(root, '/', []).
 :- http_handler(root(DB/schema), schema_handler(Method,DB), 
                 [method(Method),
                  methods([options,get,post])]).
-:- http_handler(root(DB/class_frame), class_frame_handler(Method,DB), 
+:- http_handler(root(DB/frame), frame_handler(Method,DB), 
                 [method(Method),
                  methods([options,get])]).
 :- http_handler(root(DB/document/DocID), document_handler(Method,DB,DocID),
@@ -309,15 +309,15 @@ document_handler(delete, DB, Doc_ID, Request) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 /** 
- * class_frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
+ * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
  * 
  * Establishes frame responses 
  */
-class_frame_handler(options,DB,_Request) :-
+frame_handler(options,DB,_Request) :-
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI),
     format('~n'). % send headers
-class_frame_handler(get, DB, Request) :-
+frame_handler(get, DB, Request) :-
     /* Read Document */
     authenticate(Request, Auth),
 
