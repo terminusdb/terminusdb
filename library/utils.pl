@@ -9,6 +9,7 @@
               unique_solutions/3,
               repeat_atom/3,
               zero_pad/3,
+              coerce_number/2,
               exhaust/1,
               take/3,
               from_to/4,
@@ -175,6 +176,22 @@ zero_pad(A,L,A2) :-
 	repeat_atom('0',L2,List), 
 	append(List,AtomList,TotalList),
 	atom_chars(A2,TotalList).
+
+/* 
+ * coerce_number(S,N) is det.
+ * 
+ * Ensure that S is converted to a number N
+ */ 
+coerce_number(S,N) :-
+    atom_string(A, S),
+    !,
+    atom_number(A, N).
+coerce_number(A,N) :-
+    atom(A),
+    !,
+    atom_number(A,N).
+coerce_number(N,N) :-
+    number(N).
 
 /** 
  * exhaust(+Goal:goal) is det. 

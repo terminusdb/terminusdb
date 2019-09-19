@@ -1,6 +1,8 @@
 :- module(validate_instance,[
               instanceClass/3,
-              most_specific_type/3
+              most_specific_type/3,
+              refute_insertion/5,
+              refute_deletion/5              
           ]).
 
 /** <module> Instance Validation
@@ -147,7 +149,11 @@ refute_insertion(Database,_X,P,Y,Reason) :-
     ).
 refute_insertion(Database,X,P,_Y,Reason) :-
     refute_all_restrictions(Database,X,P,Reason).
-
+refute_insertion(Database,X,P,Y,Reason) :-
+    refute_functional_property(X,P,Y,Database,Reason).
+refute_insertion(Database,X,P,Y,Reason) :-
+    refute_inverse_functional_property(X,P,Y,Database,Reason).
+    
 /* 
  * refute_node_at_class(+D,+G,+X,+C,Reason) is nondet. 
  * 
@@ -232,7 +238,10 @@ refute_deletion(Database,
              }.
 refute_deletion(Database,X,P,_Y,Reason) :-
     refute_all_restrictions(Database,X,P,Reason).
-
+refute_deletion(Database,X,P,Y,Reason) :-
+    refute_functional_property(X,P,Y,Database,Reason).
+refute_deletion(Database,X,P,Y,Reason) :-
+    refute_inverse_functional_property(X,P,Y,Database,Reason).
 
 %%%%%%%%%%%%%%%%%%%%%%
 %%   RESTRICTIONS   %%
@@ -284,7 +293,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
-                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' },
+                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
@@ -299,7 +308,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
-                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' },
+                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
@@ -314,7 +323,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
-                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' },
+                 'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
@@ -343,7 +352,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
     interpolate(['Cardinality too high for restriction: ',CR],Msg),
     Reason = _{
                  '@type' : 'vio:InstanceQualifiedCardinalityRestrictionViolation',
-			     'vio:message' : _{ '@value' : Msg, '@type' 'xsd:string' },
+			     'vio:message' : _{ '@value' : Msg, '@type' : 'xsd:string' },
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
@@ -360,7 +369,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
     interpolate(['Cardinality unequal on restriction: ',CR],Msg),
     Reason = _{
                  '@type' : 'vio:InstanceQualifiedCardinalityRestrictionViolation',
-			     'vio:message' : _{ '@value' : Msg, '@type' 'xsd:string' },
+			     'vio:message' : _{ '@value' : Msg, '@type' : 'xsd:string' },
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
@@ -370,12 +379,12 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:hasValue,V),
-    inferredEdge(X,OP,Y,Database),
+    inferredEdge(X,P,Y,Database),
     Y \= V,
     interpolate(['Wrong value on restriction: ',CR],Msg),
     Reason = _{
                  '@type' : 'vio:InstanceValueRestrictionViolation',
-			     'vio:message' : _{ '@value' : Msg, '@type' 'xsd:string' },
+			     'vio:message' : _{ '@value' : Msg, '@type' : 'xsd:string' },
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
                  'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' },
@@ -383,41 +392,44 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 
 /** 
- * notFunctionalPropertyIC(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
+ * refute_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
  * 
  * Determines of ?P is actually a functional property or not. 
  */
-notFunctionalPropertyIC(X,P,_,Database,Reason) :-
+refute_functional_property(X,P,Y,Database,Reason) :-
     functionalProperty(P,Database),
     database_instance(Database,Instance),
-    xrdf(X,P,_,Instance),
+    xrdf(Database,Instance,X,P,_),
     card(X,P,_,Database,N),
     N \= 1,
     interpolate(['Functional Property ',P,' is not functional.'],Message),
-    Reason = ['rdf:type'='NotFunctionalPropertyViolation',
-			  bestPractice=literal(type('xsd:boolean',false)),
-			  subject=X,
-			  predicate=P,
-			  message=Message].
+    Reason = _{
+                 '@type' : 'vio:FunctionalPropertyViolation',
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },			     
+			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+                 'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 
 /** 
- * notInverseFunctionalPropertyIC(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
+ * refute_inverse_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
  * 
  * Determines of ?P is actually an inverse functional property or not. 
  */
-notInverseFunctionalPropertyIC(X,P,Y,Database,Reason) :-
+refute_inverse_functional_property(X,P,Y,Database,Reason) :-
     database_instance(Database,Instance),
     inverseFunctionalProperty(P,Database),
-    xrdf(_,P,Y,Instance),
+    xrdf(Database,Instance,_,P,Y),
     card(_,P,Y,Database,N),
     N \= 1,
-    interpolate(['Functional Property ',P,' is not functional.'],Message),
-    Reason = ['rdf:type'='NotInverseFunctionalPropertyViolation',
-			  bestPractice=literal(type('xsd:boolean',false)),
-			  subject=X,
-			  predicate=P,
-			  object=Y,
-			  message=Message].
+    interpolate(['Inverse Functional Property ',P,' is not inverse functional.'],Message),
+    Reason = _{
+                 '@type' : 'vio:FunctionalPropertyViolation',
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },			     
+			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+                 'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
+                 'vio:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
+             }.
 
 days_in_month(_,1,31).
 days_in_month(Y,2,D) :- Ans is Y mod 4, Ans = 0 -> D = 29 ; D = 28 .
@@ -532,46 +544,6 @@ refute_basetype_elt(literal(type(_,S)),xdd:gYearRange, Reason) :-
                      'vio:message' : 'Not a well formed gYearRange',
                      'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:gYearRange'}
-                 }
-    ).
-refute_basetype_elt(literal(type(_,N)),xdd:pesel, Reason) :-
-    (   integer(N),
-	    \+ (atom_number(Spre_pad,N), utils:zeroPad(Spre_pad,11,S), atom_codes(S,C), phrase(xsd_parser_ipg:pesel(_,_,_,_,_,_),C,[]))
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed pesel',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : N},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:pesel'}
-                 }
-    ).
-refute_basetype_elt(literal(type(_,S)),xdd:pesel, Reason) :-
-    (   \+ integer(S),
-	    \+ (atom_codes(S,C), phrase(xsd_parser_ipg:pesel(_,_,_,_,_,_),C,[]))
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed pesel',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:pesel'}
-                 }
-    ).
-refute_basetype_elt(literal(type(_,N)),xdd:pesel, Reason) :-
-    (   integer(N),
-	    \+ (atom_number(Spre_pad,N), utils:zeroPad(Spre_pad,11,S),atom_codes(S,C), phrase(xsd_parser_ipg:peselCheck,C,[]))
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Pesel # is not valid',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : N},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:pesel'}
-                 }
-    ).
-refute_basetype_elt(literal(type(_,S)),xdd:pesel, Reason) :-
-    (   \+ integer(S),
-	    \+ (atom_codes(S,C), phrase(xsd_parser_ipg:peselCheck,C,[]))
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Pesel # is not valid',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:pesel'}
                  }
     ).
 refute_basetype_elt(literal(type(_,S)),xdd:url, Reason) :-
@@ -714,7 +686,7 @@ refute_basetype_elt(literal(type(_,S)),xsd:date,Reason) :-
 refute_basetype_elt(literal(type(_,date_time(SY,Mo,D,H,M,S))),xsd:dateTime,Reason) :-
     (   (   Mo > 12
         ;   Mo < 1
-        ;   days_irefute_month(SY,Mo,Days), D > Days
+        ;   days_in_month(SY,Mo,Days), D > Days
         ;   D < 1
         ;   H < 0
         ;   H > 23
@@ -742,7 +714,7 @@ refute_basetype_elt(literal(type(_,Atom)),xsd:dateTime,Reason) :-
     (   atom(Atom), atom_codes(Atom,C), phrase(xsd_parser:dateTime(SY,Mo,D,H,M,S,Z,ZH,ZM),C,[]),
         (   Mo > 12
         ;   Mo < 1
-        ;   days_irefute_month(SY,Mo,Days), D > Days
+        ;   days_in_month(SY,Mo,Days), D > Days
         ;   D < 1
         ;   H < 0
         ;   H > 23

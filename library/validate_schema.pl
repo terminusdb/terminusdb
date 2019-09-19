@@ -922,7 +922,7 @@ propertyCycleHelp(P,S,[Q|T],Database) :-
 propertyCycle(P,PC,Database,Reason) :-
     empty_assoc(S), propertyCycleHelp(P,S,PC,Database),
     interpolate(['Property class ', P, ' has a cycle with path: ', PC], Message),
-    jsonify(PC, JSON),
+    pathify(PC, JSON),
     Reason = _{
                  '@type' : 'vio:ClassCycle',
                  'vio:property_cycle' : JSON,

@@ -136,15 +136,15 @@ document_update(Database, Graph, Document, Witnesses) :-
 
             findall(Pos_Witness,
                     (
-                        xrdf_pos(Database,Graph, X, P, Y),
-                        validate_insertion(Database, X, P, Y, Pos_Witness)
+                        triplestore:xrdf_pos(Database,Graph, X, P, Y),
+                        refute_insertion(Database, X, P, Y, Pos_Witness)
                     ),
                     Pos_Witnesses),
             
             findall(Neg_Witness,
                     (   
-                        xrdf_neg(Database,Graph, X, P, Y),
-                        validate_deletion(Database, X, P, Y, Neg_Witness)
+                        triplestore:xrdf_neg(Database,Graph, X, P, Y),
+                        refute_deletion(Database, X, P, Y, Neg_Witness)
                     ),
                     Neg_Witnesses),
             
