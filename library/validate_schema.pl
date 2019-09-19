@@ -15,7 +15,7 @@
               strictSubsumptionOf/3,
               complementOf/3,
 		      dcog_tag/3,
-              entity/2,
+              document/2,
               
 		      unionOfList/3,
               intersectionOfList/3,
@@ -151,6 +151,8 @@ immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
 immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
 % Should this be here?
 immediateClass('https://datachemist.net/ontology/dcog#Entity', _).
+immediateClass('https://datachemist.net/ontology/dcog#Document', _).
+immediateClass('https://datachemist.net/ontology/dcog#Relationship', _).
 
 %% class(?X:uri_or_id, +Schema:database is nondet
 % class(+X:uri_or_id, +Schema:database is det
@@ -514,8 +516,11 @@ subClassStrict(X,Z,Database) :- subClassOf(X,Y,Database), subClassStrict(Y,Z, Da
 % - complementOf classes do not give subsumption properly yet (unimplemented).
 %   Requires anti-subsumption predicate
 % - oneOf should probably have individual sets for both CC, CP
-%:- table subsumptionOf/3.
-%:- rdf_meta subsumptionOf(r,r,o).
+%
+% static solutions first.
+subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_). 
+subsumptionOf('https://datachemist.net/ontology/dcog#Entity','https://datachemist.net/ontology/dcog#Document',_).
+subsumptionOf('https://datachemist.net/ontology/dcog#Relationship','https://datachemist.net/ontology/dcog#Document',_).
 subsumptionOf(CC,CC,Database) :-
     immediateClass(CC,Database).
 subsumptionOf(CC,CP,Database) :-
@@ -539,8 +544,6 @@ subsumptionOf(CC,CP,Database) :-
 subsumptionOf(CC,CP,Database) :- % datatypes
     datatype(CC,Database),
     datatypeSubsumptionOf(CC,CP,Database).
-subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_). % Is this worth throwing in? Might conflict with other constraints
-subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
 
 %% :- rdf_meta customDatatype(r,o).
 customDatatype(X,Database) :-
@@ -945,13 +948,13 @@ range(P,R,Database) :-
     xrdf(Collection,Schema,P,'http://www.w3.org/2000/01/rdf-schema#range',R).
 
 /** 
- * entity(?Class,+Database) is nondet.
+ * document(?Class,+Database) is nondet.
  * 
  * This is a foundational predicate for DQS which establishes 
  * the places in which to "clip" the graph. 
  */
-entity(Class,Database) :-
-	subsumptionOf(Class,'https://datachemist.net/ontology/dcog#Entity', Database). 
+document(Class,Database) :-
+	subsumptionOf(Class,'https://datachemist.net/ontology/dcog#Document', Database). 
 
 /** 
  * anyRange(?P,?R,+Database:database is nondet. 
@@ -999,9 +1002,9 @@ anyDomain('http://www.w3.org/2002/07/owl#topObjectProperty',
 anyDomain('http://www.w3.org/2002/07/owl#topDataProperty',
           'http://www.w3.org/2000/01/rdf-schema#Literal',_).
 anyDomain('http://www.w3.org/2000/01/rdf-schema#label',D,Database) :-
-    entity(D,Database).
+    document(D,Database).
 anyDomain('http://www.w3.org/2000/01/rdf-schema#comment',D,Database) :-
-    entity(D,Database).
+    document(D,Database).
 anyDomain(P,R,Database) :-
     domain(P,R,Database).
 anyDomain(OP,R,Database) :-

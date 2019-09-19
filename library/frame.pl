@@ -1,31 +1,31 @@
 :- module(frame, [
               %% Give a class frame for a given class.
               class_frame/3,
-              % Various class/entity queries 
-              all_entities/2,
+              % Various class/document queries 
+              all_documents/2,
               all_classes/2,
               class_properties/3,
               class_property_frame/4,
               %% Fill a given class frame with data.
               fill_class_frame/4,
-              entity_filled_frame/3,
-              all_entity_instances/2,
-              all_entity_iris/2,
+              document_filled_frame/3,
+              all_document_instances/2,
+              all_document_iris/2,
               % Get an object as described by a frame.
               % (should this be exported?)
-              % entity_object/4,
+              % document_object/4,
               % As JSON-LD
-              entity_jsonld/3,
+              document_jsonld/3,
               % As JSON-LD with a context 
-              entity_jsonld/4,
+              document_jsonld/4,
               % As JSON-LD with a context and depth parameter
-              entity_jsonld/5,
+              document_jsonld/5,
               class_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
               update_object/2,
               update_object/3,
-              entity_filled_class_frame_jsonld/4
+              document_filled_class_frame_jsonld/4
           ]).
 
 /** <module> Frames
@@ -56,7 +56,7 @@
 :- use_module(library(utils)).
 :- use_module(library(base_type)).
 :- use_module(library(triplestore)).
-:- use_module(library(validate_schema), except([entity/2])).
+:- use_module(library(validate_schema), except([document/2])).
 :- use_module(library(validate_instance)).
 :- use_module(library(inference)).
 :- use_module(library(database)).
@@ -73,8 +73,8 @@ class_record(Database,Class,[class=Class|L]) :-
 property_record(Database,Property,L) :-
     maybe_meta(Property,Database,L).
 
-all_entities(Database,AER) :-
-    unique_solutions(E,schema:entity(E,Database),AE),
+all_documents(Database,AER) :-
+    unique_solutions(E,schema:document(E,Database),AE),
     maplist(class_record(Database),AE,AER).
 
 all_classes(Database,ACR) :-
@@ -82,19 +82,19 @@ all_classes(Database,ACR) :-
     maplist(class_record(Database),AC,ACR).
 
 /** 
- * get_label(Entity,Database,Label) is semidet.
+ * get_label(Document,Database,Label) is semidet.
  */
-get_label(Entity,Database,Label) :-
+get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Entity,LabelProp,literal(lang(_,Label))),
+    xrdf(Collection,Instance,Document,LabelProp,literal(lang(_,Label))),
     !.
-get_label(Entity,Database,Label) :-
+get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Entity,LabelProp,literal(type(_,Label))),
+    xrdf(Collection,Instance,Document,LabelProp,literal(type(_,Label))),
     !.
 
 get_some_label(E,Database,L) :-
@@ -103,28 +103,28 @@ get_some_label(E,Database,L) :-
     ;   L=E).
 
 /** 
- * all_entity_instances(Database,Ae) is semidet.
+ * all_document_instances(Database,Ae) is semidet.
  * 
  * Returns a list of URI=[type=Class,label=Label] elements, where 
- * Class is an entity class and Label is a string.
+ * Class is an document class and Label is a string.
  */
-all_entity_instances(Database,AE) :-
+all_document_instances(Database,AE) :-
     database_name(Database,Collection),    
     database_instance(Database,Instance),
     unique_solutions(E=[type=C,label=L],
                      (   xrdf(Collection,Instance,
                               E,rdf:type,C),
-                         schema_util:entity(C,Database),
+                         schema_util:document(C,Database),
                          get_some_label(E,Database,L)),
                      AE).
 
-all_entity_iris(Database, IRIs) :-
+all_document_iris(Database, IRIs) :-
     database_name(Database,Collection),            
     database_instance(Database, Instance),
     findall(IRI,
             (   xrdf(Collection,Instance,
                      IRI,rdf:type,C),
-                schema_util:entity(C, Database)
+                schema_util:document(C, Database)
             ),
             IRIs).
 
@@ -145,17 +145,17 @@ most_specific_properties(Database,Properties,SpecificProperties) :-
 
 %:- rdf_meta class_properties(r,o,r).
 class_properties(Class, Database, PropertiesPrime) :-
-    (   schema:entity(Class,Database)
-    ->  EntityProperties=['http://www.w3.org/2000/01/rdf-schema#label', 
+    (   schema:document(Class,Database)
+    ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label', 
                           'http://www.w3.org/2000/01/rdf-schema#comment']
-    ;   EntityProperties=[]),
+    ;   DocumentProperties=[]),
     (   setof(Super,schema:subsumptionOf(Class,Super,Database),Classes),
         setof(P,
               S^(member(S,Classes),
                  validate_schema:domain(P,S,Database)),
               Properties)        
     ->  most_specific_properties(Database,Properties,MSProperties),
-        append(MSProperties,EntityProperties,PropertiesWithAbstract),
+        append(MSProperties,DocumentProperties,PropertiesWithAbstract),
         database_name(Database,Collection),                
         database_schema(Database,Schema),
         exclude({Schema,Collection}/[X]>>(
@@ -164,7 +164,7 @@ class_properties(Class, Database, PropertiesPrime) :-
                          X,dcog:tag,dcog:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
-    ;   PropertiesPrime=EntityProperties).
+    ;   PropertiesPrime=DocumentProperties).
 
 %:- rdf_meta has_formula(r,o).
 has_formula(Class,Database) :-
@@ -533,12 +533,12 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    domain=Class,
                    range=Range,
                    restriction=Restriction,
-                   frame=[type=entity,class=Range|RTail]
+                   frame=[type=document,class=Range|RTail]
                    |RecordRemainder]) :- 
     mostSpecificRange(Property,Range,Database),
     class(Range,Database),
-    schema:entity(Range,Database),
-    % We are an entity frame.
+    schema:document(Range,Database),
+    % We are a document frame.
     !,
     property_record(Database,Property,RecordRemainder),    
     maybe_label(Range,Database,RLabel),
@@ -556,7 +556,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
     mostSpecificRange(Property,Range,Database),
     class(Range,Database),
     oneOfList(Range,OneList,Database),
-    % We are an entity frame.
+    % We are an document frame.
     !,
     Frame = [type=oneOf, elements=DecoratedOneList],
     decorate_elements(OneList,Database,DecoratedOneList),        
@@ -573,7 +573,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    |RecordRemainder]) :-
     mostSpecificRange(Property,Range,Database),
     class(Range,Database),
-    % Object property but not an entity
+    % Object property but not an document
     !,
     property_record(Database,Property,RecordRemainder),
     calculate_property_restriction(Property,Restriction_Formula,Database,Restriction),
@@ -670,12 +670,12 @@ fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
     % An operand
     !,
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp).
-fill_class_frame(Elt,_,F,EntityFrame) :-
+fill_class_frame(Elt,_,F,DocumentFrame) :-
     member(type=Type, F),
-    member(Type,[oneOf,entity]),
+    member(Type,[oneOf,document]),
     % Just need one type
     !,
-    append(F,[domainValue=Elt],EntityFrame).
+    append(F,[domainValue=Elt],DocumentFrame).
 
 choose_property(Database,Property,[type=and,operands=R], Result) :-
     member(F,R),
@@ -705,17 +705,17 @@ class_property_frame(Class, Property, Database, PropertyFrame) :-
     class_frame(Class, Database, Frame),
     choose_property(Database,Property,Frame,PropertyFrame).
     
-% get filled frame for entity
-entity_filled_frame(Entity,Database,Filled) :-
-    instanceClass(Entity,Class,Database),
+% get filled frame for document
+document_filled_frame(Document,Database,Filled) :-
+    instanceClass(Document,Class,Database),
     class_frame(Class,Database,Frame),
-    fill_class_frame(Entity,Database,Frame,Filled).
+    fill_class_frame(Document,Database,Frame,Filled).
 
 /*
- * realiser(+Entity:uri,+Frame:frame,+Database:database+Depth:number,-Realiser:any) is det.
+ * realiser(+Document:uri,+Frame:frame,+Database:database+Depth:number,-Realiser:any) is det.
  * 
  * Synthesise the concrete representative of the schema class, 
- * showing inhabitation unfolding entities up to a depth of Depth. 
+ * showing inhabitation unfolding documents up to a depth of Depth. 
  * 
  * Does not actually appear to be det!
  */
@@ -738,11 +738,11 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Database),
-                 (   schema:entity(V,Database)
+                 (   schema:document(V,Database)
                  ->  (   Depth =< 1
                      ->  New_Realiser=[V]
                      ;   New_Depth is Depth-1,
-                         entity_object(V,Database,New_Depth,Object),
+                         document_object(V,Database,New_Depth,Object),
                          Object = [_Type,_Id|New_Realiser])
                  ;   realiser(V,Frame,Database,Depth,New_Realiser))),
               RealiserValues)
@@ -773,7 +773,7 @@ realise_frame(Elt,[[type=restriction|_R]|Rest],Database,Depth,Realisers) :-
 realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser|Realisers]) :-
     % We are a bare class_choice, not applied to any property
     !,
-    entity_object(Elt,Database,Depth,Realiser),
+    document_object(Elt,Database,Depth,Realiser),
     realise_frame(Elt,Rest,Database,Depth,Realisers).
 realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
@@ -786,11 +786,11 @@ realise_frame(_Elt,F,_Database,_Depth,[]) :-
     memberchk(type=oneOf, F),
     !.
 realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
-    memberchk(type=entity, Frame),
+    memberchk(type=document, Frame),
     (   Depth =< 1
     ->  New_Realiser=[]
     ;   New_Depth is Depth-1,
-        entity_object(Elt,Database,New_Depth,Object),
+        document_object(Elt,Database,New_Depth,Object),
         Object = [_Type,_Id|New_Realiser]).
 
 
@@ -816,7 +816,7 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Ty
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Database),
-                 (   schema:entity(V,Database)
+                 (   schema:document(V,Database)
                  ->  New_Realiser=[(C,G,Elt,Prop,V)]
                  ;   realise_triples(V,Frame,Database,Below),
                      New_Realiser=[(C,G,Elt,Prop,V)|Below])),
@@ -862,20 +862,20 @@ realise_triples(Elt,Frame,Database,Realisers) :-
     append(Realiser_List,Realisers).
 realise_triples(_Elt,F,_Database,[]) :-
     member(type=Type, F),
-    member(Type,[oneOf,entity]),
-    % is a one-of or entity (don't backtrack over member)
+    member(Type,[oneOf,document]),
+    % is a one-of or document (don't backtrack over member)
     !.
 
 /*
- * entity_object(+Entity:uri,+Database:database+Depth,-Realiser) is semidet.
+ * document_object(+Document:uri,+Database:database+Depth,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
- * Entity
+ * Document
  */ 
-entity_object(Entity,Database,Depth,Realiser) :-
-    most_specific_type(Entity,Class,Database),
+document_object(Document,Database,Depth,Realiser) :-
+    most_specific_type(Document,Class,Database),
     class_frame(Class,Database,Frame),
-    realiser(Entity,Frame,Database,Depth,Realiser).
+    realiser(Document,Frame,Database,Depth,Realiser).
 
 /* 
  * get_collection_jsonld_context(Collection,Ctx) is det. 
@@ -887,13 +887,13 @@ get_collection_jsonld_context(Collection, Ctx) :-
     term_jsonld(Ctx_Obj, Ctx).
 
 /*
- * entity_jsonld(+Entity:uri,+Ctx:any,+Database:database-Realiser) is semidet.
+ * document_jsonld(+Document:uri,+Ctx:any,+Database:database-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
- * Entity in a JSON_LD format using a supplied context.
+ * Document in a JSON_LD format using a supplied context.
  */ 
-entity_jsonld(Entity,Ctx,Database,JSON_LD) :-
-    entity_object(Entity, Database, 1, Realiser),
+document_jsonld(Document,Ctx,Database,JSON_LD) :-
+    document_object(Document, Database, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
     database_name(Database, Collection),
@@ -903,14 +903,14 @@ entity_jsonld(Entity,Ctx,Database,JSON_LD) :-
     compress(JSON_Ex,Ctx_Total,JSON_LD).
 
 /*
- * entity_jsonld(+Entity:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
+ * document_jsonld(+Document:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
- * Entity in a JSON-LD format using a supplied context and unfolding 
+ * Document in a JSON-LD format using a supplied context and unfolding 
  * up to depth Depth
  */ 
-entity_jsonld(Entity,Ctx,Database,Depth,JSON_LD) :-
-    entity_object(Entity, Database, Depth, Realiser),
+document_jsonld(Document,Ctx,Database,Depth,JSON_LD) :-
+    document_object(Document, Database, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
     database_name(Database, Collection),
@@ -921,13 +921,13 @@ entity_jsonld(Entity,Ctx,Database,Depth,JSON_LD) :-
 
 
 /*
- * entity_jsonld(+Entity:uri,+Database:database-Realiser) is semidet.
+ * document_jsonld(+Document:uri,+Database:database-Realiser) is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
- * Entity in a JSON_LD format.
+ * Document in a JSON_LD format.
  */ 
-entity_jsonld(Entity,Database,JSON_LD) :-
-    entity_jsonld(Entity,_{},Database,JSON_LD).
+document_jsonld(Document,Database,JSON_LD) :-
+    document_jsonld(Document,_{},Database,JSON_LD).
 
 
 /* 
@@ -1018,14 +1018,14 @@ update_object(ID, Obj, Database) :-
     maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
 
 /*
- * entity_filled_class_frame_jsonld(+Entity:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 
+ * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 
  *    is semidet.
  * 
  * Gets the realiser for the frame associated with the class of 
- * Entity in a JSON_LD format using a supplied context.
+ * Document in a JSON_LD format using a supplied context.
  */ 
-entity_filled_class_frame_jsonld(Entity,Ctx,Database,JSON_LD) :-
-    entity_filled_frame(Entity, Database, FCF),
+document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
+    document_filled_frame(Document, Database, FCF),
     term_jsonld(FCF, JSON_Ex),
     
     database_name(Database, Name),

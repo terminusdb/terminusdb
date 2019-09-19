@@ -36,23 +36,23 @@
 :- use_module(library(expansions)).
 
 /**
- * most_specific_type(+Entity, -Sorted, +Database)
+ * most_specific_type(+Document, -Sorted, +Database)
  *
  * Gets the most specific type for a class 
  **/
-most_specific_type(Entity, Entity_Type, Database):-
-    get_ordered_instance_classes(Entity, [Entity_Type|_], Database).
+most_specific_type(Document, Document_Type, Database):-
+    get_ordered_instance_classes(Document, [Document_Type|_], Database).
 
 /**
- * get_ordered_instance_classes(+Entity, -Sorted, +Database)
+ * get_ordered_instance_classes(+Document, -Sorted, +Database)
  *
- * Gets all classes for a specific entity and returns
+ * Gets all classes for a specific document and returns
  * them ordered by subsumption.  
  **/
-get_ordered_instance_classes(Entity, Sorted, Database) :-
+get_ordered_instance_classes(Document, Sorted, Database) :-
     findall(
         Class,
-        instanceClass(Entity, Class, Database),
+        instanceClass(Document, Class, Database),
         Classes
     ),
 

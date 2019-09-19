@@ -84,7 +84,7 @@ get_user(User_ID, User) :-
     terminus_database(Database),
     terminus_context(Ctx),
     
-    entity_jsonld(User_ID,Ctx,Database,3,User).
+    document_jsonld(User_ID,Ctx,Database,3,User).
 
 
 /** 
@@ -101,7 +101,7 @@ key_auth(Key, Auth) :-
 
     user_auth_id(User_ID, Auth_ID),
     
-    entity_jsonld(Auth_ID,Ctx,Database,Auth).
+    document_jsonld(Auth_ID,Ctx,Database,Auth).
 
 /* 
  * user_auth_id(User,Auth_id) is semidet.

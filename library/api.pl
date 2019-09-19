@@ -55,7 +55,7 @@
 % Database construction utils
 :- use_module(library(database)).
 
-% Frame and entity processing
+% Frame and document processing
 :- use_module(library(frame)).
 
 % JSON manipulation
@@ -399,7 +399,7 @@ schema_handler(post,DB,R) :- % should this be put?
  * Gets document (JSON-LD) associated with ID
  */
 try_get_document(ID,Database,Object) :-
-    (   entity_jsonld(ID,Database,Object)
+    (   document_jsonld(ID,Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
         throw(http_reply(not_found(ID,MSG)))).
@@ -412,7 +412,7 @@ try_get_document(ID,Database,Object) :-
  * Gets document as filled frame (JSON-LD) associated with ID
  */
 try_get_filled_frame(ID,Database,Object) :-
-    (   entity_filled_class_frame_jsonld(ID,_{},Database,Object)
+    (   document_filled_class_frame_jsonld(ID,_{},Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
         throw(http_reply(not_found(ID,MSG)))).

@@ -52,7 +52,9 @@ run_api_tests :-
 try(Goal) :- 
     (   call(Goal)
     ->  true
-    ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n', [Goal])).
+    ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n', [Goal]),
+        fail
+    ).
 
 run_connect_test :-
     config:server(Server),

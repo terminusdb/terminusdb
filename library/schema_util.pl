@@ -4,7 +4,7 @@
               collection_schema_module/3,
               % utils
               calculate_subsumptionOf/3,
-              entity/2
+              document/2
           ]).
 
 /** <module> Schema Util
@@ -61,6 +61,21 @@ calculate_subsumptionOf(CC, CP, Database) :-
     database_module(Database, Module),
     calculate_subsumptionOf(CC, CP, Module).
 
+calculate_subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_).
+calculate_subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
+% Always available...
+calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Document',
+                        'https://datachemist.net/ontology/dcog#Document',_).
+calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Entity',
+                        'https://datachemist.net/ontology/dcog#Entity',_).
+calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Relationship',
+                        'https://datachemist.net/ontology/dcog#Relationship',_).
+% Subsumed by Document
+calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Relationship',
+                        'https://datachemist.net/ontology/dcog#Document',_).
+calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Entity',
+                        'https://datachemist.net/ontology/dcog#Document',_).
+% Structural rules
 calculate_subsumptionOf(CC, CC, Module) :-
     Module:class(CC).
 calculate_subsumptionOf(CC, CP, Module) :-
@@ -82,11 +97,6 @@ calculate_subsumptionOf(CC, CP, Module) :-
     % the tbox version does extra work in anonymousEquivalentClass, but why?
     Module:equivalentClass(CC, CZ),
     calculate_subsumptionOf(CZ, CP, Module).
-calculate_subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_).
-calculate_subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
-% Always available...
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Entity',
-                        'https://datachemist.net/ontology/dcog#Entity',_).
 
 term_expansion(generate_owl_predicates, Terms) :-
     findall(Predicate,
@@ -118,11 +128,11 @@ term_expansion(generate_owl_predicates, Terms) :-
 
 generate_owl_predicates.
 
-entity(Class, Database) :-
+document(Class, Database) :-
     is_database(Database),
     !,
     database_module(Database, Module),
-    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Entity').
+    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Document').
 
-entity(Class, Module) :-
-    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Entity').
+document(Class, Module) :-
+    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Document').
