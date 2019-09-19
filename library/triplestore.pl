@@ -355,7 +355,7 @@ checkpoint(Collection_Id,Database_Id) :-
         graph(Collection_Id,Database_Id,ckp,ttl),
         (
             forall(
-                xrdf(Collection_Id,Database_Id,X,Y,Z),
+                xrdf(Collection_Id,[Database_Id],X,Y,Z),
                 write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
             )
         )
