@@ -149,10 +149,13 @@ immediateClass(X,Database) :-
     xrdf(Collection, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
 immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
 immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
+% This makes me nervous... [ Gavin ]
+immediateClass('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
 immediateClass('https://datachemist.net/ontology/dcog#Entity', _).
 immediateClass('https://datachemist.net/ontology/dcog#Document', _).
 immediateClass('https://datachemist.net/ontology/dcog#Relationship', _).
+
 
 %% class(?X:uri_or_id, +Schema:database is nondet
 % class(+X:uri_or_id, +Schema:database is det
@@ -230,16 +233,6 @@ noImmediateClassSC(Database, Reason) :-
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 noImmediateClassSC(Database, Reason) :-
-    subClassOf(X,Y,Database), 
-    \+ customDatatype(Y,Database), \+ immediateClass(Y,Database), \+ restriction(Y,Database),
-    interpolate(['The class ',X,' is not a subclass of a defined class ',Y], Message),
-    Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
-	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
-	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
-             }.
-noImmediateClassSC(Database, Reason) :-
     intersectionOf(X,Y,Database),
     \+ immediateClass(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',X,' is an intersection of ', Y,' but not a defined class'], Message),
@@ -250,29 +243,9 @@ noImmediateClassSC(Database, Reason) :-
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 noImmediateClassSC(Database, Reason) :-
-    intersectionOf(X,Y,Database),
-    \+ immediateClass(Y,Database), \+ restriction(Y,Database),
-    interpolate(['The class ',X,' is not an intersection of a defined class ',Y], Message),
-    Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
-	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
-	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
-             }.
-noImmediateClassSC(Database, Reason) :-
     unionOf(X,Y,Database),
     \+ immediateClass(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a defined class ',Y], Message),
-    Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
-	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
-	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
-             }.
-noImmediateClassSC(Database, Reason) :-
-    unionOf(X,Y,Database),
-    \+ immediateClass(X,Database), \+ restriction(X,Database),
-    interpolate(['The class ',X,' is a union of ', Y,' but not a defined class'], Message),
     Reason = _{
                  '@type' : 'vio:ClassInheritanceVioltion',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
@@ -754,8 +727,9 @@ annotationProperty(P,Database) :-
     database_name(Database,Collection),
     database_schema(Database,Schema),
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
-annotationProperty(P,Database) :-
-    subsumptionPropertiesOf(P,'https://datachemist.net/ontology/dcog#pseudo_property', Database).
+% Gavin nuked on Sep 20th 2019
+%annotationProperty(P,Database) :-
+%    subsumptionPropertiesOf(P,'https://datachemist.net/ontology/dcog#pseudo_property', Database).
 
 
 %:- rdf_meta functionalProperty(r,o).

@@ -1,5 +1,6 @@
 :- module(validate, [
-              schema_update/4
+              schema_transaction/4,
+              document_transaction/4
           ]).
 
 /** <module> Validation
@@ -62,7 +63,7 @@ test_schema(domainNotSubsumedSC).
 test_schema(rangeNotSubsumedSC).
 test_schema(propertyTypeOverloadSC).
 
-schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
+schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
     database_name(Database,Database_Name),
     with_transaction(
         [collection(Database_Name),
@@ -81,8 +82,8 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
                                           (   (   X = node(N)
                                               ->  interpolate(['_:',N], XF)
                                               ;   X = XF),
-                                              (   Y = node(N)
-                                              ->  interpolate(['_:',N], YF)
+                                              (   Y = node(M)
+                                              ->  interpolate(['_:',M], YF)
                                               ;   Y = literal(L),
                                                   atom(L)
                                               ->  YF = literal(lang(en,L))
@@ -125,14 +126,14 @@ schema_update(Database, Schema, New_Schema_Stream, Witnesses) :-
  * Update the database with a document, or fail with a constraint witness. 
  * 
  */
-document_update(Database, Graph, Document, Witnesses) :-
+document_transaction(Database, Graph, Goal, Witnesses) :-
     database_name(Database,Database_Name),
     with_transaction(
         [collection(Database_Name),
          graphs([Graph]),
          success(Success_Flag)],
         validate:(
-            update_object(Document,Database),
+            call(Goal),
 
             findall(Pos_Witness,
                     (

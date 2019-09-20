@@ -87,7 +87,7 @@ run_db_create_test :-
     
     with_output_to(
         string(Payload),
-        json_write(current_output, Doc, [])        
+        json_write_dict(current_output, Doc, [])        
     ),
 
     atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server,'/terminus_qa_test'], Cmd),
@@ -99,24 +99,24 @@ run_schema_update_test :-
     config:server(Server),
 
     terminus_path(Path),
-    interpolate([Path, '/test/blank.ttl'], TTL_File),
+    interpolate([Path, '/terminus-ontologies/terminus.owl.ttl'], TTL_File),
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
             'terminus:schema' : _{'@value': "schema", '@type' : "xsd:string"},
             'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
            },
-    
+
     with_output_to(
         string(Payload),
-        json_write(current_output, Doc, [])        
+        json_write_dict(current_output, Doc, [])        
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
     Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
-    format('~nRunning command: curl "~q"~n',[Args]),        
+    format('~nRunning command: curl -X POST ~s...~n',[URI]),
 
     % process_create avoids shell escaping complexities. 
     process_create(path(curl), Args,
@@ -130,8 +130,12 @@ run_schema_update_test :-
         throw(error(M))
     ;   true),
 
-    json_read(Out, Term),
-    Term = json(['terminus:status'='terminus:success']),
+    json_read_dict(Out, Term),
+    (   Term = _{'terminus:status' : 'terminus:success'}
+    ->  true
+    ;   json_write_dict(current_output,Term,[]),
+        fail),
+    
     close(Out).
     
 run_schema_get_test :-
@@ -155,11 +159,52 @@ run_get_filled_frame_test :-
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
+run_doc_update_test :-
+    % create DB
+    config:server(Server),
+
+    Doc = _{
+              '@id' : 'http://localhost:6363/terminus_qa_test/document/test',
+              'terminus:document' : _{
+                                        
+                                    }
+          },
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document'], URI),
+        
+    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl "~q"~n',[Args]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+
+    json_read(Out, Term),
+    writeq(Term).
+
+    
+
 run_get_doc_test :-
     % create DB
     config:server(Server),
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
+
 
 run_woql_test :-
     config:server(Server),

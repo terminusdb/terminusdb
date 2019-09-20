@@ -136,6 +136,24 @@ connection_authorised_user(Request, User) :-
         ;   throw(http_reply(method_not_allowed('Bad user object', User_ID))))
     ;   throw(http_reply(authorise('Not a valid key')))).
 
+%%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
+
+/* 
+ * reply_with_witnesses(+Resource_URI,+Witnesses) is det. 
+ * 
+ * 
+ */
+reply_with_witnesses(Resource_URI, Witnesses) :-
+    write_cors_headers(Resource_URI),
+
+    (   Witnesses = []
+    ->  reply_json(_{'terminus:status' : 'terminus:success'})
+    ;   reply_json(_{'terminus:status' : 'terminus:failure',
+                     'terminus:witnesses' : Witnesses},
+                   [code(406)])
+    ).
+
+
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /** 
@@ -283,11 +301,9 @@ document_handler(post, DB, Doc_ID, R) :-
     
     try_get_param('terminus:document',Request,Doc),
         
-    try_update_document(Doc_ID,Doc,Database),
+    try_update_document(Doc_ID,Doc,Database,Witnesses),
 
-    write_cors_headers(DB_URI),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_with_witnesses(DB_URI,Witnesses).
 document_handler(delete, DB, Doc_ID, Request) :-
     /* Delete Document */
     authenticate(Request, Auth),
@@ -302,11 +318,9 @@ document_handler(delete, DB, Doc_ID, Request) :-
 
     try_doc_uri(DB_URI,Doc_ID,Doc_URI),
 
-    try_delete_document(Doc_URI,Database),
+    try_delete_document(Doc_URI,Database,Witnesses),
 
-    write_cors_headers(DB_URI),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_with_witnesses(DB_URI,Witnesses).
 
 /** 
  * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
@@ -369,22 +383,14 @@ schema_handler(post,DB,R) :- % should this be put?
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,terminus/get_schema,DB_URI),
+    verify_access(Auth,terminus/update_schema,DB_URI),
 
     try_get_param('terminus:schema',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
     
     try_update_schema(DB_URI,Name,TTL,Witnesses),
-
-    config:server(SURI),
-    write_cors_headers(SURI),
-
-    (   Witnesses = []
-    ->  reply_json(_{'terminus:status' : 'terminus:success'})
-    ;   reply_json(_{'terminus:status' : 'terminus:failure',
-                     'terminus:witnesses' : Witnesses},
-                   [code(406)])
-    ).
+    
+    reply_with_witnesses(DB_URI,Witnesses).
 
     
 /********************************************************
@@ -421,15 +427,15 @@ try_get_filled_frame(ID,Database,Object) :-
         throw(http_reply(not_found(ID,MSG)))).
 
 /* 
- * try_delete_document(ID, Database) is det.
+ * try_delete_document(+ID, +Database, -Witnesses) is det.
  * 
  * Actually has determinism: det + error
  * 
  * Deletes the object associated with ID, and throws an 
  * http error otherwise.
  */
-try_delete_document(Doc_ID, Database) :-
-    (   delete_object(Doc_ID,Database)
+try_delete_document(Doc_ID, Database, Witnesses) :-
+    (   document_transaction(Database, document, frame:delete_object(Doc_ID,Database), Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
         throw(http_reply(not_found(Doc_ID,MSG)))).
@@ -442,7 +448,7 @@ try_delete_document(Doc_ID, Database) :-
  * Updates the object associated with ID, and throws an 
  * http error otherwise.
  */
-try_update_document(Doc_ID, Doc_In, Database) :-
+try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     % if there is no id, we'll use the requested one.
     (   jsonld_id(Doc_In,Doc_ID_Match)
     ->  true
@@ -453,8 +459,9 @@ try_update_document(Doc_ID, Doc_In, Database) :-
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
         throw(http_reply(not_found(Doc_ID,MSG)))),
-        
-    (   update_object(Doc, Database)    
+
+    % We probably need to be able to pass the document graph as a parameter
+    (   document_transaction(Database, document, frame:update_object(Doc,Database), Witnesses)
     ->  true
     ;   throw(http_reply(not_found(Doc_ID,'Unable to get object at Doc_ID')))).
 
@@ -673,6 +680,6 @@ try_update_schema(DB_URI,Name,TTL,Witnesses) :-
     make_database_from_database_name(DB_URI, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        schema_update(Database, NA, TTLStream, Witnesses),
+        schema_transaction(Database, NA, TTLStream, Witnesses),
         close(TTLStream)
     ).     
