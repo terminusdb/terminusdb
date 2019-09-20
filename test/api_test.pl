@@ -80,7 +80,7 @@ run_db_create_test :-
                                     'rdfs:comment':_{'@language':"en", '@value':"dasd"},
                                     'rdfs:label':_{'@language':"en", '@value':"asdsda"},
                                     'terminus:allow_origin':_{'@type':"xsd:string", '@value':"*"},
-                                    'terminus:document':_{'@type':"xsd:string", '@value':"document"},
+                                    'terminus:instance':_{'@type':"xsd:string", '@value':"document"},
                                     'terminus:schema':_{'@type':"xsd:string", '@value':"schema"}
                                    },
             'terminus:user_key':"root"},
@@ -102,9 +102,10 @@ run_schema_update_test :-
     interpolate([Path, '/terminus-ontologies/terminus.owl.ttl'], TTL_File),
 
     read_file_to_string(TTL_File, String, []),
-    Doc = _{'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-            'terminus:schema' : _{'@value': "schema", '@type' : "xsd:string"},
-            'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
+    Doc = _{
+              'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
+              'terminus:schema' : _{'@value': "schema", '@type' : "xsd:string"},
+              'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
            },
 
     with_output_to(

@@ -136,7 +136,7 @@ add_dictionary_default(Doc, Key, Default, New_Doc) :-
     ).
 
 extend_database_defaults(Doc,Ext) :-
-    add_dictionary_default(Doc, 'terminus:document',
+    add_dictionary_default(Doc, 'terminus:instance',
                            _{'@value':"document", '@type':"xsd:string"},
                            Doc1),
     add_dictionary_default(Doc1, 'terminus:schema',
