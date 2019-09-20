@@ -288,15 +288,15 @@ classOrRestriction(X,Database) :- restriction(X,Database).
 % @param Schema The current schema graph
 notUniqueClass(Y, Database, Reason) :-
     classOrRestriction(Y, Database),
-    setof(X, classOrRestriction(X,Database), L),
-    \+ count(Y,L,1),
+    bagof(Y, classOrRestriction(Y, Database), L),    
+    \+ length(L,1),
     interpolate(['The class or restriction ',Y,
 		         ' is not a unique. Some existing class has this identifier'],
 		        Message),
     Reason = _{
                  '@type' : 'vio:InvalidClassViolation', 
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                 'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' }
+                 'vio:class' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 notUniqueClassSC(Database,Reason) :- notUniqueClass(_,Database,Reason).
 
@@ -770,8 +770,10 @@ property(P,Database) :-
 %uniqueProperty(P,Database) :- property(P,Database), bagof(P2, property(P2,Database), L), count(P,L,1).
 
 notUniqueProperty(P,Database,Reason) :-
-    property(P,Database), bagof(P2, property(P2,Database), L),
-    \+ count(P,L,1),
+    property(P,Database),
+    bagof(P, property(P,Database), L),
+    \+ length(L,1),
+    %break,
     interpolate([P,' is not a unique property name, some property with this name already exists'],
 		        Message),
     Reason = _{

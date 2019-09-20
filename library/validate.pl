@@ -49,9 +49,9 @@ pre_test_schema(propertyCycleSC).
 test_schema(noImmediateClassSC).
 test_schema(noImmediateDomainSC).
 test_schema(noImmediateRangeSC).
-test_schema(notUniqueClassLabelSC).
-test_schema(notUniqueClassSC).
-test_schema(notUniquePropertySC). % still useful with annotationOverloadSC?
+%test_schema(notUniqueClassLabelSC).
+%test_schema(notUniqueClassSC).
+%test_schema(notUniquePropertySC). % still useful with annotationOverloadSC?
 %test_schema(schemaBlankNodeSC). % should never be used.
 test_schema(annotationOverloadSC).
 % OWL DL constraints
@@ -73,7 +73,11 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
             % deletes (everything)
             forall( xrdf(Database_Name, [Schema], A, B, C),
                     delete(Database_Name, Schema, A,B,C)),
-            
+            forall( xrdf(Database_Name, [Schema], A, B, C),
+                    format('WTF? (~q,~q,~q)~n', [A,B,C])),
+            %break,
+            %database_module(Database, Module),
+            %cleanup_schema_module(Module),
             % inserts (everything)
             rdf_process_turtle(New_Schema_Stream,
                                {Database_Name, Schema}/
@@ -93,7 +97,7 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                                           )
                                          )
                                ), []),
-            
+
             % First, Check pre tests. 
             findall(Pre_Witness,
                     (   pre_test_schema(Pre_Check),
