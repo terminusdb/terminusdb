@@ -884,7 +884,8 @@ document_object(Document,Database,Depth,Realiser) :-
  */
 get_collection_jsonld_context(Collection, Ctx) :-
     get_collection_prefix_list(Collection,Ctx_Obj),
-    term_jsonld(Ctx_Obj, Ctx).
+    sort(Ctx_Obj,Ctx_Sorted),
+    term_jsonld(Ctx_Sorted, Ctx).
 
 /*
  * document_jsonld(+Document:uri,+Ctx:any,+Database:database-Realiser) is semidet.
@@ -975,8 +976,11 @@ object_references(URI,Database,Edges) :-
  * 
  */
 delete_object(URI,Database) :-
-    object_edges(URI,Database,Object_Edges),
-    object_references(URI,Database,References),
+    database_name(Database,Collection),
+    get_collection_jsonld_context(Collection,Ctx),
+    prefix_expand(URI,Ctx,URI_Ex),
+    object_edges(URI_Ex,Database,Object_Edges),
+    object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
     
     maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
@@ -1001,7 +1005,11 @@ update_object(Obj, Database) :-
  * Does the actual updating using ID. 
  */
 update_object(ID, Obj, Database) :-
-    put_dict('@id', Obj, ID, New_Obj),
+    database_name(Database,Collection),
+    get_collection_jsonld_context(Collection,Ctx),
+    prefix_expand(ID,Ctx,ID_Ex),
+
+    put_dict('@id', Obj, ID_Ex, New_Obj),
 
     database_name(Database,Collection),
     get_collection_jsonld_context(Collection,Ctx),

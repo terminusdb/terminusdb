@@ -1,6 +1,7 @@
 :- module(json_ld, [
               expand/2,
               expand/3,
+              prefix_expand/3,
               compress/3,
               term_jsonld/2,
               jsonld_triples/3,
@@ -123,7 +124,7 @@ expand(JSON_LD, Context, JSON) :-
 expand(JSON, _, JSON) :-
     atom(JSON),
     !.
-expand(JSON, _, JSON) :-
+expand(JSON, _, JSON) :-    
     string(JSON).
 
 prefix_expand(K,Context,Key) :-

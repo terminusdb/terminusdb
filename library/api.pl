@@ -300,8 +300,11 @@ document_handler(post, DB, Doc_ID, R) :-
     try_db_graph(DB_URI, Database),
     
     try_get_param('terminus:document',Request,Doc),
-        
-    try_update_document(Doc_ID,Doc,Database,Witnesses),
+
+    % very hacky!
+    interpolate(['doc:',Doc_ID],Doc_URI),
+
+    try_update_document(Doc_URI,Doc,Database,Witnesses),
 
     reply_with_witnesses(DB_URI,Witnesses).
 document_handler(delete, DB, Doc_ID, Request) :-
@@ -316,7 +319,8 @@ document_handler(delete, DB, Doc_ID, Request) :-
 
     try_db_graph(DB_URI,Database),
 
-    try_doc_uri(DB_URI,Doc_ID,Doc_URI),
+    % very hacky!
+    interpolate(['doc:',Doc_ID],Doc_URI),
 
     try_delete_document(Doc_URI,Database,Witnesses),
 
@@ -451,11 +455,11 @@ try_delete_document(Doc_ID, Database, Witnesses) :-
 try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     % if there is no id, we'll use the requested one.
     (   jsonld_id(Doc_In,Doc_ID_Match)
-    ->  true
+    ->  Doc_In = Doc
     %   This is wrong - we need to have the base path here as well. 
     ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
     
-    (   Doc_ID_Match = Doc_ID
+    (   atom_string(Doc_ID,Doc_ID_Match)
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
         throw(http_reply(not_found(Doc_ID,MSG)))),

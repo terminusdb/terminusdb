@@ -44,8 +44,12 @@ run_api_tests :-
     try(run_db_create_test),
     try(run_schema_update_test),
     try(run_schema_get_test),
+    try(run_doc_update_test),
+    try(run_doc_delete_test),
+    try(run_doc_get_missing_test),
     try(run_db_delete_test),
     %   grouped )
+    try(run_doc_get_test),
     try(run_get_filled_frame_test),
     try(run_woql_test).
 
@@ -132,7 +136,7 @@ run_schema_update_test :-
     ;   true),
 
     json_read_dict(Out, Term),
-    (   Term = _{'terminus:status' : 'terminus:success'}
+    (   Term = _{'terminus:status' : "terminus:success"}
     ->  true
     ;   json_write_dict(current_output,Term,[]),
         fail),
@@ -142,6 +146,12 @@ run_schema_update_test :-
 run_schema_get_test :-
     config:server(Server),
     atomic_list_concat(['curl \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle\''], Cmd),
+    shell(Cmd).
+
+run_doc_get_test :-
+    % create DB
+    config:server(Server),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/admin?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_db_delete_test :-
@@ -164,23 +174,38 @@ run_doc_update_test :-
     % create DB
     config:server(Server),
 
-    Doc = _{
-              '@id' : 'http://localhost:6363/terminus_qa_test/document/test',
-              'terminus:document' : _{
-                                        
-                                    }
-          },
-    
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:user_key':"root",
+            'terminus:document' :
+            _{'@context':_{dcog:"https://datachemist.net/ontology/dcog#",
+                           dcogbox:"https://datachemist.net/ontology/dcogbox#",
+                           doc:"http://localhost:6363/terminus/document/",
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           rvo:"https://datachemist.net/ontology/rvo#",
+                           scm:"http://localhost:6363/terminus/schema/",
+                           terminus:"https://datachemist.net/ontology/terminus#",
+                           xdd:"https://datachemist.net/ontology/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:admin",
+              '@type':"terminus:User",
+              'rdfs:comment':_{'@language':"en", '@value':"This is a fake super user"},
+              'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
+             }
+           },
+
     with_output_to(
         string(Payload),
         json_write(current_output, Doc, [])
     ),
 
-    atomic_list_concat([Server,'/terminus_qa_test/document'], URI),
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
-    format('~nRunning command: curl "~q"~n',[Args]),        
+    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
 
     % process_create avoids shell escaping complexities. 
     process_create(path(curl), Args,
@@ -190,22 +215,36 @@ run_doc_update_test :-
                    ]),
     
     process_wait(PID,Status),
+    
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
         throw(error(M))
     ;   true),
 
     json_read(Out, Term),
-    writeq(Term).
-
     
+    (   Term = _{'terminus:status' : "terminus:success"}
+    ->  true
+    ;   json_write_dict(current_output,Term,[]),
+        fail).
+
+run_doc_delete_test :-
+    % create DB
+    config:server(Server),
+    atomic_list_concat(['curl -X DELETE \'',Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root\''], Cmd),
+    shell(Cmd).
+
+run_doc_get_missing_test :-
+    % create DB
+    config:server(Server),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root\''], Cmd),
+    \+ shell(Cmd).
 
 run_get_doc_test :-
     % create DB
     config:server(Server),
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
-
 
 run_woql_test :-
     config:server(Server),
