@@ -489,7 +489,7 @@ canonicalise_object(O,C) :-
  */
 insert(DB,G,X,Y,O) :-
     canonicalise_object(Z,O),
-    (   xrdf(DB,G,X,Y,Z)
+    (   xrdf(DB,[G],X,Y,Z)
     ->  true
     ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
         (   xrdf_neg_trans(DB,G,X,Y,Z)
@@ -577,7 +577,7 @@ rollback(Collection_Id,GName) :-
     retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)).
 
 /** 
- * xrdf(+Collection_Id,+Database_Ids,?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Collection_Id,+Database_Ids:list,?Subject,?Predicate,?Object) is nondet.
  * 
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
