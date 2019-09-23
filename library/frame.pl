@@ -25,7 +25,8 @@
               delete_object/2,
               update_object/2,
               update_object/3,
-              document_filled_class_frame_jsonld/4
+              document_filled_class_frame_jsonld/4,
+              get_collection_jsonld_context/2
           ]).
 
 /** <module> Frames

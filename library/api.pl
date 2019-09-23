@@ -459,7 +459,11 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     %   This is wrong - we need to have the base path here as well. 
     ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
     
-    (   atom_string(Doc_ID,Doc_ID_Match)
+    (   database_name(Database,Collection),
+        get_collection_jsonld_context(Collection,Ctx),
+        prefix_expand(Doc_ID,Ctx,Doc_ID_Ex),
+        prefix_expand(Doc_ID_Match,Ctx,Doc_ID_Match_Ex),        
+        Doc_ID_Ex = Doc_ID_Match_Ex
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
         throw(http_reply(not_found(Doc_ID,MSG)))),

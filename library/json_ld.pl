@@ -131,7 +131,8 @@ prefix_expand(K,Context,Key) :-
     (   split_atom(K,':',[Prefix,Suffix]),
         get_dict(Prefix,Context,Expanded)
     ->  atom_concat(Expanded,Suffix,Key)
-    ;   K = Key).
+    ;   atom_string(Key,K)
+    ).
 
 /* 
  * expand_context(+Context,-Context_Expanded) is det. 
