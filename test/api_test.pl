@@ -221,8 +221,8 @@ run_doc_update_test :-
         throw(error(M))
     ;   true),
 
-    json_read(Out, Term),
-    
+    json_read_dict(Out, Term),
+
     (   Term = _{'terminus:status' : "terminus:success"}
     ->  true
     ;   json_write_dict(current_output,Term,[]),
