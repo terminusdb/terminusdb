@@ -415,7 +415,7 @@ try_get_document(ID,Database,Object) :-
     (   document_jsonld(ID,Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(ID,MSG)))).
+        throw(http_reply(not_found(ID-MSG)))).
 
 /* 
  * try_get_document(ID, Database) is det.
@@ -428,7 +428,7 @@ try_get_filled_frame(ID,Database,Object) :-
     (   document_filled_class_frame_jsonld(ID,_{},Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(ID,MSG)))).
+        throw(http_reply(not_found(ID-MSG)))).
 
 /* 
  * try_delete_document(+ID, +Database, -Witnesses) is det.
@@ -442,7 +442,7 @@ try_delete_document(Doc_ID, Database, Witnesses) :-
     (   document_transaction(Database, document, frame:delete_object(Doc_ID,Database), Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
-        throw(http_reply(not_found(Doc_ID,MSG)))).
+        throw(http_reply(not_found(Doc_ID-MSG)))).
 
 /* 
  * try_update_document(ID, Doc, Database) is det.
@@ -466,12 +466,12 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
         Doc_ID_Ex = Doc_ID_Match_Ex
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
-        throw(http_reply(not_found(Doc_ID,MSG)))),
+        throw(http_reply(not_found(Doc_ID-MSG)))),
 
     % We probably need to be able to pass the document graph as a parameter
     (   document_transaction(Database, document, frame:update_object(Doc,Database), Witnesses)
     ->  true
-    ;   throw(http_reply(not_found(Doc_ID,'Unable to get object at Doc_ID')))).
+    ;   throw(http_reply(not_found(Doc_ID-'Unable to get object at Doc_ID')))).
 
 /* 
  * try_db_uri(DB,DB_URI) is det. 
@@ -482,7 +482,7 @@ try_db_uri(DB,DB_URI) :-
     (   config:server(Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
-    ;   throw(http_reply(not_found(DB,'Database resource can not be found')))).
+    ;   throw(http_reply(not_found(DB-'Database resource can not be found')))).
 
 /* 
  * try_doc_uri(DB,Doc,Doc_URI) is det. 
@@ -493,7 +493,7 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
     (   interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be constructed in ~s', [DB_URI,Doc_ID]),
-        throw(http_reply(not_found(Doc_ID,MSG)))).
+        throw(http_reply(not_found(Doc_ID-MSG)))).
     
 /* 
  * try_db_graph(+DB:uri,-Database:database is det. 
@@ -504,7 +504,7 @@ try_db_graph(DB_URI,Database) :-
     (   make_database_from_database_name(DB_URI,Database)
     ->  true
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
-        throw(http_reply(not_found(DB_URI,MSG)))).
+        throw(http_reply(not_found(DB_URI-MSG)))).
 
 /* 
  * try_get_param(Key,Request:request,Value) is det.
@@ -521,7 +521,7 @@ try_get_param(Key,Request,Value) :-
     (   memberchk(Key=Value,Data)        
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data,MSG)))),
+        throw(http_reply(not_found(Data-MSG)))),
     !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
@@ -531,12 +531,12 @@ try_get_param(Key,Request,Value) :-
     (   memberchk(payload(Document), Request)
     ->  true
     ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Data]),
-        throw(http_reply(not_found(Data,MSG)))),
+        throw(http_reply(not_found(Data-MSG)))),
 
     (   get_dict(Key, Document, Value)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data,MSG)))),
+        throw(http_reply(not_found(Data-MSG)))),
     !.
 try_get_param(Key,Request,_Value) :-
     % OTHER with method
@@ -544,11 +544,11 @@ try_get_param(Key,Request,_Value) :-
     !,
     
     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
-    throw(http_reply(not_found(Key,MSG))).
+    throw(http_reply(not_found(Key-MSG))).
 try_get_param(Key,_Request,_Value) :-
     % Catch all. 
     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
-    throw(http_reply(not_found(Key,MSG))).
+    throw(http_reply(not_found(Key-MSG))).
 
 /* 
  * get_param_default(Key,Request:request,Value,Default) is semidet.
@@ -586,14 +586,14 @@ try_create_db(DB,DB_URI,Doc) :-
         (   (   add_database_resource(DB,DB_URI,Doc)
             ->  true
             ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
-                throw(http_reply(not_found(DB_URI,MSG)))),
+                throw(http_reply(not_found(DB_URI-MSG)))),
 
             (   http_log_stream(Log),
                 format(Log,'~n~q~n',[create_db(DB_URI)]),
                 create_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
-                throw(http_reply(not_found(DB_URI,MSG))))
+                throw(http_reply(not_found(DB_URI-MSG))))
             
         )).
 
@@ -607,12 +607,12 @@ try_delete_db(DB_URI) :-
         (   (   delete_database_resource(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
-                throw(http_reply(not_found(DB_URI,MSG)))),
+                throw(http_reply(not_found(DB_URI-MSG)))),
 
             (   delete_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
-                throw(http_reply(not_found(DB_URI,MSG)))
+                throw(http_reply(not_found(DB_URI-MSG)))
             )
         )).
 
@@ -624,7 +624,7 @@ try_atom_json(Atom,JSON) :-
     ->  true
     ;   format(atom(MSG), 'Malformed JSON Object', []),
         % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(Atom,MSG)))).
+        throw(http_reply(not_found(Atom-MSG)))).
 
 /* 
  * add_payload_to_request(Request:request,JSON:json) is det.
@@ -649,7 +649,7 @@ try_class_frame(Class,Database,Frame) :-
     ->  true
     ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
         % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(Class,MSG)))).
+        throw(http_reply(not_found(Class-MSG)))).
     
 /* 
  * try_dump_schema(DB_URI, Request) is det. 
