@@ -363,26 +363,34 @@ jsonld_id_triples(ID,PV,Ctx,Database,Triples) :-
                 ->  Pred = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
                     Triples = [(C,G,ID,Pred,V)]
                 ;   P = Pred,
-                    Triples = [(C,G,ID,Pred,Val)|Rest],
                     %jsonld_predicate_value(P,V,Ctx,EV),
-                    (   is_dict(V)
-                    ->  (   V = _{'@type' : Type,
-                                  '@value' : Data
-                                 }
-                        ->  Val = literal(type(Type,Data)),
-                            Rest = []
-                        ;   V = _{'@language' : Lang,
-                                  '@value' : Data}
-                        ->  Val = literal(lang(Lang,Data)),
-                            Rest = []
-                        ;   jsonld_id(V,Val),
-                            jsonld_triples_aux(V,Ctx,Database,Rest))
-                    ;   Val = literal(type('http://www.w3.org/2001/XMLSchema#string',V)),
-                        Rest = []
-                    )
+                    json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples)
                 )                
             ),
             JSON_Pairs, Triples_List),
     
     append(Triples_List, Triples).
-
+ 
+json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
+    (   is_dict(V)
+    ->  (   V = _{'@type' : Type,
+                  '@value' : Data
+                 }
+        ->  Triples = [(C,G,ID,Pred,literal(type(Type,Data)))]
+        ;   V = _{'@language' : Lang,
+                  '@value' : Data}
+        ->  Triples = [(C,G,ID,Pred,literal(lang(Lang,Data)))]
+        ;   jsonld_id(V,Val),
+            jsonld_triples_aux(V,Ctx,Database,Rest),
+            Triples = [(C,G,ID,Pred,Val)|Rest])        
+    ;   is_list(V)
+    ->  maplist({C,G,ID,Pred,Ctx,Database}/[V,Triples]>>(
+                    json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples)
+                ), V, Triples_List),
+        append(Triples_List, Triples)
+    ;   string(V)        
+    ->  atom_string(A,V),
+        Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',A)))]
+    ;   atom(V)        
+    ->  Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',V)))]
+    ;   Triples = [(C,G,ID,Pred,V)]).
