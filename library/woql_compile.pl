@@ -410,12 +410,12 @@ run_term(Query,JSON) :-
     elt(definitions=Definitions,Ctx_Out),
     elt(database=Database,Ctx_Out),
 
-    http_log_stream(Log),
-    format(Log,'~n~nWe are here -1 ~n~n',[]),
+    * http_log_stream(Log),
+    * format(Log,'~n~nWe are here -1 ~n~n',[]),
     
     assert_program(Definitions),
 
-    format(Log,'~n~nWe are here -0.5 ~n~n',[]),
+    * format(Log,'~n~nWe are here -0.5 ~n~n',[]),
 
     findall((B-OGs),
             (   elt(output_graphs=OGs,Ctx_Out),
@@ -433,15 +433,13 @@ run_term(Query,JSON) :-
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
     maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
 
-    %format(Log,'~n~nWe are here 1 ~n~n',[]),
+    * format(Log,'~n~nWe are here 1 ~n~n',[]),
     
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
  
 run_term(Query,JSON) :-
     compile_query(Query,Prog,Ctx_Out),
-    %format('~n***********~nProgram: ~q~n',[Prog]),
-    %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=Database,Ctx_Out),
     assert_program(Definitions),
