@@ -144,7 +144,8 @@ user:goal_expansion(write_triple(DB,G,T,X,Y,literal(L)),write_triple(DB,G,T,X,Y,
  * Writes a single "point" out.  
  */
 write_point_turtle(Stream, P) :-
-    (   atom(P) % Do we have a prefix yet? 
+    (   (   atom(P)
+        ;   string(P)) % Do we have a prefix yet? 
     ->  write(Stream,'<'),write(Stream,P),write(Stream,'>')
     ;   debug(journaling, 'Point: ~q~n', [P]), 
         write(Stream,P)
