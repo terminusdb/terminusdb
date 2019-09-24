@@ -24,6 +24,8 @@
               merge_dictionaries/3,
               command/1,
               coerce_literal_string/2,
+              coerce_atom/2,
+              xfy_list/3,
               op(920,fy, *),
               '*'/1
           ]).
@@ -392,3 +394,30 @@ coerce_literal_string(SL,S) :-
 coerce_literal_string(SL,S) :-
     % \+ is_dict(SL),
     SL = S.
+
+
+/* 
+ * xfy_list(Op, Term, List) is det. 
+ * 
+ * Folds a functor over a list. 
+ */
+xfy_list(Op, Term, [Left|List]) :-
+    Term =.. [Op, Left, Right],
+    xfy_list(Op, Right, List),
+    !.
+xfy_list(_, Term, [Term]).
+
+
+/* 
+ * coerce_atom(Atom_Or_String,Atom) is semidet.
+ * 
+ * Coerces Atom_Or_String to an Atom if it is an atom or string
+ * but fails otherwise.
+ */ 
+coerce_atom(Atom_Or_String, Atom) :- 
+    (   atom(Atom_Or_String)
+    ->  Atom_Or_String = Atom
+    ;   string(Atom_Or_String)
+    ->  atom_string(Atom,Atom_Or_String)
+    ).
+

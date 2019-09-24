@@ -113,9 +113,9 @@ Now you are ready to interact with the HTTP server.
 
 ## Documentation 
 
-The Server API is documented here: TBD
+The Server API is documented [here](https://github.com/terminusdb/terminusdb/blob/master/API.md).
 
-WOQL Syntax is documented here: TBD
+WOQL Syntax is documented [here](https://github.com/terminusdb/terminusdb/blob/master/SYNTAX.md).
 
 ## Why 
 

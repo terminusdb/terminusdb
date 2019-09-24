@@ -1045,6 +1045,7 @@ restrict(VL) -->
 % Could be a single fold, but then we always get a conjunction with true
 list_conjunction([],true).
 list_conjunction(L,Goal) :-
+    L = [_|_],
     reverse(L,R),
     R = [A|Rest],
     foldl( [X,Y,(X,Y)]>>(true), Rest, A, Goal).
