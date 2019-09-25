@@ -64,7 +64,7 @@
 :- use_module(library(schema), []).
 :- use_module(library(types)).
 :- use_module(library(frame_types)).
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
 :- use_module(library(prefixes)).
 :- use_module(library(expansions)).
 

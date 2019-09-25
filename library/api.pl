@@ -243,8 +243,9 @@ woql_handler(get,DB,Request) :-
 
     verify_access(Auth,terminus/woql_select,DB_URI),
 
-    try_get_param('terminus:query',Request,Query),
-
+    try_get_param('terminus:query',Request,Atom_Query),
+    atom_json_dict(Atom_Query, Query, []),
+   
     * http_log_stream(Log),
     
     run_query(Query, JSON),

@@ -400,7 +400,8 @@ enrich_graphs(Databases,Database,Enriched) :-
  * Runs a WOQL query in JSON-LD WOQL syntax.
  */ 
 run_query(JSON_In, JSON_Out) :-
-    json_woql(JSON_In, Query),
+    woql_context(Ctx),
+    json_woql(JSON_In, Ctx, Query),
     run_term(Query,JSON_Out).
 
 :- use_module(library(http/http_log)).

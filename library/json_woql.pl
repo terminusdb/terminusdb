@@ -45,8 +45,9 @@ json_woql(JSON,Ctx,WOQL) :-
 json_to_woql_ast(JSON,WOQL) :-
     is_dict(JSON),
     !,
-    (   _{'http://terminusdb.com/woql#select' : [ VArgs, Sub_Query ] } :< JSON
-    ->  maplist([V,v(V)]>>true,VArgs,WOQL_Args),
+    (   _{'http://terminusdb.com/woql#select' : Clauses } :< JSON
+    ->  snoc(Vargs,Sub_Query,Clauses),
+        maplist([V,v(V)]>>true,Vargs,WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
         WOQL = select(WOQL_Args,Sub_WOQL)
     ;   _{'http://terminusdb.com/woql#and' : Qs} :< JSON
@@ -102,7 +103,7 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = insert(WG,WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#entails' : [ Q, U ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#modifies' : [ Q, U ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         json_to_woql_ast(U,WU),
         WOQL = '=>'(WQ,WU)
@@ -143,7 +144,12 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
         WOQL = limit(WN, WQ)
-    ;   throw(http_reply(not_found('Un-parsable Query'-JSON)))
+    ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
+    ->  json_to_woql_ast(Q,WQ),
+        WOQL = not(WQ)
+    ;   throw(http_reply(not_found({ '@type' : 'vio:WOQLSyntaxError',
+                                     'vio:message' :'Un-parsable Query',
+                                     'vio:query' : JSON})))
     ).
 json_to_woql_ast(JSON,WOQL) :-
     coerce_atom(JSON,A),

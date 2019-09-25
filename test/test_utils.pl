@@ -26,6 +26,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- meta_predicate try(0).
 try(Goal) :- 
     (   call(Goal)
     ->  true

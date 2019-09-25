@@ -8,7 +8,9 @@
               get_collection_prefix_list/2,
               global_prefix_expand/2,
               literal_expand/2,
-              prefix_list_to_rapper_args/2
+              prefix_list_to_rapper_args/2,
+              initialise_contexts/0,
+              woql_context/1
           ]).
 
 /** <module> Prefixes
@@ -44,6 +46,11 @@
 
 :- use_module(library(file_utils)).
 :- use_module(library(utils)).
+
+% JSON manipulation
+:- use_module(library(http/json)).
+
+:- use_module(library(jsonld)).
 
 % internal
 global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
@@ -190,3 +197,19 @@ prefix_list_to_rapper_args([],[]).
 prefix_list_to_rapper_args([P=U|Rest],['-f',Arg|Arg_Rest]) :-
     interpolate(['xmlns:',P,'="',U,'"'],Arg),
     prefix_list_to_rapper_args(Rest,Arg_Rest).
+
+:- dynamic woql_context/1.
+
+initialise_contexts :-
+    terminus_schema_path(Path),
+    interpolate([Path,'woql-context.jsonld'],File),
+    setup_call_cleanup(
+        open(File,read,Out),
+        (   retractall(woql_context(_)),
+            json_read_dict(Out, Doc),
+            get_dict_default('@context',Doc, Ctx,_{}),
+            expand_context(Ctx, Exp),
+            assertz(woql_context(Exp))
+        ),
+        close(Out)    
+    ).

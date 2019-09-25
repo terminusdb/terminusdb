@@ -32,6 +32,7 @@
 :- use_module(test(test_utils)).
 :- use_module(library(utils)).
 :- use_module(library(jsonld)).
+:- use_module(library(http/json)). 
 
 run_jsonld_tests :-
     try(run_woql_expand).
@@ -39,20 +40,22 @@ run_jsonld_tests :-
 run_woql_expand :- 
     Doc = _{'@context' : 
             _{'@version': 1.1,
-              '@vocab': "http://terminusdb.com/woql#", 
+              '@base': "http://terminusdb.com/woql",
+              '@vocab' : "#",
               'rdf' : "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
               'rdfs' : "http://www.w3.org/2000/01/rdf-schema#",
               'dcog' : "https://datachemist.net/ontology/dcog#",
-              'v' : 'http://terminusdb.com/woql/variable/',
+              'v' : "http://terminusdb.com/woql/variable/",
               'select' : _{'@type' : "@id"},
               'from' : _{'@type' : "@id"}, 
               'and' : _{'@type' : "@id"},
               'triple' : _{'@type' : "@id"},   
-              'eq' : _{'@type' : "@id" }, 
-              'sub' : _{'@type' : "@id" },
+              'eq' : _{'@type' : "@id"}, 
+              'sub' : _{'@type' : "@id"},
               'opt' : _{'@type' : "@id"}
              },
-            'select' : [["v:arg1"],
+            'select' : ["v:c",
+                        "v:f",
                         _{'and' : [_{'triple': ["v:a", "v:b", "v:c"]},
                                    _{'triple' :["v:d", "v:e", "v:f"]}]}]
            },
@@ -60,8 +63,18 @@ run_woql_expand :-
     expand(Doc,Expanded),
     % remove the context for simplicity (and because it may be expanded)
     select_dict(_{'@context' : _Ctx}, Expanded, Query),
-    format('~n~q', [Query]),
-    Query = _.
-
-
+    json_write_dict(current_output,Query),
+    Query = _{'http://terminusdb.com/woql#select':
+              [_{'@id':'http://terminusdb.com/woql/variable/c'},
+               _{'@id':'http://terminusdb.com/woql/variable/f'},
+               _{'http://terminusdb.com/woql#and':
+                 [_{'http://terminusdb.com/woql#triple':
+                    [_{'@id':'http://terminusdb.com/woql/variable/a'},
+                     _{'@id':'http://terminusdb.com/woql/variable/b'},
+                     _{'@id':'http://terminusdb.com/woql/variable/c'}]
+                   },
+                  _{'http://terminusdb.com/woql#triple':
+                    [_{'@id':'http://terminusdb.com/woql/variable/d'},
+                     _{'@id':'http://terminusdb.com/woql/variable/e'},
+                     _{'@id':'http://terminusdb.com/woql/variable/f'}]}]}]}.
     

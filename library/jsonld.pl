@@ -1,6 +1,7 @@
 :- module(jsonld, [
               expand/2,
               expand/3,
+              expand_context/2,
               prefix_expand/3,
               compress/3,
               term_jsonld/2,
@@ -46,21 +47,7 @@
  * Expands from JSON_LD prefixed format to fully expanded form.
  */ 
 expand(JSON_LD, JSON) :-
-    is_dict(JSON_LD),
-    !, 
-    get_dict_default('@context', JSON_LD, Context, _{}),
-    expand_context(Context,Context_Expanded),
-    expand(JSON_LD, Context_Expanded, JSON).
-expand(JSON_LD, JSON) :-
-    is_list(JSON_LD),
-    !,
-    maplist(expand,JSON_LD,JSON).
-expand(JSON, JSON) :-
-    atom(JSON),
-    !.
-expand(JSON_LD, JSON) :-
-    string(JSON_LD),
-    atom_string(JSON,JSON_LD).
+    expand(JSON_LD, _{}, JSON).
 
 /** 
  * expand(+JSON_LD, +Context:dict, -JSON) is det.
@@ -69,51 +56,31 @@ expand(JSON_LD, JSON) :-
  */ 
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
+    % Law of recursion: Something must be getting smaller...
+    % This "something" is the removal of the context
+    % from the object to be expanded.
+    select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
-    get_dict_default('@context', JSON_LD, New_Context, _{}),
-    
-    merge_dictionaries(Context,New_Context,Local_Context),
-    
+    expand_context(New_Context,Context_Expanded),
+    merge_dictionaries(Context,Context_Expanded,Local_Context),
+    expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
+    put_dict('@context',JSON_Ex,Local_Context,JSON).
+expand(JSON_LD, Context, JSON) :-
+    is_dict(JSON_LD),
+    % \+ select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
+    !,
     dict_keys(JSON_LD,Keys),
     findall(Key-Value,
             (
                 member(K,Keys),
                 get_dict(K,JSON_LD,V),
-
+                
                 (   member(K,['@id','@type'])
-                ->  prefix_expand(V,Local_Context,Value),
+                ->  prefix_expand(V,Context,Value),
                     Key = K
-                ;   K='@context'
-                ->  Key = K,
-                    Value = V
-                ;   expand_key(K,Local_Context,Key_Candidate,Key_Context),
-                    expand(V,Local_Context,Expanded),
-                    (   is_dict(Expanded)
-                    ->  merge_dictionaries(Key_Context,Expanded,Value),
-                        Key = Key_Candidate
-                    ;   _{'@type' : "@id"} = Key_Context
-                    ->  Key = Key_Candidate,
-                        Value = _{'@id' : Expanded}
-                    ;   _{'@type' : "@id", '@id' : ID} = Key_Context,
-                        prefix_expand(ID,Local_Context,Key),
-                        Value = _{'@id' : Expanded}
-                    ;   _{'@type' : Type} = Key_Context
-                    ->  prefix_expand(Type,Local_Context,EType),
-                        Key = Key_Candidate,
-                        Value = _{'@value' : Expanded,
-                                  '@type' : EType}
-                    ;   _{'@language' : Lang} = Key_Context
-                    ->  prefix_expand(Lang,Local_Context,EType),
-                        Key = Key_Candidate,
-                        Value = _{'@value' : Expanded,
-                                  '@language' : EType}
-                    ;   _{} = Key_Context
-                    ->  Key = Key_Candidate,
-                        Value = Expanded
-                    ;   format(atom(M),'Unknown key context ~q', [Key_Context]),
-                        throw(error(M))
-                    )
-                )                
+                ;   expand_key(K,Context,Key,Key_Context),
+                    expand_value(V,Key_Context,Context,Value)
+                )
             ),
             Data),
     dict_create(JSON,_,Data).
@@ -127,11 +94,91 @@ expand(JSON, _, JSON) :-
 expand(JSON, _, JSON) :-    
     string(JSON).
 
+expand_value(V,_{'@type' : "@id"},Ctx,Value) :-
+    % We are distributing to identify our arguments as IDs
+    !,
+    (   is_list(V)
+    ->  maplist({Ctx}/[V,Value]>>(
+                    (   string(V)
+                    ->  prefix_expand(V,Ctx,ExPrime),
+                        Value = _{'@id' : ExPrime}
+                    ;   expand(V,Ctx,Value))
+                ),V,Value)
+    ;   string(V)
+    ->  prefix_expand(V, Ctx, Expanded),
+        Value = _{'@id' : Expanded}
+    ;   expand(V,Ctx,Value)
+    ).
+expand_value(V,_{'@type' : "@id", '@id' : ID},Ctx,Value) :-
+    %   We are distributing an @id which is *fixed*
+    !,
+    prefix_expand(ID,Ctx,V),
+    Value = _{'@id' : V}.
+expand_value(V,_{'@type' : Type},Ctx,Value) :-
+    %   We are distributing a type
+    !,
+    prefix_expand(Type,Ctx,EType),
+    Value = _{'@value' : V,
+              '@type' : EType}.
+expand_value(V,_{'@language' : Lang},Ctx,Value) :-
+    %   We are distributing a language
+    !,
+    prefix_expand(Lang,Ctx,ELang),
+    Value = _{'@value' : V,
+              '@language' : ELang}.
+expand_value(V,_{},_Ctx,V) :-
+    !.
+expand_value(_V,Key_Ctx,_Ctx,_Value) :-
+    format(atom(M),'Unknown key context ~q', [Key_Ctx]),
+    throw(error(M)).
+
+has_protocol(K) :-
+    re_match('^[^:/]+://.*',K).
+
+has_prefix(K) :-
+    \+ has_protocol(K),
+    re_match('^[^:]*:[^:]*',K).
+
+has_at(K) :-
+    re_match('^@.*',K).
+
+context_prefix_expand(K,Context,Key) :-
+    %   Prefixed URI
+    (   has_prefix(K)
+    ->  split_atom(K,':',[Prefix,Suffix]),
+        get_dict(Prefix,Context,Expanded),
+        atom_concat(Expanded,Suffix,Key)
+    %   Keyword
+    ;   has_at(K)
+    ->  K = Key
+    %   This is a value expansion
+    ;   get_dict(K,Context,Obj),
+        is_dict(Obj)
+    ->  (   get_dict('@base', Context, Base)
+        ->  true
+        ;   Base = ''),
+        (   get_dict('@vocab', Context, Vocab)
+        ->  true
+        ;   Vocab = ''),
+        atomic_list_concat([Base,Vocab,K],Key)
+    %   Pass on by
+    ;   K = Key
+    ).
+
 prefix_expand(K,Context,Key) :-
-    (   split_atom(K,':',[Prefix,Suffix]),
-        get_dict(Prefix,Context,Expanded)
-    ->  atom_concat(Expanded,Suffix,Key)
-    ;   atom_string(Key,K)
+    (   has_prefix(K)
+    ->  split_atom(K,':',[Prefix,Suffix]),
+        get_dict(Prefix,Context,Expanded),
+        atom_concat(Expanded,Suffix,Key)
+    ;   has_at(K)
+    ->  K = Key
+    ;   (   get_dict('@base', Context, Base)
+        ->  true
+        ;   Base = ''),
+        (   get_dict('@vocab', Context, Vocab)
+        ->  true
+        ;   Vocab = ''),
+        atomic_list_concat([Base,Vocab,K],Key)
     ).
 
 /* 
@@ -141,7 +188,7 @@ prefix_expand(K,Context,Key) :-
  */
 expand_context(Context,Context_Expanded) :-
     dict_pairs(Context,_,Pairs),
-    maplist({Context}/[K-V,Key-V]>>(prefix_expand(K,Context,Key)), Pairs, Expanded_Pairs),
+    maplist({Context}/[K-V,Key-V]>>(context_prefix_expand(K,Context,Key)), Pairs, Expanded_Pairs),
     dict_create(Context_Expanded, _, Expanded_Pairs).
 
 /* 

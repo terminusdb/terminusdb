@@ -26,6 +26,7 @@
               coerce_literal_string/2,
               coerce_atom/2,
               xfy_list/3,
+              snoc/3,
               op(920,fy, *),
               '*'/1
           ]).
@@ -420,4 +421,15 @@ coerce_atom(Atom_Or_String, Atom) :-
     ;   string(Atom_Or_String)
     ->  atom_string(Atom,Atom_Or_String)
     ).
+
+/* 
+ * snoc(Rest,Last,List) is det.
+ *
+ * Adds an element to the end of the list (or extracts it when run backwards).
+ * 
+ * [cons backwards!]
+ */ 
+snoc([],Last,[Last]).
+snoc([First|Tail],Last,[First|Rest]) :-
+    snoc(Tail,Last,Rest).
 

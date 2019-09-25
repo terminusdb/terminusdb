@@ -34,7 +34,8 @@
               ntriples_to_hdt/2,
               cleanup_edinburgh_escapes/1,
               last_checkpoint_file/3,
-              checkpoint_to_turtle/3
+              checkpoint_to_turtle/3,
+              terminus_schema_path/1
           ]).
 
 :- use_module(utils).
@@ -89,6 +90,16 @@ db_path(Path) :-
     terminus_path(BasePath),
     db_relative_path(RelPath),
     interpolate([BasePath,RelPath],Path).
+
+/** 
+ * terminus_schema_path(Path) is det.
+ *
+ * The path to the current terminus schema directory
+ */
+terminus_schema_path(Path) :-
+    terminus_path(Base_Path),
+    Schema_Relative_Path = '/terminus-schema/',
+    interpolate([Base_Path,Schema_Relative_Path], Path).
 
 /** 
  * touch(+File) is det.

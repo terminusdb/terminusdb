@@ -97,7 +97,7 @@ run_schema_update_test :-
     config:server(Server),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-ontologies/terminus.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/terminus.owl.ttl'], TTL_File),
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{
@@ -242,26 +242,39 @@ run_get_doc_test :-
 
 run_woql_test :-
     config:server(Server),
-    atomic_list_concat(
-        ['prefixes([ s=\'',Server,'/terminus/schema#\',
-                     doc=\'',Server,'/terminus/document/\',
-                     db=\'',Server,'/terminus/\',
-                     g=\'',Server,'/\',
-                     rdf=\'http://www.w3.org/1999/02/22-rdf-syntax-ns#\',
-                     rdfs=\'http://www.w3.org/2000/01/rdf-schema#\',
-                     xdd=\'https://datachemist.net/ontology/xdd#\',
-                     xsd=\'http://www.w3.org/2001/XMLSchema#\',
-                     dcog=\'https://datachemist.net/ontology/dcog#\',
-                     owl=\'http://www.w3.org/2002/07/owl#\',
-                     dcogbox=\'https://datachemist.net/ontology/dcogbox#\'], 
-          from(g/\'terminus\',
-             select([v(\'Class\'), v(\'Label\'), v(\'Comment\'), v(\'Abstract\')],
-                (t(v(\'Class\'), rdf/type, owl/\'Class\', schema), 
-                 not(t(v(\'Class\'), dcog/tag, dcog/abstract, schema)), 
-                 opt(t(v(\'Class\'), rdfs/label, v(\'Label\'), schema)), 
-                 opt(t(v(\'Class\'), rdfs/comment, v(\'Comment\'), schema)), 
-                 opt(t(v(\'Class\'), dcog/tag, v(\'Abstract\'), schema))))))'],Query),
-    www_form_encode(Query,Encoded),
+    atomic_list_concat([Server,'/terminus/document/'], Document),
+    atomic_list_concat([Server,'/terminus/schema#'], Schema),
+    atomic_list_concat([Server,'/terminus/'], Terminus),
+    atomic_list_concat([Server,'/'], G),
+
+    Query = 
+    _{'@context' : _{s : Schema,
+                     doc : Document,
+                     db : Terminus,
+                     e : "",
+                     g : G},
+      from: ["g:terminus",
+             _{select: [
+                   "v:Class", "v:Label", "v:Comment", "v:Abstract", 
+                   _{and: [
+                         _{triple: ["v:Class", "rdf:type", "owl:Class", "e:schema"]},
+                         _{not: [_{triple: ["v:Class", "dcog:tag", "dcog:abstract", "e:schema"]}]},
+                         _{opt: [_{triple: ["v:Class", "rdfs:label", "v:Label", "e:schema"]}]},
+                         _{opt: [_{triple: ["v:Class", "rdfs:comment", "v:Comment", "e:schema"]}]},
+                         _{opt: [_{triple: ["v:Class", "dcog:tag", "v:Abstract", "e:schema"]}]}
+                     ]
+                    }
+               ]
+              }
+            ]
+     },
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
     
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
