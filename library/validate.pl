@@ -33,7 +33,7 @@
 :- use_module(library(validate_schema)).
 :- use_module(library(validate_instance)).
 :- use_module(library(frame)).
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
 :- use_module(library(semweb/turtle)).
 
 % Required for consistency

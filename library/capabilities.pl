@@ -42,7 +42,7 @@
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
 :- use_module(library(frame)).
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
 :- use_module(library(database)).
 :- use_module(library(database_utils)).
 :- use_module(library(sdk)).

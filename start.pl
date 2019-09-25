@@ -66,13 +66,13 @@ initialise_server_settings :-
 :- use_module(library(prefixes)).
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
-:- use_module(test(api_test)).
+:- use_module(test(tests)).
 
 main(Argv) :-
     maybe_upgrade,
     initialise_prefix_db,
     server(Argv),
     (   Argv == [test]
-    ->  run_api_tests()
+    ->  run_tests()
     ;   true
     ).

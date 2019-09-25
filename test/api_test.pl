@@ -2,7 +2,7 @@
               run_api_tests/0
           ]).
                  
-/** <module> Capabilities
+/** <module> API Test
  * 
  * Tests of the HTTP API interface
  * 
@@ -26,6 +26,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- use_module(test(test_utils)).
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
 :- use_module(library(database_utils)).
@@ -52,13 +53,6 @@ run_api_tests :-
     try(run_doc_get_test),
     try(run_get_filled_frame_test),
     try(run_woql_test).
-
-try(Goal) :- 
-    (   call(Goal)
-    ->  true
-    ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n', [Goal]),
-        fail
-    ).
 
 run_connect_test :-
     config:server(Server),

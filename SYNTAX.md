@@ -7,29 +7,30 @@ WOQL's primary syntax and interchange format is in JSON-LD. This gives us a rela
 
 ```
 {"@context" : {"@import": "https://terminusdb/contexts/woql/syntax/context.jsonld",
-                       "@propagate": true,
-                       "db" : "http://localhost/testDB004/graph"},
+               "@propagate": true,
+               "db" : "http://localhost/testDB004/graph"},
  "from" : [ "db:main", 
             { "select" : [ [ "v:Object", "v:Class", "v:Class_Label", "v:Label", "v:Type" ] , 
-                           {"and" : [{ "triple" : ["v:Object", "rdf:type", "v:Class"] }, 
-                                         { "<<" : ["v:Class", "dcog:Entity"] }, 
-                                         { "=" : ["v:Type", {"@value" :"Entity", "@type" : "xsd:string"}]},
-                                         { "quad" : ["v:Class", "rdfs:label", "v:Class_Label", "db:schema"]}, 
-                                         { "opt" : [{"triple" : ["v:Object", "rdfs:label", "v:Label"]}]}
-                                        ]
+                           {"and" : [{"triple" : ["v:Object", "rdf:type", "v:Class"] }, 
+                                     {"<<" : ["v:Class", "dcog:Entity"] }, 
+                                     {"=" : ["v:Type", {"@value" :"Entity", "@type" : "xsd:string"}]},
+                                     {"quad" : ["v:Class", "rdfs:label", "v:Class_Label", "db:schema"]}, 
+                                     {"opt" : [{"triple" : ["v:Object", "rdfs:label", "v:Label"]}]}
+                                    ]
                            }
                          ]
             }
           ]
-} 
+}
 ```
 
 The default imported JSON-LD context at `https://terminusdb/contexts/woql/syntax/context.jsonld"` allows the syntax to be less verbose by automatically adding "@id" to each of the syntactic elements and providing a default WOQL base URI. 
 
 ```
 {"@context" : 
- ["http://terminusdb.com/woql/",
   { 
+      "@version": 1.1,
+      "@vocab": "http://terminusdb.com/woql#", 
       "rdf" : "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
       "rdfs" : "http://www.w3.org/2000/01/rdf-schema#",
       "dcog" : "https://datachemist.net/ontology/dcog#",

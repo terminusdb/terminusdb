@@ -59,7 +59,10 @@
 :- use_module(library(frame)).
 
 % JSON manipulation
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
+
+% JSON Queries
+:- use_module(library(json_woql)).
 
 % File processing - especially for turtle
 :- use_module(library(file_utils), [checkpoint_to_turtle/3]).
@@ -241,10 +244,11 @@ woql_handler(get,DB,Request) :-
     verify_access(Auth,terminus/woql_select,DB_URI),
 
     try_get_param('terminus:query',Request,Query),
-    coerce_literal_string(Query, QS),
-    
+
     * http_log_stream(Log),
-    run_query(QS, JSON),
+    
+    run_query(Query, JSON),
+
     * format(Log,'Query: ~q~nResults in: ~q~n',[Query,JSON]),
 
     config:server(SURI),

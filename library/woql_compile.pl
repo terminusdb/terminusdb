@@ -49,7 +49,8 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
+:- use_module(library(json_woql)).
 
 :- use_module(library(frame), [
                   update_object/3,
@@ -393,9 +394,14 @@ enrich_graphs(Databases,Database,Enriched) :-
              Databases,
              Enriched).
 
-run_query(Atom, JSON) :-
-    read_term_from_atom(Atom,Query,[]),
-    run_term(Query,JSON).
+/* 
+ * run_query(JSON_In, JSON_Out) is det. 
+ * 
+ * Runs a WOQL query in JSON-LD WOQL syntax.
+ */ 
+run_query(JSON_In, JSON_Out) :-
+    json_woql(JSON_In, Query),
+    run_term(Query,JSON_Out).
 
 :- use_module(library(http/http_log)).
 
@@ -404,6 +410,7 @@ run_term(Query,JSON) :-
     ->  format(atom(M), 'Arguments are insufficiently instantiated for Query ~q', [Query]),
         throw(instantiation_error(M))
     ;   true),
+    
     compile_query(Query,Prog,Ctx_Out),
     %format('~n***********~nProgram: ~q~n',[Prog]),
     %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
