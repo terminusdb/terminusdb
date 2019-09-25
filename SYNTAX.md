@@ -90,9 +90,10 @@ Example:
                 { "triple" : [ "doc:server", "rdfs:comment", "v:Comment"] } ]}
   ]
 }
-
+```
 Returns: 
 
+```
 { "bindings": 
    [ { "v:Comment": {"@language":"en", "@value":"The current Database Server itself"}, 
        "v:Label": {"@language":"en", "@value":"The DB server"}
@@ -107,6 +108,33 @@ Returns:
 * Q_i := A WOQL Query
 
 Attempts to find a solution for any of Q_i hold
+
+Example: 
+```
+{ "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
+  "from" : [ 
+    "http://terminusdb.com/terminus",
+    { "or" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Label"] }, 
+               { "triple" : [ "doc:server", "rdfs:comment", "v:Comment"] } ]}
+  ]
+}
+```
+Returns: 
+
+```
+{
+  "bindings": [
+    {
+      "v:Comment":"unknown",
+      "v:Label": {"@language":"en", "@value":"The DB server"}
+    },
+    {
+      "v:Comment": {"@language":"en","@value":"The current Database Server itself"},
+      "v:Label":"unknown"
+    }
+  ]
+}
+```
 
 ### from
 `{ "from" : [ Graph, Query ] }`
