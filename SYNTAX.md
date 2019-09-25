@@ -42,6 +42,7 @@ The default imported JSON-LD context at `https://terminusdb/contexts/woql/syntax
       "eq" : {"@type" : "@id" }, 
       "sub" : {"@type" : "@id" },
       "opt" : {"@type" : "@id"}
+      ...
    }
 }
 ```
@@ -85,15 +86,16 @@ Example:
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
     "http://terminusdb.com/terminus",
-    { "and" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Z"] } ] }
+    { "and" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Label"] }, 
+                { "triple" : [ "doc:server", "rdfs:comment", "v:Comment"] } ]}
   ]
 }
 
 Returns: 
 
 { "bindings": 
-   [ { "http://terminusdb.com/woql/variable/Z": 
-       {"@language":"en", "@value":"The DB server"} 
+   [ { "v:Comment": {"@language":"en", "@value":"The current Database Server itself"}, 
+       "v:Label": {"@language":"en", "@value":"The DB server"}
      }
    ]
 }
