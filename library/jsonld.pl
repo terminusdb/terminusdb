@@ -143,8 +143,11 @@ has_at(K) :-
     re_match('^@.*',K).
 
 context_prefix_expand(K,Context,Key) :-
+    %   Already qualified
+    (   has_protocol(K)
+    ->  K = Key
     %   Prefixed URI
-    (   has_prefix(K)
+    ;   has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         get_dict(Prefix,Context,Expanded),
         atom_concat(Expanded,Suffix,Key)
@@ -161,12 +164,16 @@ context_prefix_expand(K,Context,Key) :-
         ->  true
         ;   Vocab = ''),
         atomic_list_concat([Base,Vocab,K],Key)
-    %   Pass on by
+    %   Pass on by...
     ;   K = Key
     ).
 
 prefix_expand(K,Context,Key) :-
-    (   has_prefix(K)
+    %   Is already qualified
+    (   has_protocol(K)
+    ->  K = Key
+    %   Is prefixed
+    ;   has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         get_dict(Prefix,Context,Expanded),
         atom_concat(Expanded,Suffix,Key)

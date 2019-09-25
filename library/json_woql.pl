@@ -52,18 +52,20 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = select(WOQL_Args,Sub_WOQL)
     ;   _{'http://terminusdb.com/woql#and' : Qs} :< JSON
     ->  maplist(json_to_woql_ast,Qs,W_Qs),
-        xfy_list(',',W_Qs,WOQL)
+        xfy_list(',',WOQL,W_Qs)
     ;   _{'http://terminusdb.com/woql#or' : Qs} :< JSON
     ->  maplist(json_to_woql_ast,Qs,W_Qs),
-        xfy_list(';',W_Qs,WOQL)
+        xfy_list(';',WOQL,W_Qs)
     ;   _{'http://terminusdb.com/woql#from' : [ Graph, Query ] } :< JSON
-    ->  json_to_woql_ast(Query,WQ),
-        WOQL = from(Graph,WQ)
+    ->  json_to_woql_ast(Graph,WG),
+        json_to_woql_ast(Query,WQ),
+        WOQL = from(WG,WQ)
     ;   _{'http://terminusdb.com/woql#quad' : [ Graph, Subject, Predicate, Object] } :< JSON
-    ->  json_to_woql_ast(Subject,WQA),
+    ->  json_to_woql_ast(Graph,WG),
+        json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
-        WOQL = t(Graph,WQA,WQB,WQC)
+        WOQL = t(WG,WQA,WQB,WQC)
     ;   _{'http://terminusdb.com/woql#triple' : [ Subject, Predicate, Object] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
@@ -147,6 +149,8 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
+    ;   _{'@id' : ID } :< JSON
+    ->  json_to_woql_ast(ID,WOQL)
     ;   throw(http_reply(not_found({ '@type' : 'vio:WOQLSyntaxError',
                                      'vio:message' :'Un-parsable Query',
                                      'vio:query' : JSON})))
@@ -156,7 +160,7 @@ json_to_woql_ast(JSON,WOQL) :-
     !,    
     (   is_json_var(A)
     ->  WOQL = v(A)
-    ;   JSON = WOQL
+    ;   A = WOQL
     ).
 json_to_woql_ast(JSON,_) :-
     throw(http_reply(not_found('Un-parsable Query'-JSON))).
@@ -169,16 +173,16 @@ json_to_woql_arith(JSON,WOQL) :-
     !,
     (   _{'http://terminusdb.com/woql#plus' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('+', WOQL_Args, WOQL)
+        xfy_list('+', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#minus' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('-', WOQL_Args, WOQL)
+        xfy_list('-', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#times' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('*', WOQL_Args, WOQL)
+        xfy_list('*', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#divide' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('/', WOQL_Args, WOQL)
+        xfy_list('/', WOQL, WOQL_Args)
     ;   is_json_var(JSON),
         WOQL = v(JSON)
     ;   throw(http_reply(not_found('Unknown Syntax:'-JSON)))

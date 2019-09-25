@@ -345,13 +345,10 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   wf(Term)
-    ->  (   compile_wf(Term, Prog, Ctx_In, Ctx_Out)
-        ->  true
-        ;   format(atom(M), 'Failure to compile term ~q', [Term]),
-            throw(compilation_error(M)))        
-    ;   throw(syntax_error(Term))
-    ).
+    (   compile_wf(Term, Prog, Ctx_In, Ctx_Out)
+    ->  true
+    ;   format(atom(M), 'Failure to compile term ~q', [Term]),
+        throw(compilation_error(M))).
 
 assert_program([]).
 assert_program([Def|Remainder]) :-

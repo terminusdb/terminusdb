@@ -10,10 +10,10 @@ WOQL's primary syntax and interchange format is in JSON-LD. This gives us a rela
                "@propagate": true,
                "db" : "http://localhost/testDB004/graph"},
  "from" : [ "db:main", 
-            { "select" : [ [ "v:Object", "v:Class", "v:Class_Label", "v:Label", "v:Type" ] , 
+            { "select" : [ "v:Object", "v:Class", "v:Class_Label", "v:Label", "v:Type", 
                            {"and" : [{"triple" : ["v:Object", "rdf:type", "v:Class"] }, 
-                                     {"<<" : ["v:Class", "dcog:Entity"] }, 
-                                     {"=" : ["v:Type", {"@value" :"Entity", "@type" : "xsd:string"}]},
+                                     {"sub" : ["v:Class", "dcog:Entity"] }, 
+                                     {"eq" : ["v:Type", {"@value" :"Entity", "@type" : "xsd:string"}]},
                                      {"quad" : ["v:Class", "rdfs:label", "v:Class_Label", "db:schema"]}, 
                                      {"opt" : [{"triple" : ["v:Object", "rdfs:label", "v:Label"]}]}
                                     ]
@@ -38,12 +38,12 @@ The default imported JSON-LD context at `https://terminusdb/contexts/woql/syntax
       "select" : {"@type" : "@id"},
       "from" : {"@type" : "@id"}, 
       "and" : {"@type" : "@id"},
-      "triple" : {"@type" : "@id"},   
-      "=" : {"@type" : "@id" }, 
-      "<<" : {"@type" : "@id" },
+      "triple" : {"@type" : "@id"},
+      "eq" : {"@type" : "@id" }, 
+      "sub" : {"@type" : "@id" },
       "opt" : {"@type" : "@id"}
    }
- ]}
+}
 ```
 
 This demonstrates a simple query which allows us to retrieve all documents in the database, along with their labels and types. 
@@ -79,6 +79,26 @@ transactional updates.
 * Q_i := A WOQL Query
 
 Attempts to find solutions in which Q_i hold simultaneously. 
+
+Example: 
+```
+{ "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
+  "from" : [ 
+    "http://terminusdb.com/terminus",
+    { "and" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Z"] } ] }
+  ]
+}
+
+Returns: 
+
+{ "bindings": 
+   [ { "http://terminusdb.com/woql/variable/Z": 
+       {"@language":"en", "@value":"The DB server"} 
+     }
+   ]
+}
+
+```
 
 ### or
 `{ "or" : [ Q1, Q2, …, Qn ] }`
@@ -232,5 +252,3 @@ Divide A\_1 by A\_2.
 ### exp
 `{ "exp" : [ A_1 , A_2] }`
 * A_i := An arithmetic expression.
-
-
