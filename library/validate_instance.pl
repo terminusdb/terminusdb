@@ -392,7 +392,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 
 /** 
- * refute_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
+ * refute_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:vio) is nondet.
  * 
  * Determines of ?P is actually a functional property or not. 
  */
@@ -412,7 +412,7 @@ refute_functional_property(X,P,Y,Database,Reason) :-
              }.
 
 /** 
- * refute_inverse_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:rvo) is nondet.
+ * refute_inverse_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:vio) is nondet.
  * 
  * Determines of ?P is actually an inverse functional property or not. 
  */

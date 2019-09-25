@@ -162,7 +162,7 @@ class_properties(Class, Database, PropertiesPrime) :-
         exclude({Schema,Collection}/[X]>>(
                     xrdf(Collection,
                          Schema,
-                         X,dcog:tag,dcog:abstract)),
+                         X,tcs:tag,tcs:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
     ;   PropertiesPrime=DocumentProperties).
@@ -330,14 +330,14 @@ maybe_comment(C,Database,[comment=Comment]) :-
     comment(C,Comment,Database), !.
 maybe_comment(_,_,[]). 
 
-maybe_dcog_tag(C,Database,[dcogtag=DC]) :-
-    dcog_tag(C,DC,Database), !.
-maybe_dcog_tag(_,_,[]).
+maybe_tcs_tag(C,Database,[tcstag=DC]) :-
+    tcs_tag(C,DC,Database), !.
+maybe_tcs_tag(_,_,[]).
 
 maybe_meta(C,Database,LCD) :- 
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
-    maybe_dcog_tag(C,Database,DCOGTag),
+    maybe_tcs_tag(C,Database,DCOGTag),
     append(Label, Comment, LC),
     append(LC,DCOGTag,LCD).
 
@@ -372,7 +372,7 @@ classes_below(Class,Database,BelowList) :-
     database_schema(Database,Schema),
     exclude({Collection, Schema}/[X]>>(
                 xrdf(Collection, Schema,
-                     X,dcog:tag,dcog:abstract)),
+                     X,tcs:tag,tcs:abstract)),
             ClassesNoBottom,
             BelowList).
                                    

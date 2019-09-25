@@ -71,7 +71,7 @@ run_db_create_test :-
 
     Doc = _{'@context': _{
                             rdfs:"http://www.w3.org/2000/01/rdf-schema#",
-                            terminus:"https://datachemist.net/ontology/terminus#"
+                            terminus:"http://terminusdb.com/schema/terminus#"
                         },
             '@type':"terminus:APIUpdate",
             'terminus:document' : _{'@id': DB_URI, '@type':"terminus:Database",
@@ -171,17 +171,17 @@ run_doc_update_test :-
     Doc = _{'@type':"terminus:APIUpdate",
             'terminus:user_key':"root",
             'terminus:document' :
-            _{'@context':_{dcog:"https://datachemist.net/ontology/dcog#",
-                           dcogbox:"https://datachemist.net/ontology/dcogbox#",
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
                            doc:"http://localhost:6363/terminus/document/",
                            ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
-                           rvo:"https://datachemist.net/ontology/rvo#",
+                           vio:"http://terminusdb.com/schema/vio#",
                            scm:"http://localhost:6363/terminus/schema/",
-                           terminus:"https://datachemist.net/ontology/terminus#",
-                           xdd:"https://datachemist.net/ontology/xdd#",
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:admin",
               '@type':"terminus:User",
@@ -258,10 +258,10 @@ run_woql_test :-
                    "v:Class", "v:Label", "v:Comment", "v:Abstract", 
                    _{and: [
                          _{triple: ["v:Class", "rdf:type", "owl:Class", "e:schema"]},
-                         _{not: [_{triple: ["v:Class", "dcog:tag", "dcog:abstract", "e:schema"]}]},
+                         _{not: [_{triple: ["v:Class", "tcs:tag", "tcs:abstract", "e:schema"]}]},
                          _{opt: [_{triple: ["v:Class", "rdfs:label", "v:Label", "e:schema"]}]},
                          _{opt: [_{triple: ["v:Class", "rdfs:comment", "v:Comment", "e:schema"]}]},
-                         _{opt: [_{triple: ["v:Class", "dcog:tag", "v:Abstract", "e:schema"]}]}
+                         _{opt: [_{triple: ["v:Class", "tcs:tag", "v:Abstract", "e:schema"]}]}
                      ]
                     }
                ]

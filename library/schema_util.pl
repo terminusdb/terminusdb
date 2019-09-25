@@ -64,17 +64,17 @@ calculate_subsumptionOf(CC, CP, Database) :-
 calculate_subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_).
 calculate_subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
 % Always available...
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Document',
-                        'https://datachemist.net/ontology/dcog#Document',_).
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Entity',
-                        'https://datachemist.net/ontology/dcog#Entity',_).
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Relationship',
-                        'https://datachemist.net/ontology/dcog#Relationship',_).
+calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Document',
+                        'http://terminusdb.com/schema/tcs#Document',_).
+calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Entity',
+                        'http://terminusdb.com/schema/tcs#Entity',_).
+calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Relationship',
+                        'http://terminusdb.com/schema/tcs#Relationship',_).
 % Subsumed by Document
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Relationship',
-                        'https://datachemist.net/ontology/dcog#Document',_).
-calculate_subsumptionOf('https://datachemist.net/ontology/dcog#Entity',
-                        'https://datachemist.net/ontology/dcog#Document',_).
+calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Relationship',
+                        'http://terminusdb.com/schema/tcs#Document',_).
+calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Entity',
+                        'http://terminusdb.com/schema/tcs#Document',_).
 % Structural rules
 calculate_subsumptionOf(CC, CC, Module) :-
     Module:class(CC).
@@ -132,7 +132,7 @@ document(Class, Database) :-
     is_database(Database),
     !,
     database_module(Database, Module),
-    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Document').
+    Module:subsumptionOf(Class, 'http://terminusdb.com/schema/tcs#Document').
 
 document(Class, Module) :-
-    Module:subsumptionOf(Class, 'https://datachemist.net/ontology/dcog#Document').
+    Module:subsumptionOf(Class, 'http://terminusdb.com/schema/tcs#Document').

@@ -44,7 +44,7 @@ run_woql_expand :-
               '@vocab' : "#",
               'rdf' : "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
               'rdfs' : "http://www.w3.org/2000/01/rdf-schema#",
-              'dcog' : "https://datachemist.net/ontology/dcog#",
+              'tcs' : "http://terminusdb.com/schema/tcs#",
               'v' : "http://terminusdb.com/woql/variable/",
               'select' : _{'@type' : "@id"},
               'from' : _{'@type' : "@id"}, 

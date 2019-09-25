@@ -37,12 +37,12 @@
 relationship_source_property(Relationship,Property,Database) :-
     database_name(Database,Collection),        
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,Relationship,dcog:source_property,Property).
+    xrdf(Collection,Schema,Relationship,tcs:source_property,Property).
 
 relationship_target_property(Relationship,Property,Database) :-
     database_name(Database,Collection),        
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,Relationship,dcog:target_property,Property).
+    xrdf(Collection,Schema,Relationship,tcs:target_property,Property).
 
 pseudo_domain(Relationship,Domain,Database) :-
     relationship_source_property(Relationship,Property,Database), 

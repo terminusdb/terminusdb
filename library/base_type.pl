@@ -131,14 +131,14 @@ baseType('http://www.w3.org/2001/XMLSchema#ENTITY'). % unimplemented.
 baseType('http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral'). % Not fullly implemented
 baseType('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral').
 baseType('http://www.w3.org/2000/01/rdf-schema#Literal').
-baseType('https://datachemist.net/ontology/xdd#coordinatePolygon').
-baseType('https://datachemist.net/ontology/xdd#coordinatePolyline').
-baseType('https://datachemist.net/ontology/xdd#gYearRange').
-baseType('https://datachemist.net/ontology/xdd#integerRange').
-baseType('https://datachemist.net/ontology/xdd#decimalRange').
-baseType('https://datachemist.net/ontology/xdd#pesel').
-baseType('https://datachemist.net/ontology/xdd#url').
-baseType('https://datachemist.net/ontology/xdd#email').
+baseType('http://terminusdb.com/schema/xdd#coordinatePolygon').
+baseType('http://terminusdb.com/schema/xdd#coordinatePolyline').
+baseType('http://terminusdb.com/schema/xdd#gYearRange').
+baseType('http://terminusdb.com/schema/xdd#integerRange').
+baseType('http://terminusdb.com/schema/xdd#decimalRange').
+baseType('http://terminusdb.com/schema/xdd#pesel').
+baseType('http://terminusdb.com/schema/xdd#url').
+baseType('http://terminusdb.com/schema/xdd#email').
 
 /** 
  * baseTypeParent(+ChildXSDURI:uri,+ParentXSDURI:uri) is det.
@@ -162,8 +162,8 @@ baseTypeParent('http://www.w3.org/2001/XMLSchema#string','http://www.w3.org/2001
           baseTypeParent('http://www.w3.org/2001/XMLSchema#ID','http://www.w3.org/2001/XMLSchema#NCName'). % unimplemented.
           baseTypeParent('http://www.w3.org/2001/XMLSchema#IDREF','http://www.w3.org/2001/XMLSchema#NCName'). % unimplemented.
           baseTypeParent('http://www.w3.org/2001/XMLSchema#ENTITY','http://www.w3.org/2001/XMLSchema#NCName'). % unimplemented.
- baseTypeParent('https://datachemist.net/ontology/xdd#url','http://www.w3.org/2001/XMLSchema#string').
- baseTypeParent('https://datachemist.net/ontology/xdd#email','http://www.w3.org/2001/XMLSchema#string').
+ baseTypeParent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#string').
+ baseTypeParent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#string').
 baseTypeParent('http://www.w3.org/2001/XMLSchema#decimal','http://www.w3.org/2001/XMLSchema#anySimpleType').
   baseTypeParent('http://www.w3.org/2001/XMLSchema#integer','http://www.w3.org/2001/XMLSchema#decimal').
     baseTypeParent('http://www.w3.org/2001/XMLSchema#nonPositiveInteger','http://www.w3.org/2001/XMLSchema#integer').
@@ -177,7 +177,7 @@ baseTypeParent('http://www.w3.org/2001/XMLSchema#decimal','http://www.w3.org/200
           baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedShort','http://www.w3.org/2001/XMLSchema#unsignedInt').
             baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedByte','http://www.w3.org/2001/XMLSchema#unsignedShort').
       baseTypeParent('http://www.w3.org/2001/XMLSchema#positiveInteger','http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
-    baseTypeParent('https://datachemist.net/ontology/xdd#pesel','http://www.w3.org/2001/XMLSchema#integer').
+    baseTypeParent('http://terminusdb.com/schema/xdd#pesel','http://www.w3.org/2001/XMLSchema#integer').
 baseTypeParent('http://www.w3.org/2001/XMLSchema#NOTATION','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
 baseTypeParent('http://www.w3.org/2001/XMLSchema#QName','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
 baseTypeParent('http://www.w3.org/2001/XMLSchema#double','http://www.w3.org/2001/XMLSchema#anySimpleType').
@@ -197,11 +197,11 @@ baseTypeParent('http://www.w3.org/2001/XMLSchema#gDay','http://www.w3.org/2001/X
 baseTypeParent('http://www.w3.org/2001/XMLSchema#duration','http://www.w3.org/2001/XMLSchema#anySimpleType').
   baseTypeParent('http://www.w3.org/2001/XMLSchema#dayTimeDuration','http://www.w3.org/2001/XMLSchema#duration').
   baseTypeParent('http://www.w3.org/2001/XMLSchema#yearMonthDuration','http://www.w3.org/2001/XMLSchema#duration').
-baseTypeParent('https://datachemist.net/ontology/xdd#coordinatePolygon','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#coordinatePolyLine','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#coordinate','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#url','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('https://datachemist.net/ontology/xdd#email','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#coordinatePolygon','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#coordinatePolyLine','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#coordinate','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#anySimpleType').

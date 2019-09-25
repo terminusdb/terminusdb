@@ -127,7 +127,7 @@ terminus_database_name(Database_Name) :-
 terminus_context(_{
                      doc : Doc,
                      schema : Schema,
-                     terminus : 'https://datachemist.net/ontology/terminus#'
+                     terminus : 'http://terminusdb.com/schema/terminus#'
                    }) :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),

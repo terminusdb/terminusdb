@@ -53,11 +53,11 @@
 :- use_module(library(jsonld)).
 
 % internal
-global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
-global_prefixes(dcogbox,'https://datachemist.net/ontology/dcogbox#').
-global_prefixes(xdd,'https://datachemist.net/ontology/xdd#').
-global_prefixes(rvo,'https://datachemist.net/ontology/rvo#').
-global_prefixes(terminus,'https://datachemist.net/ontology/terminus#').
+global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
+global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
+global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
+global_prefixes(vio,'http://terminusdb.com/schema/vio#').
+global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
 % common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').

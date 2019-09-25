@@ -14,7 +14,7 @@
 		      subsumptionOf/3,
               strictSubsumptionOf/3,
               complementOf/3,
-		      dcog_tag/3,
+		      tcs_tag/3,
               document/2,
               
 		      unionOfList/3,
@@ -149,12 +149,12 @@ immediateClass(X,Database) :-
     xrdf(Collection, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
 immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
 immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
-% This makes me nervous... [ Gavin ]
+% This makes me nevious... [ Gavin ]
 immediateClass('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
-immediateClass('https://datachemist.net/ontology/dcog#Entity', _).
-immediateClass('https://datachemist.net/ontology/dcog#Document', _).
-immediateClass('https://datachemist.net/ontology/dcog#Relationship', _).
+immediateClass('http://terminusdb.com/schema/tcs#Entity', _).
+immediateClass('http://terminusdb.com/schema/tcs#Document', _).
+immediateClass('http://terminusdb.com/schema/tcs#Relationship', _).
 
 
 %% class(?X:uri_or_id, +Schema:database is nondet
@@ -492,8 +492,8 @@ subClassStrict(X,Z,Database) :- subClassOf(X,Y,Database), subClassStrict(Y,Z, Da
 %
 % static solutions first.
 subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_). 
-subsumptionOf('https://datachemist.net/ontology/dcog#Entity','https://datachemist.net/ontology/dcog#Document',_).
-subsumptionOf('https://datachemist.net/ontology/dcog#Relationship','https://datachemist.net/ontology/dcog#Document',_).
+subsumptionOf('http://terminusdb.com/schema/tcs#Entity','http://terminusdb.com/schema/tcs#Document',_).
+subsumptionOf('http://terminusdb.com/schema/tcs#Relationship','http://terminusdb.com/schema/tcs#Document',_).
 subsumptionOf(CC,CC,Database) :-
     immediateClass(CC,Database).
 subsumptionOf(CC,CP,Database) :-
@@ -613,7 +613,7 @@ datatypeStrictSubsumptionOf(Sub,Super,Database) :-
     datatypeSubsumptionOf(Parent,Super,Database).
 
 /**
- * orphanClassSC(+Database:database-Reason:rvo) is nondet. 
+ * orphanClassSC(+Database:database-Reason:vio) is nondet. 
  * 
  * Find all orphaned classes in Schema.
  */
@@ -729,7 +729,7 @@ annotationProperty(P,Database) :-
     xrdf(Collection,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
 % Gavin nuked on Sep 20th 2019
 %annotationProperty(P,Database) :-
-%    subsumptionPropertiesOf(P,'https://datachemist.net/ontology/dcog#pseudo_property', Database).
+%    subsumptionPropertiesOf(P,'http://terminusdb.com/schema/tcs#pseudo_property', Database).
 
 
 %:- rdf_meta functionalProperty(r,o).
@@ -930,7 +930,7 @@ range(P,R,Database) :-
  * the places in which to "clip" the graph. 
  */
 document(Class,Database) :-
-	subsumptionOf(Class,'https://datachemist.net/ontology/dcog#Document', Database). 
+	subsumptionOf(Class,'http://terminusdb.com/schema/tcs#Document', Database). 
 
 /** 
  * anyRange(?P,?R,+Database:database is nondet. 
@@ -998,7 +998,7 @@ anyDomain(P,R,Database) :-
 mostSpecificDomain(P,R,Database) :- anyDomain(P,R,Database), !.
 
 /** 
- * noImmediateDomainSC(+Database:database-Reason:rvo) is nondet. 
+ * noImmediateDomainSC(+Database:database-Reason:vio) is nondet. 
  *
  * All properties which do not have a specified domain.
  */
@@ -1023,7 +1023,7 @@ noImmediateDomainSC(Database,Reason) :-
              }.
 
 /** 
- * noImmediateRangeSC(+Database:database-Reason:rvo) is nondet. 
+ * noImmediateRangeSC(+Database:database-Reason:vio) is nondet. 
  *
  * All properties which do not have a specified range.
  */
@@ -1230,15 +1230,15 @@ comment(X,Y,Database) :-
     xrdf(Collection,Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /** 
- * dcog_tag(?X:uri_or_id,?Y:any,+Database:database is det. 
+ * tcs_tag(?X:uri_or_id,?Y:any,+Database:database is det. 
  * 
  * TODO: Rename!
- * Get the dcog:tag for X as Y.
+ * Get the tcs:tag for X as Y.
  */
-dcog_tag(X,Y,Database) :-
+tcs_tag(X,Y,Database) :-
     database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,X, 'https://datachemist.net/ontology/dcog#tag', Y).
+    xrdf(Collection,Schema,X, 'http://terminusdb.com/schema/tcs#tag', Y).
 
 classHasLabel(X,Y,Database) :- class(X,Database), label(X,Y,Database).
 %classHasNoLabel(X,Database) :- class(X,Database), \+ label(X,_,Database).
@@ -1257,7 +1257,7 @@ notUniqueClassLabel(X,Database,Reason) :-
              }.
 
 /**
- * notUniqueClassLabelSC(+Database:database -Reason:rvo) is nondet. 
+ * notUniqueClassLabelSC(+Database:database -Reason:vio) is nondet. 
  * 
  * What it says on the tin: every non unique label in Database as a schema constraint. 
  */ 
