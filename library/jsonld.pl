@@ -98,11 +98,11 @@ expand_value(V,_{'@type' : "@id"},Ctx,Value) :-
     % We are distributing to identify our arguments as IDs
     !,
     (   is_list(V)
-    ->  maplist({Ctx}/[V,Value]>>(
-                    (   string(V)
-                    ->  prefix_expand(V,Ctx,ExPrime),
-                        Value = _{'@id' : ExPrime}
-                    ;   expand(V,Ctx,Value))
+    ->  maplist({Ctx}/[V1,V2]>>(
+                    (   string(V1)
+                    ->  prefix_expand(V1,Ctx,ExPrime),
+                        V2 = _{'@id' : ExPrime}
+                    ;   expand(V1,Ctx,V2))
                 ),V,Value)
     ;   string(V)
     ->  prefix_expand(V, Ctx, Expanded),
@@ -149,8 +149,10 @@ context_prefix_expand(K,Context,Key) :-
     %   Prefixed URI
     ;   has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
-        get_dict(Prefix,Context,Expanded),
-        atom_concat(Expanded,Suffix,Key)
+        (   get_dict(Prefix,Context,Expanded)
+        ->  atom_concat(Expanded,Suffix,Key)
+        ;   format(atom(M), 'Key has unkown prefix: ~q', [K]),
+            throw(syntax_error(M)))
     %   Keyword
     ;   has_at(K)
     ->  K = Key
@@ -175,8 +177,10 @@ prefix_expand(K,Context,Key) :-
     %   Is prefixed
     ;   has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
-        get_dict(Prefix,Context,Expanded),
-        atom_concat(Expanded,Suffix,Key)
+        (   get_dict(Prefix,Context,Expanded)
+        ->  atom_concat(Expanded,Suffix,Key)
+        ;   format(atom(M), 'Key has unkown prefix: ~q', [K]),
+            throw(syntax_error(M)))
     ;   has_at(K)
     ->  K = Key
     ;   (   get_dict('@base', Context, Base)

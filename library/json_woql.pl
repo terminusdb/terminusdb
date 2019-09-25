@@ -47,7 +47,7 @@ json_to_woql_ast(JSON,WOQL) :-
     !,
     (   _{'http://terminusdb.com/woql#select' : Clauses } :< JSON
     ->  snoc(Vargs,Sub_Query,Clauses),
-        maplist([V,v(V)]>>true,Vargs,WOQL_Args),
+        maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
         WOQL = select(WOQL_Args,Sub_WOQL)
     ;   _{'http://terminusdb.com/woql#and' : Qs} :< JSON

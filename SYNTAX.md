@@ -85,7 +85,7 @@ Example:
 ```
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
-    "http://terminusdb.com/terminus",
+    "http://localhost:6363/terminus",
     { "and" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Label"] }, 
                 { "triple" : [ "doc:server", "rdfs:comment", "v:Comment"] } ]}
   ]
@@ -113,7 +113,7 @@ Example:
 ```
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
-    "http://terminusdb.com/terminus",
+    "http://localhost:6363/terminus",
     { "or" : [ { "triple" : [ "doc:server", "rdfs:label", "v:Label"] }, 
                { "triple" : [ "doc:server", "rdfs:comment", "v:Comment"] } ]}
   ]
@@ -148,7 +148,25 @@ Sets the current default graph for Query.
 * Vars := List of Variable IRIs
 * Query := A WOQL Query
 
-Obtain bindings for variables in Var\_List compatible with Query. 
+Obtain bindings for variables in Var\_List compatible with
+Query. Select will mask out any variables not listed in the intial list segment.
+
+Example: 
+```
+{ "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
+  "from" : [ 
+    "http://localhost:6363/terminus",
+    { "select" : [ "v:Label", 
+                  { "triple" : [ "v:Server", "terminus:resource_includes", "v:Label"] }
+                 ]}
+  ]
+}
+```
+Returns 
+
+```
+{ "bindings" : [ { "v:Label':'doc:terminus'} ] } 
+```
 
 ### triple
 `{ "triple" : [ Subject, Predicate, Object_or_Literal ] }`
