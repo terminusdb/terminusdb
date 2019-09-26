@@ -333,6 +333,7 @@ A terminus result message indicating either terminus:success or terminus:failure
 Retrieves the database schema as a turtle encoding from the database
 
 GET http://localhost/DBID/schema
+
 ```
 curl http://localhost/dima/schema?terminus:encoding=terminus:turtle&terminus:user_key=secret
 
@@ -378,9 +379,22 @@ A terminus result message indicating either terminus:success or terminus:failure
 ```
 
 ## 10. Class Frame
+Retrieves a frame representation of a class within the ontology - a json representation of all the logic contained in the class. 
 
-terminus:class	https://datachemist.net/ontology/documentation#APIEndpointSpecification
-terminus:user_key	root
+GET http://terminus.db/DBID/frame
+
+```
+curl http://localhost/dima/schema?terminus:class=http://terminusdb.com/schema/documentation#APIEndpointSpecification
+&terminus:user_key=secret
+```
+
+### Argument
+The class that the frame is for must be passed in the terminus:class property
+
+```
+terminus:class	http://terminusdb.com/schema/documentation#APIEndpointSpecification
+terminus:user_key	secret
+```
 
 ### Return
 An array of frames, each of which is encoded as a JSON-LD frame document and each of which represents a single property in the class frame. 
@@ -390,7 +404,7 @@ An array of frames, each of which is encoded as a JSON-LD frame document and eac
   {
     "@context": {
       "doc":"http://localhost/dima/document/",
-      "docs":"http://localhost/dima/schema#",
+      "docs":"http://terminusdb.com/schema/documentation#",
       "owl":"http://www.w3.org/2002/07/owl#",
       "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
       "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
@@ -459,434 +473,23 @@ An array of frames, each of which is encoded as a JSON-LD frame document and eac
 	    "type":"objectProperty"
 	  },
 	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#description",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  }
-	],
-	[
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#type",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#summary",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#name",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#description",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  }
-	],
-	[
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#ReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#type",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#ReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#summary",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#ReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#name",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#ReturnValue",
-	    "property":"https://datachemist.net/ontology/documentation#description",
+	    "domain":"docs:APIReturnValue",
+	    "property":"docs:description",
 	    "range":"xsd:string",
 	    "restriction":"true",
 	    "type":"datatypeProperty"
 	  }
 	]
-      ],
-      "type":"class_choice"
-    },
-    "property":"https://datachemist.net/ontology/documentation#return",
-    "range":"https://datachemist.net/ontology/documentation#ReturnValue",
-    "restriction": {
-      "allValuesFrom":"https://datachemist.net/ontology/documentation#APIReturnValue",
-      "property":"https://datachemist.net/ontology/documentation#return",
-      "uri":"https://datachemist.net/ontology/documentation#RestrictEndpointReturn"
-    },
-    "type":"objectProperty"
-  },
+  },	
   {
     "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
+      "docs":"http://terminusdb.com/schema/documentation#",
       "owl":"http://www.w3.org/2002/07/owl#",
       "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
       "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
       "xsd":"http://www.w3.org/2001/XMLSchema#"
     },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
-    "property":"https://datachemist.net/ontology/documentation#name",
-    "range":"xsd:string",
-    "restriction":"true",
-    "type":"datatypeProperty"
-  },
-  {
-    "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
-      "owl":"http://www.w3.org/2002/07/owl#",
-      "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
-      "xsd":"http://www.w3.org/2001/XMLSchema#"
-    },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
-    "frame": {
-      "elements": [
-	{"class":"https://datachemist.net/ontology/documentation#get"},
-	{"class":"https://datachemist.net/ontology/documentation#put"},
-	{"class":"https://datachemist.net/ontology/documentation#post"},
-	{
-	  "class":"https://datachemist.net/ontology/documentation#delete"
-	}
-      ],
-      "type":"oneOf"
-    },
-    "property":"https://datachemist.net/ontology/documentation#method",
-    "range":"https://datachemist.net/ontology/documentation#HTTPMethod",
-    "restriction":"true",
-    "type":"objectProperty"
-  },
-  {
-    "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
-      "owl":"http://www.w3.org/2002/07/owl#",
-      "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
-      "xsd":"http://www.w3.org/2001/XMLSchema#"
-    },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
-    "property":"https://datachemist.net/ontology/documentation#headers",
-    "range":"xsd:string",
-    "restriction":"true",
-    "type":"datatypeProperty"
-  },
-  {
-    "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
-      "owl":"http://www.w3.org/2002/07/owl#",
-      "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
-      "xsd":"http://www.w3.org/2001/XMLSchema#"
-    },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
-    "frame": {
-      "operands": [
-	[
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "property":"https://datachemist.net/ontology/documentation#type",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "property":"https://datachemist.net/ontology/documentation#summary",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "frame": {
-	      "elements": [
-		{
-		  "class":"https://datachemist.net/ontology/documentation#optional"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#mandatory"
-		}
-	      ],
-	      "type":"oneOf"
-	    },
-	    "property":"https://datachemist.net/ontology/documentation#required",
-	    "range":"https://datachemist.net/ontology/documentation#Optionality",
-	    "restriction":"true",
-	    "type":"objectProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "property":"https://datachemist.net/ontology/documentation#name",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "frame": {
-	      "elements": [
-		{
-		  "class":"https://datachemist.net/ontology/documentation#json"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#text"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#jsonld"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#css"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#ttl"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#html"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#owl"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#csv"
-		}
-	      ],
-	      "type":"oneOf"
-	    },
-	    "property":"https://datachemist.net/ontology/documentation#encoding",
-	    "range":"https://datachemist.net/ontology/documentation#DataLanguage",
-	    "restriction":"true",
-	    "type":"objectProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "property":"https://datachemist.net/ontology/documentation#description",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#APIArgument",
-	    "property":"https://datachemist.net/ontology/documentation#default_value",
-	    "range":"xsd:anySimpleType",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  }
-	],
-	[
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "property":"https://datachemist.net/ontology/documentation#type",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "property":"https://datachemist.net/ontology/documentation#summary",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "frame": {
-	      "elements": [
-		{
-		  "class":"https://datachemist.net/ontology/documentation#optional"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#mandatory"
-		}
-	      ],
-	      "type":"oneOf"
-	    },
-	    "property":"https://datachemist.net/ontology/documentation#required",
-	    "range":"https://datachemist.net/ontology/documentation#Optionality",
-	    "restriction":"true",
-	    "type":"objectProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "property":"https://datachemist.net/ontology/documentation#name",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "property":"https://datachemist.net/ontology/documentation#description",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#Argument",
-	    "property":"https://datachemist.net/ontology/documentation#default_value",
-	    "range":"xsd:anySimpleType",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  }
-	],
-	[
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#type",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#summary",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "frame": {
-	      "elements": [
-		{
-		  "class":"https://datachemist.net/ontology/documentation#optional"
-		},
-		{
-		  "class":"https://datachemist.net/ontology/documentation#mandatory"
-		}
-	      ],
-	      "type":"oneOf"
-	    },
-	    "property":"https://datachemist.net/ontology/documentation#required",
-	    "range":"https://datachemist.net/ontology/documentation#Optionality",
-	    "restriction":"true",
-	    "type":"objectProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#order",
-	    "range":"xsd:nonNegativeInteger",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#name",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#description",
-	    "range":"xsd:string",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  },
-	  {
-	    "domain":"https://datachemist.net/ontology/documentation#FunctionArgument",
-	    "property":"https://datachemist.net/ontology/documentation#default_value",
-	    "range":"xsd:anySimpleType",
-	    "restriction":"true",
-	    "type":"datatypeProperty"
-	  }
-	]
-      ],
-      "type":"class_choice"
-    },
-    "property":"https://datachemist.net/ontology/documentation#argument",
-    "range":"https://datachemist.net/ontology/documentation#Argument",
-    "restriction": {
-      "allValuesFrom":"https://datachemist.net/ontology/documentation#APIArgument",
-      "property":"https://datachemist.net/ontology/documentation#argument",
-      "uri":"https://datachemist.net/ontology/documentation#RestrictEndpointArgument"
-    },
-    "type":"objectProperty"
-  },
-  {
-    "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
-      "owl":"http://www.w3.org/2002/07/owl#",
-      "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
-      "xsd":"http://www.w3.org/2001/XMLSchema#"
-    },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
-    "property":"rdfs:label",
-    "range":"xsd:string",
-    "restriction":"true",
-    "type":"datatypeProperty"
-  },
-  {
-    "@context": {
-      "dcog":"https://datachemist.net/ontology/dcog#",
-      "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-      "doc":"http://195.201.12.87:6363/dima/document/",
-      "ex":"http://example.org/",
-      "owl":"http://www.w3.org/2002/07/owl#",
-      "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-      "rvo":"https://datachemist.net/ontology/rvo#",
-      "scm":"http://195.201.12.87:6363/dima/schema/",
-      "terminus":"https://datachemist.net/ontology/terminus#",
-      "xdd":"https://datachemist.net/ontology/xdd#",
-      "xsd":"http://www.w3.org/2001/XMLSchema#"
-    },
-    "domain":"https://datachemist.net/ontology/documentation#APIEndpointSpecification",
+    "domain":"docs:APIEndpointSpecification",
     "property":"rdfs:comment",
     "range":"xsd:string",
     "restriction":"true",
@@ -895,4 +498,5 @@ An array of frames, each of which is encoded as a JSON-LD frame document and eac
 ]
 ```
 ## 11. WOQL Select
+
 ## 12. WOQL Update
