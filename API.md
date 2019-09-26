@@ -1,1 +1,186 @@
 # TerminusDB API 
+
+The Terminus DB Server includes a built in HTTP server which implements the Terminus API consisting of 12 endpoints:
+
+1. connect - GET http://terminus.db/  
+2. create_database - POST http://terminus.db/dbname  
+3. delete_database - DELETE http://terminus.db/dbname 
+4. create_document - POST http://terminus.db/dbname/document/docid  
+5. get_document - GET http://terminus.db/dbname/document/docid  
+6. update_document - POST http://terminus.db/dbname/document/docid  
+7. delete_document - DELETE http://terminus.db/dbname/document/docid 
+8. woql_select - GET http://terminus.db/dbname/woql  
+9. woql_update - POST http://terminus.db/dbname/woql  
+10. get_schema - GET http://terminus.db/dbname/schema  
+11. update_schema - POST http://terminus.db/dbname/schema  
+12. class_frame - GET http://terminus.db/dbname/frame  
+
+where dbname and docid are the local identifiers of a specific database and document respectively. 
+
+## Connect
+
+GET http://terminus.db/
+Arguments: terminus:user_key="..."
+Return: terminus:Capability
+
+```
+curl "http://195.201.12.87:6363?terminus:user_key=root"
+"@context": {
+    "dcog":"https://datachemist.net/ontology/dcog#",
+    "dcogbox":"https://datachemist.net/ontology/dcogbox#",
+    "doc":"http://195.201.12.87:6363/terminus/document/",
+    "ex":"http://example.org/",
+    "owl":"http://www.w3.org/2002/07/owl#",
+    "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
+    "rvo":"https://datachemist.net/ontology/rvo#",
+    "schema":"http://195.201.12.87:6363/terminus/schema/",
+    "scm":"http://195.201.12.87:6363/terminus/schema/",
+    "terminus":"https://datachemist.net/ontology/terminus#",
+    "xdd":"https://datachemist.net/ontology/xdd#",
+    "xsd":"http://www.w3.org/2001/XMLSchema#"
+  },
+  "@id":"doc:admin",
+  "@type":"terminus:User",
+  "rdfs:comment": {"@language":"en", "@value":"This is the server super user account"},
+  "rdfs:label": {"@language":"en", "@value":"Server Admin User"},
+  "terminus:authority": {
+    "@id":"doc:access_all_areas",
+    "@type":"terminus:ServerCapability",
+    "rdfs:comment": {"@language":"en", "@value":"Access all server functions"},
+    "rdfs:label": {"@language":"en", "@value":"All Capabilities"},
+    "terminus:action": [
+      {"@id":"terminus:class_frame", "@type":"terminus:DBAction"},
+      {"@id":"terminus:create_database", "@type":"terminus:DBAction"},
+      {"@id":"terminus:create_document", "@type":"terminus:DBAction"},
+      {"@id":"terminus:delete_database", "@type":"terminus:DBAction"},
+      {"@id":"terminus:delete_document", "@type":"terminus:DBAction"},
+      {"@id":"terminus:get_document", "@type":"terminus:DBAction"},
+      {"@id":"terminus:get_schema", "@type":"terminus:DBAction"},
+      {"@id":"terminus:update_document", "@type":"terminus:DBAction"},
+      {"@id":"terminus:update_schema", "@type":"terminus:DBAction"},
+      {"@id":"terminus:woql_select", "@type":"terminus:DBAction"},
+      {"@id":"terminus:woql_update", "@type":"terminus:DBAction"}
+    ],
+    "terminus:authority_scope": [
+      {
+        "@id":"doc:dbWhichIAmGoingToDelete",
+        "@type":"terminus:Database",
+        "rdfs:comment": {"@language":"en", "@value":"dbWhichIAmGoingToDelete"},
+        "rdfs:label": {"@language":"en", "@value":"dbWhichIAmGoingToDelete"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/dbWhichIAmGoingToDelete"
+        },
+        "terminus:instance": {"@type":"xsd:string", "@value":"document"},
+        "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
+      },
+      {
+        "@id":"doc:dima",
+        "@type":"terminus:Database",
+        "rdfs:comment": {
+          "@language":"en",
+          "@value":"This is a DB created for Dima to test the ontoogies"
+        },
+        "rdfs:label": {"@language":"en", "@value":"Dima Test DB"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/dima"
+        },
+        "terminus:instance": {"@type":"xsd:string", "@value":"document"},
+        "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
+      },
+      {
+        "@id":"doc:documentation",
+        "@type":"terminus:Database",
+        "rdfs:comment": {"@language":"en", "@value":"This is the documentation db"},
+        "rdfs:label": {"@language":"en", "@value":"Documentation database"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/documentation"
+        },
+        "terminus:instance": {"@type":"xsd:string", "@value":"document"},
+        "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
+      },
+      {
+        "@id":"doc:documentaton",
+        "@type":"terminus:Database",
+        "rdfs:comment": {"@language":"en", "@value":"This is the documentation db"},
+        "rdfs:label": {"@language":"en", "@value":"Documentation database"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/documentaton"
+        },
+        "terminus:instance": {"@type":"xsd:string", "@value":"document"},
+        "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
+      },
+      {
+        "@id":"doc:terminus",
+        "@type":"terminus:Database",
+        "rdfs:comment": {
+          "@language":"en",
+          "@value":"The master database contains the meta-data about databases, users and roles"
+        },
+        "rdfs:label": {"@language":"en", "@value":"Master Database"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/terminus"
+        }
+      },
+      {
+        "@id":"doc:test",
+        "@type":"terminus:Database",
+        "rdfs:comment": {"@language":"en", "@value":"test"},
+        "rdfs:label": {"@language":"en", "@value":"test"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {
+          "@type":"xsd:anyURI",
+          "@value":"http://195.201.12.87:6363/test"
+        },
+        "terminus:instance": {"@type":"xsd:string", "@value":"document"},
+        "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
+      },
+      {
+        "@id":"doc:server",
+        "@type":"terminus:Server",
+        "rdfs:comment": {
+          "@language":"en",
+          "@value":"The current Database Server itself"
+        },
+        "rdfs:label": {"@language":"en", "@value":"The DB server"},
+        "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+        "terminus:id": {"@type":"xsd:anyURI", "@value":"http://195.201.12.87:6363"},
+        "terminus:resource_includes": [
+          {
+            "@id":"doc:dbWhichIAmGoingToDelete",
+            "@type":"terminus:Database"
+          },
+          {"@id":"doc:dima", "@type":"terminus:Database"},
+          {"@id":"doc:documentation", "@type":"terminus:Database"},
+          {"@id":"doc:documentaton", "@type":"terminus:Database"},
+          {"@id":"doc:dummy", "@type":"terminus:Database"},
+          {"@id":"doc:terminus", "@type":"terminus:Database"},
+          {"@id":"doc:test", "@type":"terminus:Database"}
+        ]
+      }
+    ]
+  }
+}
+
+```
+## Create Database
+## Delete Database
+## Create Document
+## Delete Document
+## Get Document
+## Update Document
+## WOQL Select
+## WOQL Update
+## Get Schema
+## Update Schema
+## Class Frame
