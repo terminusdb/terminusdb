@@ -169,15 +169,43 @@ RETURN:
 }
 ```
 
+
 ## Create Database
 
+Creates a new database with the requested id in the terminus db server
+
+POST http://terminus.db/DBID
+
+where DBID is the ID of the new DB
+
+### Arguments
+POST: Content-Type: application/json
+
 ```
-{"@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#","terminus":"http://terminusdb.com/schema/terminus#"},"terminus:document":{"@type":"terminus:Database","rdfs:label":{"@language":"en","@value":"Testing Creation"},"rdfs:comment":{"@language":"en","@value":"Testing the create API"},"terminus:allow_origin":{"@type":"xsd:string","@value":"*"},"@id":"http://195.201.12.87:6363/tcre"},"@type":"terminus:APIUpdate","terminus:user_key":"root"}
-
+{
+      "@context":{
+           "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
+           "terminus":"http://terminusdb.com/schema/terminus#"
+      },
+      "terminus:document":{
+              "@type":"terminus:Database",
+              "rdfs:label":{"@language":"en","@value":"Testing Creation"},
+              "rdfs:comment":{"@language":"en","@value":"Testing the create API"},
+              "terminus:allow_origin":{"@type":"xsd:string","@value":"*"},
+              "@id":"http://localhost/tcre"
+      },
+      "@type":"terminus:APIUpdate",
+      "terminus:user_key":"secret"
+      } 
+}
 
 ```
 
-
+### Return
+A terminus result  message 
+```
+  {"terminus:status":"terminus:success"}
+```
 ## Delete Database
 ## Create Document
 ## Delete Document
