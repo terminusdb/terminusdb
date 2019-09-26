@@ -712,7 +712,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         database_name(Database,C),
-        (   database_record_instance_list(Database,L),
+        (   database_record_instance_list(C,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(C,[GE],XE,PE,YE)),
