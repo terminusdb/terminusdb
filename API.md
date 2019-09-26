@@ -176,6 +176,9 @@ Creates a new database with the requested id in the terminus db server
 
 POST http://terminus.db/DBID
 
+```
+curl -d "@my-db.json" -X POST http://localhost/tcre/
+```
 where DBID is the ID of the new DB
 
 ### Arguments
