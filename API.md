@@ -240,10 +240,12 @@ Retrieves a terminus document in JSON-LD form, from a terminus server
 GET http://localhost/terminus/document/server?terminus:user_key=secret
 
 ### Arguments
+The terminus:encoding parameter can be either terminus:jsonld or terminus:frame - both are json-ld representations but the 
 
+```
 terminus:encoding	terminus:jsonld | terminus:frame
 terminus:user_key	"api key"
-
+```
 
 ### Return
 A JSON-LD document representing the requested item
@@ -340,9 +342,10 @@ curl http://localhost/dima/schema?terminus:encoding=terminus:turtle&terminus:use
 ```
 
 ### Arguments: 
+```
 terminus:encoding	terminus:turtle
 terminus:user_key	"api key"
-
+```
 ### Return
 The database schema encoded as a JSON string containing the contents of a turtle file
 ```
