@@ -175,6 +175,35 @@ RETURN:
 ## Create Document
 ## Delete Document
 ## Get Document
+
+GET http://localhost/terminus/document/server?terminus:user_key=secret
+
+```
+ "@context": {
+    "doc":"http://localhost/terminus/document/",
+    "owl":"http://www.w3.org/2002/07/owl#",
+    "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
+    "terminus":"http://terminusdb.com/schema/terminus#",
+    "xsd":"http://www.w3.org/2001/XMLSchema#"
+  },
+  "@id":"doc:server",
+  "@type":"terminus:Server",
+  "rdfs:comment": {"@language":"en", "@value":"The current Database Server itself"},
+  "rdfs:label": {"@language":"en", "@value":"The DB server"},
+  "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
+  "terminus:resource_includes": [
+    {"@id":"doc:dbWhichIAmGoingToDelete", "@type":"terminus:Database"},
+    {"@id":"doc:dima", "@type":"terminus:Database"},
+    {"@id":"doc:documentation", "@type":"terminus:Database"},
+    {"@id":"doc:documentaton", "@type":"terminus:Database"},
+    {"@id":"doc:dummy", "@type":"terminus:Database"},
+    {"@id":"doc:terminus", "@type":"terminus:Database"},
+    {"@id":"doc:test", "@type":"terminus:Database"}
+  ]
+}
+```
+
 ## Update Document
 ## WOQL Select
 ## WOQL Update
