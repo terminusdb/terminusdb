@@ -103,9 +103,7 @@ http:location(root, '/', []).
 
 %%%%%%%%%%%%%%%%%%%% JSON Boilerplate %%%%%%%%%%%%%%%%%%%%%%
 
-%http_client:http_convert_data(+In, +Fields, -Data, [json_object()]) :-
-%json_object(+As)
-
+% Nothing here...
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -538,7 +536,7 @@ try_get_param(Key,Request,Value) :-
     ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Data]),
         throw(http_reply(not_found(Data-MSG)))),
 
-    (   get_dict(Key, Document, Value)
+    (   get_key_document(Key, Document, Value)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
         throw(http_reply(not_found(Data-MSG)))),

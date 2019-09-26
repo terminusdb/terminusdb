@@ -10,7 +10,9 @@
               literal_expand/2,
               prefix_list_to_rapper_args/2,
               initialise_contexts/0,
-              woql_context/1
+              woql_context/1,
+              get_collection_jsonld_context/2,
+              get_global_jsonld_context/1
           ]).
 
 /** <module> Prefixes
@@ -213,3 +215,27 @@ initialise_contexts :-
         ),
         close(Out)    
     ).
+
+
+/* 
+ * get_collection_jsonld_context(Collection,Ctx) is det. 
+ * 
+ * Get a JSON-LD dictonary holding the context for this db.
+ */
+get_collection_jsonld_context(Collection, Ctx) :-
+    get_collection_prefix_list(Collection,Ctx_Obj),
+    sort(Ctx_Obj,Ctx_Sorted),
+    term_jsonld(Ctx_Sorted, Ctx).
+
+/* 
+ * get_global_jsonld_context(Collection,Ctx) is det. 
+ * 
+ * Get a global JSON-LD dictonary holding the context
+ * for generic documents.
+ */
+get_global_jsonld_context(Ctx) :-
+    forall(Key-Value,
+           global_prefixes(Key,Value),
+           Pairs),
+    dict_create(Ctx,_,Pairs).
+

@@ -158,6 +158,7 @@ In Python: https://github.com/terminusdb/terminus-python-sdk
 ## TODO
 
 * Write tests for Document API
+* Add optimisations to document expansion in JSON-LD avoiding duplicate expansions
 
 ## Authors
 

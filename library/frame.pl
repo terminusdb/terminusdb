@@ -25,8 +25,7 @@
               delete_object/2,
               update_object/2,
               update_object/3,
-              document_filled_class_frame_jsonld/4,
-              get_collection_jsonld_context/2
+              document_filled_class_frame_jsonld/4
           ]).
 
 /** <module> Frames
@@ -877,16 +876,6 @@ document_object(Document,Database,Depth,Realiser) :-
     most_specific_type(Document,Class,Database),
     class_frame(Class,Database,Frame),
     realiser(Document,Frame,Database,Depth,Realiser).
-
-/* 
- * get_collection_jsonld_context(Collection,Ctx) is det. 
- * 
- * Get a JSON-LD dictonary holding the context for this db.
- */
-get_collection_jsonld_context(Collection, Ctx) :-
-    get_collection_prefix_list(Collection,Ctx_Obj),
-    sort(Ctx_Obj,Ctx_Sorted),
-    term_jsonld(Ctx_Sorted, Ctx).
 
 /*
  * document_jsonld(+Document:uri,+Ctx:any,+Database:database-Realiser) is semidet.

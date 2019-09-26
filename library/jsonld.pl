@@ -7,7 +7,9 @@
               term_jsonld/2,
               jsonld_triples/3,
               jsonld_triples/4,
-              jsonld_id/2
+              jsonld_id/2,
+              get_key_document/2,
+              get_key_document/3
           ]).
 
 /** <module> JSON-LD
@@ -452,3 +454,33 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
     ;   atom(V)        
     ->  Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',V)))]
     ;   Triples = [(C,G,ID,Pred,V)]).
+
+
+/* 
+ * get_key_document(Key,Document,Value) is det
+ * 
+ * Looks up the value of a key in a document
+ */ 
+get_key_document(Key,Document,Value) :-
+    get_global_jsonld_context(Ctx),
+    get_key_document(Key,Ctx,Document,Value).
+    
+/* 
+ * get_key_document(Key,Ctx,Document,Value)
+ */ 
+get_key_document(Key,Ctx,Document,Value) :-
+    is_dict(JSON_LD),
+    % Law of recursion: Something must be getting smaller...
+    % This "something" is the removal of the context
+    % from the object to be expanded.
+    select_dict(_{'@context' : New_Ctx}, Document, Document_Ctx_Free),
+    !,
+    expand_context(New_Ctx,Ctx_Expanded),
+    merge_dictionaries(Ctx,Ctx_Expanded,Local_Ctx),
+
+    expand(Document_Ctx_Free,Local_Ctx,Document_Ctx_Free_Ex),
+
+    get_key_document(Key, Local_Ctx, Document_Ctx_Free_Ex, Value).
+get_key_document(Key,Ctx,Document,Value) :-
+    prefix_expand(Key,Ctx,KX),
+    get_dict(KX,Document,Value).
