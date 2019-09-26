@@ -1,13 +1,14 @@
-# TerminusDB
+# Terminus Server
 
-[![Build Status](https://travis-ci.com/terminusdb/terminusdb.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb)
+[![Build Status](https://travis-ci.com/terminusdb/terminus-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminus-server)
 
-TerminusDB is an open source model driven graph database for knowledge graph representation designed 
-specifically for the web-age. 
+TerminusDB is an open source model driven graph database for knowledge
+graph representation designed specifically for the web-age.
 
-TerminusDB features a RESTful API for interacting with knowledge graphs via the JSON-LD exchange 
-format. This means you can easily string together applications within your own toolchain which 
-utilise the powerful features of graph search and graph storage. 
+Terminus Server provides TerminusDB with a RESTful API for interacting
+with knowledge graphs via the JSON-LD exchange format. This means you
+can easily string together applications within your own toolchain
+which utilise the powerful features of graph search and graph storage.
 
 ## Release Schedule 
 
@@ -27,7 +28,7 @@ v0.2.2
 
 The automated build of the master branch can be run easily with:
 
-`docker run --name terminusdb -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminusdb:latest`
+`docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminus-server:latest`
 
 There will be tagged versions upon release.
 
@@ -42,13 +43,14 @@ There will be tagged versions upon release.
 
 ### Running from source
 
-Before you can begin modeling and manipulating data in TerminusDB, you
+Before you can begin modeling and manipulating data in Terminus Server, you
 need to get some required libraries and software.
 
 #### SWIPL 
 
-To use TerminusDB, you will need the SWIPL installation of prolog. To install this in Debian variants
-simply use the apt package manager: 
+To use Terminus Server, you will need the SWIPL installation of
+prolog. To install this in Debian variants simply use the apt package
+manager:
 
 ```
 apt install swi-prolog
@@ -83,13 +85,13 @@ git clone https://github.com/rdfhdt/hdt-cpp
 ... and follow the directions contained in the repostiory for the
 pre-requisites and building the code.
 
-#### TerminusDB
+#### Terminus Server
 
-The TerminusDB source tree should then be cloned from GitHub: 
+The Terminus Server source tree should then be cloned from GitHub: 
 
 ```
-git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
+git clone https://github.com/terminusdb/terminus-server
+cd terminus-server
 git submodule init
 git submodule update
 ```
@@ -115,10 +117,10 @@ Now you are ready to interact with the HTTP server.
 
 ### Microservices API
 
-TerminusDB is organised to be _web native_ which means that all actions and activities are easily 
-automated via a RESTful JSON-LD API.
+Terminus Server is organised to be _web native_ which means that all
+actions and activities are easily automated via a RESTful JSON-LD API.
 
-The Server API is documented [here](https://github.com/terminusdb/terminusdb/blob/master/API.md).
+The Server API is documented [here](https://github.com/terminusdb/terminus-server/blob/master/API.md).
 
 ### WOQL 
 
@@ -126,7 +128,7 @@ WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph
 fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
 a native data-structure in JavaScript, Python, Prolog or any other language which has the 
 
-The Syntax is documented [here](https://github.com/terminusdb/terminusdb/blob/master/SYNTAX.md).
+The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/SYNTAX.md).
 
 ## Why 
 
@@ -144,9 +146,14 @@ TerminusDB will:
 We currently have no client, so you'll have to use the RESTful API directly. You can find 
 examples at the TerminusDB repositories...
 
-In JavaScript: https://github.com/terminusdb/terminus-javascript-sdk
+The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you 
+assistance with programatic access.
 
-In Python: https://github.com/terminusdb/terminus-python-sdk
+The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example 
+application allowing manipulation of the database, queries and .
+
+The [Python client libraries](https://github.com/terminusdb/terminus-python-sdk) give you 
+access to the database from your Python code.
 
 ## Changes in this Version 
 
