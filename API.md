@@ -223,7 +223,33 @@ A terminus result  message
 ```
 
 ## Create Document
+
+POST http://localhost/DBID/document/DOCID
+
+curl -d "@my-doc.json" -X POST http://localhost/dima/document/terminusAPI
+
+```
+{
+   "@context":
+   {
+         "doc":"http://195.201.12.87:6363/dima/document/",
+         "owl":"http://www.w3.org/2002/07/owl#",
+         "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+         "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
+         "xsd":"http://www.w3.org/2001/XMLSchema#"
+    },
+    "terminus:document":{
+        "rdfs:label":[{"@value":"The Terminus API itself","@type":"xsd:string"}],
+        "rdfs:comment":[{"@value":"here we go","@type":"xsd:string"}],
+        "@type":"http://terminusdb.com/schema/documentation#APIDefinition",
+        "@id":"http://localhost/dima/document/terminusAPI"
+     },
+     "@type":"terminus:APIUpdate",
+     "terminus:user_key":"secret"
+}
+```
 ## Delete Document
+
 ## Get Document
 
 GET http://localhost/terminus/document/server?terminus:user_key=secret
