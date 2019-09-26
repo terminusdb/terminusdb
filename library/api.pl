@@ -37,7 +37,8 @@
 :- use_module(library(http/http_json)).
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_header)).
-:- use_module(library(http/json)). 
+:- use_module(library(http/http_cors)). 
+:- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 
 % Load capabilities library
@@ -79,31 +80,46 @@
 % We may want to allow this as a setting...
 http:location(root, '/', []).
 
-:- http_handler(root(.), connect_handler(Method),
+:- http_handler(root(.), cors_catch(connect_handler(Method)),
                 [method(Method),
                  methods([get,post])]). 
-:- http_handler(root(DB), db_handler(Method,DB),
+:- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
                 [method(Method),
                  methods([options,post,delete])]).
-:- http_handler(root(DB/schema), schema_handler(Method,DB), 
+:- http_handler(root(DB/schema), cors_catch(schema_handler(Method,DB)), 
                 [method(Method),
                  methods([options,get,post])]).
-:- http_handler(root(DB/frame), frame_handler(Method,DB), 
+:- http_handler(root(DB/frame), cors_catch(frame_handler(Method,DB)), 
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(root(DB/document/DocID), document_handler(Method,DB,DocID),
+:- http_handler(root(DB/document/DocID), cors_catch(document_handler(Method,DB,DocID)),
                 [method(Method),
                  methods([options,get,post,delete])]). 
-:- http_handler(root(DB/woql), woql_handler(Method,DB),
+:- http_handler(root(DB/woql), cors_catch(woql_handler(Method,DB)),
                 [method(Method),
                  methods([options,get,post,delete])]). 
-:- http_handler(root(DB/search), search_handler(Method,DB),
+:- http_handler(root(DB/search), cors_catch(search_handler(Method,DB)),
                 [method(Method),
                  methods([options,get,post,delete])]). 
 
-%%%%%%%%%%%%%%%%%%%% JSON Boilerplate %%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
-% Nothing here...
+% We want to use cors whenever we're throwing an error.
+:- set_setting(http:cors, [*]).
+
+% Evil mechanism for catching, putting CORS headers and re-throwing.
+:- meta_predicate cors_catch(0,?).
+cors_catch(M:Goal,Request) :-
+    Goal =.. [Handler|Args],
+    append(Args,[Request],New_Args),
+    NewGoal =.. [Handler|New_Args],
+    catch(call(M:NewGoal),
+          E,
+          (   cors_enable,
+              throw(E)
+          )
+         ).
+
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 

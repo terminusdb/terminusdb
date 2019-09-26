@@ -320,6 +320,9 @@ run_woql_test :-
     ->  interpolate(["curl killed with signal ",Signal], M),
         throw(error(M))
     ;   true),
+    
+    * read_string(Out, _, Line),
+    * writeq(Line),
 
     json_read_dict(Out, Term),
     close(Out),
