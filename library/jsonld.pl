@@ -8,8 +8,8 @@
               jsonld_triples/3,
               jsonld_triples/4,
               jsonld_id/2,
-              get_key_document/2,
-              get_key_document/3
+              get_key_document/3,
+              get_key_document/4
           ]).
 
 /** <module> JSON-LD
@@ -67,6 +67,13 @@ expand(JSON_LD, Context, JSON) :-
     merge_dictionaries(Context,Context_Expanded,Local_Context),
     expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
     put_dict('@context',JSON_Ex,Local_Context,JSON).
+expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
+    !,
+    prefix_expand(Type,Context,TypeX), 
+    JSON = _{'@type' : TypeX, '@value' : Value}.
+expand(_{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
+    !,
+    JSON = _{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
     % \+ select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
@@ -96,40 +103,44 @@ expand(JSON, _, JSON) :-
 expand(JSON, _, JSON) :-    
     string(JSON).
 
-expand_value(V,_{'@type' : "@id"},Ctx,Value) :-
-    % We are distributing to identify our arguments as IDs
+expand_value(V,Key_Ctx,Ctx,Value) :-
+    is_list(V),
     !,
-    (   is_list(V)
-    ->  maplist({Ctx}/[V1,V2]>>(
-                    (   string(V1)
-                    ->  prefix_expand(V1,Ctx,ExPrime),
-                        V2 = _{'@id' : ExPrime}
-                    ;   expand(V1,Ctx,V2))
-                ),V,Value)
-    ;   string(V)
+    maplist({Key_Ctx,Ctx}/[V1,V2]>>expand_value(V1,Key_Ctx,Ctx,V2),
+            V,Value).
+expand_value(V,Key_Ctx,Ctx,Value) :-
+    string(V),
+    !,
+    (   _{'@type' : "@id"} = Key_Ctx
+    %   Type ID distribution
     ->  prefix_expand(V, Ctx, Expanded),
         Value = _{'@id' : Expanded}
-    ;   expand(V,Ctx,Value)
+    ;   _{'@type' : "@id", '@id' : ID} = Key_Ctx
+    %   Fixed ID distribution
+    ->  Value = _{'@id' : ID}
+    ;   _{'@type' : Type} = Key_Ctx
+    ->  prefix_expand(Type,Ctx,EType),
+        Value = _{'@value' : V,
+                  '@type' : EType}
+    ;   _{'@language' : Lang} = Key_Ctx
+    ->  Value = _{'@value' : V,
+                  '@language' : Lang}
+    ;   _{} = Key_Ctx
+    ->  V = Value
+    ;   throw(error('Invalid key context in expand_value/4'))
     ).
-expand_value(V,_{'@type' : "@id", '@id' : ID},Ctx,Value) :-
-    %   We are distributing an @id which is *fixed*
+expand_value(V,Key_Ctx,Ctx,Value) :-
+    is_dict(V),
     !,
-    prefix_expand(ID,Ctx,V),
-    Value = _{'@id' : V}.
-expand_value(V,_{'@type' : Type},Ctx,Value) :-
-    %   We are distributing a type
-    !,
-    prefix_expand(Type,Ctx,EType),
-    Value = _{'@value' : V,
-              '@type' : EType}.
-expand_value(V,_{'@language' : Lang},Ctx,Value) :-
-    %   We are distributing a language
-    !,
-    prefix_expand(Lang,Ctx,ELang),
-    Value = _{'@value' : V,
-              '@language' : ELang}.
-expand_value(V,_{},_Ctx,V) :-
-    !.
+    (   _{'@type' : "@id", '@id' : _} :< Key_Ctx
+    ->  expand(V,Ctx,Value)
+    ;   _{'@type' : "@id"} :< Key_Ctx
+    ->  expand(V,Ctx,Value)
+    ;   is_dict(Key_Ctx)
+    ->  merge_dictionaries(V,Key_Ctx,V2),
+        expand(V2,Ctx,Value)
+    ;   throw(error('Invalid key context in expand_value/4'))
+    ).
 expand_value(_V,Key_Ctx,_Ctx,_Value) :-
     format(atom(M),'Unknown key context ~q', [Key_Ctx]),
     throw(error(M)).
@@ -469,7 +480,7 @@ get_key_document(Key,Document,Value) :-
  * get_key_document(Key,Ctx,Document,Value)
  */ 
 get_key_document(Key,Ctx,Document,Value) :-
-    is_dict(JSON_LD),
+    is_dict(Document),
     % Law of recursion: Something must be getting smaller...
     % This "something" is the removal of the context
     % from the object to be expanded.
@@ -477,10 +488,8 @@ get_key_document(Key,Ctx,Document,Value) :-
     !,
     expand_context(New_Ctx,Ctx_Expanded),
     merge_dictionaries(Ctx,Ctx_Expanded,Local_Ctx),
-
-    expand(Document_Ctx_Free,Local_Ctx,Document_Ctx_Free_Ex),
-
-    get_key_document(Key, Local_Ctx, Document_Ctx_Free_Ex, Value).
+    get_key_document(Key, Local_Ctx, Document_Ctx_Free, Value).
 get_key_document(Key,Ctx,Document,Value) :-
     prefix_expand(Key,Ctx,KX),
-    get_dict(KX,Document,Value).
+    expand(Document,Ctx,Document_Ex),
+    get_dict(KX,Document_Ex,Value).

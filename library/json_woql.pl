@@ -149,6 +149,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
+    ;   _{'@value' : V, '@type' : T } :< JSON
+    ->  WOQL = '^^'(V,T)
+    ;   _{'@value' : V, '@lang' : L } :< JSON
+    ->  WOQL = '@'(V,L)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
     ;   throw(http_reply(not_found({ '@type' : 'vio:WOQLSyntaxError',

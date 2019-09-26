@@ -234,8 +234,8 @@ get_collection_jsonld_context(Collection, Ctx) :-
  * for generic documents.
  */
 get_global_jsonld_context(Ctx) :-
-    forall(Key-Value,
-           global_prefixes(Key,Value),
-           Pairs),
+    findall(Key-Value,
+            global_prefixes(Key,Value),
+            Pairs),
     dict_create(Ctx,_,Pairs).
 

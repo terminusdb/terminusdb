@@ -533,13 +533,13 @@ try_get_param(Key,Request,Value) :-
 
     (   memberchk(payload(Document), Request)
     ->  true
-    ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Data]),
-        throw(http_reply(not_found(Data-MSG)))),
+    ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Request]),
+        throw(http_reply(not_found(MSG)))),
 
     (   get_key_document(Key, Document, Value)
     ->  true
-    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data-MSG)))),
+    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Document]),
+        throw(http_reply(not_found(MSG)))),
     !.
 try_get_param(Key,Request,_Value) :-
     % OTHER with method
@@ -681,8 +681,8 @@ try_dump_schema(DB_URI, Request) :-
     ).
 
 /* 
- * 
- * Need a try_update_schema here...
+ * try_update_schema(+DB_URI,+Name,+TTL,-Witnesses) is det.
+ *
  */
 try_update_schema(DB_URI,Name,TTL,Witnesses) :-
     coerce_literal_string(Name, NS),

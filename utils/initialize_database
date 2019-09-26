@@ -89,7 +89,7 @@ example_inference_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_inference_template.ttl'], Path).
 
 example_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../terminus-ontologies/terminus.owl.ttl'], Path).
+    atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
 
 database_path(Dir,Host,Path) :-
     www_form_encode(Host,Safe_Host),
