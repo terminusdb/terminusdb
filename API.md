@@ -210,6 +210,18 @@ A terminus result  message
   {"terminus:status":"terminus:success"}
 ```
 ## Delete Database
+Send a HTTP delete to the Database URL
+
+```
+curl -X "DELETE" http://localhost/tcre
+```
+
+### Return
+A terminus result  message 
+```
+  {"terminus:status":"terminus:success"}
+```
+
 ## Create Document
 ## Delete Document
 ## Get Document
