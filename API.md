@@ -15,7 +15,7 @@ The Terminus DB Server includes a built in HTTP server which implements the Term
 11. update_schema - POST http://terminus.db/dbname/schema  
 12. class_frame - GET http://terminus.db/dbname/frame  
 
-where dbname and docid are the local identifiers of a specific database and document respectively. 
+Where *dbname* and *docid* are the local identifiers of a specific database and document respectively. 
 
 ## Connect
 
