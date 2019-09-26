@@ -171,6 +171,13 @@ RETURN:
 
 ## Create Database
 
+```
+{"@context":{"rdfs":"http://www.w3.org/2000/01/rdf-schema#","terminus":"http://terminusdb.com/schema/terminus#"},"terminus:document":{"@type":"terminus:Database","rdfs:label":{"@language":"en","@value":"Testing Creation"},"rdfs:comment":{"@language":"en","@value":"Testing the create API"},"terminus:allow_origin":{"@type":"xsd:string","@value":"*"},"@id":"http://195.201.12.87:6363/tcre"},"@type":"terminus:APIUpdate","terminus:user_key":"root"}
+
+
+```
+
+
 ## Delete Database
 ## Create Document
 ## Delete Document
