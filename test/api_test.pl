@@ -69,6 +69,9 @@ run_db_create_test :-
         _,
         true),
 
+    atomic_list_concat([DB_URI,'/document'], Document),
+    atomic_list_concat([DB_URI,'/schema'], Schema),
+    
     Doc = _{'@context': _{
                             rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                             terminus:"http://terminusdb.com/schema/terminus#"
@@ -78,8 +81,8 @@ run_db_create_test :-
                                     'rdfs:comment':_{'@language':"en", '@value':"dasd"},
                                     'rdfs:label':_{'@language':"en", '@value':"asdsda"},
                                     'terminus:allow_origin':_{'@type':"xsd:string", '@value':"*"},
-                                    'terminus:instance':_{'@type':"xsd:string", '@value':"document"},
-                                    'terminus:schema':_{'@type':"xsd:string", '@value':"schema"}
+                                    'terminus:instance':_{'@type':"xsd:string", '@value': Document},
+                                    'terminus:schema':_{'@type':"xsd:string", '@value': Schema}
                                    },
             'terminus:user_key':"root"},
     
@@ -119,11 +122,12 @@ run_schema_update_test :-
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus.owl.ttl'], TTL_File),
+    atomic_list_concat([DB_URI,'/schema'], Schema),
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{
               'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-              'terminus:schema' : _{'@value': "schema", '@type' : "xsd:string"},
+              'terminus:schema' : _{'@value': Schema, '@type' : "xsd:string"},
               'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
            },
 
@@ -164,13 +168,11 @@ run_schema_get_test :-
     shell(Cmd).
 
 run_doc_get_test :-
-    % create DB
     config:server(Server),
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/admin?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_db_delete_test :-
-    % create DB
     config:server(Server),
 
     % Need to set the user key correctly here or we will get a spurious error...
@@ -180,7 +182,6 @@ run_db_delete_test :-
     shell(Cmd).
 
 run_get_filled_frame_test :-
-    % create DB
     config:server(Server),
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
@@ -266,23 +267,23 @@ run_woql_test :-
     atomic_list_concat([Server,'/terminus/document/'], Document),
     atomic_list_concat([Server,'/terminus/schema#'], Schema),
     atomic_list_concat([Server,'/terminus/'], Terminus),
-    atomic_list_concat([Server,'/'], G),
+    atomic_list_concat([Server,'/'], S),
 
     Query = 
-    _{'@context' : _{s : Schema,
+    _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : Terminus,
                      e : "",
-                     g : G},
-      from: ["g:terminus",
+                     s : S},
+      from: ["s:terminus",
              _{select: [
                    "v:Class", "v:Label", "v:Comment", "v:Abstract", 
                    _{and: [
-                         _{quad: ["v:Class", "rdf:type", "owl:Class", "e:schema"]},
-                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "e:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "e:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "e:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "e:schema"]}]}
+                         _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
+                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
                      ]
                     }
                ]

@@ -138,7 +138,7 @@ user_action(User,Action) :-
        ).
 
 /* 
- * auth_action_scop(Auth,Action,Scope) is nondet.
+ * auth_action_scope(Auth,Action,Scope) is nondet.
  * 
  * Does Auth object have capability Action on scope Scope.
  * 
@@ -179,7 +179,7 @@ add_database_resource(DB_Name,URI,Doc) :-
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
     /* Extend Doc with default databases */ 
-    extend_database_defaults(Doc, Ext),
+    extend_database_defaults(URI, Doc, Ext),
     
     terminus_database_name(Collection),
     connect(Collection, DB),

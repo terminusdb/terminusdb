@@ -126,12 +126,12 @@ terminus_database_name(Database_Name) :-
  */ 
 terminus_context(_{
                      doc : Doc,
-                     schema : Schema,
+                     scm : Schema,
                      terminus : 'http://terminusdb.com/schema/terminus#'
                    }) :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),
-    atomic_list_concat([Server,'/terminus/schema/'],Schema).
+    atomic_list_concat([Server,'/terminus/schema#'],Schema).
 
 
 /* 
@@ -142,10 +142,13 @@ terminus_context(_{
 */ 
 terminus_database(Database) :-
     terminus_database_name(Database_Name),
+    atomic_list_concat([Database_Name,'/',schema],Schema),
+    atomic_list_concat([Database_Name,'/',document],Instance),
+    atomic_list_concat([Database_Name,'/',inference],Inference),
     make_database([name=Database_Name,
-                   schema=[schema],
-                   inference=[inference],
-                   instance=[document]], Database).
+                   schema=[Schema],
+                   inference=[Inference],
+                   instance=[Instance]], Database).
 
 
 database_record_schema_list(Database_Name, Schemas) :-
@@ -230,9 +233,10 @@ make_database_from_database_name(Database_Name,Database) :-
  * 
  *
  */ 
-is_schema_graph(C,schema) :-
+is_schema_graph(C,S) :-
     terminus_database_name(C),
-    !.
+    !,
+    atomic_list_concat([C,'/schema'],S).
 is_schema_graph(C,S) :-
     database_record_schema_list(C,Schemata),
     member(S,Schemata).

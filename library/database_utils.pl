@@ -2,7 +2,7 @@
               create_db/1,
               delete_db/1,
               database_exists/1,
-              extend_database_defaults/2
+              extend_database_defaults/3
           ]).
 
 /** <module> Database Utilities
@@ -53,7 +53,7 @@ create_db(DB_URI) :-
 
     % create the collection if it doesn't exist
     (   database_exists(DB_URI)
-    ->  throw(http_reply(method_not_allowed('terminus:createdatabase')))
+    ->  throw(http_reply(method_not_allowed('terminus:create_database')))
     ;   true),
 
     collection_directory(DB_URI,DB_Path),
@@ -135,10 +135,12 @@ add_dictionary_default(Doc, Key, Default, New_Doc) :-
     ;   put_dict(Key, Doc, Default, New_Doc)
     ).
 
-extend_database_defaults(Doc,Ext) :-
+extend_database_defaults(URI,Doc,Ext) :-
+    format(string(Document),'~s~s',([URI,'/document'])),
     add_dictionary_default(Doc, 'http://terminusdb.com/schema/terminus#instance',
-                           _{'@value':"document", '@type':'http://www.w3.org/2001/XMLSchema#string'},
+                           _{'@value':Document, '@type':'http://www.w3.org/2001/XMLSchema#string'},
                            Doc1),
+    format(string(Schema),'~s~s',([URI,'/schema'])),
     add_dictionary_default(Doc1, 'http://terminusdb.com/schema/terminus#schema',
-                           _{'@value':"schema", '@type':'http://www.w3.org/2001/XMLSchema#string'},
+                           _{'@value':Schema, '@type':'http://www.w3.org/2001/XMLSchema#string'},
                            Ext).

@@ -65,7 +65,6 @@ global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
-global_prefixes(ex,'http://example.org/').
 
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
@@ -74,7 +73,7 @@ global_prefixes(ex,'http://example.org/').
 default_prefixes(C,doc,U) :-
     interpolate([C,'/',document,'/'], U).
 default_prefixes(C,scm,U) :-
-    interpolate([C,'/',schema,'/'], U).
+    interpolate([C,'/',schema,'#'], U).
 % internal
 default_prefixes(_,Pre,URI) :-
     global_prefixes(Pre,URI).

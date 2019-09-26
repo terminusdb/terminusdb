@@ -671,8 +671,9 @@ try_dump_schema(DB_URI, Request) :-
             try_get_param('terminus:encoding', Request, Encoding),
             (   coerce_literal_string(Encoding, ES),
                 atom_string('terminus:turtle',ES)
-            ->  checkpoint(DB_URI, schema),
-                checkpoint_to_turtle(DB_URI, schema, TTL_File),
+            ->  atomic_list_concat([DB_URI,'/schema'],Schema),
+                checkpoint(DB_URI, Schema),
+                checkpoint_to_turtle(DB_URI, Schema, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 delete_file(TTL_File),
                 config:server(SURI),

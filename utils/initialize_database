@@ -97,7 +97,9 @@ database_path(Dir,Host,Path) :-
 
 instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'document/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'document/1/'], Path).
 
 config_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config.pl'], Path).
@@ -107,14 +109,18 @@ config_template_path(Dir,Path) :-
 
 inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'inference/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'inference/1/'], Path).
 
 ttl_path(Dir, Path) :-
     atomic_list_concat([Dir,'1-ckp.ttl'], Path).
 
 schema_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'schema/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'schema/1/'], Path).
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),

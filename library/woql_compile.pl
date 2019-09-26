@@ -692,11 +692,7 @@ compile_wf(t(X,P,Y),Goal) -->
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {
-        database_name(G,C),            
-        database_instance(G,I),
-        (   I = [document]
-        ->  Search=inference:inferredEdge(XE,PE,YE,G)
-        ;   Search=xrdf(C,I,XE,PE,YE)),
+        Search=inference:inferredEdge(XE,PE,YE,G),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         append([[Search],XGoals,YGoals],
@@ -716,7 +712,8 @@ compile_wf(t(X,P,Y,G),Goal) -->
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         database_name(Database,C),
-        (   GE = [document]
+        (   database_record_instance_list(Database,L),
+            member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(C,[GE],XE,PE,YE)),
         

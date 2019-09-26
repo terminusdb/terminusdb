@@ -8,7 +8,7 @@ WOQL's primary syntax and interchange format is in JSON-LD. This gives us a rela
 ```
 {"@context" : {"@import": "https://terminusdb/contexts/woql/syntax/context.jsonld",
                "@propagate": true,
-               "db" : "http://localhost/testDB004/graph"},
+               "db" : "http://localhost:6363/testDB004/"},
  "from" : [ "db:main", 
             { "select" : [ "v:Object", "v:Class", "v:Class_Label", "v:Label", "v:Type", 
                            {"and" : [{"triple" : ["v:Object", "rdf:type", "v:Class"] }, 
