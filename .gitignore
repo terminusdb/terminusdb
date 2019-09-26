@@ -6,3 +6,6 @@ config.pl
 *.index.v1-1
 prefix.db
 tmp/*
+TAGS
+httpd.log
+transcript.pl
