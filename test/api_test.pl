@@ -241,7 +241,8 @@ run_doc_update_test :-
     ;   true),
 
     json_read_dict(Out, Term),
-
+    close(Out),
+    
     (   Term = _{'terminus:status' : "terminus:success"}
     ->  true
     ;   json_write_dict(current_output,Term,[]),
@@ -300,6 +301,32 @@ run_woql_test :-
     ),
 
     www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
+        
+    Args = ['-X','GET',URI],
     
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root\''], Cmd),
-    shell(Cmd).
+    format('~nRunning command: curl -X GET ~s~n',[URI]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+    
+    (   _{'bindings' : L} :< Term
+    ->  length(L, N),
+        N >= 8,
+        json_write_dict(current_output,Term,[])
+    ;   json_write_dict(current_output,Term,[]),
+        fail).
