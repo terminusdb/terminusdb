@@ -395,7 +395,12 @@ schema_handler(get,DB,Request) :-
     % check access rights
     verify_access(Auth,terminus/get_schema,DB_URI),
 
-    try_get_param('terminus:schema',Request,Name),
+    % Let's do a default schema if we can't find one.
+    catch(
+        try_get_param('terminus:schema',Request,Name),
+        _,
+        interpolate([DB_URI,'/schema'],Name)
+    ),
     
     try_dump_schema(DB_URI, Name, Request).
 schema_handler(post,DB,R) :- % should this be put?
