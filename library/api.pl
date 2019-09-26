@@ -136,8 +136,8 @@ authenticate(Request, Auth) :-
     ;   throw(http_reply(authorise('Not a valid key')))).
 
 verify_access(Auth, Action, Scope) :-
-    http_log_stream(Log),
-    format(Log,'Goal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
+    * http_log_stream(Log),
+    * format(Log,'Goal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
     (   auth_action_scope(Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
