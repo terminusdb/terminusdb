@@ -237,5 +237,8 @@ get_global_jsonld_context(Ctx) :-
     findall(Key-Value,
             global_prefixes(Key,Value),
             Pairs),
-    dict_create(Ctx,_,Pairs).
+    % This is sweeping a bug under the carpet
+    % KLUDGE
+    sort(Pairs,Sorted),
+    dict_create(Ctx,_,Sorted).
 

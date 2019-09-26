@@ -492,4 +492,21 @@ get_key_document(Key,Ctx,Document,Value) :-
 get_key_document(Key,Ctx,Document,Value) :-
     prefix_expand(Key,Ctx,KX),
     expand(Document,Ctx,Document_Ex),
-    get_dict(KX,Document_Ex,Value).
+    get_dict(KX,Document_Ex,Value1),
+
+    % Transform the value to canonical form
+    % if it is set so we can do comparison
+    (   member(Key,['@type', '@id']),
+        (   atom(Value)
+        ;   string(Value))
+    %   We are a value that could require expansion
+    ->  prefix_expand(Value,Ctx,Value2),
+        format('Value2: ~s ~n', [Value2]),
+        atom_string(Value1,Value2)
+    %   May want to do dictionary expansion here
+    %   to get canonical comparitives.
+    %   We probably need a Dict1 ~ Dict2 comparison
+    %   operator which uses an expanded canonical form
+    %   modulo adornments (like '@context').
+    ;   Value1 = Value).
+

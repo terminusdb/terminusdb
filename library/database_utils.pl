@@ -128,17 +128,17 @@ add_dictionary_default(Doc, Key, Default, New_Doc) :-
                 select_dict(Res, Default, _Rest)
             ->  Doc = New_Doc
             ;   put_dict(Key, Doc, [Default|Result], New_Doc)
-            )
+            )      
         ;   (   select_dict(Result, Default, _Rest)
             ->  Doc = New_Doc
-            ;   Doc = [Default,Result]))
+            ;   put_dict(Key, Doc, [Default,Result], New_Doc)))
     ;   put_dict(Key, Doc, Default, New_Doc)
     ).
 
 extend_database_defaults(Doc,Ext) :-
-    add_dictionary_default(Doc, 'terminus:instance',
-                           _{'@value':"document", '@type':"xsd:string"},
+    add_dictionary_default(Doc, 'http://terminusdb.com/schema/terminus#instance',
+                           _{'@value':"document", '@type':'http://www.w3.org/2001/XMLSchema#string'},
                            Doc1),
-    add_dictionary_default(Doc1, 'terminus:schema',
-                           _{'@value':"schema", '@type':"xsd:string"},
+    add_dictionary_default(Doc1, 'http://terminusdb.com/schema/terminus#schema',
+                           _{'@value':"schema", '@type':'http://www.w3.org/2001/XMLSchema#string'},
                            Ext).

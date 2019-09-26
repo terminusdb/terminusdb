@@ -173,7 +173,7 @@ add_database_resource(DB_Name,URI,Doc) :-
     ;   true),
     
     /* This check is required to cary out appropriate auth restriction */
-    (   get_dict('@type', Doc, "terminus:Database")
+    (   get_key_document('@type', Doc, 'terminus:Database')
     ->  true
     ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
         throw(http_reply(method_not_allowed(URI,MSG)))),

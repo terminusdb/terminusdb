@@ -464,17 +464,18 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     
     (   database_name(Database,Collection),
         get_collection_jsonld_context(Collection,Ctx),
-        prefix_expand(Doc_ID,Ctx,Doc_ID_Ex),
-        prefix_expand(Doc_ID_Match,Ctx,Doc_ID_Match_Ex),        
-        Doc_ID_Ex = Doc_ID_Match_Ex
+        get_key_document('@id',Ctx,Doc,Doc_ID_Match)
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
-        throw(http_reply(not_found(Doc_ID-MSG)))),
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure'})))),
 
     % We probably need to be able to pass the document graph as a parameter
     (   document_transaction(Database, document, frame:update_object(Doc,Database), Witnesses)
     ->  true
-    ;   throw(http_reply(not_found(Doc_ID-'Unable to get object at Doc_ID')))).
+    ;   format(atom(MSG),'Unable to get object at Doc_ID: ~q', [Doc_ID]),
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure'})))).
 
 /* 
  * try_db_uri(DB,DB_URI) is det. 
@@ -589,14 +590,16 @@ try_create_db(DB,DB_URI,Doc) :-
         (   (   add_database_resource(DB,DB_URI,Doc)
             ->  true
             ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
-                throw(http_reply(not_found(DB_URI-MSG)))),
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'})))),
 
             (   http_log_stream(Log),
                 format(Log,'~n~q~n',[create_db(DB_URI)]),
                 create_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
-                throw(http_reply(not_found(DB_URI-MSG))))
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'}))))
             
         )).
 
@@ -610,12 +613,14 @@ try_delete_db(DB_URI) :-
         (   (   delete_database_resource(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
-                throw(http_reply(not_found(DB_URI-MSG)))),
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'})))),
 
             (   delete_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
-                throw(http_reply(not_found(DB_URI-MSG)))
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'})))
             )
         )).
 

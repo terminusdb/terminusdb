@@ -155,8 +155,8 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = '@'(V,L)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
-    ;   throw(http_reply(not_found({ '@type' : 'vio:WOQLSyntaxError',
-                                     'vio:message' :'Un-parsable Query',
+    ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                     'terminus:message' :'Un-parsable Query',
                                      'vio:query' : JSON})))
     ).
 json_to_woql_ast(JSON,WOQL) :-
@@ -167,7 +167,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   A = WOQL
     ).
 json_to_woql_ast(JSON,_) :-
-    throw(http_reply(not_found('Un-parsable Query'-JSON))).
+    format(atom(Msg), 'Un-parsable Query: ~q', [JSON]),
+    throw(http_reply(not_found(_{'terminus:message' : Msg,
+                                 'vio:query' : JSON,
+                                 'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
     atom_concat('http://terminusdb.com/woql/variable/',_,A).

@@ -88,10 +88,31 @@ run_db_create_test :-
         json_write_dict(current_output, Doc, [])        
     ),
 
-    atomic_list_concat(['curl -d \'',Payload,'\' -H "Content-Type: application/json" -X POST ',Server,'/terminus_qa_test'], Cmd),
+    atomic_list_concat([Server,'/terminus_qa_test'], URI),
+
+    Args = ['-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
+
+    format('~nRunning command: curl -X POST ~s...~n',[URI]),
     
-    format('~nRunning command: "~s"~n',[Cmd]),        
-    shell(Cmd).
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+
+    json_read_dict(Out, Term),
+    (   Term = _{'terminus:status' : "terminus:success"}
+    ->  true
+    ;   json_write_dict(current_output,Term,[]),
+        fail),
+    
+    close(Out).
+
 
 run_schema_update_test :-
     config:server(Server),
@@ -257,11 +278,11 @@ run_woql_test :-
              _{select: [
                    "v:Class", "v:Label", "v:Comment", "v:Abstract", 
                    _{and: [
-                         _{triple: ["v:Class", "rdf:type", "owl:Class", "e:schema"]},
-                         _{not: [_{triple: ["v:Class", "tcs:tag", "tcs:abstract", "e:schema"]}]},
-                         _{opt: [_{triple: ["v:Class", "rdfs:label", "v:Label", "e:schema"]}]},
-                         _{opt: [_{triple: ["v:Class", "rdfs:comment", "v:Comment", "e:schema"]}]},
-                         _{opt: [_{triple: ["v:Class", "tcs:tag", "v:Abstract", "e:schema"]}]}
+                         _{quad: ["v:Class", "rdf:type", "owl:Class", "e:schema"]},
+                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "e:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "e:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "e:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "e:schema"]}]}
                      ]
                     }
                ]
