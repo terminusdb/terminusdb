@@ -192,7 +192,9 @@ json_to_woql_arith(JSON,WOQL) :-
         xfy_list('/', WOQL, WOQL_Args)
     ;   is_json_var(JSON),
         WOQL = v(JSON)
-    ;   throw(http_reply(not_found('Unknown Syntax:'-JSON)))
+    ;   throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
+                                     'vio:query' : JSON,
+                                     'terminus:status' : 'terminus:failure'})))
     ).
 json_to_woql_arith(JSON,JSON) :-
     number(JSON).
