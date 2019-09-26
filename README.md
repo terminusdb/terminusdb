@@ -19,7 +19,7 @@ Caveat Puller!
 
 ## Latest Version 
 
-v0.1.1
+v0.2.2
 
 ## Getting Started
 
@@ -157,7 +157,7 @@ In Python: https://github.com/terminusdb/terminus-python-sdk
 
 ## TODO
 
-* Need to finish porting of all XSD and OWL constraint checking. 
+* Write tests for Document API
 
 ## Authors
 
