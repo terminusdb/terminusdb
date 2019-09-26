@@ -113,9 +113,20 @@ Now you are ready to interact with the HTTP server.
 
 ## Documentation 
 
+### Microservices API
+
+TerminusDB is organised to be _web native_ which means that all actions and activities are easily 
+automated via a RESTful JSON-LD API.
+
 The Server API is documented [here](https://github.com/terminusdb/terminusdb/blob/master/API.md).
 
-WOQL Syntax is documented [here](https://github.com/terminusdb/terminusdb/blob/master/SYNTAX.md).
+### WOQL 
+
+WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph extracting graph 
+fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
+a native data-structure in JavaScript, Python, Prolog or any other language which has the 
+
+The Syntax is documented [here](https://github.com/terminusdb/terminusdb/blob/master/SYNTAX.md).
 
 ## Why 
 
