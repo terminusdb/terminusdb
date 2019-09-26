@@ -21,24 +21,20 @@ where dbname and docid are the local identifiers of a specific database and docu
 
 GET http://terminus.db/
 Arguments: terminus:user_key="..."
-Return: terminus:Capability
+
+### Return: terminus:Capability
 
 ```
-curl "http://195.201.12.87:6363?terminus:user_key=root"
+curl "http://localhost?terminus:user_key=secret"
+
+RETURN:
+
 "@context": {
-    "dcog":"https://datachemist.net/ontology/dcog#",
-    "dcogbox":"https://datachemist.net/ontology/dcogbox#",
-    "doc":"http://195.201.12.87:6363/terminus/document/",
-    "ex":"http://example.org/",
+    "doc":"http://localhost/terminus/document/",
     "owl":"http://www.w3.org/2002/07/owl#",
     "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
-    "rvo":"https://datachemist.net/ontology/rvo#",
-    "schema":"http://195.201.12.87:6363/terminus/schema/",
-    "scm":"http://195.201.12.87:6363/terminus/schema/",
-    "terminus":"https://datachemist.net/ontology/terminus#",
-    "xdd":"https://datachemist.net/ontology/xdd#",
-    "xsd":"http://www.w3.org/2001/XMLSchema#"
+    "terminus": "http://terminusdb.com/schema/terminus#"
   },
   "@id":"doc:admin",
   "@type":"terminus:User",
@@ -71,7 +67,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/dbWhichIAmGoingToDelete"
+          "@value":"http://localhost/dbWhichIAmGoingToDelete"
         },
         "terminus:instance": {"@type":"xsd:string", "@value":"document"},
         "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
@@ -87,7 +83,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/dima"
+          "@value":"http://localhost/dima"
         },
         "terminus:instance": {"@type":"xsd:string", "@value":"document"},
         "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
@@ -100,7 +96,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/documentation"
+          "@value":"http://localhost/documentation"
         },
         "terminus:instance": {"@type":"xsd:string", "@value":"document"},
         "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
@@ -113,7 +109,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/documentaton"
+          "@value":"http://localhost/documentaton"
         },
         "terminus:instance": {"@type":"xsd:string", "@value":"document"},
         "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
@@ -129,7 +125,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/terminus"
+          "@value":"http://localhost/terminus"
         }
       },
       {
@@ -140,7 +136,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
         "terminus:id": {
           "@type":"xsd:anyURI",
-          "@value":"http://195.201.12.87:6363/test"
+          "@value":"http://localhost/test"
         },
         "terminus:instance": {"@type":"xsd:string", "@value":"document"},
         "terminus:schema": {"@type":"xsd:string", "@value":"schema"}
@@ -154,7 +150,7 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
         },
         "rdfs:label": {"@language":"en", "@value":"The DB server"},
         "terminus:allow_origin": {"@type":"xsd:string", "@value":"*"},
-        "terminus:id": {"@type":"xsd:anyURI", "@value":"http://195.201.12.87:6363"},
+        "terminus:id": {"@type":"xsd:anyURI", "@value":"http://localhost"},
         "terminus:resource_includes": [
           {
             "@id":"doc:dbWhichIAmGoingToDelete",
@@ -171,9 +167,10 @@ curl "http://195.201.12.87:6363?terminus:user_key=root"
     ]
   }
 }
-
 ```
+
 ## Create Database
+
 ## Delete Database
 ## Create Document
 ## Delete Document
