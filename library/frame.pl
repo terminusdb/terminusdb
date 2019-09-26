@@ -25,7 +25,8 @@
               delete_object/2,
               update_object/2,
               update_object/3,
-              document_filled_class_frame_jsonld/4
+              document_filled_class_frame_jsonld/4,
+              object_instance_graph/3
           ]).
 
 /** <module> Frames
@@ -961,6 +962,22 @@ object_references(URI,Database,Edges) :-
             inferredEdge(Elt, Prop, URI, Database),
             Edges).
 
+/* 
+ * object_instance_graph(JSON_or_URI,Database,I) is det.
+ */ 
+object_instance_graph(URI,Database,I) :-
+    atom(URI),
+    !,
+    database_name(Database,Name),
+    database_instance(Database,Instance),
+    member(I,Instance),
+    % Defo exists here.
+    once(xrdf(Name,[I],URI,rdf:type,_)).
+object_instance_graph(JSON,Database,I) :-
+    is_dict(JSON),    
+    get_dict('@id', JSON, URI),
+    object_instance_graph(URI,Database,I).
+        
 /* 
  * delete_object(URI,Database) is det.
  * 

@@ -122,12 +122,13 @@ run_schema_update_test :-
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus.owl.ttl'], TTL_File),
-    atomic_list_concat([DB_URI,'/schema'], Schema),
+    
+    atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{
               'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-              'terminus:schema' : _{'@value': Schema, '@type' : "xsd:string"},
+              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"},
               'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
            },
 
@@ -136,7 +137,6 @@ run_schema_update_test :-
         json_write_dict(current_output, Doc, [])        
     ),
 
-    atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
     Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
@@ -164,7 +164,10 @@ run_schema_update_test :-
     
 run_schema_get_test :-
     config:server(Server),
-    atomic_list_concat(['curl \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle\''], Cmd),
+    atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
+    www_form_encode(Schema,S),
+                       
+    atomic_list_concat(['curl \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
     shell(Cmd).
 
 run_doc_get_test :-

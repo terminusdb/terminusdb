@@ -15,7 +15,8 @@
               database_record_instance_list/2,
               database_record_schema_list/2,
               database_record_inference_list/2,
-              is_schema_graph/2
+              is_schema_graph/2,
+              default_instance_graph/2
           ]).
 
 /** <module> Implementation of database graph management
@@ -240,3 +241,15 @@ is_schema_graph(C,S) :-
 is_schema_graph(C,S) :-
     database_record_schema_list(C,Schemata),
     member(S,Schemata).
+
+
+default_instance_graph(Database,I) :-
+    database_name(Database, Name),
+    interpolate([Name,'/document'],I),
+    (   database_record_instance_list(Name,Instances),
+        member(I, Instances)
+    ->  true
+    ;   format(atom(MSG),'Unable to guess a valid document store for database: ~q', [Database]),
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure'})))
+    ).

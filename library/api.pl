@@ -379,7 +379,9 @@ schema_handler(get,DB,Request) :-
     % check access rights
     verify_access(Auth,terminus/get_schema,DB_URI),
 
-    try_dump_schema(DB_URI, Request).
+    try_get_param('terminus:schema',Request,Name),
+    
+    try_dump_schema(DB_URI, Name, Request).
 schema_handler(post,DB,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
     
@@ -442,7 +444,13 @@ try_get_filled_frame(ID,Database,Object) :-
  * http error otherwise.
  */
 try_delete_document(Doc_ID, Database, Witnesses) :-
-    (   document_transaction(Database, document, frame:delete_object(Doc_ID,Database), Witnesses)
+    (   object_instance_graph(Doc_ID, Database, Document_Graph)
+    ->  true
+    ;   default_instance_graph(Database, Document_Graph)
+    ),
+    
+    (   document_transaction(Database, Document_Graph,
+                             frame:delete_object(Doc_ID,Database), Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
         throw(http_reply(not_found(Doc_ID-MSG)))).
@@ -470,10 +478,15 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure'})))),
 
-    % We probably need to be able to pass the document graph as a parameter
-    (   document_transaction(Database, document, frame:update_object(Doc,Database), Witnesses)
+    (   object_instance_graph(Doc, Database, Document_Graph)
     ->  true
-    ;   format(atom(MSG),'Unable to get object at Doc_ID: ~q', [Doc_ID]),
+    ;   default_instance_graph(Database, Document_Graph)
+    ),
+    
+    % We probably need to be able to pass the document graph as a parameter
+    (   document_transaction(Database, Document_Graph, frame:update_object(Doc,Database), Witnesses)
+    ->  true
+    ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure'})))).
 
@@ -525,7 +538,8 @@ try_get_param(Key,Request,Value) :-
     (   memberchk(Key=Value,Data)        
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(Data-MSG)))),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG})))),
     !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
@@ -535,12 +549,14 @@ try_get_param(Key,Request,Value) :-
     (   memberchk(payload(Document), Request)
     ->  true
     ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Request]),
-        throw(http_reply(not_found(MSG)))),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG})))),
 
     (   get_key_document(Key, Document, Value)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Document]),
-        throw(http_reply(not_found(MSG)))),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG})))),
     !.
 try_get_param(Key,Request,_Value) :-
     % OTHER with method
@@ -552,7 +568,8 @@ try_get_param(Key,Request,_Value) :-
 try_get_param(Key,_Request,_Value) :-
     % Catch all. 
     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
-    throw(http_reply(not_found(Key-MSG))).
+    throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                 'terminus:message' : MSG}))).
 
 /* 
  * get_param_default(Key,Request:request,Value,Default) is semidet.
@@ -664,16 +681,15 @@ try_class_frame(Class,Database,Frame) :-
  * 
  * Write schema to current stream
  */ 
-try_dump_schema(DB_URI, Request) :-
+try_dump_schema(DB_URI, Name, Request) :-
     with_mutex(
         DB_URI,
         (
             try_get_param('terminus:encoding', Request, Encoding),
             (   coerce_literal_string(Encoding, ES),
                 atom_string('terminus:turtle',ES)
-            ->  atomic_list_concat([DB_URI,'/schema'],Schema),
-                checkpoint(DB_URI, Schema),
-                checkpoint_to_turtle(DB_URI, Schema, TTL_File),
+            ->  checkpoint(DB_URI, Name),
+                checkpoint_to_turtle(DB_URI, Name, TTL_File),
                 read_file_to_string(TTL_File, String, []),
                 delete_file(TTL_File),
                 config:server(SURI),
