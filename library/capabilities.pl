@@ -242,14 +242,14 @@ write_cors_headers(Resource_URI) :-
     format(Out,'Access-Control-Max-Age: 1728000\n',[]),
     format(Out,'Access-Control-Allow-Headers: Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]), 
     format(Out,'Access-Control-Allow-Origin: ',[]),
-    write_domains(Out,Origins),
+    write_domains(Origins, Out),
     format(Out,'\n',[]).
 
-write_domains(_,[]).
-write_domains(Out,[H|T]) :-
-    write(Out,H),
-    (   T == []
+write_domains([], _).
+write_domains([Domain| Domains], Out) :-
+    write(Out, Domain),
+    (   Domains == []
     ->  true
     ;   write(' '),
-        write_domains(Out,T)
+        write_domains(Domains, Out)
     ).

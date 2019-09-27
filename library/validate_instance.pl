@@ -432,7 +432,7 @@ refute_inverse_functional_property(X,P,Y,Database,Reason) :-
              }.
 
 days_in_month(_,1,31).
-days_in_month(Y,2,D) :- Ans is Y mod 4, Ans = 0 -> D = 29 ; D = 28 .
+days_in_month(Y,2,D) :- (Y mod 4 =:= 0 -> D = 29 ; D = 28).
 days_in_month(_,3,31).
 days_in_month(_,4,30).
 days_in_month(_,5,31).

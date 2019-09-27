@@ -124,17 +124,17 @@ write_triple(C,G,Type,PX,PY,PZ) :-
  * make static code references to ontologies less painful.
  */
 user:goal_expansion(write_triple(DB,G,T,A,Y,Z),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(A),
+    nonvar(A),
     global_prefix_expand(A,X).
 user:goal_expansion(write_triple(DB,G,T,X,B,Z),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(B),
+    nonvar(B),
     global_prefix_expand(B,Y).
 user:goal_expansion(write_triple(DB,G,T,X,Y,C),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),
+    nonvar(C),
+    C \= literal(_),
     global_prefix_expand(C,Z).
 user:goal_expansion(write_triple(DB,G,T,X,Y,literal(L)),write_triple(DB,G,T,X,Y,Object)) :-
-    \+ var(L),
+    nonvar(L),
     literal_expand(literal(L),Object).
 
 

@@ -357,12 +357,7 @@ turtle_file_type(File) :-
 graph_file_timestamp_compare(File1,File2,Order) :-
     graph_file_timestamp(File1,TimeStamp1),
     graph_file_timestamp(File2,TimeStamp2),
-    (   TimeStamp1 > TimeStamp2
-    ->  Order=(>)
-    ;   TimeStamp2 > TimeStamp1
-    ->  Order=(<)
-    ;   Order=(=)
-    ).
+	compare(Order, TimeStamp1, TimeStamp2).
 
 /**
  * graph_dir_timestamp_gt(+File1,+File2) is det.

@@ -96,7 +96,7 @@ expand(JSON_LD, Context, JSON) :-
 expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
-    maplist({Context}/[JL,J]>>(expand(JL,Context,J)),JSON_LD,JSON).
+    maplist({Context}/[JL,J]>>expand(JL,Context,J),JSON_LD,JSON).
 expand(JSON, _, JSON) :-
     atom(JSON),
     !.
@@ -215,7 +215,7 @@ prefix_expand(K,Context,Key) :-
  */
 expand_context(Context,Context_Expanded) :-
     dict_pairs(Context,_,Pairs),
-    maplist({Context}/[K-V,Key-V]>>(context_prefix_expand(K,Context,Key)), Pairs, Expanded_Pairs),
+    maplist({Context}/[K-V,Key-V]>>context_prefix_expand(K,Context,Key), Pairs, Expanded_Pairs),
     dict_create(Context_Expanded, _, Expanded_Pairs).
 
 /* 
@@ -261,7 +261,7 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
  */
 compress(JSON,Context,JSON_LD) :-
     dict_pairs(Context, _, Pairs),
-    include([_A-B]>>(atom(B)), Pairs, Valid_Pairs),
+    include([_A-B]>>atom(B), Pairs, Valid_Pairs),
     compress_aux(JSON,Valid_Pairs,JSON_Pre),
 
     extend_with_context(JSON_Pre,Context,JSON_LD).
@@ -292,7 +292,7 @@ compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
 compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_list(JSON),
     !,
-    maplist({Ctx_Pairs}/[Obj,Transformed]>>( compress_aux(Obj,Ctx_Pairs,Transformed)), JSON, JSON_LD).
+    maplist({Ctx_Pairs}/[Obj,Transformed]>>compress_aux(Obj,Ctx_Pairs,Transformed), JSON, JSON_LD).
 compress_aux(JSON,_Ctx_Pairs,JSON) :-
     string(JSON),
     !.
@@ -312,14 +312,14 @@ term_jsonld(literal(type(T,D)),_{'@type' : T, '@value' : D}).
 term_jsonld(literal(lang(L,D)),_{'@language' : L, '@value' : D}).
 term_jsonld(Term,JSON) :-
     is_list(Term),
-    maplist([A=B,A-JSON_B]>>(term_jsonld(B,JSON_B)), Term, JSON_List),
+    maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),
     % We are a dictionary not a list.
     !,
     dict_pairs(JSON, _, JSON_List).
 term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
-    maplist([Obj,JSON]>>(term_jsonld(Obj,JSON)), Term, JSON).
+    maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
 term_jsonld(JSON,JSON).
 
 /* 
@@ -409,9 +409,8 @@ jsonld_triples_aux(List, Ctx, Database, Triples) :-
     is_list(List),
     !,
     
-    maplist({Ctx,Database}/[Obj,Ts]>>(
-                jsonld_triples_aux(Obj,Ctx,Database,Ts)
-            ),
+    maplist({Ctx,Database}/[Obj,Ts]>>
+                jsonld_triples_aux(Obj,Ctx,Database,Ts),
             List,
             Ts_List),
     append(Ts_List, Triples).

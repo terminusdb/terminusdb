@@ -391,7 +391,7 @@ simplify_restriction_list(T,R,S) :-
  */ 
 normalise_restriction([type=sub, operands=Results],N) :-
     !,
-    maplist([X,Y]>>(normalise_restriction(X,Y)),Results,Normalised),
+    maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
     exclude([X]>>(X=true),Normalised,Result),
     debug(normalise,'normalise_restriction sub: ~p',[Result]),
     (   exclude([F]>>(F=[type=T|_], member(T,[and,sub])), Result, [])
@@ -400,7 +400,7 @@ normalise_restriction([type=sub, operands=Results],N) :-
     simplify_restriction_list(sub,Acc,N).
 normalise_restriction([type=and, operands=Results],N) :-
     !,
-    maplist([X,Y]>>(normalise_restriction(X,Y)),Results,Normalised),
+    maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
     exclude([X]>>(X=true),Normalised,Result),
     debug(normalise,'normalise_restriction and: ~p',[Result]),
     (   exclude([F]>>(F=[type=T|_], member(T,[and,sub])), Result, [])
@@ -413,7 +413,7 @@ normalise_restriction([type=or, operands=Results],N) :-
     simplify_restriction_list(or,Normalised,N).
 normalise_restriction([type=xor, operands=Results],N) :-
     !,
-    maplist([X,Y]>>(normalise_restriction(X,Y)),Results,Normalised),
+    maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
     exclude([X]>>(X=true),Normalised,Result),
     simplify_restriction_list(xor,Result,N).
 normalise_restriction([uri=U|Res],[uri=U|Res]) :-
@@ -951,7 +951,7 @@ object_edges(URI,Database,Edges) :-
 object_references(URI,Database,Edges) :-
     database_name(Database,C),
     database_instance(Database,G),
-
+    % TBD: much more efficient to represent edges as e.g. e(C,G,Elt,Prop,URI)
     findall((C,G,Elt,Prop,URI),
             inferredEdge(Elt, Prop, URI, Database),
             Edges).
@@ -984,7 +984,7 @@ delete_object(URI,Database) :-
     object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
     
-    maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Edges).
+    maplist([(C,[G],X,Y,Z)]>>delete(C,G,X,Y,Z), Edges).
 
 /* 
  * update_object(Obj:dict,Database) is det.
@@ -1022,9 +1022,9 @@ update_object(ID, Obj, Database) :-
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
-    maplist([(C,[G],X,Y,Z)]>>(insert(C,G,X,Y,Z)), Inserts),
+    maplist([(C,[G],X,Y,Z)]>>insert(C,G,X,Y,Z), Inserts),
     
-    maplist([(C,[G],X,Y,Z)]>>(delete(C,G,X,Y,Z)), Deletes).
+    maplist([(C,[G],X,Y,Z)]>>delete(C,G,X,Y,Z), Deletes).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 
