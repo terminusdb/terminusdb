@@ -65,7 +65,7 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result)
     phrase((whites,
             guess_number(Ans,",","."),
             whites),
-           Codes,[]),
+           Codes),
     number_string(Result,Ans),
     !.
 guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result))) :-
@@ -75,7 +75,7 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result)
     phrase((whites,
             guess_number(Ans,".",","),
             whites),
-           Codes,[]),
+           Codes),
     number_string(Result,Ans).
 
 triplet(Number_String) -->
