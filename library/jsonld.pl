@@ -302,7 +302,7 @@ compress_aux(JSON,_Ctx_Pairs,JSON) :-
 compress_aux(URI,Ctx_Pairs,Folded_URI) :-
     atom(URI),
     compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
-compress_aux(time(H, M, S),_Ctx_Pairs, _{'@value' : Atom, '@type' : 'xsd:time'}) :-
+compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
 
 /* 
