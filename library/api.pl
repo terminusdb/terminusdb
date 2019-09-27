@@ -115,19 +115,21 @@ cors_catch(M:Goal,Request) :-
           (   cors_enable,
               http_log_stream(Log),
               format(Log,'Error: ~q~n',[E]),
-              customise_error(E,F),
-              throw(F)
+              customise_error(E)
           )
          ).
 
+customise_error(syntax_error(M)) :-
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:witnesses' : M},
+               [status(400)]).
 
-customise_error(syntax_error(M),E) :-
-    E = http_reply(bad_request(_{'terminus:status' : 'terminus:failure',
-                                 'terminus:message' : M})).
-customise_error(error(syntax_error(M),_),E) :-
-    E = http_reply(bad_request(_{'terminus:status' : 'terminus:failure',
-                                 'terminus:message' : M})).
-customise_error(E,E).
+customise_error(error(syntax_error(M),_)) :-
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:witnesses' : M},
+               [status(400)]).
+customise_error(E) :-
+    throw(E).
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -183,7 +185,7 @@ reply_with_witnesses(Resource_URI, Witnesses) :-
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
     ;   reply_json(_{'terminus:status' : 'terminus:failure',
                      'terminus:witnesses' : Witnesses},
-                   [code(406)])
+                   [status(406)])
     ).
 
 
