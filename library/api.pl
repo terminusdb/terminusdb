@@ -113,6 +113,8 @@ cors_catch(M:Goal,Request) :-
     catch(call(M:Goal, Request),
           E,
           (   cors_enable,
+              http_log_stream(Log),
+              format(Log,'Error: ~q~n',[E]),
               customise_error(E,F),
               throw(F)
           )
