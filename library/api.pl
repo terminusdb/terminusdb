@@ -121,9 +121,9 @@ cors_catch(M:Goal,Request) :-
 
 customise_error(syntax_error(M)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : M},
+                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                           'vio:literal' : M}]},
                [status(400)]).
-
 customise_error(error(syntax_error(M),_)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
