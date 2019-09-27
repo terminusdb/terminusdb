@@ -116,10 +116,16 @@ cors_catch(M:Goal,Request) :-
     catch(call(M:NewGoal),
           E,
           (   cors_enable,
-              throw(E)
+              customise_error(E,F),
+              throw(F)
           )
          ).
 
+
+customise_error(syntax_error(M),E) :-
+    E = http_reply(bad_request(_{'terminus:status' : 'terminus:failure',
+                                 'terminus:message' : M})).
+customise_error(E,E).
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
