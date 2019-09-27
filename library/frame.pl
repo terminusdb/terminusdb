@@ -623,18 +623,12 @@ class_frame_aux(Class, Database, Frame) :-
         calculate_frame(Class,Properties,RestrictionFormula,Database,Frame)
     ;   Frame = [type=failure, message='No Class Formula!', class=Class]).
 
-
-/********************************************************************
- * Warning - Filled Class Frames are unlikely to work at the moment.*
- * They are left as documentation.                                  *
- ********************************************************************/
-
 /** 
- * fill_class_frame_aux(+Elt,+Database,-Frame,-Filled) is det.
+ * fill_class_frame(+Elt,+Database,-Frame,-Filled) is det.
  * 
  * Fill a class frame with values to recreate the LDO structure.
  *
- * NOTE: This should probably be obsoleted in favour of realisers
+ * NOTE: This should probably be upgraded to JSON-LD using dictionaries.
  */ 
 fill_class_frame(_,_,[],[]) :- !.
 fill_class_frame(Elt,Database,[[type=objectProperty|P]|Rest], Frames) :-
@@ -721,8 +715,8 @@ document_filled_frame(Document,Database,Filled) :-
  * Does not actually appear to be det!
  */
 realiser(Elt,Frame,Database,Depth,['@type'=Class,
-                                '@id'=Elt
-                                |Realisers]) :-
+                                   '@id'=Elt
+                                   |Realisers]) :-
     instanceClass(Elt,Class,Database),
     realise_frame(Elt,Frame,Database,Depth,Realisers).
 

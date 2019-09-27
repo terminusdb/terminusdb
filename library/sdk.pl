@@ -80,7 +80,7 @@ ask(Server,Pre_Term) :-
            bindings=Bindings_Out,New_Ctx),
     compile_query(Term,Prog,New_Ctx,_),
     debug(sdk,'Program: ~q~n', [Prog]), 
-    call(woql_compile:Prog).
+    woql_compile:Prog.
 
 ask(Pre_Term) :-
     empty_ctx(Ctx),
