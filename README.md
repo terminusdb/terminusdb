@@ -162,6 +162,12 @@ access to the database from your Python code.
 * Added database initialisation utility 
 * Added code for instance and schema checking
 
+## Future 
+
+We are eagerly awaiting the release of our new highly scalable lock-free storage layer, 
+[terminus-store](https://github.com/terminusdb/terminus-store), which will be integrated 
+into Terminus-server in a future release.
+
 ## TODO
 
 * Write tests for Document API
