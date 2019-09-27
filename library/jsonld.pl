@@ -504,8 +504,8 @@ get_key_document(Key,Ctx,Document,Value) :-
         ;   string(Value))
     %   We are a value that could require expansion
     ->  prefix_expand(Value,Ctx,Value2),
-        format('Value2: ~s ~n', [Value2]),
-        atom_string(Value1,Value2)
+        atom_string(V,Value2),
+        atom_string(V,Value1)
     %   May want to do dictionary expansion here
     %   to get canonical comparitives.
     %   We probably need a Dict1 ~ Dict2 comparison
