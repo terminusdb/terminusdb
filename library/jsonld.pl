@@ -302,6 +302,8 @@ compress_aux(JSON,_Ctx_Pairs,JSON) :-
 compress_aux(URI,Ctx_Pairs,Folded_URI) :-
     atom(URI),
     compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
+compress_aux(time(H, M, S),_Ctx_Pairs, _{'@value' : S, '@type' : 'xsd:time'}) :-
+    format(string(S),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
 
 /* 
  * term_jsonld(Term,JSON) is det.
