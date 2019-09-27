@@ -46,10 +46,14 @@ run_api_tests :-
     try(run_schema_update_test),
     try(run_schema_get_test),
     try(run_doc_update_test),
+    try(run_doc_update_get_test),
+    try(run_doc_update_update_test),
+    try(run_doc_update_update_get_test), 
     try(run_doc_delete_test),
     try(run_doc_get_missing_test),
     try(run_db_delete_test),
     %   grouped )
+    try(run_db_delete_nonexistent_test),
     try(run_doc_get_test),
     try(run_get_filled_frame_test),
     try(run_woql_test),
@@ -107,7 +111,8 @@ run_db_create_test :-
     process_wait(PID,Status),
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
 
     json_read_dict(Out, Term),
@@ -153,7 +158,8 @@ run_schema_update_test :-
     process_wait(PID,Status),
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
 
     json_read_dict(Out, Term),
@@ -200,7 +206,7 @@ run_doc_update_test :-
             'terminus:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
-                           doc:"http://localhost:6363/terminus/document/",
+                           doc:"http://localhost:6363/terminus_qa_test/document/",
                            ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
@@ -239,7 +245,8 @@ run_doc_update_test :-
     
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
 
     json_read_dict(Out, Term),
@@ -247,6 +254,169 @@ run_doc_update_test :-
     
     (   Term = _{'terminus:status' : "terminus:success"}
     ->  true
+    ;   json_write_dict(current_output,Term,[]),
+        fail).
+
+run_doc_update_get_test :-
+    config:server(Server),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+        
+    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+    
+    json_read_dict(Out, Term),
+    close(Out),
+
+    (   _{'@id':"doc:admin"} :< Term
+    ->  true
+    ;   fail).
+
+
+run_doc_update_update_test :-
+    % create DB
+    config:server(Server),
+
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:user_key':"root",
+            'terminus:document' :
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
+                           doc:"http://localhost:6363/terminus_qa_test/document/",
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           vio:"http://terminusdb.com/schema/vio#",
+                           scm:"http://localhost:6363/terminus/schema/",
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:admin",
+              '@type':"terminus:User",
+              'rdfs:comment':_{'@language':"en",
+                               '@value':"This is a fake super user who has been changed"},
+              'rdfs:label':_{'@language':"en",
+                             '@value':"Server Admin User"}
+             }
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+        
+    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+    json_write_dict(current_output,Term,[]),
+        
+    (   Term = _{'terminus:status' : "terminus:success"}
+    ->  true
+    ;   fail).
+
+run_doc_update_update_get_test :-
+    config:server(Server),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+        
+    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+
+    json_write_dict(current_output,Term,[]),
+
+    ( _{ 'rdfs:comment' :
+         _{'@language':"en",
+           '@value' : "This is a fake super user who has been changed"}} :< Term
+    ->  true
+    ;   fail).
+
+
+
+run_db_delete_nonexistent_test :-
+    config:server(Server),
+
+    % Need to set the user key correctly here or we will get a spurious error...
+    atomic_list_concat([Server,'/dOeS_nOt_ExIsT?terminus:user_key=root'], URI),
+
+    Args = ['-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
+
+    format('~nRunning command: curl -X DELETE ~s~n',[URI]),
+    
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    * read_string(Out, _, Line),
+    * writeq(Line),
+
+    json_read_dict(Out, Term),
+    writeq(Term),
+    close(Out),
+    (   _{code : 500} :< Term
+    ->  true,
+        json_write_dict(current_output,Term,[])
     ;   json_write_dict(current_output,Term,[]),
         fail).
 
@@ -259,8 +429,35 @@ run_doc_delete_test :-
 run_doc_get_missing_test :-
     % create DB
     config:server(Server),
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root\''], Cmd),
-    \+ shell(Cmd).
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+    
+    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+
+    format('Running command: curl ~s ~s ~s "~s" "~s"~n', Args),
+    
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    * read_string(Out, _, Line),
+    * writeq(Line),
+
+    json_read_dict(Out, Term),
+    close(Out),
+
+    json_write_dict(current_output,Term,[]),
+    (   _{code : 404} :< Term
+    ->  true
+    ;   fail).
 
 run_get_doc_test :-
     % create DB
@@ -320,7 +517,8 @@ run_woql_test :-
     
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
     
     * read_string(Out, _, Line),
@@ -356,7 +554,8 @@ run_woql_empty_error_test :-
     
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
     
     * read_string(Out, _, Line),
@@ -369,8 +568,6 @@ run_woql_empty_error_test :-
     ->  json_write_dict(current_output,Term,[])
     ;   json_write_dict(current_output,Term,[]),
         fail).
-    
-
     
 run_woql_syntax_error_test :-
     config:server(Server),
@@ -424,7 +621,8 @@ run_woql_syntax_error_test :-
     
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
-        throw(error(M))
+        format('~n~s~n', M),
+        fail
     ;   true),
     
     * read_string(Out, _, Line),

@@ -571,8 +571,9 @@ try_db_graph(DB_URI,Database) :-
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
-    memberchk(Method, [get,delete,post]),
-    \+ memberchk(content_type('application/json'), Request),
+    (   memberchk(Method, [get,delete])
+    ;   Method = post,
+        \+ memberchk(content_type('application/json'), Request)),
     
     http_parameters(Request, [], [form_data(Data)]),
     
