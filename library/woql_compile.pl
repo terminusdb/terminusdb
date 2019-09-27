@@ -302,7 +302,7 @@ resolve(X,Xe) -->
     view(prefixes=Prefixes), 
     {
         atom(X),
-        (   once(member(X=URI,Prefixes))
+        (   member(X=URI,Prefixes)
         ->  Xe=URI
         ;   X=Xe)
     }.
@@ -1045,7 +1045,7 @@ restrict(VL) -->
     update(bindings=B0,
            bindings=B1),
     {
-        include( {VL}/[X=_]>>(member(v(X),VL)), B0, B1)
+        include({VL}/[X=_]>>member(v(X),VL), B0, B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
@@ -1054,4 +1054,4 @@ list_conjunction(L,Goal) :-
     L = [_|_],
     reverse(L,R),
     R = [A|Rest],
-    foldl( [X,Y,(X,Y)]>>(true), Rest, A, Goal).
+    foldl([X,Y,(X,Y)]>>true, Rest, A, Goal).

@@ -90,7 +90,7 @@ obj(ID:Class) :-
     identifier(ID),
     class(Class).
 obj(ID) :-
-    \+ ID = _:_,
+    ID \= _:_,
     identifier(ID).
 obj(ID) :-
     is_dict(ID).

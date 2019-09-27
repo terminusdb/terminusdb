@@ -187,7 +187,7 @@ get_collection_prefix_pairs(Collection,List) :-
  */
 get_collection_prefix_list(Collection,List) :-
     get_collection_prefix_pairs(Collection,Pairs),
-    maplist([A-B,A=B]>>(true), Pairs, List).
+    maplist([A-B,A=B]>>true, Pairs, List).
 
 /* 
  * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
