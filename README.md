@@ -28,7 +28,7 @@ v0.2.2
 
 The automated build of the master branch can be run easily with:
 
-`docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminus-server:latest`
+`docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminusdb/terminus-server:latest`
 
 There will be tagged versions upon release.
 
