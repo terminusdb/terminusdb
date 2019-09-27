@@ -124,6 +124,9 @@ cors_catch(M:Goal,Request) :-
 customise_error(syntax_error(M),E) :-
     E = http_reply(bad_request(_{'terminus:status' : 'terminus:failure',
                                  'terminus:message' : M})).
+customise_error(error(syntax_error(M),_),E) :-
+    E = http_reply(bad_request(_{'terminus:status' : 'terminus:failure',
+                                 'terminus:message' : M})).
 customise_error(E,E).
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
