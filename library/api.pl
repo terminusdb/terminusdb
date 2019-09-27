@@ -133,7 +133,9 @@ authenticate(Request, Auth) :-
     
     (   key_auth(Key, Auth)
     ->  true
-    ;   throw(http_reply(authorise('Not a valid key')))).
+    ;   throw(http_reply(authorise(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : 'Not a valid key',
+                                     'terminus:object' : Key})))).
 
 verify_access(Auth, Action, Scope) :-
     * http_log_stream(Log),
@@ -141,7 +143,9 @@ verify_access(Auth, Action, Scope) :-
     (   auth_action_scope(Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
-        throw(http_reply(method_not_allowed(M,verify_access)))).
+        throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                              'terminus:message' : M,
+                                              'terminus:object' : 'verify_access'})))).
 
 connection_authorised_user(Request, User) :-
     try_get_param('terminus:user_key',Request,Key),
@@ -150,8 +154,12 @@ connection_authorised_user(Request, User) :-
     (   key_user(KS, User_ID)
     ->  (   get_user(User_ID, User)
         ->  true
-        ;   throw(http_reply(method_not_allowed('Bad user object', User_ID))))
-    ;   throw(http_reply(authorise('Not a valid key')))).
+        ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                  'terminus:message' : 'Bad user object',
+                                                  'terminus:object' : User_ID}))))
+    ;   throw(http_reply(authorise(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : 'Not a valid key',
+                                     'terminus:object' : KS})))).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -441,7 +449,9 @@ try_get_document(ID,Database,Object) :-
     (   document_jsonld(ID,Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(ID-MSG)))).
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:object' : ID,
+                                     'terminus:status' : 'terminus:failure'})))).
 
 /* 
  * try_get_document(ID, Database) is det.
@@ -454,7 +464,9 @@ try_get_filled_frame(ID,Database,Object) :-
     (   document_filled_class_frame_jsonld(ID,_{},Database,Object)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(ID-MSG)))).
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG,
+                                     'terminus:object' : ID})))).
 
 /* 
  * try_delete_document(+ID, +Database, -Witnesses) is det.
@@ -474,7 +486,9 @@ try_delete_document(Doc_ID, Database, Witnesses) :-
                              frame:delete_object(Doc_ID,Database), Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
-        throw(http_reply(not_found(Doc_ID-MSG)))).
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
+                                     'terminus:message' : MSG,
+                                     'terminus:object' : Doc_ID})))).
 
 /* 
  * try_update_document(ID, Doc, Database) is det.
@@ -520,7 +534,9 @@ try_db_uri(DB,DB_URI) :-
     (   config:server(Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
-    ;   throw(http_reply(not_found(DB-'Database resource can not be found')))).
+    ;   throw(http_reply(not_found(_{'terminus:message' : 'Database resource can not be found',
+                                     'terminus:status' : 'terminus:failure',
+                                     'terminus:object' : DB})))).
 
 /* 
  * try_doc_uri(DB,Doc,Doc_URI) is det. 
@@ -531,7 +547,9 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
     (   interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be constructed in ~s', [DB_URI,Doc_ID]),
-        throw(http_reply(not_found(Doc_ID-MSG)))).
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure',
+                                     'terminus:object' : DB_URI})))).
     
 /* 
  * try_db_graph(+DB:uri,-Database:database is det. 
@@ -542,7 +560,9 @@ try_db_graph(DB_URI,Database) :-
     (   make_database_from_database_name(DB_URI,Database)
     ->  true
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
-        throw(http_reply(not_found(DB_URI-MSG)))).
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure',
+                                     'terminus:object' : DB_URI})))).
 
 /* 
  * try_get_param(Key,Request:request,Value) is det.
@@ -585,7 +605,9 @@ try_get_param(Key,Request,_Value) :-
     !,
     
     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
-    throw(http_reply(not_found(Key-MSG))).
+    throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                 'terminus:status' : 'terminus:failure',
+                                 'terminus:object' : Key}))).
 try_get_param(Key,_Request,_Value) :-
     % Catch all. 
     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
@@ -670,7 +692,9 @@ try_atom_json(Atom,JSON) :-
     ->  true
     ;   format(atom(MSG), 'Malformed JSON Object', []),
         % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(Atom-MSG)))).
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG,
+                                     'terminus:object' : Atom})))).
 
 /* 
  * add_payload_to_request(Request:request,JSON:json) is det.
@@ -695,7 +719,9 @@ try_class_frame(Class,Database,Frame) :-
     ->  true
     ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
         % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(Class-MSG)))).
+        throw(http_reply(not_found(_{ 'terminus:message' : MSG,
+                                      'terminus:status' : 'terminus:failure',
+                                      'terminus:class' : Class})))).
     
 /* 
  * try_dump_schema(DB_URI, Request) is det. 
@@ -718,7 +744,9 @@ try_dump_schema(DB_URI, Name, Request) :-
                 reply_json(String)
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
                 % Give a better error code etc. This is silly.
-                throw(http_reply(method_not_allowed('try_dump_schema', MSG)))
+                throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
+                                                      'terminus:object' : DB_URI,
+                                                      'terminus:status' : 'terminus:failure'})))
             )
         )
     ).
