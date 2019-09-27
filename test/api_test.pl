@@ -52,7 +52,9 @@ run_api_tests :-
     %   grouped )
     try(run_doc_get_test),
     try(run_get_filled_frame_test),
-    try(run_woql_test).
+    try(run_woql_test),
+    try(run_woql_empty_error_test),
+    try(run_woql_syntax_error_test).
 
 run_connect_test :-
     config:server(Server),
@@ -331,5 +333,107 @@ run_woql_test :-
     ->  length(L, N),
         N >= 8,
         json_write_dict(current_output,Term,[])
+    ;   json_write_dict(current_output,Term,[]),
+        fail).
+
+run_woql_empty_error_test :-
+    config:server(Server),
+    
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Auser_key=root'], URI),
+        
+    Args = ['-X','GET',URI],
+    
+    format('~nRunning command: curl -X GET ~s~n',[URI]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    
+    * read_string(Out, _, Line),
+    * writeq(Line),
+
+    json_read_dict(Out, Term),
+    close(Out),
+    
+    (   _{'code' : 404} :< Term
+    ->  json_write_dict(current_output,Term,[])
+    ;   json_write_dict(current_output,Term,[]),
+        fail).
+    
+
+    
+run_woql_syntax_error_test :-
+    config:server(Server),
+    atomic_list_concat([Server,'/terminus/document/'], Document),
+    atomic_list_concat([Server,'/terminus/schema#'], Schema),
+    atomic_list_concat([Server,'/terminus/'], Terminus),
+    atomic_list_concat([Server,'/'], S),
+
+    Query = 
+    _{'@context' : _{scm : Schema,
+                     doc : Document,
+                     db : Terminus,
+                     e : "",
+                     s : S},
+      from: ["s:terminus",
+             _{select: [
+                   "v:Class", "v:Label", "v:Comment", "v:Abstract", 
+                   _{fand: [
+                         _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
+                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
+                     ]
+                    }
+               ]
+              }
+            ]
+     },
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
+        
+    Args = ['-X','GET',URI],
+    
+    format('~nRunning command: curl -X GET ~s~n',[URI]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    
+    * read_string(Out, _, Line),
+    * writeq(Line),
+
+    json_read_dict(Out, Term),
+    close(Out),
+
+    (   _{'code' : 404} :< Term
+    ->  json_write_dict(current_output,Term,[])
     ;   json_write_dict(current_output,Term,[]),
         fail).
