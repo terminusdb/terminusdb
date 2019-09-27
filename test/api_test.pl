@@ -455,7 +455,7 @@ run_doc_get_missing_test :-
     close(Out),
 
     json_write_dict(current_output,Term,[]),
-    (   _{code : 404} :< Term
+    (   _{'terminus:status':"terminus:failure"} :< Term
     ->  true
     ;   fail).
 
@@ -564,7 +564,7 @@ run_woql_empty_error_test :-
     json_read_dict(Out, Term),
     close(Out),
     
-    (   _{'code' : 404} :< Term
+    (   _{'terminus:status':"terminus:failure"} :< Term
     ->  json_write_dict(current_output,Term,[])
     ;   json_write_dict(current_output,Term,[]),
         fail).
@@ -631,7 +631,7 @@ run_woql_syntax_error_test :-
     json_read_dict(Out, Term),
     close(Out),
 
-    (   _{'code' : 404} :< Term
+    (   _{'@type':"vio:WOQLSyntaxError"} :< Term
     ->  json_write_dict(current_output,Term,[])
     ;   json_write_dict(current_output,Term,[]),
         fail).

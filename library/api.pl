@@ -129,6 +129,8 @@ customise_error(error(syntax_error(M),_)) :-
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : M}]},
                [status(400)]).
+customise_error(http_reply(not_found(JSON))) :-
+    reply_json(JSON,[status(404)]).
 customise_error(E) :-
     throw(E).
 

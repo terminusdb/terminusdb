@@ -30,7 +30,7 @@
 try(Goal) :- 
     (   call(Goal)
     ->  true
-    ;   format('~n*************************************~nFAIL! Could not successfully run ~s~n',
+    ;   format('~n*************************************~nFAIL! Could not successfully run ~q~n',
                [Goal]),
         fail
     ).
