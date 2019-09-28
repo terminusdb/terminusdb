@@ -196,18 +196,21 @@ run_doc_update_test :-
     % create DB
     config:server(Server),
 
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+
     Doc = _{'@type':"terminus:APIUpdate",
             'terminus:user_key':"root",
             'terminus:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
-                           doc:"http://localhost:6363/terminus_qa_test/document/",
+                           doc: Doc_Base,
                            ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
-                           scm:"http://localhost:6363/terminus/schema/",
+                           scm: Scm_Base,
                            terminus:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
@@ -254,7 +257,7 @@ run_doc_update_test :-
 run_doc_update_get_test :-
     config:server(Server),
 
-    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
     
@@ -284,18 +287,21 @@ run_doc_update_update_test :-
     % create DB
     config:server(Server),
 
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+
     Doc = _{'@type':"terminus:APIUpdate",
             'terminus:user_key':"root",
             'terminus:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
-                           doc:"http://localhost:6363/terminus_qa_test/document/",
+                           doc: Doc_Base,
                            ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
-                           scm:"http://localhost:6363/terminus/schema/",
+                           scm: Scm_Base,
                            terminus:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
