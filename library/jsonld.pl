@@ -411,7 +411,8 @@ jsonld_triples(JSON, Ctx, Database, Triples) :-
     merge_dictionaries(Ctx, Internal, New_Ctx),
     expand_context(New_Ctx,New_Expanded),
     expand(JSON,New_Expanded,JSON_Ex),
-    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples).
+    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples_Unsorted),
+    sort(Triples_Unsorted,Triples).
     
 /* 
  * jsonld_triples_aux(Dict, Ctx, Database, Tuples) is det.
