@@ -376,9 +376,13 @@ run_db_delete_nonexistent_test :-
     config:server(Server),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat([Server,'/dOeS_nOt_ExIsT?terminus:user_key=root'], URI),
+    atomic_list_concat([Server,'/dOeS_nOt_ExIsT?terminus%3Auser_key=root'], URI),
 
+<<<<<<< HEAD
     Args = ['--user', ':root','-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
+=======
+    Args =  ['-X','DELETE',URI],
+>>>>>>> 82871e8522e9cf993b0f53cad8ada3994a007901
 
     format('~nRunning command: curl -X DELETE ~s~n',[URI]),
     
