@@ -507,7 +507,9 @@ delete(DB,G,X,Y,O) :-
     ->  retractall(xrdf_pos_trans(DB,G,X,Y,Z))        
     ;   true),
     (   xrdfdb(DB,G,X,Y,Z)
-    ->  asserta(xrdf_neg_trans(DB,G,X,Y,Z))
+    ->  (   xrdf_neg_trans(DB,G,X,Y,Z)
+        ->  true
+        ;   asserta(xrdf_neg_trans(DB,G,X,Y,Z)))
     ;   true).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
