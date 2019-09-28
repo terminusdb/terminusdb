@@ -170,12 +170,12 @@ run_schema_get_test :-
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
     www_form_encode(Schema,S),
                        
-    atomic_list_concat(['curl --user ":root" \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
+    atomic_list_concat(['curl --user ":root" \'',Server,'/terminus_qa_test/schema?terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
     shell(Cmd).
 
 run_doc_get_test :-
     config:server(Server),
-    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/admin?terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/admin\''], Cmd),
     shell(Cmd).
 
 run_db_delete_test :-
@@ -349,7 +349,7 @@ run_doc_update_update_test :-
 run_doc_update_update_get_test :-
     config:server(Server),
 
-    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
     
@@ -384,7 +384,7 @@ run_db_delete_nonexistent_test :-
     % Need to set the user key correctly here or we will get a spurious error...
     atomic_list_concat([Server,'/dOeS_nOt_ExIsT'], URI),
 
-    Args = ['--user', ':root','-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
+    Args = ['--user', ':root', '-X','DELETE',URI],
 
     format('~nRunning command: curl -X DELETE ~s~n',[URI]),
     
@@ -481,7 +481,7 @@ run_doc_get_missing_test :-
 run_get_doc_test :-
     % create DB
     config:server(Server),
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus\''], Cmd),
     shell(Cmd).
 
 run_woql_test :-
@@ -519,7 +519,7 @@ run_woql_test :-
     ),
 
     www_form_encode(Payload,Encoded),
-    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
     
@@ -556,7 +556,7 @@ run_woql_test :-
 run_woql_empty_error_test :-
     config:server(Server),
     
-    atomic_list_concat([Server,'/terminus/woql?terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus/woql'], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
     
@@ -621,7 +621,7 @@ run_woql_syntax_error_test :-
     ),
 
     www_form_encode(Payload,Encoded),
-    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
     
