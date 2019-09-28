@@ -153,7 +153,7 @@ authenticate(Request, Auth) :-
     
     (   key_auth(Key, Auth)
     ->  true
-    ;   throw(http_reply(authorise(_{'terminus:status' : 'terminus:failure',
+    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : Key})))).
 
@@ -178,7 +178,7 @@ connection_authorised_user(Request, User) :-
         ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                   'terminus:message' : 'Bad user object',
                                                   'terminus:object' : User_ID}))))
-    ;   throw(http_reply(authorise(_{'terminus:status' : 'terminus:failure',
+    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
 

@@ -304,6 +304,14 @@ compress_aux(URI,Ctx_Pairs,Folded_URI) :-
     compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
 compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
+/*
+compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
+compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
+compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
+*/
 
 /* 
  * term_jsonld(Term,JSON) is det.
