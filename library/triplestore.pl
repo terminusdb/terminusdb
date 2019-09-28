@@ -108,15 +108,22 @@ destroy_indexes :-
  * Sync journals for a graph and collection
  */
 sync_from_journals(Collection,Database_Name) :-
-    % First remove everything in the dynamic predicates.
-    (   retract_graph(Collection,Database_Name),
-        hdt_transform_journals(Collection,Database_Name),
-        get_truncated_queue(Collection,Database_Name,Queue),
-        sync_queue(Collection,Database_Name, Queue)
-    ->  true
-    % in case anything failed, retract the graph
-    ;   retract_graph(Collection,Database_Name),
-        throw(graph_sync_error(Collection-Database_Name))
+    with_mutex(
+        Database_Name, 
+        % First remove everything in the dynamic predicates.
+        (   retract_graph(Collection,Database_Name),
+            hdt_transform_journals(Collection,Database_Name),
+            get_truncated_queue(Collection,Database_Name,Queue),
+            config:max_journal_queue_length(Max_Length),
+            length(Queue,Queue_Length),
+            (   Queue_Length > Max_Length
+            ->  checkpoint(Collection,Database_Name)
+            ;   sync_queue(Collection,Database_Name, Queue))
+        ->  true
+        % in case anything failed, retract the graph
+        ;   retract_graph(Collection,Database_Name),
+            throw(graph_sync_error(Collection-Database_Name))
+        )
     ).
 
 /** 
@@ -329,7 +336,7 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
                     set_graph_stream(C,G,Stream,Type,Ext),
                     initialise_graph(C,G,Stream,Type,Ext)
                 ),
-                (   once(call(Goal))
+                (   call(Goal)
                 ->  true
                 ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
                     throw(transaction_error(Msg))
@@ -347,23 +354,36 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
     ).
 
 /** 
+ * write_checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
+ * 
+ * Write a new checkpoint.
+ */ 
+write_checkpoint(Collection_Id,Database_Id) :-
+    with_mutex(
+        Database_Id,
+        (   
+            make_checkpoint_directory(Collection_Id,Database_Id, _),
+            with_output_graph(
+                graph(Collection_Id,Database_Id,ckp,ttl),
+                (
+                    forall(
+                        xrdf(Collection_Id,[Database_Id],X,Y,Z),
+                        write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
+                    )
+                )
+            )
+        )
+    ).
+
+/** 
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
  * 
  * Create a new graph checkpoint from our current dynamic triple state
+ * and sync.
  */
 checkpoint(Collection_Id,Database_Id) :-
-    make_checkpoint_directory(Collection_Id,Database_Id, _),
-    with_output_graph(
-        graph(Collection_Id,Database_Id,ckp,ttl),
-        (
-            forall(
-                xrdf(Collection_Id,[Database_Id],X,Y,Z),
-                write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
-            )
-        )
-    ),
+    write_checkpoint(Collection_Id,Database_Id),
     sync_from_journals(Collection_Id, Database_Id).
-
 
 /** 
  * check_queue(+Queue) is det.
