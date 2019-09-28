@@ -114,11 +114,14 @@ sync_from_journals(Collection,Database_Name) :-
         (   retract_graph(Collection,Database_Name),
             hdt_transform_journals(Collection,Database_Name),
             get_truncated_queue(Collection,Database_Name,Queue),
-            config:max_journal_queue_length(Max_Length),
-            length(Queue,Queue_Length),
-            (   Queue_Length > Max_Length
+            sync_queue(Collection,Database_Name, Queue),
+            (   
+                config:max_journal_queue_length(Max_Length),
+                length(Queue,Queue_Length),
+                Queue_Length > Max_Length
+            %   slightly terrifying recursion here...                 
             ->  checkpoint(Collection,Database_Name)
-            ;   sync_queue(Collection,Database_Name, Queue))
+            ;   true)
         ->  true
         % in case anything failed, retract the graph
         ;   retract_graph(Collection,Database_Name),

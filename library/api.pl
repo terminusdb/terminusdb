@@ -141,7 +141,9 @@ customise_error(error(type_error(T,O),C)) :-
                                            'vio:message' : M,
                                            'vio:type' : T,
                                            'vio:literal' : O}]},
-               [status(400)]).                                              
+               [status(400)]).
+customise_error(http_reply(method_not_allowed(JSON))) :-
+    reply_json(JSON,[status(405)]).
 customise_error(http_reply(not_found(JSON))) :-
     reply_json(JSON,[status(404)]).
 customise_error(http_reply(authorize(JSON))) :-
