@@ -125,6 +125,20 @@ refute_insertion(Database,
                  Reason) :-
     !,
     refute_node_at_class(Database,X,Class,Reason).
+refute_insertion(_Database,
+                 X,'http://www.w3.org/2000/01/rdf-schema#label',Label,
+                 Reason) :- 
+    !,
+    refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
+    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
+    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
+refute_insertion(_Database,
+                 X,'http://www.w3.org/2000/01/rdf-schema#comment',Label,
+                 Reason) :- 
+    !,
+    refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
+    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
+    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
 refute_insertion(Database,X,P,_Y,Reason) :-
     % \+ P = 'rdf:type'
     (   domain(P,Domain,Database)
@@ -224,6 +238,8 @@ forall (x p y) \in Deletes.
     S,G' |- Ca(x p y)
 
 */
+
+/* Is this even valid? If we have deleted this it shouldn't exist...
 refute_deletion(Database,
                 X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',_Class,
                 Reason) :-
@@ -236,6 +252,7 @@ refute_deletion(Database,
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' }
              }.
+*/
 refute_deletion(Database,X,P,_Y,Reason) :-
     refute_all_restrictions(Database,X,P,Reason).
 refute_deletion(Database,X,P,Y,Reason) :-
@@ -451,16 +468,16 @@ days_in_month(_,12,31).
 /* 
  * refute_basetype_elt(+Literal,+Type,-Reason)
  */ 
-refute_basetype_elt(literal(lang(S,L)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
-    (   \+ atom(S), term_to_atom(lang(S,L),A)
+refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+    (   \+ atom(L), term_to_atom(lang(L,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
-			         'vio:message' : 'Expected atom in string section, found term.',
+			         'vio:message' : 'Expected atom in language section, found term.',
 			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
                  }
     ).
-refute_basetype_elt(literal(lang(S,L)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
-    (   \+ atom(L), term_to_atom(lang(S,L),A)
+refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+    (   \+ (atom(S) ; string(S)), term_to_atom(lang(L,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
 			         'vio:message' : 'Expected atom in language section, found term.',

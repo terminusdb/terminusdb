@@ -141,14 +141,14 @@ document_transaction(Database, Graph, Goal, Witnesses) :-
 
             findall(Pos_Witness,
                     (
-                        triplestore:xrdf_pos(Database,Graph, X, P, Y),
+                        triplestore:xrdf_pos_trans(Database_Name,Graph, X, P, Y),
                         refute_insertion(Database, X, P, Y, Pos_Witness)
                     ),
                     Pos_Witnesses),
             
             findall(Neg_Witness,
                     (   
-                        triplestore:xrdf_neg(Database,Graph, X, P, Y),
+                        triplestore:xrdf_neg_trans(Database_Name,Graph, X, P, Y),
                         refute_deletion(Database, X, P, Y, Neg_Witness)
                     ),
                     Neg_Witnesses),

@@ -1012,12 +1012,12 @@ update_object(ID, Obj, Database) :-
     prefix_expand(ID,Ctx,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
-
-    database_name(Database,Collection),
-    get_collection_jsonld_context(Collection,Ctx),
     
     jsonld_triples(New_Obj,Ctx,Database,New),
     object_edges(ID,Database,Old),
+
+    debug(frame,'~nNew: ~q~n', [New]),
+    debug(frame,'~nOld: ~q~n', [Old]),
     % Don't back out now.  both above should be det so we don't have to do this. 
     !,
     subtract(New,Old,Inserts),

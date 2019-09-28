@@ -479,10 +479,12 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
     ->  (   V = _{'@type' : Type,
                   '@value' : Data
                  }
-        ->  Triples = [(C,G,ID,Pred,literal(type(Type,Data)))]
+        ->  atom_string(Atom_Type,Type),
+            Triples = [(C,G,ID,Pred,literal(type(Atom_Type,Data)))]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
-        ->  Triples = [(C,G,ID,Pred,literal(lang(Lang,Data)))]
+        ->  atom_string(Atom_Lang,Lang),
+            Triples = [(C,G,ID,Pred,literal(lang(Atom_Lang,Data)))]
         ;   jsonld_id(V,Val),
             jsonld_triples_aux(V,Ctx,Database,Rest),
             Triples = [(C,G,ID,Pred,Val)|Rest])        

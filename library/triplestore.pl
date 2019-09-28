@@ -323,22 +323,24 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
             %get_time(T),floor(T,N), %switch to sequence numbers
             interpolate([CPD,'/',N,'-',Type,'.',Ext],NewFile),
 
-            catch(
+            setup_call_cleanup(
                 (   
                     open(NewFile,write,Stream),
                     set_graph_stream(C,G,Stream,Type,Ext),
-                    initialise_graph(C,G,Stream,Type,Ext),
-                    !, % Don't ever retreat!
-                    (   once(call(Goal))
-                    ->  true
-                    ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
-                        throw(transaction_error(Msg))
-                    ),
-                    finalise_graph(C,G,Stream,Type,Ext)
+                    initialise_graph(C,G,Stream,Type,Ext)
                 ),
-                E,
+                (   once(call(Goal))
+                ->  true
+                ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
+                    throw(transaction_error(Msg))
+                ), 
                 (   finalise_graph(C,G,Stream,Type,Ext),
-                    throw(E)
+                    (   N > 1, % need an empty checkpoint.
+                        size_file(NewFile, Size),
+                        %format('~n~nSize of file is: ~d~n~n', [N]),
+                        Size = 0
+                    ->  delete_file(NewFile)
+                    ;   true)
                 )
             )
         )
