@@ -136,6 +136,8 @@ customise_error(error(syntax_error(M),_)) :-
                [status(400)]).
 customise_error(http_reply(not_found(JSON))) :-
     reply_json(JSON,[status(404)]).
+customise_error(http_reply(authorize(JSON))) :-
+    reply_json(JSON,[status(401)]).
 customise_error(E) :-
     throw(E).
 
@@ -150,12 +152,13 @@ authenticate(Request, Auth) :-
     memberchk(authorization(Text), Request),
     http_authorization_data(Text, basic(_User, Key)),
     % try_get_param('terminus:user_key',Request,Key),
+    coerce_literal_string(Key, KS),
     
-    (   key_auth(Key, Auth)
+    (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
-                                     'terminus:object' : Key})))).
+                                     'terminus:object' : KS})))).
 
 verify_access(Auth, Action, Scope) :-
     * http_log_stream(Log),

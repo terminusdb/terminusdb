@@ -395,9 +395,12 @@ coerce_literal_string(SL,S) :-
     !,
     get_dict('@value',SL, S).
 coerce_literal_string(SL,S) :-
+    is_list(SL),
+    !,
+    string_codes(S, SL).
+coerce_literal_string(SL,S) :-
     % \+ is_dict(SL),
     SL = S.
-
 
 /* 
  * xfy_list(Op, Term, List) is det. 

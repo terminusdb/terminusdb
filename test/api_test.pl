@@ -41,6 +41,7 @@
  */ 
 run_api_tests :-
     try(run_connect_test),
+    try(run_bad_auth_test),
     % ( Creates DB for other tests
     try(run_db_create_test),
     try(run_schema_update_test),
@@ -65,6 +66,33 @@ run_connect_test :-
 
     atomic_list_concat(['curl --user ":root" -X GET \'',Server,'\''], Cmd),
     shell(Cmd).
+
+run_bad_auth_test :-
+    config:server(Server),
+
+    Args = ['--user', ':flute','-X','GET', Server],
+    
+    format('~nRunning command: curl ~s ~s ~s ~s "~s"~n',Args),
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{'terminus:status':"terminus:failure"} :< Term.
 
 run_db_create_test :-
     % create DB
