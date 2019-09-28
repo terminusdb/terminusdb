@@ -182,7 +182,7 @@ run_db_delete_test :-
     config:server(Server),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat(['curl -X DELETE ',Server,'/terminus_qa_test'], Cmd),
+    atomic_list_concat(['curl --user ":root" -X DELETE ',Server,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
@@ -382,7 +382,7 @@ run_db_delete_nonexistent_test :-
     config:server(Server),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat([Server,'/dOeS_nOt_ExIsT?terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/dOeS_nOt_ExIsT'], URI),
 
     Args = ['--user', ':root','-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
 
