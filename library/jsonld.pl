@@ -304,7 +304,26 @@ compress_aux(URI,Ctx_Pairs,Folded_URI) :-
     compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
 compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
+compress_aux(date(Y, M, D),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
+compress_aux(date_time(Y,M,D,HH,MM,SS),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
+           [Y,M,D,HH,MM,SS]).
+compress_aux(month_day(M,D),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~2+-~|~`0t~d~2+', [M,D]).
+compress_aux(year_month(Y,M),_Ctx_Pairs, Atom) :-
+    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+', [Y,M]).
+
 /*
+
+date(Y,M,D)
+xsd:dateTime	date_time(Y,M,D,HH,MM,SS) (2,3)
+xsd:gDay	integer
+xsd:gMonth	integer
+xsd:gMonthDay	month_day(M,D)
+xsd:gYear	integer
+xsd:gYearMonth	year_month(Y,M)
+
 compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
 compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
