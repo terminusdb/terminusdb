@@ -168,7 +168,8 @@ verify_access(Auth, Action, Scope) :-
                                               'terminus:object' : 'verify_access'})))).
 
 connection_authorised_user(Request, User) :-
-    try_get_param('terminus:user_key',Request,Key),
+    memberchk(authorization(Text), Request),
+    http_authorization_data(Text, basic(_User, Key)),
     coerce_literal_string(Key, KS),
     
     (   key_user(KS, User_ID)
