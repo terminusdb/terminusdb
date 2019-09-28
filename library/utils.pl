@@ -310,7 +310,7 @@ split_atom(Atom,Delimiter,Result) :-
  *
  * Monadic fold over state 
  */
-:- meta_predicate foldm(5,?,?,?,?,?,?).
+:- meta_predicate foldm(5,?,?,?,?,?).
 foldm(_P,[],Base,Base,S,S).
 foldm(P,[H|T],Base,Result,S0,SN) :-
     foldm(P,T,Base,LastResult,S0,S1),
