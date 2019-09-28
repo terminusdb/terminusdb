@@ -63,7 +63,7 @@ run_api_tests :-
 run_connect_test :-
     config:server(Server),
 
-    atomic_list_concat(['curl -X GET ',Server,'/?terminus:user_key=root'], Cmd),
+    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'\''], Cmd),
     shell(Cmd).
 
 run_db_create_test :-
@@ -99,7 +99,7 @@ run_db_create_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test'], URI),
 
-    Args = ['-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
+    Args = ['--user',':root','-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
 
     format('~nRunning command: curl -X POST ~s...~n',[URI]),
     
@@ -109,20 +109,18 @@ run_db_create_test :-
                      process(PID)
                    ]),
     process_wait(PID,Status),
+    
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
         format('~n~s~n', M),
         fail
     ;   true),
-
     json_read_dict(Out, Term),
-    (   Term = _{'terminus:status' : "terminus:success"}
-    ->  true
-    ;   json_write_dict(current_output,Term,[]),
-        fail),
-    
-    close(Out).
 
+    close(Out),
+
+    nl,json_write_dict(current_output,Term,[]),
+    Term = _{'terminus:status' : "terminus:success"}.
 
 run_schema_update_test :-
     config:server(Server),
@@ -145,7 +143,7 @@ run_schema_update_test :-
     ),
 
 
-    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user',':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
     format('~nRunning command: curl -X POST ~s...~n',[URI]),
 
@@ -163,38 +161,35 @@ run_schema_update_test :-
     ;   true),
 
     json_read_dict(Out, Term),
-    (   Term = _{'terminus:status' : "terminus:success"}
-    ->  true
-    ;   json_write_dict(current_output,Term,[]),
-        fail),
+    close(Out),
     
-    close(Out).
+    Term = _{'terminus:status' : "terminus:success"}.
     
 run_schema_get_test :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
     www_form_encode(Schema,S),
                        
-    atomic_list_concat(['curl \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
+    atomic_list_concat(['curl --user ":root" \'',Server,'/terminus_qa_test/schema?terminus%3Auser_key=root&terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
     shell(Cmd).
 
 run_doc_get_test :-
     config:server(Server),
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/admin?terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/admin?terminus%3Auser_key=root\''], Cmd),
     shell(Cmd).
 
 run_db_delete_test :-
     config:server(Server),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat(['curl -X DELETE ',Server,'/terminus_qa_test?terminus:user_key=root'], Cmd),
+    atomic_list_concat(['curl -X DELETE ',Server,'/terminus_qa_test'], Cmd),
     
     format('~nRunning command: "~s"~n',[Cmd]),        
     shell(Cmd).
 
 run_get_filled_frame_test :-
     config:server(Server),
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe&terminus%3Auser_key=root\''], Cmd),
+    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe\''], Cmd),
     shell(Cmd).
 
 run_doc_update_test :-
@@ -230,7 +225,7 @@ run_doc_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', ':root', '-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
     format('~nRunning command: curl -X POST ~s...~n',[URI]),        
 
@@ -251,18 +246,17 @@ run_doc_update_test :-
 
     json_read_dict(Out, Term),
     close(Out),
+
+    nl,json_write_dict(current_output,Term,[]),
     
-    (   Term = _{'terminus:status' : "terminus:success"}
-    ->  true
-    ;   json_write_dict(current_output,Term,[]),
-        fail).
+    Term = _{'terminus:status' : "terminus:success"}.
 
 run_doc_update_get_test :-
     config:server(Server),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
         
-    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
     
     format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
 
@@ -282,10 +276,9 @@ run_doc_update_get_test :-
     json_read_dict(Out, Term),
     close(Out),
 
-    (   _{'@id':"doc:admin"} :< Term
-    ->  true
-    ;   fail).
-
+    nl,json_write_dict(current_output,Term,[]),
+    
+    _{'@id':"doc:admin"} :< Term.
 
 run_doc_update_update_test :-
     % create DB
@@ -322,7 +315,7 @@ run_doc_update_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     
     format('~nRunning command: curl -X POST ~s...~n',[URI]),        
 
@@ -343,18 +336,16 @@ run_doc_update_update_test :-
 
     json_read_dict(Out, Term),
     close(Out),
-    json_write_dict(current_output,Term,[]),
+    nl,json_write_dict(current_output,Term,[]),
         
-    (   Term = _{'terminus:status' : "terminus:success"}
-    ->  true
-    ;   fail).
+    Term = _{'terminus:status' : "terminus:success"}.
 
 run_doc_update_update_get_test :-
     config:server(Server),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
         
-    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
     
     format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
 
@@ -374,14 +365,11 @@ run_doc_update_update_get_test :-
     json_read_dict(Out, Term),
     close(Out),
 
-    json_write_dict(current_output,Term,[]),
+    nl,json_write_dict(current_output,Term,[]),
 
-    ( _{ 'rdfs:comment' :
-         _{'@language':"en",
-           '@value' : "This is a fake super user who has been changed"}} :< Term
-    ->  true
-    ;   fail).
-
+    _{ 'rdfs:comment' :
+       _{'@language':"en",
+         '@value' : "This is a fake super user who has been changed"}} :< Term.
 
 
 run_db_delete_nonexistent_test :-
@@ -390,7 +378,7 @@ run_db_delete_nonexistent_test :-
     % Need to set the user key correctly here or we will get a spurious error...
     atomic_list_concat([Server,'/dOeS_nOt_ExIsT?terminus:user_key=root'], URI),
 
-    Args = ['-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
+    Args = ['--user', ':root','-D', '/home/francoisbabeuf/headers.txt', '-X','DELETE',URI],
 
     format('~nRunning command: curl -X DELETE ~s~n',[URI]),
     
@@ -412,29 +400,56 @@ run_db_delete_nonexistent_test :-
     * writeq(Line),
 
     json_read_dict(Out, Term),
-    writeq(Term),
     close(Out),
-    (   _{code : 500} :< Term
-    ->  true,
-        json_write_dict(current_output,Term,[])
-    ;   json_write_dict(current_output,Term,[]),
-        fail).
+
+    nl,json_write_dict(current_output,Term,[]),
+    
+    _{code : 500} :< Term.
 
 run_doc_delete_test :-
-    % create DB
+        
     config:server(Server),
-    atomic_list_concat(['curl -X DELETE \'',Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root\''], Cmd),
-    shell(Cmd).
+
+    % Need to set the user key correctly here or we will get a spurious error...
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+
+    Args = ['--user', ':root','-X','DELETE',URI],
+
+    format('~nRunning command: curl ~s ~s ~s ~s "~s"',Args),
+    
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    * read_string(Out, _, Line),
+    * writeq(Line),
+
+    json_read_dict(Out, Term),
+    writeq(Term),
+    close(Out),
+    nl,json_write_dict(current_output,Term,[]),
+    
+    _{'terminus:status' : "terminus:success"} :< Term.
 
 run_doc_get_missing_test :-
     % create DB
     config:server(Server),
 
-    atomic_list_concat([Server,'/terminus_qa_test/document/admin?terminus%3Auser_key=root'], URI),
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
     
-    Args = ['-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user',':root','-X','GET','-H','Content-Type: application/json', URI],
 
-    format('Running command: curl ~s ~s ~s "~s" "~s"~n', Args),
+    format('Running command: curl ~s "~s" ~s ~s ~s "~s" "~s"~n', Args),
     
     process_create(path(curl), Args,
                    [ stdout(pipe(Out)),
@@ -455,9 +470,7 @@ run_doc_get_missing_test :-
     close(Out),
 
     json_write_dict(current_output,Term,[]),
-    (   _{'terminus:status':"terminus:failure"} :< Term
-    ->  true
-    ;   fail).
+    _{'terminus:status':"terminus:failure"} :< Term.
 
 run_get_doc_test :-
     % create DB
@@ -502,7 +515,7 @@ run_woql_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
         
-    Args = ['-X','GET',URI],
+    Args = ['--user', ':root','-X','GET',URI],
     
     format('~nRunning command: curl -X GET ~s~n',[URI]),        
 
@@ -526,20 +539,20 @@ run_woql_test :-
 
     json_read_dict(Out, Term),
     close(Out),
+
+    nl,json_write_dict(current_output,Term,[]),
     
     (   _{'bindings' : L} :< Term
     ->  length(L, N),
-        N >= 8,
-        json_write_dict(current_output,Term,[])
-    ;   json_write_dict(current_output,Term,[]),
-        fail).
+        N >= 8
+    ;   fail).
 
 run_woql_empty_error_test :-
     config:server(Server),
     
     atomic_list_concat([Server,'/terminus/woql?terminus%3Auser_key=root'], URI),
         
-    Args = ['-X','GET',URI],
+    Args = ['--user', ':root','-X','GET',URI],
     
     format('~nRunning command: curl -X GET ~s~n',[URI]),        
 
@@ -563,11 +576,9 @@ run_woql_empty_error_test :-
 
     json_read_dict(Out, Term),
     close(Out),
+    nl,json_write_dict(current_output,Term,[]),
     
-    (   _{'terminus:status':"terminus:failure"} :< Term
-    ->  json_write_dict(current_output,Term,[])
-    ;   json_write_dict(current_output,Term,[]),
-        fail).
+    _{'terminus:status':"terminus:failure"} :< Term.
     
 run_woql_syntax_error_test :-
     config:server(Server),
@@ -606,7 +617,7 @@ run_woql_syntax_error_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded,'&terminus%3Auser_key=root'], URI),
         
-    Args = ['-X','GET',URI],
+    Args = ['--user', ':root','-X','GET',URI],
     
     format('~nRunning command: curl -X GET ~s~n',[URI]),        
 
@@ -631,7 +642,5 @@ run_woql_syntax_error_test :-
     json_read_dict(Out, Term),
     close(Out),
 
-    (   _{'@type':"vio:WOQLSyntaxError"} :< Term
-    ->  json_write_dict(current_output,Term,[])
-    ;   json_write_dict(current_output,Term,[]),
-        fail).
+    nl,json_write_dict(current_output,Term,[]),
+    _{'@type':"vio:WOQLSyntaxError"} :< Term.

@@ -41,6 +41,11 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 
+% Authentication library is only half used.
+% and Auth is custom, not actually "Basic"
+% Results should be cached!
+:- use_module(library(http/http_authenticate)).
+
 % Load capabilities library
 :- use_module(library(capabilities)).
 
@@ -82,7 +87,7 @@ http:location(root, '/', []).
 
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
                 [method(Method),
-                 methods([get,post])]). 
+                 methods([options,get])]). 
 :- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
                 [method(Method),
                  methods([options,post,delete])]).
@@ -142,7 +147,9 @@ customise_error(E) :-
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    try_get_param('terminus:user_key',Request,Key),
+    memberchk(authorization(Text), Request),
+    http_authorization_data(Text, basic(_User, Key)),
+    % try_get_param('terminus:user_key',Request,Key),
     
     (   key_auth(Key, Auth)
     ->  true

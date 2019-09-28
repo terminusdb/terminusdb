@@ -28,9 +28,11 @@
 
 :- meta_predicate try(0).
 try(Goal) :- 
-    (   call(Goal)
+    (   format('~n*************************************~nRunning test ~q~n',
+               [Goal]),
+        call(Goal)
     ->  true
-    ;   format('~n*************************************~nFAIL! Could not successfully run ~q~n',
+    ;   format('~n+++++++++++++++++++++++++++++++++++++~nFAIL! Could not successfully run ~q~n',
                [Goal]),
         fail
     ).
