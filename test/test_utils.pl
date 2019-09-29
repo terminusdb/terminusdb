@@ -1,5 +1,7 @@
 :- module(test_utils,[
-              try/1
+              try/1,
+              curl_json/2,
+              report_curl_command/1
           ]).
                  
 /** <module> Test Utilities
@@ -26,6 +28,9 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- use_module(library(utils)).
+:- use_module(library(http/json)).
+
 :- meta_predicate try(0).
 try(Goal) :- 
     (   format('~n*****************************************************',[]),
@@ -38,3 +43,53 @@ try(Goal) :-
         format('~n+++++++++++++++++++++++++++++++++++++++++++++++++++++~n', []),
         fail
     ).
+
+write_arg(Arg) :-
+    string(Arg),
+    !,
+    writeq(Arg).
+write_arg(Arg) :-
+    re_match('.*:.*', Arg),
+    !,
+    writeq(Arg).
+write_arg(Arg) :-
+    re_match('[^ ]+ ', Arg),
+    !,
+    format('"~s"',Arg).
+write_arg(Arg) :-
+    atom(Arg),
+    !,
+    write(Arg).
+
+write_args(Args) :-
+    intersperse(' ', Args,Spaced),
+    !,
+    maplist(write_arg,Spaced),
+    format('~n',[]).
+
+report_curl_command(Args) :-
+    format('~nRunning command: curl ',[]),
+    write_args(Args).
+
+/*
+ * curl_json(+Args,-JSON) is semidet. 
+ */
+curl_json(Args,JSON) :-
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, JSON),
+    close(Out).
+
+

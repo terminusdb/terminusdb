@@ -47,6 +47,7 @@ run_api_tests :-
     try(run_db_create_test),
     try(run_schema_update_test),
     try(run_schema_get_test),
+    try(run_doc_get_test),
     try(run_doc_update_test),
     try(run_doc_update_get_test),
     try(run_doc_update_update_test),
@@ -73,25 +74,8 @@ run_connect_test :-
     config:server(Server),
 
     Args = ['--user', ':root','-X','GET', Server],
-    
-    format('~nRunning command: curl ~s ~s ~s ~s "~s"~n',Args),
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
     _{'@type':"terminus:User"} :< Term.
@@ -100,25 +84,8 @@ run_bad_auth_test :-
     config:server(Server),
 
     Args = ['--user', ':flute','-X','GET', Server],
-    
-    format('~nRunning command: curl ~s ~s ~s ~s "~s"~n',Args),
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
     _{'terminus:status':"terminus:failure"} :< Term.
@@ -148,33 +115,16 @@ run_db_create_test :-
                                     'terminus:schema':_{'@type':"xsd:string", '@value': Schema}
                                    },
             'terminus:user_key':"root"},
-    
+
     with_output_to(
         string(Payload),
         json_write_dict(current_output, Doc, [])        
-    ),
+    ), 
 
     atomic_list_concat([Server,'/terminus_qa_test'], URI),
-
     Args = ['--user',':root','-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
-
-    format('~nRunning command: curl -X POST ~s...~n',[URI]),
-    
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-    json_read_dict(Out, Term),
-
-    close(Out),
+    report_curl_command(Args),
+    curl_json(Args,Term),
 
     nl,json_write_dict(current_output,Term,[]),
     Term = _{'terminus:status' : "terminus:success"}.
@@ -201,53 +151,53 @@ run_schema_update_test :-
 
 
     Args = ['--user',':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl -X POST ~s...~n',[URI]),
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
 
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
-    
     Term = _{'terminus:status' : "terminus:success"}.
     
 run_schema_get_test :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
     www_form_encode(Schema,S),
-                       
-    atomic_list_concat(['curl --user ":root" \'',Server,'/terminus_qa_test/schema?terminus%3Aencoding=terminus%3Aturtle&terminus%3Aschema=',S,'\''], Cmd),
-    shell(Cmd).
+    atomic_list_concat([Server,'/terminus_qa_test/schema?terminus%3Aencoding=terminus%3Aturtle&terminus&3Aturtle&terminus&3Aschema=',S],URI),
+    
+    Args = ['--user',':root',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+    string(Term).
 
 run_doc_get_test :-
     config:server(Server),
-    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/admin\''], Cmd),
-    shell(Cmd).
+    atomic_list_concat([Server,'/terminus/document/admin'], URI),
+    Args = ['--user', ':root','-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    json_write_dict(current_output,Term,[]),
+    _{'@type' : "terminus:User"} :< Term.
 
 run_db_delete_test :-
     config:server(Server),
-
-    % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat(['curl --user ":root" -X DELETE ',Server,'/terminus_qa_test'], Cmd),
-    
-    format('~nRunning command: "~s"~n',[Cmd]),        
-    shell(Cmd).
+    atomic_list_concat([Server,'/terminus_qa_test'],URI),
+    Args = ['--user', ':root', '-X','DELETE', URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+    _{'terminus:status' : "terminus:success"} :< Term.
 
 run_get_filled_frame_test :-
     config:server(Server),
-    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe\''], Cmd),
-    shell(Cmd).
+    atomic_list_concat([Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe'],
+                       URI),
+    Args = ['--user', ':root', '-X','GET', URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    % This should not return a bare frame...
+    is_list(Term).
 
 run_doc_update_test :-
     % create DB
@@ -286,30 +236,11 @@ run_doc_update_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root', '-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
-    Term = _{'terminus:status' : "terminus:success"}.
+    _{'terminus:status' : "terminus:success"} :< Term.
 
 run_doc_update_get_test :-
     config:server(Server),
@@ -317,25 +248,8 @@ run_doc_update_get_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-    
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
     _{'@id':"doc:admin"} :< Term.
@@ -379,26 +293,8 @@ run_doc_update_update_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
         
     Term = _{'terminus:status' : "terminus:success"}.
@@ -409,25 +305,8 @@ run_doc_update_update_get_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl ~s ~s ~s "~s" ~s~n',Args),
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
     _{ 'rdfs:comment' :
@@ -442,31 +321,11 @@ run_db_delete_nonexistent_test :-
     atomic_list_concat([Server,'/dOeS_nOt_ExIsT'], URI),
 
     Args = ['--user', ':root', '-X','DELETE',URI],
-
-    format('~nRunning command: curl -X DELETE ~s~n',[URI]),
-    
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
+    % This should not be a bare error
     _{code : 500} :< Term.
 
 run_doc_delete_test :-
@@ -477,29 +336,8 @@ run_doc_delete_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
 
     Args = ['--user', ':root','-X','DELETE',URI],
-
-    format('~nRunning command: curl ~s ~s ~s ~s "~s"',Args),
-    
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    writeq(Term),
-    close(Out),
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
     _{'terminus:status' : "terminus:success"} :< Term.
@@ -511,35 +349,11 @@ run_doc_get_missing_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
     
     Args = ['--user',':root','-X','GET','-H','Content-Type: application/json', URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
 
-    format('Running command: curl ~s "~s" ~s ~s ~s "~s" "~s"~n', Args),
-    
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    process_wait(PID,Status),
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
-    json_write_dict(current_output,Term,[]),
     _{'terminus:status':"terminus:failure"} :< Term.
-
-run_get_doc_test :-
-    % create DB
-    config:server(Server),
-    atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus\''], Cmd),
-    shell(Cmd).
 
 /****************************************************************
  * Woql Tests
@@ -582,30 +396,8 @@ run_woql_test :-
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
-    
-    format('~nRunning command: curl -X GET ~s~n',[URI]),        
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-    
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
     (   _{'bindings' : L} :< Term
@@ -619,29 +411,8 @@ run_woql_empty_error_test :-
     atomic_list_concat([Server,'/terminus/woql'], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
-    
-    format('~nRunning command: curl -X GET ~s~n',[URI]),        
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-    
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    close(Out),
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
     _{'terminus:status':"terminus:failure"} :< Term.
@@ -684,31 +455,10 @@ run_woql_syntax_error_test :-
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
     Args = ['--user', ':root','-X','GET',URI],
-    
-    format('~nRunning command: curl -X GET ~s~n',[URI]),        
-
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-    
-    * read_string(Out, _, Line),
-    * writeq(Line),
-
-    json_read_dict(Out, Term),
-    close(Out),
-
+    report_curl_command(Args),
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
+    
     _{'@type':"vio:WOQLSyntaxError"} :< Term.
 
 /****************************************************************
@@ -756,26 +506,56 @@ run_bad_comment_update_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
-    
-    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
 
-    % process_create avoids shell escaping complexities. 
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
-                   ]),
-    
-    process_wait(PID,Status),
-    
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+        
+    _{'terminus:status':"terminus:failure",
+      'terminus:witnesses': _W} :< Term.
 
-    json_read_dict(Out, Term),
-    close(Out),
+run_bad_property_update_test :-
+    % create DB
+    config:server(Server),
+
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:document' :
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
+                           doc: Doc_Base,
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           vio:"http://terminusdb.com/schema/vio#",
+                           scm: Scm_Base,
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:bad_admin",
+              '@type':"terminus:User",
+              'terminus:shmerminus':_{'@id' : 'doc:berminus'},
+              'rdfs:comment':_{'@type':"xsd:integer",
+                               '@value': 3},
+              'rdfs:label':_{'@language':"en",
+                             '@value':"A badly designed admin user"}
+             }
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+        
+    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+
+    report_curl_command(Args),
+    curl_json(Args,Term),    
     nl,json_write_dict(current_output,Term,[]),
         
     _{'terminus:status':"terminus:failure",
