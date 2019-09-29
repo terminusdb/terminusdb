@@ -167,19 +167,20 @@ auth_action_scope(Auth, Action, Resource_ID) :-
  * describes all of its metadata properties.
  */
 add_database_resource(DB_Name,URI,Doc) :-
+    expand(Doc,DocX),
     /* Don't create database resources if they already exist */
     (   database_exists(URI)
     ->  throw(http_reply(method_not_allowed('terminus:create_database','Database exists')))
     ;   true),
     
     /* This check is required to cary out appropriate auth restriction */
-    (   get_key_document('@type', Doc, 'terminus:Database')
+    (   get_key_document('@type', DocX, 'terminus:Database')
     ->  true
     ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
         throw(http_reply(method_not_allowed(URI,MSG)))),
 
     /* Extend Doc with default databases */ 
-    extend_database_defaults(URI, Doc, Ext),
+    extend_database_defaults(URI, DocX, Ext),
     
     terminus_database_name(Collection),
     connect(Collection, DB),

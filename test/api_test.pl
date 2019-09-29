@@ -42,7 +42,8 @@
 run_api_tests :-
     try(run_connect_test),
     try(run_bad_auth_test),
-    % ( Creates DB for other tests
+    % TERMINUS_QA_TEST (
+    %   Creates DB for other tests
     try(run_db_create_test),
     try(run_schema_update_test),
     try(run_schema_get_test),
@@ -52,8 +53,11 @@ run_api_tests :-
     try(run_doc_update_update_get_test), 
     try(run_doc_delete_test),
     try(run_doc_get_missing_test),
+    %     INSTANCE_CHECKING (
+    try(run_bad_comment_update_test),
+    %     ) INSTANCE CHECKING
     try(run_db_delete_test),
-    %   grouped )
+    % ) TERMINUS_QA_TEST
     try(run_db_delete_nonexistent_test),
     try(run_doc_get_test),
     try(run_get_filled_frame_test),
@@ -61,11 +65,36 @@ run_api_tests :-
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test).
 
+/****************************************************************
+ * Basic API tests
+ ***************************************************************/
+
 run_connect_test :-
     config:server(Server),
 
-    atomic_list_concat(['curl --user ":root" -X GET \'',Server,'\''], Cmd),
-    shell(Cmd).
+    Args = ['--user', ':root','-X','GET', Server],
+    
+    format('~nRunning command: curl ~s ~s ~s ~s "~s"~n',Args),
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{'@type':"terminus:User"} :< Term.
 
 run_bad_auth_test :-
     config:server(Server),
@@ -512,6 +541,10 @@ run_get_doc_test :-
     atomic_list_concat(['curl -X GET \'',Server,'/terminus/document/terminus\''], Cmd),
     shell(Cmd).
 
+/****************************************************************
+ * Woql Tests
+ ***************************************************************/
+
 run_woql_test :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus/document/'], Document),
@@ -523,7 +556,6 @@ run_woql_test :-
     _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : Terminus,
-                     e : "",
                      s : S},
       from: ["s:terminus",
              _{select: [
@@ -678,3 +710,74 @@ run_woql_syntax_error_test :-
 
     nl,json_write_dict(current_output,Term,[]),
     _{'@type':"vio:WOQLSyntaxError"} :< Term.
+
+/****************************************************************
+ * Instance Checking Tests
+ ***************************************************************/
+
+/* 
+ * To run this we need to create a 'terminus_qa_test' database first...
+ */
+run_bad_comment_update_test :-
+    % create DB
+    config:server(Server),
+
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:document' :
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
+                           doc: Doc_Base,
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           vio:"http://terminusdb.com/schema/vio#",
+                           scm: Scm_Base,
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:bad_admin",
+              '@type':"terminus:User",
+              'rdfs:comment':_{'@type':"xsd:integer",
+                               '@value': 3},
+              'rdfs:label':_{'@language':"en",
+                             '@value':"A badly designed admin user"}
+             }
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+        
+    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    
+    format('~nRunning command: curl -X POST ~s...~n',[URI]),        
+
+    % process_create avoids shell escaping complexities. 
+    process_create(path(curl), Args,
+                   [ stdout(pipe(Out)),
+                     stderr(null),
+                     process(PID)
+                   ]),
+    
+    process_wait(PID,Status),
+    
+    (   Status=killed(Signal)
+    ->  interpolate(["curl killed with signal ",Signal], M),
+        format('~n~s~n', M),
+        fail
+    ;   true),
+
+    json_read_dict(Out, Term),
+    close(Out),
+    nl,json_write_dict(current_output,Term,[]),
+        
+    _{'terminus:status':"terminus:failure",
+      'terminus:witnesses': _W} :< Term.
+
