@@ -328,6 +328,7 @@ resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
     [],
     {
         string(X),
+        % this looks likes it does nothing...
         string_to_atom(Y,X)
     }.
 resolve(X@L,literal(lang(LE,XE))) -->

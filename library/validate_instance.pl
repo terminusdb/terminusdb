@@ -36,6 +36,7 @@
 :- use_module(library(base_type)).
 :- use_module(library(inference)).
 :- use_module(library(expansions)).
+:- use_module(library(http/json)).
 
 /**
  * most_specific_type(+Document, -Sorted, +Database)
@@ -231,8 +232,6 @@ refute_all_restrictions(Database,X,P,Reason) :-
 deletes following the following pattern: 
 
 forall (x p y) \in Deletes. 
-
-  p = 'rdf:type' => exists T . S,G |- x : T
 
   forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
     S,G' |- Ca(x p y)
@@ -536,6 +535,15 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordin
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:coordinate'}
                  }
     ).
+refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#dateRange', Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:dateRange(_,_),C,[]))
+    ->  Reason = _{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed dateRange',
+                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
+                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:dateRange'}
+                 }
+    ).
 refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#integerRange', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integerRange(_,_),C,[]))
     ->  Reason = _{
@@ -581,8 +589,17 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#email',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:email'}
                  }
     ).
+refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#json', Reason) :-
+    (   \+ (catch(atom_json_dict(S,_,[]),_,fail))
+    ->  Reason = _{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a valid json object',
+                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
+                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:json'}
+                 }
+    ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#boolean',Reason) :-
-    (   \+ member(S,['true','false','1','0']), term_to_atom(S,A)
+    (   \+ (string_to_atom(S,A), member(A,['true','false','1','0']))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed boolean.',
@@ -677,8 +694,8 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#time',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:time'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#time',Reason) :-
-    (   atom_codes(S,C), phrase(xsd_parser:time(H,M,S,Z,ZH,ZM),C,[]),
+refute_basetype_elt(literal(type(_,String)),'http://www.w3.org/2001/XMLSchema#time',Reason) :-
+    (   atom_codes(String,C), phrase(xsd_parser:time(H,M,S,Z,ZH,ZM),C,[]),
         (   H > 23
         ;   M > 59
         ;   (\+ member(Z,[1,-1]))
@@ -779,8 +796,8 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth'
     ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gMonth(M,Z,ZH,ZM),C,[]),
-        (   M < 12
-        ;   M > 1
+        (   M > 12
+        ;   M < 1
         ;   (\+ member(Z,[1,-1]))
         ;   ZH > 6
         ;   ZM > 59)
@@ -1209,4 +1226,3 @@ refute_basetype_elt(X,'http://www.w3.org/2000/01/rdf-schema#anySimpleType',Reaso
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:anySimpleType'}
                  }
     ).
-

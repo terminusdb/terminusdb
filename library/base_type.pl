@@ -31,8 +31,6 @@
 :- use_module(utils).
 
 %%%% Dacura types prefix
-%% dacura:coordinatePolygon
-%% dacura:dateRange ???
 
 /** 
  * baseType(?BaseTypeURI:uri) is nondet.
@@ -131,14 +129,17 @@ baseType('http://www.w3.org/2001/XMLSchema#ENTITY'). % unimplemented.
 baseType('http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral'). % Not fullly implemented
 baseType('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral').
 baseType('http://www.w3.org/2000/01/rdf-schema#Literal').
+baseType('http://terminusdb.com/schema/xdd#coordinate').
 baseType('http://terminusdb.com/schema/xdd#coordinatePolygon').
 baseType('http://terminusdb.com/schema/xdd#coordinatePolyline').
+baseType('http://terminusdb.com/schema/xdd#dateRange').
 baseType('http://terminusdb.com/schema/xdd#gYearRange').
 baseType('http://terminusdb.com/schema/xdd#integerRange').
 baseType('http://terminusdb.com/schema/xdd#decimalRange').
-baseType('http://terminusdb.com/schema/xdd#pesel').
+baseType('http://terminusdb.com/schema/xdd#json').
 baseType('http://terminusdb.com/schema/xdd#url').
 baseType('http://terminusdb.com/schema/xdd#email').
+baseType('http://terminusdb.com/schema/xdd#html').
 
 /** 
  * baseTypeParent(+ChildXSDURI:uri,+ParentXSDURI:uri) is det.
@@ -197,11 +198,14 @@ baseTypeParent('http://www.w3.org/2001/XMLSchema#gDay','http://www.w3.org/2001/X
 baseTypeParent('http://www.w3.org/2001/XMLSchema#duration','http://www.w3.org/2001/XMLSchema#anySimpleType').
   baseTypeParent('http://www.w3.org/2001/XMLSchema#dayTimeDuration','http://www.w3.org/2001/XMLSchema#duration').
   baseTypeParent('http://www.w3.org/2001/XMLSchema#yearMonthDuration','http://www.w3.org/2001/XMLSchema#duration').
+baseTypeParent('http://terminusdb.com/schema/xdd#coordinate','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#coordinatePolygon','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#coordinatePolyLine','http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseTypeParent('http://terminusdb.com/schema/xdd#coordinate','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#dateRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#anySimpleType').
 baseTypeParent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#json','http://www.w3.org/2001/XMLSchema#anySimpleType').
+baseTypeParent('http://terminusdb.com/schema/xdd#html','http://www.w3.org/2001/XMLSchema#anySimpleType').

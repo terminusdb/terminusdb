@@ -157,6 +157,9 @@ auth_action_scope(Auth, Action, Resource_ID) :-
         )
 	   ).
 
+    % make comparison late..
+    %atom_string(Resource_ID,Resource_ID_String).
+
 /*  
  * add_database_resource(DB,URI,Doc) is det.
  * 

@@ -42,8 +42,8 @@
 run_api_tests :-
     try(run_connect_test),
     try(run_bad_auth_test),
+    %
     % TERMINUS_QA_TEST (
-    %   Creates DB for other tests
     try(run_db_create_test),
     try(run_schema_update_test),
     try(run_schema_get_test),
@@ -56,9 +56,19 @@ run_api_tests :-
     try(run_doc_get_missing_test),
     %     INSTANCE_CHECKING (
     try(run_bad_comment_update_test),
+    try(run_bad_property_update_test),
     %     ) INSTANCE CHECKING
     try(run_db_delete_test),
     % ) TERMINUS_QA_TEST
+    %
+    % INSTANCE TERMINUS_QA_TEST (
+    try(run_db_create_test),
+    try(run_schema_datatypes_update_test),
+    try(run_bad_doc_datatype_update_test),
+    try(run_good_doc_datatype_update_test),        
+    try(run_db_delete_test),
+    % ) INSTANCE TERMINUS_QA_TEST
+    %
     try(run_db_delete_nonexistent_test),
     try(run_doc_get_test),
     try(run_get_filled_frame_test),
@@ -538,8 +548,8 @@ run_bad_property_update_test :-
               '@id':"doc:bad_admin",
               '@type':"terminus:User",
               'terminus:shmerminus':_{'@id' : 'doc:berminus'},
-              'rdfs:comment':_{'@type':"xsd:integer",
-                               '@value': 3},
+              'rdfs:comment':_{'@language':"en",
+                               '@value': "doinky doink"},
               'rdfs:label':_{'@language':"en",
                              '@value':"A badly designed admin user"}
              }
@@ -561,3 +571,213 @@ run_bad_property_update_test :-
     _{'terminus:status':"terminus:failure",
       'terminus:witnesses': _W} :< Term.
 
+/************************************* 
+ * Datatypes schema instance checking.
+ * 
+ * Need to load a fresh database for this with run_db_create_test/0
+ * followed by run_db_delete_test/0
+ */
+run_schema_datatypes_update_test :-
+    config:server(Server),
+
+    terminus_path(Path),
+    interpolate([Path, '/terminus-schema/datatypes.owl.ttl'], TTL_File),
+    
+    atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
+
+    read_file_to_string(TTL_File, String, []),
+    Doc = _{
+              'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
+              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"}
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write_dict(current_output, Doc, [])        
+    ),
+
+
+    Args = ['--user',':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    Term = _{'terminus:status' : "terminus:success"}.
+
+run_bad_doc_datatype_update_test :-
+    config:server(Server),
+
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+    
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:document' :
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
+                           doc:Doc_Base,
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           vio:"http://terminusdb.com/schema/vio#",
+                           scm:Scm_Base,
+                           datatypes:"http://terminusdb.com/schema/datatypes#",
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:bad_data",
+              '@type':"datatypes:DatatypeHolder",
+              'rdfs:comment':_{'@language':"en",
+                               '@value': "A very bad document"},
+              'rdfs:label':_{'@language':"en",
+                             '@value':"Bad Doc"},
+              'datatypes:coord':_{'@type' : "xdd:coordinate",
+                                  '@value' : "fdas"},
+              'datatypes:coordline':_{'@type' : "xdd:coordinatePolyline",
+                                      '@value' : "fdas"},
+              'datatypes:coordpoly':_{'@type' : "xdd:coordinatePolygon",
+                                      '@value' : "goop"},
+              'datatypes:dateRange':_{'@type' : "xdd:dateRange",
+                                      '@value' : "1-2"},
+              'datatypes:gYearRange':_{'@type' : "xdd:gYearRange",
+                                       '@value' : "a-c"},
+              'datatypes:integerRange':_{'@type' : "xdd:integerRange",
+                                         '@value' : "[1,k]"},
+              'datatypes:decimalRange':_{'@type' : "xdd:decimalRange",
+                                         '@value' : "asdf"},
+              'datatypes:email':_{'@type' : "xdd:email",
+                                  '@value' : 2},
+              'datatypes:html':_{'@type' : "xdd:html",
+                                 '@value' : 1},
+              'datatypes:url':_{'@type' : "xdd:url",
+                                '@value' : 3},
+              'datatypes:boolean':_{'@type' : "xsd:boolean",
+                                    '@value' : "asdf"},
+              'datatypes:decimal':_{'@type' : "xsd:decimal",
+                                    '@value' : "asdf"},
+              'datatypes:double':_{'@type' : "xsd:double",
+                                   '@value' : "asdf"},
+              'datatypes:float':_{'@type' : "xsd:float",
+                                  '@value' : "a float wat?"},
+              'datatypes:time':_{'@type' : "xsd:time",
+                                 '@value' : "that time again"},
+              'datatypes:date':_{'@type' : "xsd:date",
+                                 '@value' : "the date"},
+              'datatypes:dateTime':_{'@type' : "xsd:dateTime",
+                                     '@value' : "the dateTime"},
+              'datatypes:dateTimeStamp':_{'@type' : "xsd:dateTimeStamp",
+                                          '@value' : "the dateTimeStamp"},
+              'datatypes:gYearMonth':_{'@type' : "xsd:gYearMonth",
+                                       '@value' : "Yar"},
+              'datatypes:gMonth':_{'@type' : "xsd:gMonth",
+                                   '@value' : "ggggMaonth"},
+              'datatypes:json':_{'@type' : "xdd:json",
+                                 '@value' : "{"}
+             }
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+        
+    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+        
+    _{'terminus:status':"terminus:failure",
+      'terminus:witnesses': W} :< Term,
+
+    length(W,18).
+
+run_good_doc_datatype_update_test :-
+    config:server(Server),
+
+    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
+    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
+    
+    Doc = _{'@type':"terminus:APIUpdate",
+            'terminus:document' :
+            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                           tbs:"http://terminusdb.com/schema/tbs#",
+                           doc:Doc_Base,
+                           ex:"http://example.org/",
+                           owl:"http://www.w3.org/2002/07/owl#",
+                           rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                           vio:"http://terminusdb.com/schema/vio#",
+                           scm:Scm_Base,
+                           datatypes:"http://terminusdb.com/schema/datatypes#",
+                           terminus:"http://terminusdb.com/schema/terminus#",
+                           xdd:"http://terminusdb.com/schema/xdd#",
+                           xsd:"http://www.w3.org/2001/XMLSchema#"},
+              '@id':"doc:bad_data",
+              '@type':"datatypes:DatatypeHolder",
+              'rdfs:comment':_{'@language':"en",
+                               '@value': "A healthy document"},
+              'rdfs:label':_{'@language':"en",
+                             '@value':"Healthy Document"},
+              'datatypes:coord':_{'@type' : "xdd:coordinate",
+                                  '@value' : "[ 32.0 , 41.0 ]"},
+              'datatypes:coordline':_{'@type' : "xdd:coordinatePolyline",
+                                      '@value' : "[ [ 32.0 , 41.0 ] ]"},
+              'datatypes:coordpoly':_{'@type' : "xdd:coordinatePolygon",
+                                      '@value' : "[ [ 32.0 , 41.0 ] ]"},
+              'datatypes:dateRange':_{'@type' : "xdd:dateRange",
+                                      '@value' : "[ 2019-08-02 , 2019-08-03 ]"},
+              'datatypes:gYearRange':_{'@type' : "xdd:gYearRange",
+                                       '@value' : "[ 2017 , 2018 ]"},
+              'datatypes:integerRange':_{'@type' : "xdd:integerRange",
+                                         '@value' : "[ 1 , 12]"},
+              'datatypes:decimalRange':_{'@type' : "xdd:decimalRange",
+                                         '@value' : "[ 1.0 , 33 ]"},
+              'datatypes:email':_{'@type' : "xdd:email",
+                                  '@value' : "gavin@datachemist.com"},
+              'datatypes:html':_{'@type' : "xdd:html",
+                                 '@value' : "<html></html>"},
+              'datatypes:url':_{'@type' : "xdd:url",
+                                '@value' : "http://terminusdb.com"},
+              'datatypes:boolean':_{'@type' : "xsd:boolean",
+                                    '@value' : true},
+              'datatypes:decimal':_{'@type' : "xsd:decimal",
+                                    '@value' : "12.5"},
+              'datatypes:double':_{'@type' : "xsd:double",
+                                   '@value' : "NAN" },
+              'datatypes:float':_{'@type' : "xsd:float",
+                                  '@value' : "12.2343E-7"},
+              'datatypes:time':_{'@type' : "xsd:time",
+                                 '@value' : "12:34:00"},
+              'datatypes:date':_{'@type' : "xsd:date",
+                                 '@value' : "2019-05-29"},
+              'datatypes:dateTime':_{'@type' : "xsd:dateTime",
+                                     '@value' : "2019-05-29T12:34:00"},
+              'datatypes:dateTimeStamp':_{'@type' : "xsd:dateTimeStamp",
+                                          '@value' : "3243"},
+              'datatypes:gYearMonth':_{'@type' : "xsd:gYearMonth",
+                                       '@value' : "2018-05"},
+              'datatypes:gMonth':_{'@type' : "xsd:gMonth",
+                                   '@value' : "--03"},
+              'datatypes:json':_{'@type' : "xdd:json",
+                                 '@value' : "{\"asdf\" : \"fdas\"}"}
+             }
+           },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Doc, [])
+    ),
+
+    atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
+        
+    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+        
+    _{'terminus:status':"terminus:success"} :< Term.
+    % need to check witnesses but we throw an error at insert leaving only witness! 

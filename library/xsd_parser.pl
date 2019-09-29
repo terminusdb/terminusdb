@@ -153,6 +153,7 @@ timeZone(-1,ZH,ZM) --> "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM) .
 timeZone(1,0,0) --> "" .
 
 % Hour, Minute, Second, ZoneSign, ZoneHour, ZoneMinute
+time(H,M,0,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Z,ZH,ZM).
 time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 			timeZone(Z,ZH,ZM) .
 
@@ -171,11 +172,11 @@ gYear(Y,Z,ZH,ZM) --> year(Y), timeZone(Z,ZH,ZM) .
 
 gYearMonth(Y,M,Z,ZH,ZM) --> year(Y), "-", twoDigitNatural(M), timeZone(Z,ZH,ZM) .
 
-gMonth(M,Z,ZH,ZM) --> "-", twoDigitNatural(M), timeZone(Z,ZH,ZM) .
+gMonth(M,Z,ZH,ZM) --> "--", twoDigitNatural(M), timeZone(Z,ZH,ZM) .
 
 gMonthDay(Mo,D,Z,ZH,ZM) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Z,ZH,ZM) .
 
-gDay(D,Z,ZH,ZM) --> "--", twoDigitNatural(D), timeZone(Z,ZH,ZM) .
+gDay(D,Z,ZH,ZM) --> "---", twoDigitNatural(D), timeZone(Z,ZH,ZM) .
 
 
 maybeYear(Y) --> natural(Y), "Y" .
@@ -317,14 +318,13 @@ point(X,Y) --> "[" , whitespace, decimal(X), whitespace,
 points([[X,Y]|L]) --> whitespace, "," , whitespace, point(X,Y), whitespace, points(L) .
 points([]) -->  whitespace, "]" .
 
-coordinatePolygon([[X,Y]|L]) --> "[" , point(X,Y), points(L).
+coordinatePolygon([[X,Y]|L]) --> "[" , whitespace, point(X,Y), points(L).
 coordinatePolygon([]) --> "[" , whitespace , "]" .
 
 decimalRange(X,X) --> decimal(X).
 decimalRange(X,Y) --> "[" , whitespace, decimal(X), whitespace,
 					  "," , whitespace, decimal(Y), whitespace, 
 					  "]" .
-
 integerRange(X,X) --> positiveInteger(X).
 integerRange(X,Y) --> "[" , whitespace, positiveInteger(X), whitespace,
 					 "," , whitespace, positiveInteger(Y), whitespace, 
@@ -335,6 +335,12 @@ gYearRange(X,Y) --> "[" , whitespace, gYear(X,_,_,_), whitespace,
 					"," , whitespace, gYear(Y,_,_,_), whitespace, 
 					"]" .
 
+dateRange(date(Y,M,D,Z,HH,MM),date(Y,M,D,Z,HH,MM)) -->
+    date(Y,M,D,Z,HH,MM).
+dateRange(date(Y1,M1,D1,Z1,HH1,MM1),date(Y2,M2,D2,Z2,HH2,MM2)) -->
+    "[" , whitespace, date(Y1,M1,D1,Z1,HH1,MM1), whitespace,
+	"," , whitespace, date(Y2,M2,D2,Z2,HH2,MM2), whitespace, 
+	"]" .
 
 terminal([],_S).
 
