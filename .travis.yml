@@ -1,7 +1,7 @@
 before_script:
   - sudo apt-add-repository ppa:swi-prolog/stable -y
   - sudo apt-get update -q
-  - sudo apt-get install swi-prolog-nox curl autoconf libtool zlib1g zlib1g-dev python
+  - sudo apt-get install swi-prolog-nox curl autoconf libtool zlib1g zlib1g-dev python raptor2-utils
   - git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git
   - git clone --branch v0.30.0 https://github.com/drobilla/serd.git
   - cd serd && ./waf configure && ./waf && sudo ./waf install
