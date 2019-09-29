@@ -205,6 +205,9 @@ connection_authorised_user(Request, User) :-
 reply_with_witnesses(Resource_URI, Witnesses) :-
     write_cors_headers(Resource_URI),
 
+    http_log_stream(Log),
+    format(Log,'~nWitnesses~qn',[Witnesses]),
+
     (   Witnesses = []
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
     ;   reply_json(_{'terminus:status' : 'terminus:failure',

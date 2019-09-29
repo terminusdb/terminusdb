@@ -603,7 +603,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#boolean
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed boolean.',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:boolean'}
                  }
     ).

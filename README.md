@@ -68,7 +68,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install(hdt).
+1 ?- pack_install('https://github.com/GavinMendelGleason/hdt.git').
 % Contacting server ....
 2 ?- pack_install(mavis). 
 % Contacting server ....
