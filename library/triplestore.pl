@@ -520,7 +520,7 @@ triples_canonical([(D,G,A,B,C)|Triples],[(D,G,X,Y,Z)|Canonical]) :-
  */ 
 canonicalise_subject(O,C) :-
     (   string(O)
-    ->  string_to_atom(O,C)
+    ->  atom_string(C,O)
     ;   O=C).
 
 /* 

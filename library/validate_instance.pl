@@ -599,7 +599,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#json', 
                  }
     ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#boolean',Reason) :-
-    (   \+ (string_to_atom(S,A), member(A,['true','false','1','0']))
+    (   \+ (atom_string(A,S), member(A,['true','false','1','0']))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed boolean.',

@@ -365,7 +365,7 @@ compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
 
 assert_program([]).
 assert_program([Def|Remainder]) :-
-    assert(Def),
+    assertz(Def),
     assert_program(Remainder).
 
 retract_program([]).
