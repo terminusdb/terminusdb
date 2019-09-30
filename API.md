@@ -534,10 +534,10 @@ A `terminus:DatabaseMetadata` object is returned whose structure is as follows:
   },
   "@type":"terminus:DatabaseMetadata",
   "terminus:database_created_time": {
-    "@type":"xsd:nonNegativeInteger",
+    "@type":"xsd:dateTime",
     "@value":"2019-09-30T09:42:26+00:00"
   },
-  "terminus:database_modified_time": {"@type":"xsd:dataTime", "@value":"2019-09-30T09:42:26+00:00"},
+  "terminus:database_modified_time": {"@type":"xsd:dateTime", "@value":"2019-09-30T09:42:26+00:00"},
   "terminus:database_size": {"@type":"xsd:nonNegativeInteger", "@value":113781}
 }
 ```

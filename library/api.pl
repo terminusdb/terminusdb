@@ -145,6 +145,7 @@ customise_error(error(type_error(T,O),C)) :-
                                            'vio:type' : T,
                                            'vio:literal' : O}]},
                [status(400)]).
+%customise_error((method_not_allowed(
 customise_error(http_reply(method_not_allowed(JSON))) :-
     reply_json(JSON,[status(405)]).
 customise_error(http_reply(not_found(JSON))) :-
@@ -851,9 +852,9 @@ try_get_metadata(DB_URI,JSON) :-
     JSON = _{'@context' : Ctx,
              '@type' : 'terminus:DatabaseMetadata',
              'terminus:database_modified_time' : _{'@value' : Modified_DT,
-                                                   '@type' : 'xsd:dataTime'},
+                                                   '@type' : 'xsd:dateTime'},
              'terminus:database_created_time' : _{'@value' : Created_DT,
-                                                  '@type' : 'xsd:nonNegativeInteger'},
+                                                  '@type' : 'xsd:dateTime'},
              'terminus:database_size' : _{'@value' : Size,
                                           '@type' : 'xsd:nonNegativeInteger'}}.
 
