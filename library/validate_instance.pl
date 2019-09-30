@@ -155,7 +155,7 @@ refute_insertion(Database,_X,P,Y,Reason) :-
     % \+ P = 'rdf:type'
     (   range(P,Range,Database)
     ->  refute_node_at_range(Database,Y,Range,Reason)    
-    ;   interpolate(['The property ', P,' has an undefined domain.'],Message),
+    ;   format(atom(Message),'The property ~q has an undefined domain.',[P]),
         Reason = _{
                      '@type' : 'vio:PropertyWithUndefinedRange',
                      'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
@@ -178,7 +178,7 @@ refute_node_at_class(Database,X,Class,Reason) :-
     (   instanceClass(X,IC,Database)
     ->  (   subsumptionOf(IC,Class,Database)
         ->  false
-        ;   interpolate(['The subject ',X,' has a class ',IC,' not subsumed by ',Class,'.'],Message),
+        ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
             Reason = _{
                          '@type' : 'vio:InstanceSubsumptionViolation',
                          'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
@@ -186,7 +186,7 @@ refute_node_at_class(Database,X,Class,Reason) :-
                          'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
                          'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
                      })
-    ;   interpolate(['The subject ',X,' has no defined class.'],Message),
+    ;   format(atom(Message),'The subject ~q has no defined class.',[X]),
         Reason = _{
                      '@type' : 'vio:UntypedInstance',
                      'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},

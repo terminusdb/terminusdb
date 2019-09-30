@@ -486,6 +486,7 @@ literal_to_canonical(A^^Ty) :-
 literal_to_canonical(A@Lang) :-
     !,
     literal_to_canonical(lang(Lang,A)).
+/*
 literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit)),
                      literal(type('http://www.w3.org/2001/XMLSchema#boolean',Can))) :-
     !,
@@ -495,6 +496,7 @@ literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit
         ->  Can=false
         ;   fail)             
     ).
+*/
 literal_to_canonical(X,X).
 
 /** 
@@ -515,7 +517,7 @@ canonicalise_object(O,C) :-
  * Insert quint into transaction predicates.
  */
 insert(DB,G,X,Y,O) :-
-    canonicalise_object(Z,O),
+    canonicalise_object(O,Z),
     (   xrdf(DB,[G],X,Y,Z)
     ->  true
     ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
