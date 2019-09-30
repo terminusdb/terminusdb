@@ -41,7 +41,9 @@
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
 :- use_module(library(database)).
-
+:- use_module(library(triplestore),[
+                  triples_canonical/2
+              ]).
        
 /** 
  * expand(+JSON_LD, -JSON) is det.
@@ -411,9 +413,10 @@ jsonld_triples(JSON, Ctx, Database, Triples) :-
     merge_dictionaries(Ctx, Internal, New_Ctx),
     expand_context(New_Ctx,New_Expanded),
     expand(JSON,New_Expanded,JSON_Ex),
-    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples_Unsorted),
-    sort(Triples_Unsorted,Triples).
-    
+    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples_Apocryphal),
+    triples_canonical(Triples_Apocryphal,Triples_Canonical),
+    sort(Triples_Canonical,Triples).
+
 /* 
  * jsonld_triples_aux(Dict, Ctx, Database, Tuples) is det.
  * 

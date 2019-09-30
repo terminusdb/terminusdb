@@ -17,7 +17,11 @@
               with_output_graph/2,
               ttl_to_hdt/2,
               with_transaction/2,
-              checkpoint/2
+              checkpoint/2,
+              canonicalise_subject/2,
+              canonicalise_predicate/2,
+              canonicalise_object/2,
+              triples_canonical/2
           ]).
 
 :- use_module(library(hdt)). 
@@ -497,13 +501,31 @@ literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit
         ;   fail)             
     ).
 */
-literal_to_canonical(X,X).
+literal_to_canonical(X,X). % dubious!
 
+/* 
+ * triples_canonical(Apocryphal,Canonical) is det.
+ * 
+ * Turn list of triples into a canonical comparable form.
+ */
+triples_canonical([],[]).
+triples_canonical([(D,G,A,B,C)|Triples],[(D,G,X,Y,Z)|Canonical]) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
+    triples_canonical(Triples,Canonical).
+
+/* 
+ * canonicalise_subject(+O,-C) is det.
+ */ 
 canonicalise_subject(O,C) :-
     (   string(O)
     ->  string_to_atom(O,C)
     ;   O=C).
 
+/* 
+ * canonicalise_predicate(+O,-C) is det.
+ */ 
 canonicalise_predicate(O,C) :-
     (   string(O)
     ->  string_to_atom(O,C)

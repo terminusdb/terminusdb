@@ -21,6 +21,7 @@
               % As JSON-LD with a context and depth parameter
               document_jsonld/5,
               class_frame_jsonld/3,
+              triples_canonical/2,
               object_edges/3,
               delete_object/2,
               update_object/2,
@@ -942,8 +943,9 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
 object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database)
     ->  class_frame(Class,Database,Frame),
-        realise_triples(URI,Frame,Database,Edges_Unsorted),
-        sort(Edges_Unsorted,Edges)
+        realise_triples(URI,Frame,Database,Apocryphal),
+        triples_canonical(Apocryphal, Canonical),
+        sort(Canonical,Edges)
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
     
