@@ -659,6 +659,10 @@ fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
     % a bare restriction (restricts nothing)
     !, 
     fill_class_frame(Elt,Database,Rest,Frames).
+fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp) :-
+    % An class choice
+    !,
+    maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp).
 fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
     member(type=Type, C), 
     member(operands=Fs, C),

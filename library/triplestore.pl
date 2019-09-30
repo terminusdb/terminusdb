@@ -505,6 +505,8 @@ literal_to_canonical(X,X).
 canonicalise_object(O,C) :-
     (   is_literal(O)
     ->  literal_to_canonical(O,C)
+    ;   string(O)
+    ->  string_to_atom(O,C)
     ;   O=C).
 
 /** 

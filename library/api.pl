@@ -71,7 +71,7 @@
 :- use_module(library(json_woql)).
 
 % File processing - especially for turtle
-:- use_module(library(file_utils), [checkpoint_to_turtle/3]).
+:- use_module(library(file_utils), [checkpoint_to_turtle/3,db_size/2]).
 
 % Validation
 :- use_module(library(validate)).
@@ -106,6 +106,9 @@ http:location(root, '/', []).
 :- http_handler(root(DB/search), cors_catch(search_handler(Method,DB)),
                 [method(Method),
                  methods([options,get,post,delete])]). 
+:- http_handler(root(DB/meta), cors_catch(meta_handler(Method,DB)),
+                [method(Method),
+                 methods([options,get])]). 
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
@@ -467,6 +470,25 @@ schema_handler(post,DB,R) :- % should this be put?
     
     reply_with_witnesses(DB_URI,Witnesses).
 
+/* */
+meta_handler(options,DB,_Request) :-
+    % database may not exist - use server for CORS
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI),
+    format('~n'). % send headers
+meta_handler(get,DB,Request) :-
+    /* Read Document */
+    authenticate(Request, Auth),
+
+    % We should make it so we can pun documents and IDs
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,terminus/update_schema,DB_URI),
+    
+    try_get_metadata(DB_URI,JSON),
+
+    reply_with_witnesses(DB_URI,JSON).
     
 /********************************************************
  * Determinising predicates used in handlers            *
@@ -803,3 +825,19 @@ try_update_schema(DB_URI,Name,TTL,Witnesses) :-
         schema_transaction(Database, NA, TTLStream, Witnesses),
         close(TTLStream)
     ).     
+
+/* 
+ * try_get_metadata(+DB_URI,+Name,+TTL,-Witnesses) is det.
+ *
+ * 
+ */
+try_get_metadata(DB_URI,JSON) :-
+    (   db_size(DB_URI,Size)
+    ->  true
+    ;   Size = 0),
+    
+    JSON = _{ '@type' : 'terminus:DatabaseMetadata',
+              'terminus:size' : _{'@value' : Size,
+                                  '@type' : 'xsd:nonNegativeInteger'}}.
+
+    

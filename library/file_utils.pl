@@ -35,7 +35,8 @@
               cleanup_edinburgh_escapes/1,
               last_checkpoint_file/3,
               checkpoint_to_turtle/3,
-              terminus_schema_path/1
+              terminus_schema_path/1,
+              db_size/2
           ]).
 
 :- use_module(utils).
@@ -562,3 +563,21 @@ checkpoint_to_turtle(Collection,Database,Output_File) :-
     delete_file(NTriples_File),
     
     close(Out).
+
+/* 
+ * db_size(DB_URI,Size) is det.
+ * 
+ * Get an approximate of the database size.
+ */ 
+db_size(DB_URI,Size) :-
+    aggregate_all(sum(File_Size),
+                  (   
+                      graphs(DB_URI,Graph_IDs),
+                      member(Graph_ID,Graph_IDs),
+                      current_checkpoint_directory(DB_URI,Graph_ID,CPD),
+                      files(CPD,Files),
+                      member(File,Files),
+                      interpolate([CPD,'/',File],Path),
+                      size_file(Path, File_Size)
+                  ),
+                  Size).
