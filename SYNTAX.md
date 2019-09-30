@@ -81,7 +81,7 @@ transactional updates.
 
 Attempts to find solutions in which Q_i hold simultaneously. 
 
-Example: 
+#### Example: 
 ```
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
@@ -91,7 +91,7 @@ Example:
   ]
 }
 ```
-Returns: 
+#### Returns: 
 
 ```
 { "bindings": 
@@ -109,7 +109,7 @@ Returns:
 
 Attempts to find a solution for any of Q_i hold
 
-Example: 
+#### Example: 
 ```
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
@@ -119,7 +119,7 @@ Example:
   ]
 }
 ```
-Returns: 
+#### Returns: 
 
 ```
 {
@@ -137,11 +137,34 @@ Returns:
 ```
 
 ### from
-`{ "from" : [ Graph, Query ] }`
-* Graph := A graph identifier IRI. 
+`{ "from" : [ Database, Query ] }`
+* Database := A database identifier IRI. 
 * Query := A WOQL Query
 
-Sets the current default graph for Query. 
+Sets the current default database for Query. 
+
+```
+{"@context" : {scm : "http://localhost:6363/terminus/document#",
+               doc : "http://localhost:6363/terminus/document/",
+               s : "http://localhost:6363/"},
+ "from":["s:terminus",
+         {"triple":[ "doc:admin", "rdfs:comment", "v:comment"]}
+        ]}
+```
+
+#### Returns 
+
+```
+{
+  "bindings": [
+    {
+      "v:comment": {"@language":"en", "@value":"This is the server super user account"}
+    }
+  ],
+  "graphs": {}
+}
+
+```
 
 ### select
 `{ "select" : [ Var_List, Query ] }`
@@ -151,7 +174,7 @@ Sets the current default graph for Query.
 Obtain bindings for variables in Var\_List compatible with
 Query. Select will mask out any variables not listed in the intial list segment.
 
-Example: 
+#### Example: 
 ```
 { "@context" : { "doc" : "http://localhost:6363/terminus/document/" },
   "from" : [ 
@@ -162,7 +185,7 @@ Example:
   ]
 }
 ```
-Returns 
+### Returns 
 
 ```
 { "bindings" : [ { "v:Label':'doc:terminus'} ] } 
@@ -203,6 +226,38 @@ Elt\_A is identical to Elt_B or the "@id" fields of the JSON-LDs.
 * JSON := A JSON-LD document to replace the document at the "@id" given at the top level of the document. 
 
 This is used to update documents in the database as a single operation. 
+
+### Example:
+```
+{"@context" : {scm : Scm_Base,
+               doc : "http://terminusdb.com/terminus/document/",
+               db : "http://terminusdb.com/terminus/",
+               rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+               s : "http://terminusdb.com/"},
+ "from": ["s:terminus",
+          {"into": ["db:document",
+                      {"when": [{"true": []},
+                                {"update": [
+                                
+                                    {"@id":"doc:admin",
+                                     "@type":"terminus:User",
+                                     "rdfs:comment":_{"@language":"en", 
+                                                      "@value":"A WOQL updated superuser"},
+                                     "rdfs:label":{"@language":"en", 
+                                                   "@value":"Server Admin User"}
+                                     }
+                                     
+                                           ]}
+                               ]}
+                     ]}
+            ]}
+```
+
+#### Returns
+
+```
+{"bindings": [ {} ], "graphs": {}}
+```
 
 ### delete
 `{ "delete" : [ JSON_or_IRI ] }`
