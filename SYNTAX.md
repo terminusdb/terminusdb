@@ -298,12 +298,12 @@ Inserts the triple into the given graph IRI (or the default).
 * Predicate : Predicate IRI or Variable IRI
 * Object\_or\_Literal : Object, Literal or Variable IRI
  
-### entails
-`{ "entails" : [ Query, Update ] }`
+### when
+`{ "when" : [ Query, Update ] }`
 * Query := A WOQL Query
 * Update := A WOQL Update
 
-For every Solution to Query, perform Update. 
+For every Solution to Query, perform Update. "_when Query, then Update_"
 
 ### trim
 `{ "trim" : [ String , Trimmed_String ] }`
