@@ -62,6 +62,12 @@ opt_spec([[opt(help),
            longflags([port]),
            default(6363),
            help('set the server port')],
+          
+          [opt(protocol),
+           type(atom),
+           longflags([protocol]),
+           default(http),
+           help('set the protocol used by the server')],
 
           [opt(key),
            type(atom),
@@ -107,6 +113,12 @@ config_path(Dir,Path) :-
 config_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config-template.tpl'], Path).
 
+index_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../index.html'], Path).
+
+index_template_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../index.tpl'], Path).
+
 inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
     atomic_list_concat(['http://',Host,'/terminus/'],DBF),
@@ -136,6 +148,14 @@ write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount
     close(Tpl_Stream),
     open(Config_Path, write, Stream),
     format(Stream, Tpl_String, [Server_Name, Port, Worker_Amount]),
+    close(Stream).
+
+write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server_Name, Port, Key) :-
+    open(Index_Tpl_Path, read, Tpl_Stream),
+    read_string(Tpl_Stream, _, Tpl_String),
+    close(Tpl_Stream),
+    open(Index_Path, write, Stream),
+    format(Stream, Tpl_String, [Protocol,Server_Name,Port,Key]),
     close(Stream).
 
 program(Prog) :-
@@ -188,11 +208,16 @@ main(Args) :-
         ttl_path(Schema_Path, Schema_TTL_Path),
         config_template_path(Dir, Config_Tpl_Path),
         config_path(Dir,Config_Path),
+        index_template_path(Dir, Index_Tpl_Path),
+        index_path(Dir,Index_Path),
 
         memberchk(workers_amount(Workers_Arg), Opts),
         write_config_file(Config_Tpl_Path, Config_Path, Server,
                           Port_Arg, Workers_Arg),
         crypto_password_hash(Key,Hash, [cost(15)]),
+        memberchk(protocol(Protocol), Opts),
+        write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
+                         Port_Arg, Key),
         
         make_directory_path(Instance_Path),
         make_directory_path(Inference_Path),
