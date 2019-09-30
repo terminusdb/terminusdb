@@ -660,10 +660,20 @@ fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
     % a bare restriction (restricts nothing)
     !, 
     fill_class_frame(Elt,Database,Rest,Frames).
-fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp) :-
-    % An class choice
+fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
+    % A class choice
     !,
-    maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp).
+    %format('Elt: ~q~n', [Elt]),        
+    instanceClass(Elt,Class,Database),
+    %format('Class: ~q~n', [Class]),
+    maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp),
+    %format('Fsp: ~q~n', [Fsp]),
+    include({Class}/[Frame]>>(
+                forall(member(Prop_Frame,Frame),
+                       member(domain=Class, Prop_Frame))
+            ), Fsp, Filtered),
+    debug(frame,'fill_class_frame/4 choice Filtered: ~q~n', [Filtered]),
+    Filtered = [Fsp_Filtered].
 fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
     member(type=Type, C), 
     member(operands=Fs, C),
