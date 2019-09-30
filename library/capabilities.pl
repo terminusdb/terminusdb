@@ -173,15 +173,23 @@ add_database_resource(DB_Name,URI,Doc) :-
     expand(Doc,DocX),
     /* Don't create database resources if they already exist */
     (   database_exists(URI)
-    ->  throw(http_reply(method_not_allowed('terminus:create_database','Database exists')))
+    ->  throw(http_reply(method_not_allowed(
+                             _{'@type' : 'vio:DatabaseCreateError',
+                               'vio:database_name' : {'@value' : URI,
+                                                      '@type' : 'xdd:url'},
+                               'vio:message' : 'Database exists'})))
     ;   true),
     
     /* This check is required to cary out appropriate auth restriction */
     (   get_key_document('@type', DocX, 'terminus:Database')
     ->  true
     ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
-        throw(http_reply(method_not_allowed(URI,MSG)))),
-
+        throw(http_reply(method_not_allowed(
+                             _{'@type' : 'vio:DatabaseCreateError',
+                               'vio:database_name' : {'@value' : URI,
+                                                      '@type' : 'xdd:url'},
+                               'vio:message' : MSG})))),
+    
     /* Extend Doc with default databases */ 
     extend_database_defaults(URI, DocX, Ext),
     
