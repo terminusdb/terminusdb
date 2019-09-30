@@ -69,15 +69,18 @@
 				hide_disabled_buttons: true,
 				rules: [
 					{
-						pattern: { renderer: "object"},
+						pattern: { renderer: "object", depth: ">0"},
+						output: {
+							facet: "page",
+							features: ["body", "type"],
+						}
+					},
+					{
+						pattern: { renderer: "object", depth: 0},
 						output: {
 							facet: "page",
 							features: ["body", "type", "id"],
 						}
-					},
-					{
-						pattern: { renderer: "property"},
-						output: {facet: "multiline", features: ["body", "label"]}
 					},
 					{
 						pattern: { renderer: "value"},
