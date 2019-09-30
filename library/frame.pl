@@ -955,11 +955,12 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
  * the same source? 
  */ 
 object_edges(URI,Database,Edges) :-
-    (   most_specific_type(URI,Class,Database)
-    ->  class_frame(Class,Database,Frame),
+    (   most_specific_type(URI,Class,Database),
+        class_frame(Class,Database,Frame),
         realise_triples(URI,Frame,Database,Apocryphal),
         triples_canonical(Apocryphal, Canonical),
         sort(Canonical,Edges)
+    ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
     
