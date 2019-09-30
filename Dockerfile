@@ -11,7 +11,8 @@ RUN apt-get update \
 	g++ \
 	python \
 	git \
-	automake \
+        automake \
+        curl \
     make \
     raptor2-utils
 RUN cd /app \
