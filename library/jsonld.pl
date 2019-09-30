@@ -44,7 +44,11 @@
 :- use_module(library(triplestore),[
                   triples_canonical/2
               ]).
-       
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 /** 
  * expand(+JSON_LD, -JSON) is det.
  * 

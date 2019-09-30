@@ -69,6 +69,10 @@
 :- use_module(library(prefixes)).
 :- use_module(library(expansions)).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 class_record(Database,Class,[class=Class|L]) :-
     maybe_meta(Class,Database,L).
             
