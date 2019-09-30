@@ -499,6 +499,16 @@ literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit
 */
 literal_to_canonical(X,X).
 
+canonicalise_subject(O,C) :-
+    (   string(O)
+    ->  string_to_atom(O,C)
+    ;   O=C).
+
+canonicalise_predicate(O,C) :-
+    (   string(O)
+    ->  string_to_atom(O,C)
+    ;   O=C).
+
 /** 
  * canonicalise_object(+O,-C) is det. 
  * 
@@ -511,13 +521,16 @@ canonicalise_object(O,C) :-
     ->  string_to_atom(O,C)
     ;   O=C).
 
+
 /** 
  * insert(+DB:atom,+G:graph_identifier,+X,+Y,+Z) is det.
  * 
  * Insert quint into transaction predicates.
  */
-insert(DB,G,X,Y,O) :-
-    canonicalise_object(O,Z),
+insert(DB,G,A,B,C) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
     (   xrdf(DB,[G],X,Y,Z)
     ->  true
     ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
@@ -530,8 +543,10 @@ insert(DB,G,X,Y,O) :-
  * 
  * Delete quad from transaction predicates.
  */
-delete(DB,G,X,Y,O) :-
-    canonicalise_object(Z,O),
+delete(DB,G,A,B,C) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
     (   xrdf_pos_trans(DB,G,X,Y,Z)
     ->  retractall(xrdf_pos_trans(DB,G,X,Y,Z))        
     ;   true),
