@@ -331,11 +331,23 @@ resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
         % this looks likes it does nothing...
         string_to_atom(Y,X)
     }.
-resolve(X@L,literal(lang(LE,XE))) -->
+resolve(X@L,literal(lang(LE,XS))) -->
     resolve(X,XE),
+    {
+        (   ground(XE),
+            atom(XE)
+        ->  atom_string(XE,XS)
+        ;   XE = XS)
+    },
     resolve(L,LE).
-resolve(X^^T,literal(type(TE,XE))) -->
+resolve(X^^T,literal(type(TE,XS))) -->
     resolve(X,XE),
+    {
+        (   ground(XE),
+            atom(XE)
+        ->  atom_string(XE,XS)
+        ;   XE = XS)
+    },
     resolve(T,TE).
 
 /* 
