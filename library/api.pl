@@ -106,7 +106,7 @@ http:location(root, '/', []).
 :- http_handler(root(DB/search), cors_catch(search_handler(Method,DB)),
                 [method(Method),
                  methods([options,get,post,delete])]). 
-:- http_handler(root(DB/meta), cors_catch(meta_handler(Method,DB)),
+:- http_handler(root(DB/metadata), cors_catch(metadata_handler(Method,DB)),
                 [method(Method),
                  methods([options,get])]). 
 
@@ -471,12 +471,12 @@ schema_handler(post,DB,R) :- % should this be put?
     reply_with_witnesses(DB_URI,Witnesses).
 
 /* */
-meta_handler(options,DB,_Request) :-
+metadata_handler(options,DB,_Request) :-
     % database may not exist - use server for CORS
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI),
     format('~n'). % send headers
-meta_handler(get,DB,Request) :-
+metadata_handler(get,DB,Request) :-
     /* Read Document */
     authenticate(Request, Auth),
 
@@ -488,7 +488,7 @@ meta_handler(get,DB,Request) :-
 
     try_get_metadata(DB_URI,JSON),
 
-    reply_with_witnesses(DB_URI,JSON).
+    reply_json(JSON).
     
 /********************************************************
  * Determinising predicates used in handlers            *
