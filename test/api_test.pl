@@ -61,6 +61,15 @@ run_api_tests :-
     try(run_db_delete_test),
     % ) TERMINUS_QA_TEST
     %
+    % UPDATE_WOQL_CHECKING (
+    /* 
+    try(run_db_create_test),
+    try(run_woql_update_test),
+    try(run_woql_verify_update_test),
+    try(run_db_delete_test),
+    */
+    % ) UPDATE_WOQL_CHECKING
+    %
     % INSTANCE TERMINUS_QA_TEST (
     try(run_db_create_test),
     try(run_schema_datatypes_update_test),
@@ -471,6 +480,94 @@ run_woql_syntax_error_test :-
     nl,json_write_dict(current_output,Term,[]),
     
     _{'@type':"vio:WOQLSyntaxError"} :< Term.
+
+% Requires terminus_qa_test!
+run_woql_update_test :-
+    config:server(Server),
+    atomic_list_concat([Server,'/terminus_qa_test/document/'], Doc_Base),
+    atomic_list_concat([Server,'/terminus_qa_test/schema#'], Scm_Base),
+    atomic_list_concat([Server,'/terminus_qa_test/'], QA),
+    atomic_list_concat([Server,'/'], S),
+
+    Document = _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+                              tbs:"http://terminusdb.com/schema/tbs#",
+                              doc: Doc_Base,
+                              ex:"http://example.org/",
+                              owl:"http://www.w3.org/2002/07/owl#",
+                              rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                              rdfs:"http://www.w3.org/2000/01/rdf-schema#",
+                              vio:"http://terminusdb.com/schema/vio#",
+                              scm: Scm_Base,
+                              terminus:"http://terminusdb.com/schema/terminus#",
+                              xdd:"http://terminusdb.com/schema/xdd#",
+                              xsd:"http://www.w3.org/2001/XMLSchema#"},
+                 '@id':"doc:admin",
+                 '@type':"terminus:User",
+                 'rdfs:comment':_{'@language':"en", '@value':"A WOQL updated superuser"},
+                 'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
+                },
+    Query = 
+    _{'@context' : _{scm : Doc_Base,
+                     doc : Scm_Base,
+                     db : QA,
+                     s : S},
+      from: ["s:terminus_qa_test",
+             _{into: ["s:terminus_qa_test",
+                      _{when: [_{true: []},
+                               _{update: [Document]}
+                              ]}
+                     ]}
+            ]},
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
+        
+    Args = ['--user', ':root','-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+    
+    _{'bindings' : _{}} :< Term.
+
+% Requires terminus_qa_test!
+run_woql_verify_update_test :-
+    config:server(Server),
+    atomic_list_concat([Server,'/terminus_qa_test/document/'], Document),
+    atomic_list_concat([Server,'/terminus_qa_test/schema#'], Schema),
+    atomic_list_concat([Server,'/terminus_qa_test/'], QA),
+    atomic_list_concat([Server,'/'], S),
+
+    Query = 
+    _{'@context' : _{scm : Schema,
+                     doc : Document,
+                     db : QA,
+                     s : S},
+      from: ["s:terminus_qa_test",
+             _{triple: [ "doc:admin", "rdfs:comment", "v:comment"]}
+            ]},
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
+        
+    Args = ['--user', ':root','-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+    
+    _{'bindings' : [X]}  :< Term,
+    
+    writeq(X).
+
 
 /****************************************************************
  * Instance Checking Tests

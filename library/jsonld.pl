@@ -144,8 +144,8 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,_Key_Ctx,_Ctx,V) :-
     number(V),
     !.
-expand_value(_V,Key_Ctx,_Ctx,_Value) :-
-    format(atom(M),'Unknown key context ~q', [Key_Ctx]),
+expand_value(V,Key_Ctx,_Ctx,_Value) :-
+    format(atom(M),'Unknown key context ~q for value ~q', [Key_Ctx,V]),
     throw(error(M)).
 
 has_protocol(K) :-

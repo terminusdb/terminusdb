@@ -60,6 +60,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Query,WQ),
         WOQL = from(WG,WQ)
+    ;   _{'http://terminusdb.com/woql#into' : [ Graph, Query ] } :< JSON
+    ->  json_to_woql_ast(Graph,WG),
+        json_to_woql_ast(Query,WQ),
+        WOQL = into(WG,WQ)
     ;   _{'http://terminusdb.com/woql#quad' : [ Graph, Subject, Predicate, Object] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
@@ -80,7 +84,7 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(B,WQB),
         WOQL = '='(WQA,WQB)
     ;   _{'http://terminusdb.com/woql#update' : [ Doc ] } :< JSON
-    ->  WOQL = update(Doc)
+    ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  WOQL = delete(Doc)
     ;   _{'http://terminusdb.com/woql#-triple' : [ Subject, Predicate, Object ] } :< JSON
@@ -105,7 +109,7 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = insert(WG,WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#modifies' : [ Q, U ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#when' : [ Q, U ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         json_to_woql_ast(U,WU),
         WOQL = '=>'(WQ,WU)
@@ -149,6 +153,8 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
+    ;   _{'http://terminusdb.com/woql#true' : [] } :< JSON
+    ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  WOQL = '^^'(V,T)
     ;   _{'@value' : V, '@lang' : L } :< JSON

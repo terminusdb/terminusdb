@@ -243,7 +243,7 @@ empty_ctx(S0,S6) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
     elt(database=Database,S0),
-    elt(database=Write_Graph,S0),
+    elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
@@ -407,14 +407,16 @@ run_query(JSON_In, JSON_Out) :-
 :- use_module(library(http/http_log)).
 
 run_term(Query,JSON) :-
+    /*
     (   \+ ground(Query)
     ->  format(atom(M), 'Arguments are insufficiently instantiated for Query ~q', [Query]),
         throw(instantiation_error(M))
     ;   true),
-    
+    */
+    * format('~n***********~nQuery: ~q~n',[Query]),
     compile_query(Query,Prog,Ctx_Out),
-    %format('~n***********~nProgram: ~q~n',[Prog]),
-    %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
+    * format('~n***********~nProgram: ~q~n',[Prog]),
+    * format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=_Database,Ctx_Out),
 
@@ -548,6 +550,8 @@ compile_relation(X:C,XE,Class,Goals) -->
         )
     }.
 
+compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
+    view(database=Database).
 compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
     view(database=Database),
     resolve(X,URI).
@@ -830,10 +834,8 @@ compile_wf((A => B),Goal) -->
         Goal = (
             with_transaction(
                 [collection(C),graphs(WG)],
-                exhaust(
-                    (   ProgA,
-                        ProgB
-                    ))
+                forall(ProgA,
+                       ProgB)
             )
         )
     }.
@@ -1003,7 +1005,7 @@ compile_wf(into(G,S),Goal) -->
     % swap in new graph
     resolve(G,GE),
     update(write_graph=OG,
-           write_graph=GE),
+           write_graph=[GE]),
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph=_,
