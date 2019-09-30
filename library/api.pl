@@ -846,12 +846,15 @@ try_get_metadata(DB_URI,JSON) :-
     ;   Created_DT = "1970-01-01T00:00"
     ),
 
-    JSON = _{ '@type' : 'terminus:DatabaseMetadata',
-              'terminus:database_modified_time' : _{'@value' : Modified_DT,
-                                                    '@type' : 'xsd:dataTime'},
-              'terminus:database_created_time' : _{'@value' : Created_DT,
-                                                   '@type' : 'xsd:nonNegativeInteger'},
-              'terminus:database_size' : _{'@value' : Size,
-                                           '@type' : 'xsd:nonNegativeInteger'}}.
+    get_collection_jsonld_context(DB_URI,Ctx),
+    
+    JSON = _{'@context' : Ctx,
+             '@type' : 'terminus:DatabaseMetadata',
+             'terminus:database_modified_time' : _{'@value' : Modified_DT,
+                                                   '@type' : 'xsd:dataTime'},
+             'terminus:database_created_time' : _{'@value' : Created_DT,
+                                                  '@type' : 'xsd:nonNegativeInteger'},
+             'terminus:database_size' : _{'@value' : Size,
+                                          '@type' : 'xsd:nonNegativeInteger'}}.
 
     

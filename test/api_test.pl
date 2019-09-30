@@ -74,7 +74,8 @@ run_api_tests :-
     try(run_get_filled_frame_test),
     try(run_woql_test),
     try(run_woql_empty_error_test),
-    try(run_woql_syntax_error_test).
+    try(run_woql_syntax_error_test),
+    try(run_db_metadata_test).
 
 /****************************************************************
  * Basic API tests

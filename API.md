@@ -14,6 +14,7 @@ The Terminus DB Server includes a built in HTTP server which implements the Term
 10. class_frame - GET http://terminus.db/DBNAME/frame  
 11. woql_select - GET http://terminus.db/DBNAME/woql  
 12. woql_update - POST http://terminus.db/DBNAME/woql  
+13. metadata - GET http://terminus.db/DBNAME/metadata  
 
 Where *DBNAME* and *DOCID* are the local identifiers of a specific database and specific document respectively. 
 
@@ -503,3 +504,40 @@ An array of frames, each of which is encoded as a JSON-LD frame document and eac
 ## 11. WOQL Select
 
 ## 12. WOQL Update
+
+## 13. metadata - GET http://terminus.db/DBNAME/metadata  
+
+The metadata associated with a database can be retrieved with a GET to the `metadata`.
+
+```
+curl --user ':root' -X GET -H 'Content-Type: application/json' 'http://localhost:6363/terminus/metadata' 
+```
+
+### Return
+
+A `terminus:DatabaseMetadata` object is returned whose structure is as follows: 
+
+```
+{
+  "@context": {
+    "doc":"http://localhost:6363/terminus/document/",
+    "owl":"http://www.w3.org/2002/07/owl#",
+    "rdf":"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs":"http://www.w3.org/2000/01/rdf-schema#",
+    "scm":"http://localhost:6363/terminus/schema#",
+    "tbs":"http://terminusdb.com/schema/tbs#",
+    "tcs":"http://terminusdb.com/schema/tcs#",
+    "terminus":"http://terminusdb.com/schema/terminus#",
+    "vio":"http://terminusdb.com/schema/vio#",
+    "xdd":"http://terminusdb.com/schema/xdd#",
+    "xsd":"http://www.w3.org/2001/XMLSchema#"
+  },
+  "@type":"terminus:DatabaseMetadata",
+  "terminus:database_created_time": {
+    "@type":"xsd:nonNegativeInteger",
+    "@value":"2019-09-30T09:42:26+00:00"
+  },
+  "terminus:database_modified_time": {"@type":"xsd:dataTime", "@value":"2019-09-30T09:42:26+00:00"},
+  "terminus:database_size": {"@type":"xsd:nonNegativeInteger", "@value":113781}
+}
+```
