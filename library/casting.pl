@@ -30,6 +30,10 @@
 :- use_module(library(prefixes)).
 :- use_module(library(speculative_parse)).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 /* 
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.
  * 

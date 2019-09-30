@@ -40,6 +40,10 @@
 
 :- use_module(utils).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 /** <module> File Utils
  * 
  * Utility predicate which help in the manipulation of files and store 

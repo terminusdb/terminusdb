@@ -66,6 +66,10 @@
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 % is this actually needed?
 :- op(2, xfx, :).
 :- op(600, xfx, <:).

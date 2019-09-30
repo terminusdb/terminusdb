@@ -52,6 +52,9 @@
 :- use_module(library(sdk)).
 :- use_module(library(file_utils)).
 
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
+
 /* 
  * Database term accessors.
  */ 
