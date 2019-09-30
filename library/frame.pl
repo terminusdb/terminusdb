@@ -661,7 +661,7 @@ fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
     !, 
     fill_class_frame(Elt,Database,Rest,Frames).
 fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
-    % A class choice
+    % A class choice (the choice has already been made...)
     !,
     %format('Elt: ~q~n', [Elt]),        
     instanceClass(Elt,Class,Database),
