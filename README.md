@@ -141,10 +141,15 @@ TerminusDB will:
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
-## Issues 
+## Client
 
-We currently have no client, so you'll have to use the RESTful API directly. You can find 
-examples at the TerminusDB repositories...
+In order to begin manipulating and querying your database you can
+simply point your browser to `TERMINUS_DIR/index.html` which should
+allow you to manage and query your database.
+
+You can also perform all configuration, querying and management
+functions via the RESTful API. We have a number of client libraries to
+help you get started:
 
 The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you 
 assistance with programatic access.
