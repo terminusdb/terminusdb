@@ -16,7 +16,10 @@
               database_record_schema_list/2,
               database_record_inference_list/2,
               is_schema_graph/2,
-              default_instance_graph/2
+              default_instance_graph/2,
+              db_size/2,
+              db_modified_datetime/2,
+              db_created_datetime/2
           ]).
 
 /** <module> Implementation of database graph management
@@ -47,6 +50,7 @@
 :- use_module(library(utils)).
 :- use_module(library(types)).
 :- use_module(library(sdk)).
+:- use_module(library(file_utils)).
 
 /* 
  * Database term accessors.
@@ -253,3 +257,50 @@ default_instance_graph(Database,I) :-
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure'})))
     ).
+
+/* 
+ * db_size(DB_URI,Size) is det.
+ * 
+ * Get an approximate of the database size.
+ */ 
+db_size(DB_URI,Size) :-
+    aggregate_all(sum(File_Size),
+                  (   
+                      graphs(DB_URI,Graph_IDs),
+                      member(Graph_ID,Graph_IDs),
+                      current_checkpoint_directory(DB_URI,Graph_ID,CPD),
+                      files(CPD,Files),
+                      member(File,Files),
+                      interpolate([CPD,'/',File],Path),
+                      size_file(Path, File_Size)
+                  ),
+                  Size).
+
+/* 
+ * db_modified_datetime(+DB,-DateTimeString) is det. 
+ * 
+ * The last modified time
+ */ 
+db_modified_datetime(DB_URI,DateTimeString) :-
+    aggregate_all(max(TimeStamp),
+                  (   
+                      graphs(DB_URI,Graphs),
+                      member(Graph,Graphs),
+                      graph_directory(DB_URI, Graph, Path),
+                      time_file(Path, TimeStamp)
+                  ),
+                  MaxTimeStamp),
+    stamp_date_time(MaxTimeStamp, DateTime, 0),
+    format_time(atom(DateTimeString),'%FT%T%:z', DateTime).
+
+/* 
+ * db_created_datetime(+DB,-DateTimeString) is det. 
+ * 
+ * The last modified time
+ */ 
+db_created_datetime(DB_URI,DateTimeString) :-
+    collection_directory(DB_URI,Path),
+    time_file(Path, TimeStamp),
+    stamp_date_time(TimeStamp, DateTime, 0),
+    format_time(atom(DateTimeString),'%FT%T%:z', DateTime).
+

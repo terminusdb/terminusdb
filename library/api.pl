@@ -71,7 +71,7 @@
 :- use_module(library(json_woql)).
 
 % File processing - especially for turtle
-:- use_module(library(file_utils), [checkpoint_to_turtle/3,db_size/2]).
+:- use_module(library(file_utils), [checkpoint_to_turtle/3]).
 
 % Validation
 :- use_module(library(validate)).
@@ -485,7 +485,7 @@ meta_handler(get,DB,Request) :-
 
     % check access rights
     verify_access(Auth,terminus/update_schema,DB_URI),
-    
+
     try_get_metadata(DB_URI,JSON),
 
     reply_with_witnesses(DB_URI,JSON).
@@ -835,9 +835,23 @@ try_get_metadata(DB_URI,JSON) :-
     (   db_size(DB_URI,Size)
     ->  true
     ;   Size = 0),
-    
+
+    (   db_modified_datetime(DB_URI,Modified_DT)
+    ->  true
+    ;   Modified_DT = "1970-01-01T00:00"
+    ),
+
+    (   db_created_datetime(DB_URI,Created_DT)
+    ->  true
+    ;   Created_DT = "1970-01-01T00:00"
+    ),
+
     JSON = _{ '@type' : 'terminus:DatabaseMetadata',
-              'terminus:size' : _{'@value' : Size,
-                                  '@type' : 'xsd:nonNegativeInteger'}}.
+              'terminus:database_modified_time' : _{'@value' : Modified_DT,
+                                                    '@type' : 'xsd:dataTime'},
+              'terminus:database_created_time' : _{'@value' : Created_DT,
+                                                   '@type' : 'xsd:nonNegativeInteger'},
+              'terminus:database_size' : _{'@value' : Size,
+                                           '@type' : 'xsd:nonNegativeInteger'}}.
 
     

@@ -781,3 +781,15 @@ run_good_doc_datatype_update_test :-
         
     _{'terminus:status':"terminus:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness! 
+
+run_db_metadata_test :-
+    config:server(Server),
+
+    atomic_list_concat([Server,'/terminus/metadata'], URI),
+        
+    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{ '@type' : "terminus:DatabaseMetadata"} :< Term.
