@@ -16,22 +16,10 @@ v1.0.0
 
 ## Getting Started
 
-### Running the Docker image
+### Install from Docker image
 
-The automated build of the master branch can be run easily with:
-
-`docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -it terminusdb/terminus-server:latest`
-
-There will be tagged versions upon release.
-
-#### Env variables
-
-| Env variable   | Description                      | Default   |
-|----------------|----------------------------------|-----------|
-| SERVER_NAME    | Location of the server           | localhost |
-| SERVER_PORT    | Port of the server               | 6363      |
-| WORKERS_AMOUNT | Amount of workers for the server | 8         |
-| ADMIN_PASS     | Administrator password           | root      |
+To install a docker image with the latest server (*RECOMMENDED*) follow the instructions 
+here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/DOCKER.md).
 
 ### Building from source
 
