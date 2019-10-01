@@ -185,7 +185,7 @@ Query. Select will mask out any variables not listed in the intial list segment.
   ]
 }
 ```
-### Returns 
+#### Returns 
 
 ```
 { "bindings" : [ { "v:Label':'doc:terminus'} ] } 
@@ -227,7 +227,7 @@ Elt\_A is identical to Elt_B or the "@id" fields of the JSON-LDs.
 
 This is used to update documents in the database as a single operation. 
 
-### Example:
+#### Example:
 ```
 {"@context" : {scm : Scm_Base,
                doc : "http://terminusdb.com/terminus/document/",
