@@ -128,7 +128,14 @@ cors_catch(M:Goal,Request) :-
               format(Log,'Error: ~q~n',[E]),
               customise_error(E)
           )
-         ).
+         ),
+    !.
+cors_catch(_,_Request) :-
+    % Probably should extract the path from Request
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : _{'@type' : 'xsd:string',
+                                        '@value' : 'Resource not found'}},
+               [status(400)]).
 
 customise_error(syntax_error(M)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
