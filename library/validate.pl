@@ -109,23 +109,12 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                                               ->  fixup_schema_literal(Y,YF)
                                               %   Otherwise walk on by...
                                               ;   Y = YF),
-                                              % http_log_stream(Log),        
-                                              % format(Log,'writing: ~q~n',[rdf(XF,P,YF)]),
+
                                               insert(Database_Name,Schema,XF,P,YF)
                                           )
                                          )
                                ), []),
 
-            /*
-            with_output_to(
-                string(Payload),
-                (   
-                    listing(triplestore:xrdf_pos_trans),
-                    listing(triplestore:xrdf_neg_trans)
-                )
-            ),
-            format(Log,'listing: ~s~n',[Payload]),
-            */          
             % First, Check pre tests. 
             findall(Pre_Witness,
                     (   pre_test_schema(Pre_Check),
