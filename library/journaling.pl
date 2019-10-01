@@ -123,6 +123,9 @@ write_triple(C,G,Type,PX,PY,PZ) :-
  * Goal expansion for write_triple in order to 
  * make static code references to ontologies less painful.
  */
+:- multifile user:goal_expansion/2.
+:- dynamic user:goal_expansion/2.
+
 user:goal_expansion(write_triple(DB,G,T,A,Y,Z),write_triple(DB,G,T,X,Y,Z)) :-
     nonvar(A),
     global_prefix_expand(A,X).

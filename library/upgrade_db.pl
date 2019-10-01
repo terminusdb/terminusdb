@@ -136,6 +136,9 @@ run_upgrade([Version1,Version2|Rest]) :-
  * head terms from run_upgrade_step/2 so we can check accessibility
  * of an upgrade.
  */
+:- multifile user:term_expansion/2.
+:- dynamic user:term_expansion/2.
+
 user:term_expansion((run_upgrade_step(X,Y):-Body),
                     [(run_upgrade_step(X,Y):-Body),
                      upgrade_step(X,Y)]).

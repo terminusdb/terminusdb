@@ -265,6 +265,7 @@ is_class_formula(restriction(Restriction)) :-
 is_class_formula(class(Class)) :-
     is_uri(Class).
 
+:- multifile error:has_type/2.
 error:has_type(class_formula,X) :-
     is_class_formula(X).
 
