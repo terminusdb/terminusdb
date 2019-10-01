@@ -3,10 +3,6 @@ services:
 
 if: branch = master
 
-env:
-  global:
-    - secure: "Hf/BcKQ7c21/y0yL3ZrgoZBW53SNYtRo4zch6QCaNKyOlqV7vC2BWmbTaQanfoOnKGm3esxO3Lp6hyY9V8mhK3KEQVf5j2r6k5FFwjlJlDBUrqubTOBYeXmeh8c8k0ByZfS8kYMMKwZE3uBqDpCF2eykOQPFvw2Ah7BCuADdV+5kvVruyOZ5YmF6YHqwl5LEp5c8KLTYAwMZVMlxTYJiRMnA7S9sbmrPio5UaXrSXDkNLxewA8wm7bpyjImQiAEWW15eqQKkXvUMFnJOGrJkQRdEHoY3pwtNwG1YRdHzNtqyNXJhjWl7UDCqC+FPf9thR3SFkubprUh5tVxoWXZOgjPXfS29e+GQBgJ9SeqZpSSXdExe//fJFowm/hOKohuSiY5PX9k86ONRIZRsLfP2GkAUUjZLC6JkJldRJF9uaYfvyK8ZkslrcV684E+bU7D/CcfRSnVNDMJW+C4DxUvDB+WzazxiJCtCcg9FXmuT6wxmAHz8sOXhcNCq0O4ZdQVnvn8zEylKO/haQ/JdEqsBDa5X+U5VE6XrVnZwxfWtuxGktJIEi4R/v8BjymONBJMzY54jtckBfFs5RXzdc+Mtk/0q2FpApTwZ9Nj4YHjqlY83opn+Aml5mZ5hBaNyOchqd6PQWeqt1pz6Bgeg5zYki/+/B/HSt7+TS9nO3YBVTE8="
-
 script:
   - docker build -t terminusdb/terminus-server:latest .
   - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/initialize_database -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl test"
