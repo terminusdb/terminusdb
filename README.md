@@ -10,17 +10,9 @@ with knowledge graphs via the JSON-LD exchange format. This means you
 can easily string together applications within your own toolchain
 which utilise the powerful features of graph search and graph storage.
 
-## Release Schedule 
-
-We have a v1.0.0 release schedule for October 1st, 2019. This means
-that the current codebase is in a very high level of flux, and as we
-have never had a prior release, there are no release labels to pull. 
-
-Caveat Puller! 
-
 ## Latest Version 
 
-v0.2.2
+v1.0.0
 
 ## Getting Started
 
