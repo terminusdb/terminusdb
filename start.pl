@@ -1,4 +1,4 @@
-#!/usr/bin/env swipl
+#!/usr/bin/env -S swipl -q
 
 /* 
  *  This file is part of TerminusDB.

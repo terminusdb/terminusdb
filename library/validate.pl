@@ -13,8 +13,8 @@
  *                                                                       *
  *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, either version 3 of the License, or    *
- *  (at your option) any later version.                                  *
+ *  the Free Software Foundation, under version 3 of the License.        *
+ *                                                                       *
  *                                                                       *
  *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
@@ -35,6 +35,9 @@
 :- use_module(library(frame)).
 :- use_module(library(jsonld)).
 :- use_module(library(semweb/turtle)).
+
+% For debugging
+:- use_module(library(http/http_log)).
 
 % Required for consistency
 pre_test_schema(classCycleSC).
@@ -62,6 +65,21 @@ test_schema(invalidDomainSC).
 test_schema(domainNotSubsumedSC).
 test_schema(rangeNotSubsumedSC).
 test_schema(propertyTypeOverloadSC).
+test_schema(invalid_RDFS_property_SC).
+
+/* deal with precularities of rdf_process_turtle */
+fixup_schema_literal(literal(lang(Lang,S)),literal(lang(Lang,String))) :-
+    (   atom(S)
+    ->  atom_string(S,String)
+    ;   S = String).
+fixup_schema_literal(literal(type(Type,S)),literal(type(Type,String))) :-
+    (   atom(S)
+    ->  atom_string(S,String)
+    ;   S = String).
+fixup_schema_literal(literal(L),literal(lang(en,String))) :-
+    (   atom(L)
+    ->  atom_string(L,String)
+    ;   L = String).
 
 schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
     database_name(Database,Database_Name),
@@ -72,12 +90,9 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         validate:(
             % deletes (everything)
             forall( xrdf(Database_Name, [Schema], A, B, C),
-                    delete(Database_Name, Schema, A,B,C)),
-            forall( xrdf(Database_Name, [Schema], A, B, C),
-                    format('WTF? (~q,~q,~q)~n', [A,B,C])),
-            %break,
-            %database_module(Database, Module),
-            %cleanup_schema_module(Module),
+                    delete(Database_Name, Schema, A, B, C)),
+            
+            % ??? cleanup_schema_module(Module),
             % inserts (everything)
             rdf_process_turtle(New_Schema_Stream,
                                {Database_Name, Schema}/
@@ -86,18 +101,31 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                                           (   (   X = node(N)
                                               ->  interpolate(['_:',N], XF)
                                               ;   X = XF),
+                                              
                                               (   Y = node(M)
                                               ->  interpolate(['_:',M], YF)
-                                              ;   Y = literal(L),
-                                                  atom(L)
-                                              ->  YF = literal(lang(en,L))
+                                              %   Bare atom literal needs to be lifted.
+                                              ;   Y = literal(_)
+                                              ->  fixup_schema_literal(Y,YF)
+                                              %   Otherwise walk on by...
                                               ;   Y = YF),
-                                              %nl,nl,writeq(rdf(X,P,Y)),nl,nl,
+                                              % http_log_stream(Log),        
+                                              % format(Log,'writing: ~q~n',[rdf(XF,P,YF)]),
                                               insert(Database_Name,Schema,XF,P,YF)
                                           )
                                          )
                                ), []),
 
+            /*
+            with_output_to(
+                string(Payload),
+                (   
+                    listing(triplestore:xrdf_pos_trans),
+                    listing(triplestore:xrdf_neg_trans)
+                )
+            ),
+            format(Log,'listing: ~s~n',[Payload]),
+            */          
             % First, Check pre tests. 
             findall(Pre_Witness,
                     (   pre_test_schema(Pre_Check),

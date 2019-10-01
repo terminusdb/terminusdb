@@ -70,7 +70,8 @@
 		      invalidDomainSC/2,
               invalidRangeSC/2,             % OWL
 		      domainNotSubsumedSC/2,
-              rangeNotSubsumedSC/2          % OWL
+              rangeNotSubsumedSC/2,         % OWL
+              invalid_RDFS_property_SC/2    % OWL 
 	      ]).
 
 /** <module> Schema Validation
@@ -84,8 +85,8 @@
  *                                                                       *
  *  TerminusDB is free software: you can redistribute it and/or modify    *
  *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, either version 3 of the License, or    *
- *  (at your option) any later version.                                  *
+ *  the Free Software Foundation, under version 3 of the License.        *
+ *                                                                       *
  *                                                                       *
  *  TerminusDB is distributed in the hope that it will be useful,         *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
@@ -102,6 +103,7 @@
 :- use_module(library(utils)).
 :- use_module(library(types)).
 :- use_module(library(base_type)).
+:- use_module(library(validate_instance)).
 
 /* 
  * Vio JSON util
@@ -1065,6 +1067,18 @@ invalidDomainSC(Database,Reason) :-
              }.
 
 /** 
+ * invalid_RDFS_property_SC(+Database:database-Reason:any) is nondet. 
+ *
+ * Finds all domains that are not valid classes for a given property in Database. 
+ */
+invalid_RDFS_property_SC(Database,Reason) :-
+    database_name(Database,Name),
+    database_schema(Database,Schema),
+    rdfsProperty(P),
+    xrdf(Name,Schema,_,P,Y),
+    refute_basetype_elt(Y,'http://www.w3.org/2001/XMLSchema#string',Reason).
+    
+/** 
  * invalidRangeSC(+Database:database-Reason:any) is nondet. 
  *
  * Finds all ranges that are not valid classes for a given property in Database. 
@@ -1102,6 +1116,8 @@ invalidRangeSC(Database,Reason) :-
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
              }.
+
+
 
 % Logging / Turn off for production
 :- use_module(library(http/http_log)).

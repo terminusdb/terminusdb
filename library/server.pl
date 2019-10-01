@@ -14,8 +14,8 @@
  *                                                                       *
  *  TerminusDB is free software: you can redistribute it and/or modify    *
  *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, either version 3 of the License, or    *
- *  (at your option) any later version.                                  *
+ *  the Free Software Foundation, under version 3 of the License.        *
+ *                                                                       *
  *                                                                       *
  *  TerminusDB is distributed in the hope that it will be useful,         *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
@@ -36,6 +36,7 @@
 :- use_module(triplestore).
 
 server(_Argv) :-
+    config:server(Server),
     config:server_port(Port),
     config:server_workers(Workers),
     config:server_worker_options(_Settings),
@@ -53,4 +54,6 @@ server(_Argv) :-
 			   prefix
 			 ]),
         sync_from_journals,
-	    http_delete_handler(id(busy_loading))).
+	    http_delete_handler(id(busy_loading))),
+    format("~n% Wecome to TerminusDB's terminus-server! ~n", [Server]),
+    format("% You can view your server in a browser at '~s/dashboard' ~n~n", [Server]).
