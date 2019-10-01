@@ -43,7 +43,6 @@
 				"server", "db", "api_explorer", "change-server", "import_schema", "create_database",
 				"create_document", "get_document", "get_schema", "update_schema", "woql_select"
 			],
-		 	css: "theme",
 			plugins: {
 				"font-awesome": true,
 				gmaps: false,
@@ -69,18 +68,15 @@
 				hide_disabled_buttons: true,
 				rules: [
 					{
-						pattern: { renderer: "object", depth: ">0"},
-						output: {
-							facet: "page",
-							features: ["body", "type"],
-						}
-					},
-					{
-						pattern: { renderer: "object", depth: 0},
+						pattern: { renderer: "object"},
 						output: {
 							facet: "page",
 							features: ["body", "type", "id"],
 						}
+					},
+					{
+						pattern: { renderer: "property"},
+						output: {facet: "multiline", features: ["body", "label"]}
 					},
 					{
 						pattern: { renderer: "value"},
@@ -189,7 +185,7 @@
 				viewer: "html"
 			}
 		};
-		
+
 		TerminusConfig.location = {server: "~s://~s:~d", key: "~s"};
 		
 		function loadTerminatorWhenReady(){
