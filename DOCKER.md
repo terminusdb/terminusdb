@@ -2,7 +2,7 @@
 
 1. Install Docker as described on the [Docker installation page](https://docs.docker.com/install/). Choose your
    operating system on the left sidebar.
-2. Run `docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -t -d terminusdb/terminus-server:latest`
+2. Open a command terminal (shell on Unix, Powershell or Cmd on Windows) and run `docker run --name terminus-server -p 6363:6363 -e SERVER_NAME=localhost -e DB_PASS=root -t -d terminusdb/terminus-server:latest`
 
 You can configure the following environment variables to taste using the `-e ENV_NAME=value` in the docker command above:
 
