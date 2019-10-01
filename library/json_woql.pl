@@ -29,7 +29,11 @@
 
 :- use_module(library(utils)).
 :- use_module(library(jsonld)).
- 
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 json_woql(JSON,WOQL) :-
     json_woql(JSON,_{},WOQL).
 

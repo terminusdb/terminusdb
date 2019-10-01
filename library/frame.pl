@@ -69,6 +69,10 @@
 :- use_module(library(prefixes)).
 :- use_module(library(expansions)).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 class_record(Database,Class,[class=Class|L]) :-
     maybe_meta(Class,Database,L).
             
@@ -661,7 +665,7 @@ fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
     !, 
     fill_class_frame(Elt,Database,Rest,Frames).
 fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
-    % A class choice
+    % A class choice (the choice has already been made...)
     !,
     %format('Elt: ~q~n', [Elt]),        
     instanceClass(Elt,Class,Database),
@@ -951,11 +955,12 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
  * the same source? 
  */ 
 object_edges(URI,Database,Edges) :-
-    (   most_specific_type(URI,Class,Database)
-    ->  class_frame(Class,Database,Frame),
+    (   most_specific_type(URI,Class,Database),
+        class_frame(Class,Database,Frame),
         realise_triples(URI,Frame,Database,Apocryphal),
         triples_canonical(Apocryphal, Canonical),
         sort(Canonical,Edges)
+    ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
     

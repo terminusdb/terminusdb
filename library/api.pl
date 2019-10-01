@@ -71,7 +71,7 @@
 :- use_module(library(json_woql)).
 
 % File processing - especially for turtle
-:- use_module(library(file_utils), [checkpoint_to_turtle/3]).
+:- use_module(library(file_utils), [checkpoint_to_turtle/3,terminus_path/1]).
 
 % Validation
 :- use_module(library(validate)).
@@ -86,6 +86,9 @@
 http:location(root, '/', []).
 
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(root(dashboard), cors_catch(dashboard_handler(Method)),
                 [method(Method),
                  methods([options,get])]). 
 :- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
@@ -125,7 +128,14 @@ cors_catch(M:Goal,Request) :-
               format(Log,'Error: ~q~n',[E]),
               customise_error(E)
           )
-         ).
+         ),
+    !.
+cors_catch(_,_Request) :-
+    % Probably should extract the path from Request
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : _{'@type' : 'xsd:string',
+                                        '@value' : 'Resource not found'}},
+               [status(400)]).
 
 customise_error(syntax_error(M)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
@@ -145,6 +155,8 @@ customise_error(error(type_error(T,O),C)) :-
                                            'vio:type' : T,
                                            'vio:literal' : O}]},
                [status(400)]).
+customise_error(graph_sync_error(JSON)) :-
+    reply_json(JSON,[status(500)]).
 %customise_error((method_not_allowed(
 customise_error(http_reply(method_not_allowed(JSON))) :-
     reply_json(JSON,[status(405)]).
@@ -157,17 +169,27 @@ customise_error(E) :-
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
+/*
+ *  fetch_authorization_data(+Request, -KS) is semi-determinate.
+ *
+ *  Fetches the HTTP Basic Authorization data
+ */
+fetch_authorization_data(Request, KS) :-
+    (   memberchk(authorization(Text), Request),
+        http_authorization_data(Text, basic(_User, Key)),
+        coerce_literal_string(Key, KS))
+    -> true
+    ;  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                             'terminus:message' : "No HTTP BASIC key supplied",
+                                             'terminus:object' : 'fetch_authorization_data'}))).
+
 /* 
  * authenticate(+Data,+Auth_Obj) is det. 
- * 
+ *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    memberchk(authorization(Text), Request),
-    http_authorization_data(Text, basic(_User, Key)),
-    % try_get_param('terminus:user_key',Request,Key),
-    coerce_literal_string(Key, KS),
-    
+    fetch_authorization_data(Request, KS),
     (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
@@ -185,9 +207,7 @@ verify_access(Auth, Action, Scope) :-
                                               'terminus:object' : 'verify_access'})))).
 
 connection_authorised_user(Request, User) :-
-    memberchk(authorization(Text), Request),
-    http_authorization_data(Text, basic(_User, Key)),
-    coerce_literal_string(Key, KS),
+    fetch_authorization_data(Request, KS),
     
     (   key_user(KS, User_ID)
     ->  (   get_user(User_ID, User)
@@ -223,7 +243,7 @@ reply_with_witnesses(Resource_URI, Witnesses) :-
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /** 
- * connect_handler(Request:http_request) is det.
+ * connect_handler(+Method,+Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
     config:server(SURI),
@@ -236,6 +256,21 @@ connect_handler(get,Request) :-
     write_cors_headers(SURI),
     reply_json(User).
 
+/* 
+ * dashboard_handler(+Method,+Request) is det. 
+ */
+dashboard_handler(options,_Request) :-
+    config:server(SURI),
+    write_cors_headers(SURI),
+    format('~n').
+dashboard_handler(get,_Request) :-
+    terminus_path(Path),
+    interpolate([Path,'/index.html'], Index_Path),
+    read_file_to_string(Index_Path, String, []),
+    config:server(SURI),
+    write_cors_headers(SURI),
+    format('~n'),
+    write(String).
 
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.

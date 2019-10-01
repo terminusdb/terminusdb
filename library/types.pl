@@ -46,6 +46,8 @@ This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
 
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
 
 /** 
  * is_literal(+X) is semidet.

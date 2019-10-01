@@ -62,12 +62,11 @@ run_api_tests :-
     % ) TERMINUS_QA_TEST
     %
     % UPDATE_WOQL_CHECKING (
-    /* 
     try(run_db_create_test),
+    try(run_schema_update_test),
     try(run_woql_update_test),
     try(run_woql_verify_update_test),
     try(run_db_delete_test),
-    */
     % ) UPDATE_WOQL_CHECKING
     %
     % INSTANCE TERMINUS_QA_TEST (
@@ -507,12 +506,12 @@ run_woql_update_test :-
                  'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
                 },
     Query = 
-    _{'@context' : _{scm : Doc_Base,
-                     doc : Scm_Base,
+    _{'@context' : _{scm : Scm_Base,
+                     doc : Doc_Base,
                      db : QA,
                      s : S},
       from: ["s:terminus_qa_test",
-             _{into: ["s:terminus_qa_test",
+             _{into: ["db:document",
                       _{when: [_{true: []},
                                _{update: [Document]}
                               ]}
@@ -532,7 +531,7 @@ run_woql_update_test :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
-    _{'bindings' : _{}} :< Term.
+    _{'bindings' : [ _{} ]} :< Term.
 
 % Requires terminus_qa_test!
 run_woql_verify_update_test :-
@@ -563,10 +562,12 @@ run_woql_verify_update_test :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
-    _{'bindings' : [X]}  :< Term,
-    
-    writeq(X).
+
+
+    _{'bindings' : [ _{
+                         'http://terminusdb.com/woql/variable/comment':
+                         _{'@language':"en",'@value':"A WOQL updated superuser"}}
+                   ]}  :< Term.
 
 
 /****************************************************************

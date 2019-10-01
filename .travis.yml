@@ -1,15 +1,14 @@
-before_script:
-  - sudo apt-add-repository ppa:swi-prolog/stable -y
-  - sudo apt-get update -q
-  - sudo apt-get install swi-prolog-nox curl autoconf libtool zlib1g zlib1g-dev python raptor2-utils
-  - git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git
-  - git clone --branch v0.30.0 https://github.com/drobilla/serd.git
-  - cd serd && ./waf configure && ./waf && sudo ./waf install
-  - cd ../hdt-cpp && ./autogen.sh && ./configure && make -j4 && sudo make install && sudo ldconfig
-  - cd ../ && echo "pack_remove('hdt')." | sudo swipl
-  - echo "pack_install('https://github.com/GavinMendelGleason/hdt.git',[interactive(false)])." | sudo swipl
-  - echo "pack_install(mavis,[interactive(false)])." | sudo swipl
+services:
+  - docker
+
+if: branch = master
 
 script:
-  - swipl -g main ./utils/initialize_database -k root -s localhost
-  - swipl -g run_tests -g halt start.pl test
+  - docker build -t terminusdb/terminus-server:latest .
+  - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/initialize_database -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl test"
+  - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
+  - docker push terminusdb/terminus-server:latest
+
+notifications:
+  irc:
+    - "chat.freenode.net##terminusdb"

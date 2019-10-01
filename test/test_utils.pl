@@ -31,6 +31,9 @@
 :- use_module(library(utils)).
 :- use_module(library(http/json)).
 
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
+
 :- meta_predicate try(0).
 try(Goal) :- 
     (   format('~n*****************************************************',[]),

@@ -35,6 +35,8 @@
 :- use_module(library(utils), except([elt/2])).
 :- use_module(library(triplestore), [
                   xrdf/5,
+                  insert/5,
+                  delete/5,
                   with_output_graph/2,
                   sync_from_journals/2,
                   with_transaction/2
@@ -65,6 +67,10 @@
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 % is this actually needed?
 :- op(2, xfx, :).
@@ -365,7 +371,7 @@ compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
 
 assert_program([]).
 assert_program([Def|Remainder]) :-
-    assert(Def),
+    assertz(Def),
     assert_program(Remainder).
 
 retract_program([]).
@@ -837,17 +843,21 @@ compile_wf((A => B),Goal) -->
     compile_wf(A,ProgA),
     % This second one should be simpler, to reflect that only writes are allowed on the right. 
     compile_wf(B,ProgB),
-    view(collection=C),
+    view(database=Database),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
-    view(write_graph=WG),
+    view(write_graph=[WG]),
     {
-        %format('***************~nImplicative Program: ~n~q~n',[(ProgA,ProgB)])
         Goal = (
-            with_transaction(
-                [collection(C),graphs(WG)],
-                forall(ProgA,
-                       ProgB)
+            validate:document_transaction(Database,WG,
+                                          woql_compile:(
+                                              forall(ProgA,
+                                                     ProgB)
+                                          ),Witnesses),
+            (   Witnesses = []
+            ->  true
+            ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                      'terminus:witnesses' : Witnesses})))
             )
         )
     }.

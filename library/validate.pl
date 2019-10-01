@@ -138,7 +138,6 @@ document_transaction(Database, Graph, Goal, Witnesses) :-
          success(Success_Flag)],
         validate:(
             call(Goal),
-
             findall(Pos_Witness,
                     (
                         triplestore:xrdf_pos_trans(Database_Name,Graph, X, P, Y),

@@ -54,6 +54,10 @@
 
 :- use_module(library(jsonld)).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 % internal
 global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
 global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
