@@ -133,7 +133,12 @@ sync_from_journals(Collection,Database_Name) :-
         ->  true
         % in case anything failed, retract the graph
         ;   retract_graph(Collection,Database_Name),
-            throw(graph_sync_error(Collection-Database_Name))
+            format(atom(Msg), 'Could not sync graph ~q for database ~q', [Collection,Database_Name]),
+            throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : Msg,
+                                     'terminus:broken_database' : Collection,
+                                     'terminus:broken_graph' : Database_Name
+                                    }))
         )
     ).
 

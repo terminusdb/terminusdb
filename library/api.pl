@@ -155,6 +155,8 @@ customise_error(error(type_error(T,O),C)) :-
                                            'vio:type' : T,
                                            'vio:literal' : O}]},
                [status(400)]).
+customise_error(graph_sync_error(JSON)) :-
+    reply_json(JSON,[status(500)]).
 %customise_error((method_not_allowed(
 customise_error(http_reply(method_not_allowed(JSON))) :-
     reply_json(JSON,[status(405)]).
