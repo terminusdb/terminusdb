@@ -157,17 +157,27 @@ customise_error(E) :-
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%
 
+/*
+ *  fetch_authorization_data(+Request, -KS) is semi-determinate.
+ *
+ *  Fetches the HTTP Basic Authorization data
+ */
+fetch_authorization_data(Request, KS) :-
+    (   memberchk(authorization(Text), Request),
+        http_authorization_data(Text, basic(_User, Key)),
+        coerce_literal_string(Key, KS))
+    -> true
+    ;  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                             'terminus:message' : "No HTTP BASIC key supplied",
+                                             'terminus:object' : 'fetch_authorization_data'}))).
+
 /* 
  * authenticate(+Data,+Auth_Obj) is det. 
- * 
+ *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message. 
  */
 authenticate(Request, Auth) :-
-    memberchk(authorization(Text), Request),
-    http_authorization_data(Text, basic(_User, Key)),
-    % try_get_param('terminus:user_key',Request,Key),
-    coerce_literal_string(Key, KS),
-    
+    fetch_authorization_data(Request, KS),
     (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
@@ -185,9 +195,7 @@ verify_access(Auth, Action, Scope) :-
                                               'terminus:object' : 'verify_access'})))).
 
 connection_authorised_user(Request, User) :-
-    memberchk(authorization(Text), Request),
-    http_authorization_data(Text, basic(_User, Key)),
-    coerce_literal_string(Key, KS),
+    fetch_authorization_data(Request, KS),
     
     (   key_user(KS, User_ID)
     ->  (   get_user(User_ID, User)
