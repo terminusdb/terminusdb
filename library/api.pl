@@ -83,6 +83,8 @@
 
 %% Set base location
 % We may want to allow this as a setting...
+:- multifile http:location/3.
+:- dynamic http:location/3.
 http:location(root, '/', []).
 
 :- http_handler(root(.), cors_catch(connect_handler(Method)),

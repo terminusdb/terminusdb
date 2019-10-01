@@ -64,6 +64,8 @@ is_property_restriction(L) :-
 is_property_restriction(L) :-
     member(someValuesFrom=_,L).
 
+:- multifile error:has_type/2.
+
 error:has_type(property_restriction,X) :-
     is_property_restriction(X).
 

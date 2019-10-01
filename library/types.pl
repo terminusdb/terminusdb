@@ -60,6 +60,7 @@ is_literal(literal(type(Type,_Data))) :-
     % this should probably have the full xsd build out.
     atom(Type).
 
+:- multifile error:has_type/2.
 error:has_type(literal,X) :-
     is_literal(X).
 
