@@ -89,8 +89,7 @@ assistance with programatic access.
 The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example 
 application allowing manipulation of the database, queries and .
 
-The [Python client libraries](https://github.com/terminusdb/terminus-python-sdk) give you 
-access to the database from your Python code.
+The [Python client libraries] Coming Soon...
 
 ## Changes in this Version 
 
