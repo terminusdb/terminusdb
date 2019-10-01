@@ -71,7 +71,7 @@
 :- use_module(library(json_woql)).
 
 % File processing - especially for turtle
-:- use_module(library(file_utils), [checkpoint_to_turtle/3]).
+:- use_module(library(file_utils), [checkpoint_to_turtle/3,terminus_path/1]).
 
 % Validation
 :- use_module(library(validate)).
@@ -86,6 +86,9 @@
 http:location(root, '/', []).
 
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(root(dashboard), cors_catch(dashboard_handler(Method)),
                 [method(Method),
                  methods([options,get])]). 
 :- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
@@ -223,7 +226,7 @@ reply_with_witnesses(Resource_URI, Witnesses) :-
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 /** 
- * connect_handler(Request:http_request) is det.
+ * connect_handler(+Method,+Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
     config:server(SURI),
@@ -236,6 +239,21 @@ connect_handler(get,Request) :-
     write_cors_headers(SURI),
     reply_json(User).
 
+/* 
+ * dashboard_handler(+Method,+Request) is det. 
+ */
+dashboard_handler(options,_Request) :-
+    config:server(SURI),
+    write_cors_headers(SURI),
+    format('~n').
+dashboard_handler(get,_Request) :-
+    terminus_path(Path),
+    interpolate([Path,'/index.html'], Index_Path),
+    read_file_to_string(Index_Path, String, []),
+    config:server(SURI),
+    write_cors_headers(SURI),
+    format('~n'),
+    write(String).
 
 /** 
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
