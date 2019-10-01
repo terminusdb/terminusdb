@@ -42,7 +42,7 @@ The Server API is documented [here](https://github.com/terminusdb/terminus-serve
 
 WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph extracting graph 
 fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
-a native data-structure in JavaScript, Python, Prolog or any other language which has the 
+a native data-structure in JavaScript, Python, and Prolog.
 
 The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/SYNTAX.md).
 
