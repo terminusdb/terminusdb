@@ -113,7 +113,7 @@ owl_types([allDifferent,
 
 metadata_predicates([schema/2]).
 calculated_predicates([subsumptionOf/2]).
-util_predicates([entity/1]).
+util_predicates([document/1]).
 
 schema_predicate(Predicate) :-
     (   rdfs_types(Rdfs_Types),

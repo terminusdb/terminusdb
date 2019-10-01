@@ -4,7 +4,7 @@
               get_user/2,
               user_action/2,
               auth_action_scope/3,
-              add_database_resource/2,
+              add_database_resource/3,
               delete_database_resource/1,
               write_cors_headers/1
           ]).
@@ -18,56 +18,41 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
 :- use_module(config(config),[]).
+:- use_module(library(crypto)).
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
 :- use_module(library(frame)).
-:- use_module(library(json_ld)).
-:- use_module(library(collection)).
-:- use_module(library(md5)).
+:- use_module(library(jsonld)).
+:- use_module(library(database)).
+:- use_module(library(database_utils)).
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
-
-terminus_collection(Collection) :-
-    config:server_name(Server),
-    atomic_list_concat([Server,'/terminus'],Collection).
-
-/** 
- * terminus_context(Context : dictionary) is det.
- * 
- * JSON-LD of terminus context. 
- */ 
-terminus_context(_{
-                       doc : Doc, 
-                       terminus : 'https://datachemist.net/ontology/terminus#'
-                   }) :-
-    config:server_name(Server),
-    atomic_list_concat([Server,'/terminus/document/'],Doc).
 
 /** 
  * root_user_id(Root_User_ID : uri) is det.
  */
 root_user_id(Root) :-
-    config:server_name(Server),
+    config:server(Server),
     atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /** 
@@ -76,9 +61,8 @@ root_user_id(Root) :-
  * Key user association - goes only one way
  */ 
 key_user(Key, User_ID) :-
-    md5_hash(Key, Hash, []),
-    
-    terminus_collection(Collection),
+    coerce_literal_string(Key,K),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([User_ID], 
@@ -87,7 +71,9 @@ key_user(Key, User_ID) :-
 			       t( User_ID , terminus/user_key_hash, Hash^^_ )
 		       )
 	          )
-       ).
+       ),
+    atom_string(Hash_Atom, Hash),
+    crypto_password_hash(K, Hash_Atom).
 
 /** 
  * get_user(+User_ID, -User) is det.
@@ -95,11 +81,10 @@ key_user(Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(User_ID, User) :-
-    terminus_collection(C),
-    make_collection_graph(C,Graph),
+    terminus_database(Database),
     terminus_context(Ctx),
     
-    entity_jsonld(User_ID,Ctx,Graph,3,User).
+    document_jsonld(User_ID,Ctx,Database,3,User).
 
 
 /** 
@@ -111,13 +96,12 @@ get_user(User_ID, User) :-
 key_auth(Key, Auth) :-
     key_user(Key,User_ID),
 
-    terminus_collection(C),
-    make_collection_graph(C,Graph),
+    terminus_database(Database),
     terminus_context(Ctx),
 
     user_auth_id(User_ID, Auth_ID),
     
-    entity_jsonld(Auth_ID,Ctx,Graph,Auth).
+    document_jsonld(Auth_ID,Ctx,Database,Auth).
 
 /* 
  * user_auth_id(User,Auth_id) is semidet.
@@ -126,7 +110,7 @@ key_auth(Key, Auth) :-
  * obj embedded in woql.
  */
 user_auth_id(User_ID, Auth_ID) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Auth_ID], 
@@ -141,7 +125,7 @@ user_auth_id(User_ID, Auth_ID) :-
  * user_action(+User,-Action) is nondet.
  */
 user_action(User,Action) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection,DB),
     ask(DB, 
         select([Action], 
@@ -154,14 +138,14 @@ user_action(User,Action) :-
        ).
 
 /* 
- * auth_action_scop(Auth,Action,Scope) is nondet.
+ * auth_action_scope(Auth,Action,Scope) is nondet.
  * 
  * Does Auth object have capability Action on scope Scope.
  * 
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(Auth, Action, Resource_ID) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    where(
@@ -173,31 +157,51 @@ auth_action_scope(Auth, Action, Resource_ID) :-
         )
 	   ).
 
+    % make comparison late..
+    %atom_string(Resource_ID,Resource_ID_String).
+
 /*  
- * add_database_resource(DB) is det.
+ * add_database_resource(DB,URI,Doc) is det.
  * 
  * Adds a database resource object to the capability instance database for the purpose of 
  * authority reference.
+ * 
+ * DB is the name of the database, URI is its identifier and Doc is a document which 
+ * describes all of its metadata properties.
  */
-add_database_resource(URI,Doc) :-
-    terminus_context(Ctx),
-    compress(Doc,Ctx,Min),
+add_database_resource(DB_Name,URI,Doc) :-
+    expand(Doc,DocX),
+    /* Don't create database resources if they already exist */
+    (   database_exists(URI)
+    ->  throw(http_reply(method_not_allowed(
+                             _{'@type' : 'vio:DatabaseCreateError',
+                               'vio:database_name' : {'@value' : URI,
+                                                      '@type' : 'xdd:url'},
+                               'vio:message' : 'Database exists'})))
+    ;   true),
+    
     /* This check is required to cary out appropriate auth restriction */
-    (   get_dict('@type', Min, 'terminus:Database')
+    (   get_key_document('@type', DocX, 'terminus:Database')
     ->  true
-    ;   format(atom(MSG),'Unable to create a non-database document due to capabilities authorised.'),
-        throw(http_reply(method_not_allowed(URI,MSG)))),
-
-    terminus_collection(Collection),
+    ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
+        throw(http_reply(method_not_allowed(
+                             _{'@type' : 'vio:DatabaseCreateError',
+                               'vio:database_name' : {'@value' : URI,
+                                                      '@type' : 'xdd:url'},
+                               'vio:message' : MSG})))),
+    
+    /* Extend Doc with default databases */ 
+    extend_database_defaults(URI, DocX, Ext),
+    
+    terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB, 
 	    (
-            hash(doc, [URI], DB_URI)
+            true
         =>
-            insert(DB_URI, rdf/type, terminus/'Database'),
-            insert(DB_URI, terminus/id, URI^^(xsd/string)),
-            insert(doc/server, terminus/resource_includes, doc/master),
-            update_document(DB,Doc)
+            insert(doc/server, terminus/resource_includes, doc/DB_Name),
+            insert(doc/DB_Name, terminus/id, URI^^(xsd/anyURI)),
+            update_object(doc/DB_Name,Ext)
         )
        ).
 
@@ -213,13 +217,16 @@ delete_database_resource(URI) :-
     % but are those references then going to be "naked" having no other reference?
     %
     % Supposing we have only one scope for an auth, do we delete the auth? 
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     % delete the object
     ask(DB, 
         (
-            t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
-            t(DB_URI, rdf/type, terminus/'Database')
+            where(
+                (
+                    t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+                    t(DB_URI, rdf/type, terminus/'Database')
+                ))
         =>  
             delete_object(DB_URI)
         )).
@@ -230,7 +237,7 @@ delete_database_resource(URI) :-
  * Writes cors headers associated with Resource_URI
  */
 write_cors_headers(Resource_URI) :-
-    terminus_collection(Collection),
+    terminus_database_name(Collection),
     connect(Collection, DB),
     % delete the object
     findall(Origin,
@@ -245,16 +252,16 @@ write_cors_headers(Resource_URI) :-
     format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
     format(Out,'Access-Control-Allow-Credentials: true\n',[]),
     format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-    format(Out,'Access-Control-Allow-Headers: Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]), 
+    format(Out,'Access-Control-Allow-Headers: Authorization, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]), 
     format(Out,'Access-Control-Allow-Origin: ',[]),
-    write_domains(Out,Origins),
+    write_domains(Origins, Out),
     format(Out,'\n',[]).
 
-write_domains(_,[]).
-write_domains(Out,[H|T]) :-
-    write(Out,H),
-    (   T == []
+write_domains([], _).
+write_domains([Domain| Domains], Out) :-
+    write(Out, Domain),
+    (   Domains == []
     ->  true
     ;   write(' '),
-        write_domains(Out,T)
+        write_domains(Domains, Out)
     ).

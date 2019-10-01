@@ -1,15 +1,17 @@
 #!/usr/bin/env swipl
+% -*- mode: prolog;-*-
 
 :- initialization(main).
 
+:- use_module(library(crypto)).
+:- use_module(library(filesex)).
 :- use_module(library(process)).
 :- use_module(library(optparse)).
-:- use_module(library(md5)).
 
 /*
- * command(Cmd) is semidet. 
- * 
- * True if Cmd exists. 
+ * command(Cmd) is semidet.
+ *
+ * True if Cmd exists.
  */
 command(Cmd) :-
     catch(
@@ -36,7 +38,7 @@ hostname(Hostname) :-
 opt_spec([[opt(help),
            type(boolean),
            shortflags([h]),
-           longflags([help]), 
+           longflags([help]),
            default(false),
            help('print this help')],
 
@@ -46,15 +48,35 @@ opt_spec([[opt(help),
            longflags([server]),
            default(''),
            help('set the server name')],
+
+          [opt(workers_amount),
+           type(integer),
+           shortflags([w]),
+           longflags([workers]),
+           default(8),
+           help('set the amount of server workers')],
+
+          [opt(port),
+           type(integer),
+           shortflags([p]),
+           longflags([port]),
+           default(6363),
+           help('set the server port')],
           
+          [opt(protocol),
+           type(atom),
+           longflags([protocol]),
+           default(http),
+           help('set the protocol used by the server')],
+
           [opt(key),
            type(atom),
            shortflags([k]),
            longflags([key]),
            default(admin),
-           help('key of amin user')]]).
+           help('key of admin user')]]).
 
-/* 
+/*
  * help(+Cmd:atom,-Help:atom) is det.
  */
 help(Cmd,Spec,Help) :-
@@ -66,43 +88,92 @@ Set the administrative key - necessary before superuser can begin to set other p
 
 ~s', [Name,Help_Text]).
 
-example_instance_ttl(Dir,Path) :- 
+example_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_instance_template.ttl'], Path).
 
-example_inference_ttl(Dir,Path) :- 
+example_inference_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_inference_template.ttl'], Path).
 
-example_schema_ttl(Dir,Path) :- 
-    atomic_list_concat([Dir,'/../terminus-ontologies/terminus.owl.ttl'], Path).
+example_schema_ttl(Dir,Path) :-
+    atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
 
 database_path(Dir,Host,Path) :-
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Host,'%2fterminus/'], Path).
+    www_form_encode(Host,Safe_Host),
+    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Safe_Host,'%2fterminus/'], Path).
 
 instance_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'main/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'document/1/'], Path).
+
+config_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../config/config.pl'], Path).
+
+config_template_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../config/config-template.tpl'], Path).
+
+index_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../index.html'], Path).
+
+index_template_path(Dir,Path) :-
+    atomic_list_concat([Dir, '/../index.tpl'], Path).
 
 inference_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'inference/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'inference/1/'], Path).
+
+ttl_path(Dir, Path) :-
+    atomic_list_concat([Dir,'1-ckp.ttl'], Path).
 
 schema_path(Dir,Host,Path) :-
     database_path(Dir,Host,DB),
-    atomic_list_concat([DB,'schema/1/'], Path).
+    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
+    www_form_encode(DBF,DBS),
+    atomic_list_concat([DB,DBS,'schema/1/'], Path).
+
+replace_in_file(Path, Pattern, With) :-
+    read_file_to_string(Path, FileString, []),
+    atomic_list_concat(Split, Pattern, FileString),
+    atomic_list_concat(Split, With, NewFileString),
+    open(Path, write, FileStream),
+    write(FileStream, NewFileString),
+    close(FileStream).
+
+write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount) :-
+    open(Config_Tpl_Path, read, Tpl_Stream),
+    read_string(Tpl_Stream, _, Tpl_String),
+    close(Tpl_Stream),
+    open(Config_Path, write, Stream),
+    format(Stream, Tpl_String, [Server_Name, Port, Worker_Amount]),
+    close(Stream).
+
+write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server_Name, Port, Key) :-
+    open(Index_Tpl_Path, read, Tpl_Stream),
+    read_string(Tpl_Stream, _, Tpl_String),
+    close(Tpl_Stream),
+    open(Index_Path, write, Stream),
+    format(Stream, Tpl_String, [Protocol,Server_Name,Port,Key]),
+    close(Stream).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
-    
+
 main(Args) :-
-    (   command(rdf2hdt)    
-    ->  true
-    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n')),
 
     program(Prog),
     opt_spec(Spec),
     opt_parse(Spec,Args,Opts,_),
     help(Prog,Spec,Help_Text),
-    
+
+    (   command(rdf2hdt)
+    ->  true
+    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n'),
+        write(Help_Text),
+        halt(2)),
+
     (   memberchk(help(true), Opts)
     ->  write(Help_Text),
         halt
@@ -120,39 +191,52 @@ main(Args) :-
             ;   Server = localhost
             )
         ;   Server = Server_Arg),
-        
-        format("\nPlease copy config/config-example.pl to config/config.pl and change the hostname to 'http(s?)://~s'\n",
-               [Server]),
-        
+
         example_instance_ttl(Dir,Example_Instance_TTL),
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
 
-        database_path(Dir,Server,DB_Path),
-        instance_path(Dir,Server,Instance_Path),
-        inference_path(Dir,Server,Inference_Path),
-        schema_path(Dir,Server,Schema_Path),
+        memberchk(port(Port_Arg), Opts),
+        atomic_list_concat([Server, ":", Port_Arg], ServerPort),
         
-        md5_hash(Key,Hash,[]),
-        atomic_list_concat(['
-mkdir -p "',Instance_Path,'";
-mkdir -p "',Inference_Path,'";
-mkdir -p "',Schema_Path,'";
-rm -f ',Instance_Path,'* ;
-rm -f ',Inference_Path,'* ;
-rm -f ',Schema_Path,'* ;
-touch ',DB_Path,'COLLECTION;
-cp "',Example_Instance_TTL,'" "',Instance_Path,'1-ckp.ttl";
-cp "',Example_Inference_TTL,'" "',Inference_Path,'1-ckp.ttl";
-cp "',Example_Schema_TTL,'" "',Schema_Path,'1-ckp.ttl";
-sed -i "s/SEKRET_ADMIN_KEY/',Hash,'/" "',Instance_Path,'1-ckp.ttl";
-sed -i "s/localhost/',Server,'/" "',Instance_Path,'1-ckp.ttl";
-sed -i "s/localhost/',Server,'/" "',Schema_Path,'1-ckp.ttl";
-'],
-                           Cmd),
-        % format('Running Cmd:~s~n',[Cmd]),
-        shell(Cmd),
-        format('Successfully updated admin key!!~n'),
-        halt).
+        database_path(Dir,ServerPort,DB_Path),
+        instance_path(Dir,ServerPort,Instance_Path),
+        ttl_path(Instance_Path, Instance_TTL_Path),
+        inference_path(Dir,ServerPort,Inference_Path),
+        ttl_path(Inference_Path, Inference_TTL_Path),
+        schema_path(Dir,ServerPort,Schema_Path),
+        ttl_path(Schema_Path, Schema_TTL_Path),
+        config_template_path(Dir, Config_Tpl_Path),
+        config_path(Dir,Config_Path),
+        index_template_path(Dir, Index_Tpl_Path),
+        index_path(Dir,Index_Path),
 
-    
+        memberchk(workers_amount(Workers_Arg), Opts),
+        write_config_file(Config_Tpl_Path, Config_Path, Server,
+                          Port_Arg, Workers_Arg),
+        crypto_password_hash(Key,Hash, [cost(15)]),
+        memberchk(protocol(Protocol), Opts),
+        write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
+                         Port_Arg, Key),
+        
+        make_directory_path(Instance_Path),
+        make_directory_path(Inference_Path),
+        make_directory_path(Schema_Path),
+        delete_directory_contents(Instance_Path),
+        delete_directory_contents(Inference_Path),
+        delete_directory_contents(Schema_Path),
+        atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
+        open(Collection_File, write, Collection_Stream),
+        close(Collection_Stream),
+        copy_file(Example_Instance_TTL, Instance_TTL_Path),
+        copy_file(Example_Inference_TTL, Inference_TTL_Path),
+        copy_file(Example_Schema_TTL, Schema_TTL_Path),
+        replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
+        replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
+        replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
+        replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
+        format('Successfully updated admin key!!~n'),        
+        halt
+    ).
+
+

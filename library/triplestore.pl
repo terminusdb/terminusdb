@@ -11,12 +11,17 @@
               commit/2,
               rollback/2,
               check_graph_exists/2,
-              last_plane_number/2,
               graph_checkpoint/3,
               current_checkpoint_directory/3,
               last_checkpoint_number/2,
               with_output_graph/2,
-              ttl_to_hdt/2
+              ttl_to_hdt/2,
+              with_transaction/2,
+              checkpoint/2,
+              canonicalise_subject/2,
+              canonicalise_predicate/2,
+              canonicalise_object/2,
+              triples_canonical/2
           ]).
 
 :- use_module(library(hdt)). 
@@ -26,6 +31,12 @@
 :- use_module(library(schema), [cleanup_schema_module/1]).
 :- use_module(library(prefixes)).
 :- use_module(library(types)).
+% feeling very circular :(
+:- use_module(library(database)).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 /** <module> Triplestore
  * 
@@ -34,20 +45,20 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -56,23 +67,25 @@
  * 
  * Retract all dynamic elements of graph. 
  */
-retract_graph(Collection,Graph_Name) :-
-    schema:collection_schema_module(Collection,Graph_Name,Module), 
-    schema:cleanup_schema_module(Module),
-    retractall(xrdf_pos(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_neg(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_pos_trans(Collection,Graph_Name,_,_,_)),
-    retractall(xrdf_neg_trans(Collection,Graph_Name,_,_,_)).
+retract_graph(Collection,Database_Name) :-
+    (   is_schema_graph(Collection,Database_Name)
+    ->  schema:collection_schema_module(Collection,Database_Name,Module),
+        schema:cleanup_schema_module(Module)
+    ;   true),
+    retractall(xrdf_pos(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_neg(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_pos_trans(Collection,Database_Name,_,_,_)),
+    retractall(xrdf_neg_trans(Collection,Database_Name,_,_,_)).
 
 /** 
- * destroy_graph(+Collection,+Graph_Id:graph_identifier) is det. 
+ * destroy_graph(+Collection,+Database_Id:graph_identifier) is det. 
  * 
  * Completely remove a graph from disk.
  */ 
-destroy_graph(Collection,Graph_Name) :-
-    retract_graph(Collection, Graph_Name),
-    graph_directory(Collection, Graph_Name, GraphPath),
-    delete_directory_and_contents(GraphPath).
+destroy_graph(Collection,Database_Name) :-
+    retract_graph(Collection, Database_Name),
+    graph_directory(Collection, Database_Name, DatabasePath),
+    delete_directory_and_contents(DatabasePath).
 
 /** 
  * destroy_indexes(+C,+G) is det.
@@ -102,16 +115,31 @@ destroy_indexes :-
  * 
  * Sync journals for a graph and collection
  */
-sync_from_journals(Collection,Graph_Name) :-
-    % First remove everything in the dynamic predicates.
-    (   retract_graph(Collection,Graph_Name),
-        hdt_transform_journals(Collection,Graph_Name),
-        get_truncated_queue(Collection,Graph_Name,Queue),
-        sync_queue(Collection,Graph_Name, Queue)
-    ->  true
-    % in case anything failed, retract the graph
-    ;   retract_graph(Collection,Graph_Name),
-        throw(graph_sync_error(Collection-Graph_Name))
+sync_from_journals(Collection,Database_Name) :-
+    with_mutex(
+        Database_Name, 
+        % First remove everything in the dynamic predicates.
+        (   retract_graph(Collection,Database_Name),
+            hdt_transform_journals(Collection,Database_Name),
+            get_truncated_queue(Collection,Database_Name,Queue),
+            sync_queue(Collection,Database_Name, Queue),
+            (   
+                config:max_journal_queue_length(Max_Length),
+                length(Queue,Queue_Length),
+                Queue_Length > Max_Length
+            %   slightly terrifying recursion here...                 
+            ->  checkpoint(Collection,Database_Name)
+            ;   true)
+        ->  true
+        % in case anything failed, retract the graph
+        ;   retract_graph(Collection,Database_Name),
+            format(atom(Msg), 'Could not sync graph ~q for database ~q', [Collection,Database_Name]),
+            throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : Msg,
+                                     'terminus:broken_database' : Collection,
+                                     'terminus:broken_graph' : Database_Name
+                                    }))
+        )
     ).
 
 /** 
@@ -137,7 +165,7 @@ type_compare(neg,ckp,(<)).
 type_compare(neg,pos,(>)).
 
 /** 
- * get_truncated_queue(+Collection,+Graph,-Queue) is semidet. 
+ * get_truncated_queue(+Collection,+Database,-Queue) is semidet. 
  * 
  * Get the queue associated with a graph up to the first checkpoint if it exists. 
  */
@@ -174,14 +202,14 @@ get_truncated_queue(C,G,Queue) :-
             Queue).
     
 /** 
- * hdt_tranform_journals(+Collection_ID,+Graph_ID) is det.
+ * hdt_tranform_journals(+Collection_ID,+Database_ID) is det.
  * 
  * Transform all oustanding journals to hdt files for graph G. 
  * 
  * TODO: This has never been tested.
  */
-hdt_transform_journals(Collection_ID,Graph_Name) :-
-    graph_directory(Collection_ID,Graph_Name,DirPath),
+hdt_transform_journals(Collection_ID,Database_Name) :-
+    graph_directory(Collection_ID,Database_Name,DirPath),
     subdirectories(DirPath,Entries),
     forall(member(Entry,Entries),
            (   interpolate([DirPath,'/',Entry],Directory),
@@ -303,7 +331,7 @@ close_all_handles([Head|Rest]) :-
 /** 
  * with_output_graph(+Template,:Goal) is det. 
  * 
- * Template is graph(Collection_ID,Graph_Id,Type,Ext) where Type is one of {ckp,neg,pos}
+ * Template is graph(Collection_ID,Database_Id,Type,Ext) where Type is one of {ckp,neg,pos}
  * and Ext is one of {ttl,hdt,ntr}
  *
  * ckp is for new graph (initial checkpoint) or any thereafter. 
@@ -318,44 +346,60 @@ with_output_graph(graph(C,G,Type,Ext),Goal) :-
             %get_time(T),floor(T,N), %switch to sequence numbers
             interpolate([CPD,'/',N,'-',Type,'.',Ext],NewFile),
 
-            catch(
+            setup_call_cleanup(
                 (   
                     open(NewFile,write,Stream),
                     set_graph_stream(C,G,Stream,Type,Ext),
-                    initialise_graph(C,G,Stream,Type,Ext),
-                    !, % Don't ever retreat!
-                    (   once(call(Goal))
-                    ->  true
-                    ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
-                        throw(transaction_error(Msg))
-                    ),
-                    finalise_graph(C,G,Stream,Type,Ext)
+                    initialise_graph(C,G,Stream,Type,Ext)
                 ),
-                E,
+                (   call(Goal)
+                ->  true
+                ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
+                    throw(transaction_error(Msg))
+                ), 
                 (   finalise_graph(C,G,Stream,Type,Ext),
-                    throw(E)
+                    (   N > 1, % need an empty checkpoint.
+                        size_file(NewFile, Size),
+                        %format('~n~nSize of file is: ~d~n~n', [N]),
+                        Size = 0
+                    ->  delete_file(NewFile)
+                    ;   true)
                 )
             )
         )
     ).
 
 /** 
- * collapse_planes(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * write_checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
  * 
- * Create a new graph checkpoint from our current dynamic triple state
- */
-collapse_planes(Collection_Id,Graph_Id) :-
-    make_checkpoint_directory(Collection_Id,Graph_Id, _),
-    with_output_graph(
-        graph(Collection_Id,Graph_Id,ckp,ttl),
-        (
-            forall(
-                xrdf(Collection_Id,Graph_Id,X,Y,Z),
-                write_triple(Collection_Id,Graph_Id,ckp,X,Y,Z)
+ * Write a new checkpoint.
+ */ 
+write_checkpoint(Collection_Id,Database_Id) :-
+    with_mutex(
+        Database_Id,
+        (   
+            make_checkpoint_directory(Collection_Id,Database_Id, _),
+            with_output_graph(
+                graph(Collection_Id,Database_Id,ckp,ttl),
+                (
+                    forall(
+                        xrdf(Collection_Id,[Database_Id],X,Y,Z),
+                        write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
+                    )
+                )
             )
         )
     ).
 
+/** 
+ * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
+ * 
+ * Create a new graph checkpoint from our current dynamic triple state
+ * and sync.
+ */
+checkpoint(Collection_Id,Database_Id) :-
+    write_checkpoint(Collection_Id,Database_Id),
+    sync_from_journals(Collection_Id, Database_Id).
 
 /** 
  * check_queue(+Queue) is det.
@@ -379,32 +423,32 @@ sync_from_journals :-
 
     forall(
         (   member(Collection,Collections),
-            graphs(Collection,Graphs),
-            member(Graph_Name, Graphs)
+            graphs(Collection,Databases),
+            member(Database_Name, Databases)
         ),
         (
-            format("~n ** Syncing ~q in collection ~q ~n~n", [Graph_Name,Collection]),
-            catch(sync_from_journals(Collection,Graph_Name),
-                  graph_sync_error(Graph_Name),
-                  format("~n ** ERROR: Graph ~s in Collection ~s failed to sync.~n~n", [Graph_Name,Collection]))      
+            format("~n ** Syncing ~q in collection ~q ~n~n", [Database_Name,Collection]),
+            catch(sync_from_journals(Collection,Database_Name),
+                  graph_sync_error(Database_Name),
+                  format("~n ** ERROR: Database ~s in Collection ~s failed to sync.~n~n", [Database_Name,Collection]))      
         )
     ).
 
 /** 
- * make_empty_graph(+Collection_ID,+Graph) is det.
+ * make_empty_graph(+Collection_ID,+Database) is det.
  * 
  * Create a new empty graph
  */
-make_empty_graph(Collection_ID,Graph_Id) :-
+make_empty_graph(Collection_ID,Database_Id) :-
     % create the collection if it doesn't exist
     collection_directory(Collection_ID,Collection_Path),
     ensure_directory(Collection_Path),
     interpolate([Collection_Path,'/COLLECTION'],Collection_File),
     touch(Collection_File),
     % create the graph if it doesn't exist
-    graph_directory(Collection_ID,Graph_Id,Graph_Path),
-    ensure_directory(Graph_Path),
-    make_checkpoint_directory(Collection_ID,Graph_Id, CPD),
+    graph_directory(Collection_ID,Database_Id,Database_Path),
+    ensure_directory(Database_Path),
+    make_checkpoint_directory(Collection_ID,Database_Id, CPD),
     %get_time(T),floor(T,N),
     N=1,
     interpolate([CPD,'/',N,'-ckp.ttl'],TTLFile),
@@ -413,35 +457,35 @@ make_empty_graph(Collection_ID,Graph_Id) :-
     ttl_to_hdt(TTLFile,CKPFile).
 
 /** 
- * import_graph(+File,+Collection_ID,+Graph) is det.
+ * import_graph(+File,+Collection_ID,+Database) is det.
  * 
- * This predicate imports a given File as the latest checkpoint of Graph_Name
+ * This predicate imports a given File as the latest checkpoint of Database_Name
  * 
  * File will be in either ntriples, turtle or hdt format. 
  */
-import_graph(File, Collection_ID, Graph_Id) :-    
+import_graph(File, Collection_ID, Database_Id) :-    
     graph_file_extension(File,Ext),
     (   Ext = hdt,
         hdt_open(_, File, [access(map), indexed(false)]), % make sure this is a proper HDT file
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         copy_file(File,NewFile)
     ;   Ext = ttl,
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,                
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         ttl_to_hdt(File,NewFile)
     ;   Ext = ntr,
-        make_checkpoint_directory(Collection_ID,Graph_Id,CPD),
+        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
         N=1,                
         %get_time(T),floor(T,N),
         interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
         ntriples_to_hdt(File,NewFile)
     ),
-    sync_from_journals(Collection_ID,Graph_Id).
+    sync_from_journals(Collection_ID,Database_Id).
 
 /** 
  * literal_to_canonical(+Lit,-Can) is det. 
@@ -449,6 +493,13 @@ import_graph(File, Collection_ID, Graph_Id) :-
  * Converts a literal to canonical form. Currently 
  * we are only canonicalising booleans. We may extend as necessary.
  */
+literal_to_canonical(A^^Ty) :-
+    !,
+    literal_to_canonical(literal(Ty,A)).
+literal_to_canonical(A@Lang) :-
+    !,
+    literal_to_canonical(lang(Lang,A)).
+/*
 literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit)),
                      literal(type('http://www.w3.org/2001/XMLSchema#boolean',Can))) :-
     !,
@@ -458,7 +509,36 @@ literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit
         ->  Can=false
         ;   fail)             
     ).
-literal_to_canonical(X,X).
+*/
+literal_to_canonical(X,X). % dubious!
+
+/* 
+ * triples_canonical(Apocryphal,Canonical) is det.
+ * 
+ * Turn list of triples into a canonical comparable form.
+ */
+triples_canonical([],[]).
+triples_canonical([(D,G,A,B,C)|Triples],[(D,G,X,Y,Z)|Canonical]) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
+    triples_canonical(Triples,Canonical).
+
+/* 
+ * canonicalise_subject(+O,-C) is det.
+ */ 
+canonicalise_subject(O,C) :-
+    (   string(O)
+    ->  atom_string(C,O)
+    ;   O=C).
+
+/* 
+ * canonicalise_predicate(+O,-C) is det.
+ */ 
+canonicalise_predicate(O,C) :-
+    (   string(O)
+    ->  string_to_atom(O,C)
+    ;   O=C).
 
 /** 
  * canonicalise_object(+O,-C) is det. 
@@ -468,64 +548,44 @@ literal_to_canonical(X,X).
 canonicalise_object(O,C) :-
     (   is_literal(O)
     ->  literal_to_canonical(O,C)
+    ;   string(O)
+    ->  string_to_atom(O,C)
     ;   O=C).
+
 
 /** 
  * insert(+DB:atom,+G:graph_identifier,+X,+Y,+Z) is det.
  * 
  * Insert quint into transaction predicates.
  */
-insert(DB,G,X,Y,O) :-
-    canonicalise_object(Z,O),
-    (   xrdf(DB,G,X,Y,Z)
+insert(DB,G,A,B,C) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
+    (   xrdf(DB,[G],X,Y,Z)
     ->  true
     ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
         (   xrdf_neg_trans(DB,G,X,Y,Z)
         ->  retractall(xrdf_neg_trans(DB,G,X,Y,Z))
         ;   true)).
 
-user:goal_expansion(insert(DB,G,A,Y,Z),insert(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(insert(DB,G,X,B,Z),insert(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(insert(DB,G,X,Y,C),insert(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),        
-    global_prefix_expand(C,Z).
-user:goal_expansion(insert(DB,G,X,Y,literal(L)),insert(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
-
-
 /** 
  * delete(+DB,+G,+X,+Y,+Z) is det.
  * 
  * Delete quad from transaction predicates.
  */
-delete(DB,G,X,Y,O) :-
-    canonicalise_object(Z,O),
+delete(DB,G,A,B,C) :-
+    canonicalise_subject(A,X),
+    canonicalise_predicate(B,Y),
+    canonicalise_object(C,Z),
     (   xrdf_pos_trans(DB,G,X,Y,Z)
     ->  retractall(xrdf_pos_trans(DB,G,X,Y,Z))        
     ;   true),
     (   xrdfdb(DB,G,X,Y,Z)
-    ->  asserta(xrdf_neg_trans(DB,G,X,Y,Z))
+    ->  (   xrdf_neg_trans(DB,G,X,Y,Z)
+        ->  true
+        ;   asserta(xrdf_neg_trans(DB,G,X,Y,Z)))
     ;   true).
-
-user:goal_expansion(delete(DB,G,A,Y,Z),delete(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(delete(DB,G,X,B,Z),delete(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(delete(DB,G,X,Y,C),delete(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),                
-    global_prefix_expand(C,Z).
-user:goal_expansion(delete(DB,G,X,Y,literal(L)),delete(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
@@ -541,22 +601,8 @@ update(DB,G,X,Y,Z,Action) :-
     new_triple(X,Y,Z,Action,X1,Y1,Z1),
     insert(DB,G,X1,Y1,Z1).
 
-user:goal_expansion(update(DB,G,A,Y,Z,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(update(DB,G,X,B,Z,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(update(DB,G,X,Y,C,Act),update(DB,G,X,Y,Z,Act)) :-
-    \+ var(C),
-    \+ C = literal(_),
-    global_prefix_expand(C,Z).
-user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
-
 /** 
- * commit(+C:collection_id,+G:graph_id) is det.
+ * commit(+C:collection_id,+G:graph_identifier) is det.
  * 
  * Commits the current transaction state to backing store and dynamic predicate
  * for a given collection and graph.
@@ -566,81 +612,68 @@ commit(CName,GName) :-
     % negative before positive
     % graph_id_name(G,GName),
     with_output_graph(
-            graph(CName,GName,neg,ttl),
-            (   forall(
-                     xrdf_neg_trans(CName,GName,X,Y,Z),
-                     (   % journal
-                         write_triple(CName,GName,neg,X,Y,Z),
-                         % dynamic 
-                         retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                         retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                         asserta(xrdf_neg(CName,GName,X,Y,Z))
-                     ))
-            )
+        graph(CName,GName,neg,ttl),
+        (   forall(
+                xrdf_neg_trans(CName,GName,X,Y,Z),
+                (   % journal
+                    write_triple(CName,GName,neg,X,Y,Z),
+                    % dynamic 
+                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                    asserta(xrdf_neg(CName,GName,X,Y,Z))
+                ))
+        )
     ),
+
     retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
     
     with_output_graph(
-            graph(CName,GName,pos,ttl),
-            (   forall(
-                    xrdf_pos_trans(CName,GName,X,Y,Z),
-                     
-                    (% journal
-                        write_triple(CName,GName,pos,X,Y,Z),
-                        % dynamic
-                        retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                        retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                        asserta(xrdf_pos(CName,GName,X,Y,Z))
-                    ))
-            )
+        graph(CName,GName,pos,ttl),
+        (   forall(
+                xrdf_pos_trans(CName,GName,X,Y,Z),
+                
+                (% journal
+                    write_triple(CName,GName,pos,X,Y,Z),
+                    % dynamic
+                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
+                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
+                    asserta(xrdf_pos(CName,GName,X,Y,Z))
+                ))
+        )
     ),
+    
     retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
 
 /** 
- * rollback(+Collection_Id,+Graph_Id:graph_identifier) is det.
+ * rollback(+Collection_Id,+Database_Ids:list(graph_identifier)) is det.
  * 
  * Rollback the current transaction state.
  */
 rollback(Collection_Id,GName) :-
-    % graph_id_name(Graph_Id, GName),
     retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
-    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)). 
+    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)).
 
 /** 
- * xrdf(+Collection_Id,+Graph_Id,?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Collection_Id,+Database_Ids:list,?Subject,?Predicate,?Object) is nondet.
  * 
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
- * Graph is either an atom or a list of atoms, referring to the name(s) of the graph(s).
+ * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
-% temporarily remove id behaviour.
-xrdf(C,G,X,Y,Z) :-
+xrdf(C,Gs,X,Y,Z) :-
+    member(G,Gs),
     xrdfid(C,G,X,Y,Z).
-
-user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(xrdf(DB,G,X,B,Z),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(xrdf(DB,G,X,Y,C),xrdf(DB,G,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),
-    global_prefix_expand(C,Z).
-user:goal_expansion(xrdf(DB,G,X,Y,literal(L)),xrdf(DB,G,X,Y,Object)) :-
-    \+ var(L),
-    literal_expand(literal(L),Object).
 
 xrdfid(C,G,X0,Y0,Z0) :-
     !,
-    (   xrdf_pos_trans(C,G,X0,Y0,Z0)     % If in positive graph, return results
-    ;   (   xrdf_neg_trans(C,G,X0,Y0,Z0) % If it's not negative
-        *-> false                      % If it *is* negative, fail		
-        ;   xrdfdb(C,G,X0,Y0,Z0))).      % Read in the permanent store
-
+    (   xrdf_pos_trans(C,G,X0,Y0,Z0)      % If in positive graph, return results
+    ;   xrdfdb(C,G,X0,Y0,Z0),             % or a lower plane
+        \+ xrdf_neg_trans(C,G,X0,Y0,Z0)   % but only if it's not negative
+    ). 
+        
 /** 
- * xrdfdb(+Collection_Id,+Graph_Id,?X,?Y,?Z) is nondet.
+ * xrdfdb(+Collection_Id,+Database_Id,?X,?Y,?Z) is nondet.
  * 
  * This layer has only those predicates with backing store.
  */ 
@@ -657,17 +690,20 @@ xrdf_search_queue([ckp(HDT)|_],X,Y,Z) :-
     hdt_search_safe(HDT,X,Y,Z).
 xrdf_search_queue([pos(HDT)|Rest],X,Y,Z) :-
     (   hdt_search_safe(HDT,X,Y,Z)
-    ;   xrdf_search_queue(X,Y,Z,Rest)).
+    ;   xrdf_search_queue(Rest,X,Y,Z)).
 xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
-    (   hdt_search_safe(HDT,X,Y,Z)
-    *-> false
-    ;   xrdf_search_queue(X,Y,Z,Rest)).
+    xrdf_search_queue(Rest,X,Y,Z),
+    \+ hdt_search_safe(HDT,X,Y,Z).
 
 /* 
  * hdt_search_safe(HDT,X,P,Y) is nondet.
  * 
  * Add some marshalling.
- */ 
+ */
+/* 
+hdt_search_safe(HDT,X,Y,Z) :-
+    hdt_search(HDT,X,Y,Z).
+*/
 hdt_search_safe(HDT,X,Y,literal(type(T,Z))) :-
 	hdt_search(HDT,X,Y,Z^^T).
 hdt_search_safe(HDT,X,Y,literal(lang(L,Z))) :-
@@ -679,3 +715,65 @@ hdt_search_safe(HDT,X,Y,Z) :-
 	var(Z),
 	hdt_search(HDT,X,Y,Z),
 	atom(Z).
+
+
+/** 
+ * with_transaction(+Options,:Goal) is semidet.
+ * 
+ * Executes goal, commits if successful, and rolls back if not.
+ * 
+ * Options is a list which contains any of:
+ * 
+ *  graphs([Database0,Database1,...,Databasen])
+ * 
+ *  Specifying each of the graphs which is in the transaction
+ * 
+ *  success(SuccessFlag)
+ *  
+ *  which gives a way to make the transaction fail, even if goal succeeds 
+ * 
+ * TODO: We should perhaps have an additional structure witness(Witness) which 
+ *       returns the witnesses of failure
+ *
+ */
+with_transaction(Options,Goal) :-
+    % some crazy heavy locking here!
+    with_mutex(transaction,
+               (   member(graphs(Database_Id_Bag),Options),
+                   !,
+                   member(collection(C),Options),
+                   !,
+                   sort(Database_Id_Bag,Database_Ids),
+                   !,
+                   % if we can't get graphs, there is nothing interesting to do anyhow. 
+                   (
+                       % select success flag from
+                       ignore(
+                           member(success(SuccessFlag),Options)
+                       ),
+                       % Call the goal
+                       call(Goal),
+                       
+                       (   (   
+                               (   var(SuccessFlag)
+                               % If the goal succeeds but there is no success flag, set to true
+                               ->  SuccessFlag = true
+                               ;   true)
+                           ->  true
+                           % If the goal fails, we want to signal failure and rollback
+                           ;   SuccessFlag = false
+                           ),
+                           SuccessFlag = true
+                       ->  forall(member(G,Database_Ids),
+                                  (   commit(C,G),
+                                      sync_from_journals(C,G)))
+                       % We have succeeded in running the goal but Success is false
+                       ;   forall(member(G,Database_Ids),rollback(C,G))
+                       )
+                   ->  true
+                   % We have not succeeded in running goal, so we need to cleanup
+                   ;   forall(member(G,Database_Ids),rollback(C,G)),
+                       fail
+                   )
+               )
+              ).

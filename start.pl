@@ -40,15 +40,21 @@ add_config_path :-
 
 :- add_config_path.
 
+add_test_path :- 
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/test',Config),
+    asserta(user:file_search_path(test, Config)).
+
+:- add_test_path.
+
 initialise_server_settings :-
     file_search_path(terminus_home, BasePath),    
     !,
     atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
-    ;   atom_concat(BasePath, '/config/config-example.pl',
-                    Example_Settings_Path),
-        copy_file(Example_Settings_Path,Settings_Path)
+    ;   format("CRITICAL ERROR: Server can't be started because the configuration is missing~n~nRun: ~s/utils/initialize_database first~n", BasePath),
+        halt(10)
     ).
 
 :- initialise_server_settings.
@@ -59,9 +65,14 @@ initialise_server_settings :-
 :- use_module(library(prefixes)).
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
+:- use_module(test(tests)).
 
 main(Argv) :-
     maybe_upgrade,
     initialise_prefix_db,
-    server(Argv).
- 
+    initialise_contexts,
+    server(Argv),
+    (   Argv == [test]
+    ->  run_tests()
+    ;   true
+    ).

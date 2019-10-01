@@ -7,7 +7,12 @@
               get_collection_prefixes/2,
               get_collection_prefix_list/2,
               global_prefix_expand/2,
-              literal_expand/2
+              literal_expand/2,
+              prefix_list_to_rapper_args/2,
+              initialise_contexts/0,
+              woql_context/1,
+              get_collection_jsonld_context/2,
+              get_global_jsonld_context/1
           ]).
 
 /** <module> Prefixes
@@ -44,18 +49,26 @@
 :- use_module(library(file_utils)).
 :- use_module(library(utils)).
 
+% JSON manipulation
+:- use_module(library(http/json)).
+
+:- use_module(library(jsonld)).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 % internal
-global_prefixes(dcog,'https://datachemist.net/ontology/dcog#').
-global_prefixes(dcogbox,'https://datachemist.net/ontology/dcogbox#').
-global_prefixes(xdd,'https://datachemist.net/ontology/xdd#').
-global_prefixes(rvo,'https://datachemist.net/ontology/rvo#').
-global_prefixes(terminus,'https://datachemist.net/ontology/terminus#').
+global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
+global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
+global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
+global_prefixes(vio,'http://terminusdb.com/schema/vio#').
+global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
 % common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
-global_prefixes(ex,'http://example.org/').
 
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
@@ -64,7 +77,7 @@ global_prefixes(ex,'http://example.org/').
 default_prefixes(C,doc,U) :-
     interpolate([C,'/',document,'/'], U).
 default_prefixes(C,scm,U) :-
-    interpolate([C,'/',schema,'/'], U).
+    interpolate([C,'/',schema,'#'], U).
 % internal
 default_prefixes(_,Pre,URI) :-
     global_prefixes(Pre,URI).
@@ -167,16 +180,68 @@ get_collection_prefixes(Collection_Id,Prefixes) :-
  * return a list of pairs of prefixes.
  */
 get_collection_prefix_pairs(Collection,List) :-
-    setof(Prefix-Uri,
-          prefix(Collection, Prefix, Uri),
-          List).
+    findall(Prefix-Uri,
+            prefix(Collection, Prefix, Uri),
+            List).
 
 /* 
- * get_collection_prefixes_list(Collection:atom,Prefixes:dict) is det.
+ * get_collection_prefix_list(Collection:atom,Prefixes:dict) is det.
  * 
  * return a list of pairs of prefixes.
  */
 get_collection_prefix_list(Collection,List) :-
     get_collection_prefix_pairs(Collection,Pairs),
-    maplist([A-B,A=B]>>(true), Pairs, List).
+    maplist([A-B,A=B]>>true, Pairs, List).
+
+/* 
+ * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
+ * 
+ * return a list of arguments for rapper.
+ */
+prefix_list_to_rapper_args([],[]).
+prefix_list_to_rapper_args([P=U|Rest],['-f',Arg|Arg_Rest]) :-
+    interpolate(['xmlns:',P,'="',U,'"'],Arg),
+    prefix_list_to_rapper_args(Rest,Arg_Rest).
+
+:- dynamic woql_context/1.
+
+initialise_contexts :-
+    terminus_schema_path(Path),
+    interpolate([Path,'woql-context.jsonld'],File),
+    setup_call_cleanup(
+        open(File,read,Out),
+        (   retractall(woql_context(_)),
+            json_read_dict(Out, Doc),
+            get_dict_default('@context',Doc, Ctx,_{}),
+            expand_context(Ctx, Exp),
+            assertz(woql_context(Exp))
+        ),
+        close(Out)    
+    ).
+
+
+/* 
+ * get_collection_jsonld_context(Collection,Ctx) is det. 
+ * 
+ * Get a JSON-LD dictonary holding the context for this db.
+ */
+get_collection_jsonld_context(Collection, Ctx) :-
+    get_collection_prefix_list(Collection,Ctx_Obj),
+    sort(Ctx_Obj,Ctx_Sorted),
+    term_jsonld(Ctx_Sorted, Ctx).
+
+/* 
+ * get_global_jsonld_context(Collection,Ctx) is det. 
+ * 
+ * Get a global JSON-LD dictonary holding the context
+ * for generic documents.
+ */
+get_global_jsonld_context(Ctx) :-
+    findall(Key-Value,
+            global_prefixes(Key,Value),
+            Pairs),
+    % This is sweeping a bug under the carpet
+    % KLUDGE
+    sort(Pairs,Sorted),
+    dict_create(Ctx,_,Sorted).
 

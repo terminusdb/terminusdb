@@ -6,7 +6,7 @@
               is_one_of_frame/1,
               is_and_frame/1,
               is_xor_frame/1,
-              is_entity_frame/1,
+              is_document_frame/1,
               is_frame/1
           ]).
 
@@ -103,8 +103,8 @@ is_one_of_frame(F) :-
     member(type=oneOf,F),
     member(elements=_Elts,F).
 
-is_entity_frame(F) :-
-    member(type=entity,F),
+is_document_frame(F) :-
+    member(type=document,F),
     member(class=_Class,F).
 
 is_class_choice_frame(F) :-
@@ -124,7 +124,7 @@ is_xor_frame(F) :-
     member(operands=_,F).
 
 is_frame(F) :- exclude(is_property_frame,F,[]).
-is_frame(F) :- is_entity_frame(F).
+is_frame(F) :- is_document_frame(F).
 is_frame(F) :- is_one_of_frame(F).
 is_frame(F) :- is_class_choice_frame(F).
     

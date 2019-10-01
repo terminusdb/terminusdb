@@ -30,10 +30,17 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(collection)).
+:- use_module(library(database)).
 :- use_module(library(woql_term)).
 :- use_module(library(utils), except([elt/2])).
-:- use_module(library(triplestore), [xrdf/5,with_output_graph/2,sync_from_journals/2]).
+:- use_module(library(triplestore), [
+                  xrdf/5,
+                  insert/5,
+                  delete/5,
+                  with_output_graph/2,
+                  sync_from_journals/2,
+                  with_transaction/2
+              ]).
 :- use_module(library(schema), [subsumptionOf/3]).
 :- use_module(library(relationships), [
                   relationship_source_property/3,
@@ -44,7 +51,13 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 
-:- use_module(library(json_ld)).
+:- use_module(library(jsonld)).
+:- use_module(library(json_woql)).
+
+:- use_module(library(frame), [
+                  update_object/3,
+                  delete_object/2
+              ]).
  
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
@@ -54,6 +67,10 @@
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 % is this actually needed?
 :- op(2, xfx, :).
@@ -97,29 +114,29 @@ merge_output_graphs_aux([], OGs2, Seen, OGs3) :-
 merge_output_bindings(A, B, C) :-
     union(A,B,C).
 
-merge_graph(Graph_List0,Graph_List1,Graph_List2) :-
+merge_graph(Database_List0,Database_List1,Database_List2) :-
     % in both
-    convlist({Graph_List1}/[Name=graph(T0,G0,F0),
+    convlist({Database_List1}/[Name=graph(T0,G0,F0),
                             Name=graph(T2,G2,F2)]>>(
-                member(Name=graph(T1,G1,F1),Graph_List1),
+                member(Name=graph(T1,G1,F1),Database_List1),
                 append(T0,T1,T2),
                 append(G0,G1,G2),
                 append(F0,F1,F2)),
-             Graph_List0,Graph_List_Same),
+             Database_List0,Database_List_Same),
     % in first
-    convlist({Graph_List1}/[Name=graph(T0,G0,F0),
+    convlist({Database_List1}/[Name=graph(T0,G0,F0),
                             Name=graph(T0,G0,F0)]>>(
-                 \+ member(Name=_,Graph_List1)),
-             Graph_List0,Graph_List_Left),
+                 \+ member(Name=_,Database_List1)),
+             Database_List0,Database_List_Left),
     % in second
-    convlist({Graph_List0}/[Name=graph(T0,G0,F0),
+    convlist({Database_List0}/[Name=graph(T0,G0,F0),
                             Name=graph(T0,G0,F0)]>>(
-                 \+ member(Name=_,Graph_List0)),
-             Graph_List1,Graph_List_Right),
-    append([Graph_List_Same,
-            Graph_List_Left,
-            Graph_List_Right],
-           Graph_List2).
+                 \+ member(Name=_,Database_List0)),
+             Database_List1,Database_List_Right),
+    append([Database_List_Same,
+            Database_List_Left,
+            Database_List_Right],
+           Database_List2).
         
 
 merge_graphs_aux([],G,G).
@@ -147,7 +164,7 @@ merge(S0,S1,SM) :-
     merge_output_bindings(B0,B1,Bindings),
 
     member(prefixes=Prefixes,S0),
-    member(graph=Graph,S0),
+    member(database=Database,S0),
     member(write_graph=Write_Graph,S0),
     member(definitions=Definitions,S0),    
     member(bound=Bound,S1),
@@ -158,7 +175,7 @@ merge(S0,S1,SM) :-
         current_output_graph=default,
         definitions=Definitions,
         prefixes=Prefixes,
-        graph=Graph,
+       database=Database,
         write_graph=Write_Graph,
         collection=C,
         used=Used,
@@ -221,7 +238,7 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
                      rdfs='http://www.w3.org/2000/01/rdf-schema#'],
            definitions=[],
            collection='https://example.org',
-           graph=_,
+          database=_,
            used=_Used,
            bound=3,
            module=M,
@@ -231,15 +248,15 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
 empty_ctx(S0,S6) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
-    elt(graph=Graph,S0),
-    elt(graph=Write_Graph,S0),
+    elt(database=Database,S0),
+    elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
-    select(graph=_,S1,
-           graph=Graph,S2),
+    select(database=_,S1,
+          database=Database,S2),
     select(module=_,S2,
            module=M,S3),
     select(definitions=_,S3,
@@ -251,15 +268,15 @@ empty_ctx(S0,S6) :-
 
 empty_ctx(Prefixes,S0,S6) :-
     empty_ctx(S),
-    elt(graph=Graph,S0),
+    elt(database=Database,S0),
     elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
-    select(graph=_,S1,
-           graph=Graph,S2),
+    select(database=_,S1,
+          database=Database,S2),
     select(module=_,S2,
            module=M,S3),
     select(definitions=_,S3,
@@ -291,7 +308,7 @@ resolve(X,Xe) -->
     view(prefixes=Prefixes), 
     {
         atom(X),
-        (   once(member(X=URI,Prefixes))
+        (   member(X=URI,Prefixes)
         ->  Xe=URI
         ;   X=Xe)
     }.
@@ -317,13 +334,26 @@ resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
     [],
     {
         string(X),
+        % this looks likes it does nothing...
         string_to_atom(Y,X)
     }.
-resolve(X@L,literal(lang(LE,XE))) -->
+resolve(X@L,literal(lang(LE,XS))) -->
     resolve(X,XE),
+    {
+        (   ground(XE),
+            atom(XE)
+        ->  atom_string(XE,XS)
+        ;   XE = XS)
+    },
     resolve(L,LE).
-resolve(X^^T,literal(type(TE,XE))) -->
+resolve(X^^T,literal(type(TE,XS))) -->
     resolve(X,XE),
+    {
+        (   ground(XE),
+            atom(XE)
+        ->  atom_string(XE,XS)
+        ;   XE = XS)
+    },
     resolve(T,TE).
 
 /* 
@@ -334,17 +364,14 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   wf(Term)
-    ->  (   compile_wf(Term, Prog, Ctx_In, Ctx_Out)
-        ->  true
-        ;   format(atom(M), 'Failure to compile term ~q', [Term]),
-            throw(compilation_error(M)))        
-    ;   throw(syntax_error(Term))
-    ).
+    (   compile_wf(Term, Prog, Ctx_In, Ctx_Out)
+    ->  true
+    ;   format(atom(M), 'Failure to compile term ~q', [Term]),
+        throw(compilation_error(M))).
 
 assert_program([]).
 assert_program([Def|Remainder]) :-
-    assert(Def),
+    assertz(Def),
     assert_program(Remainder).
 
 retract_program([]).
@@ -353,8 +380,8 @@ retract_program([def(Name,Args,_Body)|Remainder]) :-
     abolish(woql_compile:Name/N),
     retract_program(Remainder).
 
-bookend_graphs(Graphs) :-
-    maplist([_=g(L,L-[],_-[])]>>true, Graphs).
+bookend_graphs(Databases) :-
+    maplist([_=g(L,L-[],_-[])]>>true, Databases).
 
 nonground_elts([A|Rest_In],[A|Rest_Out]) :-
     \+ ground(A),
@@ -365,12 +392,13 @@ nonground_elts([_|Rest_In],Rest_Out) :-
 nonground_elts([],[]).
 
 /* 
- * enrich_graphs(Graphs,Graph,Enriched) is det.
+ * enrich_graphs(Databases,Database,Enriched) is det.
  * 
  * DDD enrich_graph_fragment currently unimplemented...
  */
-enrich_graphs(Graphs,Graph,Enriched) :-
-    convlist({Graph}/[G=g(L,H-[],F-[]),
+/*
+enrich_graphs(Databases,Database,Enriched) :-
+    convlist({Database}/[G=g(L,H-[],F-[]),
                       G=Result]>>(
                  % just set it to something
                  % if unbound
@@ -378,27 +406,46 @@ enrich_graphs(Graphs,Graph,Enriched) :-
                  ignore(F=[]),
                  ignore(L=[]),
                  \+ L=[], % don't include if empty.
-                 enrich_graph_fragment([],H,F,Graph,Result)
+                 enrich_graph_fragment([],H,F,Database,Result)
              ),
-             Graphs,
+             Databases,
              Enriched).
+*/
 
-run_query(Atom, JSON) :-
-    read_term_from_atom(Atom,Query,[]),
-    run_term(Query,JSON).
+/* 
+ * run_query(JSON_In, JSON_Out) is det. 
+ * 
+ * Runs a WOQL query in JSON-LD WOQL syntax.
+ */ 
+run_query(JSON_In, JSON_Out) :-
+    woql_context(Ctx),
+    json_woql(JSON_In, Ctx, Query),
+    run_term(Query,JSON_Out).
+
+:- use_module(library(http/http_log)).
 
 run_term(Query,JSON) :-
+    /*
     (   \+ ground(Query)
     ->  format(atom(M), 'Arguments are insufficiently instantiated for Query ~q', [Query]),
         throw(instantiation_error(M))
     ;   true),
+    */
+    * format('~n***********~nQuery: ~q~n',[Query]),
     compile_query(Query,Prog,Ctx_Out),
-    %format('~n***********~nProgram: ~q~n',[Prog]),
-    %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
+    * format('~n***********~nProgram: ~q~n',[Prog]),
+    * format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
-    elt(graph=Graph,Ctx_Out),
+    elt(database=_Database,Ctx_Out),
+
+    * http_log_stream(Log),
+    * format(Log,'~n~nWe are here -1 ~n~n',[]),
+    
     assert_program(Definitions),
-    findall((B,OGs),
+
+    * format(Log,'~n~nWe are here -0.5 ~n~n',[]),
+
+    findall((B-OGs),
             (   elt(output_graphs=OGs,Ctx_Out),
                 % sets head to graph start and tail to the empty list.
                 bookend_graphs(OGs),
@@ -407,21 +454,23 @@ run_term(Query,JSON) :-
             ),
             BGs),
 
-    zip(Bindings,Graph_List_List,BGs),
-    merge_graphs(Graph_List_List,Graph_List),
-    
-    maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
-    maplist({Graph}/[OGs,Gs]>>enrich_graphs(OGs,Graph,Gs),Graph_List,E_Graphs),
+    zip(Bindings,Database_List_List,BGs),
 
-    jsonify([bindings=Patched_Bindings,graphs=E_Graphs],JSON),
+    merge_graphs(Database_List_List,Database_List),
+
+    maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
+    % maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
+    Database_List= E_Databases,
+    
+    * format(Log,'~n~nWe are here 1 ~n~n',[]),
+    
+    term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
  
 run_term(Query,JSON) :-
     compile_query(Query,Prog,Ctx_Out),
-    %format('~n***********~nProgram: ~q~n',[Prog]),
-    %format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
-    elt(graph=Graph,Ctx_Out),
+    elt(database=_Database,Ctx_Out),
     assert_program(Definitions),
     findall((B,Gs),
             (   elt(output_graphs=OGs,Ctx_Out),
@@ -430,13 +479,14 @@ run_term(Query,JSON) :-
                 call(Prog),
                 elt(bindings=B1,Ctx_Out),
                 patch_bindings(B1,B),
-                enrich_graphs(OGs,Graph,Gs)
+                % enrich_graphs(OGs,Database,Gs)
+                OGs = Gs
             ),
             BGs),
 
-    zip(Bindings,Graphs,BGs),
+    zip(Bindings,Databases,BGs),
     
-    jsonify([bindings=Bindings,graphs=Graphs],JSON),
+    term_jsonld([bindings=Bindings,graphs=Databases],JSON),
     ignore(retract_program(Definitions)).
 
 literal_string(literal(type(_,Val)), Val).
@@ -474,10 +524,10 @@ compile_node(X:C,XE,Goals) -->
     !,
     resolve(X,XE),
     expand(C,CE),
-    view(graph=G),
+    view(database=G),
     {
-        graph_collection(G,C),
-        graph_instance(G,I),
+        database_name(G,C),
+        database_instance(G,I),
         Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                  once(subsumptionOf(D,CE,G))
                 ]
@@ -488,7 +538,7 @@ compile_node(X,XE,[]) -->
 
 compile_node_or_lit(PE,X:C,XE,XGoals) -->
     !,
-    view(graph=G),
+    view(database=G),
     (   { datatypeProperty(PE,G) }
     ->  resolve(X,XE),
         { XGoals=[] }
@@ -506,30 +556,32 @@ compile_relation(X:C,XE,Class,Goals) -->
     resolve(X,XE),
     %expand(C,CE),
     resolve(Class,ClassE),
-    view(graph=G),
+    view(database=G),
     {
         (   X=ignore
         ->  Goals=[]
-        ;   graph_collection(G,C),
-            graph_instance(G,I),
+        ;   database_name(G,C),
+            database_instance(G,I),
             Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                      once(subsumptionOf(D,ClassE,G))
                     ]
         )
     }.
 
-compile_wf(update_object(X,Doc),update_object(URI,Doc,Graph)) -->
-    view(graph=Graph),
+compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
+    view(database=Database).
+compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
+    view(database=Database),
     resolve(X,URI).
-compile_wf(delete_object(X),delete_object(URI,Graph)) -->
-    view(graph=Graph),
+compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
+    view(database=Database),
     resolve(X,URI).
-compile_wf(delete(WG,X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+compile_wf(delete([WG],X,P,Y),delete(WC,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(collection=WC).
-compile_wf(insert(WG,X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+compile_wf(insert([WG],X,P,Y),insert(WC,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
@@ -539,13 +591,13 @@ compile_wf(delete(X,P,Y),delete(WC,WG,XE,PE,YE)) -->
     resolve(P,PE),
     resolve(Y,YE),
     view(collection=WC),
-    view(write_graph=WG).
+    view(write_graph=[WG]).
 compile_wf(insert(X,P,Y),insert(WC,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(collection=WC),
-    view(write_graph=WG).
+    view(write_graph=[WG]).
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
     { list_conjunction(Goals,Goal) }.
@@ -571,7 +623,7 @@ compile_wf(like(A,B,F), Goal) -->
 compile_wf(A << B,subsumptionOf(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
-    view(graph=G).
+    view(database=G).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(let(P,Args,Def,Query),Goal) -->
@@ -662,16 +714,12 @@ compile_wf(t(X,P,Y),Goal) -->
     compile_node(X,XE,XGoals),
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
-    view(graph=G),
+    view(database=G),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {
-        graph_collection(G,C),            
-        graph_instance(G,I),
-        (   I = main
-        ->  Search=inferredEdge(XE,PE,YE,G)
-        ;   Search=xrdf(C,I,XE,PE,YE)),
+        Search=inference:inferredEdge(XE,PE,YE,G),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         append([[Search],XGoals,YGoals],
@@ -683,17 +731,18 @@ compile_wf(t(X,P,Y,G),Goal) -->
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
     resolve(G,GE),
-    view(graph=Graph),
+    view(database=Database),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
     {        
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        graph_collection(Graph,C),
-        (   GE = main
-        ->  Search=inferredEdge(XE,PE,YE,Graph)
-        ;   Search=xrdf(C,GE,XE,PE,YE)),
+        database_name(Database,C),
+        (   database_record_instance_list(C,L),
+            member(GE,L)
+        ->  Search=inference:inferredEdge(XE,PE,YE,Database)
+        ;   Search=xrdf(C,[GE],XE,PE,YE)),
         
         append([[Search],XGoals,YGoals],
                GoalList),
@@ -704,13 +753,13 @@ compile_wf(r(X,R,Y),Goal) -->
     compile_relation(R,RE,RClass,RGoals),
     expand(RClass,RClassID),    
     compile_node(Y,YE,YGoals),
-    view(graph=G),
+    view(database=G),
     view(current_output_graph=OG),
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     {
-        graph_collection(G,C),                
-        graph_instance(G,I),
+        database_name(G,C),                
+        database_instance(G,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -739,20 +788,20 @@ compile_wf(r(X,R,Y,G),Goal) -->
     compile_relation(R,RE,RClass,RGoals),
     expand(RClass,RClassID),
     compile_node(Y,YE,YGoals),
-    %view(graph=G),
+    %view(database=G),
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     view(current_output_graph=OG),
     {
-        make_collection_graph(G,Graph),
-        graph_collection(Graph,C),
-        graph_instance(Graph,I),
+        make_database_from_database_name(G,Database),
+        database_name(Database,C),
+        database_instance(Database,I),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
 
-        relationship_source_property(RClassID,P,Graph),
-        relationship_target_property(RClassID,Q,Graph),
+        relationship_source_property(RClassID,P,Database),
+        relationship_target_property(RClassID,Q,Database),
 
         %format('***************~nRelation:~n~q-~q~n',[T0,T1]),
 
@@ -794,19 +843,21 @@ compile_wf((A => B),Goal) -->
     compile_wf(A,ProgA),
     % This second one should be simpler, to reflect that only writes are allowed on the right. 
     compile_wf(B,ProgB),
-    view(collection=C),
+    view(database=Database),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
-    view(write_graph=WG),
+    view(write_graph=[WG]),
     {
-        %format('***************~nImplicative Program: ~n~q~n',[(ProgA,ProgB)])
         Goal = (
-            with_transction(
-                [collection(C),graphs([WG])],
-                exhaust(
-                    (   ProgA,
-                        ProgB
-                    ))
+            validate:document_transaction(Database,WG,
+                                          woql_compile:(
+                                              forall(ProgA,
+                                                     ProgB)
+                                          ),Witnesses),
+            (   Witnesses = []
+            ->  true
+            ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                      'terminus:witnesses' : Witnesses})))
             )
         )
     }.
@@ -857,12 +908,12 @@ compile_wf(all(P), Prog) -->
     }.
 compile_wf(from(G,P),Goal) -->
     resolve(G,GName),
-    { make_collection_graph(GName,Graph) },
-    update(graph=Old_Graph,
-           graph=Graph),
+    { make_database_from_database_name(GName,Database) },
+    update(database=Old_Database,
+           database=Database),
     compile_wf(P, Goal),
-    update(graph=_,
-           graph=Old_Graph).
+    update(database=_,
+           database=Old_Database).
 compile_wf(depth(N,P), Prog) -->
     update(bound=D,
            bound=N),
@@ -976,7 +1027,7 @@ compile_wf(into(G,S),Goal) -->
     % swap in new graph
     resolve(G,GE),
     update(write_graph=OG,
-           write_graph=GE),
+           write_graph=[GE]),
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph=_,
@@ -1019,12 +1070,13 @@ restrict(VL) -->
     update(bindings=B0,
            bindings=B1),
     {
-        include( {VL}/[X=_]>>(member(v(X),VL)), B0, B1)
+        include({VL}/[X=_]>>member(v(X),VL), B0, B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
 list_conjunction([],true).
 list_conjunction(L,Goal) :-
+    L = [_|_],
     reverse(L,R),
     R = [A|Rest],
-    foldl( [X,Y,(X,Y)]>>(true), Rest, A, Goal).
+    foldl([X,Y,(X,Y)]>>true, Rest, A, Goal).

@@ -1,6 +1,8 @@
 :- module(database_utils,[
               create_db/1,
-              delete_db/1
+              delete_db/1,
+              database_exists/1,
+              extend_database_defaults/3
           ]).
 
 /** <module> Database Utilities
@@ -32,55 +34,113 @@
 :- use_module(library(triplestore)).
 :- use_module(library(utils)).
 :- use_module(library(journaling)).
+:- use_module(library(database)).
+
+
+/* 
+ * database_exists(DB_URI) is semidet.
+ */ 
+database_exists(DB_URI) :-
+    collection_directory(DB_URI,DB_Path),
+    exists_directory(DB_Path).
 
 /** 
  * create_db(+DB:atom) is semidet.
  * 
  * Create a new empty graph
  */
-create_db(DB) :-
+create_db(DB_URI) :-
 
     % create the collection if it doesn't exist
-    collection_directory(DB,DB_Path),
-    (   exists_directory(DB_Path)
-    ->  throw(http_reply(method_not_allowed('terminus:createdatabase')))
+    (   database_exists(DB_URI)
+    ->  throw(http_reply(method_not_allowed('terminus:create_database')))
     ;   true),
-    
+
+    collection_directory(DB_URI,DB_Path),
     ensure_directory(DB_Path),
     interpolate([DB_Path,'/COLLECTION'],DB_File),
     touch(DB_File),
-    
-    % create the graph if it doesn't exist
-    graph_directory(DB,main,Main_Path),
-    ensure_directory(Main_Path),
-    
-    graph_directory(DB,schema,Schema_Path),
-    ensure_directory(Schema_Path),
-    
-    make_checkpoint_directory(DB, main, _Main_CPD),
-    make_checkpoint_directory(DB, schema, Schema_CPD),
-    
-    %get_time(T),floor(T,N),
-    N=1,
-    interpolate([Schema_CPD,'/',N,'-ckp.ttl'],TTLFile),
-    touch(TTLFile),
-    interpolate([Schema_CPD,'/',N,'-ckp.hdt'],CKPFile),
-    ttl_to_hdt(TTLFile,CKPFile),    
 
-    with_output_graph(
-        graph(DB,schema,ckp,ttl),
+    initialise_prefix_db(DB_URI),
+    
+    % Set up schemata
+    forall(
         (
-            interpolate([DB],Label),
-            interpolate(['Ontology for ',DB],Comment),
-            write_triple(DB,schema,ckp,DB,rdf:type,owl:'Ontology'),
-            write_triple(DB,schema,ckp,DB,rdfs:label,literal(lang(en,Label))),
-            write_triple(DB,schema,ckp,DB,rdfs:comment,literal(lang(en,Comment)))
+            database_record_schema_list(DB_URI,Schemata),
+            member(Schema,Schemata)
+        ),
+        (   
+            % create the graph if it doesn't exist
+            graph_directory(DB_URI,Schema,Schema_Path),
+            ensure_directory(Schema_Path),
+            make_checkpoint_directory(DB_URI, Schema, _),
+
+            with_output_graph(
+                graph(DB_URI,Schema,ckp,ttl),
+                (
+                    interpolate([DB_URI],Label),
+                    interpolate([Schema,' ontology for ',DB_URI],Comment),
+                    write_triple(DB_URI,Schema,ckp,DB_URI,rdf:type,owl:'Ontology'),
+                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:label,literal(lang(en,Label))),
+                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:comment,literal(lang(en,Comment)))
+                )
+            ),
+            sync_from_journals(DB_URI,Schema)
         )
     ),
-    sync_from_journals(DB,main),
-    sync_from_journals(DB,schema).
+
+    % Set up instance graphs
+    forall(
+        (
+            database_record_instance_list(DB_URI,Instances),
+            member(Instance,Instances)
+        ),
+        (   
+            % create the graph if it doesn't exist
+            graph_directory(DB_URI,Instance,Instance_Path),
+            ensure_directory(Instance_Path),
+            make_checkpoint_directory(DB_URI, Instance, _),
+
+            % Just make an empty checkpoint.
+            with_output_graph(
+                graph(DB_URI,Instance,ckp,ttl),
+                (
+                    true
+                )
+            ),
+            
+            sync_from_journals(DB_URI,Instance)
+        )
+    ).
     
 delete_db(DB) :-
     collection_directory(DB,DB_Path),
     delete_directory_and_contents(DB_Path).
 
+/* 
+ * should probably go in JSON-LD
+ */
+add_dictionary_default(Doc, Key, Default, New_Doc) :-
+    % hairy logic - can this be simplified?
+    (   get_dict(Key, Doc, Result)
+    ->  (   is_list(Result)
+        ->  (   member(Res, Result),
+                select_dict(Res, Default, _Rest)
+            ->  Doc = New_Doc
+            ;   put_dict(Key, Doc, [Default|Result], New_Doc)
+            )      
+        ;   (   select_dict(Result, Default, _Rest)
+            ->  Doc = New_Doc
+            ;   put_dict(Key, Doc, [Default,Result], New_Doc)))
+    ;   put_dict(Key, Doc, Default, New_Doc)
+    ).
+
+extend_database_defaults(URI,Doc,Ext) :-
+    format(string(Document),'~s~s',([URI,'/document'])),
+    add_dictionary_default(Doc, 'http://terminusdb.com/schema/terminus#instance',
+                           _{'@value':Document, '@type':'http://www.w3.org/2001/XMLSchema#string'},
+                           Doc1),
+    format(string(Schema),'~s~s',([URI,'/schema'])),
+    add_dictionary_default(Doc1, 'http://terminusdb.com/schema/terminus#schema',
+                           _{'@value':Schema, '@type':'http://www.w3.org/2001/XMLSchema#string'},
+                           Ext).

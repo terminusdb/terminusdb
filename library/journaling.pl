@@ -11,28 +11,28 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */ 
 
-:- use_module(types).
-:- use_module(utils).
-:- use_module(collection).
-:- use_module(prefixes).
+:- use_module(library(types)).
+:- use_module(library(utils)).
+:- use_module(library(database)).
+:- use_module(library(prefixes)).
  
 /** 
  * graph_stream(+C:collection_identifier,+G:graph_identifier,-Stream,-Type,-Ext) is det.  
@@ -47,10 +47,10 @@
  * Stores the currently associated stream with graph G and its type. 
  * Raises an error if there is already an associated stream for graph G.
  */
-set_graph_stream(Collection_Id,Graph_Id,S,Type,Ext) :-
-    (   graph_stream(Collection_Id,Graph_Id,S0,Type,Ext)
-    ->  throw(graph_stream_already_set(Collection_Id,Graph_Id,S0,Type,Ext))
-    ;   assertz(graph_stream(Collection_Id,Graph_Id,S,Type,Ext))
+set_graph_stream(Collection_Id,Database_Id,S,Type,Ext) :-
+    (   graph_stream(Collection_Id,Database_Id,S0,Type,Ext)
+    ->  throw(graph_stream_already_set(Collection_Id,Database_Id,S0,Type,Ext))
+    ;   assertz(graph_stream(Collection_Id,Database_Id,S,Type,Ext))
     ).
 
 
@@ -59,9 +59,9 @@ set_graph_stream(Collection_Id,Graph_Id,S,Type,Ext) :-
  *
  * Close stream associated with a given graph.
  */ 
-close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext) :-
-    forall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
-           (   retractall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext)),
+close_graph_stream(Collection_Id,Database_Id,Stream,Type,Ext) :-
+    forall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
+           (   retractall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext)),
                flush_output(Stream),
                close(Stream)
            )).
@@ -72,14 +72,14 @@ close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext) :-
  * Close all streams associated with all graphs.
  */ 
 closeStreams :-
-    forall(graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
-           close_graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext)).
+    forall(graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
+           close_graph_stream(Collection_Id,Database_Id,Stream,Type,Ext)).
 
 /* 
- * initialise_graph(Collection_ID,Graph_ID,Stream,Type,Ext) is semidet.
+ * initialise_graph(Collection_ID,Database_ID,Stream,Type,Ext) is semidet.
  */
-initialise_graph(Collection_Id,Graph_Id,Stream,Type,Ext) :-
-    graph_stream(Collection_Id,Graph_Id,Stream,Type,Ext),
+initialise_graph(Collection_Id,Database_Id,Stream,Type,Ext) :-
+    graph_stream(Collection_Id,Database_Id,Stream,Type,Ext),
     (   Ext=ttl
     ->  true % deprecated write_turtle_prelude(Stream)
     ;   Ext=ntr
@@ -89,12 +89,12 @@ initialise_graph(Collection_Id,Graph_Id,Stream,Type,Ext) :-
     ).
 
 /* 
- * initialise_graph(Collection_ID,Graph_ID,Stream,Type,Ext) is semidet.
+ * initialise_graph(Collection_ID,Database_ID,Stream,Type,Ext) is semidet.
  */
-finalise_graph(Colection_Id,Graph,Stream,Type,Ext) :-
-    graph_stream(Colection_Id,Graph,Stream,Type,Ext),
+finalise_graph(Colection_Id,Database,Stream,Type,Ext) :-
+    graph_stream(Colection_Id,Database,Stream,Type,Ext),
     (   Ext=ttl
-    ->  close_graph_stream(Colection_Id,Graph,Stream,Type,Ext)
+    ->  close_graph_stream(Colection_Id,Database,Stream,Type,Ext)
     ;   Ext=ntr
     ->  throw(unimplemented_storage_type(ntr))
     ;   Ext=hdt
@@ -124,17 +124,17 @@ write_triple(C,G,Type,PX,PY,PZ) :-
  * make static code references to ontologies less painful.
  */
 user:goal_expansion(write_triple(DB,G,T,A,Y,Z),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(A),
+    nonvar(A),
     global_prefix_expand(A,X).
 user:goal_expansion(write_triple(DB,G,T,X,B,Z),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(B),
+    nonvar(B),
     global_prefix_expand(B,Y).
 user:goal_expansion(write_triple(DB,G,T,X,Y,C),write_triple(DB,G,T,X,Y,Z)) :-
-    \+ var(C),
-    \+ C = literal(_),
+    nonvar(C),
+    C \= literal(_),
     global_prefix_expand(C,Z).
 user:goal_expansion(write_triple(DB,G,T,X,Y,literal(L)),write_triple(DB,G,T,X,Y,Object)) :-
-    \+ var(L),
+    nonvar(L),
     literal_expand(literal(L),Object).
 
 
@@ -144,7 +144,8 @@ user:goal_expansion(write_triple(DB,G,T,X,Y,literal(L)),write_triple(DB,G,T,X,Y,
  * Writes a single "point" out.  
  */
 write_point_turtle(Stream, P) :-
-    (   atom(P) % Do we have a prefix yet? 
+    (   (   atom(P)
+        ;   string(P)) % Do we have a prefix yet? 
     ->  write(Stream,'<'),write(Stream,P),write(Stream,'>')
     ;   debug(journaling, 'Point: ~q~n', [P]), 
         write(Stream,P)

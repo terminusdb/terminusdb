@@ -10,25 +10,25 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(utils)). 
-:- use_module(library(collection)).
+:- use_module(library(database)).
 :- use_module(library(woql_compile)).
 :- use_module(library(woql_term)).
 
@@ -45,12 +45,12 @@ connect(DB,New_Ctx) :-
     select(prefixes=_,Ctx,
            prefixes=Prefixes, Ctx1),
 
-    make_collection_graph(DB,Graph),
+    make_database_from_database_name(DB,DB_Obj),
 
-    graph_instance(Graph,I),
+    database_instance(DB_Obj,I),
     
-    select(graph=_,Ctx1,
-           graph=Graph,Ctx2),
+    select(database=_,Ctx1,
+           database=DB_Obj,Ctx2),
     select(write_graph=_,Ctx2,
            write_graph=I,Ctx3),
     select(collection=_,Ctx3,
@@ -80,7 +80,7 @@ ask(Server,Pre_Term) :-
            bindings=Bindings_Out,New_Ctx),
     compile_query(Term,Prog,New_Ctx,_),
     debug(sdk,'Program: ~q~n', [Prog]), 
-    call(woql_compile:Prog).
+    woql_compile:Prog.
 
 ask(Pre_Term) :-
     empty_ctx(Ctx),

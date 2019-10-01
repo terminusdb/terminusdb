@@ -1,4 +1,5 @@
 :- module(file_utils,[
+              terminus_path/1,
               db_relative_path/1,
               db_path/1,
               touch/1,
@@ -31,10 +32,17 @@
               make_checkpoint_directory/3,
               ttl_to_hdt/2,
               ntriples_to_hdt/2,
-              cleanup_edinburgh_escapes/1
+              cleanup_edinburgh_escapes/1,
+              last_checkpoint_file/3,
+              checkpoint_to_turtle/3,
+              terminus_schema_path/1
           ]).
 
 :- use_module(utils).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 /** <module> File Utils
  * 
@@ -69,15 +77,33 @@
 db_relative_path('/storage/').
 
 /** 
+ * terminus_path(-Path) is det. 
+ * 
+ * Fully qualified path name to current terminus installation.
+ */ 
+terminus_path(Path) :-
+    once(
+        file_search_path(terminus_home,Path)
+    ).
+
+/** 
  * db_path(-Path) is det.
  * 
  */
 db_path(Path) :-
-    once(
-        file_search_path(terminus_home,BasePath)
-    ), 
+    terminus_path(BasePath),
     db_relative_path(RelPath),
     interpolate([BasePath,RelPath],Path).
+
+/** 
+ * terminus_schema_path(Path) is det.
+ *
+ * The path to the current terminus schema directory
+ */
+terminus_schema_path(Path) :-
+    terminus_path(Base_Path),
+    Schema_Relative_Path = '/terminus-schema/',
+    interpolate([Base_Path,Schema_Relative_Path], Path).
 
 /** 
  * touch(+File) is det.
@@ -113,13 +139,13 @@ sanitise_file_name(G,F) :-
  * Returns the path for a given graph 
  */
 collection_directory(Collection_ID,Path) :-
-    once(file_search_path(cliopatria,BasePath)),
+    once(file_search_path(terminus_home,BasePath)),
     db_relative_path(RelPath),
     sanitise_file_name(Collection_ID,CSafe),
     interpolate([BasePath,RelPath,CSafe],Path).
 
 /** 
- * graph_directory(+Collection_ID,+Graph_Id:graph_identifier,-Path) is det. 
+ * graph_directory(+Collection_ID,+Database_Id:graph_identifier,-Path) is det. 
  * 
  * Returns the path for a given graph 
  */
@@ -227,7 +253,7 @@ graph_file_sequence_number(FilePath,Seq) :-
 
 
 /** 
- * last_checkpoint_number(+GraphName_Dir_Path,-Number) is det. 
+ * last_checkpoint_number(+DatabaseName_Dir_Path,-Number) is det. 
  *
  * Number of last checkpoint.
  */ 
@@ -335,12 +361,7 @@ turtle_file_type(File) :-
 graph_file_timestamp_compare(File1,File2,Order) :-
     graph_file_timestamp(File1,TimeStamp1),
     graph_file_timestamp(File2,TimeStamp2),
-    (   TimeStamp1 > TimeStamp2
-    ->  Order=(>)
-    ;   TimeStamp2 > TimeStamp1
-    ->  Order=(<)
-    ;   Order=(=)
-    ).
+	compare(Order, TimeStamp1, TimeStamp2).
 
 /**
  * graph_dir_timestamp_gt(+File1,+File2) is det.
@@ -355,21 +376,21 @@ graph_dir_timestamp_gt(Dir1,Dir2) :-
     Number1 > Number2. 
 
 /** 
- * current_checkpoint_directory(+Collection_ID,+Graph_Id:graph_identifer,-Path) is semidet. 
+ * current_checkpoint_directory(+Collection_ID,+Database_Id:graph_identifer,-Path) is semidet. 
  * 
  * Return the latest checkpoint directory.
  */
-current_checkpoint_directory(Collection_ID,Graph_Id, Path) :-
-    graph_directory(Collection_ID,Graph_Id, GraphPath),
-    subdirectories(GraphPath,AllCheckpoints),
+current_checkpoint_directory(Collection_ID,Database_Id, Path) :-
+    graph_directory(Collection_ID,Database_Id, DatabasePath),
+    subdirectories(DatabasePath,AllCheckpoints),
     (   predsort([Delta,X,Y]>>
              (   atom_number(X,XN), atom_number(Y,YN), XN < YN
              ->  Delta=(>)
              ;   Delta=(<)
              ),
              AllCheckpoints,[File|_Rest])
-    ->  interpolate([GraphPath,'/',File],Path)
-    ;   throw(no_checkpoint_directory(Graph_Id,Path))). 
+    ->  interpolate([DatabasePath,'/',File],Path)
+    ;   throw(no_checkpoint_directory(Database_Id,Path))). 
 
 
 /**
@@ -399,39 +420,39 @@ collections(Collections) :-
     maplist(sanitise_file_name,Collections,Valid_Collection_Files).
 
 /*
- * graphs(?Collection_ID,-Graphs:list(uri)) is nondet.
+ * graphs(?Collection_ID,-Databases:list(uri)) is nondet.
  * 
  * Return a list of all current graphs. 
  * FIX: This is probably a bit dangerous as newly constructed 
  * directories in the hdt dir will *look* like new graphs. 
  * Probably need some sort of metadata. 
  */
-graphs(Collection_ID,Graphs) :-
+graphs(Collection_ID,Databases) :-
     collections(Collections),
     (   member(Collection_ID,Collections)
     ->  sanitise_file_name(Collection_ID,Collection_Name),
         db_path(Path),
         interpolate([Path,Collection_Name], Collection_Path),
-        subdirectories(Collection_Path,Graph_Names),
+        subdirectories(Collection_Path,Database_Names),
         include({Collection_Path}/[Name]>>(
                     interpolate([Collection_Path,'/',Name],X),
                     exists_directory(X)
-                ),Graph_Names,Valid_Graph_Names),
-        maplist([N,S]>>sanitise_file_name(N,S),Graphs,Valid_Graph_Names)
-    ;   Graphs = []).
+                ),Database_Names,Valid_Database_Names),
+        maplist([N,S]>>sanitise_file_name(N,S),Databases,Valid_Database_Names)
+    ;   Databases = []).
 
 /** 
- * make_checkpoint_directory(+Collection_ID,+Graph_ID:graph_identifer,-CPD) is det. 
+ * make_checkpoint_directory(+Collection_ID,+Database_ID:graph_identifer,-CPD) is det. 
  * 
  * Create the current checkpoint directory
  */
-make_checkpoint_directory(Collection_ID, Graph_Id, CPD) :-
-    graph_directory(Collection_ID,Graph_Id, Graph_Path),
-    ensure_directory(Graph_Path),
-    last_checkpoint_number(Graph_Path,M),
+make_checkpoint_directory(Collection_ID, Database_Id, CPD) :-
+    graph_directory(Collection_ID,Database_Id, Database_Path),
+    ensure_directory(Database_Path),
+    last_checkpoint_number(Database_Path,M),
     N is M+1,
     %get_time(T),floor(T,N),
-    interpolate([Graph_Path,'/',N],CPD),
+    interpolate([Database_Path,'/',N],CPD),
     make_directory(CPD).
 
 
@@ -457,7 +478,7 @@ cleanup_edinburgh_escapes(File) :-
     
 
 /** 
- * ttl_to_hdt(+FileIn,-FileOut) is det.
+ * ttl_to_hdt(+FileIn,+FileOut) is det.
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
@@ -475,7 +496,7 @@ ttl_to_hdt(FileIn,FileOut) :-
     close(Out).
 
 /** 
- * ntriples_to_hdt(+File) is det.
+ * ntriples_to_hdt(+FileIn,-FileOut) is det.
  * 
  * Create a hdt file from ttl using the rdf2hdt tool.
  */
@@ -490,3 +511,59 @@ ntriples_to_hdt(FileIn,FileOut) :-
         throw(error(M))
     ;   true),
     close(Out).
+
+/* 
+ * last_checkpoint_file(Collection,File) is det. 
+ * 
+ * Give the file location of the last checkpoint for 
+ * transformation (to turtle json-ld etc). 
+ */ 
+last_checkpoint_file(C,G,File) :-
+    current_checkpoint_directory(C,G,CPD),
+    interpolate([CPD,'/1-ckp.hdt'],File).
+
+/** 
+ * checkpoint_to_turtle(+C,+G,-Output_File) is det.
+ * 
+ * Create a hdt file from ttl using the rdf2hdt tool.
+ */
+checkpoint_to_turtle(Collection,Database,Output_File) :-
+    last_checkpoint_file(Collection,Database,FileIn), 
+    user:file_search_path(terminus_home, Dir),
+    get_time(N),
+    interpolate([Dir,'/tmp/',N,'.ntriples'],NTriples_File),
+    process_create(path(hdt2rdf), ['-f','ntriples',FileIn,NTriples_File],
+                   [ stdout(pipe(NT_Out)),
+                     process(PID)
+                   ]),
+    process_wait(PID,Status),
+    (   Status=killed(Signal)
+    ->  interpolate(["hdt2rdf killed with signal ",Signal], M),
+        throw(error(M))
+    ;   true),
+    close(NT_Out),
+    
+    get_collection_prefix_list(Collection,List),
+    prefix_list_to_rapper_args(List,Prefix_Args),
+    append([['-i','ntriples','-o','turtle'],Prefix_Args,[NTriples_File]], Args),
+
+    interpolate([Dir,'/tmp/',N,'.ttl'],Output_File),
+    open(Output_File, write, Out),
+
+    process_create(path(rapper), Args,
+                   [ stderr(null),
+                     stdout(pipe(PipeStream)),
+                     process(Rapper_PID)
+                   ]),
+    process_wait(Rapper_PID,Rapper_Status),
+    copy_stream_data(PipeStream, Out),
+    close(PipeStream),
+    (   Rapper_Status=killed(Rapper_Signal)
+    ->  interpolate(["hdt2rdf killed with signal ",Rapper_Signal], M),
+        throw(error(M))
+    ;   true),
+    
+    delete_file(NTriples_File),
+    
+    close(Out).
+

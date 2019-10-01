@@ -1,101 +1,50 @@
-# TerminusDB
+# Terminus Server
 
-TerminusDB open source model driven graph database for knowledge graph representation designed 
-specifically for the web-age. 
+[![Build Status](https://travis-ci.com/terminusdb/terminus-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminus-server)
 
-TerminusDB features a RESTful API for interacting with knowledge graphs via the JSON-LD exchange 
-format. This means you can easily string together applications within your own toolchain which 
-utilise the powerful features of graph search and graph storage. 
+TerminusDB is an open source model driven graph database for knowledge
+graph representation designed specifically for the web-age.
 
-## Release Schedule 
-
-We have a v1.0.0 release schedule for October 1st, 2019. This means
-that the current codebase is in a very high level of flux, and as we
-have never had a prior release, there are no release labels to pull. 
-
-Caveat Puller! 
+Terminus Server provides TerminusDB with a RESTful API for interacting
+with knowledge graphs via the JSON-LD exchange format. This means you
+can easily string together applications within your own toolchain
+which utilise the powerful features of graph search and graph storage.
 
 ## Latest Version 
 
-v0.1.1
+v1.0.0
 
 ## Getting Started
 
-Before you can begin modeling and manipulating data in TerminusDB, you
-need to get some required libraries and software.
+### Install from Docker image
 
-### SWIPL 
+To install a docker image with the latest server (*RECOMMENDED*) follow the instructions 
+here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/DOCKER.md).
 
-To use TerminusDB, you will need the SWIPL installation of prolog. To install this in Debian variants
-simply use the apt package manager: 
+### Building from source
 
-```
-apt install swi-prolog
-```
-Once installed, you will have to install two library dependencies from SWIPL. 
+In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/BUILD.md) directions. 
 
-This can be done by typing: 
+### Open Dashboard
 
-```
-$ swipl
-Welcome to SWI-Prolog (threaded, 64 bits, version 8.1.10-28-g8a26a53c1)
-SWI-Prolog comes with ABSOLUTELY NO WARRANTY. This is free software.
-Please run ?- license. for legal details.
-
-For online help and background, visit http://www.swi-prolog.org
-For built-in help, use ?- help(Topic). or ?- apropos(Word).
-
-1 ?- pack_install(hdt).
-% Contacting server ....
-2 ?- pack_install(mavis). 
-% Contacting server ....
-```
-
-### HDT Library 
-
-You will also need to install `hdt-cpp`. You can git clone the source tree from this repository: 
-
-```
-git clone https://github.com/rdfhdt/hdt-cpp
-```
-
-... and follow the directions contained in the repostiory for the
-pre-requisites and building the code.
-
-### TerminusDB
-
-The TerminusDB source tree should then be cloned from GitHub: 
-
-```
-git clone https://github.com/terminusdb/terminusdb
-git submodule init
-```
-
-You should copy `config/config-example.pl` to `config/config.pl` and then 
-edit the values there to set things such as server name and server 
-port. 
-
-You also need to update the admin user password which is used as a
-super-user API key for access. This can be done with the
-`initialize_database` script.
-
-```
-utils/initialize_database -k "my_password_here" -s "my_server_name_here"
-```
-
-At this point you can enter the terminusDB directory and start the server: 
-
-```
-./start.pl
-```
-
-Now you are ready to interact with the HTTP server. 
+One you have installed terminus-server either from the docker or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/dashboard". (for instance "http://localhost:6363/dashboard").
 
 ## Documentation 
 
-The Server API is documented here: TBD
+### Microservices API
 
-WOQL Syntax is documented here: TBD
+Terminus Server is organised to be _web native_ which means that all
+actions and activities are easily automated via a RESTful JSON-LD API.
+
+The Server API is documented [here](https://github.com/terminusdb/terminus-server/blob/master/API.md).
+
+### WOQL 
+
+WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph extracting graph 
+fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
+a native data-structure in JavaScript, Python, Prolog or any other language which has the 
+
+The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/SYNTAX.md).
 
 ## Why 
 
@@ -108,14 +57,23 @@ TerminusDB will:
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
-## Issues 
+## Client
 
-We currently have no client, so you'll have to use the RESTful API directly. You can find 
-examples at the TerminusDB repositories...
+In order to begin manipulating and querying your database you can
+simply point your browser to `TERMINUS_DIR/index.html` which should
+allow you to manage and query your database.
 
-In JavaScript: https://github.com/terminusdb/terminus-javascript-sdk
+You can also perform all configuration, querying and management
+functions via the RESTful API. We have a number of client libraries to
+help you get started:
 
-In Python: https://github.com/terminusdb/terminus-python-sdk
+The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you 
+assistance with programatic access.
+
+The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example 
+application allowing manipulation of the database, queries and .
+
+The [Python client libraries] Coming Soon...
 
 ## Changes in this Version 
 
@@ -124,9 +82,16 @@ In Python: https://github.com/terminusdb/terminus-python-sdk
 * Added database initialisation utility 
 * Added code for instance and schema checking
 
+## Future 
+
+We are eagerly awaiting the release of our new highly scalable lock-free storage layer, 
+[terminus-store](https://github.com/terminusdb/terminus-store), which will be integrated 
+into Terminus-server in a future release.
+
 ## TODO
 
-* Need to finish porting of all XSD and OWL constraint checking. 
+* Write tests for Document API
+* Add optimisations to document expansion in JSON-LD avoiding duplicate expansions
 
 ## Authors
 

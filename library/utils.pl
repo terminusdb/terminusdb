@@ -9,6 +9,7 @@
               unique_solutions/3,
               repeat_atom/3,
               zero_pad/3,
+              coerce_number/2,
               exhaust/1,
               take/3,
               from_to/4,
@@ -22,6 +23,10 @@
               count/3,
               merge_dictionaries/3,
               command/1,
+              coerce_literal_string/2,
+              coerce_atom/2,
+              xfy_list/3,
+              snoc/3,
               op(920,fy, *),
               '*'/1
           ]).
@@ -32,22 +37,26 @@
  * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, either version 3 of the License, or    *
  *  (at your option) any later version.                                  *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 /*
  * Forget the next phrase.
@@ -175,6 +184,22 @@ zero_pad(A,L,A2) :-
 	append(List,AtomList,TotalList),
 	atom_chars(A2,TotalList).
 
+/* 
+ * coerce_number(S,N) is det.
+ * 
+ * Ensure that S is converted to a number N
+ */ 
+coerce_number(S,N) :-
+    atom_string(A, S),
+    !,
+    atom_number(A, N).
+coerce_number(A,N) :-
+    atom(A),
+    !,
+    atom_number(A,N).
+coerce_number(N,N) :-
+    number(N).
+
 /** 
  * exhaust(+Goal:goal) is det. 
  * 
@@ -289,6 +314,7 @@ split_atom(Atom,Delimiter,Result) :-
  *
  * Monadic fold over state 
  */
+:- meta_predicate foldm(5,?,?,?,?,?).
 foldm(_P,[],Base,Base,S,S).
 foldm(P,[H|T],Base,Result,S0,SN) :-
     foldm(P,T,Base,LastResult,S0,S1),
@@ -299,6 +325,7 @@ foldm(P,[H|T],Base,Result,S0,SN) :-
  * 
  * Monadic map over state 
  */
+:- meta_predicate mapm(4,?,?,?,?).
 mapm(_P,[],[],S,S).
 mapm(P,[H|T],[HP|TP],S0,SN) :-
     call(P,H,HP,S0,S1),
@@ -351,9 +378,67 @@ command(Cmd) :-
  *
  * This is debug/3 with a specified stream.
  */
-
+/*
 debug(Topic, Format, Args) :-
     debugging(Topic, true, To),
     !,
     print_debug(Topic, To, Format, Args).
 debug(_, _, _).
+*/
+
+
+/* 
+ * coerce_literal_string(+S_or_L, -S) is det.
+ * 
+ * We pun GET and POST parameters in requests but
+ * to do this we need to be able to conflate literals
+ * with strings.
+ */
+coerce_literal_string(SL,S) :-
+    is_dict(SL),
+    !,
+    get_dict('@value',SL, S).
+coerce_literal_string(SL,S) :-
+    is_list(SL),
+    !,
+    string_codes(S, SL).
+coerce_literal_string(SL,S) :-
+    % \+ is_dict(SL),
+    SL = S.
+
+/* 
+ * xfy_list(Op, Term, List) is det. 
+ * 
+ * Folds a functor over a list. 
+ */
+xfy_list(Op, Term, [Left|List]) :-
+    Term =.. [Op, Left, Right],
+    xfy_list(Op, Right, List),
+    !.
+xfy_list(_, Term, [Term]).
+
+
+/* 
+ * coerce_atom(Atom_Or_String,Atom) is semidet.
+ * 
+ * Coerces Atom_Or_String to an Atom if it is an atom or string
+ * but fails otherwise.
+ */ 
+coerce_atom(Atom_Or_String, Atom) :- 
+    (   atom(Atom_Or_String)
+    ->  Atom_Or_String = Atom
+    ;   string(Atom_Or_String)
+    ->  atom_string(Atom,Atom_Or_String)
+    ).
+
+/* 
+ * snoc(Rest,Last,List) is det.
+ *
+ * Adds an element to the end of the list (or extracts it when run backwards).
+ * 
+ * [cons backwards!]
+ */ 
+snoc([],Last,[Last]).
+snoc([First|Tail],Last,[First|Rest]) :-
+    snoc(Tail,Last,Rest).
+
