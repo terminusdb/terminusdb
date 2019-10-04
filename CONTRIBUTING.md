@@ -30,7 +30,7 @@ Docker is a prerequisite for setting it up this way, an alternative is following
 3. Go to the directory `cd terminus-server`.
 4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm  terminusdb/terminus-server:latest` 
    inside the terminus-server directory. It will mount the current sources to the Docker container.
-5. Run `make` inside the swipl console after you changed the code.
+5. Run `make.` inside the swipl console after you changed the code.
 
 
 ## Coding conventions
