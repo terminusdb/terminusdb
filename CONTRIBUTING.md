@@ -20,6 +20,19 @@ It should look something like this:
     > 
     > This is a paragraph describing my change."
 
+## Development environment
+
+One of the easier ways to set up a development environment is by forking the git repository, cloning it and checking out the `dev` branch.
+Docker is a prerequisite for setting it up this way, an alternative is following the instructions in [BUILD.md](BUILD.md).
+
+1. Make a fork on GitHub
+2. Clone the repository with `git clone git@github.com:[your_username]/terminus-server.git`
+3. Go to the directory `cd terminus-server`.
+4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm  terminusdb/terminus-server:latest` 
+   inside the terminus-server directory. It will mount the current sources to the Docker container.
+5. Run `make` inside the swipl console after you changed the code.
+
+
 ## Coding conventions
 
 We have a house style for prolog, especially for conditionals. We will be releasing a prolog mode for emacs soon that 
