@@ -1,8 +1,8 @@
 # Build From Source
 
-[Debian / Ubuntu](##Debian-or-Ubuntu)
+[Debian / Ubuntu](#debian-or-ubuntu)
 
-[Fedora / Red Hat](##Fedora-or-Red-Hat)
+[Fedora / Red Hat](#fedora-or-red-hat)
 
 ## Debian or Ubuntu
 
