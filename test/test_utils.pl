@@ -1,7 +1,8 @@
 :- module(test_utils,[
               try/1,
               curl_json/2,
-              report_curl_command/1
+              report_curl_command/1,
+              admin_pass/1
           ]).
                  
 /** <module> Test Utilities
@@ -95,4 +96,13 @@ curl_json(Args,JSON) :-
     json_read_dict(Out, JSON),
     close(Out).
 
-
+/* 
+ * admin_pass(+Pass) is det.
+ * 
+ * Get the administrator password for testing from the environment, 
+ * or try the default ('root')
+ */
+admin_pass(Pass) :-
+    (   getenv('TERMINUS_ADMIN_PASSWD', Pass)
+    ->  true
+    ;   Pass='root').

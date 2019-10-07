@@ -89,10 +89,15 @@ run_api_tests :-
  * Basic API tests
  ***************************************************************/
 
+auth(Auth) :-
+    admin_pass(Pass),
+    atomic_list_concat([':',Pass],Auth).
+
 run_connect_test :-
     config:server(Server),
-
-    Args = ['--user', ':root','-X','GET', Server],
+    auth(Auth),
+    
+    Args = ['--user', Auth,'-X','GET', Server],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -101,7 +106,7 @@ run_connect_test :-
 
 run_bad_auth_test :-
     config:server(Server),
-
+    
     Args = ['--user', ':flute','-X','GET', Server],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -112,6 +117,8 @@ run_bad_auth_test :-
 run_db_create_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
+
     atomic_list_concat([Server,'/terminus_qa_test'], DB_URI),
     catch(
         api:try_delete_db(DB_URI),
@@ -141,7 +148,7 @@ run_db_create_test :-
     ), 
 
     atomic_list_concat([Server,'/terminus_qa_test'], URI),
-    Args = ['--user',':root','-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
+    Args = ['--user',Auth,'-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
 
@@ -150,6 +157,7 @@ run_db_create_test :-
 
 run_schema_update_test :-
     config:server(Server),
+    auth(Auth),
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus.owl.ttl'], TTL_File),
@@ -169,7 +177,7 @@ run_schema_update_test :-
     ),
 
 
-    Args = ['--user',':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user',Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -178,11 +186,12 @@ run_schema_update_test :-
     
 run_schema_get_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
     www_form_encode(Schema,S),
     atomic_list_concat([Server,'/terminus_qa_test/schema?terminus%3Aencoding=terminus%3Aturtle&terminus&3Aturtle&terminus&3Aschema=',S],URI),
     
-    Args = ['--user',':root',URI],
+    Args = ['--user',Auth,URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -190,8 +199,9 @@ run_schema_get_test :-
 
 run_doc_get_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus/document/admin'], URI),
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     json_write_dict(current_output,Term,[]),
@@ -199,8 +209,9 @@ run_doc_get_test :-
 
 run_db_delete_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus_qa_test'],URI),
-    Args = ['--user', ':root', '-X','DELETE', URI],
+    Args = ['--user', Auth, '-X','DELETE', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -208,9 +219,10 @@ run_db_delete_test :-
 
 run_get_filled_frame_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe'],
                        URI),
-    Args = ['--user', ':root', '-X','GET', URI],
+    Args = ['--user', Auth, '-X','GET', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -221,6 +233,7 @@ run_get_filled_frame_test :-
 run_doc_update_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -254,7 +267,7 @@ run_doc_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root', '-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth, '-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -263,10 +276,11 @@ run_doc_update_test :-
 
 run_doc_update_get_test :-
     config:server(Server),
+    auth(Auth),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -276,6 +290,7 @@ run_doc_update_get_test :-
 run_doc_update_update_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -311,7 +326,7 @@ run_doc_update_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -320,10 +335,11 @@ run_doc_update_update_test :-
 
 run_doc_update_update_get_test :-
     config:server(Server),
+    auth(Auth),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -335,11 +351,12 @@ run_doc_update_update_get_test :-
 
 run_db_delete_nonexistent_test :-
     config:server(Server),
+    auth(Auth),
 
     % Need to set the user key correctly here or we will get a spurious error...
     atomic_list_concat([Server,'/dOeS_nOt_ExIsT'], URI),
 
-    Args = ['--user', ':root', '-X','DELETE',URI],
+    Args = ['--user', Auth, '-X','DELETE',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -350,11 +367,12 @@ run_db_delete_nonexistent_test :-
 run_doc_delete_test :-
         
     config:server(Server),
+    auth(Auth),
 
     % Need to set the user key correctly here or we will get a spurious error...
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
 
-    Args = ['--user', ':root','-X','DELETE',URI],
+    Args = ['--user', Auth,'-X','DELETE',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -364,10 +382,11 @@ run_doc_delete_test :-
 run_doc_get_missing_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
     
-    Args = ['--user',':root','-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user',Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -380,6 +399,7 @@ run_doc_get_missing_test :-
 
 run_woql_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus/document/'], Document),
     atomic_list_concat([Server,'/terminus/schema#'], Schema),
     atomic_list_concat([Server,'/terminus/'], Terminus),
@@ -414,7 +434,7 @@ run_woql_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -426,10 +446,11 @@ run_woql_test :-
 
 run_woql_empty_error_test :-
     config:server(Server),
+    auth(Auth),
     
     atomic_list_concat([Server,'/terminus/woql'], URI),
         
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -438,6 +459,7 @@ run_woql_empty_error_test :-
     
 run_woql_syntax_error_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus/document/'], Document),
     atomic_list_concat([Server,'/terminus/schema#'], Schema),
     atomic_list_concat([Server,'/terminus/'], Terminus),
@@ -473,7 +495,7 @@ run_woql_syntax_error_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
         
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -483,6 +505,7 @@ run_woql_syntax_error_test :-
 % Requires terminus_qa_test!
 run_woql_update_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus_qa_test/document/'], Doc_Base),
     atomic_list_concat([Server,'/terminus_qa_test/schema#'], Scm_Base),
     atomic_list_concat([Server,'/terminus_qa_test/'], QA),
@@ -526,7 +549,7 @@ run_woql_update_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
         
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -536,6 +559,7 @@ run_woql_update_test :-
 % Requires terminus_qa_test!
 run_woql_verify_update_test :-
     config:server(Server),
+    auth(Auth),
     atomic_list_concat([Server,'/terminus_qa_test/document/'], Document),
     atomic_list_concat([Server,'/terminus_qa_test/schema#'], Schema),
     atomic_list_concat([Server,'/terminus_qa_test/'], QA),
@@ -558,7 +582,7 @@ run_woql_verify_update_test :-
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
         
-    Args = ['--user', ':root','-X','GET',URI],
+    Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -580,6 +604,7 @@ run_woql_verify_update_test :-
 run_bad_comment_update_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -614,7 +639,7 @@ run_bad_comment_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -626,6 +651,7 @@ run_bad_comment_update_test :-
 run_bad_property_update_test :-
     % create DB
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -661,7 +687,7 @@ run_bad_property_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),    
@@ -678,6 +704,7 @@ run_bad_property_update_test :-
  */
 run_schema_datatypes_update_test :-
     config:server(Server),
+    auth(Auth),
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/datatypes.owl.ttl'], TTL_File),
@@ -696,7 +723,7 @@ run_schema_datatypes_update_test :-
     ),
 
 
-    Args = ['--user',':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user',Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
@@ -705,6 +732,7 @@ run_schema_datatypes_update_test :-
 
 run_bad_doc_datatype_update_test :-
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -782,7 +810,7 @@ run_bad_doc_datatype_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -795,6 +823,7 @@ run_bad_doc_datatype_update_test :-
 
 run_good_doc_datatype_update_test :-
     config:server(Server),
+    auth(Auth),
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
@@ -872,7 +901,7 @@ run_good_doc_datatype_update_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
-    Args = ['--user', ':root','-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -883,10 +912,11 @@ run_good_doc_datatype_update_test :-
 
 run_db_metadata_test :-
     config:server(Server),
+    auth(Auth),
 
     atomic_list_concat([Server,'/terminus/metadata'], URI),
         
-    Args = ['--user', ':root','-X','GET','-H','Content-Type: application/json', URI],
+    Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
