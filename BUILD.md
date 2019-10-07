@@ -47,6 +47,15 @@ git clone https://github.com/rdfhdt/hdt-cpp
 ... and follow the directions contained in the repostiory for the
 pre-requisites and building the code.
 
+
+### Rapper
+
+Rapper is a dependency as well. Install it with:
+
+```
+sudo apt install raptor2-utils
+```
+
 ### Terminus Server
 
 The Terminus Server source tree should then be cloned from GitHub:
@@ -109,6 +118,14 @@ sudo make install
 # Add the library path to the ld paths
 echo "/usr/local/lib/" | sudo tee /etc/ld.so.conf.d/local-lib.conf
 sudo ldconfig
+```
+
+### Rapper
+
+Rapper is a dependency as well. Install it with:
+
+```
+sudo dnf install raptor2 
 ```
 
 ### SWIPL libraries
