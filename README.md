@@ -12,7 +12,7 @@ which utilise the powerful features of graph search and graph storage.
 
 ## Latest Version 
 
-v1.0.0
+v1.0.1
 
 ## Getting Started
 
