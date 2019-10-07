@@ -267,7 +267,7 @@ dashboard_handler(options,_Request) :-
     format('~n').
 dashboard_handler(get,_Request) :-
     terminus_path(Path),
-    interpolate([Path,'/index.html'], Index_Path),
+    interpolate([Path,'/storage/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
     config:server(SURI),
     write_cors_headers(SURI),
