@@ -49,7 +49,7 @@ opt_spec([[opt(help),
            default(''),
            help('set the server name')],
 
-          [opt(workers_amount),
+          [opt(workers),
            type(integer),
            shortflags([w]),
            longflags([workers]),
@@ -142,12 +142,12 @@ replace_in_file(Path, Pattern, With) :-
     write(FileStream, NewFileString),
     close(FileStream).
 
-write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Worker_Amount) :-
+write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Workers) :-
     open(Config_Tpl_Path, read, Tpl_Stream),
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
     open(Config_Path, write, Stream),
-    format(Stream, Tpl_String, [Server_Name, Port, Worker_Amount]),
+    format(Stream, Tpl_String, [Server_Name, Port, Workers]),
     close(Stream).
 
 write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server_Name, Port, Key) :-
@@ -211,9 +211,9 @@ main(Args) :-
         index_template_path(Dir, Index_Tpl_Path),
         index_path(Dir,Index_Path),
 
-        memberchk(workers_amount(Workers_Arg), Opts),
+        memberchk(workers(Workers), Opts),
         write_config_file(Config_Tpl_Path, Config_Path, Server,
-                          Port_Arg, Workers_Arg),
+                          Port_Arg, Workers),
         crypto_password_hash(Key,Hash, [cost(15)]),
         memberchk(protocol(Protocol), Opts),
         write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,

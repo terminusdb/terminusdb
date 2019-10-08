@@ -10,12 +10,12 @@ You can configure the following environment variables to taste using the `-e ENV
 
 #### Env variables
 
-| Env variable   | Description                      | Default   |
-|----------------|----------------------------------|-----------|
-| SERVER_NAME    | Location of the server           | localhost |
-| SERVER_PORT    | Port of the server               | 6363      |
-| WORKERS_AMOUNT | Amount of workers for the server | 8         |
-| ADMIN_PASS     | Administrator password           | root      |
+| Env variable | Description                      | Default   |
+|--------------|----------------------------------|-----------|
+| SERVER_NAME  | Location of the server           | localhost |
+| SERVER_PORT  | Port of the server               | 6363      |
+| WORKERS      | Amount of workers for the server | 8         |
+| ADMIN_PASS   | Administrator password           | root      |
 
 
 3. You should see a hash appearing in the terminal.
