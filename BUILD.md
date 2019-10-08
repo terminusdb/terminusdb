@@ -71,11 +71,11 @@ git submodule update
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`initialize_database` script. The script should also be used to
+`db_util` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/initialize_database -k "my_password_here" -s "my_server_name_here"
+utils/db_util -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -163,11 +163,11 @@ git submodule update
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`initialize_database` script. The script should also be used to
+`db_util` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/initialize_database -k "my_password_here" -s "my_server_name_here"
+utils/db_util -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server: 
@@ -238,11 +238,11 @@ git submodule update
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`initialize_database` script. The script should also be used to
+`db_util` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/initialize_database -k "my_password_here" -s "my_server_name_here"
+utils/db_util -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:

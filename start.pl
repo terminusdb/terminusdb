@@ -53,7 +53,7 @@ initialise_server_settings :-
     atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
-    ;   format("CRITICAL ERROR: Server can't be started because the configuration is missing~n~nRun: ~s/utils/initialize_database first~n", BasePath),
+    ;   format("CRITICAL ERROR: Server can't be started because the configuration is missing~n~nRun: ~s/utils/db_util first~n", BasePath),
         halt(10)
     ).
 
