@@ -1,5 +1,6 @@
 :- module(test_utils,[
               try/1,
+              status_200/1,
               curl_json/2,
               report_curl_command/1,
               admin_pass/1
@@ -30,6 +31,7 @@
  */
 
 :- use_module(library(utils)).
+:- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
 
 :- use_module(library(apply)).
@@ -74,6 +76,10 @@ write_args(Args) :-
 report_curl_command(Args) :-
     format('~nRunning command: curl ',[]),
     write_args(Args).
+
+status_200(URL) :-
+    http_open(URL, _, [status_code(200)]).
+
 
 /*
  * curl_json(+Args,-JSON) is semidet. 

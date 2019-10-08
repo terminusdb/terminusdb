@@ -83,6 +83,7 @@ run_api_tests :-
     try(run_woql_test),
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
+    try(run_dashboard),
     try(run_db_metadata_test).
 
 /****************************************************************
@@ -909,6 +910,12 @@ run_good_doc_datatype_update_test :-
         
     _{'terminus:status':"terminus:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness! 
+
+run_dashboard :-
+    config:server(Server),
+    atomic_list_concat([Server,'/dashboard'], URI),
+    status_200(URI).
+
 
 run_db_metadata_test :-
     config:server(Server),
