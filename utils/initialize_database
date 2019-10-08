@@ -158,6 +158,50 @@ write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server_Name, Port, Key) :
     format(Stream, Tpl_String, [Protocol,Server_Name,Port,Key]),
     close(Stream).
 
+initialize_database(Server, Port, Workers, Protocol, Key, Dir) :-
+        example_instance_ttl(Dir,Example_Instance_TTL),
+        example_inference_ttl(Dir,Example_Inference_TTL),
+        example_schema_ttl(Dir,Example_Schema_TTL),
+
+        atomic_list_concat([Server, ":", Port], ServerPort),
+        
+        database_path(Dir,ServerPort,DB_Path),
+        instance_path(Dir,ServerPort,Instance_Path),
+        ttl_path(Instance_Path, Instance_TTL_Path),
+        inference_path(Dir,ServerPort,Inference_Path),
+        ttl_path(Inference_Path, Inference_TTL_Path),
+        schema_path(Dir,ServerPort,Schema_Path),
+        ttl_path(Schema_Path, Schema_TTL_Path),
+        config_template_path(Dir, Config_Tpl_Path),
+        config_path(Dir,Config_Path),
+        index_template_path(Dir, Index_Tpl_Path),
+        index_path(Dir,Index_Path),
+
+        write_config_file(Config_Tpl_Path, Config_Path, Server,
+                          Port, Workers),
+        crypto_password_hash(Key,Hash, [cost(15)]),
+        write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
+                         Port, Key),
+        
+        make_directory_path(Instance_Path),
+        make_directory_path(Inference_Path),
+        make_directory_path(Schema_Path),
+        delete_directory_contents(Instance_Path),
+        delete_directory_contents(Inference_Path),
+        delete_directory_contents(Schema_Path),
+        atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
+        open(Collection_File, write, Collection_Stream),
+        close(Collection_Stream),
+        copy_file(Example_Instance_TTL, Instance_TTL_Path),
+        copy_file(Example_Inference_TTL, Inference_TTL_Path),
+        copy_file(Example_Schema_TTL, Schema_TTL_Path),
+        replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
+        replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
+        replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
+        replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
+        format('Successfully updated admin key!!~n').
+
+
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
 
@@ -191,51 +235,10 @@ main(Args) :-
             ;   Server = localhost
             )
         ;   Server = Server_Arg),
-
-        example_instance_ttl(Dir,Example_Instance_TTL),
-        example_inference_ttl(Dir,Example_Inference_TTL),
-        example_schema_ttl(Dir,Example_Schema_TTL),
-
-        memberchk(port(Port_Arg), Opts),
-        atomic_list_concat([Server, ":", Port_Arg], ServerPort),
-        
-        database_path(Dir,ServerPort,DB_Path),
-        instance_path(Dir,ServerPort,Instance_Path),
-        ttl_path(Instance_Path, Instance_TTL_Path),
-        inference_path(Dir,ServerPort,Inference_Path),
-        ttl_path(Inference_Path, Inference_TTL_Path),
-        schema_path(Dir,ServerPort,Schema_Path),
-        ttl_path(Schema_Path, Schema_TTL_Path),
-        config_template_path(Dir, Config_Tpl_Path),
-        config_path(Dir,Config_Path),
-        index_template_path(Dir, Index_Tpl_Path),
-        index_path(Dir,Index_Path),
-
+        memberchk(port(Port), Opts),
         memberchk(workers(Workers), Opts),
-        write_config_file(Config_Tpl_Path, Config_Path, Server,
-                          Port_Arg, Workers),
-        crypto_password_hash(Key,Hash, [cost(15)]),
         memberchk(protocol(Protocol), Opts),
-        write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
-                         Port_Arg, Key),
-        
-        make_directory_path(Instance_Path),
-        make_directory_path(Inference_Path),
-        make_directory_path(Schema_Path),
-        delete_directory_contents(Instance_Path),
-        delete_directory_contents(Inference_Path),
-        delete_directory_contents(Schema_Path),
-        atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
-        open(Collection_File, write, Collection_Stream),
-        close(Collection_Stream),
-        copy_file(Example_Instance_TTL, Instance_TTL_Path),
-        copy_file(Example_Inference_TTL, Inference_TTL_Path),
-        copy_file(Example_Schema_TTL, Schema_TTL_Path),
-        replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-        replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
-        replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
-        replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
-        format('Successfully updated admin key!!~n'),        
+        initialize_database(Server, Port, Workers, Protocol, Key, Dir),
         halt
     ).
 
