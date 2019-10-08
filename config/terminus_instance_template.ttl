@@ -27,7 +27,8 @@ doc:terminus
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
     terminus:allow_origin "*"^^xsd:string ;    
-    terminus:id "http://SERVER_NAME/terminus"^^xsd:anyURI .
+    terminus:id "http://SERVER_NAME/terminus"^^xsd:anyURI ;
+    terminus:instance "http://SERVER_NAME/terminus/document"^^xsd:string .
 
 doc:server
     a terminus:Server ;
