@@ -84,9 +84,9 @@ fixup_schema_literal(literal(L),literal(lang(en,String))) :-
 schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
     database_name(Database,Database_Name),
     with_transaction(
-        [collection(Database_Name),
-         graphs([Schema]),
-         success(Success_Flag)],
+        [write_graphs([Database_Name-Schema-SW]),
+         read_graphs([Database_Name-Schema-SR])
+         commit(Commit)],
         validate:(
             % deletes (everything)
             forall( xrdf(Database_Name, [Schema], A, B, C),
@@ -127,7 +127,7 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
             % We survived the pre_tests, better check schema constriants
             ;   findall(Schema_Witness,
                         (   test_schema(Check),
-                            call(Check,Database,Schema_Witness)),
+                            call(Chbeck,Database,Schema_Witness)),
                         Schema_Witnesses),
                 (   \+ Schema_Witnesses = []
                 ->  Success_Flag = false,

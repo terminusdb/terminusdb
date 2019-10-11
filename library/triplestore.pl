@@ -1,16 +1,16 @@
 :- module(triplestore, [
               destroy_graph/2,
+              check_graph_exists/2,
               make_empty_graph/2,
-              destroy_indexes/0,
               sync_from_journals/0,
-              sync_from_journals/2,
+              sync_database/1,
+              sync_graph/2,
               xrdf/5,
               insert/5,
               delete/5,
               update/6,
               commit/2,
               rollback/2,
-              check_graph_exists/2,
               graph_checkpoint/3,
               current_checkpoint_directory/3,
               last_checkpoint_number/2,
@@ -24,7 +24,7 @@
               triples_canonical/2
           ]).
 
-:- use_module(library(hdt)). 
+:- use_module(library(terminus_store)).
 :- use_module(library(file_utils)).
 :- use_module(library(journaling)).
 :- use_module(library(utils)).
@@ -62,528 +62,212 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 /** 
- * retract_graph(+G:atom) is det. 
- * 
- * Retract all dynamic elements of graph. 
- */
-retract_graph(Collection,Database_Name) :-
-    (   is_schema_graph(Collection,Database_Name)
-    ->  schema:collection_schema_module(Collection,Database_Name,Module),
-        schema:cleanup_schema_module(Module)
-    ;   true),
-    retractall(xrdf_pos(Collection,Database_Name,_,_,_)),
-    retractall(xrdf_neg(Collection,Database_Name,_,_,_)),
-    retractall(xrdf_pos_trans(Collection,Database_Name,_,_,_)),
-    retractall(xrdf_neg_trans(Collection,Database_Name,_,_,_)).
-
-/** 
- * destroy_graph(+Collection,+Database_Id:graph_identifier) is det. 
+ * destroy_graph(+DBID,+GID:graph_identifier) is det. 
  * 
  * Completely remove a graph from disk.
+ * 
+ * currently this is a noop - we can worry about collection 
+ * later.
  */ 
-destroy_graph(Collection,Database_Name) :-
-    retract_graph(Collection, Database_Name),
-    graph_directory(Collection, Database_Name, DatabasePath),
-    delete_directory_and_contents(DatabasePath).
+destroy_graph(_DBID,_GID) :-
+    true.
 
-/** 
- * destroy_indexes(+C,+G) is det.
- * 
- * Destroy indexes for graph G in collection C. 
- */
-destroy_indexes(C,G) :-
-    current_checkpoint_directory(C,G,CPD),
-    files(CPD,Entries),
-    include(hdt_file_type,Entries,HDTEntries),
-    maplist({CPD}/[H,F]>>(interpolate([CPD,'/',H],Path),
-                          atom_concat(Path,'.index.v1-1',F)), HDTEntries, FileCandidates),
-    include(exists_file,FileCandidates,Files),
-    maplist(delete_file,Files).
-
-destroy_indexes :-
-    forall(
-        (
-            graphs(C,Gs),
-            member(G,Gs)
-        ),
-        ignore(destroy_indexes(C,G))
-    ).
-
-/** 
- * sync_from_journals(+C,+G) is det.
- * 
- * Sync journals for a graph and collection
- */
-sync_from_journals(Collection,Database_Name) :-
-    with_mutex(
-        Database_Name, 
-        % First remove everything in the dynamic predicates.
-        (   retract_graph(Collection,Database_Name),
-            hdt_transform_journals(Collection,Database_Name),
-            get_truncated_queue(Collection,Database_Name,Queue),
-            sync_queue(Collection,Database_Name, Queue),
-            (   
-                config:max_journal_queue_length(Max_Length),
-                length(Queue,Queue_Length),
-                Queue_Length > Max_Length
-            %   slightly terrifying recursion here...                 
-            ->  checkpoint(Collection,Database_Name)
-            ;   true)
-        ->  true
-        % in case anything failed, retract the graph
-        ;   retract_graph(Collection,Database_Name),
-            format(atom(Msg), 'Could not sync graph ~q for database ~q', [Collection,Database_Name]),
-            throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : Msg,
-                                     'terminus:broken_database' : Collection,
-                                     'terminus:broken_graph' : Database_Name
-                                    }))
-        )
-    ).
-
-/** 
- * cut_queue_at_checkpoint(+Sorted,-RelevantQueue) is det.
- * 
- * Takes the relevant queue, and clips it at the first checkpoint. 
- */
-cut_queue_at_checkpoint([H|_T],[H]) :-
-    graph_file_type(H,ckp).
-cut_queue_at_checkpoint([H|T],[H|R]) :-
-    graph_file_type(H,Type), (Type=pos; Type=neg),
-    cut_queue_at_checkpoint(T,R).
-
-/** 
- * type_compare(+Ty1,+Ty2,-Ord).
- * 
- * Ty1,Ty2 is one of {ckp,neg,pos}. This gives a total ordering.
- */ 
-type_compare(X,X,(=)).
-type_compare(ckp,_,(>)).
-type_compare(pos,_,(<)).
-type_compare(neg,ckp,(<)).
-type_compare(neg,pos,(>)).
-
-/** 
- * get_truncated_queue(+Collection,+Database,-Queue) is semidet. 
- * 
- * Get the queue associated with a graph up to the first checkpoint if it exists. 
- */
-get_truncated_queue(C,G,Queue) :-
-    current_checkpoint_directory(C,G,DirPath), 
-    files(DirPath,Entries),
-    include(hdt_file_type,Entries,HDTEntries),
-    predsort([Delta,X,Y]>>(   graph_file_timestamp_compare(X,Y,Ord),
-                              (   Ord=(>)
-                              ->  Delta=(<)
-                              ;   Ord=(<)
-                              ->  Delta=(>)
-                              ;   graph_file_type(X,Tx),
-                                  graph_file_type(Y,Ty),
-                                  type_compare(Tx,Ty,Delta))),
-             HDTEntries,Sorted),
-
-    %format('Sorted queue: ~q~n',[Sorted]),
-    
-    cut_queue_at_checkpoint(Sorted,RelevantQueue),
-
-    %format('Relevant queue: ~q~n',[Sorted]),
-
-    findall(Elt,
-            (
-                member(File,RelevantQueue),
-                interpolate([DirPath,'/',File],FilePath),
-                hdt_open(HDT0, FilePath),
-		        graph_file_type(File,Type),                
-                ( Type=pos, Elt=pos(HDT0)
-                ; Type=neg, Elt=neg(HDT0)
-                ; Type=ckp, Elt=ckp(HDT0))
-            ),
-            Queue).
-    
-/** 
- * hdt_tranform_journals(+Collection_ID,+Database_ID) is det.
- * 
- * Transform all oustanding journals to hdt files for graph G. 
- * 
- * TODO: This has never been tested.
- */
-hdt_transform_journals(Collection_ID,Database_Name) :-
-    graph_directory(Collection_ID,Database_Name,DirPath),
-    subdirectories(DirPath,Entries),
-    forall(member(Entry,Entries),
-           (   interpolate([DirPath,'/',Entry],Directory),
-               files(Directory,Files),
-             
-               include({Directory}/[F]>>(interpolate([Directory,'/',F],Full),
-                                         turtle_file_type(Full)),
-                       Files,TurtleEntries), 
-             
-               forall(member(TTLFile,TurtleEntries),
-                      (   graph_file_base(TTLFile,Base),
-                          interpolate([Directory,'/',TTLFile],TTLFilePath),
-                          interpolate([Directory,'/',Base,'.hdt'],HDTFilePath),
-                          (   exists_file(HDTFilePath)
-                          ->  true
-                          ;   ttl_to_hdt(TTLFilePath,HDTFilePath),
-                              % get rid of any possible old indexes
-                              interpolate([Directory,'/',Base,'.hdt.index.v1-1'],I),
-                              (   exists_file(I)
-                              ->  delete_file(I)
-                              ;   true)
-                          )
-                      )
-                     )
-           )
-          ).
-
-/** 
- * xrdf_pos_trans(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
- * 
- * The dynamic predicate which stores positive updates for transactions.
- * This is thread local - it only functions in a transaction
- */
-:- thread_local xrdf_pos_trans/5.
-
-/** 
- * xrdf_neg_trans(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
- * 
- * The dynamic predicate which stores negative updates for transactions.
- */
-:- thread_local xrdf_neg_trans/5.
-
-/** 
- * xrdf_pos(+C, +G, ?X,?Y,?Z) is nondet.
- * 
- * The dynamic predicate which stores positive updates from the journal. 
- */
-:- dynamic xrdf_pos/5.
-
-/** 
- * xrdf_neg(+C:atom,+G:atom,?X,?Y,?Z) is nondet.
- * 
- * The dynamic predicate which stores negative updates from the journal. 
- */
-:- dynamic xrdf_neg/5.
 
 /**
- * check_graph_exists(+Collection_ID,+G:graph_identifier) is semidet.
+ * check_graph_exists(+Database_ID,+G:graph_identifier) is semidet.
  * 
  * checks to see is the graph id in the current graph list
- **/
-check_graph_exists(C,G):-
-    graphs(C, G_List),
-    member(G, G_List),
-    !.  
-
-/** 
- * graph_checkpoint(+C,+G,-HDT) is semidet.
- * 
- * Returns the last checkpoint HDT associated with a given graph. 
  */
-graph_checkpoint(C, G, HDT) :-
-    graph_hdt_queue(C, G, Queue),
-    graph_checkpoint_search(Queue, HDT).
-
-graph_checkpoint_search([], _) :- fail.
-
-graph_checkpoint_search([ckp(HDT)|_], HDT).
-graph_checkpoint_search([pos(_)|Rest], Result) :-
-    graph_checkpoint_search(Rest, Result).
-graph_checkpoint_search([neg(_)|Rest], Result) :-
-    graph_checkpoint_search(Rest, Result).
-
-/**
- * graph_hdt_queue(+C, +G, -HDTs) is semidet.
- *
- * Returns a queue of hdt files up to and including the last checkpoint.
- * This is recalculated by sync_queue/3.
- */
-:- dynamic graph_hdt_queue/3.
-
-/** 
- * sync_queue(+Collection_ID,+G,+Queue) is det. % + exception
- * 
- * Update the xrdf_pos/5 and xrdf_neg/5 predicates and the 
- * graph_checkpoint/2 predicate from the current graph. 
- */
-sync_queue(C, G, Queue) :-
-    (   check_queue(Queue)
-    ->  true
-    ;   throw(malformed_graph_journal_queue(G))),
-    (   graph_hdt_queue(C, G, Old_Queue)
-    ->  close_all_handles(Old_Queue)
-    ;   true),
-    retractall(graph_hdt_queue(C, G,_)),
-    asserta(graph_hdt_queue(C, G, Queue)).
-
-/**
- * close_all_handles(+Queue:list) is det.
- *
- * Close all hdt handles of the queue.
- */
-close_all_handles([]).
-close_all_handles([Head|Rest]) :-
-    Head =.. [_, HDT],
-    hdt_close(HDT),
-    close_all_handles(Rest).
-
-/** 
- * with_output_graph(+Template,:Goal) is det. 
- * 
- * Template is graph(Collection_ID,Database_Id,Type,Ext) where Type is one of {ckp,neg,pos}
- * and Ext is one of {ttl,hdt,ntr}
- *
- * ckp is for new graph (initial checkpoint) or any thereafter. 
- */
-:- meta_predicate with_output_graph(?, 0).
-with_output_graph(graph(C,G,Type,Ext),Goal) :-
-    with_mutex(
-        G,
-        (   current_checkpoint_directory(C,G,CPD),
-            last_plane_number(CPD,M),
-            N is M+1,
-            %get_time(T),floor(T,N), %switch to sequence numbers
-            interpolate([CPD,'/',N,'-',Type,'.',Ext],NewFile),
-
-            setup_call_cleanup(
-                (   
-                    open(NewFile,write,Stream),
-                    set_graph_stream(C,G,Stream,Type,Ext),
-                    initialise_graph(C,G,Stream,Type,Ext)
-                ),
-                (   call(Goal)
-                ->  true
-                ;   format(atom(Msg),'Goal (~q) in with_output_graph failed~n',[Goal]),
-                    throw(transaction_error(Msg))
-                ), 
-                (   finalise_graph(C,G,Stream,Type,Ext),
-                    (   N > 1, % need an empty checkpoint.
-                        size_file(NewFile, Size),
-                        %format('~n~nSize of file is: ~d~n~n', [N]),
-                        Size = 0
-                    ->  delete_file(NewFile)
-                    ;   true)
-                )
-            )
-        )
-    ).
-
-/** 
- * write_checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
- * 
- * Write a new checkpoint.
- */ 
-write_checkpoint(Collection_Id,Database_Id) :-
-    with_mutex(
-        Database_Id,
-        (   
-            make_checkpoint_directory(Collection_Id,Database_Id, _),
-            with_output_graph(
-                graph(Collection_Id,Database_Id,ckp,ttl),
-                (
-                    forall(
-                        xrdf(Collection_Id,[Database_Id],X,Y,Z),
-                        write_triple(Collection_Id,Database_Id,ckp,X,Y,Z)
-                    )
-                )
-            )
-        )
-    ).
-
+check_graph_exists(DB,G):-
+    dbid_graphid_obj(DB,G,_),
+    !.
+ 
 /** 
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
  * 
  * Create a new graph checkpoint from our current dynamic triple state
  * and sync.
- */
-checkpoint(Collection_Id,Database_Id) :-
-    write_checkpoint(Collection_Id,Database_Id),
-    sync_from_journals(Collection_Id, Database_Id).
-
-/** 
- * check_queue(+Queue) is det.
  * 
- * Sanity check the queue. 
+ * UUU Should this ever be called? - should it be automatic?
  */
-check_queue([pos(_HDT)|Res]) :-
-        check_queue(Res). 
-check_queue([neg(_HDT)|Res]) :-
-        check_queue(Res). 
-check_queue([ckp(_HDT)]).
+checkpoint(_DB_ID,Graph_ID) :-
+    throw(error("Unimplemented")).
 
-/** 
- * sync_from_journals is det.  
+/* 
+ * storage(-Storage_Obj) is det. 
  * 
- * This predicate updates the xrdf_pos/5 and xrdf_neg/5 predicate so that 
- * it reflects the current state of the database on file. 
+ * Global variable holding the current storage associated with the server. 
+ * This is set by sync_storage/0.
  */ 
-sync_from_journals :-
-    collections(Collections),
+:- dynamic storage/1.
 
-    forall(
-        (   member(Collection,Collections),
-            graphs(Collection,Databases),
-            member(Database_Name, Databases)
-        ),
+/* 
+ * sync_storage is semidet. 
+ * 
+ * Global variable holding the current storage associated with the server. 
+ * This is set by sync_storage/0.
+ */ 
+sync_storage :- 
+    with_mutex(
+        sync_storage,
         (
-            format("~n ** Syncing ~q in collection ~q ~n~n", [Database_Name,Collection]),
-            catch(sync_from_journals(Collection,Database_Name),
-                  graph_sync_error(Database_Name),
-                  format("~n ** ERROR: Database ~s in Collection ~s failed to sync.~n~n", [Database_Name,Collection]))      
+            db_path(Path),
+            open_directory_store(Path,Storage),
+            retractall(storage(_)),
+            assertz(storage(Storage))
+        )
+    ).
+
+/* 
+ * sync_graph(+DBN,+GID) is det. 
+ * 
+ * Sync the graph into dbid_graphid_obj/3 or throw an error.
+ * 
+ * The Mutex is not needed when called from sync_database 
+ * but adding in case others call sync_graph/2 directly.
+ */ 
+sync_graph(DBN,G) :-
+    atomic_list_concat(['sync_', DBN,'_',G], Mutex),
+    with_mutex(
+        Mutex,
+        (   open_named_graph(Storage, G, Gobj),
+            retractall(dbid_graphid_obj(DBN, G, _)),
+            assertz(dbid_graphid_obj(DBN, G, Gobj))
+        ->  true
+        ;   retractall(dbid_graphid_obj(DBN, G, _)),
+            format(atom(Msg),
+                   'Could not sync graph ~q for database ~q',
+                   [DBN,G]),
+            throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : Msg,
+                                     'terminus:broken_database' : DBN,
+                                     'terminus:broken_graph' : G
+                                    }))
+        )
+    ).
+
+/* 
+ * dbid_graphid_obj(+DBID,+GraphID,-Obj).
+ * 
+ * Maintains a table of the current named_graph objects in terminus-store 
+ * associated with the given database and graph. 
+ */
+:- dynamic dbid_graphid_obj/3.
+
+/* 
+ * sync_database(Database) is det.
+ * 
+ * Maintains a table of the current named_graph objects in terminus-store 
+ * associated with the given database and graph. 
+ */
+sync_database(Database) :-
+    % I believe we want to be able to set the database predicate for this database
+    % without someone racing us.
+    database_name(Database,DBN),
+    atomic_list_concat(['sync_', DBN], Mutex),
+    with_mutex(
+        Mutex,
+        (
+            (   
+                storage(Storage),
+                
+                database_instance(Database, Instances),
+                database_inference(Database, Inferences),
+                database_schema(Database, Schemas),
+                
+                append([Instances,Inferences,Schemas], Graphs),
+                
+            ->  forall(
+                    member(G, Graphs),
+                    sync_graph(DBN,G)
+                )
+            
+            ;   format(atom(Msg),
+                       'Could not load database or associated graphs for database ~q',
+                       [DBN]),                            
+                throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
+                                         'terminus:message' : Msg,
+                                         'terminus:broken_database' : DBN
+                                        }))
+            )
+        )
+    ).
+
+sync_terminus :-
+    storage(Storage),
+    terminus_database(Terminus), 
+    sync_database(Terminus).
+
+sync_databases :-
+    database_record_list(Database_Names),
+    forall(
+        member(DBN,Database_Names),
+        (
+            make_database_from_database_name(DBN,Database),
+            sync_database(Database)
         )
     ).
 
 /** 
- * make_empty_graph(+Collection_ID,+Database) is det.
+ * sync_from_journals is det.  
  * 
- * Create a new empty graph
- */
-make_empty_graph(Collection_ID,Database_Id) :-
-    % create the collection if it doesn't exist
-    collection_directory(Collection_ID,Collection_Path),
-    ensure_directory(Collection_Path),
-    interpolate([Collection_Path,'/COLLECTION'],Collection_File),
-    touch(Collection_File),
-    % create the graph if it doesn't exist
-    graph_directory(Collection_ID,Database_Id,Database_Path),
-    ensure_directory(Database_Path),
-    make_checkpoint_directory(Collection_ID,Database_Id, CPD),
-    %get_time(T),floor(T,N),
-    N=1,
-    interpolate([CPD,'/',N,'-ckp.ttl'],TTLFile),
-    touch(TTLFile),
-    interpolate([CPD,'/',N,'-ckp.hdt'],CKPFile),
-    ttl_to_hdt(TTLFile,CKPFile).
+ */ 
+sync_from_journals :-    
+    /* do something here */
+    sync_storage,
+    sync_terminus,
+    sync_databases.
 
 /** 
- * import_graph(+File,+Collection_ID,+Database) is det.
+ * make_empty_graph(+DB_ID,+Graph_ID) is det.
+ * 
+ * Create a new empty graph.
+ * 
+ * UUU
+ */
+make_empty_graph(DB_ID,Graph_ID) :-
+    atomic_list_concat(['sync_',DB_ID,'_',Graph_ID], Mutex),
+    with_mutex(
+        Mutex,
+        (   
+            store(Store),
+            create_database(Store,Graph_ID,Graph_Obj),
+            assert(dbid_graphid_obj(DB_ID,Graph_ID,Graph_Obj))
+        )
+    ).
+
+
+/** 
+ * import_graph(+File,+DB_ID,+Graph_ID) is det.
  * 
  * This predicate imports a given File as the latest checkpoint of Database_Name
  * 
  * File will be in either ntriples, turtle or hdt format. 
+ * 
+ * UUU - do some transactional stuff here as with schema.
  */
-import_graph(File, Collection_ID, Database_Id) :-    
-    graph_file_extension(File,Ext),
-    (   Ext = hdt,
-        hdt_open(_, File, [access(map), indexed(false)]), % make sure this is a proper HDT file
-        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
-        N=1,
-        %get_time(T),floor(T,N),
-        interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
-        copy_file(File,NewFile)
-    ;   Ext = ttl,
-        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
-        N=1,                
-        %get_time(T),floor(T,N),
-        interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
-        ttl_to_hdt(File,NewFile)
-    ;   Ext = ntr,
-        make_checkpoint_directory(Collection_ID,Database_Id,CPD),
-        N=1,                
-        %get_time(T),floor(T,N),
-        interpolate([CPD,'/',N,'-ckp.hdt'],NewFile),
-        ntriples_to_hdt(File,NewFile)
-    ),
-    sync_from_journals(Collection_ID,Database_Id).
+import_graph(File, DB_ID, Graph_ID) :-
+    false.
 
 /** 
- * literal_to_canonical(+Lit,-Can) is det. 
+ * insert(+DB:atom,+G:graph_identifier,+Builder,+X,+Y,+Z) is det.
  * 
- * Converts a literal to canonical form. Currently 
- * we are only canonicalising booleans. We may extend as necessary.
+ * Insert triple into transaction layer
  */
-literal_to_canonical(A^^Ty) :-
-    !,
-    literal_to_canonical(literal(Ty,A)).
-literal_to_canonical(A@Lang) :-
-    !,
-    literal_to_canonical(lang(Lang,A)).
-/*
-literal_to_canonical(literal(type('http://www.w3.org/2001/XMLSchema#boolean',Lit)),
-                     literal(type('http://www.w3.org/2001/XMLSchema#boolean',Can))) :-
-    !,
-    (   member(Lit, ['1',true])
-    ->  Can=true
-    ;   (   member(Lit, ['0',false]) 
-        ->  Can=false
-        ;   fail)             
-    ).
-*/
-literal_to_canonical(X,X). % dubious!
-
-/* 
- * triples_canonical(Apocryphal,Canonical) is det.
- * 
- * Turn list of triples into a canonical comparable form.
- */
-triples_canonical([],[]).
-triples_canonical([(D,G,A,B,C)|Triples],[(D,G,X,Y,Z)|Canonical]) :-
-    canonicalise_subject(A,X),
-    canonicalise_predicate(B,Y),
-    canonicalise_object(C,Z),
-    triples_canonical(Triples,Canonical).
-
-/* 
- * canonicalise_subject(+O,-C) is det.
- */ 
-canonicalise_subject(O,C) :-
-    (   string(O)
-    ->  atom_string(C,O)
-    ;   O=C).
-
-/* 
- * canonicalise_predicate(+O,-C) is det.
- */ 
-canonicalise_predicate(O,C) :-
-    (   string(O)
-    ->  string_to_atom(O,C)
-    ;   O=C).
-
-/** 
- * canonicalise_object(+O,-C) is det. 
- * 
- * Finds the canonical form for an object
- */
-canonicalise_object(O,C) :-
-    (   is_literal(O)
-    ->  literal_to_canonical(O,C)
-    ;   string(O)
-    ->  string_to_atom(O,C)
-    ;   O=C).
-
-
-/** 
- * insert(+DB:atom,+G:graph_identifier,+X,+Y,+Z) is det.
- * 
- * Insert quint into transaction predicates.
- */
-insert(DB,G,A,B,C) :-
-    canonicalise_subject(A,X),
-    canonicalise_predicate(B,Y),
-    canonicalise_object(C,Z),
+insert(DB,G,Builder,X,Y,Z) :-
     (   xrdf(DB,[G],X,Y,Z)
     ->  true
-    ;   asserta(xrdf_pos_trans(DB,G,X,Y,Z)),
-        (   xrdf_neg_trans(DB,G,X,Y,Z)
-        ->  retractall(xrdf_neg_trans(DB,G,X,Y,Z))
-        ;   true)).
+    ;   nb_add_triple(Builder, X, Y, Z)
+    ).
 
 /** 
- * delete(+DB,+G,+X,+Y,+Z) is det.
+ * delete(+DB,+G,+Builder,+X,+Y,+Z) is det.
  * 
  * Delete quad from transaction predicates.
  */
-delete(DB,G,A,B,C) :-
-    canonicalise_subject(A,X),
-    canonicalise_predicate(B,Y),
-    canonicalise_object(C,Z),
-    (   xrdf_pos_trans(DB,G,X,Y,Z)
-    ->  retractall(xrdf_pos_trans(DB,G,X,Y,Z))        
-    ;   true),
-    (   xrdfdb(DB,G,X,Y,Z)
-    ->  (   xrdf_neg_trans(DB,G,X,Y,Z)
-        ->  true
-        ;   asserta(xrdf_neg_trans(DB,G,X,Y,Z)))
+delete(DB,G,Builder,X,Y,Z) :-
+    (   xrdf(DB,[G],X,Y,Z)
+    ->  nb_remove_triple(Builder,X,Y,Z)
     ;   true).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
@@ -601,58 +285,6 @@ update(DB,G,X,Y,Z,Action) :-
     insert(DB,G,X1,Y1,Z1).
 
 /** 
- * commit(+C:collection_id,+G:graph_identifier) is det.
- * 
- * Commits the current transaction state to backing store and dynamic predicate
- * for a given collection and graph.
- */
-commit(CName,GName) :-
-    % Time order here is critical as we actually have a time stamp for ordering.
-    % negative before positive
-    % graph_id_name(G,GName),
-    with_output_graph(
-        graph(CName,GName,neg,ttl),
-        (   forall(
-                xrdf_neg_trans(CName,GName,X,Y,Z),
-                (   % journal
-                    write_triple(CName,GName,neg,X,Y,Z),
-                    % dynamic 
-                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                    asserta(xrdf_neg(CName,GName,X,Y,Z))
-                ))
-        )
-    ),
-
-    retractall(xrdf_neg_trans(CName,GName,X,Y,Z)),
-    
-    with_output_graph(
-        graph(CName,GName,pos,ttl),
-        (   forall(
-                xrdf_pos_trans(CName,GName,X,Y,Z),
-                
-                (% journal
-                    write_triple(CName,GName,pos,X,Y,Z),
-                    % dynamic
-                    retractall(xrdf_pos(CName,GName,X,Y,Z)),
-                    retractall(xrdf_neg(CName,GName,X,Y,Z)),
-                    asserta(xrdf_pos(CName,GName,X,Y,Z))
-                ))
-        )
-    ),
-    
-    retractall(xrdf_pos_trans(CName,GName,X,Y,Z)).
-
-/** 
- * rollback(+Collection_Id,+Database_Ids:list(graph_identifier)) is det.
- * 
- * Rollback the current transaction state.
- */
-rollback(Collection_Id,GName) :-
-    retractall(xrdf_pos_trans(Collection_Id,GName,X,Y,Z)),
-    retractall(xrdf_neg_trans(Collection_Id,GName,X,Y,Z)).
-
-/** 
  * xrdf(+Collection_Id,+Database_Ids:list,?Subject,?Predicate,?Object) is nondet.
  * 
  * The basic predicate implementing the the RDF database.
@@ -661,118 +293,164 @@ rollback(Collection_Id,GName) :-
  * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
 xrdf(C,Gs,X,Y,Z) :-
+    assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
-    xrdfid(C,G,X,Y,Z).
+    dbid_graphid_obj(C,G,Obj),
+    head(Obj,Layer),
+    triple(Layer,X,Y,Z).
 
-xrdfid(C,G,X0,Y0,Z0) :-
-    !,
-    (   xrdf_pos_trans(C,G,X0,Y0,Z0)      % If in positive graph, return results
-    ;   xrdfdb(C,G,X0,Y0,Z0),             % or a lower plane
-        \+ xrdf_neg_trans(C,G,X0,Y0,Z0)   % but only if it's not negative
-    ). 
-        
-/** 
- * xrdfdb(+Collection_Id,+Database_Id,?X,?Y,?Z) is nondet.
+/* 
+ * bind_read_graph_layers(+Spec_List:list) is det. 
  * 
- * This layer has only those predicates with backing store.
+ * Spec_List is a skeleton DBN-GN-GL in which DBN and GN are bound 
+ * and GL is supplied. 
+ * 
+ * We produce a GL binding to the current read layer of head.
  */ 
-xrdfdb(C,G,X,Y,Z) :-
-    graph_hdt_queue(C,G, Queue),
-    xrdf_search_queue(Queue,X,Y,Z).
+bind_read_graph_layers([]).
+bind_read_graph_layers([DBN-GN-GL|Rest]) :-
+    dbid_graphid_obj(DBN,GN,Graph_Obj),
+    head(Graph_Obj,GL),
+    !,
+    bind_read_graph_layers(Rest).
+bind_read_graph_layers([DBN-GN-_|Rest]) :-
+    format(string(MSG), 'Unable to bind a read layer for DB: ~q and Graph ~q', [DBN,GN]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+bind_read_graph_layers([Spec|Rest]) :-
+    format(string(MSG), 'Unable to interpret read graph specification: ~q', [Spec]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
 
 /* 
- * xrdf_search_queue(Queue,X,Y,Z) is nondet.
+ * bind_write_graph_layer_builders(+Spec_List:list) is det. 
  * 
- * Underlying planar access to hdts
- */
-xrdf_search_queue([ckp(HDT)|_],X,Y,Z) :-
-    hdt_search_safe(HDT,X,Y,Z).
-xrdf_search_queue([pos(HDT)|Rest],X,Y,Z) :-
-    (   hdt_search_safe(HDT,X,Y,Z)
-    ;   xrdf_search_queue(Rest,X,Y,Z)).
-xrdf_search_queue([neg(HDT)|Rest],X,Y,Z) :-
-    xrdf_search_queue(Rest,X,Y,Z),
-    \+ hdt_search_safe(HDT,X,Y,Z).
+ * Spec_List is a skeleton DBN-GN-WGLB in which DBN and GN are bound 
+ * and WGLB is supplied. In fact we ignore DBN and GN, but will 
+ * use them at commit time to know which associated layer builder we mean.
+ * 
+ */ 
+bind_write_graph_layer_builders([]).
+bind_write_graph_layer_builders([_DBN-_GN-WGLB-_WL|Rest]) :-
+    store(Store),
+    open_write(Store,WGLB),
+    !,
+    bind_write_graph_layer_builders(Rest).
+bind_write_graph_layer_builders([DBN-GN-_-_|Rest]) :-
+    format(string(MSG), 'Unable to bind a write layer for DB: ~q and Graph ~q', [DBN,GN]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+bind_write_graph_layer_builders([Spec|Rest]) :-
+    format(string(MSG), 'Unable to interpret write graph specification: ~q', [Spec]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+
 
 /* 
- * hdt_search_safe(HDT,X,P,Y) is nondet.
+ * commit_write_graph_layer_builders(+Spec_List:list) is det. 
  * 
- * Add some marshalling.
- */
+ * Spec_List is a skeleton DBN-GN-WGLB-WL in which DBN and GN and WGLB are bound 
+ * and WL is supplied. 
+ * 
+ */ 
+commit_write_graph_layer_builders([]).
+commit_write_graph_layer_builders([_DBN-_GN-WGLB-WL|Rest]) :-
+    nb_commit(WGLB,WL),
+    !,
+    commit_write_graph_layer_builders(Rest).
+commit_write_graph_layer_builders([DBN-GN-_-_|Rest]) :-
+    format(string(MSG), 'Unable to commit a write layer builder for DB: ~q and Graph ~q', [DBN,GN]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+commit_write_graph_layer_builders([Spec|Rest]) :-
+    format(string(MSG), 'Unable to interpret write graph commit specification: ~q', [Spec]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+
+
 /* 
-hdt_search_safe(HDT,X,Y,Z) :-
-    hdt_search(HDT,X,Y,Z).
-*/
-hdt_search_safe(HDT,X,Y,literal(type(T,Z))) :-
-	hdt_search(HDT,X,Y,Z^^T).
-hdt_search_safe(HDT,X,Y,literal(lang(L,Z))) :-
-	hdt_search(HDT,X,Y,Z@L).
-hdt_search_safe(HDT,X,Y,Z) :-
-	atom(Z),
-	hdt_search(HDT,X,Y,Z).
-hdt_search_safe(HDT,X,Y,Z) :-
-	var(Z),
-	hdt_search(HDT,X,Y,Z),
-	atom(Z).
+ * push_write_graph_layers(+Spec_List:list) is det. 
+ * 
+ * Spec_List is a skeleton DBN-GN-WGLB-WL in which DBN and GN and WGLB are bound 
+ * and WL is supplied. 
+ * 
+ */ 
+push_write_graph_layers([]).
+push_write_graph_layers([_DBN-_GN-WGLB-WL|Rest]) :-
+    nb_set_head(WGLB,WL),
+    !,
+    push_write_graph_layers(Rest).
+push_write_graph_layers([DBN-GN-_-_|Rest]) :-
+    format(string(MSG), 'Unable to push a write layer builder for DB: ~q and Graph ~q', [DBN,GN]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
+push_write_graph_layers([Spec|Rest]) :-
+    format(string(MSG), 'Unable to interpret write graph push specification: ~q', [Spec]),
+    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
+                                      'terminus:message' : MSG}))).
 
 
 /** 
- * with_transaction(+Options,:Goal) is semidet.
+ * hoare_transaction(+Options,:Pre,:Update,:Post) is semidet.
  * 
- * Executes goal, commits if successful, and rolls back if not.
+ * If Succeeds if Pre, Executes Update and tests Posts resulting in 
+ * member(witnesses(Witnesses), Options)
  * 
  * Options is a list which contains any of:
  * 
- *  graphs([Database0,Database1,...,Databasen])
+ *  * read_graphs([DB_ID-Graph_ID0-RL0,
+ *                 DB_ID-Graph_ID1-RL1,
+ *                 ....
+ *                 DB_ID-Graph_IDN-RLN])
  * 
- *  Specifying each of the graphs which is in the transaction
- * 
- *  success(SuccessFlag)
- *  
- *  which gives a way to make the transaction fail, even if goal succeeds 
- * 
- * TODO: We should perhaps have an additional structure witness(Witness) which 
- *       returns the witnesses of failure
+ *  Specifying each of the writeable graphs which is in the transaction
+ *  and binding the associated write layer-builder.
  *
+ * 
+ *  * write_graphs([DB_ID-Graph_ID0-WLB0-WL0,
+ *                  DB_ID-Graph_ID1-WLB1-WL1, 
+ *                  ...
+ *                  DB_ID-Graph_IDN-WLBN-WLN
+ *                 ])
+ * 
+ *  Specifying each of the writeable graphs which is in the transaction
+ *  and binding the associated write layer-builder.
+ * 
+ *  * witnesses(Witnesses)
+ *  
+ *  Which gives a list of the witnesses of failure. 
+ * 
  */
-with_transaction(Options,Goal) :-
-    % some crazy heavy locking here!
-    with_mutex(transaction,
-               (   member(graphs(Database_Id_Bag),Options),
-                   !,
-                   member(collection(C),Options),
-                   !,
-                   sort(Database_Id_Bag,Database_Ids),
-                   !,
-                   % if we can't get graphs, there is nothing interesting to do anyhow. 
-                   (
-                       % select success flag from
-                       ignore(
-                           member(success(SuccessFlag),Options)
-                       ),
-                       % Call the goal
-                       call(Goal),
-                       
-                       (   (   
-                               (   var(SuccessFlag)
-                               % If the goal succeeds but there is no success flag, set to true
-                               ->  SuccessFlag = true
-                               ;   true)
-                           ->  true
-                           % If the goal fails, we want to signal failure and rollback
-                           ;   SuccessFlag = false
-                           ),
-                           SuccessFlag = true
-                       ->  forall(member(G,Database_Ids),
-                                  (   commit(C,G),
-                                      sync_from_journals(C,G)))
-                       % We have succeeded in running the goal but Success is false
-                       ;   forall(member(G,Database_Ids),rollback(C,G))
-                       )
-                   ->  true
-                   % We have not succeeded in running goal, so we need to cleanup
-                   ;   forall(member(G,Database_Ids),rollback(C,G)),
-                       fail
-                   )
-               )
-              ).
+hoare_transaction(Options,Pre,Update,Post) :-
+    (   memberchk(read_graphs(Read_Graph_Objs),Options)
+    ->  true
+    ;   Read_Graph_Objs=[]),
+
+    bind_read_graph_layers(Read_Graph_Objs),
+    
+    (   memberchk(write_graphs(Write_Graph_Objs),Options)        
+    ->  true
+    ;   Write_Graph_Objs = []),
+
+    bind_write_graph_layer_builders(Write_Graph_Objs),
+
+    (   memberchk(witnesses(_), Options)
+    ->  Transaction_Options = Options
+    ;   Transaction_Options = [witnesses([])|Options]
+    ),
+    
+    call(Pre),
+    
+    (   call(Update)
+    ->  commit_write_graph_layer_builders(Write_Graph_Objs)
+    ;   format(string(MSG), "Unable to perform the update requested: ~q", [Update]),
+        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+    
+    (   call(Post),
+    ->  (   memberchk(witnesses([]),Options),
+        ->  push_write_graph_layers(Write_Graph_Objs)
+        ;   true)
+    ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
+        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))).

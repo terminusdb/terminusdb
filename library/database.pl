@@ -77,14 +77,7 @@ database_error_schema(database(_,_,_,_,_,Error_Schema), Error_Schema).
  * [instance=Instance,schema=Schema...]
  */ 
 make_database(DatabaseList, Database) :-
-    Database = database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(name,DatabaseList,Name,[]),
-    get_key(schema,DatabaseList,Schema,[]),
-    get_key(instance,DatabaseList,Instance,[]),
-    get_key(inference,DatabaseList,Inference,[]),
-    get_key(error_schema,DatabaseList,Error_Schema,[]),
-    get_key(error_instance,DatabaseList,Error_Instance,[]),
-
+    make_raw_database(DatabaseList, Database),
     schema:database_module(Database,Module),
     schema:ensure_schema_in_module(Database,Module).
 
@@ -157,6 +150,17 @@ terminus_database(Database) :-
                    schema=[Schema],
                    inference=[Inference],
                    instance=[Instance]], Database).
+
+
+database_record_list(Databases) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name, Terminus_DB),
+
+    findall(DB_Resource, 
+            ask(Terminus_DB,
+                t( DB_Resource , rdf/type , terminus/'Database') ,
+               ),
+            Databases).
 
 
 database_record_schema_list(Database_Name, Schemas) :-
