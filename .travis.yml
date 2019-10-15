@@ -7,6 +7,8 @@ stages:
   - build
   - name: deploy
     if: branch = master
+  - name: deploy_dev
+    if: branch = dev
   - name: deploy_tag
     if: tag =~ ^v
 
@@ -23,6 +25,13 @@ jobs:
         - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl test"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminus-server:latest
+
+    - stage: deploy_dev
+      script:
+        - docker build -t terminusdb/terminus-server:dev .
+        - docker run -it terminusdb/terminus-server:dev bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl test"
+        - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
+        - docker push terminusdb/terminus-server:dev
 
     - stage: deploy_tag
       script:
