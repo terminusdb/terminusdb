@@ -89,10 +89,10 @@ Set the administrative key - necessary before superuser can begin to set other p
 ~s', [Name,Help_Text]).
 
 example_instance_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../config/terminus_instance_template.ttl'], Path).
+    atomic_list_concat([Dir,'/terminus_instance_template.ttl'], Path).
 
 example_inference_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../config/terminus_inference_template.ttl'], Path).
+    atomic_list_concat([Dir,'/terminus_inference_template.ttl'], Path).
 
 example_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
