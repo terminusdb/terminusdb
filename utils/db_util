@@ -111,7 +111,7 @@ config_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config.pl'], Path).
 
 config_template_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../config/config-template.tpl'], Path).
+    atomic_list_concat([Dir, '/config-template.tpl'], Path).
 
 index_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../index.html'], Path).
