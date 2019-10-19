@@ -57,18 +57,27 @@
 
 /* 
  * Database term accessors.
+ * 
+ * Deprecated: For backwards compatability. 
+ * Use dictionary accessors. 
  */ 
-database_name(database(Name, _ , _ ,_, _, _),Name).
+database_name(DB,Name) :-
+    DB.name = Name.
 
-database_instance(database(_, Instance, _ ,_, _, _),Instance).
+database_instance(DB,Instance) :-
+    DB.instance = Instance.
 
-database_inference(database(_, _,Inference,_,_,_),Inference).
+database_inference(DB, Inference) :-
+    DB.inference = Inference.
 
-database_schema(database(_, _,_,Schema,_,_),Schema).
+database_schema(DB,Schema) :-
+    DB.schema = Schema.
 
-database_error_instance(database(_,_,_,_,Error_Instance,_), Error_Instance).
+database_read_transaction(DB, Read_Transaction) :-
+    DB.read_transaction = Read_Transaction.
 
-database_error_schema(database(_,_,_,_,_,Error_Schema), Error_Schema).
+database_write_transaction(DB, Write_Transaction) :-
+    DB.write_transaction = Write_Transaction.
 
 /** 
  * make_database(+DatabaseList:list,-Database:database) is det.
@@ -90,26 +99,7 @@ make_database(DatabaseList, Database) :-
  * This does NO schema compilation and is only used during initial pre-testing for cycles.
  */ 
 make_raw_database(DatabaseList, Database) :-
-    Database = database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema),
-    get_key(name,DatabaseList,Name,[]),
-    get_key(schema,DatabaseList,Schema,[]),
-    get_key(instance,DatabaseList,Instance,[]),
-    get_key(inference,DatabaseList,Inference,[]),
-    get_key(error_schema,DatabaseList,Error_Schema,[]),
-    get_key(error_instance,DatabaseList,Error_Instance,[]).
-
-/** 
- * database_identifiers(+Database:database -DatabaseList:list(database_identifier)) is det.
- * 
- * Create a list of names of the graphs elements contained in a graph structure. 
- */ 
-database_identifiers(Database,Names) :-
-    database_instance(Database,GI),
-    database_inference(Database,Inf),
-    database_schema(Database,GS),
-    database_error_instance(Database,EI),
-    database_error_schema(Database,ES),
-    exclude(is_empty_graph_name,[GI,Inf,GS,EI,ES], Names).
+    dict_create(Database, database, DatabaseList).
 
 /* 
  * terminus_database_name(Database_Name) is det. 
@@ -125,11 +115,10 @@ terminus_database_name(Database_Name) :-
  * 
  * JSON-LD of terminus context. 
  */ 
-terminus_context(_{
-                     doc : Doc,
-                     scm : Schema,
-                     terminus : 'http://terminusdb.com/schema/terminus#'
-                   }) :-
+terminus_context(_{doc : Doc,
+                   scm : Schema,
+                   terminus : 'http://terminusdb.com/schema/terminus#'
+                  }) :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),
     atomic_list_concat([Server,'/terminus/schema#'],Schema).
@@ -311,3 +300,57 @@ db_created_datetime(DB_URI,DateTimeString) :-
     stamp_date_time(TimeStamp, DateTime, 0),
     format_time(atom(DateTimeString),'%FT%T%:z', DateTime).
 
+/* 
+ * open_read_transaction(+DB1, -DB2) is det.
+ * 
+ * Open read transaction for all named graphs.
+ */
+open_read_transaction(Database1, Database2) :-
+    append([Database1.instance,
+            Database1.inference,
+            Database1.schema
+           ], Graphs),
+    maplist({N}/[G, read_obj{dbid : N, graphid : G, layer : L}]>>(
+                dbid_graphid_obj(N,G,Obj)
+                head(Obj, L)
+            ), Graphs, NL),
+    Database2 = Database1.put(database{read_transaction=NL}).
+
+/* 
+ * open_write_transaction(+DB1, +Graphs, -DB2) is det.
+ * 
+ * Open a write transaction. 
+ */ 
+open_write_transaction(Database1, Graphs, Database2) :-
+    maplist([G, write_obj{dbid : _N, graphid : _G, builder : B} ]>>(
+                store(Store),
+                open_write(Store, B)                
+            ), Graphs, NL),
+    Database2 = Database1.put( database{write_transaction=NL} ).
+
+commit_write_transaction(Database1, Database2) :-
+    Database1.write_transactions = WTs,
+    maplist([write_obj{dbid: N, graphid: G, builder: B},
+             read_obj{dbid: N, graphid: G, layer: L}]>>(
+                nb_commit(B, L)
+            ), WTs,RTs),
+    Database1.read_transactions = RTs1,
+    update_read_layers(RTs1, RTs, RTs2),                     
+    Database1 = Database1.put( database{write_transactions=[]})
+                         .put( database{read_transactions=RTs2}).
+
+update_read_layers(RTs, [], RTs).
+update_read_layers(RTs1, [read_obj{dbid:N, graphid:G, layer: L}|Records], RTs2) :-
+    select(read_obj{dbid:N, graphid:G, layer: _}, RTs1, 
+           read_obj{dbid:N, graphid:G, layer: L}, RTs_I),
+    update_read_layers(RTs_I, Records, RTs2). 
+
+get_read_layer(Database,G,L) :-
+    Database.name = DBN, 
+    Database.read_transaction = RT, 
+    memberchk( read_obj{dbid: DBN, graphid: G, layer: L}, RT).
+
+get_write_builder(Database,G,W) :-
+    Database.name = DBN, 
+    Database.write_transaction = WT, 
+    memberchk( write_obj{dbid: DBN, graphid: G, builder: W}, WT).

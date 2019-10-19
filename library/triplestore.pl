@@ -2,26 +2,14 @@
               destroy_graph/2,
               check_graph_exists/2,
               make_empty_graph/2,
-              sync_from_journals/0,
+              sync_backing_store/0,
               sync_database/1,
               sync_graph/2,
               xrdf/5,
               insert/5,
               delete/5,
               update/6,
-              commit/2,
-              rollback/2,
-              graph_checkpoint/3,
-              current_checkpoint_directory/3,
-              last_checkpoint_number/2,
-              with_output_graph/2,
-              ttl_to_hdt/2,
-              with_transaction/2,
-              checkpoint/2,
-              canonicalise_subject/2,
-              canonicalise_predicate/2,
-              canonicalise_object/2,
-              triples_canonical/2
+              with_transaction/3
           ]).
 
 :- use_module(library(terminus_store)).
@@ -209,10 +197,10 @@ sync_databases :-
     ).
 
 /** 
- * sync_from_journals is det.  
+ * sync_backing_store is det.  
  * 
  */ 
-sync_from_journals :-    
+sync_backing_store :-    
     /* do something here */
     sync_storage,
     sync_terminus,
@@ -249,15 +237,49 @@ make_empty_graph(DB_ID,Graph_ID) :-
 import_graph(File, DB_ID, Graph_ID) :-
     false.
 
+object_storage(O,S) :-
+    % easier to to go this way...
+    (   nonvar(O)
+    ->  (   O = literal(L),
+            nonvar(L)
+        ->  (   L = lang(Lang,String),
+            ->  format(string(S), '"~q"@~s', [String,Lang])
+            ;   L = type(Type,String),
+                format(string(S), '"~q"^^"~q"', [String,Type]))
+        ;   true)
+    ;   true
+    ).
+
+storage_object(S,O) :- 
+    (   S = value(V)
+    ->  (   re_matchsub('^"(.*)"\\^\\^"(.*)"', V, M, []),
+            O = literal(type(M.2, M.1))
+        ->  re_matchsub('^"(.*)"@(.*)', V, M, []),
+            O = literal(lang(M.2, M.1))
+        ;   throw(error('Bad stored value ~q')))
+    ;   S = O).
+
+canonical_representation(S, S) :-
+    is_string(S), 
+canonical_representation(literal(L), value(Rep)) :-
+    (   L = lang(Lang,String),
+        format(string(Rep), '"~q"@"~q"', [String,Lang])
+    ->  L = type(Type,String),
+        format(string(Rep), '"~q"^^"~q"', [String,Type])
+    ).
+
 /** 
  * insert(+DB:atom,+G:graph_identifier,+Builder,+X,+Y,+Z) is det.
  * 
  * Insert triple into transaction layer
  */
-insert(DB,G,Builder,X,Y,Z) :-
+insert(DB,G,X,Y,Z) :-
     (   xrdf(DB,[G],X,Y,Z)
     ->  true
-    ;   nb_add_triple(Builder, X, Y, Z)
+    ;   object_storage(Z,S),
+        get_write_builder(DB,G,Builder),
+        nb_add_triple(Builder, X, Y, S),
+        storage_object(S,Z),
     ).
 
 /** 
@@ -265,9 +287,12 @@ insert(DB,G,Builder,X,Y,Z) :-
  * 
  * Delete quad from transaction predicates.
  */
-delete(DB,G,Builder,X,Y,Z) :-
+delete(DB,G,X,Y,Z) :-
     (   xrdf(DB,[G],X,Y,Z)
-    ->  nb_remove_triple(Builder,X,Y,Z)
+    ->  object_storage(Z,S),
+        get_write_builder(DB,G,Builder),
+        nb_remove_triple(Builder,X,Y,S),
+        storage_object(S,Z)
     ;   true).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
@@ -292,164 +317,127 @@ update(DB,G,X,Y,Z,Action) :-
  *
  * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
  */
-xrdf(C,Gs,X,Y,Z) :-
+xrdf(Database,Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
-    dbid_graphid_obj(C,G,Obj),
-    head(Obj,Layer),
-    triple(Layer,X,Y,Z).
+    get_read_layer(Database,G,Layer),
+    xrdf_db(Layer,X,Y,Z).
 
 /* 
- * bind_read_graph_layers(+Spec_List:list) is det. 
+ * xrdf_db(Layer,X,Y,Z) is nondet.
  * 
- * Spec_List is a skeleton DBN-GN-GL in which DBN and GN are bound 
- * and GL is supplied. 
- * 
- * We produce a GL binding to the current read layer of head.
+ * Marshalls types appropriately for terminus-store
  */ 
-bind_read_graph_layers([]).
-bind_read_graph_layers([DBN-GN-GL|Rest]) :-
-    dbid_graphid_obj(DBN,GN,Graph_Obj),
-    head(Graph_Obj,GL),
-    !,
-    bind_read_graph_layers(Rest).
-bind_read_graph_layers([DBN-GN-_|Rest]) :-
-    format(string(MSG), 'Unable to bind a read layer for DB: ~q and Graph ~q', [DBN,GN]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-bind_read_graph_layers([Spec|Rest]) :-
-    format(string(MSG), 'Unable to interpret read graph specification: ~q', [Spec]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
+xrfd_db(Layer,X,Y,Z)
+    object_storage(Z,S),
+    triple(Layer,X,Y,S),
+    storage_object(S,Z).
 
 /* 
- * bind_write_graph_layer_builders(+Spec_List:list) is det. 
+ * open_update_transaction(Transaction_Records:list) is det. 
  * 
- * Spec_List is a skeleton DBN-GN-WGLB in which DBN and GN are bound 
- * and WGLB is supplied. In fact we ignore DBN and GN, but will 
- * use them at commit time to know which associated layer builder we mean.
- * 
+ * Opens a new database Update which can be used during the transaction. 
  */ 
-bind_write_graph_layer_builders([]).
-bind_write_graph_layer_builders([_DBN-_GN-WGLB-_WL|Rest]) :-
-    store(Store),
-    open_write(Store,WGLB),
-    !,
-    bind_write_graph_layer_builders(Rest).
-bind_write_graph_layer_builders([DBN-GN-_-_|Rest]) :-
-    format(string(MSG), 'Unable to bind a write layer for DB: ~q and Graph ~q', [DBN,GN]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-bind_write_graph_layer_builders([Spec|Rest]) :-
-    format(string(MSG), 'Unable to interpret write graph specification: ~q', [Spec]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-
+open_pre_transaction([]).
+open_pre_transaction([transaction_record{
+                          pre_database : Pre,
+                          write_graphs : Write_Graphs,
+                          update_database : Update,
+                          post_database : _}
+                      | Rest]) :-
+    open_read_transaction(Pre, Intermediate),
+    open_write_transaction(Intermediate, Write_Graphs, Update),
+    open_pre_transaction(Rest).
 
 /* 
- * commit_write_graph_layer_builders(+Spec_List:list) is det. 
- * 
- * Spec_List is a skeleton DBN-GN-WGLB-WL in which DBN and GN and WGLB are bound 
- * and WL is supplied. 
- * 
- */ 
-commit_write_graph_layer_builders([]).
-commit_write_graph_layer_builders([_DBN-_GN-WGLB-WL|Rest]) :-
-    nb_commit(WGLB,WL),
-    !,
-    commit_write_graph_layer_builders(Rest).
-commit_write_graph_layer_builders([DBN-GN-_-_|Rest]) :-
-    format(string(MSG), 'Unable to commit a write layer builder for DB: ~q and Graph ~q', [DBN,GN]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-commit_write_graph_layer_builders([Spec|Rest]) :-
-    format(string(MSG), 'Unable to interpret write graph commit specification: ~q', [Spec]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-
+ * open_post_transaction(Transction_Records:list) is det. 
+ *
+ * Opens a final database to test before pushing head. 
+ */
+open_post_transaction([]).
+open_post_transaction([transaction_record{
+                           pre_database : _,
+                           update_database : Update,
+                           write_graphs : _,
+                           post_database : Post}                       
+                       |Rest]) :-
+    commit_write_transaction(Update,Post),
+    open_post_transaction(Rest).
 
 /* 
- * push_write_graph_layers(+Spec_List:list) is det. 
+ * commit_transaction(Transaction_Records:list) is det. 
  * 
- * Spec_List is a skeleton DBN-GN-WGLB-WL in which DBN and GN and WGLB are bound 
- * and WL is supplied. 
- * 
- */ 
-push_write_graph_layers([]).
-push_write_graph_layers([_DBN-_GN-WGLB-WL|Rest]) :-
-    nb_set_head(WGLB,WL),
-    !,
-    push_write_graph_layers(Rest).
-push_write_graph_layers([DBN-GN-_-_|Rest]) :-
-    format(string(MSG), 'Unable to push a write layer builder for DB: ~q and Graph ~q', [DBN,GN]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-push_write_graph_layers([Spec|Rest]) :-
-    format(string(MSG), 'Unable to interpret write graph push specification: ~q', [Spec]),
-    throw(http_reply(resource_error(_{'terminus:status' : 'terminus:error',
-                                      'terminus:message' : MSG}))).
-
+ * Commits all altered graphs to head. 
+ */
+commit_transaction([]).
+commit_transaction([transaction_record{ pre_database: _,
+                                        write_graphs: WGs,
+                                        update_database :_,
+                                        post_database: PDB }|Rest]) :-
+    maplist({PDB}/[G]>>(
+                store(Store),
+                open_named_graph(Store,G,G_Obj),
+                get_read_layer(PDB,G,Layer)
+                nb_set_head(DG_Obj, Layer),
+            ), WGs),
+    commit_transaction(Rest).
+                  
 
 /** 
- * hoare_transaction(+Options,:Pre,:Update,:Post) is semidet.
+ * with_transaction(+Options,:Query_Update,:Post) is semidet.
  * 
- * If Succeeds if Pre, Executes Update and tests Posts resulting in 
+ * Succeeds if Update and tests Post resulting in 
  * member(witnesses(Witnesses), Options)
  * 
  * Options is a list which contains any of:
  * 
- *  * read_graphs([DB_ID-Graph_ID0-RL0,
- *                 DB_ID-Graph_ID1-RL1,
- *                 ....
- *                 DB_ID-Graph_IDN-RLN])
+ *  * transaction_records([transaction_record{ pre_database : Pre_Database_1, 
+ *                                             write_graphs : [Graph_Id_1_1... Graph_Id_1_k], 
+ *                                             update_database : Update_Database_1, 
+ *                                             post_database : Post_Database_1 }, 
+ *                         ...
+ *                         transaction_record{ pre_database : Pre_Database_n, 
+ *                                             write_graphs : [Graph_Id_n_1 ... Graph_Id_n_j], 
+ *                                             update_database : Update_Database_n, 
+ *                                             post_database : Post_Database_n }])
  * 
- *  Specifying each of the writeable graphs which is in the transaction
- *  and binding the associated write layer-builder.
- *
- * 
- *  * write_graphs([DB_ID-Graph_ID0-WLB0-WL0,
- *                  DB_ID-Graph_ID1-WLB1-WL1, 
- *                  ...
- *                  DB_ID-Graph_IDN-WLBN-WLN
- *                 ])
- * 
- *  Specifying each of the writeable graphs which is in the transaction
- *  and binding the associated write layer-builder.
+ *  Specifying each of the databases which exist in the pre, update and post phases.
+ *  Each database object binds in turn the layers and builders of the transaction 
+ *  in its associated read_obj / write_obj fields.
  * 
  *  * witnesses(Witnesses)
  *  
  *  Which gives a list of the witnesses of failure. 
  * 
  */
-hoare_transaction(Options,Pre,Update,Post) :-
-    (   memberchk(read_graphs(Read_Graph_Objs),Options)
+with_transaction(Options,Query_Update,Post) :-
+    (   memberchk(transaction_records(Records), Options)
     ->  true
-    ;   Read_Graph_Objs=[]),
+    ;   format(string(MSG), "No transaction records in options: ~q", [Options]),
+        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
 
-    bind_read_graph_layers(Read_Graph_Objs),
-    
-    (   memberchk(write_graphs(Write_Graph_Objs),Options)        
-    ->  true
-    ;   Write_Graph_Objs = []),
-
-    bind_write_graph_layer_builders(Write_Graph_Objs),
-
-    (   memberchk(witnesses(_), Options)
-    ->  Transaction_Options = Options
-    ;   Transaction_Options = [witnesses([])|Options]
-    ),
-    
-    call(Pre),
+    % get read layer and layer builders for transaction
+    (   open_pre_transaction(Records)
+    ->  format(string(MSG), "Unable to process pre transaction records: ~q", [Records]),
+        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
     
     (   call(Update)
-    ->  commit_write_graph_layer_builders(Write_Graph_Objs)
+    ->  true
     ;   format(string(MSG), "Unable to perform the update requested: ~q", [Update]),
         throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))),
     
+    (   open_post_transaction(Records)
+    ->  true
+    ;   format(string(MSG), "Unable to process post transaction records: ~q", [Records]),
+        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+        
     (   call(Post),
     ->  (   memberchk(witnesses([]),Options),
-        ->  push_write_graph_layers(Write_Graph_Objs)
+        ->  push_transaction(Records)
         ;   true)
     ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
         throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',

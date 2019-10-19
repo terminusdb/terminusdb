@@ -37,9 +37,8 @@
                   xrdf/5,
                   insert/5,
                   delete/5,
-                  with_output_graph/2,
-                  sync_from_journals/2,
-                  with_transaction/2
+                  sync_database/1,
+                  with_transaction/3
               ]).
 :- use_module(library(schema), [subsumptionOf/3]).
 :- use_module(library(relationships), [
@@ -526,9 +525,8 @@ compile_node(X:C,XE,Goals) -->
     expand(C,CE),
     view(database=G),
     {
-        database_name(G,C),
         database_instance(G,I),
-        Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
+        Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                  once(subsumptionOf(D,CE,G))
                 ]
     }.
@@ -552,7 +550,7 @@ compile_node_or_lit(_,X,XE,[]) -->
     resolve(X,XE).
 
 /* currently the same as compile node */
-compile_relation(X:C,XE,Class,Goals) -->
+compile_relation(X:_C,XE,Class,Goals) -->
     resolve(X,XE),
     %expand(C,CE),
     resolve(Class,ClassE),
@@ -560,9 +558,8 @@ compile_relation(X:C,XE,Class,Goals) -->
     {
         (   X=ignore
         ->  Goals=[]
-        ;   database_name(G,C),
-            database_instance(G,I),
-            Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
+        ;   database_instance(G,I),
+            Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                      once(subsumptionOf(D,ClassE,G))
                     ]
         )
@@ -738,11 +735,10 @@ compile_wf(t(X,P,Y,G),Goal) -->
     {        
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        database_name(Database,C),
-        (   database_record_instance_list(C,L),
+        (   database_instance(Database,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
-        ;   Search=xrdf(C,[GE],XE,PE,YE)),
+        ;   Search=xrdf(Database,[GE],XE,PE,YE)),
         
         append([[Search],XGoals,YGoals],
                GoalList),
@@ -758,8 +754,8 @@ compile_wf(r(X,R,Y),Goal) -->
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     {
-        database_name(G,C),                
         database_instance(G,I),
+        database_name(G,C),                
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -774,8 +770,8 @@ compile_wf(r(X,R,Y),Goal) -->
         ;   format(atom(M), 'No relationship target property ~q in ~q', [RClassID,G]),
             throw(error(M))),
 
-        append([[xrdf(C,I,RE,P,XE),
-                 xrdf(C,I,RE,Q,YE),
+        append([[xrdf(G,I,RE,P,XE),
+                 xrdf(G,I,RE,Q,YE),
                  is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
                  T0=[triple(C,I,XE,RE,YE,'==>')|T1]
                 ],XGoals,RGoals,YGoals],

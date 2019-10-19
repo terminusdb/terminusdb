@@ -62,30 +62,25 @@ create_db(DB_URI) :-
     touch(DB_File),
 
     initialise_prefix_db(DB_URI),
-    
+    store(Store),
+
     % Set up schemata
     forall(
         (
             database_record_schema_list(DB_URI,Schemata),
             member(Schema,Schemata)
         ),
-        (   
-            % create the graph if it doesn't exist
-            graph_directory(DB_URI,Schema,Schema_Path),
-            ensure_directory(Schema_Path),
-            make_checkpoint_directory(DB_URI, Schema, _),
-
-            with_output_graph(
-                graph(DB_URI,Schema,ckp,ttl),
-                (
-                    interpolate([DB_URI],Label),
-                    interpolate([Schema,' ontology for ',DB_URI],Comment),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdf:type,owl:'Ontology'),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:label,literal(lang(en,Label))),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:comment,literal(lang(en,Comment)))
-                )
-            ),
-            sync_from_journals(DB_URI,Schema)
+        (
+            interpolate([DB_URI],Label),
+            interpolate([Schema,' schema ',DB_URI],Comment),
+            
+            open_write(Store,Builder),
+            open_named_graph(Store,Schema,DB),
+            nb_add_triple(Builder,DB_URI,rdf:type,owl:'Ontology'),
+            nb_add_triple(Builder,DB_URI,rdfs:label,literal(lang(en,Label))),
+            nb_add_triple(Builder,DB_URI,rdfs:comment,literal(lang(en,Comment))),
+            nb_commit(Builder,Layer),
+            nb_set_head(DB,Layer)
         )
     ),
 
@@ -95,27 +90,17 @@ create_db(DB_URI) :-
             database_record_instance_list(DB_URI,Instances),
             member(Instance,Instances)
         ),
-        (   
-            % create the graph if it doesn't exist
-            graph_directory(DB_URI,Instance,Instance_Path),
-            ensure_directory(Instance_Path),
-            make_checkpoint_directory(DB_URI, Instance, _),
-
-            % Just make an empty checkpoint.
-            with_output_graph(
-                graph(DB_URI,Instance,ckp,ttl),
-                (
-                    true
-                )
-            ),
-            
-            sync_from_journals(DB_URI,Instance)
+        (
+            open_write(Store,Builder),
+            open_named_graph(Store,Instance,DB),
+            nb_commit(Builder,Layer),
+            nb_set_head(DB,Layer)
         )
     ).
-    
-delete_db(DB) :-
-    collection_directory(DB,DB_Path),
-    delete_directory_and_contents(DB_Path).
+
+delete_db(_DB) :-
+    % TODO: no-op for now, but should actually free the storage.
+    true.
 
 /* 
  * should probably go in JSON-LD

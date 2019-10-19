@@ -39,9 +39,8 @@
 runChain(X,[P],Y,Database) :-
     inferredEdge(X,P,Y,Database).
 runChain(X,[P|PropList],Z,Database) :-
-    database_name(Database,C),
     database_instance(Database,I),
-    xrdf(C,I,X,P,Y),
+    xrdf(Database,I,X,P,Y),
     runChain(Y,PropList,Z,Database).
 
 /** 
@@ -51,9 +50,8 @@ runChain(X,[P|PropList],Z,Database) :-
  * Concrete links are already in InferredEdge
  */ 
 inferredTransitiveEdge(X,OP,Z,Database) :-
-    database_name(Database,Collection),
     database_inference(Database,Inference),
-    xrdf(Collection, Inference,
+    xrdf(Database, Inference,
          SOP,rdfs:subPropertyOf,OP),
     inferredEdge(X,SOP,Y,Database),
     inferredEdge(Y,OP,Z,Database).
@@ -66,27 +64,22 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
 inferredEdge(X,OP,Y,Database) :-
-    database_name(Database,Collection),
     database_instance(Database,Instance),
-    xrdf(Collection,Instance,X,OP,Y).
+    xrdf(Database,Instance,X,OP,Y).
 inferredEdge(X,OP,Y,Database) :-
-    database_name(Database,Collection),
     database_inference(Database,Inference),
-    xrdf(Collection,Inference,OP,rdf:type,owl:'TransitiveProperty'),
+    xrdf(Database,Inference,OP,rdf:type,owl:'TransitiveProperty'),
     inferredTransitiveEdge(X,OP,Y,Database).
 inferredEdge(X,OP,Y,Database) :-
-    database_name(Database,Collection),
     database_inference(Database,Inference),
-    xrdf(Collection,Inference,OP,owl:'inverseOf',P),
+    xrdf(Database,Inference,OP,owl:'inverseOf',P),
     inferredEdge(Y,P,X,Database).
 inferredEdge(X,OP,Y,Database) :-
-    database_name(Database,Collection),
     database_inference(Database,Inference),
-    xrdf(Collection,Inference,OP,owl:propertyChainAxiom,ListObj),
-    collect(Collection,Inference,ListObj,PropList),
+    xrdf(Database,Inference,OP,owl:propertyChainAxiom,ListObj),
+    collect(Database,Inference,ListObj,PropList),
     runChain(X,PropList,Y,Database).
 inferredEdge(X,OP,Y,Database) :-
-    database_name(Database,Collection),
     database_inference(Database,Inference),
-    xrdf(Collection,Inference,SOP,rdfs:subPropertyOf,OP),
+    xrdf(Database,Inference,SOP,rdfs:subPropertyOf,OP),
     inferredEdge(X,SOP,Y,Database).

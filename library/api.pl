@@ -579,8 +579,9 @@ try_delete_document(Doc_ID, Database, Witnesses) :-
     ;   default_instance_graph(Database, Document_Graph)
     ),
     
-    (   document_transaction(Database, Document_Graph,
-                             frame:delete_object(Doc_ID,Database), Witnesses)
+    (   document_transaction(Database, Transaction_DB, Document_Graph,
+                             frame:delete_object(Doc_ID,Transaction_DB),
+                             Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
@@ -616,7 +617,8 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     ),
     
     % We probably need to be able to pass the document graph as a parameter
-    (   document_transaction(Database, Document_Graph, frame:update_object(Doc,Database), Witnesses)
+    (   document_transaction(Database, Transaction_DB, Document_Graph,
+                             frame:update_object(Doc,Transaction_DB), Witnesses)
     ->  true
     ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,

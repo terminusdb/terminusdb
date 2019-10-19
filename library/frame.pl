@@ -21,7 +21,6 @@
               % As JSON-LD with a context and depth parameter
               document_jsonld/5,
               class_frame_jsonld/3,
-              triples_canonical/2,
               object_edges/3,
               delete_object/2,
               update_object/2,
@@ -115,20 +114,18 @@ get_some_label(E,Database,L) :-
  * Class is an document class and Label is a string.
  */
 all_document_instances(Database,AE) :-
-    database_name(Database,Collection),    
     database_instance(Database,Instance),
     unique_solutions(E=[type=C,label=L],
-                     (   xrdf(Collection,Instance,
+                     (   xrdf(Database,Instance,
                               E,rdf:type,C),
                          schema_util:document(C,Database),
                          get_some_label(E,Database,L)),
                      AE).
 
 all_document_iris(Database, IRIs) :-
-    database_name(Database,Collection),            
     database_instance(Database, Instance),
     findall(IRI,
-            (   xrdf(Collection,Instance,
+            (   xrdf(Database,Instance,
                      IRI,rdf:type,C),
                 schema_util:document(C, Database)
             ),
@@ -162,10 +159,9 @@ class_properties(Class, Database, PropertiesPrime) :-
               Properties)        
     ->  most_specific_properties(Database,Properties,MSProperties),
         append(MSProperties,DocumentProperties,PropertiesWithAbstract),
-        database_name(Database,Collection),                
         database_schema(Database,Schema),
-        exclude({Schema,Collection}/[X]>>(
-                    xrdf(Collection,
+        exclude({Schema,Database}/[X]>>(
+                    xrdf(Database,
                          Schema,
                          X,tcs:tag,tcs:abstract)),
                 PropertiesWithAbstract,
@@ -187,59 +183,50 @@ has_formula(Class,Database) :-
 %
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:someValuesFrom,C).
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:someValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:allValuesFrom,C).
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:allValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:minCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:minCardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:maxCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:maxCardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:cardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:cardinality,literal(type(_Type, CardStr))),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:minQualifiedCardinality,literal(type(_Type, CardStr))),
-    xrdf(Collection,Schema,CR,owl:onClass,C),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:minQualifiedCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:maxQualifiedCardinality,literal(type(_Type,CardStr))),
-    xrdf(Collection,Schema,CR,owl:onClass,C),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality,literal(type(_Type,CardStr))),
+    xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:qualifiedCardinality,literal(type(_Type,CardStr))),
-    xrdf(Collection,Schema,CR,owl:onClass,C),
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:qualifiedCardinality,literal(type(_Type,CardStr))),
+    xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    xrdf(Collection,Schema,CR,owl:onProperty,OP),
-    xrdf(Collection,Schema,CR,owl:hasValue,V).
+    xrdf(Database,Schema,CR,owl:onProperty,OP),
+    xrdf(Database,Schema,CR,owl:hasValue,V).
 
 % ignore modeline
 % is_class_formula(+Formula:any) is semidet. 
@@ -374,10 +361,9 @@ property_restriction(P,Database,R) :-
 classes_below(Class,Database,BelowList) :-
     unique_solutions(Below,schema:subsumptionOf(Below,Class,Database),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
-    database_name(Database,Collection),
     database_schema(Database,Schema),
-    exclude({Collection, Schema}/[X]>>(
-                xrdf(Collection, Schema,
+    exclude({Database, Schema}/[X]>>(
+                xrdf(Database, Schema,
                      X,tcs:tag,tcs:abstract)),
             ClassesNoBottom,
             BelowList).
@@ -823,9 +809,9 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Ty
     !, % no turning back if we are an object property
     database_name(Database,C),
     database_instance(Database,G),
-    
+
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
-    xrdf(C,G,Elt,RDFType,Type),
+    xrdf(Database,G,Elt,RDFType,Type),
     
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
@@ -847,7 +833,7 @@ realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,
     database_instance(Database,G),
         
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
-    xrdf(C,G,Elt,RDFType,Type),
+    xrdf(Database,G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     (   setof((C,G,Elt,Prop,V),
@@ -902,8 +888,8 @@ document_jsonld(Document,Ctx,Database,JSON_LD) :-
     document_object(Document, Database, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
-    database_name(Database, Collection),
-    get_collection_jsonld_context(Collection,Ctx_Database),
+    database_name(Database, Name),
+    get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
 
     compress(JSON_Ex,Ctx_Total,JSON_LD).
@@ -919,8 +905,8 @@ document_jsonld(Document,Ctx,Database,Depth,JSON_LD) :-
     document_object(Document, Database, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     
-    database_name(Database, Collection),
-    get_collection_jsonld_context(Collection,Ctx_Database),
+    database_name(Database, Name),
+    get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
 
     compress(JSON_Ex,Ctx_Total,JSON_LD).
@@ -944,9 +930,9 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
     class_frame(Class,Database,Frame),
     term_jsonld(Frame,JSON_LD),
     
-    database_name(Database, Collection),
-    get_collection_jsonld_context(Collection,Ctx),
-    
+    database_name(Database, Name),
+    get_collection_jsonld_context(Name,Ctx),
+
     compress(JSON_LD,Ctx,JSON_Frame).
 
 /* 
@@ -958,9 +944,8 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
 object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
-        realise_triples(URI,Frame,Database,Apocryphal),
-        triples_canonical(Apocryphal, Canonical),
-        sort(Canonical,Edges)
+        realise_triples(URI,Frame,Database,Unsorted),
+        sort(Unsorted,Edges)
     ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
@@ -985,11 +970,10 @@ object_references(URI,Database,Edges) :-
 object_instance_graph(URI,Database,I) :-
     atom(URI),
     !,
-    database_name(Database,Name),
     database_instance(Database,Instance),
     member(I,Instance),
     % Defo exists here.
-    once(xrdf(Name,[I],URI,rdf:type,_)).
+    once(xrdf(Database,[I],URI,rdf:type,_)).
 object_instance_graph(JSON,Database,I) :-
     is_dict(JSON),    
     get_dict('@id', JSON, URI),
@@ -1000,14 +984,13 @@ object_instance_graph(JSON,Database,I) :-
  * 
  */
 delete_object(URI,Database) :-
-    database_name(Database,Collection),
-    get_collection_jsonld_context(Collection,Ctx),
+    get_collection_jsonld_context(Database,Ctx),
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
-    
-    maplist([(C,[G],X,Y,Z)]>>delete(C,G,X,Y,Z), Edges).
+    database_name(Database,DB_Name),
+    maplist({DB_Name,Database}/[(DB_Name,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Edges).
 
 /* 
  * update_object(Obj:dict,Database) is det.
@@ -1029,8 +1012,8 @@ update_object(Obj, Database) :-
  * Does the actual updating using ID. 
  */
 update_object(ID, Obj, Database) :-
-    database_name(Database,Collection),
-    get_collection_jsonld_context(Collection,Ctx),
+    database_name(Database,Database),
+    get_collection_jsonld_context(Database,Ctx),
     prefix_expand(ID,Ctx,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),

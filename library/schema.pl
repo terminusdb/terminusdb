@@ -47,31 +47,31 @@ capitalize(Atom, Capitalized) :-
     upcase_atom(First, First_Upper),
     atom_chars(Capitalized, [First_Upper|Rest]).
 
-compile_schema_type_to_module(Collection, Schema, Namespace, Type, Module) :-
+compile_schema_type_to_module(Database, Schema, Namespace, Type, Module) :-
     Module:dynamic(Type/1),
     capitalize(Type, Capitalized_Type),
     global_prefix_expand(Namespace:Capitalized_Type, Prefixed_Type),
     global_prefix_expand(rdf:type, RDF_TYPE),
-    forall(xrdf(Collection, Schema, Thing, RDF_TYPE, Prefixed_Type),
+    forall(xrdf(Database, Schema, Thing, RDF_TYPE, Prefixed_Type),
            (   X =.. [Type, Thing],
                asserta(Module:X))).
 
-compile_schema_types_to_module(Collection, Schema, Namespace, Types, Module) :-
+compile_schema_types_to_module(Database, Schema, Namespace, Types, Module) :-
     forall(member(Type, Types),
-           compile_schema_type_to_module(Collection, Schema, Namespace, Type, Module)).
+           compile_schema_type_to_module(Database, Schema, Namespace, Type, Module)).
     
 
-compile_schema_types_to_module(Collection, Schema, Module) :-
+compile_schema_types_to_module(Database, Schema, Module) :-
     rdfs_types(Rdfs_Types),
-    compile_schema_types_to_module(Collection, Schema, rdfs, Rdfs_Types, Module),
+    compile_schema_types_to_module(Database, Schema, rdfs, Rdfs_Types, Module),
 
     owl_types(Owl_Types),
-    compile_schema_types_to_module(Collection, Schema, owl, Owl_Types, Module).
+    compile_schema_types_to_module(Database, Schema, owl, Owl_Types, Module).
 
-compile_schema_basic_property_to_module(Collection, Schema, Property_Namespace, Property_Name, Module) :-
+compile_schema_basic_property_to_module(Database, Schema, Property_Namespace, Property_Name, Module) :-
     Module:dynamic(Property_Name/2),
     forall((   global_prefix_expand(Property_Namespace:Property_Name,Prop),
-               xrdf(Collection, Schema, Subject, Prop, Object)),
+               xrdf(Database, Schema, Subject, Prop, Object)),
            (   X =.. [Property_Name, Subject, Object],
                asserta(Module:X))).
 
@@ -83,38 +83,37 @@ basic_property(Namespace, Property) :-
         Namespace = owl,
         member(Property, Properties)).
 
-compile_schema_basic_properties_to_module(Collection, Schema, Module) :-
+compile_schema_basic_properties_to_module(Database, Schema, Module) :-
     forall(basic_property(Namespace, Property),
-           compile_schema_basic_property_to_module(Collection, Schema, Namespace, Property, Module)).
+           compile_schema_basic_property_to_module(Database, Schema, Namespace, Property, Module)).
 
-rdf_prolog_list(Collection, Database_Id, Object, [Head|Tail]) :-
+rdf_prolog_list(Database, Database_Id, Object, [Head|Tail]) :-
     global_prefix_expand(rdf:first,RDF_First),
     global_prefix_expand(rdf:rest,RDF_Rest),
     global_prefix_expand(rdf:nil,RDF_Nil),
-    once(xrdf(Collection, Database_Id, Object, RDF_First, Head)),
-    (   once(xrdf(Collection, Database_Id, Object, RDF_Rest, RDF_Nil))
+    once(xrdf(Database, Database_Id, Object, RDF_First, Head)),
+    (   once(xrdf(Database, Database_Id, Object, RDF_Rest, RDF_Nil))
     ->  Tail=[]
-    ;   once(xrdf(Collection, Database_Id, Object, RDF_Rest, Rest)),
-        rdf_prolog_list(Collection, Database_Id, Rest, Tail)).
+    ;   once(xrdf(Database, Database_Id, Object, RDF_Rest, Rest)),
+        rdf_prolog_list(Database, Database_Id, Rest, Tail)).
 
-compile_schema_list_property_to_module(Collection, Schema, Namespace, Property, Module) :-
+compile_schema_list_property_to_module(Database, Schema, Namespace, Property, Module) :-
     Module:dynamic(Property/2),
     global_prefix_expand(Namespace:Property,Prop),              
-    forall(xrdf(Collection, Schema, Subject, Prop, Object),
-           (   rdf_prolog_list(Collection, Schema, Object, Options),
+    forall(xrdf(Database, Schema, Subject, Prop, Object),
+           (   rdf_prolog_list(Database, Schema, Object, Options),
                X =.. [Property, Subject, Options],
                asserta(Module:X))).
 
-compile_schema_list_properties_to_module(Collection, Schema, Module) :-
+compile_schema_list_properties_to_module(Database, Schema, Module) :-
     % as far as I can tell, only four owl properties have a list as range
     owl_list_properties(Properties),
     forall(member(Property, Properties),
-           compile_schema_list_property_to_module(Collection, Schema, owl, Property, Module)).
+           compile_schema_list_property_to_module(Database, Schema, owl, Property, Module)).
 
 add_metadata_to_module(Database, Module) :-
-    database_name(Database, Collection),
     database_schema(Database, Schema),
-    Module:asserta(schema(Collection, Schema)).
+    Module:asserta(schema(Database, Schema)).
 
 precalculate_subsumptions(Database, Module) :-
     Module:dynamic(subsumptionOf/2),
@@ -141,12 +140,11 @@ compile_util_predicates(Module) :-
 compile_schema_to_module(Database, Module) :-
     % use the transaction mutex to ensure that no transaction is running while a schema module is updated.
     with_mutex(transaction,
-               (   database_name(Database, Collection),
-                   database_schema(Database, Schema),                   
+               (   database_schema(Database, Schema),                   
                    cleanup_schema_module(Module),
-                   compile_schema_types_to_module(Collection, Schema, Module),
-                   compile_schema_basic_properties_to_module(Collection, Schema, Module),
-                   compile_schema_list_properties_to_module(Collection, Schema, Module),
+                   compile_schema_types_to_module(Database, Schema, Module),
+                   compile_schema_basic_properties_to_module(Database, Schema, Module),
+                   compile_schema_list_properties_to_module(Database, Schema, Module),
                    precalculate_subsumptions(Database, Module),
                    compile_util_predicates(Module),
                    add_metadata_to_module(Database, Module))).
@@ -157,17 +155,16 @@ schema_defined(Module) :-
     metadata_predicates(Predicates),
     forall(member(P, Predicates), current_predicate(Module:P)).
 
-schema_metadata(Module, Collection, Schema) :-
-    Module:schema(Collection, Schema).
+schema_metadata(Module, Database, Schema) :-
+    Module:schema(Database, Schema).
 
 /* 
  * ensure_schema_in_module(+Database,-Module) is det.
  */ 
 ensure_schema_in_module(Database, Module) :-
-    database_module(Database, Module),            
-    database_name(Database, Collection),
+    database_module(Database, Module),
     database_schema(Database, Schema),
     (   (   schema_defined(Module),
-            schema_metadata(Module, Collection, Schema))
+            schema_metadata(Module, Database, Schema))
     ->  true
     ;   compile_schema_to_module(Database, Module)).

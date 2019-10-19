@@ -441,4 +441,3 @@ coerce_atom(Atom_Or_String, Atom) :-
 snoc([],Last,[Last]).
 snoc([First|Tail],Last,[First|Rest]) :-
     snoc(Tail,Last,Rest).
-
