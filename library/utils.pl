@@ -28,7 +28,9 @@
               xfy_list/3,
               snoc/3,
               op(920,fy, *),
-              '*'/1
+              '*'/1,
+              op(700,xfy,<>),
+              '<>'/2
           ]).
 
 /** <module> Utils 
@@ -64,6 +66,17 @@
  * Ueful for declarative debugging. 
  */ 
 *_.
+
+/* 
+ * '<>'(:Goal1,:Goal2) is det
+ * 
+ * Deterministic 
+ */
+:- meta_predicate '<>'(0,0).
+'<>'(Goal1, Goal2) :-
+    (   call(Goal1)
+    ->  true
+    ;   call(Goal2)).
 
 /** 
  * elt(+Key,+Set) is semidet.

@@ -46,11 +46,12 @@ connect(DB,New_Ctx) :-
            prefixes=Prefixes, Ctx1),
 
     make_database_from_database_name(DB,DB_Obj),
-
+    maybe_open_read_transaction(DB_Obj,DBR),
+    
     database_instance(DB_Obj,I),
     
     select(database=_,Ctx1,
-           database=DB_Obj,Ctx2),
+           database=DBR,Ctx2),
     select(write_graph=_,Ctx2,
            write_graph=I,Ctx3),
     select(collection=_,Ctx3,

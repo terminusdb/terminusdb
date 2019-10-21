@@ -5,6 +5,7 @@
               set_collection_prefixes/2,
               delete_collection_prefixes/1,
               get_collection_prefixes/2,
+              get_collection_prefix_pairs/2,
               get_collection_prefix_list/2,
               global_prefix_expand/2,
               literal_expand/2,
@@ -54,6 +55,12 @@
 
 :- use_module(library(jsonld)).
 
+:- use_module(library(database), [
+                  database_name_list/1,
+                  terminus_database_name/1
+              ]).
+
+% efficiency
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
@@ -102,6 +109,7 @@ literal_expand(literal(lang(L,D)), literal(lang(L,D))).
  * should use a different name?
  */
 initialise_prefix_db(C) :-
+    retractall_prefix(C,_,_),
     forall(
         default_prefixes(C,P,U),
         assert_prefix(C,P,U)
@@ -119,12 +127,14 @@ initialise_prefix_db :-
         % create the file
     ->  touch(File),
         db_attach(File, []),
+        terminus_database_name(Terminus_Name),
+        initialise_prefix_db(Terminus_Name), 
         % Add default prefixes to all collections
         % (prefixes are collection dependent)
-        collections(Collections),
+        database_name_list(Names),
         forall(
-            member(C,Collections),
-            initialise_prefix_db(C)
+            member(N,Names),
+            initialise_prefix_db(N)
         )
         % Attach to the already existing file.
     ;   db_attach(File, [])

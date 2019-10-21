@@ -37,8 +37,7 @@
                   xrdf/5,
                   insert/5,
                   delete/5,
-                  sync_database/1,
-                  with_transaction/3
+                  sync_database/1
               ]).
 :- use_module(library(schema), [subsumptionOf/3]).
 :- use_module(library(relationships), [
@@ -322,19 +321,20 @@ resolve(X,Xe) -->
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
     [],
     {
-        integer(X)
+        integer(X),
+        !
     }.
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#decimal',X))) -->
     [],
     {
-        number(X)
+        number(X),
+        !
     }.
-resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
+resolve(X,X) -->
     [],
     {
         string(X),
-        % this looks likes it does nothing...
-        string_to_atom(Y,X)
+        !
     }.
 resolve(X@L,literal(lang(LE,XS))) -->
     resolve(X,XE),
@@ -836,27 +836,35 @@ compile_wf((A,B),(ProgA,ProgB)) -->
         %format('***************~nConjunctive Program: ~n~q~n',[(ProgA,ProgB)])
     }.
 compile_wf((A => B),Goal) -->
+    view(database=Database),
     compile_wf(A,ProgA),
+    update(database=Database,
+           database=UpdateDB),
     % This second one should be simpler, to reflect that only writes are allowed on the right. 
     compile_wf(B,ProgB),
-    view(database=Database),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
     view(write_graph=[WG]),
     {
         Goal = (
-            validate:document_transaction(Database,WG,
-                                          woql_compile:(
-                                              forall(ProgA,
-                                                     ProgB)
-                                          ),Witnesses),
+            validate:document_transaction(
+                         Database,
+                         UpdateDB,
+                         WG,
+                         woql_compile:(
+                             forall(ProgA,
+                                    ProgB)
+                         ),
+                         Witnesses),
             (   Witnesses = []
             ->  true
             ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                       'terminus:witnesses' : Witnesses})))
             )
         )
-    }.
+    },
+    update(database=_,
+           database=Database).
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).

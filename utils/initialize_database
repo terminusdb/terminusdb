@@ -3,10 +3,24 @@
 
 :- initialization(main).
 
-:- use_module(library(crypto)).
 :- use_module(library(filesex)).
+
+% Set up access to the libraries
+:- prolog_load_context(directory, Dir),
+   atomic_list_concat([Dir,'/../library'],One_Up),
+   absolute_file_name(One_Up,Lib),
+   asserta(user:file_search_path(library, Lib)).
+
+:- use_module(library(crypto)).
 :- use_module(library(process)).
 :- use_module(library(optparse)).
+:- use_module(library(terminus_store)).
+:- use_module(library(semweb/turtle)).
+:- use_module(library(literals)).
+
+/*****************************************************
+ * Utils
+ *****************************************************/ 
 
 /*
  * command(Cmd) is semidet.
@@ -35,6 +49,38 @@ hostname(Hostname) :-
         ;   Hostname = localhost)
     ;   Hostname = localhost).
 
+safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
+    www_form_encode(Graph_ID,Safe_Graph_ID),
+    create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+
+/** 
+ * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
+ * 
+ * Reads in Turtle String and writes initial database.
+ */
+create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
+    open_directory_store(Path,Store),
+    safe_create_named_graph(Store,Graph_ID,Graph_Obj),
+    open_write(Store, Builder),
+
+    % write to a temporary builder.
+    rdf_process_turtle(
+        TTL_Path,
+        {Builder}/
+        [Triples,_Resource]>>(
+            forall(member(T, Triples),
+                   (   normalise_triple(T, rdf(X,P,Y)),
+                       object_storage(Y,S), 
+                       nb_add_triple(Builder, X, P, S)))),
+        []),
+    % commit this builder to a temporary layer to perform a diff.
+    nb_commit(Builder,Layer),
+    nb_set_head(Graph_Obj, Layer).
+
+
+/*****************************************************
+ * Opts 
+ *****************************************************/ 
 opt_spec([[opt(help),
            type(boolean),
            shortflags([h]),
@@ -88,6 +134,10 @@ Set the administrative key - necessary before superuser can begin to set other p
 
 ~s', [Name,Help_Text]).
 
+/*****************************************************
+ * Paths and Main
+ *****************************************************/ 
+
 example_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../config/terminus_instance_template.ttl'], Path).
 
@@ -97,15 +147,15 @@ example_inference_ttl(Dir,Path) :-
 example_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
 
-database_path(Dir,Host,Path) :-
-    www_form_encode(Host,Safe_Host),
-    atomic_list_concat([Dir,'/../storage/http%3a%2f%2f',Safe_Host,'%2fterminus/'], Path).
+database_path(Dir,Path) :-
+    atomic_list_concat([Dir,'/../storage/db/'], Pre_Path),
+    absolute_file_name(Pre_Path,Path).
 
-instance_path(Dir,Host,Path) :-
-    database_path(Dir,Host,DB),
-    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
-    www_form_encode(DBF,DBS),
-    atomic_list_concat([DB,DBS,'document/1/'], Path).
+instance_path(Dir,Path) :-
+    atomic_list_concat([Dir,'/../tmp/instance.ttl'], Path).
+
+instance_name(Host,Name) :-
+    atomic_list_concat(['http://',Host,'/terminus/document'],Name).
 
 config_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config.pl'], Path).
@@ -119,20 +169,20 @@ index_path(Dir,Path) :-
 index_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../index.tpl'], Path).
 
-inference_path(Dir,Host,Path) :-
-    database_path(Dir,Host,DB),
-    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
-    www_form_encode(DBF,DBS),
-    atomic_list_concat([DB,DBS,'inference/1/'], Path).
+inference_path(Dir,Path) :-
+    atomic_list_concat([Dir,'/../tmp/inference.ttl'], Path).
+
+inference_name(Host,Name) :-
+    atomic_list_concat(['http://',Host,'/terminus/inference'],Name).
 
 ttl_path(Dir, Path) :-
     atomic_list_concat([Dir,'1-ckp.ttl'], Path).
 
-schema_path(Dir,Host,Path) :-
-    database_path(Dir,Host,DB),
-    atomic_list_concat(['http://',Host,'/terminus/'],DBF),
-    www_form_encode(DBF,DBS),
-    atomic_list_concat([DB,DBS,'schema/1/'], Path).
+schema_path(Dir,Path) :-
+    atomic_list_concat([Dir,'/../tmp/schema.ttl'], Path).
+
+schema_name(Host,Name) :-
+    atomic_list_concat(['http://',Host,'/terminus/schema'],Name).
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
@@ -193,19 +243,21 @@ main(Args) :-
         ;   Server = Server_Arg),
 
         example_instance_ttl(Dir,Example_Instance_TTL),
+
         example_inference_ttl(Dir,Example_Inference_TTL),
         example_schema_ttl(Dir,Example_Schema_TTL),
 
         memberchk(port(Port_Arg), Opts),
         atomic_list_concat([Server, ":", Port_Arg], ServerPort),
+
+        database_path(Dir,DB_Path),
+        make_directory_path(DB_Path),
+        delete_directory_contents(DB_Path),
         
-        database_path(Dir,ServerPort,DB_Path),
-        instance_path(Dir,ServerPort,Instance_Path),
-        ttl_path(Instance_Path, Instance_TTL_Path),
-        inference_path(Dir,ServerPort,Inference_Path),
-        ttl_path(Inference_Path, Inference_TTL_Path),
-        schema_path(Dir,ServerPort,Schema_Path),
-        ttl_path(Schema_Path, Schema_TTL_Path),
+        instance_path(Dir,Instance_TTL_Path),
+        inference_path(Dir,Inference_TTL_Path),
+        schema_path(Dir,Schema_TTL_Path),
+
         config_template_path(Dir, Config_Tpl_Path),
         config_path(Dir,Config_Path),
         index_template_path(Dir, Index_Tpl_Path),
@@ -219,15 +271,6 @@ main(Args) :-
         write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
                          Port_Arg, Key),
         
-        make_directory_path(Instance_Path),
-        make_directory_path(Inference_Path),
-        make_directory_path(Schema_Path),
-        delete_directory_contents(Instance_Path),
-        delete_directory_contents(Inference_Path),
-        delete_directory_contents(Schema_Path),
-        atomic_list_concat([DB_Path, 'COLLECTION'], Collection_File),
-        open(Collection_File, write, Collection_Stream),
-        close(Collection_Stream),
         copy_file(Example_Instance_TTL, Instance_TTL_Path),
         copy_file(Example_Inference_TTL, Inference_TTL_Path),
         copy_file(Example_Schema_TTL, Schema_TTL_Path),
@@ -235,6 +278,12 @@ main(Args) :-
         replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
         replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
         replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
+        instance_name(ServerPort,Instance_Name),
+        create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
+        schema_name(ServerPort,Schema_Name),
+        create_graph_from_turtle(DB_Path,Schema_Name,Schema_TTL_Path),
+        inference_name(ServerPort,Inference_Name),
+        create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),                
         format('Successfully updated admin key!!~n'),        
         halt
     ).

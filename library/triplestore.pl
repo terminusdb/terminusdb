@@ -5,14 +5,22 @@
               sync_backing_store/0,
               sync_database/1,
               sync_graph/2,
+              safe_create_named_graph/3,
+              safe_open_named_graph/3,
               xrdf/5,
+              xrdf_db/4,
               insert/5,
               delete/5,
               update/6,
-              with_transaction/3
+              storage/1,
+              dbid_graphid_obj/3
           ]).
 
 :- use_module(library(terminus_store)).
+:- reexport(library(terminus_store),
+            except([create_named_graph/3,
+                    open_named_graph/3])).
+
 :- use_module(library(file_utils)).
 :- use_module(library(journaling)).
 :- use_module(library(utils)).
@@ -21,6 +29,7 @@
 :- use_module(library(types)).
 % feeling very circular :(
 :- use_module(library(database)).
+:- use_module(library(literals)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -78,7 +87,7 @@ check_graph_exists(DB,G):-
  * 
  * UUU Should this ever be called? - should it be automatic?
  */
-checkpoint(_DB_ID,Graph_ID) :-
+checkpoint(_DB_ID,_Graph_ID) :-
     throw(error("Unimplemented")).
 
 /* 
@@ -118,7 +127,8 @@ sync_graph(DBN,G) :-
     atomic_list_concat(['sync_', DBN,'_',G], Mutex),
     with_mutex(
         Mutex,
-        (   open_named_graph(Storage, G, Gobj),
+        (   storage(Storage),
+            safe_open_named_graph(Storage, G, Gobj),
             retractall(dbid_graphid_obj(DBN, G, _)),
             assertz(dbid_graphid_obj(DBN, G, Gobj))
         ->  true
@@ -157,13 +167,11 @@ sync_database(Database) :-
         Mutex,
         (
             (   
-                storage(Storage),
-                
                 database_instance(Database, Instances),
                 database_inference(Database, Inferences),
                 database_schema(Database, Schemas),
                 
-                append([Instances,Inferences,Schemas], Graphs),
+                append([Instances,Inferences,Schemas], Graphs)
                 
             ->  forall(
                     member(G, Graphs),
@@ -182,12 +190,12 @@ sync_database(Database) :-
     ).
 
 sync_terminus :-
-    storage(Storage),
     terminus_database(Terminus), 
     sync_database(Terminus).
 
 sync_databases :-
-    database_record_list(Database_Names),
+    database_name_list(Database_Names),
+    
     forall(
         member(DBN,Database_Names),
         (
@@ -206,6 +214,24 @@ sync_backing_store :-
     sync_terminus,
     sync_databases.
 
+/* 
+ * safe_create_named_graph(+Store,+Graph_ID,-Graph_Obj) is det. 
+ *
+ * create the named graph, encoded for file-name safety
+ */
+safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
+    www_form_encode(Graph_ID,Safe_Graph_ID),
+    create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+
+/* 
+ * safe_open_named_graph(+Store,+Graph_ID,-Graph_Obj) is det. 
+ *
+ * open the named graph, encoded for file-name safety
+ */
+safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
+    www_form_encode(Graph_ID,Safe_Graph_ID),
+    open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+
 /** 
  * make_empty_graph(+DB_ID,+Graph_ID) is det.
  * 
@@ -218,8 +244,8 @@ make_empty_graph(DB_ID,Graph_ID) :-
     with_mutex(
         Mutex,
         (   
-            store(Store),
-            create_database(Store,Graph_ID,Graph_Obj),
+            storage(Store),
+            safe_create_named_graph(Store,Graph_ID,Graph_Obj),
             assert(dbid_graphid_obj(DB_ID,Graph_ID,Graph_Obj))
         )
     ).
@@ -234,39 +260,9 @@ make_empty_graph(DB_ID,Graph_ID) :-
  * 
  * UUU - do some transactional stuff here as with schema.
  */
-import_graph(File, DB_ID, Graph_ID) :-
-    false.
-
-object_storage(O,S) :-
-    % easier to to go this way...
-    (   nonvar(O)
-    ->  (   O = literal(L),
-            nonvar(L)
-        ->  (   L = lang(Lang,String),
-            ->  format(string(S), '"~q"@~s', [String,Lang])
-            ;   L = type(Type,String),
-                format(string(S), '"~q"^^"~q"', [String,Type]))
-        ;   true)
-    ;   true
-    ).
-
-storage_object(S,O) :- 
-    (   S = value(V)
-    ->  (   re_matchsub('^"(.*)"\\^\\^"(.*)"', V, M, []),
-            O = literal(type(M.2, M.1))
-        ->  re_matchsub('^"(.*)"@(.*)', V, M, []),
-            O = literal(lang(M.2, M.1))
-        ;   throw(error('Bad stored value ~q')))
-    ;   S = O).
-
-canonical_representation(S, S) :-
-    is_string(S), 
-canonical_representation(literal(L), value(Rep)) :-
-    (   L = lang(Lang,String),
-        format(string(Rep), '"~q"@"~q"', [String,Lang])
-    ->  L = type(Type,String),
-        format(string(Rep), '"~q"^^"~q"', [String,Type])
-    ).
+import_graph(_File, _DB_ID, _Graph_ID) :-
+    throw(error(_{'terminus:status' : 'terminus:error',
+                  'terminus:message' : "import_graph/3 is unimplemented"})).
 
 /** 
  * insert(+DB:atom,+G:graph_identifier,+Builder,+X,+Y,+Z) is det.
@@ -279,7 +275,7 @@ insert(DB,G,X,Y,Z) :-
     ;   object_storage(Z,S),
         get_write_builder(DB,G,Builder),
         nb_add_triple(Builder, X, Y, S),
-        storage_object(S,Z),
+        storage_object(S,Z)
     ).
 
 /** 
@@ -320,125 +316,34 @@ update(DB,G,X,Y,Z,Action) :-
 xrdf(Database,Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
-    get_read_layer(Database,G,Layer),
+    maybe_open_read_transaction(Database,DBR),
+    get_read_layer(DBR,G,Layer),
     xrdf_db(Layer,X,Y,Z).
+
+
+pre_convert_node(X,A) :-
+    (   nonvar(X)
+    ->  atom_string(X,A)
+    ;   true).
+
+post_convert_node(A,X) :-
+    (   nonvar(X)
+    ->  (   atom(X)
+        ->  string_to_atom(A,X)
+        ;   X = A)
+    ;   string_to_atom(A,X)).
 
 /* 
  * xrdf_db(Layer,X,Y,Z) is nondet.
  * 
  * Marshalls types appropriately for terminus-store
  */ 
-xrfd_db(Layer,X,Y,Z)
+xrdf_db(Layer,X,Y,Z) :-
+    pre_convert_node(X,A),
+    pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple(Layer,X,Y,S),
+    triple(Layer,A,B,S),
+    post_convert_node(A,X),
+    post_convert_node(B,Y),
     storage_object(S,Z).
 
-/* 
- * open_update_transaction(Transaction_Records:list) is det. 
- * 
- * Opens a new database Update which can be used during the transaction. 
- */ 
-open_pre_transaction([]).
-open_pre_transaction([transaction_record{
-                          pre_database : Pre,
-                          write_graphs : Write_Graphs,
-                          update_database : Update,
-                          post_database : _}
-                      | Rest]) :-
-    open_read_transaction(Pre, Intermediate),
-    open_write_transaction(Intermediate, Write_Graphs, Update),
-    open_pre_transaction(Rest).
-
-/* 
- * open_post_transaction(Transction_Records:list) is det. 
- *
- * Opens a final database to test before pushing head. 
- */
-open_post_transaction([]).
-open_post_transaction([transaction_record{
-                           pre_database : _,
-                           update_database : Update,
-                           write_graphs : _,
-                           post_database : Post}                       
-                       |Rest]) :-
-    commit_write_transaction(Update,Post),
-    open_post_transaction(Rest).
-
-/* 
- * commit_transaction(Transaction_Records:list) is det. 
- * 
- * Commits all altered graphs to head. 
- */
-commit_transaction([]).
-commit_transaction([transaction_record{ pre_database: _,
-                                        write_graphs: WGs,
-                                        update_database :_,
-                                        post_database: PDB }|Rest]) :-
-    maplist({PDB}/[G]>>(
-                store(Store),
-                open_named_graph(Store,G,G_Obj),
-                get_read_layer(PDB,G,Layer)
-                nb_set_head(DG_Obj, Layer),
-            ), WGs),
-    commit_transaction(Rest).
-                  
-
-/** 
- * with_transaction(+Options,:Query_Update,:Post) is semidet.
- * 
- * Succeeds if Update and tests Post resulting in 
- * member(witnesses(Witnesses), Options)
- * 
- * Options is a list which contains any of:
- * 
- *  * transaction_records([transaction_record{ pre_database : Pre_Database_1, 
- *                                             write_graphs : [Graph_Id_1_1... Graph_Id_1_k], 
- *                                             update_database : Update_Database_1, 
- *                                             post_database : Post_Database_1 }, 
- *                         ...
- *                         transaction_record{ pre_database : Pre_Database_n, 
- *                                             write_graphs : [Graph_Id_n_1 ... Graph_Id_n_j], 
- *                                             update_database : Update_Database_n, 
- *                                             post_database : Post_Database_n }])
- * 
- *  Specifying each of the databases which exist in the pre, update and post phases.
- *  Each database object binds in turn the layers and builders of the transaction 
- *  in its associated read_obj / write_obj fields.
- * 
- *  * witnesses(Witnesses)
- *  
- *  Which gives a list of the witnesses of failure. 
- * 
- */
-with_transaction(Options,Query_Update,Post) :-
-    (   memberchk(transaction_records(Records), Options)
-    ->  true
-    ;   format(string(MSG), "No transaction records in options: ~q", [Options]),
-        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
-                                         'terminus:message' : MSG})))),
-
-    % get read layer and layer builders for transaction
-    (   open_pre_transaction(Records)
-    ->  format(string(MSG), "Unable to process pre transaction records: ~q", [Records]),
-        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
-                                         'terminus:message' : MSG})))),
-    
-    (   call(Update)
-    ->  true
-    ;   format(string(MSG), "Unable to perform the update requested: ~q", [Update]),
-        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
-                                         'terminus:message' : MSG})))),
-    
-    (   open_post_transaction(Records)
-    ->  true
-    ;   format(string(MSG), "Unable to process post transaction records: ~q", [Records]),
-        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
-                                         'terminus:message' : MSG})))),
-        
-    (   call(Post),
-    ->  (   memberchk(witnesses([]),Options),
-        ->  push_transaction(Records)
-        ;   true)
-    ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
-        throw(http_repy(not_acceptable(_{'terminus:status' : 'terminus:error',
-                                         'terminus:message' : MSG})))).

@@ -36,13 +36,12 @@
 :- use_module(library(journaling)).
 :- use_module(library(database)).
 
-
 /* 
  * database_exists(DB_URI) is semidet.
  */ 
 database_exists(DB_URI) :-
-    collection_directory(DB_URI,DB_Path),
-    exists_directory(DB_Path).
+    database_name_list(Databases),
+    memberchk(DB_URI,Databases).
 
 /** 
  * create_db(+DB:atom) is semidet.
@@ -62,7 +61,7 @@ create_db(DB_URI) :-
     touch(DB_File),
 
     initialise_prefix_db(DB_URI),
-    store(Store),
+    storage(Store),
 
     % Set up schemata
     forall(
@@ -75,7 +74,8 @@ create_db(DB_URI) :-
             interpolate([Schema,' schema ',DB_URI],Comment),
             
             open_write(Store,Builder),
-            open_named_graph(Store,Schema,DB),
+            safe_open_named_graph(Store,Schema,DB),
+            
             nb_add_triple(Builder,DB_URI,rdf:type,owl:'Ontology'),
             nb_add_triple(Builder,DB_URI,rdfs:label,literal(lang(en,Label))),
             nb_add_triple(Builder,DB_URI,rdfs:comment,literal(lang(en,Comment))),
@@ -92,7 +92,7 @@ create_db(DB_URI) :-
         ),
         (
             open_write(Store,Builder),
-            open_named_graph(Store,Instance,DB),
+            safe_open_named_graph(Store,Instance,DB),
             nb_commit(Builder,Layer),
             nb_set_head(DB,Layer)
         )

@@ -7,11 +7,12 @@
               database_inference/2,
               make_database/2,
               make_raw_database/2,
-              database_identifiers/2,
               terminus_database_name/1,
               terminus_database/1,
               terminus_context/1,
               make_database_from_database_name/2,
+              database_name_list/1,
+              database_record_list/1,
               database_record_instance_list/2,
               database_record_schema_list/2,
               database_record_inference_list/2,
@@ -19,7 +20,12 @@
               default_instance_graph/2,
               db_size/2,
               db_modified_datetime/2,
-              db_created_datetime/2
+              db_created_datetime/2,
+              get_read_layer/3,
+              get_write_builder/3,
+              % commit_write_transaction/2,
+              maybe_open_read_transaction/2,
+              with_transaction/3
           ]).
 
 /** <module> Implementation of database graph management
@@ -54,6 +60,7 @@
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(triplestore)).
 
 /* 
  * Database term accessors.
@@ -78,6 +85,12 @@ database_read_transaction(DB, Read_Transaction) :-
 
 database_write_transaction(DB, Write_Transaction) :-
     DB.write_transaction = Write_Transaction.
+
+database_error_schema(DB, Error_Schema) :-
+    DB.error_schema = Error_Schema.
+
+database_error_instance(DB, Error_Instance) :-
+    DB.error_instance = Error_Instance.
 
 /** 
  * make_database(+DatabaseList:list,-Database:database) is det.
@@ -138,19 +151,34 @@ terminus_database(Database) :-
     make_database([name=Database_Name,
                    schema=[Schema],
                    inference=[Inference],
-                   instance=[Instance]], Database).
+                   instance=[Instance],
+                   read_transaction=[],
+                   write_transaction=[]], Database).
 
+database_name_list(Database_Atoms) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name, Terminus_DB),
+    
+    findall(Database_Name, 
+            ask(Terminus_DB,
+                (   t( DB_Resource , rdf/type , terminus/'Database'),
+                    t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI))
+                )
+               ),
+            Database_Names),
+
+    maplist(string_to_atom, Database_Names, Database_Atomised),
+    exclude(terminus_database_name, Database_Atomised, Database_Atoms). 
 
 database_record_list(Databases) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name, Terminus_DB),
-
+    
     findall(DB_Resource, 
             ask(Terminus_DB,
-                t( DB_Resource , rdf/type , terminus/'Database') ,
+                t( DB_Resource , rdf/type , terminus/'Database')
                ),
             Databases).
-
 
 database_record_schema_list(Database_Name, Schemas) :-
     terminus_database_name(Terminus_Name),
@@ -224,7 +252,9 @@ make_database_from_database_name(Database_Name,Database) :-
         make_database([name=Database_Name,
                        schema=Schemata,
                        instance=Instances,
-                       inference=Inferences
+                       inference=Inferences,
+                       read_transaction=[],
+                       write_transaction=[]
                       ], Database)
     ).
 
@@ -311,10 +341,10 @@ open_read_transaction(Database1, Database2) :-
             Database1.schema
            ], Graphs),
     maplist({N}/[G, read_obj{dbid : N, graphid : G, layer : L}]>>(
-                dbid_graphid_obj(N,G,Obj)
+                dbid_graphid_obj(N,G,Obj),
                 head(Obj, L)
             ), Graphs, NL),
-    Database2 = Database1.put(database{read_transaction=NL}).
+    Database2 = Database1.put(database{read_transaction:NL}).
 
 /* 
  * open_write_transaction(+DB1, +Graphs, -DB2) is det.
@@ -322,11 +352,12 @@ open_read_transaction(Database1, Database2) :-
  * Open a write transaction. 
  */ 
 open_write_transaction(Database1, Graphs, Database2) :-
-    maplist([G, write_obj{dbid : _N, graphid : _G, builder : B} ]>>(
-                store(Store),
+    Database1.name = N,
+    maplist({N}/[G, write_obj{dbid : N, graphid : G, builder : B} ]>>(
+                storage(Store),
                 open_write(Store, B)                
             ), Graphs, NL),
-    Database2 = Database1.put( database{write_transaction=NL} ).
+    Database2 = Database1.put( database{write_transaction:NL} ).
 
 commit_write_transaction(Database1, Database2) :-
     Database1.write_transactions = WTs,
@@ -336,8 +367,8 @@ commit_write_transaction(Database1, Database2) :-
             ), WTs,RTs),
     Database1.read_transactions = RTs1,
     update_read_layers(RTs1, RTs, RTs2),                     
-    Database1 = Database1.put( database{write_transactions=[]})
-                         .put( database{read_transactions=RTs2}).
+    Database2 = Database1.put( database{write_transactions:[]})
+                         .put( database{read_transactions:RTs2}).
 
 update_read_layers(RTs, [], RTs).
 update_read_layers(RTs1, [read_obj{dbid:N, graphid:G, layer: L}|Records], RTs2) :-
@@ -354,3 +385,119 @@ get_write_builder(Database,G,W) :-
     Database.name = DBN, 
     Database.write_transaction = WT, 
     memberchk( write_obj{dbid: DBN, graphid: G, builder: W}, WT).
+
+maybe_open_read_transaction(DB1,DB2) :-
+    (   DB1.read_transaction = []
+    ->  open_read_transaction(DB1, DB2)
+    ;   DB1 = DB2).
+
+
+/* 
+ * open_update_transaction(Transaction_Records:list) is det. 
+ * 
+ * Opens a new database Update which can be used during the transaction. 
+ */ 
+open_pre_transaction([]).
+open_pre_transaction([transaction_record{
+                          pre_database : Pre,
+                          write_graphs : Write_Graphs,
+                          update_database : Update,
+                          post_database : _}
+                      | Rest]) :-
+    open_read_transaction(Pre, Intermediate),
+    open_write_transaction(Intermediate, Write_Graphs, Update),
+    open_pre_transaction(Rest).
+
+/* 
+ * open_post_transaction(Transction_Records:list) is det. 
+ *
+ * Opens a final database to test before pushing head. 
+ */
+open_post_transaction([]).
+open_post_transaction([transaction_record{
+                           pre_database : _,
+                           update_database : Update,
+                           write_graphs : _,
+                           post_database : Post}                       
+                       |Rest]) :-
+    commit_write_transaction(Update,Post),
+    open_post_transaction(Rest).
+
+/* 
+ * commit_transaction(Transaction_Records:list) is det. 
+ * 
+ * Commits all altered graphs to head. 
+ */
+commit_transaction([]).
+commit_transaction([transaction_record{ pre_database: _,
+                                        write_graphs: WGs,
+                                        update_database :_,
+                                        post_database: PDB }|Rest]) :-
+    maplist({PDB}/[G]>>(
+                storage(Store),
+                safe_open_named_graph(Store,G,G_Obj),
+                get_read_layer(PDB,G,Layer),
+                nb_set_head(G_Obj, Layer)
+            ), WGs),
+    commit_transaction(Rest).
+                  
+/** 
+ * with_transaction(+Options,:Query_Update,:Post) is semidet.
+ * 
+ * Succeeds if Update and tests Post resulting in 
+ * member(witnesses(Witnesses), Options)
+ * 
+ * Options is a list which contains any of:
+ * 
+ *  * transaction_records([transaction_record{ pre_database : Pre_Database_1, 
+ *                                             write_graphs : [Graph_Id_1_1... Graph_Id_1_k], 
+ *                                             update_database : Update_Database_1, 
+ *                                             post_database : Post_Database_1 }, 
+ *                         ...
+ *                         transaction_record{ pre_database : Pre_Database_n, 
+ *                                             write_graphs : [Graph_Id_n_1 ... Graph_Id_n_j], 
+ *                                             update_database : Update_Database_n, 
+ *                                             post_database : Post_Database_n }])
+ * 
+ *  Specifying each of the databases which exist in the pre, update and post phases.
+ *  Each database object binds in turn the layers and builders of the transaction 
+ *  in its associated read_obj / write_obj fields.
+ * 
+ *  * witnesses(Witnesses)
+ *  
+ *  Which gives a list of the witnesses of failure. 
+ * 
+ */
+with_transaction(Options,Query_Update,Post) :-
+    (   member(transaction_records(Records), Options)
+    ->  true
+    ;   format(string(MSG), "No transaction records in options: ~q", [Options]),
+        throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+
+    % get read layer and layer builders for transaction
+    (   open_pre_transaction(Records)
+    ->  true
+    ;   format(string(MSG), "Unable to process pre transaction records: ~q", [Records]),
+        throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+    
+    (   call(Query_Update)
+    ->  true
+    ;   format(string(MSG), "Unable to perform the update requested: ~q", [Query_Update]),
+        throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+    
+    (   open_post_transaction(Records)
+    ->  true
+    ;   format(string(MSG), "Unable to process post transaction records: ~q", [Records]),
+        throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))),
+        
+    (   call(Post)
+    ->  (   memberchk(witnesses([]),Options)
+        ->  commit_transaction(Records)
+        ;   true)
+    ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
+        throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                         'terminus:message' : MSG})))).

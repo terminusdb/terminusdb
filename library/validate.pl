@@ -1,5 +1,5 @@
 :- module(validate, [
-              schema_transaction/5,
+              schema_transaction/4,
               document_transaction/5
           ]).
 
@@ -36,6 +36,8 @@
 :- use_module(library(jsonld)).
 :- use_module(library(semweb/turtle)).
 
+:- use_module(library(literals)).
+
 % For debugging
 :- use_module(library(http/http_log)).
 
@@ -67,41 +69,12 @@ test_schema(rangeNotSubsumedSC).
 test_schema(propertyTypeOverloadSC).
 test_schema(invalid_RDFS_property_SC).
 
-/* deal with precularities of rdf_process_turtle */
-fixup_schema_literal(literal(lang(Lang,S)),literal(lang(Lang,String))) :-
-    (   atom(S)
-    ->  atom_string(S,String)
-    ;   S = String).
-fixup_schema_literal(literal(type(Type,S)),literal(type(Type,String))) :-
-    (   atom(S)
-    ->  atom_string(S,String)
-    ;   S = String).
-fixup_schema_literal(literal(L),literal(lang(en,String))) :-
-    (   atom(L)
-    ->  atom_string(L,String)
-    ;   L = String).
-
-normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
-    (   X = node(N)
-    ->  interpolate(['_:',N], XF)
-    ;   X = XF),
-    
-    (   Y = node(M)
-    ->  interpolate(['_:',M], YF)
-    %   Bare atom literal needs to be lifted.
-    ;   Y = literal(_)
-    ->  fixup_schema_literal(Y,YF)
-    %   Otherwise walk on by...
-    ;   Y = YF).
-
 /* 
  * schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
  * 
  * Updates a schema using a turtle formatted stream.
  */ 
-schema_transaction(Database, Transaction_Database, Schema, New_Schema_Stream, Witnesses) :-
-    database_name(Database,Database_Name),
-    
+schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
     % make a fresh empty graph against which to diff
     open_memory_store(Store),
     open_write(Store, Builder),
@@ -116,7 +89,7 @@ schema_transaction(Database, Transaction_Database, Schema, New_Schema_Stream, Wi
                        nb_add_triple(Builder, X, P, Y)))),
         []),
     % commit this builder to a temporary layer to perform a diff.
-    nb_commit(Builder,New_Schema_Layer),
+    nb_commit(Builder,Layer),
     
     with_transaction(
         [transaction_record{
@@ -131,10 +104,10 @@ schema_transaction(Database, Transaction_Database, Schema, New_Schema_Stream, Wi
             % file, but not in the db. 
             (   xrdf(Update_DB,[Schema], A, B, C),
                 \+ xrdf_db(Layer,X,Y,Z)
-            ->  delete(Update_DB,Schema,SW,X,Y,Z)
+            ->  delete(Update_DB,Schema,X,Y,Z)
             ;   xrdf_db(Layer,X,Y,Z), 
                 \+ xrdf(Update_DB,[Schema], A, B, C)
-            ->  insert(Update_DB,Schema,SW,X,Y,Z)
+            ->  insert(Update_DB,Schema,X,Y,Z)
             ;   true % in both
             )
         ),
@@ -158,7 +131,8 @@ schema_transaction(Database, Transaction_Database, Schema, New_Schema_Stream, Wi
                 ;   % TODO: We do not need to perform a global check of instances
                     % Better would be a local check derived from schema delta.
                     findall(Witness,
-                            (   xrdf(Post_DB,E,F,G),
+                            (   Instances = Post_DB.instances,
+                                xrdf(Post_DB,Instances,E,F,G),
                                 refute_insertion(Post_DB,E,F,G,Witness)),
                             Witnesses)
                 
@@ -176,24 +150,26 @@ schema_transaction(Database, Transaction_Database, Schema, New_Schema_Stream, Wi
  */
 document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
     with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             update_database: Update_Database,
-             post_database: Post_Database,
-             write_graphs: [Graph]},
+        [transaction_records(
+             [transaction_record{
+                  pre_database: Database,
+                  update_database: Update_Database,
+                  post_database: Post_Database,
+                  write_graphs: [Graph]}
+             ]),
          witnesses(Witnesses)],
         Goal,
         (   findall(Pos_Witness,
                     (
-                        triplestore:xrdf_pos_trans(Database_Name,Graph, X, P, Y),
-                        refute_insertion(Database, X, P, Y, Pos_Witness)
+                        triplestore:xrdf(Post_Database, [Graph], X, P, Y),
+                        refute_insertion(Post_Database, X, P, Y, Pos_Witness)
                     ),
                     Pos_Witnesses),
             
             findall(Neg_Witness,
                     (   
-                        triplestore:xrdf_neg_trans(Database_Name,Graph, X, P, Y),
-                        refute_deletion(Database, X, P, Y, Neg_Witness)
+                        triplestore:xrdf(Post_Database, [Graph], X, P, Y),
+                        refute_deletion(Post_Database, X, P, Y, Neg_Witness)
                     ),
                     Neg_Witnesses),
             

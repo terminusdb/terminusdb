@@ -82,7 +82,7 @@ set_db_version(Version) :-
     interpolate([DB_Path,'VERSION'],Version_File),
     setup_call_cleanup(
         open(Version_File,update, Stream),
-        write_term(Stream,Version,[quoted(true),fullstop(true)]),
+        write(Stream,Version),
         close(Stream)
     ).
 
