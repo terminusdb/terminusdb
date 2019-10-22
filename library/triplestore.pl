@@ -3,8 +3,6 @@
               check_graph_exists/2,
               make_empty_graph/2,
               sync_backing_store/0,
-              sync_database/1,
-              sync_graph/2,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/5,
@@ -12,8 +10,7 @@
               insert/5,
               delete/5,
               update/6,
-              storage/1,
-              dbid_graphid_obj/3
+              storage/1
           ]).
 
 :- use_module(library(terminus_store)).
@@ -144,75 +141,13 @@ sync_graph(DBN,G) :-
         )
     ).
 
-/* 
- * dbid_graphid_obj(+DBID,+GraphID,-Obj).
- * 
- * Maintains a table of the current named_graph objects in terminus-store 
- * associated with the given database and graph. 
- */
-:- dynamic dbid_graphid_obj/3.
-
-/* 
- * sync_database(Database) is det.
- * 
- * Maintains a table of the current named_graph objects in terminus-store 
- * associated with the given database and graph. 
- */
-sync_database(Database) :-
-    % I believe we want to be able to set the database predicate for this database
-    % without someone racing us.
-    database_name(Database,DBN),
-    atomic_list_concat(['sync_', DBN], Mutex),
-    with_mutex(
-        Mutex,
-        (
-            (   
-                database_instance(Database, Instances),
-                database_inference(Database, Inferences),
-                database_schema(Database, Schemas),
-                
-                append([Instances,Inferences,Schemas], Graphs)
-                
-            ->  forall(
-                    member(G, Graphs),
-                    sync_graph(DBN,G)
-                )
-            
-            ;   format(atom(Msg),
-                       'Could not load database or associated graphs for database ~q',
-                       [DBN]),                            
-                throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
-                                         'terminus:message' : Msg,
-                                         'terminus:broken_database' : DBN
-                                        }))
-            )
-        )
-    ).
-
-sync_terminus :-
-    terminus_database(Terminus), 
-    sync_database(Terminus).
-
-sync_databases :-
-    database_name_list(Database_Names),
-    
-    forall(
-        member(DBN,Database_Names),
-        (
-            make_database_from_database_name(DBN,Database),
-            sync_database(Database)
-        )
-    ).
-
 /** 
  * sync_backing_store is det.  
  * 
  */ 
 sync_backing_store :-    
     /* do something here */
-    sync_storage,
-    sync_terminus,
-    sync_databases.
+    sync_storage.
 
 /* 
  * safe_create_named_graph(+Store,+Graph_ID,-Graph_Obj) is det. 

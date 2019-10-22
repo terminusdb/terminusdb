@@ -341,7 +341,8 @@ open_read_transaction(Database1, Database2) :-
             Database1.schema
            ], Graphs),
     maplist({N}/[G, read_obj{dbid : N, graphid : G, layer : L}]>>(
-                dbid_graphid_obj(N,G,Obj),
+                storage(Store),
+                safe_open_named_graph(Store,G,Obj),
                 head(Obj, L)
             ), Graphs, NL),
     Database2 = Database1.put(database{read_transaction:NL}).

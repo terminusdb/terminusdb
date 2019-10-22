@@ -36,8 +36,7 @@
 :- use_module(library(triplestore), [
                   xrdf/5,
                   insert/5,
-                  delete/5,
-                  sync_database/1
+                  delete/5
               ]).
 :- use_module(library(schema), [subsumptionOf/3]).
 :- use_module(library(relationships), [
