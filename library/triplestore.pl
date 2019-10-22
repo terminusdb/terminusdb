@@ -66,15 +66,14 @@
 destroy_graph(_DBID,_GID) :-
     true.
 
-
 /**
  * check_graph_exists(+Database_ID,+G:graph_identifier) is semidet.
  * 
  * checks to see is the graph id in the current graph list
  */
 check_graph_exists(DB,G):-
-    dbid_graphid_obj(DB,G,_),
-    !.
+    store(Store),
+    open_named_store(Store,G,_).
  
 /** 
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
