@@ -63,8 +63,11 @@
  * currently this is a noop - we can worry about collection 
  * later.
  */ 
-destroy_graph(_DBID,_GID) :-
-    true.
+destroy_graph(_DBID,GID) :-
+    db_path(Path),
+    www_form_encode(GID,Safe_GID),
+    interpolate([Path,Safe_GID,'.label'],Label),
+    delete_file(Label).
 
 /**
  * check_graph_exists(+Database_ID,+G:graph_identifier) is semidet.
@@ -72,8 +75,8 @@ destroy_graph(_DBID,_GID) :-
  * checks to see is the graph id in the current graph list
  */
 check_graph_exists(_DB,G):-
-    store(Store),
-    open_named_store(Store,G,_).
+    storage(Store),
+    safe_open_named_graph(Store,G,_).
  
 /** 
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
