@@ -71,7 +71,7 @@ destroy_graph(_DBID,_GID) :-
  * 
  * checks to see is the graph id in the current graph list
  */
-check_graph_exists(DB,G):-
+check_graph_exists(_DB,G):-
     store(Store),
     open_named_store(Store,G,_).
  
