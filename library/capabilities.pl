@@ -175,8 +175,8 @@ add_database_resource(DB_Name,URI,Doc) :-
     (   database_exists(URI)
     ->  throw(http_reply(method_not_allowed(
                              _{'@type' : 'vio:DatabaseCreateError',
-                               'vio:database_name' : {'@value' : URI,
-                                                      '@type' : 'xdd:url'},
+                               'vio:database_name' : _{'@value' : URI,
+                                                       '@type' : 'xdd:url'},
                                'vio:message' : 'Database exists'})))
     ;   true),
     
