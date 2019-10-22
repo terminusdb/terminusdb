@@ -1012,8 +1012,8 @@ update_object(Obj, Database) :-
  * Does the actual updating using ID. 
  */
 update_object(ID, Obj, Database) :-
-    database_name(Database,Database),
-    get_collection_jsonld_context(Database,Ctx),
+    database_name(Database,Database_Name),
+    get_collection_jsonld_context(Database_Name,Ctx),
     prefix_expand(ID,Ctx,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
@@ -1028,9 +1028,9 @@ update_object(ID, Obj, Database) :-
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
-    maplist([(C,[G],X,Y,Z)]>>insert(C,G,X,Y,Z), Inserts),
+    maplist({Database}/[(C,[G],X,Y,Z)]>>insert(Database,G,X,Y,Z), Inserts),
     
-    maplist([(C,[G],X,Y,Z)]>>delete(C,G,X,Y,Z), Deletes).
+    maplist({Database}/[(C,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Deletes).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 

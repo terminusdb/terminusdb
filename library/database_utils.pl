@@ -55,11 +55,6 @@ create_db(DB_URI) :-
     ->  throw(http_reply(method_not_allowed('terminus:create_database')))
     ;   true),
 
-    collection_directory(DB_URI,DB_Path),
-    ensure_directory(DB_Path),
-    interpolate([DB_Path,'/COLLECTION'],DB_File),
-    touch(DB_File),
-
     initialise_prefix_db(DB_URI),
     storage(Store),
 

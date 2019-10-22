@@ -459,7 +459,7 @@ equivalentClass(CC,CE,Database) :-
 %% :- rdf_meta equivalentClass(r,r,o).
 anonymousEquivalentClass(C,CE,Database) :-
     database_schema(Database,Schema),
-    equivalentClass(C,CE,Schema),
+    equivalentClass(C,CE,Database),
     % Exactly one reference to this class, or everything will go to hell.
     (setof(X,xrdf(Database,Schema,X,_,CE), ListX) *-> ListX = L ; L = []),
     length(L,1).

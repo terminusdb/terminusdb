@@ -130,15 +130,15 @@ refute_insertion(_Database,
                  Reason) :- 
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
-    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
-    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
+    Reason = Base_Reason.put(_{'vio:subject' : X,
+                               'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}).
 refute_insertion(_Database,
                  X,'http://www.w3.org/2000/01/rdf-schema#comment',Label,
                  Reason) :- 
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
-    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
-    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
+    Reason = Base_Reason.put(_{'vio:subject' : X,
+                               'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}).
 refute_insertion(Database,X,P,_Y,Reason) :-
     % \+ P = 'rdf:type'
     (   domain(P,Domain,Database)

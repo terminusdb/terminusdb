@@ -573,27 +573,27 @@ compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(database=Database),
     resolve(X,URI).
-compile_wf(delete([WG],X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+compile_wf(delete([WG],X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC).
-compile_wf(insert([WG],X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+    view(database=DB).
+compile_wf(insert([WG],X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC).
-compile_wf(delete(X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+    view(database=DB).
+compile_wf(delete(X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC),
+    view(database=DB),
     view(write_graph=[WG]).
-compile_wf(insert(X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC),
+    view(database=DB),
     view(write_graph=[WG]).
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),

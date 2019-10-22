@@ -353,22 +353,22 @@ open_read_transaction(Database1, Database2) :-
  */ 
 open_write_transaction(Database1, Graphs, Database2) :-
     Database1.name = N,
-    maplist({N}/[G, write_obj{dbid : N, graphid : G, builder : B} ]>>(
-                storage(Store),
-                open_write(Store, B)                
+    maplist({Database1,N}/[G, write_obj{dbid : N, graphid : G, builder : B} ]>>(
+                get_read_layer(Database1,G,L),
+                open_write(L, B)
             ), Graphs, NL),
     Database2 = Database1.put( database{write_transaction:NL} ).
 
 commit_write_transaction(Database1, Database2) :-
-    Database1.write_transactions = WTs,
+    Database1.write_transaction = WTs,
     maplist([write_obj{dbid: N, graphid: G, builder: B},
              read_obj{dbid: N, graphid: G, layer: L}]>>(
                 nb_commit(B, L)
-            ), WTs,RTs),
-    Database1.read_transactions = RTs1,
-    update_read_layers(RTs1, RTs, RTs2),                     
-    Database2 = Database1.put( database{write_transactions:[]})
-                         .put( database{read_transactions:RTs2}).
+            ), WTs, RTs),
+    Database1.read_transaction = RTs1,
+    update_read_layers(RTs1, RTs, RTs2),
+    Database2 = Database1.put( database{write_transaction:[],
+                                        read_transaction:RTs2}).
 
 update_read_layers(RTs, [], RTs).
 update_read_layers(RTs1, [read_obj{dbid:N, graphid:G, layer: L}|Records], RTs2) :-
@@ -440,7 +440,7 @@ commit_transaction([transaction_record{ pre_database: _,
                 nb_set_head(G_Obj, Layer)
             ), WGs),
     commit_transaction(Rest).
-                  
+
 /** 
  * with_transaction(+Options,:Query_Update,:Post) is semidet.
  * 
@@ -496,7 +496,11 @@ with_transaction(Options,Query_Update,Post) :-
         
     (   call(Post)
     ->  (   memberchk(witnesses([]),Options)
-        ->  commit_transaction(Records)
+        ->  (   commit_transaction(Records)
+            ->  true
+            ;   format(string(MSG), "Failed to commit transaction: ~q", [Records]),
+                throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
+                                                  'terminus:message' : MSG}))))
         ;   true)
     ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
