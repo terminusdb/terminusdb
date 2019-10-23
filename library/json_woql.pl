@@ -91,23 +91,23 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  WOQL = delete(Doc)
-    ;   _{'http://terminusdb.com/woql#-triple' : [ Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#minus_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = delete(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#+triple' : [ Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#plus_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = insert(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#-quad' : [ Graph, Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#minus_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = delete(WG,WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#+quad' : [ Graph, Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#plus_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
@@ -154,6 +154,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
         WOQL = limit(WN, WQ)
+    ;   _{'http://terminusdb.com/woql#order_by' : Clauses } :< JSON    
+    ->  snoc(Vargs,Sub_Query,Clauses),
+        maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
+        json_to_woql_ast(Sub_Query,Sub_WOQL),
+        WOQL = order_by(WOQL_Args,Sub_WOQL)
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
