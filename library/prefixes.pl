@@ -7,8 +7,6 @@
               get_collection_prefixes/2,
               get_collection_prefix_pairs/2,
               get_collection_prefix_list/2,
-              global_prefix_expand/2,
-              literal_expand/2,
               prefix_list_to_rapper_args/2,
               initialise_contexts/0,
               woql_context/1,
@@ -65,18 +63,6 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-% internal
-global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
-global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
-global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
-global_prefixes(vio,'http://terminusdb.com/schema/vio#').
-global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
-% common
-global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
-global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
-global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
-global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
-
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
  */
@@ -88,17 +74,6 @@ default_prefixes(C,scm,U) :-
 % internal
 default_prefixes(_,Pre,URI) :-
     global_prefixes(Pre,URI).
-
-/* 
- * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
- */
-global_prefix_expand(Prefix:X, URI) :-
-    global_prefixes(Prefix,Base),
-    interpolate([Base,X],URI).
-
-literal_expand(literal(type(T,D)), literal(type(E,D))) :-
-    global_prefix_expand(T,E).
-literal_expand(literal(lang(L,D)), literal(lang(L,D))).
 
 /*
  * initialise_prefix_db(+Collection) is det.

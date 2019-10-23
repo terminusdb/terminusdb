@@ -52,7 +52,7 @@
  * 
  * Supplies the current version number of the DB
  */ 
-database_version('0.1.0').
+database_version('1.0.0').
 
 /*
  * get_db_version(-Version) is det.
