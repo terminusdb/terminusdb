@@ -445,6 +445,13 @@ commit_transaction([transaction_record{ pre_database: _,
             ), WGs),
     commit_transaction(Rest).
 
+is_transaction_record(R) :-
+    is_dict(R),
+    transaction_record{} :< R.
+
+get_transaction_records(Options,Records) :-
+    include(is_transaction_record,Options,Records).
+
 /** 
  * with_transaction(+Options,:Query_Update,:Post) is semidet.
  * 
@@ -473,7 +480,7 @@ commit_transaction([transaction_record{ pre_database: _,
  * 
  */
 with_transaction(Options,Query_Update,Post) :-
-    (   member(transaction_records(Records), Options)
+    (   get_transaction_records(Options,Records)
     ->  true
     ;   format(string(MSG), "No transaction records in options: ~q", [Options]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',

@@ -150,13 +150,11 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
  */
 document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
     with_transaction(
-        [transaction_records(
-             [transaction_record{
-                  pre_database: Database,
-                  update_database: Update_Database,
-                  post_database: Post_Database,
-                  write_graphs: [Graph]}
-             ]),
+        [transaction_record{
+             pre_database: Database,
+             update_database: Update_Database,
+             post_database: Post_Database,
+             write_graphs: [Graph]},       
          witnesses(Witnesses)],
         Goal,
         validate:(   findall(Pos_Witness,

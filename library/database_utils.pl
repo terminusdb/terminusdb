@@ -1,5 +1,6 @@
 :- module(database_utils,[
               create_db/1,
+              post_create_db/1,
               delete_db/1,
               database_exists/1,
               extend_database_defaults/3
@@ -50,48 +51,62 @@ database_exists(DB_URI) :-
  */
 create_db(DB_URI) :-
 
-    % create the collection if it doesn't exist
-    (   database_exists(DB_URI)
-    ->  throw(http_reply(method_not_allowed('terminus:create_database')))
-    ;   true),
-
     initialise_prefix_db(DB_URI),
     storage(Store),
 
     % Set up schemata
     forall(
         (
+            % If none, we succeed... (headless)
             database_record_schema_list(DB_URI,Schemata),
             member(Schema,Schemata)
         ),
-        (
-            interpolate([DB_URI],Label),
-            interpolate([Schema,' schema ',DB_URI],Comment),
-            
-            open_write(Store,Builder),
-            safe_open_named_graph(Store,Schema,DB),
-            
-            nb_add_triple(Builder,DB_URI,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#Ontology'),
-            nb_add_triple(Builder,DB_URI,'http://www.w3.org/2000/01/rdf-schema#label',literal(lang(en,Label))),
-            nb_add_triple(Builder,DB_URI,'http://www.w3.org/2000/01/rdf-schema#comment',literal(lang(en,Comment))),
-            nb_commit(Builder,Layer),
-            nb_set_head(DB,Layer)
+        (   open_write(Store, Builder),
+            safe_create_named_graph(Store,Schema,G_Obj),
+            nb_commit(Builder, Layer),
+            nb_set_head(G_Obj, Layer)
         )
     ),
 
     % Set up instance graphs
     forall(
         (
+            % If none, we succeed... (legless)
             database_record_instance_list(DB_URI,Instances),
             member(Instance,Instances)
         ),
-        (
-            open_write(Store,Builder),
-            safe_open_named_graph(Store,Instance,DB),
-            nb_commit(Builder,Layer),
-            nb_set_head(DB,Layer)
+        (   open_write(Store, Builder),
+            safe_create_named_graph(Store,Instance,G_Obj),
+            nb_commit(Builder, Layer),
+            nb_set_head(G_Obj, Layer)
         )
     ).
+
+post_create_db(DB_URI) :-
+    make_database_from_database_name(DB_URI, Database),
+    Schemata = Database.schema, 
+    with_transaction(
+        [transaction_record{
+             pre_database: Database,
+             write_graphs: Schemata,
+             update_database: Update_DB,
+             post_database: _Post_DB},
+         witnesses(Witnesses)],
+        forall(member(Schema,Schemata),
+               (
+                   interpolate([DB_URI],Label),
+                   interpolate([Schema,' ontology for ',DB_URI],Comment),
+                   insert(Update_DB, Schema, rdf:type, owl:'Ontology'),
+                   insert(Update_DB, Schema, rdfs:label, literal(lang(en,Label))),
+                   insert(Update_DB, Schema, rdfs:comment, literal(lang(en,Comment)))
+               )
+              ),
+        % always an ok update...
+        true
+    ),
+    % Succeed only if the witnesses are empty. 
+    Witnesses = [].
+
 
 delete_db(_DB) :-
     % TODO: no-op for now, but should actually free the storage.

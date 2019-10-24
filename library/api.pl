@@ -745,7 +745,13 @@ try_create_db(DB,DB_URI,Doc) :-
     % Try to create the database resource first.
     with_mutex(
         DB_URI,
-        (   (   add_database_resource(DB,DB_URI,Doc)
+        (       % create the collection if it doesn't exist
+            (   database_exists(DB_URI)
+            ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                      'terminus:method' : 'terminus:create_database'})))
+            ;   true),
+            
+            (   add_database_resource(DB,DB_URI,Doc)
             ->  true
             ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -756,6 +762,12 @@ try_create_db(DB,DB_URI,Doc) :-
                 create_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'})))),
+
+            (   post_create_db(DB_URI)
+            ->  true
+            ;   format(atom(MSG), 'Unable to perform post-creation updates: ~s', [DB_URI]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'}))))
             
