@@ -38,7 +38,7 @@
                   insert/5,
                   delete/5
               ]).
-:- use_module(library(schema), [subsumptionOf/3]).
+:- use_module(library(schema)).
 :- use_module(library(relationships), [
                   relationship_source_property/3,
                   relationship_target_property/3

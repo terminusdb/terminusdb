@@ -19,7 +19,6 @@
                     open_named_graph/3])).
 
 :- use_module(library(file_utils)).
-:- use_module(library(journaling)).
 :- use_module(library(utils)).
 :- use_module(library(schema), [cleanup_schema_module/1]).
 :- use_module(library(prefixes)).
@@ -245,14 +244,22 @@ update(DB,G,X,Y,Z,Action) :-
 
 xrdf_added(DB,G,X,Y,Z) :-
     get_read_layer(DB,G,L),
+    pre_convert_node(X,A),
+    pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_addition(L,X,Y,S),
+    triple_addition(L,A,B,S),
+    post_convert_node(A,X),
+    post_convert_node(B,Y),
     storage_object(S,Z).
 
 xrdf_deleted(DB,G,X,Y,Z) :-
     get_read_layer(DB,G,L),
+    pre_convert_node(X,A),
+    pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_removal(L,X,Y,S),
+    triple_removal(L,A,B,S),
+    post_convert_node(A,X),
+    post_convert_node(B,Y),
     storage_object(S,Z).
 
 /** 

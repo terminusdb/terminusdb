@@ -34,7 +34,6 @@
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
 :- use_module(library(utils)).
-:- use_module(library(journaling)).
 :- use_module(library(database)).
 
 /* 
@@ -96,9 +95,9 @@ post_create_db(DB_URI) :-
                (
                    interpolate([DB_URI],Label),
                    interpolate([Schema,' ontology for ',DB_URI],Comment),
-                   insert(Update_DB, Schema, rdf:type, owl:'Ontology'),
-                   insert(Update_DB, Schema, rdfs:label, literal(lang(en,Label))),
-                   insert(Update_DB, Schema, rdfs:comment, literal(lang(en,Comment)))
+                   insert(Update_DB, Schema, DB_URI, rdf:type, owl:'Ontology'),
+                   insert(Update_DB, Schema, DB_URI, rdfs:label, literal(lang(en,Label))),
+                   insert(Update_DB, Schema, DB_URI, rdfs:comment, literal(lang(en,Comment)))
                )
               ),
         % always an ok update...
@@ -108,9 +107,22 @@ post_create_db(DB_URI) :-
     Witnesses = [].
 
 
-delete_db(_DB) :-
-    % TODO: no-op for now, but should actually free the storage.
-    true.
+delete_db(DB) :-
+    db_path(Path),
+    www_form_encode(DB,DBID),
+    interpolate(['^(?<name>',DBID,'.*).label$'],Pattern),
+    files(Path,Files),
+    forall(
+        (   member(File,Files),
+            re_matchsub(Pattern,File,Sub,[])
+        ),
+        (
+            interpolate([Path,File],QFile),
+            get_time(Time),
+            interpolate([Path,Sub.name,'-',Time,'.deleted'],Deleted_File),
+            rename_file(QFile,Deleted_File)
+        )
+    ).
 
 /* 
  * should probably go in JSON-LD

@@ -40,6 +40,7 @@
 
 % Import global definitions
 :- use_module(library(global_prefixes)).
+:- reexport(library(global_prefixes)).
 
 % Use prolog persistency for prefix management.
 % We could use the DB itself but this gets a bit too metacircular!
