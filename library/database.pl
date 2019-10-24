@@ -343,11 +343,12 @@ open_read_transaction(Database1, Database2) :-
             Database1.inference,
             Database1.schema
            ], Graphs),
-    maplist({N}/[G, read_obj{dbid : N, graphid : G, layer : L}]>>(
-                storage(Store),
-                safe_open_named_graph(Store,G,Obj),
-                head(Obj, L)
-            ), Graphs, NL),
+    storage(Store),
+    % Only collect read layers if they have a head.
+    convlist({Store,N}/[G, read_obj{dbid : N, graphid : G, layer : L}]>>(
+                 safe_open_named_graph(Store,G,Obj),
+                 head(Obj, L)
+             ), Graphs, NL),
     Database2 = Database1.put(database{read_transaction:NL}).
 
 /* 
@@ -357,9 +358,11 @@ open_read_transaction(Database1, Database2) :-
  */ 
 open_write_transaction(Database1, Graphs, Database2) :-
     Database1.name = N,
-    maplist({Database1,N}/[G, write_obj{dbid : N, graphid : G, builder : B} ]>>(
-                get_read_layer(Database1,G,L),
-                open_write(L, B)
+    storage(Store),
+    maplist({Store,Database1,N}/[G, write_obj{dbid : N, graphid : G, builder : B} ]>>(
+                (   get_read_layer(Database1,G,L)
+                ->  open_write(L, B)
+                ;   open_write(Store, B))
             ), Graphs, NL),
     Database2 = Database1.put( database{write_transaction:NL} ).
 
@@ -378,7 +381,12 @@ update_read_layers(RTs, [], RTs).
 update_read_layers(RTs1, [read_obj{dbid:N, graphid:G, layer: L}|Records], RTs2) :-
     select(read_obj{dbid:N, graphid:G, layer: _}, RTs1, 
            read_obj{dbid:N, graphid:G, layer: L}, RTs_I),
-    update_read_layers(RTs_I, Records, RTs2). 
+    !,
+    update_read_layers(RTs_I, Records, RTs2).
+update_read_layers(RTs1, [R|Records], RTs2) :-
+    % \+ select(...)
+    % doesn't exist in RTs1...
+    update_read_layers([R|RTs1], Records, RTs2).
 
 get_read_layer(Database,G,L) :-
     Database.name = DBN, 

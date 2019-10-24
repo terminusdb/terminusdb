@@ -35,6 +35,7 @@
 :- use_module(library(triplestore)).
 :- use_module(library(utils)).
 :- use_module(library(database)).
+:- use_module(library(expansions)).
 
 /* 
  * database_exists(DB_URI) is semidet.
@@ -60,11 +61,7 @@ create_db(DB_URI) :-
             database_record_schema_list(DB_URI,Schemata),
             member(Schema,Schemata)
         ),
-        (   open_write(Store, Builder),
-            safe_create_named_graph(Store,Schema,G_Obj),
-            nb_commit(Builder, Layer),
-            nb_set_head(G_Obj, Layer)
-        )
+        safe_create_named_graph(Store,Schema,_)        
     ),
 
     % Set up instance graphs
@@ -74,11 +71,7 @@ create_db(DB_URI) :-
             database_record_instance_list(DB_URI,Instances),
             member(Instance,Instances)
         ),
-        (   open_write(Store, Builder),
-            safe_create_named_graph(Store,Instance,G_Obj),
-            nb_commit(Builder, Layer),
-            nb_set_head(G_Obj, Layer)
-        )
+        safe_create_named_graph(Store,Instance,_)        
     ).
 
 post_create_db(DB_URI) :-
@@ -95,9 +88,14 @@ post_create_db(DB_URI) :-
                (
                    interpolate([DB_URI],Label),
                    interpolate([Schema,' ontology for ',DB_URI],Comment),
-                   insert(Update_DB, Schema, DB_URI, rdf:type, owl:'Ontology'),
-                   insert(Update_DB, Schema, DB_URI, rdfs:label, literal(lang(en,Label))),
-                   insert(Update_DB, Schema, DB_URI, rdfs:comment, literal(lang(en,Comment)))
+                   % goal expansion doesn't work here..
+                   global_prefix_expand(rdf:type, Rdf_type),
+                   global_prefix_expand(rdfs:label, Rdfs_label),
+                   global_prefix_expand(rdfs:comment, Rdfs_comment),
+                   global_prefix_expand(owl:'Ontology', OWL_ontology),
+                   insert(Update_DB, Schema, DB_URI, Rdf_type, OWL_ontology),
+                   insert(Update_DB, Schema, DB_URI, Rdfs_label, literal(lang(en,Label))),
+                   insert(Update_DB, Schema, DB_URI, Rdfs_comment, literal(lang(en,Comment)))
                )
               ),
         % always an ok update...

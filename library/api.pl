@@ -748,6 +748,7 @@ try_create_db(DB,DB_URI,Doc) :-
         (       % create the collection if it doesn't exist
             (   database_exists(DB_URI)
             ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                      'terminus:message' : 'Database already exists',
                                                       'terminus:method' : 'terminus:create_database'})))
             ;   true),
             
@@ -774,8 +775,9 @@ try_create_db(DB,DB_URI,Doc) :-
         )).
 
 /* 
- * try_create_db(DB_URI,Object) is det.
+ * try_delete_db(DB_URI) is det.
  * 
+ * Attempt to delete a database given its URI
  */
 try_delete_db(DB_URI) :-
     with_mutex(

@@ -57,6 +57,6 @@ turtle_triples(Layer,X,P,Y,_) :-
 layer_to_turtle(Layer,Prefixes,Out_Stream) :- 
    rdf_save_canonical_turtle(
         Out_Stream,
-        [prefixes(Prefixes),expand(turtle_triples(Layer))]
+        [prefixes(Prefixes),expand(turtle_triples(Layer)),group(true),indent(2)]
     ). 
     

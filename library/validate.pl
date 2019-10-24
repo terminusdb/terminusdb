@@ -74,6 +74,7 @@ test_schema(invalid_RDFS_property_SC).
  * Updates a schema using a turtle formatted stream.
  */ 
 schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
+    
     % make a fresh empty graph against which to diff
     open_memory_store(Store),
     open_write(Store, Builder),
@@ -85,11 +86,13 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         [Triples,_Resource]>>(
             forall(member(T, Triples),
                    (   normalise_triple(T, rdf(X,P,Y)),
-                       nb_add_triple(Builder, X, P, Y)))),
+                       object_storage(Y,S),
+                       nb_add_triple(Builder, X, P, S)
+                   ))),
         []),
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
-    
+
     with_transaction(
         [transaction_record{
              pre_database: Database,
@@ -101,13 +104,15 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         validate:(
             % first write everything into the layer-builder that is in the new
             % file, but not in the db. 
-            (   xrdf(Update_DB,[Schema], A, B, C),
-                \+ xrdf_db(Layer,X,Y,Z)
-            ->  delete(Update_DB,Schema,X,Y,Z)
-            ;   xrdf_db(Layer,X,Y,Z), 
-                \+ xrdf(Update_DB,[Schema], A, B, C)
-            ->  insert(Update_DB,Schema,X,Y,Z)
-            ;   true % in both
+            forall(
+                (   xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
+                    \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
+                delete(Update_DB,Schema,A_Old,B_Old,C_Old)
+            ),
+            forall(
+                (   xrdf_db(Layer,A_New,B_New,C_New), 
+                    \+ xrdf(Update_DB,[Schema], A_New, B_New, C_New)),
+                insert(Update_DB,Schema,A_New,B_New,C_New)
             )
         ),
         % Post conditions
@@ -130,8 +135,8 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                 ;   % TODO: We do not need to perform a global check of instances
                     % Better would be a local check derived from schema delta.
                     findall(Witness,
-                            (   Instances = Post_DB.instances,
-                                xrdf(Post_DB,Instances,E,F,G),
+                            (   database_instance(Post_DB, Instance),
+                                xrdf(Post_DB,Instance,E,F,G),
                                 refute_insertion(Post_DB,E,F,G,Witness)),
                             Witnesses)
                 

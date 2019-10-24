@@ -210,8 +210,7 @@ insert(DB,G,X,Y,Z) :-
     ->  true
     ;   object_storage(Z,S),
         get_write_builder(DB,G,Builder),
-        nb_add_triple(Builder, X, Y, S),
-        storage_object(S,Z)
+        nb_add_triple(Builder, X, Y, S)
     ).
 
 /** 
@@ -223,8 +222,7 @@ delete(DB,G,X,Y,Z) :-
     (   xrdf(DB,[G],X,Y,Z)
     ->  object_storage(Z,S),
         get_write_builder(DB,G,Builder),
-        nb_remove_triple(Builder,X,Y,S),
-        storage_object(S,Z)
+        nb_remove_triple(Builder,X,Y,S)
     ;   true).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
@@ -241,7 +239,11 @@ update(DB,G,X,Y,Z,Action) :-
     new_triple(X,Y,Z,Action,X1,Y1,Z1),
     insert(DB,G,X1,Y1,Z1).
 
-
+/* 
+ * xrdf_added(+DB:database,+G:graph_identifier,+X,+Y,+Z) is nondet. 
+ * 
+ * Query exactly the current layer (and no deeper) for added triples.
+ */ 
 xrdf_added(DB,G,X,Y,Z) :-
     get_read_layer(DB,G,L),
     pre_convert_node(X,A),
@@ -252,6 +254,11 @@ xrdf_added(DB,G,X,Y,Z) :-
     post_convert_node(B,Y),
     storage_object(S,Z).
 
+/* 
+ * xrdf_deleted(+DB:database,+G:graph_identifier,+X,+Y,+Z) is nondet. 
+ * 
+ * Query exactly the current layer (and no deeper) for deleted triples.
+ */ 
 xrdf_deleted(DB,G,X,Y,Z) :-
     get_read_layer(DB,G,L),
     pre_convert_node(X,A),

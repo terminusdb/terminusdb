@@ -973,7 +973,8 @@ object_instance_graph(URI,Database,I) :-
     database_instance(Database,Instance),
     member(I,Instance),
     % Defo exists here.
-    once(xrdf(Database,[I],URI,rdf:type,_)).
+    (   xrdf(Database,[I],URI,rdf:type,_)
+    ->  true).
 object_instance_graph(JSON,Database,I) :-
     is_dict(JSON),    
     get_dict('@id', JSON, URI),
