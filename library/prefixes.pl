@@ -5,9 +5,8 @@
               set_collection_prefixes/2,
               delete_collection_prefixes/1,
               get_collection_prefixes/2,
+              get_collection_prefix_pairs/2,
               get_collection_prefix_list/2,
-              global_prefix_expand/2,
-              literal_expand/2,
               prefix_list_to_rapper_args/2,
               initialise_contexts/0,
               woql_context/1,
@@ -39,6 +38,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+% Import global definitions
+:- use_module(library(global_prefixes)).
+:- reexport(library(global_prefixes)).
+
 % Use prolog persistency for prefix management.
 % We could use the DB itself but this gets a bit too metacircular!
 :- use_module(library(persistency)).
@@ -54,21 +57,15 @@
 
 :- use_module(library(jsonld)).
 
+:- use_module(library(database), [
+                  database_name_list/1,
+                  terminus_database_name/1
+              ]).
+
+% efficiency
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-
-% internal
-global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
-global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
-global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
-global_prefixes(vio,'http://terminusdb.com/schema/vio#').
-global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
-% common
-global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
-global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
-global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
-global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 
 /* 
  * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
@@ -82,17 +79,6 @@ default_prefixes(C,scm,U) :-
 default_prefixes(_,Pre,URI) :-
     global_prefixes(Pre,URI).
 
-/* 
- * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
- */
-global_prefix_expand(Prefix:X, URI) :-
-    global_prefixes(Prefix,Base),
-    interpolate([Base,X],URI).
-
-literal_expand(literal(type(T,D)), literal(type(E,D))) :-
-    global_prefix_expand(T,E).
-literal_expand(literal(lang(L,D)), literal(lang(L,D))).
-
 /*
  * initialise_prefix_db(+Collection) is det.
  * 
@@ -102,6 +88,7 @@ literal_expand(literal(lang(L,D)), literal(lang(L,D))).
  * should use a different name?
  */
 initialise_prefix_db(C) :-
+    retractall_prefix(C,_,_),
     forall(
         default_prefixes(C,P,U),
         assert_prefix(C,P,U)
@@ -112,22 +99,24 @@ initialise_prefix_db(C) :-
  * 
  * Set up the prefix database. 
  */
-initialise_prefix_db :- 
+initialise_prefix_db :-
     once(file_search_path(terminus_home,BasePath)),
     interpolate([BasePath,'/',storage,'/','prefix.db'],File),
     (   \+ exists_file(File)
         % create the file
     ->  touch(File),
-        db_attach(File, []),
+        db_attach(File, [sync(flush)]),
+        terminus_database_name(Terminus_Name),
+        initialise_prefix_db(Terminus_Name),
         % Add default prefixes to all collections
         % (prefixes are collection dependent)
-        collections(Collections),
+        database_name_list(Names),
         forall(
-            member(C,Collections),
-            initialise_prefix_db(C)
+            member(N,Names),
+            initialise_prefix_db(N)
         )
         % Attach to the already existing file.
-    ;   db_attach(File, [])
+    ;   db_attach(File, [sync(flush)])
     ).
 
 /* 

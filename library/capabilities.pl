@@ -243,8 +243,8 @@ write_cors_headers(Resource_URI) :-
     findall(Origin,
             ask(DB, 
                 where(   
-                    (   t(Internal_Resource_URI, terminus/allow_origin, Origin^^(xsd/string)),
-                        t(Internal_Resource_URI, terminus/id, Resource_URI^^(xsd/anyURI))
+                    (   t(Internal_Resource_URI, terminus/id, Resource_URI^^(xsd/anyURI)),
+                        t(Internal_Resource_URI, terminus/allow_origin, Origin^^(xsd/string))
                     )
                 )),
             Origins),

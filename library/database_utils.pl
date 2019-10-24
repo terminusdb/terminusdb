@@ -1,5 +1,6 @@
 :- module(database_utils,[
               create_db/1,
+              post_create_db/1,
               delete_db/1,
               database_exists/1,
               extend_database_defaults/3
@@ -33,16 +34,15 @@
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
 :- use_module(library(utils)).
-:- use_module(library(journaling)).
 :- use_module(library(database)).
-
+:- use_module(library(expansions)).
 
 /* 
  * database_exists(DB_URI) is semidet.
  */ 
 database_exists(DB_URI) :-
-    collection_directory(DB_URI,DB_Path),
-    exists_directory(DB_Path).
+    database_name_list(Databases),
+    memberchk(DB_URI,Databases).
 
 /** 
  * create_db(+DB:atom) is semidet.
@@ -51,71 +51,76 @@ database_exists(DB_URI) :-
  */
 create_db(DB_URI) :-
 
-    % create the collection if it doesn't exist
-    (   database_exists(DB_URI)
-    ->  throw(http_reply(method_not_allowed('terminus:create_database')))
-    ;   true),
-
-    collection_directory(DB_URI,DB_Path),
-    ensure_directory(DB_Path),
-    interpolate([DB_Path,'/COLLECTION'],DB_File),
-    touch(DB_File),
-
     initialise_prefix_db(DB_URI),
-    
+    storage(Store),
+
     % Set up schemata
     forall(
         (
+            % If none, we succeed... (headless)
             database_record_schema_list(DB_URI,Schemata),
             member(Schema,Schemata)
         ),
-        (   
-            % create the graph if it doesn't exist
-            graph_directory(DB_URI,Schema,Schema_Path),
-            ensure_directory(Schema_Path),
-            make_checkpoint_directory(DB_URI, Schema, _),
-
-            with_output_graph(
-                graph(DB_URI,Schema,ckp,ttl),
-                (
-                    interpolate([DB_URI],Label),
-                    interpolate([Schema,' ontology for ',DB_URI],Comment),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdf:type,owl:'Ontology'),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:label,literal(lang(en,Label))),
-                    write_triple(DB_URI,Schema,ckp,DB_URI,rdfs:comment,literal(lang(en,Comment)))
-                )
-            ),
-            sync_from_journals(DB_URI,Schema)
-        )
+        safe_create_named_graph(Store,Schema,_)        
     ),
 
     % Set up instance graphs
     forall(
         (
+            % If none, we succeed... (legless)
             database_record_instance_list(DB_URI,Instances),
             member(Instance,Instances)
         ),
-        (   
-            % create the graph if it doesn't exist
-            graph_directory(DB_URI,Instance,Instance_Path),
-            ensure_directory(Instance_Path),
-            make_checkpoint_directory(DB_URI, Instance, _),
+        safe_create_named_graph(Store,Instance,_)        
+    ).
 
-            % Just make an empty checkpoint.
-            with_output_graph(
-                graph(DB_URI,Instance,ckp,ttl),
-                (
-                    true
-                )
-            ),
-            
-            sync_from_journals(DB_URI,Instance)
+post_create_db(DB_URI) :-
+    make_database_from_database_name(DB_URI, Database),
+    Schemata = Database.schema, 
+    with_transaction(
+        [transaction_record{
+             pre_database: Database,
+             write_graphs: Schemata,
+             update_database: Update_DB,
+             post_database: _Post_DB},
+         witnesses(Witnesses)],
+        forall(member(Schema,Schemata),
+               (
+                   interpolate([DB_URI],Label),
+                   interpolate([Schema,' ontology for ',DB_URI],Comment),
+                   % goal expansion doesn't work here..
+                   global_prefix_expand(rdf:type, Rdf_type),
+                   global_prefix_expand(rdfs:label, Rdfs_label),
+                   global_prefix_expand(rdfs:comment, Rdfs_comment),
+                   global_prefix_expand(owl:'Ontology', OWL_ontology),
+                   insert(Update_DB, Schema, DB_URI, Rdf_type, OWL_ontology),
+                   insert(Update_DB, Schema, DB_URI, Rdfs_label, literal(lang(en,Label))),
+                   insert(Update_DB, Schema, DB_URI, Rdfs_comment, literal(lang(en,Comment)))
+               )
+              ),
+        % always an ok update...
+        true
+    ),
+    % Succeed only if the witnesses are empty. 
+    Witnesses = [].
+
+
+delete_db(DB) :-
+    db_path(Path),
+    www_form_encode(DB,DBID),
+    interpolate(['^(?<name>',DBID,'.*).label$'],Pattern),
+    files(Path,Files),
+    forall(
+        (   member(File,Files),
+            re_matchsub(Pattern,File,Sub,[])
+        ),
+        (
+            interpolate([Path,File],QFile),
+            get_time(Time),
+            interpolate([Path,Sub.name,'-',Time,'.deleted'],Deleted_File),
+            rename_file(QFile,Deleted_File)
         )
     ).
-    
-delete_db(DB) :-
-    collection_directory(DB,DB_Path),
-    delete_directory_and_contents(DB_Path).
 
 /* 
  * should probably go in JSON-LD

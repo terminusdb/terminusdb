@@ -1,13 +1,13 @@
-:- module(server, [server/1]).
+:- module(global_prefixes, [
+              global_prefixes/2,
+              global_prefix_expand/2,
+              literal_expand/2
+          ]).
 
-/** <module> HTTP server module
- *
- * This module implements the database server. It is primarily composed 
- * of a number of RESTful APIs which exchange information in JSON format 
- * over HTTP. This is intended as a mechanism for interprocess 
- * communication via *API* and not as a fully fledged high performance 
- * server.
- *
+/** <module> Global Prefixes
+ * 
+ * Global prefix management utilities used for goal expansion
+ * 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -27,33 +27,27 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-% configuration predicates
-:- use_module(config(config),[]).
+% internal
+global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
+global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
+global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
+global_prefixes(vio,'http://terminusdb.com/schema/vio#').
+global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
+% common
+global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
+global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
+global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
+global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 
-% http server
-:- use_module(library(http/thread_httpd)).
-:- use_module(library(http/http_dispatch)).
-:- use_module(triplestore).
+/* 
+ * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
+ */
+global_prefix_expand(Prefix:X, URI) :-
+    global_prefixes(Prefix,Base),
+    atomic_list_concat([Base,X],URI).
 
-server(_Argv) :-
-    config:server(Server),
-    config:server_port(Port),
-    config:server_workers(Workers),
-    config:server_worker_options(_Settings),
-	config:http_options(HTTPOptions),
-	http_server(http_dispatch,
-		        [ port(Port),
-		          workers(Workers)
-		          | HTTPOptions
-		        ]),
-	setup_call_cleanup(
-	    http_handler(root(.), busy_loading,
-			 [ priority(1000),
-			   hide_children(true),
-			   id(busy_loading),
-			   prefix
-			 ]),
-        sync_backing_store,
-	    http_delete_handler(id(busy_loading))),
-    format("~n% Wecome to TerminusDB's terminus-server! ~n", [Server]),
-    format("% You can view your server in a browser at '~s/dashboard' ~n~n", [Server]).
+literal_expand(literal(type(T,D)), literal(type(E,D))) :-
+    nonvar(T),
+    !,
+    global_prefix_expand(T,E).
+literal_expand(literal(lang(L,D)), literal(lang(L,D))).

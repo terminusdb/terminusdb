@@ -36,12 +36,9 @@
 :- use_module(library(triplestore), [
                   xrdf/5,
                   insert/5,
-                  delete/5,
-                  with_output_graph/2,
-                  sync_from_journals/2,
-                  with_transaction/2
+                  delete/5
               ]).
-:- use_module(library(schema), [subsumptionOf/3]).
+:- use_module(library(schema)).
 :- use_module(library(relationships), [
                   relationship_source_property/3,
                   relationship_target_property/3
@@ -323,19 +320,20 @@ resolve(X,Xe) -->
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
     [],
     {
-        integer(X)
+        integer(X),
+        !
     }.
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#decimal',X))) -->
     [],
     {
-        number(X)
+        number(X),
+        !
     }.
-resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#string',Y))) -->
+resolve(X,X) -->
     [],
     {
         string(X),
-        % this looks likes it does nothing...
-        string_to_atom(Y,X)
+        !
     }.
 resolve(X@L,literal(lang(LE,XS))) -->
     resolve(X,XE),
@@ -526,9 +524,8 @@ compile_node(X:C,XE,Goals) -->
     expand(C,CE),
     view(database=G),
     {
-        database_name(G,C),
         database_instance(G,I),
-        Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
+        Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                  once(subsumptionOf(D,CE,G))
                 ]
     }.
@@ -552,7 +549,7 @@ compile_node_or_lit(_,X,XE,[]) -->
     resolve(X,XE).
 
 /* currently the same as compile node */
-compile_relation(X:C,XE,Class,Goals) -->
+compile_relation(X:_C,XE,Class,Goals) -->
     resolve(X,XE),
     %expand(C,CE),
     resolve(Class,ClassE),
@@ -560,9 +557,8 @@ compile_relation(X:C,XE,Class,Goals) -->
     {
         (   X=ignore
         ->  Goals=[]
-        ;   database_name(G,C),
-            database_instance(G,I),
-            Goals = [xrdf(C,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
+        ;   database_instance(G,I),
+            Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
                      once(subsumptionOf(D,ClassE,G))
                     ]
         )
@@ -576,27 +572,27 @@ compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(database=Database),
     resolve(X,URI).
-compile_wf(delete([WG],X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+compile_wf(delete([WG],X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC).
-compile_wf(insert([WG],X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+    view(database=DB).
+compile_wf(insert([WG],X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC).
-compile_wf(delete(X,P,Y),delete(WC,WG,XE,PE,YE)) -->
+    view(database=DB).
+compile_wf(delete(X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC),
+    view(database=DB),
     view(write_graph=[WG]).
-compile_wf(insert(X,P,Y),insert(WC,WG,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(collection=WC),
+    view(database=DB),
     view(write_graph=[WG]).
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
@@ -738,11 +734,10 @@ compile_wf(t(X,P,Y,G),Goal) -->
     {        
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        database_name(Database,C),
-        (   database_record_instance_list(C,L),
+        (   database_instance(Database,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
-        ;   Search=xrdf(C,[GE],XE,PE,YE)),
+        ;   Search=xrdf(Database,[GE],XE,PE,YE)),
         
         append([[Search],XGoals,YGoals],
                GoalList),
@@ -758,8 +753,8 @@ compile_wf(r(X,R,Y),Goal) -->
     update(output_graphs=OGS1,
            output_graphs=OGS2),
     {
-        database_name(G,C),                
         database_instance(G,I),
+        database_name(G,C),                
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -774,8 +769,8 @@ compile_wf(r(X,R,Y),Goal) -->
         ;   format(atom(M), 'No relationship target property ~q in ~q', [RClassID,G]),
             throw(error(M))),
 
-        append([[xrdf(C,I,RE,P,XE),
-                 xrdf(C,I,RE,Q,YE),
+        append([[xrdf(G,I,RE,P,XE),
+                 xrdf(G,I,RE,Q,YE),
                  is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
                  T0=[triple(C,I,XE,RE,YE,'==>')|T1]
                 ],XGoals,RGoals,YGoals],
@@ -840,27 +835,35 @@ compile_wf((A,B),(ProgA,ProgB)) -->
         %format('***************~nConjunctive Program: ~n~q~n',[(ProgA,ProgB)])
     }.
 compile_wf((A => B),Goal) -->
+    view(database=Database),
     compile_wf(A,ProgA),
+    update(database=Database,
+           database=UpdateDB),
     % This second one should be simpler, to reflect that only writes are allowed on the right. 
     compile_wf(B,ProgB),
-    view(database=Database),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
     view(write_graph=[WG]),
     {
         Goal = (
-            validate:document_transaction(Database,WG,
-                                          woql_compile:(
-                                              forall(ProgA,
-                                                     ProgB)
-                                          ),Witnesses),
+            validate:document_transaction(
+                         Database,
+                         UpdateDB,
+                         WG,
+                         woql_compile:(
+                             forall(ProgA,
+                                    ProgB)
+                         ),
+                         Witnesses),
             (   Witnesses = []
             ->  true
             ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                       'terminus:witnesses' : Witnesses})))
             )
         )
-    }.
+    },
+    update(database=_,
+           database=Database).
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
@@ -1022,6 +1025,9 @@ compile_wf(hash(Base,Args,Id), Prog) -->
 compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
+    compile_wf(S, Prog).
+compile_wf(order_by(L,S),order_by(LE,Prog)) -->
+    mapm(resolve,L,LE),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph

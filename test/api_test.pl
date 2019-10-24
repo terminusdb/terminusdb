@@ -195,7 +195,8 @@ run_schema_get_test :-
     Args = ['--user',Auth,URI],
     report_curl_command(Args),
     curl_json(Args,Term),
-    nl,json_write_dict(current_output,Term,[]),
+    nl,write(Term),
+    * json_write_dict(current_output,Term,[]),
     string(Term).
 
 run_doc_get_test :-

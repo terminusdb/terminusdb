@@ -70,14 +70,14 @@
 % JSON Queries
 :- use_module(library(json_woql)).
 
-% File processing - especially for turtle
-:- use_module(library(file_utils), [checkpoint_to_turtle/3,terminus_path/1]).
+% File processing 
+:- use_module(library(file_utils), [terminus_path/1]).
 
 % Validation
 :- use_module(library(validate)).
 
-% Checkpointing...
-:- use_module(library(triplestore), [checkpoint/2]).
+% Dumping turtle
+:- use_module(library(turtle_utils)).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -195,8 +195,7 @@ authenticate(Request, Auth) :-
     (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key',
-                                     'terminus:object' : KS})))).
+                                     'terminus:message' : 'Not a valid key'})))).
 
 verify_access(Auth, Action, Scope) :-
     * http_log_stream(Log),
@@ -267,7 +266,7 @@ dashboard_handler(options,_Request) :-
     format('~n').
 dashboard_handler(get,_Request) :-
     terminus_path(Path),
-    interpolate([Path,'/index.html'], Index_Path),
+    interpolate([Path,'/storage/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
     config:server(SURI),
     write_cors_headers(SURI),
@@ -579,8 +578,9 @@ try_delete_document(Doc_ID, Database, Witnesses) :-
     ;   default_instance_graph(Database, Document_Graph)
     ),
     
-    (   document_transaction(Database, Document_Graph,
-                             frame:delete_object(Doc_ID,Database), Witnesses)
+    (   document_transaction(Database, Transaction_DB, Document_Graph,
+                             frame:delete_object(Doc_ID,Transaction_DB),
+                             Witnesses)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
@@ -615,8 +615,8 @@ try_update_document(Doc_ID, Doc_In, Database, Witnesses) :-
     ;   default_instance_graph(Database, Document_Graph)
     ),
     
-    % We probably need to be able to pass the document graph as a parameter
-    (   document_transaction(Database, Document_Graph, frame:update_object(Doc,Database), Witnesses)
+    (   document_transaction(Database, Transaction_DB, Document_Graph,
+                             frame:update_object(Doc,Transaction_DB), Witnesses)
     ->  true
     ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -745,7 +745,14 @@ try_create_db(DB,DB_URI,Doc) :-
     % Try to create the database resource first.
     with_mutex(
         DB_URI,
-        (   (   add_database_resource(DB,DB_URI,Doc)
+        (       % create the collection if it doesn't exist
+            (   database_exists(DB_URI)
+            ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                      'terminus:message' : 'Database already exists',
+                                                      'terminus:method' : 'terminus:create_database'})))
+            ;   true),
+            
+            (   add_database_resource(DB,DB_URI,Doc)
             ->  true
             ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -757,13 +764,20 @@ try_create_db(DB,DB_URI,Doc) :-
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'})))),
+
+            (   post_create_db(DB_URI)
+            ->  true
+            ;   format(atom(MSG), 'Unable to perform post-creation updates: ~s', [DB_URI]),
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'}))))
             
         )).
 
 /* 
- * try_create_db(DB_URI,Object) is det.
+ * try_delete_db(DB_URI) is det.
  * 
+ * Attempt to delete a database given its URI
  */
 try_delete_db(DB_URI) :-
     with_mutex(
@@ -833,10 +847,12 @@ try_dump_schema(DB_URI, Name, Request) :-
             try_get_param('terminus:encoding', Request, Encoding),
             (   coerce_literal_string(Encoding, ES),
                 atom_string('terminus:turtle',ES)
-            ->  checkpoint(DB_URI, Name),
-                checkpoint_to_turtle(DB_URI, Name, TTL_File),
-                read_file_to_string(TTL_File, String, []),
-                delete_file(TTL_File),
+            ->  with_output_to(
+                    string(String), 
+                    (   current_output(Stream),
+                        graph_to_turtle(DB_URI, Name, Stream)
+                    )
+                ),
                 config:server(SURI),
                 write_cors_headers(SURI),
                 reply_json(String)

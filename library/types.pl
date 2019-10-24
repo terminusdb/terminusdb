@@ -11,7 +11,9 @@
               is_prefix_db/1,
               is_database_identifier/1,
               is_empty_graph_name/1,
-              is_database/1
+              is_database/1,
+              is_read_obj/1,
+              is_write_obj/1
           ]).
 
 /** <module> Types
@@ -212,14 +214,49 @@ error:has_type(rdf_object, Rdf_Object):-
  * is_database(Database) is semidet.
  * 
  */
-is_database(database(Name,Instance,Inference,Schema,Error_Instance,Error_Schema)) :-
+is_database(DB) :-
+    is_dict(DB),
+    DB.get(name) = Name,
+    DB.get(instance) = Instance,
+    (   DB.get(inference) = Inference
+    ->  true
+    ;   Inference = []),
+    DB.get(schema) = Schema,
+    (   DB.get(error_instance) = Error_Instance
+    ->  true
+    ;   Error_Instance = []), 
+    (   DB.get(error_schema) = Error_Schema
+    ->  true
+    ;   Error_Schema = []),
+    DB.get(write_transaction) =  _WT,
+    DB.get(read_transaction) = _RT,
+
     atom(Name),
     maplist(is_graph_identifier,Instance),
     maplist(is_graph_identifier,Inference),
     maplist(is_graph_identifier,Schema),
     maplist(is_graph_identifier,Error_Instance),
-    maplist(is_graph_identifier,Error_Schema).
+    maplist(is_graph_identifier,Error_Schema),
+    maplist(is_write_obj,RT),
+    maplist(is_read_obj,RT).
 
 error:has_type(database, X) :-
     is_database(X).
 
+is_write_obj(write_obj{ dbid: N,
+                        graphid: G,
+                        builder: _B }) :-
+    atom(N),
+    atom(G).
+
+error:has_type(write_obj, X) :-
+    is_write_obj(X).
+
+is_read_obj(read_obj{ dbid: N,
+                      graphid: G,
+                      layer: _B }) :-
+    atom(N),
+    atom(G).
+
+error:has_type(read_obj, X) :-
+    is_read_obj(X).

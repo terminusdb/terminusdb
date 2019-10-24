@@ -1,6 +1,6 @@
 :- module(validate, [
               schema_transaction/4,
-              document_transaction/4
+              document_transaction/5
           ]).
 
 /** <module> Validation
@@ -28,13 +28,14 @@
 
 :- use_module(library(triplestore)).
 :- use_module(library(database)).
-:- use_module(library(journaling)).
 :- use_module(library(utils)).
 :- use_module(library(validate_schema)).
 :- use_module(library(validate_instance)).
 :- use_module(library(frame)).
 :- use_module(library(jsonld)).
 :- use_module(library(semweb/turtle)).
+
+:- use_module(library(literals)).
 
 % For debugging
 :- use_module(library(http/http_log)).
@@ -67,113 +68,114 @@ test_schema(rangeNotSubsumedSC).
 test_schema(propertyTypeOverloadSC).
 test_schema(invalid_RDFS_property_SC).
 
-/* deal with precularities of rdf_process_turtle */
-fixup_schema_literal(literal(lang(Lang,S)),literal(lang(Lang,String))) :-
-    (   atom(S)
-    ->  atom_string(S,String)
-    ;   S = String).
-fixup_schema_literal(literal(type(Type,S)),literal(type(Type,String))) :-
-    (   atom(S)
-    ->  atom_string(S,String)
-    ;   S = String).
-fixup_schema_literal(literal(L),literal(lang(en,String))) :-
-    (   atom(L)
-    ->  atom_string(L,String)
-    ;   L = String).
-
+/* 
+ * schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
+ * 
+ * Updates a schema using a turtle formatted stream.
+ */ 
 schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
-    database_name(Database,Database_Name),
+    
+    % make a fresh empty graph against which to diff
+    open_memory_store(Store),
+    open_write(Store, Builder),
+
+    % write to a temporary builder.
+    rdf_process_turtle(
+        New_Schema_Stream,
+        {Builder}/
+        [Triples,_Resource]>>(
+            forall(member(T, Triples),
+                   (   normalise_triple(T, rdf(X,P,Y)),
+                       object_storage(Y,S),
+                       nb_add_triple(Builder, X, P, S)
+                   ))),
+        []),
+    % commit this builder to a temporary layer to perform a diff.
+    nb_commit(Builder,Layer),
+
     with_transaction(
-        [collection(Database_Name),
-         graphs([Schema]),
-         success(Success_Flag)],
+        [transaction_record{
+             pre_database: Database,
+             write_graphs: [Schema],
+             update_database: Update_DB,
+             post_database: Post_DB},
+         witnesses(Witnesses)],
+        % Update
         validate:(
-            % deletes (everything)
-            forall( xrdf(Database_Name, [Schema], A, B, C),
-                    delete(Database_Name, Schema, A, B, C)),
-            
-            % ??? cleanup_schema_module(Module),
-            % inserts (everything)
-            rdf_process_turtle(New_Schema_Stream,
-                               {Database_Name, Schema}/
-                               [Triples,_Resource]>>(
-                                   forall(member(rdf(X,P,Y), Triples),
-                                          (   (   X = node(N)
-                                              ->  interpolate(['_:',N], XF)
-                                              ;   X = XF),
-                                              
-                                              (   Y = node(M)
-                                              ->  interpolate(['_:',M], YF)
-                                              %   Bare atom literal needs to be lifted.
-                                              ;   Y = literal(_)
-                                              ->  fixup_schema_literal(Y,YF)
-                                              %   Otherwise walk on by...
-                                              ;   Y = YF),
-
-                                              insert(Database_Name,Schema,XF,P,YF)
-                                          )
-                                         )
-                               ), []),
-
-            % First, Check pre tests. 
+            % first write everything into the layer-builder that is in the new
+            % file, but not in the db. 
+            forall(
+                (   xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
+                    \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
+                delete(Update_DB,Schema,A_Old,B_Old,C_Old)
+            ),
+            forall(
+                (   xrdf_db(Layer,A_New,B_New,C_New), 
+                    \+ xrdf(Update_DB,[Schema], A_New, B_New, C_New)),
+                insert(Update_DB,Schema,A_New,B_New,C_New)
+            )
+        ),
+        % Post conditions
+        validate:(
             findall(Pre_Witness,
                     (   pre_test_schema(Pre_Check),
-                        call(Pre_Check,Database,Pre_Witness)),
+                        call(Pre_Check,Post_DB,Pre_Witness)),
                     Pre_Witnesses),
             (   \+ Pre_Witnesses = []
             % We have witnesses of failure and must bail
-            ->  Success_Flag = false,
-                Witnesses = Pre_Witnesses
+            ->  Witnesses = Pre_Witnesses
             % We survived the pre_tests, better check schema constriants
             ;   findall(Schema_Witness,
                         (   test_schema(Check),
-                            call(Check,Database,Schema_Witness)),
+                            call(Check,Post_DB,Schema_Witness)),
                         Schema_Witnesses),
                 (   \+ Schema_Witnesses = []
-                ->  Success_Flag = false,
-                    Witnesses = Schema_Witnesses
+                ->  Witnesses = Schema_Witnesses
                     % Winning!
-                ;   Success_Flag = true,
-                    Witnesses = []
+                ;   % TODO: We do not need to perform a global check of instances
+                    % Better would be a local check derived from schema delta.
+                    findall(Witness,
+                            (   database_instance(Post_DB, Instance),
+                                xrdf(Post_DB,Instance,E,F,G),
+                                refute_insertion(Post_DB,E,F,G,Witness)),
+                            Witnesses)
+                
                 )
             )
         )
     ).
 
 /* 
- * document_update(Database:database, Graph:graph_identifier, 
- *                 Document:json_ld, Witnesses:json_ld) is det.
+ * document_transaction(Database:database, Transaction_Database:database, Graph:graph_identifier,   
+ *                      Document:json_ld, Witnesses:json_ld) is det.
  * 
  * Update the database with a document, or fail with a constraint witness. 
  * 
  */
-document_transaction(Database, Graph, Goal, Witnesses) :-
-    database_name(Database,Database_Name),
+document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
     with_transaction(
-        [collection(Database_Name),
-         graphs([Graph]),
-         success(Success_Flag)],
-        validate:(
-            call(Goal),
-            findall(Pos_Witness,
-                    (
-                        triplestore:xrdf_pos_trans(Database_Name,Graph, X, P, Y),
-                        refute_insertion(Database, X, P, Y, Pos_Witness)
-                    ),
-                    Pos_Witnesses),
-            
-            findall(Neg_Witness,
-                    (   
-                        triplestore:xrdf_neg_trans(Database_Name,Graph, X, P, Y),
-                        refute_deletion(Database, X, P, Y, Neg_Witness)
-                    ),
-                    Neg_Witnesses),
-            
-            append(Pos_Witnesses, Neg_Witnesses, Witnesses),
-            
-            (   Witnesses = []
-            ->  Success_Flag = true
-            ;   Success_Flag = false
-            )
-        )
+        [transaction_record{
+             pre_database: Database,
+             update_database: Update_Database,
+             post_database: Post_Database,
+             write_graphs: [Graph]},       
+         witnesses(Witnesses)],
+        Goal,
+        validate:(   findall(Pos_Witness,
+                             (
+                                 triplestore:xrdf_added(Post_Database, Graph, X, P, Y),
+                                 refute_insertion(Post_Database, X, P, Y, Pos_Witness)
+                             ),
+                             Pos_Witnesses),
+                     
+                     findall(Neg_Witness,
+                             (   
+                                 triplestore:xrdf_deleted(Post_Database, Graph, X, P, Y),
+                                 refute_deletion(Post_Database, X, P, Y, Neg_Witness)
+                             ),
+                             Neg_Witnesses),
+                     Neg_Witnesses = [],
+                     
+                     append(Pos_Witnesses, Neg_Witnesses, Witnesses)            
+                 )
     ).

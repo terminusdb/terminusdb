@@ -22,7 +22,7 @@ RUN cd /app \
 	cd /app/hdt-cpp && ./autogen.sh && ./configure && make -j4 && make install && cd / \
 	&& ldconfig \
 	&& PKG_DIR=/usr/lib/swipl/pack \
-	&& echo "pack_remove('hdt').\
-                 pack_install('https://github.com/GavinMendelGleason/hdt.git',[package_directory('$PKG_DIR'),interactive(false)]).\
+	&& echo "pack_remove(terminus_store_prolog).\
+                 pack_install(terminus_store_prolog,[package_directory('$PKG_DIR'),interactive(false)]).\
                  pack_install(mavis,[package_directory('$PKG_DIR'),interactive(false)])."  | swipl
 CMD /app/terminusdb/init_docker.sh

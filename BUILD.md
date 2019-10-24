@@ -32,27 +32,15 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/GavinMendelGleason/hdt.git').
+1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
 % Contacting server ....
 2 ?- pack_install(mavis). 
 % Contacting server ....
 ```
 
-### HDT Library
-
-You will also need to install `hdt-cpp`. You can git clone the source tree from this repository:
-
-```
-git clone https://github.com/rdfhdt/hdt-cpp
-```
-
-... and follow the directions contained in the repostiory for the
-pre-requisites and building the code.
-
-
 ### Rapper
 
-Rapper is a dependency as well. Install it with:
+Raptor2 / rapper is also a dependency. Install it with:
 
 ```
 sudo apt install raptor2-utils

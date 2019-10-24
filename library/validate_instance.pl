@@ -77,13 +77,11 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
  * Determines the class C identified with the instance X.
  */
 instanceClass(X, Y, Database) :-
-    database_name(Database,Collection),
     database_instance(Database,Instance),
-    xrdf(Collection,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Database,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 instanceClass(X, Y, Database) :-
-    database_name(Database,Collection),
     database_schema(Database,Schema), % instances can also exist in the schema
-    xrdf(Collection,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Database,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 
 % X has cardinality N at property OP
 card(X,OP,Y,Database,N) :-
@@ -132,15 +130,15 @@ refute_insertion(_Database,
                  Reason) :- 
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
-    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
-    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
+    Reason = Base_Reason.put(_{'vio:subject' : X,
+                               'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}).
 refute_insertion(_Database,
                  X,'http://www.w3.org/2000/01/rdf-schema#comment',Label,
                  Reason) :- 
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
-    put_dict(_{'vio:subject' : X}, Base_Reason, Subject_Reason),
-    put_dict(_{'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}, Subject_Reason, Reason).
+    Reason = Base_Reason.put(_{'vio:subject' : X,
+                               'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}).
 refute_insertion(Database,X,P,_Y,Reason) :-
     % \+ P = 'rdf:type'
     (   domain(P,Domain,Database)
