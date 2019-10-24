@@ -1,4 +1,5 @@
 :- module(global_prefixes, [
+              global_prefixes/2,
               global_prefix_expand/2,
               literal_expand/2
           ]).

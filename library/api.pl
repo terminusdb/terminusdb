@@ -195,8 +195,7 @@ authenticate(Request, Auth) :-
     (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key',
-                                     'terminus:object' : KS})))).
+                                     'terminus:message' : 'Not a valid key'})))).
 
 verify_access(Auth, Action, Scope) :-
     * http_log_stream(Log),

@@ -151,7 +151,7 @@ user:term_expansion((run_upgrade_step(X,Y):-Body),
  * NOTE: shortcuts should go first in the clause order.
  */ 
 :- discontiguous run_upgrade_step/2.
-run_upgrade_step(none,'0.1.0') :-
+run_upgrade_step(none,'1.0.0') :-
     db_path(Path), 
     subdirectories(Path,Database_Names),
     forall(
@@ -168,4 +168,4 @@ run_upgrade_step(none,'0.1.0') :-
             )
         )
     ),
-    set_db_version('0.1.0').
+    set_db_version('1.0.0').

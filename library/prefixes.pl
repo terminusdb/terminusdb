@@ -38,6 +38,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+% Import global definitions
+:- use_module(library(global_prefixes)).
+
 % Use prolog persistency for prefix management.
 % We could use the DB itself but this gets a bit too metacircular!
 :- use_module(library(persistency)).
@@ -95,15 +98,15 @@ initialise_prefix_db(C) :-
  * 
  * Set up the prefix database. 
  */
-initialise_prefix_db :- 
+initialise_prefix_db :-
     once(file_search_path(terminus_home,BasePath)),
     interpolate([BasePath,'/',storage,'/','prefix.db'],File),
     (   \+ exists_file(File)
         % create the file
     ->  touch(File),
-        db_attach(File, []),
+        db_attach(File, [sync(flush)]),
         terminus_database_name(Terminus_Name),
-        initialise_prefix_db(Terminus_Name), 
+        initialise_prefix_db(Terminus_Name),
         % Add default prefixes to all collections
         % (prefixes are collection dependent)
         database_name_list(Names),
@@ -112,7 +115,7 @@ initialise_prefix_db :-
             initialise_prefix_db(N)
         )
         % Attach to the already existing file.
-    ;   db_attach(File, [])
+    ;   db_attach(File, [sync(flush)])
     ).
 
 /* 

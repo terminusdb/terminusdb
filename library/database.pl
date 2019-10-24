@@ -155,16 +155,19 @@ terminus_database(Database) :-
                    read_transaction=[],
                    write_transaction=[]], Database).
 
+/* 
+ * 
+ * This is needed for the prefix manufacture so there is a slight 
+ * complication with bootstrapping. 
+ */ 
 database_name_list(Database_Atoms) :-
-    terminus_database_name(Terminus_Name),
-    connect(Terminus_Name, Terminus_DB),
+    terminus_database(DB),
     
     findall(Database_Name, 
-            ask(Terminus_DB,
-                (   t( DB_Resource , rdf/type , terminus/'Database'),
-                    t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI))
-                )
-               ),
+            (   xrdf(DB,DB.instance,
+                     DB_Resource, rdf:type, terminus:'Database'),
+                xrdf(DB,DB.instance,
+                     DB_Resource, terminus:id, literal(type(_,Database_Name)))),
             Database_Names),
 
     maplist(string_to_atom, Database_Names, Database_Atomised),

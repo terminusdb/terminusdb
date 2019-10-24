@@ -242,6 +242,19 @@ update(DB,G,X,Y,Z,Action) :-
     new_triple(X,Y,Z,Action,X1,Y1,Z1),
     insert(DB,G,X1,Y1,Z1).
 
+
+xrdf_added(DB,G,X,Y,Z) :-
+    get_read_layer(DB,G,L),
+    object_storage(Z,S),
+    triple_addition(L,X,Y,S),
+    storage_object(S,Z).
+
+xrdf_deleted(DB,G,X,Y,Z) :-
+    get_read_layer(DB,G,L),
+    object_storage(Z,S),
+    triple_removal(L,X,Y,S),
+    storage_object(S,Z).
+
 /** 
  * xrdf(+Collection_Id,+Database_Ids:list,?Subject,?Predicate,?Object) is nondet.
  * 

@@ -161,14 +161,14 @@ document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
         Goal,
         validate:(   findall(Pos_Witness,
                              (
-                                 triplestore:xrdf(Post_Database, [Graph], X, P, Y),
+                                 triplestore:xrdf_added(Post_Database, [Graph], X, P, Y),
                                  refute_insertion(Post_Database, X, P, Y, Pos_Witness)
                              ),
                              Pos_Witnesses),
                      
-                     * findall(Neg_Witness,
+                     findall(Neg_Witness,
                              (   
-                                 triplestore:xrdf(Post_Database, [Graph], X, P, Y),
+                                 triplestore:xrdf_deleted(Post_Database, [Graph], X, P, Y),
                                  refute_deletion(Post_Database, X, P, Y, Neg_Witness)
                              ),
                              Neg_Witnesses),
