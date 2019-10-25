@@ -15,6 +15,9 @@ RUN apt-get update \
         curl \
     make \
     raptor2-utils
+# Install Rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cd /app \
         && git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git \
         && git clone --branch v0.30.0 https://github.com/drobilla/serd.git \
