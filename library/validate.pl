@@ -29,6 +29,10 @@
 :- use_module(library(triplestore)).
 :- use_module(library(database)).
 :- use_module(library(utils)).
+:- use_module(library(schema),[
+                  database_module/2,
+                  compile_schema_to_module/2
+              ]).
 :- use_module(library(validate_schema)).
 :- use_module(library(validate_instance)).
 :- use_module(library(frame)).
@@ -141,7 +145,10 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                             Witnesses)
                 
                 )
-            )
+            ),
+            % if we got here, I think this might be safe.
+            database_module(Database, Module),
+            compile_schema_to_module(Post_DB, Module)
         )
     ).
 

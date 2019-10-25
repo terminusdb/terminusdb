@@ -572,7 +572,15 @@ try_get_filled_frame(ID,Database,Object) :-
  * Deletes the object associated with ID, and throws an 
  * http error otherwise.
  */
-try_delete_document(Doc_ID, Database, Witnesses) :-
+try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
+    (   database_name(Database,Collection),
+        get_collection_jsonld_context(Collection,Ctx)
+    ->  prefix_expand(Pre_Doc_ID,Ctx,Doc_ID)
+    ;   format(atom(MSG), 'Document resource ~s could not be expanded', [Pre_Doc_ID]),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
+                                     'terminus:message' : MSG,
+                                     'terminus:object' : Pre_Doc_ID})))),
+        
     (   object_instance_graph(Doc_ID, Database, Document_Graph)
     ->  true
     ;   default_instance_graph(Database, Document_Graph)
@@ -782,18 +790,17 @@ try_create_db(DB,DB_URI,Doc) :-
 try_delete_db(DB_URI) :-
     with_mutex(
         DB_URI, 
-        (   (   delete_database_resource(DB_URI)
-            ->  true
-            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'})))),
-
-            (   delete_db(DB_URI)
+        (   (   delete_db(DB_URI)
             ->  true
             ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'})))
-            )
+                                             'terminus:status' : 'terminus:failure'})))),
+        
+            (   delete_database_resource(DB_URI)
+            ->  true
+            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
+                throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                             'terminus:status' : 'terminus:failure'}))))
         )).
 
 /* 

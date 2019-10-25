@@ -104,7 +104,7 @@ post_create_db(DB_URI) :-
     % Succeed only if the witnesses are empty. 
     Witnesses = [].
 
-
+% evil much? Unlikely to be safe.
 delete_db(DB) :-
     db_path(Path),
     www_form_encode(DB,DBID),

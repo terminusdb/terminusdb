@@ -28,7 +28,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(global_prefixes), [global_prefix_expand/2]). 
+:- use_module(library(prefixes), [global_prefix_expand/2]). 
 :- use_module(library(database)).
 :- use_module(library(triplestore)).
 :- use_module(library(schema_definitions)).

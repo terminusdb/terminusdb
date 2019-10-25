@@ -221,14 +221,15 @@ delete_database_resource(URI) :-
     connect(Collection, DB),
     % delete the object
     ask(DB, 
-        (
-            where(
-                (
-                    t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
-                    t(DB_URI, rdf/type, terminus/'Database')
-                ))
-        =>  
-            delete_object(DB_URI)
+        (   t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+            (   
+                where(
+                    (
+                        t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+                        t(DB_URI, rdf/type, terminus/'Database')
+                    ))
+            =>  
+                delete_object(DB_URI))
         )).
 
 /*  

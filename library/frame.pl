@@ -146,11 +146,10 @@ add_most_specific_property(_Database,P,PList,[P|PList]).
 most_specific_properties(Database,Properties,SpecificProperties) :-
     foldl(add_most_specific_property(Database),Properties,[],SpecificProperties). 
 
-%:- rdf_meta class_properties(r,o,r).
 class_properties(Class, Database, PropertiesPrime) :-
     (   schema:document(Class,Database)
     ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label', 
-                          'http://www.w3.org/2000/01/rdf-schema#comment']
+                            'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   DocumentProperties=[]),
     (   setof(Super,schema:subsumptionOf(Class,Super,Database),Classes),
         setof(P,

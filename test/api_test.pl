@@ -84,7 +84,7 @@ run_api_tests :-
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
     try(run_dashboard),
-    try(run_db_metadata_test).
+    * try(run_db_metadata_test).
 
 /****************************************************************
  * Basic API tests
@@ -168,8 +168,7 @@ run_schema_update_test :-
     read_file_to_string(TTL_File, String, []),
     Doc = _{
               'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"},
-              'terminus:user_key' : _{'@value': "root", '@type' : "xsd:string"}
+              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"}
            },
 
     with_output_to(
@@ -232,21 +231,15 @@ run_get_filled_frame_test :-
     % This should not return a bare frame...
     is_list(Term).
 
-run_doc_update_test :-
-    % create DB
+test_update_document(Doc) :-
     config:server(Server),
-    auth(Auth),
 
-    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
-    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
-
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:user_key':"root",
-            'terminus:document' :
-            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+    format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
+    format(string(Scm_Base), "~s~s", [Server,"/terminus_qa_test/schema#"]),
+    
+    Doc = _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc: Doc_Base,
-                           ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
@@ -259,12 +252,19 @@ run_doc_update_test :-
               '@type':"terminus:User",
               'rdfs:comment':_{'@language':"en", '@value':"This is a fake super user"},
               'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
-             }
-           },
+             }.
+
+run_doc_update_test :-
+    % create DB
+    config:server(Server),
+    auth(Auth),
+
+    test_update_document(Doc), 
 
     with_output_to(
         string(Payload),
-        json_write(current_output, Doc, [])
+        json_write(current_output, _{'@type':"terminus:APIUpdate",
+                                     'terminus:document' : Doc}, [])
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
@@ -287,23 +287,27 @@ run_doc_update_get_test :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
     
-    _{'@id':"doc:admin"} :< Term.
+    test_update_document(Doc),
 
-run_doc_update_update_test :-
-    % create DB
+    nl,writeq(Doc),nl,nl,
+    writeq(Term), nl,nl,
+    % original document simulates
+    (   Term = Doc
+    ->  true
+    ;   format('~n~nNot structured as: ~n', []),
+        json_write_dict(current_output,Doc,[]),
+        false
+    ).
+
+test_update_update_document(Doc) :-
     config:server(Server),
-    auth(Auth),
+    
+    format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
+    format(string(Scm_Base), "~s~s", [Server,"/terminus_qa_test/schema#"]),
 
-    interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
-    interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
-
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:user_key':"root",
-            'terminus:document' :
-            _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
+    Doc = _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc: Doc_Base,
-                           ex:"http://example.org/",
                            owl:"http://www.w3.org/2002/07/owl#",
                            rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
@@ -318,12 +322,20 @@ run_doc_update_update_test :-
                                '@value':"This is a fake super user who has been changed"},
               'rdfs:label':_{'@language':"en",
                              '@value':"Server Admin User"}
-             }
-           },
+             }.
 
+
+run_doc_update_update_test :-
+    % create DB
+    config:server(Server),
+    auth(Auth),
+
+    test_update_update_document(Doc),
+    
     with_output_to(
         string(Payload),
-        json_write(current_output, Doc, [])
+        json_write(current_output, _{'@type':"terminus:APIUpdate",
+                                     'terminus:document' : Doc}, [])
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
@@ -339,6 +351,8 @@ run_doc_update_update_get_test :-
     config:server(Server),
     auth(Auth),
 
+    test_update_update_document(Doc),
+
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
         
     Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
@@ -346,10 +360,12 @@ run_doc_update_update_get_test :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{ 'rdfs:comment' :
-       _{'@language':"en",
-         '@value' : "This is a fake super user who has been changed"}} :< Term.
-
+    (   Term = Doc
+    ->  true
+    ;   format('~n~nNot structured as: ~n', []),
+        json_write_dict(current_output,Doc,[]),
+        false
+    ).
 
 run_db_delete_nonexistent_test :-
     config:server(Server),
@@ -362,9 +378,9 @@ run_db_delete_nonexistent_test :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-
+    
     % This should not be a bare error
-    _{code : 500} :< Term.
+    _{'terminus:status':"terminus:failure"} :< Term.
 
 run_doc_delete_test :-
         
@@ -375,6 +391,7 @@ run_doc_delete_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
 
     Args = ['--user', Auth,'-X','DELETE',URI],
+    
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
