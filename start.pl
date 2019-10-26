@@ -71,7 +71,6 @@ main(Argv) :-
     maybe_upgrade,
     initialise_prefix_db,
     initialise_contexts,
-    trace(compile_schema_to_module),
     server(Argv),
     (   Argv == [test]
     ->  run_tests()

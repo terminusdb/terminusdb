@@ -111,7 +111,7 @@ initialise_prefix_db :-
     ->  touch(File),
         db_attach(File, [sync(flush)]),
         terminus_database_name(Terminus_Name),
-        initialise_prefix_db(Terminus_Name),
+        initialise_prefix_db(Terminus_Name)
         % Attach to the already existing file.
     ;   db_attach(File, [sync(flush)])
     ).
