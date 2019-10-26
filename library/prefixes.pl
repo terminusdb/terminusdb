@@ -88,16 +88,20 @@ default_prefixes(_,Pre,URI) :-
  * should use a different name?
  */
 initialise_prefix_db(C) :-
-    retractall_prefix(C,_,_),
-    forall(
-        default_prefixes(C,P,U),
-        assert_prefix(C,P,U)
+    with_mutex(
+        C,
+        (   retractall_prefix(C,_,_),
+            forall(
+                default_prefixes(C,P,U),
+                assert_prefix(C,P,U)
+            )
+        )
     ).
 
 /* 
  * initialise_prefix_db is det.
  * 
- * Set up the prefix database. 
+ * Set up the prefix datoabase. 
  */
 initialise_prefix_db :-
     once(file_search_path(terminus_home,BasePath)),
@@ -108,13 +112,6 @@ initialise_prefix_db :-
         db_attach(File, [sync(flush)]),
         terminus_database_name(Terminus_Name),
         initialise_prefix_db(Terminus_Name),
-        % Add default prefixes to all collections
-        % (prefixes are collection dependent)
-        database_name_list(Names),
-        forall(
-            member(N,Names),
-            initialise_prefix_db(N)
-        )
         % Attach to the already existing file.
     ;   db_attach(File, [sync(flush)])
     ).
