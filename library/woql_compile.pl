@@ -526,7 +526,7 @@ compile_node(X:C,XE,Goals) -->
     {
         database_instance(G,I),
         Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                 once(subsumptionOf(D,CE,G))
+                 once(schema:subsumptionOf(D,CE,G))
                 ]
     }.
 compile_node(X,XE,[]) -->
@@ -559,7 +559,7 @@ compile_relation(X:_C,XE,Class,Goals) -->
         ->  Goals=[]
         ;   database_instance(G,I),
             Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                     once(subsumptionOf(D,ClassE,G))
+                     once(schema:subsumptionOf(D,ClassE,G))
                     ]
         )
     }.
@@ -616,7 +616,7 @@ compile_wf(like(A,B,F), Goal) -->
                                   literal_string(BE,BS),
                                   isub(AS, BS, true, F)))))
     }.
-compile_wf(A << B,subsumptionOf(AE,BE,G)) -->
+compile_wf(A << B,schema:subsumptionOf(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
     view(database=G).

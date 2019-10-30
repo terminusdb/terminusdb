@@ -289,8 +289,6 @@ run_doc_update_get_test :-
     
     test_update_document(Doc),
 
-    nl,writeq(Doc),nl,nl,
-    writeq(Term), nl,nl,
     % original document simulates
     (   Term = Doc
     ->  true
