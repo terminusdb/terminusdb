@@ -963,7 +963,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
                       (   nth1(Idx,Names,N),
                           nth1(Idx,Values,Xe)
                       ->  true
-                      ;   format(atom(Msg),'No such indexed name in get: ~q with header: ~q',[N,Names]),
+                      ;   format(atom(Msg),'No such indexed name in get: ~q with header: ~q and values: ~q',[N,Names,Values]),
                           throw(http_error(syntax_error(Msg)))
                       )
               ), Spec, [], Indexing_List),
