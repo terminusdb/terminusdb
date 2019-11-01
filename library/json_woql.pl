@@ -91,23 +91,23 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  WOQL = delete(Doc)
-    ;   _{'http://terminusdb.com/woql#minus_triple' : [ Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#add_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = delete(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#plus_triple' : [ Subject, Predicate, Object ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#delete_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = insert(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#minus_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#delete_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = delete(WG,WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#plus_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#add_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),

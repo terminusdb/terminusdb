@@ -59,11 +59,15 @@
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
-:- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
-:- use_module(casting, [typecast/4,hash/3]).
+:- use_module(library(validate_schema), [datatypeProperty/2, objectProperty/2]).
+:- use_module(library(casting), [typecast/4,hash/3]).
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
+
+:- use_module(library(remote_file), [
+                  copy_remote/4
+              ]).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -940,9 +944,16 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     view(bindings=B),
     {
 
-        (   File_Spec = file(CSV_Path,Options)
-        ;   File_Spec = file(CSV_Path),
-            Options = []),
+        (   (   File_Spec = file(CSV_Path,Options)
+            ;   File_Spec = file(CSV_Path),
+                Options = []),
+            dict_options(_DictOptions,Options)
+        ;   (   File_Spec = http(URI,Options)
+            ;   File_Spec = http(URI),
+                Options = []),
+            dict_options(DictOptions,Options),
+            copy_remote(URI,URI,CSV_Path,DictOptions)
+        ),
 
         % Index each named column in the spec
         foldl({Names,Values,B}/
@@ -957,7 +968,8 @@ compile_wf(get(Spec,File_Spec), Prog) -->
               ), Spec, [], Indexing_List),
     
         list_conjunction(Indexing_List,Indexing),
-        
+
+        % This should know about non-header
         Prog = (
             % header row only
             csv_read_file_row(CSV_Path, Header_Row, [line(1)|Options]),
