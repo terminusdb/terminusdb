@@ -1066,10 +1066,11 @@ compile_wf(format(X,A,L),format(atom(XE,A,LE))) -->
 compile_wf(X is Arith, XE is ArithE) -->
     resolve(X,XE),
     compile_arith(Arith,ArithE).
-compile_wf(group_by(WGroup,WTemplate,WQuery),group_by(Group,Template,Query)) -->
+compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
     resolve(WGroup,Group),
     mapm(resolve,WTemplate,Template),
-    compile_wf(WQuery, Query).
+    compile_wf(WQuery, Query),
+    resolve(WAcc,Acc).
 compile_wf(true,true) -->
     [].
 

@@ -414,6 +414,6 @@ wf(format(A,B,C)) :-
     obj_or_lit(A),
     atom(B),
     is_list(C).
-wf(group_by(_A,_B,_C)) :-
+wf(group_by(_A,_B,_C,_D)) :-
     true.
 wf(true).
