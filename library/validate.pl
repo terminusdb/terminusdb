@@ -93,7 +93,7 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                        object_storage(Y,S),
                        nb_add_triple(Builder, X, P, S)
                    ))),
-        []),
+        [encoding(utf8)]),
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
 
