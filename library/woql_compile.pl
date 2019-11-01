@@ -1072,8 +1072,8 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
 compile_wf(member(X,Y),member(XE,YE)) -->
-    resolve(X,XE),
-    mapm(resolve,Y,YE).
+    mapm(resolve,X,XE).
+    resolve(Y,YE).
 compile_wf(true,true) -->
     [].
 
