@@ -93,6 +93,10 @@ into Terminus-server in a future release.
 * Write tests for Document API
 * Add optimisations to document expansion in JSON-LD avoiding duplicate expansions
 
+## Contact 
+
+You can write the authors, or connect to us on FreeNode IRC on the `#TerminusDB` channel.
+
 ## Authors
 
 Gavin Mendel-Gleason <gavin@datachemist.com>
