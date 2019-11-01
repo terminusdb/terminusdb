@@ -1054,8 +1054,11 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),atomic_list_concat(LE,AE)) -->
+compile_wf(concat(L,A),atomic_list_concat(LLE,AE)) -->
     mapm(resolve,L,LE),
+    {
+        maplist(literally,LE, LLE)
+    },
     resolve(A,AE).
 compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
     resolve(S,SE),
@@ -1076,6 +1079,13 @@ compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].
+
+literally(literal(type(_,L)), L).
+literally(literal(lang(_,L)), L).
+literally(X, X) :-
+    (   var(X)
+    ;   atom(X)
+    ;   string(X)).
 
 compile_arith(Exp,ExpE) -->
     {
