@@ -2,7 +2,7 @@
 
 1. Install Docker as described on the [Docker installation page](https://docs.docker.com/install/). Choose your
    operating system on the left sidebar.
-2. Open a command terminal (shell on Unix, Powershell or Cmd on Windows) and run `docker run -it --name terminus-server -d --mount type=volume,source=terminus_storage,dst=/app/terminusdb/storage --mount type=volume,source=terminus_config,dst=/app/terminusdb/config -p 6363:6363  --rm  terminusdb/terminus-server:latest`
+2. Open a command terminal (shell on Unix, Powershell or Cmd on Windows) and run `docker run -it --name terminus-server -d -v terminus_storage:/app/terminusdb/storage -v terminus_config:/app/terminusdb/config -p 6363:6363 --rm terminusdb/terminus-server:latest`
 
 This will create two volumes: one to persist your database data and one to persist your configuration.
 
