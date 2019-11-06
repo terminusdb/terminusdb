@@ -141,6 +141,14 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#opt' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = 'opt'(WQ)
+    ;   _{'http://terminusdb.com/woql#get' : [ Header, File ] } :< JSON
+    ->  maplist(json_to_woql_ast,Header,WHeader),
+        json_to_woql_ast(File,WFile),
+        WOQL = get(WHeader,WFile)
+    ;   _{'http://terminusdb.com/woql#remote' : [ File ] } :< JSON
+    ->  WOQL = remote(File)
+    ;   _{'http://terminusdb.com/woql#file' : [ File ] } :< JSON
+    ->  WOQL = file(File)
     ;   _{'http://terminusdb.com/woql#hash' : [ Base, Q, Hash ] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
@@ -159,9 +167,25 @@ json_to_woql_ast(JSON,WOQL) :-
         maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
         WOQL = order_by(WOQL_Args,Sub_WOQL)
+    ;   _{'http://terminusdb.com/woql#group_by' : [Spec,Obj,Query,Collector]} :< JSON
+    ->  json_to_woql_ast(Spec,WSpec),
+        json_to_woql_ast(Obj,WObj),
+        json_to_woql_ast(Query,WQuery),
+        json_to_woql_ast(Collector,WCollector),
+        WOQL = group_by(WSpec,WObj,WQuery,WCollector)
+    ;   _{'http://terminusdb.com/woql#list' : Elements } :< JSON
+    ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)), Elements, WOQL)
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
+    ;   _{'http://terminusdb.com/woql#as' : [ S, V ] } :< JSON
+    ->  (   _{'@value' : WS} :< S
+        ->  string_to_atom(WS,WA),
+            json_to_woql_ast(V,WV),
+            WOQL = as(WA,WV)
+        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'No source column specified',
+                                         'vio:query' : JSON}))))
     ;   _{'http://terminusdb.com/woql#true' : [] } :< JSON
     ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON

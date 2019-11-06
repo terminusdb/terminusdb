@@ -83,6 +83,7 @@ run_api_tests :-
     try(run_woql_test),
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
+    try(run_woql_csv_test), 
     try(run_dashboard),
     * try(run_db_metadata_test).
 
@@ -610,6 +611,50 @@ run_woql_verify_update_test :-
                          _{'@language':"en",'@value':"A WOQL updated superuser"}}
                    ]}  :< Term.
 
+
+run_woql_csv_test :-
+    config:server(Server),
+    auth(Auth),
+    terminus_path(Path),
+    atomic_list_concat([Server,'/terminus/document/'], Document),
+    atomic_list_concat([Server,'/terminus/schema#'], Schema),
+    atomic_list_concat([Server,'/terminus/'], Terminus),
+    atomic_list_concat([Server,'/'], S),
+    atomic_list_concat([Path,'/test/0CE.csv'],CSV),
+    Query = 
+    _{'@context' : _{scm : Schema,
+                     doc : Document,
+                     db : Terminus,
+                     s : S},
+      limit : [2,
+               _{get : [ [_{as : [_{'@value' : "Polity_nam"}, "v:Polity_Name"]},
+                          _{as : [_{'@value' : "fid"},        "v:Polygon"]}],
+                         _{file : [CSV]}
+                       ]}
+              ]},
+    
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
+        
+    Args = ['--user', Auth,'-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{bindings : [
+          _{
+              'http://terminusdb.com/woql/variable/Polity_Name':"ItRomPr",
+              'http://terminusdb.com/woql/variable/Polygon':1
+          },
+          _{
+              'http://terminusdb.com/woql/variable/Polity_Name':"ItRomPr",
+              'http://terminusdb.com/woql/variable/Polygon':1
+          }]} :< Term. 
 
 /****************************************************************
  * Instance Checking Tests
