@@ -38,7 +38,7 @@
                   insert/5,
                   delete/5
               ]).
-:- use_module(library(schema)).
+%:- use_module(library(schema)).
 :- use_module(library(relationships), [
                   relationship_source_property/3,
                   relationship_target_property/3
@@ -494,6 +494,13 @@ run_term(Query,JSON) :-
 literal_string(literal(type(_,Val)), Val).
 literal_string(literal(lang(_,Val)), Val).
 
+not_literal(X) :-
+    nonvar(X),
+    X = literal(_),
+    !,
+    false.
+not_literal(_).
+
 expand(A/B,U) -->
     !,
     view(prefixes=NS),
@@ -722,7 +729,7 @@ compile_wf(t(X,P,Y),Goal) -->
         Search=inference:inferredEdge(XE,PE,YE,G),
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        append([[Search],XGoals,YGoals],
+        append([[not_literal(XE),not_literal(PE),Search],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
@@ -743,7 +750,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(Database,[GE],XE,PE,YE)),
         
-        append([[Search],XGoals,YGoals],
+        append([[not_literal(XE),not_literal(PE),Search],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
@@ -969,7 +976,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
               ), Spec, [], Indexing_List),
     
         list_conjunction(Indexing_List,Indexing),
-
+        
         % This should know about non-header
         Prog = (
             % header row only
@@ -1055,11 +1062,8 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),atomic_list_concat(LLE,AE)) -->
+compile_wf(concat(L,A),atomic_list_concat(LE,AE)) -->
     mapm(resolve,L,LE),
-    {
-        maplist(literally,LE, LLE)
-    },
     resolve(A,AE).
 compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
     resolve(S,SE),
