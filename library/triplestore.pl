@@ -113,35 +113,6 @@ sync_storage :-
         )
     ).
 
-/* 
- * sync_graph(+DBN,+GID) is det. 
- * 
- * Sync the graph into dbid_graphid_obj/3 or throw an error.
- * 
- * The Mutex is not needed when called from sync_database 
- * but adding in case others call sync_graph/2 directly.
- */ 
-sync_graph(DBN,G) :-
-    atomic_list_concat(['sync_', DBN,'_',G], Mutex),
-    with_mutex(
-        Mutex,
-        (   storage(Storage),
-            safe_open_named_graph(Storage, G, Gobj),
-            retractall(dbid_graphid_obj(DBN, G, _)),
-            assertz(dbid_graphid_obj(DBN, G, Gobj))
-        ->  true
-        ;   retractall(dbid_graphid_obj(DBN, G, _)),
-            format(atom(Msg),
-                   'Could not sync graph ~q for database ~q',
-                   [DBN,G]),
-            throw(graph_sync_error(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : Msg,
-                                     'terminus:broken_database' : DBN,
-                                     'terminus:broken_graph' : G
-                                    }))
-        )
-    ).
-
 /** 
  * sync_backing_store is det.  
  * 
