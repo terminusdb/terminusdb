@@ -4,8 +4,8 @@
           ]).
 
 /** <module> WOQL JSON-LD syntax
- * 
- * This file contains the code for conversion of JSON-LD to the WOQL 
+ *
+ * This file contains the code for conversion of JSON-LD to the WOQL
  * AST.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -41,11 +41,11 @@ json_woql(JSON,Ctx,WOQL) :-
     expand(JSON,Ctx,JSON_Ex),
     json_to_woql_ast(JSON_Ex,WOQL).
 
-/* 
- * json_to_woql_ast(+JSON:dict,-AST:any) is det. 
- * 
- * Translate a JSON-LD WOQL statement into the AST. 
- */ 
+/*
+ * json_to_woql_ast(+JSON:dict,-AST:any) is det.
+ *
+ * Translate a JSON-LD WOQL statement into the AST.
+ */
 json_to_woql_ast(JSON,WOQL) :-
     is_dict(JSON),
     !,
@@ -152,7 +152,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash ] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
-        json_to_woql_ast(Hash,WHash),        
+        json_to_woql_ast(Hash,WHash),
         WOQL = hash(WBase,WQ,WHash)
     ;   _{'http://terminusdb.com/woql#start' : [ N, Q ] } :< JSON
     ->  json_to_woql_arith(N,WN),
@@ -162,7 +162,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
         WOQL = limit(WN, WQ)
-    ;   _{'http://terminusdb.com/woql#order_by' : Clauses } :< JSON    
+    ;   _{'http://terminusdb.com/woql#order_by' : Clauses } :< JSON
     ->  snoc(Vargs,Sub_Query,Clauses),
         maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
@@ -208,7 +208,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ).
 json_to_woql_ast(JSON,WOQL) :-
     coerce_atom(JSON,A),
-    !,    
+    !,
     (   is_json_var(A)
     ->  WOQL = v(A)
     ;   A = WOQL
@@ -245,6 +245,3 @@ json_to_woql_arith(JSON,WOQL) :-
     ).
 json_to_woql_arith(JSON,JSON) :-
     number(JSON).
-
-    
-

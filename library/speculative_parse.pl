@@ -4,9 +4,9 @@
                              ]).
 
 /** <module> Speculative Parse
- * 
- * Guess the correct parse of an input. 
- * 
+ *
+ * Guess the correct parse of an input.
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -28,11 +28,11 @@
 
 :- use_module(xsd_parser).
 :- use_module(library(dcg/basics), [whites//0]).
- 
+
 /*
- * guess_date(+Val,-Date) is nondet. 
- * 
- * Guess some possible dates. 
+ * guess_date(+Val,-Date) is nondet.
+ *
+ * Guess some possible dates.
  */
 guess_date(Val,literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Date))) :-
     atom_codes(Val,Codes),
@@ -43,8 +43,8 @@ guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',Val)))
 
 /*
  * guess_number(+Val,-Number) is nondet. (or det?)
- * 
- * Guess some possible numbers. 
+ *
+ * Guess some possible numbers.
  */
 guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Val))) :-
     number(Val),
@@ -85,7 +85,7 @@ triplet(Number_String) -->
     }.
 
 doublet(Number_String) -->
-    digit(A), digit(B), 
+    digit(A), digit(B),
     { string_concat(A,B,Number_String)
     }.
 
@@ -158,4 +158,3 @@ guess_time(time(H,M,S,Z,ZH,ZM)) -->
     !.
 guess_time(time(H,M,0,0,-,-)) -->
     twoDigitNatural(H), ":", twoDigitNatural(M).
-

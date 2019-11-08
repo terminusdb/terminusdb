@@ -3,8 +3,8 @@
           ]).
 
 /** <module> Turtle utilities
- * 
- * Utilities for manipulating, inputing and outputing turtle 
+ *
+ * Utilities for manipulating, inputing and outputing turtle
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
@@ -25,14 +25,14 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(prefixes)). 
+:- use_module(library(prefixes)).
 :- use_module(library(triplestore)).
 :- use_module(library(semweb/turtle)).
 
-/** 
+/**
  * graph_to_turtle(+N,+G,+Output_Stream) is det.
- * 
- * Create a ttl representation of the graph G in the 
+ *
+ * Create a ttl representation of the graph G in the
  * database named N.
  */
 graph_to_turtle(N,G,Out_Stream) :-
@@ -42,21 +42,20 @@ graph_to_turtle(N,G,Out_Stream) :-
     head(Obj, L),
     layer_to_turtle(L,Prefixes,Out_Stream).
 
-/** 
+/**
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
  */
-turtle_triples(Layer,X,P,Y,_) :-    
+turtle_triples(Layer,X,P,Y,_) :-
     xrdf_db(Layer,X,P,Y).
 
-/** 
+/**
  * layer_to_turtle(Layer,Prefixes,Out_Stream) is det.
- * 
- * Write out triples from Layer to Out_Stream, using turtle_triples/5 
- * as the generator, with prefixes, Prefixes. 
+ *
+ * Write out triples from Layer to Out_Stream, using turtle_triples/5
+ * as the generator, with prefixes, Prefixes.
  */
-layer_to_turtle(Layer,Prefixes,Out_Stream) :- 
+layer_to_turtle(Layer,Prefixes,Out_Stream) :-
    rdf_save_canonical_turtle(
         Out_Stream,
-        [prefixes(Prefixes),expand(turtle_triples(Layer)),group(true),indent(2)]
-    ). 
-    
+        [prefixes(Prefixes),expand(turtle_triples(Layer)),group(true),indent(2),silent(true)]
+    ).

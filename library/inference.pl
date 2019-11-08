@@ -3,9 +3,9 @@
           ]).
 
 /** <module> Inference
- * 
+ *
  * Predicates for inferring additional triples from the Inference ontology.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -30,9 +30,9 @@
 :- use_module(library(triplestore)).
 :- use_module(library(expansions)).
 
-/** 
+/**
  * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database is nondet.
- * 
+ *
  * Run a property axiom chain PropList from X to Y.
  */
 %:- table runChain/4.
@@ -43,12 +43,12 @@ runChain(X,[P|PropList],Z,Database) :-
     xrdf(Database,I,X,P,Y),
     runChain(Y,PropList,Z,Database).
 
-/** 
+/**
  * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:database is nondet.
- * 
+ *
  * We impose an ordering to avoid non-termination (subproperty ordering)
  * Concrete links are already in InferredEdge
- */ 
+ */
 inferredTransitiveEdge(X,OP,Z,Database) :-
     database_inference(Database,Inference),
     xrdf(Database, Inference,
@@ -56,11 +56,11 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
     inferredEdge(X,SOP,Y,Database),
     inferredEdge(Y,OP,Z,Database).
 
-/** 
+/**
  * inferredEdge(?X,?OP,?Y,+Database:database) is nondet.
- * 
+ *
  * Calculates all available triples under inference
- * 
+ *
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
 inferredEdge(X,OP,Y,Database) :-

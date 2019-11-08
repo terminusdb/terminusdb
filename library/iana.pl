@@ -1,9 +1,9 @@
 :- module(iana, [iana/3]).
 
 /** <module> IANA defined language list.
- * 
+ *
  * All IANA language prefixes to be used in literal language assignment.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *

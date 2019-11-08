@@ -3,9 +3,9 @@
           ]).
 
 /** <module> Remote File
- * 
+ *
  * Remote file manipulation
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -28,7 +28,7 @@
 :- use_module(file_utils).
 
 
-/* 
+/*
  * copy_remote(+Remote, +Name, -File) is det.
  *
  */
@@ -37,7 +37,7 @@ copy_remote(Remote, Name, File, Options) :-
         sanitise_file_name(Name,Safe),
         temp_path(Dir),
         format(atom(File), "~w/~w-~w", [Dir,Safe,Time]),
-        (   User = Options.get(user), 
+        (   User = Options.get(user),
             Pass = Options.get(password),
             format(atom(Log_File), "~w/~w.log", [Dir,Safe]),
             format(atom(CMD), 'wget --http-user="~w" --http-password="~w" "~w" -O "~w" -o "~w"',

@@ -29,9 +29,9 @@
                        time/8]).
 
 /** <module> XSD Parser
- * 
+ *
  * Attempt to implement XSD parsing as faithfully as possible.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -95,13 +95,13 @@ notDigit --> anyBut('01234567890'), notDigit.
 notDigit --> anyBut('01234567890').
 
 oneDigitNatural(N) --> digit(A), { number_string(N,A) }.
-	
+
 twoDigitNatural(N) --> digit(A), digit(B), { string_concat(A,B,C), number_string(N,C) } .
 
-threeDigitNatural(N) --> digit(A), digit(B), digit(C), { string_concat(A,B,I), string_concat(I,C,D), number_string(N,D) } . 
+threeDigitNatural(N) --> digit(A), digit(B), digit(C), { string_concat(A,B,I), string_concat(I,C,D), number_string(N,D) } .
 
 fourDigitNatural(N) --> digit(A), digit(B), digit(C), digit(D),
-			{ string_concat(A,B,S1), string_concat(S1,C,S2), string_concat(S2,D,S3), number_string(N,S3) } . 
+			{ string_concat(A,B,S1), string_concat(S1,C,S2), string_concat(S2,D,S3), number_string(N,S3) } .
 
 
 digits(T) --> digit(X), digits(S),
@@ -235,8 +235,8 @@ alpha --> alphaLower .
 alphas --> alphas, alpha .
 alphas --> alpha .
 
-   
-base64elt --> alpha . 
+
+base64elt --> alpha .
 base64elt --> base64char .
 base64elt --> digit(_) .
 
@@ -252,7 +252,7 @@ base64Terminates --> whitespace, base64elt,
 		     whitespace, base64elt .
 base64Terminates --> whitespace, base64elt,
 		     whitespace, base64elt2,
-		     whitespace, equals, 
+		     whitespace, equals,
 		     whitespace, equals .
 base64Terminates --> whitespace, base64elt,
 		     whitespace, base64elt,
@@ -311,7 +311,7 @@ ncname --> "_" , ncolonSeq .
  ******************/
 
 point(X,Y) --> "[" , whitespace, decimal(X), whitespace,
-			   "," , whitespace, decimal(Y), whitespace, 
+			   "," , whitespace, decimal(Y), whitespace,
 			   "]" .
 
 
@@ -323,23 +323,23 @@ coordinatePolygon([]) --> "[" , whitespace , "]" .
 
 decimalRange(X,X) --> decimal(X).
 decimalRange(X,Y) --> "[" , whitespace, decimal(X), whitespace,
-					  "," , whitespace, decimal(Y), whitespace, 
+					  "," , whitespace, decimal(Y), whitespace,
 					  "]" .
 integerRange(X,X) --> positiveInteger(X).
 integerRange(X,Y) --> "[" , whitespace, positiveInteger(X), whitespace,
-					 "," , whitespace, positiveInteger(Y), whitespace, 
+					 "," , whitespace, positiveInteger(Y), whitespace,
 					 "]" .
 
 gYearRange(X,X) --> gYear(X,_,_,_).
 gYearRange(X,Y) --> "[" , whitespace, gYear(X,_,_,_), whitespace,
-					"," , whitespace, gYear(Y,_,_,_), whitespace, 
+					"," , whitespace, gYear(Y,_,_,_), whitespace,
 					"]" .
 
 dateRange(date(Y,M,D,Z,HH,MM),date(Y,M,D,Z,HH,MM)) -->
     date(Y,M,D,Z,HH,MM).
 dateRange(date(Y1,M1,D1,Z1,HH1,MM1),date(Y2,M2,D2,Z2,HH2,MM2)) -->
     "[" , whitespace, date(Y1,M1,D1,Z1,HH1,MM1), whitespace,
-	"," , whitespace, date(Y2,M2,D2,Z2,HH2,MM2), whitespace, 
+	"," , whitespace, date(Y2,M2,D2,Z2,HH2,MM2), whitespace,
 	"]" .
 
 terminal([],_S).
@@ -363,4 +363,3 @@ emailname --> emailChar.
 email --> emailname, "@", domain.
 
 string(S,L,[]) :- string_codes(S,L).
-

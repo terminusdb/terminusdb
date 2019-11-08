@@ -11,21 +11,21 @@
           ]).
 
 /** <module> Frame Types
- * 
+ *
  * Type checking predicates for frames.
  *
  *
  * Frame Grammar:
- * 
+ *
  * % example
- *  [type=objectProperty, 
+ *  [type=objectProperty,
  *   domain=Domain,
  *   range=Range,
- *   frame=[[...], ..., [...]] => { 'type' : 'objectProperty', 
- *                                  'domain' : 'Domain', 
+ *   frame=[[...], ..., [...]] => { 'type' : 'objectProperty',
+ *                                  'domain' : 'Domain',
  *                                  'range' : 'Range',
  *                                  'frame' : [{ ... } , ... , { ... }] }.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -44,7 +44,7 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-      
+
 is_property_restriction(true).
 is_property_restriction(L) :-
     member(type=Type,L),
@@ -129,6 +129,6 @@ is_frame(F) :- exclude(is_property_frame,F,[]).
 is_frame(F) :- is_document_frame(F).
 is_frame(F) :- is_one_of_frame(F).
 is_frame(F) :- is_class_choice_frame(F).
-    
+
 error:has_type(frame, X) :-
     is_frame(X).

@@ -1,7 +1,7 @@
 :- module(frame, [
               %% Give a class frame for a given class.
               class_frame/3,
-              % Various class/document queries 
+              % Various class/document queries
               all_documents/2,
               all_classes/2,
               class_properties/3,
@@ -16,7 +16,7 @@
               % document_object/4,
               % As JSON-LD
               document_jsonld/3,
-              % As JSON-LD with a context 
+              % As JSON-LD with a context
               document_jsonld/4,
               % As JSON-LD with a context and depth parameter
               document_jsonld/5,
@@ -30,11 +30,11 @@
           ]).
 
 /** <module> Frames
- * 
- * Frame code for generating either objects based on ontology information 
- * or descriptors of the object type - or the combination of the two 
+ *
+ * Frame code for generating either objects based on ontology information
+ * or descriptors of the object type - or the combination of the two
  * coupled together.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -74,7 +74,7 @@
 
 class_record(Database,Class,[class=Class|L]) :-
     maybe_meta(Class,Database,L).
-            
+
 property_record(Database,Property,L) :-
     maybe_meta(Property,Database,L).
 
@@ -86,7 +86,7 @@ all_classes(Database,ACR) :-
     unique_solutions(C,class(C,Database),AC),
     maplist(class_record(Database),AC,ACR).
 
-/** 
+/**
  * get_label(Document,Database,Label) is semidet.
  */
 get_label(Document,Database,Label) :-
@@ -107,10 +107,10 @@ get_some_label(E,Database,L) :-
     ->  true
     ;   L=E).
 
-/** 
+/**
  * all_document_instances(Database,Ae) is semidet.
- * 
- * Returns a list of URI=[type=Class,label=Label] elements, where 
+ *
+ * Returns a list of URI=[type=Class,label=Label] elements, where
  * Class is an document class and Label is a string.
  */
 all_document_instances(Database,AE) :-
@@ -144,18 +144,18 @@ add_most_specific_property(Database,P,PList,Rp) :-
 add_most_specific_property(_Database,P,PList,[P|PList]).
 
 most_specific_properties(Database,Properties,SpecificProperties) :-
-    foldl(add_most_specific_property(Database),Properties,[],SpecificProperties). 
+    foldl(add_most_specific_property(Database),Properties,[],SpecificProperties).
 
 class_properties(Class, Database, PropertiesPrime) :-
     (   schema:document(Class,Database)
-    ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label', 
+    ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label',
                             'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   DocumentProperties=[]),
     (   setof(Super,schema:subsumptionOf(Class,Super,Database),Classes),
         setof(P,
               S^(member(S,Classes),
                  validate_schema:domain(P,S,Database)),
-              Properties)        
+              Properties)
     ->  most_specific_properties(Database,Properties,MSProperties),
         append(MSProperties,DocumentProperties,PropertiesWithAbstract),
         database_schema(Database,Schema),
@@ -228,9 +228,9 @@ restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
     xrdf(Database,Schema,CR,owl:hasValue,V).
 
 % ignore modeline
-% is_class_formula(+Formula:any) is semidet. 
-%  
-% True if Formula is a class formula 
+% is_class_formula(+Formula:any) is semidet.
+%
+% True if Formula is a class formula
 is_class_formula(Class<Superclasses) :-
     is_uri(Class),
     exclude(is_class_formula,Superclasses,[]).
@@ -255,15 +255,15 @@ is_class_formula(class(Class)) :-
 error:has_type(class_formula,X) :-
     is_class_formula(X).
 
-/* 
+/*
  * class_assertion(+Database:database +Class:uri, -Formula:class_formula) is nondet.
  *
  * Get one solution of the OWL class assertions
- * 
+ *
  * @param Database A graph object identifying the current schema graph.
  * @param Class Atom URI identifier of rfds or owl Class.
  * @param Formula Term describing the class relationships.
- * 
+ *
  * TODO: Formula should be a type
  */
 %:- rdf_meta class_assertion(o,r,t).
@@ -297,9 +297,9 @@ class_assertion(Database,Class,class(Class)) :-
     \+ restriction(Class,Database),
     \+ has_formula(Class,Database).
 
-/* 
+/*
  * class_formula(+Class:uri, +Database:database -Formula:class_formula) is semidet.
- * 
+ *
  * Create a formula describing the manner in which the class is
  * defined.
  *
@@ -320,13 +320,13 @@ maybe_label(_,_,[]).
 
 maybe_comment(C,Database,[comment=Comment]) :-
     comment(C,Comment,Database), !.
-maybe_comment(_,_,[]). 
+maybe_comment(_,_,[]).
 
 maybe_tcs_tag(C,Database,[tcstag=DC]) :-
     tcs_tag(C,DC,Database), !.
 maybe_tcs_tag(_,_,[]).
 
-maybe_meta(C,Database,LCD) :- 
+maybe_meta(C,Database,LCD) :-
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
     maybe_tcs_tag(C,Database,DCOGTag),
@@ -339,9 +339,9 @@ decorate_elements([Elt|Rest],Database,[MLC|Restp]) :-
     decorate_elements(Rest,Database,Restp).
 
 /**
- * property_restriction(+Property:uri,+Database:databasePR:property_restriction) is det. 
- * 
- * Obtains a property restriction which is intrinsic to the property rather than 
+ * property_restriction(+Property:uri,+Database:databasePR:property_restriction) is det.
+ *
+ * Obtains a property restriction which is intrinsic to the property rather than
  * a result of a restriction class.
  */
 property_restriction(P,Database,R) :-
@@ -351,10 +351,10 @@ property_restriction(P,Database,R) :-
     ).
 
 
-/** 
+/**
  * classes_below(+Class:uri, +Database, -Below:list(uri)) is det.
- * 
- * Get all classes below us in the subsumption hierarchy, 
+ *
+ * Get all classes below us in the subsumption hierarchy,
  * excluding owl:Nothing or abstract classes.
  */
 classes_below(Class,Database,BelowList) :-
@@ -366,7 +366,7 @@ classes_below(Class,Database,BelowList) :-
                      X,tcs:tag,tcs:abstract)),
             ClassesNoBottom,
             BelowList).
-                                   
+
 simplify_restriction_list(T,R,S) :-
     (   R = [S]
     ->  true
@@ -375,11 +375,11 @@ simplify_restriction_list(T,R,S) :-
     ;   S=[type=T,
            operands=R]).
 
-/** 
- * normalise_restriction(+Restriction:property_restriction,-N:property_restriction) is det. 
+/**
+ * normalise_restriction(+Restriction:property_restriction,-N:property_restriction) is det.
  *
  * Disjunctive normal form for restriction.
- */ 
+ */
 normalise_restriction([type=sub, operands=Results],N) :-
     !,
     maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
@@ -412,10 +412,10 @@ normalise_restriction([uri=U|Res],[uri=U|Res]) :-
 normalise_restriction(true,true) :-
     !.
 
-/* 
+/*
  * restriction_formula(+Formula:class_formula,+Database:database
  *                     -RestrictionFormula:property_restriction) is det.
- * 
+ *
  * Calculate the formula of restrictions for a class.
  */
 restriction_formula(_<L,Database,S) :-
@@ -445,9 +445,9 @@ restriction_formula(restriction(L),_,L) :-
 restriction_formula(_=oneOf(_),_,true) :-
     !.
 
-/** 
+/**
  * select_restriction(+P:uri,+R:property_restriction,+Database:database-S:property_restriction) is det.
- */ 
+ */
 select_restriction(P,[type=or,operands=Operands],G,Restriction) :-
     !,
     convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
@@ -468,28 +468,28 @@ select_restriction(P,[uri=U,property=Q|R],G,[uri=U,property=P|R]) :-
     subsumptionPropertiesOf(P,Q,G),
     !.
 select_restriction(_,[uri=_,property=_|_],_,true) :-
-    !. % \+ subsumptionPropertiesOf(P,Q,Database).    
+    !. % \+ subsumptionPropertiesOf(P,Q,Database).
 select_restriction(_,true,_,true).
 
 
-/** 
- * calculate_property_restriction(+Property:uri,+Restriction_Formula:property_restriction, 
+/**
+ * calculate_property_restriction(+Property:uri,+Restriction_Formula:property_restriction,
  *                                +Database:database-Restriction:property_restriction)  is det.
- * 
- * Calculate the full restriction on a given property, from the formula and 
+ *
+ * Calculate the full restriction on a given property, from the formula and
  * constraints directly on the property.
  */
-calculate_property_restriction(Property,Restriction_Formula,Database,Restriction) :- 
+calculate_property_restriction(Property,Restriction_Formula,Database,Restriction) :-
     select_restriction(Property,Restriction_Formula,Database,CalculatedRestriction),
     property_restriction(Property,Database,PropRestriction),
     normalise_restriction([type=and,operands=[PropRestriction,CalculatedRestriction]],
                           Restriction).
 
-/** 
+/**
  * apply_restriction(+Class:uri,+Property:uri,+Database:database
  *                   +RestrictionFormula:property_restriction,Frame) is semidet.
- * 
- * 
+ *
+ *
  */
 %:- rdf_meta apply_restriction(r,r,o,o,t).
 apply_restriction(Class,Property,Database,Restriction_Formula,
@@ -503,7 +503,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
     % we don't want to generate a frame here at all.
     annotationProperty(Property,Database),
     !,
-    mostSpecificRange(Property,Range,Database),    
+    mostSpecificRange(Property,Range,Database),
     property_record(Database,Property,RecordRemainder),
     calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
 apply_restriction(Class,Property,Database,Restriction_Formula,
@@ -526,13 +526,13 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    range=Range,
                    restriction=Restriction,
                    frame=[type=document,class=Range|RTail]
-                   |RecordRemainder]) :- 
+                   |RecordRemainder]) :-
     mostSpecificRange(Property,Range,Database),
     class(Range,Database),
     schema:document(Range,Database),
     % We are a document frame.
     !,
-    property_record(Database,Property,RecordRemainder),    
+    property_record(Database,Property,RecordRemainder),
     maybe_label(Range,Database,RLabel),
     maybe_comment(Range,Database,RComment),
     append(RLabel, RComment, RTail),
@@ -544,14 +544,14 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    range=Range,
                    restriction=Restriction,
                    frame=Frame
-                   |RecordRemainder]) :- 
+                   |RecordRemainder]) :-
     mostSpecificRange(Property,Range,Database),
     class(Range,Database),
     oneOfList(Range,OneList,Database),
     % We are an document frame.
     !,
     Frame = [type=oneOf, elements=DecoratedOneList],
-    decorate_elements(OneList,Database,DecoratedOneList),        
+    decorate_elements(OneList,Database,DecoratedOneList),
     property_record(Database,Property,RecordRemainder),
     % These always come together as a triplet, so should probably be one thing.
     calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
@@ -579,23 +579,23 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
         Frame=[type=class_choice,operands=Frames]
     ).
 
-/* 
+/*
  * calculate_frame(+Class:uri,+Properties:list(uri),
  *                 +Restriction_Formula:property_restriction, Database:database -Frame) is det.
- * 
- * Calculate the application of the restriction formula to the properties. 
+ *
+ * Calculate the application of the restriction formula to the properties.
 333 */
-calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :- 
+calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
     maplist({Class,Database,Restriction_Formula}/[Property,Property_Frame]
             >>(apply_restriction(Class,Property,Database,Restriction_Formula,Property_Frame)),
             Properties, Frames).
 
 /*
- * We can't actually check types here because tabling doesn't work with 
+ * We can't actually check types here because tabling doesn't work with
  * attributed variables.
- * 
- * class_frame_aux(+Class:uri,Database:databaseOutputFrame:frame) is semidet. 
- * Generate the frame associated with a given class. 
+ *
+ * class_frame_aux(+Class:uri,Database:databaseOutputFrame:frame) is semidet.
+ * Generate the frame associated with a given class.
  *
  * Fails if the class doesn't exist.
  */
@@ -614,13 +614,13 @@ class_frame_aux(Class, Database, Frame) :-
         calculate_frame(Class,Properties,RestrictionFormula,Database,Frame)
     ;   Frame = [type=failure, message='No Class Formula!', class=Class]).
 
-/** 
+/**
  * fill_class_frame(+Elt,+Database,-Frame,-Filled) is det.
- * 
+ *
  * Fill a class frame with values to recreate the LDO structure.
  *
  * NOTE: This should probably be upgraded to JSON-LD using dictionaries.
- */ 
+ */
 fill_class_frame(_,_,[],[]) :- !.
 fill_class_frame(Elt,Database,[[type=objectProperty|P]|Rest], Frames) :-
     % object property
@@ -648,12 +648,12 @@ fill_class_frame(Elt,Database,[[type=datatypeProperty|P]|Rest],Frames) :-
     ;   fill_class_frame(Elt,Database,Rest,Frames)).
 fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
     % a bare restriction (restricts nothing)
-    !, 
+    !,
     fill_class_frame(Elt,Database,Rest,Frames).
 fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     % A class choice (the choice has already been made...)
     !,
-    %format('Elt: ~q~n', [Elt]),        
+    %format('Elt: ~q~n', [Elt]),
     instanceClass(Elt,Class,Database),
     %format('Class: ~q~n', [Class]),
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp),
@@ -665,7 +665,7 @@ fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     debug(frame,'fill_class_frame/4 choice Filtered: ~q~n', [Filtered]),
     Filtered = [Fsp_Filtered].
 fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
-    member(type=Type, C), 
+    member(type=Type, C),
     member(operands=Fs, C),
     % An operand
     !,
@@ -704,7 +704,7 @@ choose_property(_Database,_P,[], []) :- !.
 class_property_frame(Class, Property, Database, PropertyFrame) :-
     class_frame(Class, Database, Frame),
     choose_property(Database,Property,Frame,PropertyFrame).
-    
+
 % get filled frame for document
 document_filled_frame(Document,Database,Filled) :-
     instanceClass(Document,Class,Database),
@@ -713,10 +713,10 @@ document_filled_frame(Document,Database,Filled) :-
 
 /*
  * realiser(+Document:uri,+Frame:frame,+Database:database+Depth:number,-Realiser:any) is det.
- * 
- * Synthesise the concrete representative of the schema class, 
- * showing inhabitation unfolding documents up to a depth of Depth. 
- * 
+ *
+ * Synthesise the concrete representative of the schema class,
+ * showing inhabitation unfolding documents up to a depth of Depth.
+ *
  * Does not actually appear to be det!
  */
 realiser(Elt,Frame,Database,Depth,['@type'=Class,
@@ -725,9 +725,9 @@ realiser(Elt,Frame,Database,Depth,['@type'=Class,
     instanceClass(Elt,Class,Database),
     realise_frame(Elt,Frame,Database,Depth,Realisers).
 
-/* 
+/*
  * realise_frame(Elt,Frame,Database,Depth,Quasi_JSONLD) is det.
- * 
+ *
  * Traverse frame synthesising realisers.
  */
 realise_frame(_,[],_,_,[]) :-
@@ -768,7 +768,7 @@ realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Database,Depth,Realisers) :-
     ).
 realise_frame(Elt,[[type=restriction|_R]|Rest],Database,Depth,Realisers) :-
     % We are a bare restriction, not applied to any property
-    !, 
+    !,
     realise_frame(Elt,Rest,Database,Depth,Realisers).
 realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser|Realisers]) :-
     % We are a bare class_choice, not applied to any property
@@ -777,7 +777,7 @@ realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser
     realise_frame(Elt,Rest,Database,Depth,Realisers).
 realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
-    % member(type=Type, Frame), 
+    % member(type=Type, Frame),
     member(operands=Fs, Frame),
     !, % We're an operator, so stick with it
     maplist({Elt,Database,Depth}/[TheFrame,New_Realiser]
@@ -794,14 +794,14 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
         Object = [_Type,_Id|New_Realiser]).
 
 
-/* 
+/*
  * realise_triples(Elt,Frame,Database,Realiser) is det.
  *
- * The triple realiser must be kept in complete lock step with the definition above. 
+ * The triple realiser must be kept in complete lock step with the definition above.
  * This makes me wonder if we shouldn't keep the method fused or derived!
- * 
+ *
  * It may be desirable to have a depth parameter here as well?
- */ 
+ */
 realise_triples(_,[],_,[]) :-
     !.
 realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Type)|Realiser]) :-
@@ -809,9 +809,9 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Ty
     database_name(Database,C),
     database_instance(Database,G),
 
-    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
     xrdf(Database,G,Elt,RDFType,Type),
-    
+
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
@@ -830,8 +830,8 @@ realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,
     !, % no turning back if we are a datatype property
     database_name(Database,C),
     database_instance(Database,G),
-        
-    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+
+    RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
     xrdf(Database,G,Elt,RDFType,Type),
 
     member(property=Prop, P),
@@ -844,7 +844,7 @@ realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,
     ).
 realise_triples(Elt,[[type=restriction|_R]|Rest],Database,Realiser) :-
     % We are a bare restriction, not applied to any property
-    !, 
+    !,
     realise_triples(Elt,Rest,Database,Realiser).
 realise_triples(Elt,[[type=class_choice,operands=_]|Rest],Database,Realiser) :-
     % We are a bare class choice, not applied to any property
@@ -854,7 +854,7 @@ realise_triples(Elt,[[type=class_choice,operands=_]|Rest],Database,Realiser) :-
     append(Edges,Realiser_Tail,Realiser).
 realise_triples(Elt,Frame,Database,Realisers) :-
     % We should be able to assume correctness of operator here...
-    % member(type=Type, Frame), 
+    % member(type=Type, Frame),
     member(operands=Fs, Frame),
     !, % We're an operator, so stick with it
     maplist({Elt,Database}/[TheFrame,New_Realiser]
@@ -868,10 +868,10 @@ realise_triples(_Elt,F,_Database,[]) :-
 
 /*
  * document_object(+Document:uri,+Database:database+Depth,-Realiser) is semidet.
- * 
- * Gets the realiser for the frame associated with the class of 
+ *
+ * Gets the realiser for the frame associated with the class of
  * Document
- */ 
+ */
 document_object(Document,Database,Depth,Realiser) :-
     most_specific_type(Document,Class,Database),
     class_frame(Class,Database,Frame),
@@ -879,14 +879,14 @@ document_object(Document,Database,Depth,Realiser) :-
 
 /*
  * document_jsonld(+Document:uri,+Ctx:any,+Database:database-Realiser) is semidet.
- * 
- * Gets the realiser for the frame associated with the class of 
+ *
+ * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
- */ 
+ */
 document_jsonld(Document,Ctx,Database,JSON_LD) :-
     document_object(Document, Database, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-    
+
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
@@ -895,15 +895,15 @@ document_jsonld(Document,Ctx,Database,JSON_LD) :-
 
 /*
  * document_jsonld(+Document:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
- * 
- * Gets the realiser for the frame associated with the class of 
- * Document in a JSON-LD format using a supplied context and unfolding 
+ *
+ * Gets the realiser for the frame associated with the class of
+ * Document in a JSON-LD format using a supplied context and unfolding
  * up to depth Depth
- */ 
+ */
 document_jsonld(Document,Ctx,Database,Depth,JSON_LD) :-
     document_object(Document, Database, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-    
+
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
@@ -913,33 +913,33 @@ document_jsonld(Document,Ctx,Database,Depth,JSON_LD) :-
 
 /*
  * document_jsonld(+Document:uri,+Database:database-Realiser) is semidet.
- * 
- * Gets the realiser for the frame associated with the class of 
+ *
+ * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format.
- */ 
+ */
 document_jsonld(Document,Database,JSON_LD) :-
     document_jsonld(Document,_{},Database,JSON_LD).
 
 
-/* 
+/*
  * class_frame_jsonld(Class,Database,JSON_Frame) is det.
- * 
+ *
  */
 class_frame_jsonld(Class,Database,JSON_Frame) :-
     class_frame(Class,Database,Frame),
     term_jsonld(Frame,JSON_LD),
-    
+
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx),
 
     compress(JSON_LD,Ctx,JSON_Frame).
 
-/* 
+/*
  * object_edges(URI,Database,Edges) is det.
- * 
- * Is there any way to make this so that everyting is derived from 
- * the same source? 
- */ 
+ *
+ * Is there any way to make this so that everyting is derived from
+ * the same source?
+ */
 object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
@@ -948,13 +948,13 @@ object_edges(URI,Database,Edges) :-
     ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
-    
 
-/* 
+
+/*
  * object_references(URI,Database,Edges) is det.
- * 
+ *
  * Get the set of references to a given object.
- */ 
+ */
 object_references(URI,Database,Edges) :-
     database_name(Database,C),
     database_instance(Database,G),
@@ -963,9 +963,9 @@ object_references(URI,Database,Edges) :-
             inferredEdge(Elt, Prop, URI, Database),
             Edges).
 
-/* 
+/*
  * object_instance_graph(JSON_or_URI,Database,I) is det.
- */ 
+ */
 object_instance_graph(URI,Database,I) :-
     atom(URI),
     !,
@@ -975,13 +975,13 @@ object_instance_graph(URI,Database,I) :-
     (   xrdf(Database,[I],URI,rdf:type,_)
     ->  true).
 object_instance_graph(JSON,Database,I) :-
-    is_dict(JSON),    
+    is_dict(JSON),
     get_dict('@id', JSON, URI),
     object_instance_graph(URI,Database,I).
-        
-/* 
+
+/*
  * delete_object(URI,Database) is det.
- * 
+ *
  */
 delete_object(URI,Database) :-
     get_collection_jsonld_context(Database,Ctx),
@@ -992,12 +992,12 @@ delete_object(URI,Database) :-
     database_name(Database,DB_Name),
     maplist({DB_Name,Database}/[(DB_Name,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Edges).
 
-/* 
+/*
  * update_object(Obj:dict,Database) is det.
- * 
+ *
  * This should extract the object from the database
  * and set up inserts / deletes as:
- * 
+ *
  * Inserts := triples(New) / triples(Old)
  * Deletes := triples(New) / triples(New)
  */
@@ -1006,10 +1006,10 @@ update_object(Obj, Database) :-
     update_object(ID,Obj,Database).
 
 
-/* 
+/*
  * update_object(ID:url,Obj:dict,Database) is det.
- * 
- * Does the actual updating using ID. 
+ *
+ * Does the actual updating using ID.
  */
 update_object(ID, Obj, Database) :-
     database_name(Database,Database_Name),
@@ -1017,32 +1017,32 @@ update_object(ID, Obj, Database) :-
     prefix_expand(ID,Ctx,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
-    
+
     jsonld_triples(New_Obj,Ctx,Database,New),
     object_edges(ID,Database,Old),
 
     debug(frame,'~nNew: ~q~n', [New]),
     debug(frame,'~nOld: ~q~n', [Old]),
-    % Don't back out now.  both above should be det so we don't have to do this. 
+    % Don't back out now.  both above should be det so we don't have to do this.
     !,
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
     maplist({Database}/[(C,[G],X,Y,Z)]>>insert(Database,G,X,Y,Z), Inserts),
-    
+
     maplist({Database}/[(C,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Deletes).
 
 /*
- * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON) 
+ * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)
  *    is semidet.
- * 
- * Gets the realiser for the frame associated with the class of 
+ *
+ * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
- */ 
+ */
 document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
     document_filled_frame(Document, Database, FCF),
     term_jsonld(FCF, JSON_Ex),
-    
+
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),

@@ -17,8 +17,8 @@
           ]).
 
 /** <module> Types
- * 
- * This module implements pervasive types which can be used for type 
+ *
+ * This module implements pervasive types which can be used for type
  * checking. Works particularly well in conjunction with Mavis.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -42,18 +42,18 @@
 
 
 
-/************************************************************************* 
+/*************************************************************************
 
-This file deliberately has no dependencies - please do not introduce them. 
+This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 
-/** 
+/**
  * is_literal(+X) is semidet.
- *  
+ *
  */
 is_literal(literal(lang(Lang,Data))) :-
     atom(Lang),
@@ -66,10 +66,10 @@ is_literal(literal(type(Type,_Data))) :-
 error:has_type(literal,X) :-
     is_literal(X).
 
-/** 
+/**
  * is_uri(+X) is semidet.
- * 
- */ 
+ *
+ */
 is_uri(X) :-
     atom(X).
 is_uri(X) :-
@@ -80,7 +80,7 @@ error:has_type(uri,X) :-
 
 /**
  * is_prefixed_uri(+X) is semidet.
- * 
+ *
  **/
 is_prefixed_uri(X):-
     nonvar(X),
@@ -89,10 +89,10 @@ is_prefixed_uri(X):-
 error:has_type(prefixed_uri,X) :-
     is_prefixed_uri(X).
 
-/** 
+/**
  * is_id(+X) is semidet.
- * 
- **/ 
+ *
+ **/
 is_id(id(Y)) :-
     (   atom(Y)
     ->  true
@@ -102,9 +102,9 @@ error:has_type(id,X) :-
     is_id(X).
 
 
-/** 
+/**
  * is_uri_or_id(+X) is semidet.
- * 
+ *
  **/
 is_uri_or_id(X) :-
     is_uri(X).
@@ -116,38 +116,38 @@ is_uri_or_id(id(Y)) :-
 error:has_type(uri_or_id,X) :-
     is_uri_or_id(X).
 
-/** 
+/**
  * is_object(+X) is semidet.
- * 
- **/ 
+ *
+ **/
 is_object(X) :-
     (   is_prefixed_uri(X) % DDD maybe not anymore...
-    ->  true        
+    ->  true
     ;   is_literal(X)
     ->  true
     ;   is_uri(X)).
 
 
-/** 
+/**
  * is_object_or_id(+X) is semidet.
- * 
- **/ 
+ *
+ **/
 is_object_or_id(X) :-
     (   is_object(X)
     ->  true
     ;   is_id(X)).
 
 
-/** 
+/**
  * is_bnode(+X) is semidet.
  */
 is_bnode(X) :-
     atom_prefix(X,'_:').
 
-/** 
+/**
  * is_number_compat(X) is semidet.
- * 
- * Compatibility with number type. Needs to not supply bindings as it 
+ *
+ * Compatibility with number type. Needs to not supply bindings as it
  * is not a constraint but a test of current groundness.
  *
  * Name borrowed from Ciao.
@@ -158,7 +158,7 @@ is_number_compat(X) :-
     ;   number(X)).
 
 
-/* 
+/*
  * is_graph_identifier(X) is semidet.
  *
  * Type of a graph identifier object
@@ -169,10 +169,10 @@ is_graph_identifier(GID) :-
 error:has_type(graph_identifier, X) :-
     is_graph_identifier(X).
 
-/* 
+/*
  * is_prefix_db(X) is semidet.
- * 
- * Tests to see if we have a valid prefix database. 
+ *
+ * Tests to see if we have a valid prefix database.
  */
 is_prefix_db([]).
 is_prefix_db([A=B|Tail]) :-
@@ -184,11 +184,11 @@ error:has_type(prefix_db, X) :-
     is_prefix_db(X).
 
 
-/* 
+/*
  * is_database_identifier(X) is semidet.
- * 
+ *
  * Type of a database identifier
- */ 
+ */
 is_database_identifier(X) :-
     atom(X).
 
@@ -197,9 +197,9 @@ error:has_type(database_identifier, X) :-
 
 /**
  * is_empty_graph_name(+Database_Id:graph_identifier) is semidet.
- * 
+ *
  * Sometimes we want to designate that there is no graph
- * we can do this with none or false. JSON converts to @(false) 
+ * we can do this with none or false. JSON converts to @(false)
  * for a null object.
  **/
 is_empty_graph_name(Database_Id):-
@@ -210,9 +210,9 @@ is_empty_graph_name(Database_Id):-
 error:has_type(rdf_object, Rdf_Object):-
     is_rdf_object(Rdf_Object).
 
-/* 
+/*
  * is_database(Database) is semidet.
- * 
+ *
  */
 is_database(DB) :-
     is_dict(DB),
@@ -224,7 +224,7 @@ is_database(DB) :-
     DB.get(schema) = Schema,
     (   DB.get(error_instance) = Error_Instance
     ->  true
-    ;   Error_Instance = []), 
+    ;   Error_Instance = []),
     (   DB.get(error_schema) = Error_Schema
     ->  true
     ;   Error_Schema = []),

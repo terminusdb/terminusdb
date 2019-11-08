@@ -4,23 +4,23 @@
                      ]).
 
 /** <module> Utilities to check and upgrade the database version
- * 
- * This module is meant to upgrade old versions of the database to new database 
- * formats. 
- * 
- * We want to create chaining rules for application of lifting operations so that we 
- * only have to test each upgrade from V to V+1, but can apply arbitrary version 
- * lifts. This is done using term expansion from run_upgrade_step/2 which automatically 
+ *
+ * This module is meant to upgrade old versions of the database to new database
+ * formats.
+ *
+ * We want to create chaining rules for application of lifting operations so that we
+ * only have to test each upgrade from V to V+1, but can apply arbitrary version
+ * lifts. This is done using term expansion from run_upgrade_step/2 which automatically
  * constructs upgrade_step/2 so that we can test accessibility with accessible/2.
  *
- * In order to add an upgrade step, please add a clause to run_upgrade_step/2 and 
+ * In order to add an upgrade step, please add a clause to run_upgrade_step/2 and
  * change the current version set in database_version/1
  *
- * i.e.  
+ * i.e.
 
  run_upgrade_step('1.2','1.3') :-
-     % do stuff here. 
-     % ... 
+     % do stuff here.
+     % ...
      true.
 
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -46,17 +46,17 @@
 :- use_module(file_utils).
 :- use_module(library(pcre)).
 
-       
-/** 
- * database_version(-Version) is det. 
- * 
+
+/**
+ * database_version(-Version) is det.
+ *
  * Supplies the current version number of the DB
- */ 
+ */
 database_version('1.0.0').
 
 /*
  * get_db_version(-Version) is det.
- * 
+ *
  * Reports the version associated with the current backing store
  */
 get_db_version(Version) :-
@@ -68,16 +68,16 @@ get_db_version(Version) :-
             (   read_string(Stream, "\n", "\r", _End, String),
                 atom_string(Version,String)
             ),
-            close(Stream)        
+            close(Stream)
         )
     ;   Version = none).
- 
-/* 
+
+/*
  * set_db_version(+Version) is det.
- * 
+ *
  * Set the Database version
- */ 
-set_db_version(Version) :- 
+ */
+set_db_version(Version) :-
     db_path(DB_Path),
     interpolate([DB_Path,'VERSION'],Version_File),
     setup_call_cleanup(
@@ -86,7 +86,7 @@ set_db_version(Version) :-
         close(Stream)
     ).
 
-/* 
+/*
  * guess_collection_name(+Database_Name,-Collection) is semidet.
  *
  * Try to guess the collection name of graph
@@ -97,9 +97,9 @@ guess_collection_name(Database_Name,Collection) :-
                 Dict, []),
     get_dict('Collection',Dict,Collection).
 
-/* 
- * accessible(Version1,Version2,Path) is det. 
- * 
+/*
+ * accessible(Version1,Version2,Path) is det.
+ *
  * Determines if one version is accessible from another
  */
 accessible(Version,Version,[]).
@@ -124,15 +124,15 @@ run_upgrade([Version1,Version2|Rest]) :-
     run_upgrade_step(Version1,Version2),
     run_upgrade([Version2|Rest]).
 
-/* 
+/*
  * upgrade_step(Version1,Version2) is semidet.
- * 
+ *
  * Describes if there is an upgrade from Version1 to Version2
  */
 :- discontiguous upgrade_step/2.
 
-/* 
- * We do term expansion to add a upgrade_step/2 with the two 
+/*
+ * We do term expansion to add a upgrade_step/2 with the two
  * head terms from run_upgrade_step/2 so we can check accessibility
  * of an upgrade.
  */
@@ -143,16 +143,16 @@ user:term_expansion((run_upgrade_step(X,Y):-Body),
                     [(run_upgrade_step(X,Y):-Body),
                      upgrade_step(X,Y)]).
 
-/* 
+/*
  * run_upgrade_step(X,Y) is nondet.
- * 
+ *
  * Perform an upgrade step from version X, to version Y
  *
  * NOTE: shortcuts should go first in the clause order.
- */ 
+ */
 :- discontiguous run_upgrade_step/2.
 run_upgrade_step(none,'1.0.0') :-
-    db_path(Path), 
+    db_path(Path),
     subdirectories(Path,Database_Names),
     forall(
         member(Database_Name,Database_Names),
@@ -160,11 +160,11 @@ run_upgrade_step(none,'1.0.0') :-
             (   guess_collection_name(Database_Name,Collection_Name)
             ->  interpolate([Path,Collection_Name], Collection_Path),
                 interpolate([Path,Database_Name], Database_Path),
-                ensure_directory(Collection_Path), 
+                ensure_directory(Collection_Path),
                 mv(Database_Path,Collection_Path),
                 interpolate([Collection_Path,'/COLLECTION'], Collection_Marker),
                 touch(Collection_Marker)
-            ;   true % not really a graph 
+            ;   true % not really a graph
             )
         )
     ),

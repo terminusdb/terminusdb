@@ -20,7 +20,7 @@
 
 /*****************************************************
  * Utils
- *****************************************************/ 
+ *****************************************************/
 
 /*
  * command(Cmd) is semidet.
@@ -53,9 +53,9 @@ safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
-/** 
+/**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
- * 
+ *
  * Reads in Turtle String and writes initial database.
  */
 create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
@@ -70,7 +70,7 @@ create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
         [Triples,_Resource]>>(
             forall(member(T, Triples),
                    (   normalise_triple(T, rdf(X,P,Y)),
-                       object_storage(Y,S), 
+                       object_storage(Y,S),
                        nb_add_triple(Builder, X, P, S)))),
         []),
     % commit this builder to a temporary layer to perform a diff.
@@ -79,8 +79,8 @@ create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
 
 
 /*****************************************************
- * Opts 
- *****************************************************/ 
+ * Opts
+ *****************************************************/
 opt_spec([[opt(help),
            type(boolean),
            shortflags([h]),
@@ -108,7 +108,7 @@ opt_spec([[opt(help),
            longflags([port]),
            default(6363),
            help('set the server port')],
-          
+
           [opt(protocol),
            type(atom),
            longflags([protocol]),
@@ -136,7 +136,7 @@ Set the administrative key - necessary before superuser can begin to set other p
 
 /*****************************************************
  * Paths and Main
- *****************************************************/ 
+ *****************************************************/
 
 example_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/terminus_instance_template.ttl'], Path).
@@ -219,7 +219,7 @@ initialize_database(Server, Port, Workers, Protocol, Key, Dir) :-
         database_path(Dir,DB_Path),
         make_directory_path(DB_Path),
         delete_directory_contents(DB_Path),
-        
+
         instance_path(Dir,Instance_TTL_Path),
         inference_path(Dir,Inference_TTL_Path),
         schema_path(Dir,Schema_TTL_Path),
@@ -234,7 +234,7 @@ initialize_database(Server, Port, Workers, Protocol, Key, Dir) :-
         crypto_password_hash(Key,Hash, [cost(15)]),
         write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
                          Port, Key),
-        
+
         copy_file(Example_Instance_TTL, Instance_TTL_Path),
         copy_file(Example_Inference_TTL, Inference_TTL_Path),
         copy_file(Example_Schema_TTL, Schema_TTL_Path),
@@ -262,12 +262,6 @@ main(Args) :-
     opt_parse(Spec,Args,Opts,_),
     help(Prog,Spec,Help_Text),
 
-    (   command(rdf2hdt)
-    ->  true
-    ;   format('We can\'t proceed without rdf2hdt but it\'s not installed.  Aborting.\n'),
-        write(Help_Text),
-        halt(2)),
-
     (   memberchk(help(true), Opts)
     ->  write(Help_Text),
         halt
@@ -291,5 +285,3 @@ main(Args) :-
         initialize_database(Server, Port, Workers, Protocol, Key, Dir),
         halt
     ).
-
-

@@ -13,9 +13,9 @@
           ]).
 
 /** <module> JSON-LD
- * 
+ *
  * Definitions for translating and manipulating JSON_LD
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -47,19 +47,19 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-/** 
+/**
  * expand(+JSON_LD, -JSON) is det.
- * 
+ *
  * Expands from JSON_LD prefixed format to fully expanded form.
- */ 
+ */
 expand(JSON_LD, JSON) :-
     expand(JSON_LD, _{}, JSON).
 
-/** 
+/**
  * expand(+JSON_LD, +Context:dict, -JSON) is det.
- * 
+ *
  * Expands from JSON_LD prefixed format to fully expanded form.
- */ 
+ */
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
     % Law of recursion: Something must be getting smaller...
@@ -73,7 +73,7 @@ expand(JSON_LD, Context, JSON) :-
     put_dict('@context',JSON_Ex,Local_Context,JSON).
 expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
     !,
-    prefix_expand(Type,Context,TypeX), 
+    prefix_expand(Type,Context,TypeX),
     JSON = _{'@type' : TypeX, '@value' : Value}.
 expand(_{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     !,
@@ -87,7 +87,7 @@ expand(JSON_LD, Context, JSON) :-
             (
                 member(K,Keys),
                 get_dict(K,JSON_LD,V),
-                
+
                 (   member(K,['@id','@type'])
                 ->  prefix_expand(V,Context,Value),
                     Key = K
@@ -104,7 +104,7 @@ expand(JSON_LD, Context, JSON) :-
 expand(JSON, _, JSON) :-
     atom(JSON),
     !.
-expand(JSON, _, JSON) :-    
+expand(JSON, _, JSON) :-
     string(JSON).
 
 expand_value(V,Key_Ctx,Ctx,Value) :-
@@ -212,8 +212,8 @@ prefix_expand(K,Context,Key) :-
         atomic_list_concat([Base,Vocab,K],Key)
     ).
 
-/* 
- * expand_context(+Context,-Context_Expanded) is det. 
+/*
+ * expand_context(+Context,-Context_Expanded) is det.
  *
  * Expand all prefixes in the context for other elements of the context
  */
@@ -222,10 +222,10 @@ expand_context(Context,Context_Expanded) :-
     maplist({Context}/[K-V,Key-V]>>context_prefix_expand(K,Context,Key), Pairs, Expanded_Pairs),
     dict_create(Context_Expanded, _, Expanded_Pairs).
 
-/* 
+/*
  * expand_key(+K,+Context,-Key,-Value) is det.
- * 
- * Need to expand value from context information in the event 
+ *
+ * Need to expand value from context information in the event
  * that typing/language information is contained there.
  */
 expand_key(K,Context,Key,Value) :-
@@ -239,12 +239,12 @@ expand_key(K,Context,Key,Value) :-
     ;   Key = Key_Candidate,
         Value = _{}).
 
-/* 
- * compress_uri(URI, Key, Prefix, Compressed) is det. 
- * 
+/*
+ * compress_uri(URI, Key, Prefix, Compressed) is det.
+ *
  * Take a URI and a context and compress uris such that
  * Ctx = { foo : 'http://example.com/' }
- * URI = 'http://example.com/bar' 
+ * URI = 'http://example.com/bar'
  * compresses to => foo:bar
  */
 compress_uri(URI, Key, Prefix, Comp) :-
@@ -258,9 +258,9 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
     ->  true
     ;   URI = Folded_URI).
 
-/* 
+/*
  * compress(JSON,Context,JSON_LD) is det.
- * 
+ *
  * Replace expanded URIs using Context.
  */
 compress(JSON,Context,JSON_LD) :-
@@ -276,12 +276,12 @@ extend_with_context(JSON_Pre,Context,JSON_LD) :-
     merge_dictionaries(_{'@context' : Context}, JSON_Pre, JSON_LD).
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_list(JSON_Pre),
-    
+
     maplist({Context}/[JSON,JSON_Out]>>extend_with_context(JSON,Context,JSON_Out),
             JSON_Pre,
             JSON_LD).
 
-    
+
 compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_dict(JSON),
     !,
@@ -336,10 +336,10 @@ compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
 */
 
-/* 
+/*
  * term_jsonld(Term,JSON) is det.
- * 
- * expand a prolog internal json representation to dicts. 
+ *
+ * expand a prolog internal json representation to dicts.
  */
 term_jsonld(literal(type(T,D)),_{'@type' : T, '@value' : D}).
 term_jsonld(literal(lang(L,D)),_{'@language' : L, '@value' : D}).
@@ -355,10 +355,10 @@ term_jsonld(Term,JSON) :-
     maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
 term_jsonld(JSON,JSON).
 
-/* 
+/*
  * Get the ID a json objct
- * 
- */ 
+ *
+ */
 jsonld_id(Obj,ID) :-
     is_dict(Obj),
     !,
@@ -374,13 +374,13 @@ jsonld_id(_Obj,Database,ID) :-
   */
 
 /* Debug
- * This should not exist.... We should already be expanded.  
+ * This should not exist.... We should already be expanded.
  *
  * jsonld_predicate_value(P,Val,Ctx,Expanded_Value) is det.
- * 
+ *
  * Look up the predicate in the context to see if we should expand our information
  * about the value.
- */ 
+ */
 jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
     get_dict(P,Ctx,Expanded),
 
@@ -401,10 +401,10 @@ jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
         ;   merge_dictionaries(Expanded, _{'@value' : Val}, Expanded_Value))
     ;   Val = Expanded_Value).
 jsonld_predicate_value(_P,Val,_Ctx,Val).
-    
-/* 
- * jsonld_triples(+Dict,+Database,-Triples) is det. 
- * 
+
+/*
+ * jsonld_triples(+Dict,+Database,-Triples) is det.
+ *
  * Return the triples associated with a JSON-LD structure.
  */
 jsonld_triples(JSON, Database, Triples) :-
@@ -418,10 +418,10 @@ jsonld_triples(JSON, Ctx, Database, Triples) :-
     jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples_Unsorted),
     sort(Triples_Unsorted,Triples).
 
-/* 
+/*
  * jsonld_triples_aux(Dict, Ctx, Database, Tuples) is det.
- * 
- * Create the n-triple format of the given json triples 
+ *
+ * Create the n-triple format of the given json triples
  * suitable for use with delete/5 or insert/5
  */
 jsonld_triples_aux(Dict, Ctx, Database, Triples) :-
@@ -442,21 +442,21 @@ jsonld_triples_aux(Dict, Ctx, Database, Triples) :-
 jsonld_triples_aux(List, Ctx, Database, Triples) :-
     is_list(List),
     !,
-    
+
     maplist({Ctx,Database}/[Obj,Ts]>>
                 jsonld_triples_aux(Obj,Ctx,Database,Ts),
             List,
             Ts_List),
     append(Ts_List, Triples).
-    
-/* 
- * jsonld_id_triples(ID,PV,Ctx,Database,Triples) is det. 
+
+/*
+ * jsonld_id_triples(ID,PV,Ctx,Database,Triples) is det.
  *
- * We have the id and are looking for the edge and values. 
+ * We have the id and are looking for the edge and values.
  */
 jsonld_id_triples(ID,PV,Ctx,Database,Triples) :-
     is_dict(PV),
-    !,    
+    !,
 
     dict_pairs(PV, _, JSON_Pairs),
     maplist({ID,Ctx,Database}/[P-V,Triples]>>(
@@ -472,12 +472,12 @@ jsonld_id_triples(ID,PV,Ctx,Database,Triples) :-
                 ;   P = Pred,
                     %jsonld_predicate_value(P,V,Ctx,EV),
                     json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples)
-                )                
+                )
             ),
             JSON_Pairs, Triples_List),
-    
+
     append(Triples_List, Triples).
- 
+
 json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
     (   is_dict(V)
     ->  (   V = _{'@type' : Type,
@@ -491,32 +491,32 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
             Triples = [(C,G,ID,Pred,literal(lang(Atom_Lang,Data)))]
         ;   jsonld_id(V,Val),
             jsonld_triples_aux(V,Ctx,Database,Rest),
-            Triples = [(C,G,ID,Pred,Val)|Rest])        
+            Triples = [(C,G,ID,Pred,Val)|Rest])
     ;   is_list(V)
     ->  maplist({C,G,ID,Pred,Ctx,Database}/[V,Triples]>>(
                     json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples)
                 ), V, Triples_List),
         append(Triples_List, Triples)
-    ;   string(V)        
+    ;   string(V)
     ->  atom_string(A,V),
         Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',A)))]
-    ;   atom(V)        
+    ;   atom(V)
     ->  Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',V)))]
     ;   Triples = [(C,G,ID,Pred,V)]).
 
 
-/* 
+/*
  * get_key_document(Key,Document,Value) is det
- * 
+ *
  * Looks up the value of a key in a document
- */ 
+ */
 get_key_document(Key,Document,Value) :-
     get_global_jsonld_context(Ctx),
     get_key_document(Key,Ctx,Document,Value).
-    
-/* 
+
+/*
  * get_key_document(Key,Ctx,Document,Value)
- */ 
+ */
 get_key_document(Key,Ctx,Document,Value) :-
     is_dict(Document),
     % Law of recursion: Something must be getting smaller...
@@ -547,4 +547,3 @@ get_key_document(Key,Ctx,Document,Value) :-
     %   operator which uses an expanded canonical form
     %   modulo adornments (like '@context').
     ;   Value1 = Value).
-

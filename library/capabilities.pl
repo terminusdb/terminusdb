@@ -8,12 +8,12 @@
               delete_database_resource/1,
               write_cors_headers/1
           ]).
-                 
+
 /** <module> Capabilities
- * 
+ *
  * Capability system for access control.
- * 
- * We will eventually integrate a rich ontological model which 
+ *
+ * We will eventually integrate a rich ontological model which
  * enables fine grained permission access to the database.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -48,26 +48,26 @@
 :- use_module(library(sdk)).
 :- op(1050, xfx, =>).
 
-/** 
+/**
  * root_user_id(Root_User_ID : uri) is det.
  */
 root_user_id(Root) :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
-/** 
+/**
  * key_user(+Key,-User) is det.
- * 
+ *
  * Key user association - goes only one way
- */ 
+ */
 key_user(Key, User_ID) :-
     coerce_literal_string(Key,K),
     terminus_database_name(Collection),
     connect(Collection,DB),
-    ask(DB, 
-        select([User_ID], 
+    ask(DB,
+        select([User_ID],
 		       (
-			       t( User_ID , rdf/type , terminus/'User' ), 
+			       t( User_ID , rdf/type , terminus/'User' ),
 			       t( User_ID , terminus/user_key_hash, Hash^^_ )
 		       )
 	          )
@@ -75,24 +75,24 @@ key_user(Key, User_ID) :-
     atom_string(Hash_Atom, Hash),
     crypto_password_hash(K, Hash_Atom).
 
-/** 
+/**
  * get_user(+User_ID, -User) is det.
- * 
+ *
  * Gets back a full user object which includes all authorities
  */
 get_user(User_ID, User) :-
     terminus_database(Database),
     terminus_context(Ctx),
-    
+
     document_jsonld(User_ID,Ctx,Database,3,User).
 
 
-/** 
- * key_auth(Key,Auth) is det. 
- *  
+/**
+ * key_auth(Key,Auth) is det.
+ *
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
- */ 
+ */
 key_auth(Key, Auth) :-
     key_user(Key,User_ID),
 
@@ -100,22 +100,22 @@ key_auth(Key, Auth) :-
     terminus_context(Ctx),
 
     user_auth_id(User_ID, Auth_ID),
-    
+
     document_jsonld(Auth_ID,Ctx,Database,Auth).
 
-/* 
+/*
  * user_auth_id(User,Auth_id) is semidet.
- * 
- * Maybe should return the auth object - as soon as we have 
+ *
+ * Maybe should return the auth object - as soon as we have
  * obj embedded in woql.
  */
 user_auth_id(User_ID, Auth_ID) :-
     terminus_database_name(Collection),
     connect(Collection,DB),
-    ask(DB, 
-        select([Auth_ID], 
+    ask(DB,
+        select([Auth_ID],
 		       (
-			       t( User_ID , rdf/type , terminus/'User' ), 
+			       t( User_ID , rdf/type , terminus/'User' ),
 			       t( User_ID , terminus/authority, Auth_ID )
 		       )
 	          )
@@ -127,27 +127,27 @@ user_auth_id(User_ID, Auth_ID) :-
 user_action(User,Action) :-
     terminus_database_name(Collection),
     connect(Collection,DB),
-    ask(DB, 
-        select([Action], 
+    ask(DB,
+        select([Action],
 		       (
-			       t( User , rdf/type , terminus/'User' ), 
-			       t( User , terminus/authority, Auth ), 
+			       t( User , rdf/type , terminus/'User' ),
+			       t( User , terminus/authority, Auth ),
 			       t( Auth , terminus/action, Action)
 		       )
 	          )
        ).
 
-/* 
+/*
  * auth_action_scope(Auth,Action,Scope) is nondet.
- * 
+ *
  * Does Auth object have capability Action on scope Scope.
- * 
+ *
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(Auth, Action, Resource_ID) :-
     terminus_database_name(Collection),
     connect(Collection, DB),
-    ask(DB, 
+    ask(DB,
 	    where(
             (
                 t(Auth, terminus/action, Action),
@@ -160,13 +160,13 @@ auth_action_scope(Auth, Action, Resource_ID) :-
     % make comparison late..
     %atom_string(Resource_ID,Resource_ID_String).
 
-/*  
+/*
  * add_database_resource(DB,URI,Doc) is det.
- * 
- * Adds a database resource object to the capability instance database for the purpose of 
+ *
+ * Adds a database resource object to the capability instance database for the purpose of
  * authority reference.
- * 
- * DB is the name of the database, URI is its identifier and Doc is a document which 
+ *
+ * DB is the name of the database, URI is its identifier and Doc is a document which
  * describes all of its metadata properties.
  */
 add_database_resource(DB_Name,URI,Doc) :-
@@ -179,7 +179,7 @@ add_database_resource(DB_Name,URI,Doc) :-
                                                        '@type' : 'xdd:url'},
                                'vio:message' : 'Database exists'})))
     ;   true),
-    
+
     /* This check is required to cary out appropriate auth restriction */
     (   get_key_document('@type', DocX, 'terminus:Database')
     ->  true
@@ -189,13 +189,13 @@ add_database_resource(DB_Name,URI,Doc) :-
                                'vio:database_name' : _{'@value' : URI,
                                                        '@type' : 'xdd:url'},
                                'vio:message' : MSG})))),
-    
-    /* Extend Doc with default databases */ 
+
+    /* Extend Doc with default databases */
     extend_database_defaults(URI, DocX, Ext),
-    
+
     terminus_database_name(Collection),
     connect(Collection, DB),
-    ask(DB, 
+    ask(DB,
 	    (
             true
         =>
@@ -206,35 +206,35 @@ add_database_resource(DB_Name,URI,Doc) :-
        ).
 
 
-/*  
+/*
  * delete_database_resource(URI) is det.
- * 
- * Deletes a database resource object to the capability instance database for the purpose of 
+ *
+ * Deletes a database resource object to the capability instance database for the purpose of
  * removing the authority reference.
  */
 delete_database_resource(URI) :-
     % hmmm... this is going to be tricky... We need to delete all references to the object.
     % but are those references then going to be "naked" having no other reference?
     %
-    % Supposing we have only one scope for an auth, do we delete the auth? 
+    % Supposing we have only one scope for an auth, do we delete the auth?
     terminus_database_name(Collection),
     connect(Collection, DB),
     % delete the object
-    ask(DB, 
+    ask(DB,
         (   t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
-            (   
+            (
                 where(
                     (
                         t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
                         t(DB_URI, rdf/type, terminus/'Database')
                     ))
-            =>  
+            =>
                 delete_object(DB_URI))
         )).
 
-/*  
+/*
  * write_cors_headers(Resource_URI) is det.
- * 
+ *
  * Writes cors headers associated with Resource_URI
  */
 write_cors_headers(Resource_URI) :-
@@ -242,8 +242,8 @@ write_cors_headers(Resource_URI) :-
     connect(Collection, DB),
     % delete the object
     findall(Origin,
-            ask(DB, 
-                where(   
+            ask(DB,
+                where(
                     (   t(Internal_Resource_URI, terminus/id, Resource_URI^^(xsd/anyURI)),
                         t(Internal_Resource_URI, terminus/allow_origin, Origin^^(xsd/string))
                     )
@@ -253,7 +253,7 @@ write_cors_headers(Resource_URI) :-
     format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
     format(Out,'Access-Control-Allow-Credentials: true\n',[]),
     format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-    format(Out,'Access-Control-Allow-Headers: Authorization, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]), 
+    format(Out,'Access-Control-Allow-Headers: Authorization, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
     format(Out,'Access-Control-Allow-Origin: ',[]),
     write_domains(Origins, Out),
     format(Out,'\n',[]).

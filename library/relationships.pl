@@ -4,9 +4,9 @@
               relationship_to_pseudoedges_and_classes/4
           ]).
 
-/** <module> Management of relationships 
- * 
- * This module helps other modules with the representation of graphs and collections 
+/** <module> Management of relationships
+ *
+ * This module helps other modules with the representation of graphs and collections
  * by bundling them as objects with some convenience operators.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -35,26 +35,26 @@
 :- use_module(library(semweb/rdf_db)).
 
 relationship_source_property(Relationship,Property,Database) :-
-    database_name(Database,Collection),        
+    database_name(Database,Collection),
     database_schema(Database,Schema),
     xrdf(Collection,Schema,Relationship,tcs:source_property,Property).
 
 relationship_target_property(Relationship,Property,Database) :-
-    database_name(Database,Collection),        
+    database_name(Database,Collection),
     database_schema(Database,Schema),
     xrdf(Collection,Schema,Relationship,tcs:target_property,Property).
 
 pseudo_domain(Relationship,Domain,Database) :-
-    relationship_source_property(Relationship,Property,Database), 
+    relationship_source_property(Relationship,Property,Database),
     range(Property,Domain,Database).
 
 pseudo_range(Relationship,Range,Database) :-
-    relationship_target_property(Relationship,Property,Database), 
+    relationship_target_property(Relationship,Property,Database),
     range(Property,Range,Database).
 
-/** 
+/**
  * relationship_to_pseudoedges_and_classes(+Relationship:uri,+Database:database-PseudoEdge:pseudoEdge,Classes:list(uri)) is det.
- * 
+ *
  * Calculate the pseudoedge and classes associated with a given relationship class
  */
 relationship_to_pseudoedges_and_classes(Relationship,Database,
@@ -68,5 +68,3 @@ relationship_to_pseudoedges_and_classes(Relationship,Database,
             pseudo_range(Relationship,Range,Database)
         )
     ).
-
-    

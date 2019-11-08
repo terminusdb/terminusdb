@@ -5,9 +5,9 @@
           ]).
 
 /** <module> Global Prefixes
- * 
+ *
  * Global prefix management utilities used for goal expansion
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -39,7 +39,7 @@ global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 
-/* 
+/*
  * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
  */
 global_prefix_expand(Prefix:X, URI) :-
