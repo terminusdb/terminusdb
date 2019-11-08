@@ -99,7 +99,8 @@ database_error_instance(DB, Error_Instance) :-
  * [instance=Instance,schema=Schema...]
  */
 make_database(DatabaseList, Database) :-
-    make_raw_database(DatabaseList, Database),
+    make_raw_database(DatabaseList, RawDatabase),
+    open_read_transaction(RawDatabase, Database),
     schema:database_module(Database,Module),
     schema:ensure_schema_in_module(Database,Module).
 
@@ -153,8 +154,7 @@ terminus_database(Database) :-
                    inference=[Inference],
                    instance=[Instance],
                    read_transaction=[],
-                   write_transaction=[]], EmptyDatabase),
-    open_read_transaction(EmptyDatabase, Database).
+                   write_transaction=[]], Database).
 
 /*
  *
