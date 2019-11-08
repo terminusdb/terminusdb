@@ -153,7 +153,8 @@ terminus_database(Database) :-
                    inference=[Inference],
                    instance=[Instance],
                    read_transaction=[],
-                   write_transaction=[]], Database).
+                   write_transaction=[]], EmptyDatabase),
+    open_read_transaction(EmptyDatabase, Database).
 
 /* 
  * 
