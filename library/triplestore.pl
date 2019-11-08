@@ -1,7 +1,6 @@
 :- module(triplestore, [
               destroy_graph/2,
               check_graph_exists/2,
-              make_empty_graph/2,
               sync_backing_store/0,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
@@ -138,24 +137,6 @@ safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
 safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
-
-/**
- * make_empty_graph(+DB_ID,+Graph_ID) is det.
- *
- * Create a new empty graph.
- *
- * UUU
- */
-make_empty_graph(DB_ID,Graph_ID) :-
-    atomic_list_concat(['sync_',DB_ID,'_',Graph_ID], Mutex),
-    with_mutex(
-        Mutex,
-        (
-            storage(Store),
-            safe_create_named_graph(Store,Graph_ID,Graph_Obj),
-            assert(dbid_graphid_obj(DB_ID,Graph_ID,Graph_Obj))
-        )
-    ).
 
 
 /**
