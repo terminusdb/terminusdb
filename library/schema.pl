@@ -4,11 +4,11 @@
               ensure_schema_in_module/2
           ]).
 
-/** <module> Schema 
- * 
- * The schema module deals with compilation and clearing of ontology 
- * compilation to predicates. 
- * 
+/** <module> Schema
+ *
+ * The schema module deals with compilation and clearing of ontology
+ * compilation to predicates.
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -28,7 +28,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(prefixes), [global_prefix_expand/2]). 
+:- use_module(library(prefixes), [global_prefix_expand/2]).
 :- use_module(library(database)).
 :- use_module(library(triplestore)).
 :- use_module(library(schema_definitions)).
@@ -59,7 +59,7 @@ compile_schema_type_to_module(Database, Schema, Namespace, Type, Module) :-
 compile_schema_types_to_module(Database, Schema, Namespace, Types, Module) :-
     forall(member(Type, Types),
            compile_schema_type_to_module(Database, Schema, Namespace, Type, Module)).
-    
+
 
 compile_schema_types_to_module(Database, Schema, Module) :-
     rdfs_types(Rdfs_Types),
@@ -99,7 +99,7 @@ rdf_prolog_list(Database, Database_Id, Object, [Head|Tail]) :-
 
 compile_schema_list_property_to_module(Database, Schema, Namespace, Property, Module) :-
     Module:dynamic(Property/2),
-    global_prefix_expand(Namespace:Property,Prop),              
+    global_prefix_expand(Namespace:Property,Prop),
     forall(xrdf(Database, Schema, Subject, Prop, Object),
            (   rdf_prolog_list(Database, Schema, Object, Options),
                X =.. [Property, Subject, Options],
@@ -140,7 +140,7 @@ compile_util_predicates(Module) :-
 compile_schema_to_module(Database, Module) :-
     % use the transaction mutex to ensure that no transaction is running while a schema module is updated.
     with_mutex(transaction,
-               (   database_schema(Database, Schema),                   
+               (   database_schema(Database, Schema),
                    cleanup_schema_module(Module),
                    compile_schema_types_to_module(Database, Schema, Module),
                    compile_schema_basic_properties_to_module(Database, Schema, Module),
@@ -158,9 +158,9 @@ schema_defined(Module) :-
 schema_metadata(Module, Database, Schema) :-
     Module:schema(Database, Schema).
 
-/* 
+/*
  * ensure_schema_in_module(+Database,-Module) is det.
- */ 
+ */
 ensure_schema_in_module(Database, Module) :-
     database_module(Database, Module),
     database_schema(Database, Schema),
