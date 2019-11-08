@@ -3,15 +3,8 @@ WORKDIR /app
 COPY ./ /app/terminusdb
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
-	autoconf \
-	libtool \
-	zlib1g zlib1g-dev \
-	pkg-config \
-	autotools-dev \
-	g++ \
-	python \
-	git \
-        automake \
+        git \
+	build-essential \
         curl \
     make
 # Install Rust
