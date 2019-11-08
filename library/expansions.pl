@@ -1,9 +1,9 @@
 :- module(expansions, []).
 
 /** <module> Expansions
- * 
+ *
  * Goal expansions required by some modules.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -49,7 +49,7 @@ user:goal_expansion(delete(DB,G,X,B,Z),delete(DB,G,X,Y,Z)) :-
     global_prefix_expand(B,Y).
 user:goal_expansion(delete(DB,G,X,Y,C),delete(DB,G,X,Y,Z)) :-
     nonvar(C),
-    C \= literal(_),                
+    C \= literal(_),
     global_prefix_expand(C,Z).
 user:goal_expansion(delete(DB,G,X,Y,literal(L)),delete(DB,G,X,Y,Object)) :-
     nonvar(L),
@@ -64,7 +64,7 @@ user:goal_expansion(insert(DB,G,X,B,Z),insert(DB,G,X,Y,Z)) :-
     global_prefix_expand(B,Y).
 user:goal_expansion(insert(DB,G,X,Y,C),insert(DB,G,X,Y,Z)) :-
     nonvar(C),
-    C \= literal(_),        
+    C \= literal(_),
     global_prefix_expand(C,Z).
 user:goal_expansion(insert(DB,G,X,Y,literal(L)),insert(DB,G,X,Y,Object)) :-
     nonvar(L),
@@ -84,4 +84,3 @@ user:goal_expansion(update(DB,G,X,Y,C,Act),update(DB,G,X,Y,Z,Act)) :-
 user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act)) :-
     nonvar(L),
     literal_expand(literal(L),Object).
-

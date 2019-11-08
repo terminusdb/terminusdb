@@ -8,11 +8,11 @@
            metadata_predicates/1,
            util_predicates/1]).
 
-/** <module> Schema Definitions 
- * 
+/** <module> Schema Definitions
+ *
  * Those elements of the OWL ontology which will be rewriten as internalised
  * predicates.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *

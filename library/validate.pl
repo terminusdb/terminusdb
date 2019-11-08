@@ -4,9 +4,9 @@
           ]).
 
 /** <module> Validation
- * 
+ *
  * Implements schema and instance validation
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -48,12 +48,12 @@
 pre_test_schema(classCycleSC).
 pre_test_schema(propertyCycleSC).
 
-/** 
+/**
  * test_schema(-Pred:atom) is nondet.
- * 
+ *
  * This predicate gives each available schema constraint.
  */
-% Restrictions on schemas 
+% Restrictions on schemas
 test_schema(noImmediateClassSC).
 test_schema(noImmediateDomainSC).
 test_schema(noImmediateRangeSC).
@@ -64,21 +64,21 @@ test_schema(noImmediateRangeSC).
 test_schema(annotationOverloadSC).
 % OWL DL constraints
 test_schema(orphanClassSC).
-test_schema(orphanPropertySC). 
-test_schema(invalidRangeSC). 
+test_schema(orphanPropertySC).
+test_schema(invalidRangeSC).
 test_schema(invalidDomainSC).
 test_schema(domainNotSubsumedSC).
 test_schema(rangeNotSubsumedSC).
 test_schema(propertyTypeOverloadSC).
 test_schema(invalid_RDFS_property_SC).
 
-/* 
+/*
  * schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
- * 
+ *
  * Updates a schema using a turtle formatted stream.
- */ 
+ */
 schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
-    
+
     % make a fresh empty graph against which to diff
     open_memory_store(Store),
     open_write(Store, Builder),
@@ -107,14 +107,14 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         % Update
         validate:(
             % first write everything into the layer-builder that is in the new
-            % file, but not in the db. 
+            % file, but not in the db.
             forall(
                 (   xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
                     \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
                 delete(Update_DB,Schema,A_Old,B_Old,C_Old)
             ),
             forall(
-                (   xrdf_db(Layer,A_New,B_New,C_New), 
+                (   xrdf_db(Layer,A_New,B_New,C_New),
                     \+ xrdf(Update_DB,[Schema], A_New, B_New, C_New)),
                 insert(Update_DB,Schema,A_New,B_New,C_New)
             )
@@ -143,7 +143,7 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                                 xrdf(Post_DB,Instance,E,F,G),
                                 refute_insertion(Post_DB,E,F,G,Witness)),
                             Witnesses)
-                
+
                 )
             ),
             % if we got here, I think this might be safe.
@@ -152,12 +152,12 @@ schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         )
     ).
 
-/* 
- * document_transaction(Database:database, Transaction_Database:database, Graph:graph_identifier,   
+/*
+ * document_transaction(Database:database, Transaction_Database:database, Graph:graph_identifier,
  *                      Document:json_ld, Witnesses:json_ld) is det.
- * 
- * Update the database with a document, or fail with a constraint witness. 
- * 
+ *
+ * Update the database with a document, or fail with a constraint witness.
+ *
  */
 document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
     with_transaction(
@@ -165,7 +165,7 @@ document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
              pre_database: Database,
              update_database: Update_Database,
              post_database: Post_Database,
-             write_graphs: [Graph]},       
+             write_graphs: [Graph]},
          witnesses(Witnesses)],
         Goal,
         validate:(   findall(Pos_Witness,
@@ -174,15 +174,15 @@ document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
                                  refute_insertion(Post_Database, X, P, Y, Pos_Witness)
                              ),
                              Pos_Witnesses),
-                     
+
                      findall(Neg_Witness,
-                             (   
+                             (
                                  triplestore:xrdf_deleted(Post_Database, Graph, X, P, Y),
                                  refute_deletion(Post_Database, X, P, Y, Neg_Witness)
                              ),
                              Neg_Witnesses),
                      Neg_Witnesses = [],
-                     
-                     append(Pos_Witnesses, Neg_Witnesses, Witnesses)            
+
+                     append(Pos_Witnesses, Neg_Witnesses, Witnesses)
                  )
     ).

@@ -33,10 +33,10 @@
               '<>'/2
           ]).
 
-/** <module> Utils 
- * 
+/** <module> Utils
+ *
  * Utility predicates
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -62,15 +62,15 @@
 
 /*
  * Forget the next phrase.
- * 
- * Ueful for declarative debugging. 
- */ 
+ *
+ * Ueful for declarative debugging.
+ */
 *_.
 
-/* 
+/*
  * '<>'(:Goal1,:Goal2) is det
- * 
- * Deterministic 
+ *
+ * Deterministic
  */
 :- meta_predicate '<>'(0,0).
 '<>'(Goal1, Goal2) :-
@@ -78,11 +78,11 @@
     ->  true
     ;   call(Goal2)).
 
-/** 
+/**
  * elt(+Key,+Set) is semidet.
- * 
+ *
  * This predicate is true when Key is in Set
- * 
+ *
  * depricated - use memberchk
  */
 elt(Key,Set) :-
@@ -90,23 +90,23 @@ elt(Key,Set) :-
     ->  true
     ;   false).
 
-/** 
- * get_key(+Key,+Object,-Val,+Default) is det. 
- * 
- * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we 
+/**
+ * get_key(+Key,+Object,-Val,+Default) is det.
+ *
+ * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we
  * assume Val=Default.
  */
-get_key(Key,Object,Val,Default) :- 
+get_key(Key,Object,Val,Default) :-
     (   member(Key=Val, Object)
-    ->  true 
+    ->  true
     ;   Val = Default
     ).
 
-/** 
- * get_key(+Key,+Object,-Val) is det. 
- * 
- * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we 
- * throw an error. 
+/**
+ * get_key(+Key,+Object,-Val) is det.
+ *
+ * If Key=Val is a member of Object, we succeed with the given substitution, otherwise we
+ * throw an error.
  */
 get_key(Key,Object,Value) :-
 	(   \+ ground(Object)
@@ -119,11 +119,11 @@ get_key(Key,Object,Value) :-
 	    throw(http_reply(bad_request(M)))
     ).
 
-/** 
+/**
  * zip(+A:list(T),+B:list(S),-C:list(pair(T,S))) is det.
  * zip(+A:list(T),-B:list(S),+C:list(pair(T,S))) is det.
  * zip(-A:list(T),+B:list(S),+C:list(pair(T,S))) is det.
- * 
+ *
  * Zip two lists into a list of pairs (or unzip, in the other two modes)
  */
 %:- pred zip(list(T),list(V),list(pair(T,V))).
@@ -132,9 +132,9 @@ zip([A|RestA],[B|RestB],[(A-B)|Zip]) :-
 zip([],[],[]).
 
 
-/** 
+/**
  * intersperse(+Item,+List,-Output) is det.
- * 
+ *
  * Puts an element between every element of a list.
  */
 intersperse(_,[],[]).
@@ -142,9 +142,9 @@ intersperse(_,[X],[X]).
 intersperse(Item,[X,Y|Rest],[X,Item|New_Rest]) :-
     intersperse(Item,[Y|Rest],New_Rest).
 
-/** 
- * interpolate(L:list,A:atom) is det. 
- * 
+/**
+ * interpolate(L:list,A:atom) is det.
+ *
  * Takes a list of values of mixed type, and appends them together as rendered atoms.
  */
 interpolate([],'').
@@ -156,15 +156,15 @@ interpolate([H|T],S) :-
     string(H), atom_string(C,H),
     interpolate(T,Rest),
     atom_concat(C,Rest,S) , !.
-interpolate([H|T],S) :- 
+interpolate([H|T],S) :-
     ground(H), term_to_atom(H,C),
     interpolate(T,Rest) ,
     atom_concat(C,Rest,S) , !.
 
-/** 
+/**
  * unique_solutions(+Template,+Goal,-Collection) is det.
- * 
- * This implements the CORRECT semantics for setof. 
+ *
+ * This implements the CORRECT semantics for setof.
  * i.e. returns an empty list for failure to find solutions, rather than failing.
  */
 :- meta_predicate unique_solutions(?,0,?).
@@ -173,10 +173,10 @@ unique_solutions(Template, Goal, Collection) :-
     ->  Collection=CollectionX
     ;   Collection=[]).
 
-/** 
+/**
  * repeat_atom(+A:atom,+N:int,-L:list) is det.
- * 
- * Repeats an atom A, N times. 
+ *
+ * Repeats an atom A, N times.
  */
 repeat_atom(_A,0,[]).
 repeat_atom(A,N,[A|Z]) :-
@@ -184,24 +184,24 @@ repeat_atom(A,N,[A|Z]) :-
 	N2 is N - 1,
 	repeat_atom(A,N2,Z).
 
-/** 
- * zero_pad(-A1:atom,Length:int,A2:atom) is det. 
+/**
+ * zero_pad(-A1:atom,Length:int,A2:atom) is det.
  *
- * Pad the atom A1, with '0' to make it length Length. 
+ * Pad the atom A1, with '0' to make it length Length.
  */
 zero_pad(A,L,A2) :-
 	atom_chars(A,AtomList),
 	length(AtomList, L1),
 	L2 is L - L1,
-	repeat_atom('0',L2,List), 
+	repeat_atom('0',L2,List),
 	append(List,AtomList,TotalList),
 	atom_chars(A2,TotalList).
 
-/* 
+/*
  * coerce_number(S,N) is det.
- * 
+ *
  * Ensure that S is converted to a number N
- */ 
+ */
 coerce_number(S,N) :-
     atom_string(A, S),
     !,
@@ -213,9 +213,9 @@ coerce_number(A,N) :-
 coerce_number(N,N) :-
     number(N).
 
-/** 
- * exhaust(+Goal:goal) is det. 
- * 
+/**
+ * exhaust(+Goal:goal) is det.
+ *
  * Run a goal through every possible solution, always succeeding.
  *
  */
@@ -223,12 +223,12 @@ coerce_number(N,N) :-
 exhaust(Goal) :-
     forall(Goal ; true, true).
 
-/* 
+/*
  * take(+N:int,+List:list,-Out:list) is det.
- * 
+ *
  * Take the first elements of a list to min(length(List),N).
- */ 
-take(N,List,Out) :- 
+ */
+take(N,List,Out) :-
     (   N=0
     ->  Out=[]
     ;   NNext is N-1,
@@ -237,11 +237,11 @@ take(N,List,Out) :-
             take(NNext,Rest,Sub)
         ;   List = Out
         )
-    ). 
+    ).
 
-/* 
+/*
  * from_to(+From:int,+To:int,+List:list,-Out) is det.
- */ 
+ */
 from_to(From,To,List,Out) :-
     (   From=0
     ->  take(To,List,Out)
@@ -265,10 +265,10 @@ drop(N,[_|Tail],LastElements) :-
 	N1 is N  - 1,
 	drop(N1,Tail,LastElements).
 
-/* 
- * truncate_list(Offset:integer, Limit:integer, Input:list, Output:list) is det. 
- * 
- * Truncate a list to some length, starting from some offset. 
+/*
+ * truncate_list(Offset:integer, Limit:integer, Input:list, Output:list) is det.
+ *
+ * Truncate a list to some length, starting from some offset.
  */
 truncate_list(Offset,Limit,Input,Output) :-
     (   Limit < 0
@@ -280,9 +280,9 @@ truncate_list(Offset,Limit,Input,Output) :-
 
 /**
  * sfoldr(+P,+Gen,+Z,-Result) is det.
- * 
- * Fold using predicate P with generator Gen and terminal solution Z. 
- * This is much more memory efficient than realising a list when the list is 
+ *
+ * Fold using predicate P with generator Gen and terminal solution Z.
+ * This is much more memory efficient than realising a list when the list is
  * large.
  */
 :- meta_predicate sfoldr(3,1,+,-).
@@ -298,23 +298,23 @@ sfoldr(Pred,Generator,Zero,Result) :-
        R=Result
     ).
 
-/* 
+/*
  * trim(+String, -Trimmed) is det.
  *
- * Replaces a string with its space trimmed equivalent  
+ * Replaces a string with its space trimmed equivalent
  */
 trim(String,Trimmed) :-
     re_replace('^\\s*(.*?)\\s*$','\\1', String, Trimmed).
 
-/* 
+/*
  * get_dict_default(Key,Dict,Value,Default)
- */ 
+ */
 get_dict_default(Key,Dict,Value,Default) :-
     (   get_dict(Key,Dict,Value)
     ->  true
     ;   Value = Default).
 
-/* 
+/*
  * split_atom(Atom:atom,Delimiter:atom,Result:list(atom)) is det.
  */
 split_atom(Atom,Delimiter,Result) :-
@@ -322,10 +322,10 @@ split_atom(Atom,Delimiter,Result) :-
     maplist([S,A]>>(atom_string(A,S)), Strings, Result).
 
 
-/* 
+/*
  * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.
  *
- * Monadic fold over state 
+ * Monadic fold over state
  */
 :- meta_predicate foldm(5,?,?,?,?,?).
 foldm(_P,[],Base,Base,S,S).
@@ -335,8 +335,8 @@ foldm(P,[H|T],Base,Result,S0,SN) :-
 
 /*
  * mapm(P:predicate,L:list,O:list,S0:any,SN:any) is det.
- * 
- * Monadic map over state 
+ *
+ * Monadic map over state
  */
 :- meta_predicate mapm(4,?,?,?,?).
 mapm(_P,[],[],S,S).
@@ -344,23 +344,23 @@ mapm(P,[H|T],[HP|TP],S0,SN) :-
     call(P,H,HP,S0,S1),
     mapm(P,T,TP,S1,SN).
 
-/** 
- * count(+A:atom,+L:list,-C:int) is det. 
- * 
- * Counts occurences of A in L. 
- */ 
+/**
+ * count(+A:atom,+L:list,-C:int) is det.
+ *
+ * Counts occurences of A in L.
+ */
 count(_,[], 0).
 count(A,[B|L],C) :- count(A,L,K), (A=B -> C is K+1 ; C=K).
 
-/* 
+/*
  * merge_dictionaries(+Dict1,+Dict2,-Dict3) is det.
  *
- * Merge favouring left. 
- */ 
+ * Merge favouring left.
+ */
 merge_dictionaries(Dict1,Dict2,Dict3) :-
     dict_pairs(Dict1, _, Pairs1),
     dict_pairs(Dict2, _, Pairs2),
-    findall(A-B, 
+    findall(A-B,
             (   member(A-B, Pairs1)
             ;   member(A-B, Pairs2),
                 \+ member(A-_, Pairs1)
@@ -369,9 +369,9 @@ merge_dictionaries(Dict1,Dict2,Dict3) :-
     dict_create(Dict3, _, Pairs3).
 
 /*
- * command(Cmd) is semidet. 
- * 
- * True if Cmd exists. 
+ * command(Cmd) is semidet.
+ *
+ * True if Cmd exists.
  */
 command(Cmd) :-
     catch(
@@ -384,7 +384,7 @@ command(Cmd) :-
         fail).
 
 
-/* 
+/*
  * debug(+Topic, +Stream, +Format, :Args) is det.
  *
  * Format a message if debug topic is enabled. Similar to format/3.
@@ -400,9 +400,9 @@ debug(_, _, _).
 */
 
 
-/* 
+/*
  * coerce_literal_string(+S_or_L, -S) is det.
- * 
+ *
  * We pun GET and POST parameters in requests but
  * to do this we need to be able to conflate literals
  * with strings.
@@ -419,10 +419,10 @@ coerce_literal_string(SL,S) :-
     % \+ is_dict(SL),
     SL = S.
 
-/* 
- * xfy_list(Op, Term, List) is det. 
- * 
- * Folds a functor over a list. 
+/*
+ * xfy_list(Op, Term, List) is det.
+ *
+ * Folds a functor over a list.
  */
 xfy_list(Op, Term, [Left|List]) :-
     Term =.. [Op, Left, Right],
@@ -431,26 +431,26 @@ xfy_list(Op, Term, [Left|List]) :-
 xfy_list(_, Term, [Term]).
 
 
-/* 
+/*
  * coerce_atom(Atom_Or_String,Atom) is semidet.
- * 
+ *
  * Coerces Atom_Or_String to an Atom if it is an atom or string
  * but fails otherwise.
- */ 
-coerce_atom(Atom_Or_String, Atom) :- 
+ */
+coerce_atom(Atom_Or_String, Atom) :-
     (   atom(Atom_Or_String)
     ->  Atom_Or_String = Atom
     ;   string(Atom_Or_String)
     ->  atom_string(Atom,Atom_Or_String)
     ).
 
-/* 
+/*
  * snoc(Rest,Last,List) is det.
  *
  * Adds an element to the end of the list (or extracts it when run backwards).
- * 
+ *
  * [cons backwards!]
- */ 
+ */
 snoc([],Last,[Last]).
 snoc([First|Tail],Last,[First|Rest]) :-
     snoc(Tail,Last,Rest).

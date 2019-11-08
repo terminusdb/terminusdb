@@ -32,7 +32,7 @@
 :- use_module(library(validate_schema)).
 :- use_module(library(database)).
 :- use_module(library(triplestore)).
-:- use_module(library(utils)). 
+:- use_module(library(utils)).
 :- use_module(library(types)).
 :- use_module(library(base_type)).
 :- use_module(library(inference)).
@@ -42,7 +42,7 @@
 /**
  * most_specific_type(+Document, -Sorted, +Database)
  *
- * Gets the most specific type for a class 
+ * Gets the most specific type for a class
  **/
 most_specific_type(Document, Document_Type, Database):-
     get_ordered_instance_classes(Document, [Document_Type|_], Database).
@@ -51,7 +51,7 @@ most_specific_type(Document, Document_Type, Database):-
  * get_ordered_instance_classes(+Document, -Sorted, +Database)
  *
  * Gets all classes for a specific document and returns
- * them ordered by subsumption.  
+ * them ordered by subsumption.
  **/
 get_ordered_instance_classes(Document, Sorted, Database) :-
     findall(
@@ -71,9 +71,9 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
         ), Classes, Sorted
     ).
 
-/** 
+/**
  * instanceClass(?X:uri, ?C:uri, +Database:database is nondet.
- * 
+ *
  * Determines the class C identified with the instance X.
  */
 instanceClass(X, Y, Database) :-
@@ -105,15 +105,15 @@ qualifiedCard(X,OP,Y,C,Database,N) :-
  * refute_insertion(+Database, +Graph, +X, +P, +Y, -Reason)
  *
 
-For readability: 
+For readability:
 
 S,G |- X : C  :=  \+ refute_node_at(S,G,X,C,Reason)
 
-inserts follow this pattern: 
+inserts follow this pattern:
 
-forall (x p y) \in Inserts. 
-  p = 'rdf:type' => S,G |- x : y 
-  p /= 'rdf:type' => 
+forall (x p y) \in Inserts.
+  p = 'rdf:type' => S,G |- x : y
+  p /= 'rdf:type' =>
     S,G |- x : dom(p) /\ S,G |- y : rng(p)
 
   forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
@@ -127,14 +127,14 @@ refute_insertion(Database,
     refute_node_at_class(Database,X,Class,Reason).
 refute_insertion(_Database,
                  X,'http://www.w3.org/2000/01/rdf-schema#label',Label,
-                 Reason) :- 
+                 Reason) :-
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
     Reason = Base_Reason.put(_{'vio:subject' : X,
                                'vio:property' : 'http://www.w3.org/2000/01/rdf-schema#label'}).
 refute_insertion(_Database,
                  X,'http://www.w3.org/2000/01/rdf-schema#comment',Label,
-                 Reason) :- 
+                 Reason) :-
     !,
     refute_basetype_elt(Label,'http://www.w3.org/2001/XMLSchema#string',Base_Reason),
     Reason = Base_Reason.put(_{'vio:subject' : X,
@@ -142,7 +142,7 @@ refute_insertion(_Database,
 refute_insertion(Database,X,P,_Y,Reason) :-
     % \+ P = 'rdf:type'
     (   domain(P,Domain,Database)
-    ->  refute_node_at_class(Database,X,Domain,Reason)        
+    ->  refute_node_at_class(Database,X,Domain,Reason)
     ;   interpolate(['The property ', P,' has an undefined domain.'],Message),
         Reason = _{
                      '@type' : 'vio:PropertyWithUndefinedDomain',
@@ -153,7 +153,7 @@ refute_insertion(Database,X,P,_Y,Reason) :-
 refute_insertion(Database,_X,P,Y,Reason) :-
     % \+ P = 'rdf:type'
     (   range(P,Range,Database)
-    ->  refute_node_at_range(Database,Y,Range,Reason)    
+    ->  refute_node_at_range(Database,Y,Range,Reason)
     ;   format(atom(Message),'The property ~q has an undefined domain.',[P]),
         Reason = _{
                      '@type' : 'vio:PropertyWithUndefinedRange',
@@ -167,12 +167,12 @@ refute_insertion(Database,X,P,Y,Reason) :-
     refute_functional_property(X,P,Y,Database,Reason).
 refute_insertion(Database,X,P,Y,Reason) :-
     refute_inverse_functional_property(X,P,Y,Database,Reason).
-    
-/* 
- * refute_node_at_class(+D,+G,+X,+C,Reason) is nondet. 
- * 
- * Refute that X is at class C. 
- */ 
+
+/*
+ * refute_node_at_class(+D,+G,+X,+C,Reason) is nondet.
+ *
+ * Refute that X is at class C.
+ */
 refute_node_at_class(Database,X,Class,Reason) :-
     (   instanceClass(X,IC,Database)
     ->  (   subsumptionOf(IC,Class,Database)
@@ -194,9 +194,9 @@ refute_node_at_class(Database,X,Class,Reason) :-
 
 /*
  * refute_node_at_range(+Database,+Graph,+X,+Class,-Reason) is nondet.
- * 
+ *
  * This does extra work for datatypes, the passes to the generic class check.
- */ 
+ */
 refute_node_at_range(_Database,X,Class,Reason) :-
     is_literal(X),
     !,
@@ -205,14 +205,14 @@ refute_node_at_range(Database,X,Class,Reason) :-
     % \+ is_literal(X)
     refute_node_at_class(Database,X,Class,Reason).
 
-/* 
+/*
  * refute_sp_restriction(+Database,+Graph,+X,+P,-Reason) is nondet.
- * 
+ *
 
 forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
     S,G' |- Ca(x p y)
 
- */ 
+ */
 refute_all_restrictions(Database,X,P,Reason) :-
     % Domain existence must be checked separately
     instanceClass(X,C,Database),
@@ -221,16 +221,16 @@ refute_all_restrictions(Database,X,P,Reason) :-
     % check to see does X satisfy each restriction
 	refute_restriction(Database,X,CR,P,Reason).
 
-/* 
- * refute_deletion(Database,X,P,Y,Reason) is nondet. 
- * 
- * We no longer need to show satisfaction of domain and range 
- * as we have been taken off the charts, but we do have to show 
+/*
+ * refute_deletion(Database,X,P,Y,Reason) is nondet.
+ *
+ * We no longer need to show satisfaction of domain and range
+ * as we have been taken off the charts, but we do have to show
  * that cardinalities have not been violated.
 
-deletes following the following pattern: 
+deletes following the following pattern:
 
-forall (x p y) \in Deletes. 
+forall (x p y) \in Deletes.
 
   forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
     S,G' |- Ca(x p y)
@@ -262,11 +262,11 @@ refute_deletion(Database,X,P,Y,Reason) :-
 %%   RESTRICTIONS   %%
 %%%%%%%%%%%%%%%%%%%%%%
 
-/* 
+/*
  * refute_restriction(X,CR,Reason)
  *
- * X is not an element of the restriction CR at P (for Reason) 
- */ 
+ * X is not an element of the restriction CR at P (for Reason)
+ */
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:someValuesFrom,C),
@@ -285,7 +285,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:allValuesFrom,C),
     inferredEdge(X,P,Y,Database),
-    refute_node_at_range(Database,Y,C,Reason), 
+    refute_node_at_range(Database,Y,C,Reason),
     interpolate(['Some values not from restriction class: ',CR],Msg),
     Reason = _{
                  '@type' : 'vio:InstanceQualifiedRestrictionViolation',
@@ -406,10 +406,10 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:value' : _{ '@value' : V, '@type' : 'xsd:anyURI' }
              }.
 
-/** 
+/**
  * refute_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:vio) is nondet.
- * 
- * Determines of ?P is actually a functional property or not. 
+ *
+ * Determines of ?P is actually a functional property or not.
  */
 refute_functional_property(X,P,Y,Database,Reason) :-
     functionalProperty(P,Database),
@@ -420,16 +420,16 @@ refute_functional_property(X,P,Y,Database,Reason) :-
     interpolate(['Functional Property ',P,' is not functional.'],Message),
     Reason = _{
                  '@type' : 'vio:FunctionalPropertyViolation',
-                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },			     
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
                  'vio:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 
-/** 
+/**
  * refute_inverse_functional_property(?X,?P,?Y,+Instance:atom,+Schema:atom,-Reason:vio) is nondet.
- * 
- * Determines of ?P is actually an inverse functional property or not. 
+ *
+ * Determines of ?P is actually an inverse functional property or not.
  */
 refute_inverse_functional_property(X,P,Y,Database,Reason) :-
     database_instance(Database,Instance),
@@ -440,7 +440,7 @@ refute_inverse_functional_property(X,P,Y,Database,Reason) :-
     interpolate(['Inverse Functional Property ',P,' is not inverse functional.'],Message),
     Reason = _{
                  '@type' : 'vio:FunctionalPropertyViolation',
-                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },			     
+                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string' },
 			     'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
                  'vio:predicate' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
                  'vio:object' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -462,10 +462,10 @@ days_in_month(_,12,31).
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%
 %%%%%%%%%%%%%%%%%%%%%%
-              
-/* 
+
+/*
  * refute_basetype_elt(+Literal,+Type,-Reason)
- */ 
+ */
 refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ atom(L), term_to_atom(lang(L,S),A)
     ->  Reason = _{
@@ -1071,7 +1071,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiv
     ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
-        I < 1 
+        I < 1
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:positiveInteger: out of range.',

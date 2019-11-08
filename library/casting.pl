@@ -4,9 +4,9 @@
           ]).
 
 /** <module> Casting
- * 
+ *
  * Utilities for casting between types for I/O.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -34,11 +34,11 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-/* 
+/*
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.
- * 
+ *
  * Create a hash uri starting from @Base using key @Args.
- */ 
+ */
 hash(Base,Args,Output) :-
     maplist([In,Out]>>
             (   (   string(In)
@@ -50,9 +50,9 @@ hash(Base,Args,Output) :-
     md5_hash(ArgAtom,Hash,[]),
     atom_concat(Base,Hash,Output).
 
-/* 
- * Presumably this should record into prov on failure. 
- */ 
+/*
+ * Presumably this should record into prov on failure.
+ */
 typecast(Val, Type, Hint, Cast) :-
     global_prefix_expand(Type,Type_URI),
     typecast_switch(Val,Type_URI,Hint,Cast).

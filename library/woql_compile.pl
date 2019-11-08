@@ -7,10 +7,10 @@
               empty_ctx/2
           ]).
 
-/** <module> WOQL Compile 
- * 
- * Core compiler for the WOQL query language. 
- * 
+/** <module> WOQL Compile
+ *
+ * Core compiler for the WOQL query language.
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -55,7 +55,7 @@
                   update_object/3,
                   delete_object/2
               ]).
- 
+
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
@@ -97,7 +97,7 @@ merge_output_graphs_aux([G=g(O1,_H1-T1,_FH1-FT1)|OGs1],
     Head=T2,
     Fringe_Head=FT1,
     Fringe_Head=FT2,
-    merge_output_graphs_aux(OGs1, OGs2,[G|Seen],OGs3).    
+    merge_output_graphs_aux(OGs1, OGs2,[G|Seen],OGs3).
 merge_output_graphs_aux([G=g(OG,H-T,FH-FT)|Rest],
                         OGs1,
                         Seen,
@@ -108,10 +108,10 @@ merge_output_graphs_aux([], OGs2, Seen, OGs3) :-
     exclude([G=_]>>(member(G,Seen)), OGs2, OGs3).
 
 /*
- * merge_output_bindings(Bindings0,Bindings1,Bindings_Merged) is det. 
- * 
+ * merge_output_bindings(Bindings0,Bindings1,Bindings_Merged) is det.
+ *
  * merge bindings such that co-bindings get the same binding variables.
- */ 
+ */
 merge_output_bindings(A, B, C) :-
     union(A,B,C).
 
@@ -138,7 +138,7 @@ merge_graph(Database_List0,Database_List1,Database_List2) :-
             Database_List_Left,
             Database_List_Right],
            Database_List2).
-        
+
 
 merge_graphs_aux([],G,G).
 merge_graphs_aux([G0|Gs],G1,Out) :-
@@ -148,13 +148,13 @@ merge_graphs_aux([G0|Gs],G1,Out) :-
 merge_graphs(Gs,G) :-
     merge_graphs_aux(Gs,[],G).
 
-/* 
+/*
  * merge(S0,S1,SM) is det.
  *
- * We need to merge multiple states into a signal state for output. 
- * 
+ * We need to merge multiple states into a signal state for output.
+ *
  * we use S0 as the prototype
- */ 
+ */
 merge(S0,S1,SM) :-
     member(output_graphs=OGs0,S0),
     member(output_graphs=OGs1,S1),
@@ -167,7 +167,7 @@ merge(S0,S1,SM) :-
     member(prefixes=Prefixes,S0),
     member(database=Database,S0),
     member(write_graph=Write_Graph,S0),
-    member(definitions=Definitions,S0),    
+    member(definitions=Definitions,S0),
     member(bound=Bound,S1),
     member(used=Used,S1),
     member(module=M,S1),
@@ -191,7 +191,7 @@ merge_all_aux([S1|Ss],S0,S) :-
 
 merge_all([S0|Ss],S) :-
     merge_all_aux(Ss,S0,S).
-         
+
 /* (already imported)
  * elt(Elt,Set) is det.
  */
@@ -224,14 +224,14 @@ peak(S0,S0,S0).
 return(S0,_,S0).
 
 /*
- * Ctx is a context object which has some of the following attributes: 
- * [attribute=Value] 
+ * Ctx is a context object which has some of the following attributes:
+ * [attribute=Value]
  *
    prefixes = [P=foo, Q=bar]  % which prefixes are expanded
    bindings = [v=bar]         % bindings for variables
    bound = N                  % Current number of bindings
 
- */ 
+ */
 empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
            current_output_graph=default,
            write_graph=_,
@@ -306,7 +306,7 @@ resolve(v(X),Xe) -->
         ;   B1=[X=Xe|B0])
     }.
 resolve(X,Xe) -->
-    view(prefixes=Prefixes), 
+    view(prefixes=Prefixes),
     {
         atom(X),
         (   member(X=URI,Prefixes)
@@ -318,7 +318,7 @@ resolve(X,Xe) -->
         is_dict(X),
         !,
         expand(X,XEx), % also need to use the prefixes here.
-        jsonld_id(XEx,XI)      
+        jsonld_id(XEx,XI)
     },
     resolve(XI,Xe).
 resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
@@ -358,7 +358,7 @@ resolve(X^^T,literal(type(TE,XS))) -->
     },
     resolve(T,TE).
 
-/* 
+/*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
 compile_query(Term, Prog, Ctx_Out) :-
@@ -393,9 +393,9 @@ nonground_elts([_|Rest_In],Rest_Out) :-
     nonground_elts(Rest_In,Rest_Out).
 nonground_elts([],[]).
 
-/* 
+/*
  * enrich_graphs(Databases,Database,Enriched) is det.
- * 
+ *
  * DDD enrich_graph_fragment currently unimplemented...
  */
 /*
@@ -414,11 +414,11 @@ enrich_graphs(Databases,Database,Enriched) :-
              Enriched).
 */
 
-/* 
- * run_query(JSON_In, JSON_Out) is det. 
- * 
+/*
+ * run_query(JSON_In, JSON_Out) is det.
+ *
  * Runs a WOQL query in JSON-LD WOQL syntax.
- */ 
+ */
 run_query(JSON_In, JSON_Out) :-
     woql_context(Ctx),
     json_woql(JSON_In, Ctx, Query),
@@ -442,7 +442,7 @@ run_term(Query,JSON) :-
 
     * http_log_stream(Log),
     * format(Log,'~n~nWe are here -1 ~n~n',[]),
-    
+
     assert_program(Definitions),
 
     * format(Log,'~n~nWe are here -0.5 ~n~n',[]),
@@ -463,12 +463,12 @@ run_term(Query,JSON) :-
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
     % maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
     Database_List= E_Databases,
-    
+
     * format(Log,'~n~nWe are here 1 ~n~n',[]),
-    
+
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
- 
+
 run_term(Query,JSON) :-
     compile_query(Query,Prog,Ctx_Out),
     elt(definitions=Definitions,Ctx_Out),
@@ -487,7 +487,7 @@ run_term(Query,JSON) :-
             BGs),
 
     zip(Bindings,Databases,BGs),
-    
+
     term_jsonld([bindings=Bindings,graphs=Databases],JSON),
     ignore(retract_program(Definitions)).
 
@@ -526,7 +526,7 @@ patch_bindings([V=X|B0],[V=Y|B1]) :-
 
 /* For now, no class expressions.
 
-We should wrap URIs so this is deterministic without cut. 
+We should wrap URIs so this is deterministic without cut.
 
 */
 compile_node(X:C,XE,Goals) -->
@@ -640,16 +640,16 @@ compile_wf(let(P,Args,Def,Query),Goal) -->
     % get previous definitions
     view(definitions=Old_Definitions),
 
-    % *** compile the predicate definition ***    
+    % *** compile the predicate definition ***
     empty_ctx,
     % Bind formal parameters
     mapm(resolve,Args,Rargs),
 
-    % Get the initial output graph and Tail variable. 
+    % Get the initial output graph and Tail variable.
     view(current_output_graph=G),
     view(output_graphs=OGS0),
     { elt(G=g(OG,_-T,FH-FT),OGS0) },
-    
+
     % Get upper bound, and update the Used var.
     update(bound=_,
            bound=Bound),
@@ -694,7 +694,7 @@ compile_wf(let(P,Args,Def,Query),Goal) -->
                          Fringe-Fringe_Tail=FH-FT
                      )),
         % Meta logical test feels very procedural...
-        Post_Logic = (   var(FH) % Empty fringe means Tail is the head. 
+        Post_Logic = (   var(FH) % Empty fringe means Tail is the head.
                      ->  FH=FT
                      ;   true),
         Predicate = (M:Predicate_Head :- Pre_Logic, Body, Post_Logic)
@@ -742,14 +742,14 @@ compile_wf(t(X,P,Y,G),Goal) -->
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
-    {        
+    {
         %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
         %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         (   database_instance(Database,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(Database,[GE],XE,PE,YE)),
-        
+
         append([[not_literal(XE),not_literal(PE),Search],XGoals,YGoals],
                GoalList),
         list_conjunction(GoalList,Goal)
@@ -757,7 +757,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
 compile_wf(r(X,R,Y),Goal) -->
     compile_node(X,XE,XGoals),
     compile_relation(R,RE,RClass,RGoals),
-    expand(RClass,RClassID),    
+    expand(RClass,RClassID),
     compile_node(Y,YE,YGoals),
     view(database=G),
     view(current_output_graph=OG),
@@ -765,7 +765,7 @@ compile_wf(r(X,R,Y),Goal) -->
            output_graphs=OGS2),
     {
         database_instance(G,I),
-        database_name(G,C),                
+        database_name(G,C),
 
         select(OG=g(Full_G,_-T0,FH-FT),OGS1,
                OG=g(Full_G,T0-T1,FH-FT),OGS2),
@@ -774,7 +774,7 @@ compile_wf(r(X,R,Y),Goal) -->
         ->  true
         ;   format(atom(M), 'No relationship source property ~q in ~q', [RClassID,G]),
             throw(error(M))),
-        
+
         (   relationship_target_property(RClassID,Q,G)
         ->  true
         ;   format(atom(M), 'No relationship target property ~q in ~q', [RClassID,G]),
@@ -786,7 +786,7 @@ compile_wf(r(X,R,Y),Goal) -->
                  T0=[triple(C,I,XE,RE,YE,'==>')|T1]
                 ],XGoals,RGoals,YGoals],
                GoalList),
-        
+
         list_conjunction(GoalList,Goal)
     }.
 compile_wf(r(X,R,Y,G),Goal) -->
@@ -850,7 +850,7 @@ compile_wf((A => B),Goal) -->
     compile_wf(A,ProgA),
     update(database=Database,
            database=UpdateDB),
-    % This second one should be simpler, to reflect that only writes are allowed on the right. 
+    % This second one should be simpler, to reflect that only writes are allowed on the right.
     compile_wf(B,ProgB),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
@@ -892,7 +892,7 @@ compile_wf(all(P), Prog) -->
     update(output_graphs=OGs0,
            output_graphs=OGs1),
     %{ format('******************~nGot here 2~n') },
-    
+
     update(bindings=_,
            bindings=Old_Bindings),
     {   %format('******************~nGot here 3~n'),
@@ -966,7 +966,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         foldl({Names,Values,B}/
               [N as v(V),R,[Term|R]]>>(
                   member(V=Xe,B),
-                  Term = 
+                  Term =
                       (   nth1(Idx,Names,N),
                           nth1(Idx,Values,Xe)
                       ->  true
@@ -974,9 +974,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
                           throw(http_error(syntax_error(Msg)))
                       )
               ), Spec, [], Indexing_List),
-    
+
         list_conjunction(Indexing_List,Indexing),
-        
+
         % This should know about non-header
         Prog = (
             % header row only
@@ -1002,7 +1002,7 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
             Options = []),
 
         Header_Row =.. [row|Names],
-        
+
         Prog = setup_call_cleanup(
                    open(CSV_Path, write, Out),
                    (
@@ -1106,7 +1106,7 @@ compile_arith(Exp,ExpE) -->
     }.
 compile_arith(Exp,ExpE) -->
     resolve(Exp,ExpE).
-    
+
 restrict(VL) -->
     update(bindings=B0,
            bindings=B1),

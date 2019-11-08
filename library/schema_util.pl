@@ -8,9 +8,9 @@
           ]).
 
 /** <module> Schema Util
- * 
+ *
  * Utilities to assist in the compilation of schemata.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -36,20 +36,20 @@
 :- use_module(library(types)).
 :- use_module(library(schema_definitions)).
 
-/* 
- * database_module(+Database:database, -Module:atom) is det. 
+/*
+ * database_module(+Database:database, -Module:atom) is det.
  */
 database_module(Database,Module) :-
     database_name(Database,C),
     database_schema(Database,S),
     collection_schema_module(C,S,Module).
 
-/* 
+/*
  * collection_schema_module(+Collection:atom,+Schema,-Module:atom) is det.
- * 
- * Construct a canonical module name for the current collection. 
- * 
- */ 
+ *
+ * Construct a canonical module name for the current collection.
+ *
+ */
 collection_schema_module(Collection,_,Collection).
     % Actually we only want one per collection, so we will not do any
     % fine grained graph based cache coherence for now.

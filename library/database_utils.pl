@@ -7,9 +7,9 @@
           ]).
 
 /** <module> Database Utilities
- * 
- * Various database level utilities. This is a layer above the triple store 
- * in terms of logic, and placed here as we want to be able to make use 
+ *
+ * Various database level utilities. This is a layer above the triple store
+ * in terms of logic, and placed here as we want to be able to make use
  * of WOQL and other libraries without circularity.
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -37,16 +37,16 @@
 :- use_module(library(database)).
 :- use_module(library(expansions)).
 
-/* 
+/*
  * database_exists(DB_URI) is semidet.
- */ 
+ */
 database_exists(DB_URI) :-
     database_name_list(Databases),
     memberchk(DB_URI,Databases).
 
-/** 
+/**
  * create_db(+DB:atom) is semidet.
- * 
+ *
  * Create a new empty graph
  */
 create_db(DB_URI) :-
@@ -61,7 +61,7 @@ create_db(DB_URI) :-
             database_record_schema_list(DB_URI,Schemata),
             member(Schema,Schemata)
         ),
-        safe_create_named_graph(Store,Schema,_)        
+        safe_create_named_graph(Store,Schema,_)
     ),
 
     % Set up instance graphs
@@ -71,12 +71,12 @@ create_db(DB_URI) :-
             database_record_instance_list(DB_URI,Instances),
             member(Instance,Instances)
         ),
-        safe_create_named_graph(Store,Instance,_)        
+        safe_create_named_graph(Store,Instance,_)
     ).
 
 post_create_db(DB_URI) :-
     make_database_from_database_name(DB_URI, Database),
-    Schemata = Database.schema, 
+    Schemata = Database.schema,
     with_transaction(
         [transaction_record{
              pre_database: Database,
@@ -101,7 +101,7 @@ post_create_db(DB_URI) :-
         % always an ok update...
         true
     ),
-    % Succeed only if the witnesses are empty. 
+    % Succeed only if the witnesses are empty.
     Witnesses = [].
 
 % evil much? Unlikely to be safe.
@@ -122,7 +122,7 @@ delete_db(DB) :-
         )
     ).
 
-/* 
+/*
  * should probably go in JSON-LD
  */
 add_dictionary_default(Doc, Key, Default, New_Doc) :-
@@ -133,7 +133,7 @@ add_dictionary_default(Doc, Key, Default, New_Doc) :-
                 select_dict(Res, Default, _Rest)
             ->  Doc = New_Doc
             ;   put_dict(Key, Doc, [Default|Result], New_Doc)
-            )      
+            )
         ;   (   select_dict(Result, Default, _Rest)
             ->  Doc = New_Doc
             ;   put_dict(Key, Doc, [Default,Result], New_Doc)))

@@ -15,10 +15,10 @@
           ]).
 
 /** <module> Prefixes
- * 
- * Prefix management utilities which assign a default prefix set with a 
- * given collection. 
- * 
+ *
+ * Prefix management utilities which assign a default prefix set with a
+ * given collection.
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                      *
@@ -67,8 +67,8 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-/* 
- * default_prefixes(+C:uri,-P:atom,-U:uri) is det. 
+/*
+ * default_prefixes(+C:uri,-P:atom,-U:uri) is det.
  */
 % per database shorthands
 default_prefixes(C,doc,U) :-
@@ -81,10 +81,10 @@ default_prefixes(_,Pre,URI) :-
 
 /*
  * initialise_prefix_db(+Collection) is det.
- * 
- * Set up default prefixes for a new collection. 
- * The semantics of this is quite different from initialise_prefix_db/2, 
- * because it doesn't cause a re-attache of the database. Perhaps we 
+ *
+ * Set up default prefixes for a new collection.
+ * The semantics of this is quite different from initialise_prefix_db/2,
+ * because it doesn't cause a re-attache of the database. Perhaps we
  * should use a different name?
  */
 initialise_prefix_db(C) :-
@@ -98,10 +98,10 @@ initialise_prefix_db(C) :-
         )
     ).
 
-/* 
+/*
  * initialise_prefix_db is det.
- * 
- * Set up the prefix datoabase. 
+ *
+ * Set up the prefix datoabase.
  */
 initialise_prefix_db :-
     once(file_search_path(terminus_home,BasePath)),
@@ -116,24 +116,24 @@ initialise_prefix_db :-
     ;   db_attach(File, [sync(flush)])
     ).
 
-/* 
+/*
  * update_collection_prefixes(Prefixes:dict, Collection:atom) is det.
  */
 update_collection_prefixes(Prefixes, Collection_Id) :-
     delete_collection_prefixes(Collection_Id),
     set_collection_prefixes(Prefixes, Collection_Id).
 
-/* 
+/*
  * set_collection_prefixes(Prefixes:dict, Collection:atom) is det.
  */
 set_collection_prefixes(Prefixes,Collection_Id) :-
     dict_pairs(Prefixes, _, Pairs),
     set_collection_pairs(Pairs, Collection_Id).
 
-/* 
+/*
  * set_collection_pairs(Prefixes:list(pair(atom,atom)), Collection:atom) is det.
- * 
- * Use list of pairs to represent prefixes. 
+ *
+ * Use list of pairs to represent prefixes.
  */
 set_collection_pairs([], _).
 set_collection_pairs([(Prefix-Uri)|Tail], Collection_Id) :-
@@ -143,26 +143,26 @@ set_collection_pairs([(Prefix-Uri)|Tail], Collection_Id) :-
     ),
     set_collection_pairs(Tail, Collection_Id).
 
-/* 
+/*
  * delete_collection_pairs(Collection:atom) is det.
- * 
- * Delete all prefixes associated with a collection. 
+ *
+ * Delete all prefixes associated with a collection.
  */
 delete_collection_prefixes(Collection_Id):-
     retractall_prefix(Collection_Id,_,_).
 
-/* 
+/*
  * get_collection_prefixes(Collection:atom,Prefixes:dict) is det.
- * 
- * Return a dictionary of prefixes for the current collection. 
+ *
+ * Return a dictionary of prefixes for the current collection.
  */
 get_collection_prefixes(Collection_Id,Prefixes) :-
     get_collection_prefix_pairs(Collection_Id,Prefix_List),
     dict_pairs(Prefixes, _, Prefix_List).
 
-/* 
+/*
  * get_collection_prefix_pairs(Collection:atom,Prefixes:dict) is det.
- * 
+ *
  * return a list of pairs of prefixes.
  */
 get_collection_prefix_pairs(Collection,List) :-
@@ -170,18 +170,18 @@ get_collection_prefix_pairs(Collection,List) :-
             prefix(Collection, Prefix, Uri),
             List).
 
-/* 
+/*
  * get_collection_prefix_list(Collection:atom,Prefixes:dict) is det.
- * 
+ *
  * return a list of pairs of prefixes.
  */
 get_collection_prefix_list(Collection,List) :-
     get_collection_prefix_pairs(Collection,Pairs),
     maplist([A-B,A=B]>>true, Pairs, List).
 
-/* 
+/*
  * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
- * 
+ *
  * return a list of arguments for rapper.
  */
 prefix_list_to_rapper_args([],[]).
@@ -202,13 +202,13 @@ initialise_contexts :-
             expand_context(Ctx, Exp),
             assertz(woql_context(Exp))
         ),
-        close(Out)    
+        close(Out)
     ).
 
 
-/* 
- * get_collection_jsonld_context(Collection,Ctx) is det. 
- * 
+/*
+ * get_collection_jsonld_context(Collection,Ctx) is det.
+ *
  * Get a JSON-LD dictonary holding the context for this db.
  */
 get_collection_jsonld_context(Collection, Ctx) :-
@@ -216,9 +216,9 @@ get_collection_jsonld_context(Collection, Ctx) :-
     sort(Ctx_Obj,Ctx_Sorted),
     term_jsonld(Ctx_Sorted, Ctx).
 
-/* 
- * get_global_jsonld_context(Collection,Ctx) is det. 
- * 
+/*
+ * get_global_jsonld_context(Collection,Ctx) is det.
+ *
  * Get a global JSON-LD dictonary holding the context
  * for generic documents.
  */
@@ -230,4 +230,3 @@ get_global_jsonld_context(Ctx) :-
     % KLUDGE
     sort(Pairs,Sorted),
     dict_create(Ctx,_,Sorted).
-

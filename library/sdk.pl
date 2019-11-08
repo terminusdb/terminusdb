@@ -3,11 +3,11 @@
               ask/2,
               ask/1]).
 
-/** <module> Prolog SDK 
- * 
- * Package to make interaction with WOQL and the TerminusDB easy and 
+/** <module> Prolog SDK
+ *
+ * Package to make interaction with WOQL and the TerminusDB easy and
  * efficient.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -27,29 +27,29 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)). 
+:- use_module(library(utils)).
 :- use_module(library(database)).
 :- use_module(library(woql_compile)).
 :- use_module(library(woql_term)).
 
 :- reexport(woql_term).
 
-/* 
+/*
  * connect(+DB:uri -Ctx:context) is det.
  */
 connect(DB,New_Ctx) :-
     empty_ctx(Ctx),
 
     get_collection_prefix_list(DB, Prefixes),
-    
+
     select(prefixes=_,Ctx,
            prefixes=Prefixes, Ctx1),
 
     make_database_from_database_name(DB,DB_Obj),
     maybe_open_read_transaction(DB_Obj,DBR),
-    
+
     database_instance(DB_Obj,I),
-    
+
     select(database=_,Ctx1,
            database=DBR,Ctx2),
     select(write_graph=_,Ctx2,
@@ -62,7 +62,7 @@ pre_term_to_term_and_bindings(Pre_Term,Term,Bindings_In,Bindings_Out) :-
     ->  (   member(V=X,Bindings_In),
             Pre_Term == X
         ->  Bindings_In = Bindings_Out,
-            Term = v(V)            
+            Term = v(V)
         ;   gensym('Var',G),
             Bindings_Out = [G=Pre_Term|Bindings_In],
             Term = v(G)
@@ -75,12 +75,12 @@ pre_term_to_term_and_bindings(Pre_Term,Term,Bindings_In,Bindings_Out) :-
         Term =.. [F|New_Args]
     ).
 
-ask(Server,Pre_Term) :- 
+ask(Server,Pre_Term) :-
     pre_term_to_term_and_bindings(Pre_Term,Term,[],Bindings_Out),
     select(bindings=_,Server,
            bindings=Bindings_Out,New_Ctx),
     compile_query(Term,Prog,New_Ctx,_),
-    debug(sdk,'Program: ~q~n', [Prog]), 
+    debug(sdk,'Program: ~q~n', [Prog]),
     woql_compile:Prog.
 
 ask(Pre_Term) :-

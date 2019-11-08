@@ -4,10 +4,10 @@
           ]).
 
 /** <module> Datatypes for XSD and extensions
- * 
- * This module exposes a predicate classifying all basetypes and 
+ *
+ * This module exposes a predicate classifying all basetypes and
  * a subsumption relation between these basetypes.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -32,7 +32,7 @@
 
 %%%% Dacura types prefix
 
-/** 
+/**
  * baseType(?BaseTypeURI:uri) is nondet.
  *
  * Predicate which gives the available basetypes.
@@ -42,7 +42,7 @@
  | xsd:boolean	| true, false |
  | xsd:decimal	| Arbitrary-precision decimal numbers |
  | xsd:integer	| Arbitrary-size integer numbers |
- # IEEE floating-point numbers 
+ # IEEE floating-point numbers
  | xsd:double	| 64-bit floating point numbers incl. ±Inf, ±0, NaN |
  | xsd:float	| 32-bit floating point numbers incl. ±Inf, ±0, NaN |
  # Time and date
@@ -50,7 +50,7 @@
  | xsd:time	| Times (hh:mm:ss.sss…) with or without timezone |
  | xsd:dateTime	| Date and time with or without timezone |
  | xsd:dateTimeStamp	| Date and time with required timezone |
- # Recurring and partial dates 
+ # Recurring and partial dates
  | xsd:gYear | 	Gregorian calendar year |
  | xsd:gMonth |	Gregorian calendar month |
  | xsd:gDay	| Gregorian calendar day of the month |
@@ -75,7 +75,7 @@
  # Encoded binary data
  | xsd:hexBinary |	Hex-encoded binary data |
  | xsd:base64Binary |	Base64-encoded binary data |
- # Miscellaneous XSD types 
+ # Miscellaneous XSD types
  | xsd:anyURI |	Absolute or relative URIs and IRIs |
  | xsd:language |	Language tags per [BCP47] |
  | xsd:normalizedString |	Whitespace-normalized strings |
@@ -85,41 +85,41 @@
  | xsd:NCName |	XML NCNames |
  */
 baseType('http://www.w3.org/2001/XMLSchema#anySimpleType').
-baseType('http://www.w3.org/2001/XMLSchema#string'). 
-baseType('http://www.w3.org/2001/XMLSchema#boolean'). 
-baseType('http://www.w3.org/2001/XMLSchema#decimal'). 
-baseType('http://www.w3.org/2001/XMLSchema#double'). 
-baseType('http://www.w3.org/2001/XMLSchema#float'). 
+baseType('http://www.w3.org/2001/XMLSchema#string').
+baseType('http://www.w3.org/2001/XMLSchema#boolean').
+baseType('http://www.w3.org/2001/XMLSchema#decimal').
+baseType('http://www.w3.org/2001/XMLSchema#double').
+baseType('http://www.w3.org/2001/XMLSchema#float').
 baseType('http://www.w3.org/2001/XMLSchema#time').
 baseType('http://www.w3.org/2001/XMLSchema#date').  % Unimplemented!!! DDD
-baseType('http://www.w3.org/2001/XMLSchema#dateTime'). 
+baseType('http://www.w3.org/2001/XMLSchema#dateTime').
 baseType('http://www.w3.org/2001/XMLSchema#dateTimeStamp').
-baseType('http://www.w3.org/2001/XMLSchema#gYear'). 
-baseType('http://www.w3.org/2001/XMLSchema#gMonth'). 
-baseType('http://www.w3.org/2001/XMLSchema#gDay'). 
-baseType('http://www.w3.org/2001/XMLSchema#gYearMonth'). 	
-baseType('http://www.w3.org/2001/XMLSchema#gMonthDay'). 
-baseType('http://www.w3.org/2001/XMLSchema#duration'). 
-baseType('http://www.w3.org/2001/XMLSchema#yearMonthDuration'). 
-baseType('http://www.w3.org/2001/XMLSchema#dayTimeDuration'). 
-baseType('http://www.w3.org/2001/XMLSchema#byte'). 
-baseType('http://www.w3.org/2001/XMLSchema#short'). 
-baseType('http://www.w3.org/2001/XMLSchema#integer'). 
-baseType('http://www.w3.org/2001/XMLSchema#long'). 
-baseType('http://www.w3.org/2001/XMLSchema#unsignedByte'). 
-baseType('http://www.w3.org/2001/XMLSchema#unsignedInt'). 
-baseType('http://www.w3.org/2001/XMLSchema#unsignedLong'). 
-baseType('http://www.w3.org/2001/XMLSchema#positiveInteger'). 
-baseType('http://www.w3.org/2001/XMLSchema#nonNegativeInteger'). 
-baseType('http://www.w3.org/2001/XMLSchema#negativeInteger'). 
-baseType('http://www.w3.org/2001/XMLSchema#nonPositiveInteger'). 
-baseType('http://www.w3.org/2001/XMLSchema#base64Binary'). 
-baseType('http://www.w3.org/2001/XMLSchema#anyURI'). 
-baseType('http://www.w3.org/2001/XMLSchema#language'). 
-baseType('http://www.w3.org/2001/XMLSchema#normalizedString'). 
-baseType('http://www.w3.org/2001/XMLSchema#token'). 
-baseType('http://www.w3.org/2001/XMLSchema#NMTOKEN'). 
-baseType('http://www.w3.org/2001/XMLSchema#Name'). 
+baseType('http://www.w3.org/2001/XMLSchema#gYear').
+baseType('http://www.w3.org/2001/XMLSchema#gMonth').
+baseType('http://www.w3.org/2001/XMLSchema#gDay').
+baseType('http://www.w3.org/2001/XMLSchema#gYearMonth').
+baseType('http://www.w3.org/2001/XMLSchema#gMonthDay').
+baseType('http://www.w3.org/2001/XMLSchema#duration').
+baseType('http://www.w3.org/2001/XMLSchema#yearMonthDuration').
+baseType('http://www.w3.org/2001/XMLSchema#dayTimeDuration').
+baseType('http://www.w3.org/2001/XMLSchema#byte').
+baseType('http://www.w3.org/2001/XMLSchema#short').
+baseType('http://www.w3.org/2001/XMLSchema#integer').
+baseType('http://www.w3.org/2001/XMLSchema#long').
+baseType('http://www.w3.org/2001/XMLSchema#unsignedByte').
+baseType('http://www.w3.org/2001/XMLSchema#unsignedInt').
+baseType('http://www.w3.org/2001/XMLSchema#unsignedLong').
+baseType('http://www.w3.org/2001/XMLSchema#positiveInteger').
+baseType('http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
+baseType('http://www.w3.org/2001/XMLSchema#negativeInteger').
+baseType('http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
+baseType('http://www.w3.org/2001/XMLSchema#base64Binary').
+baseType('http://www.w3.org/2001/XMLSchema#anyURI').
+baseType('http://www.w3.org/2001/XMLSchema#language').
+baseType('http://www.w3.org/2001/XMLSchema#normalizedString').
+baseType('http://www.w3.org/2001/XMLSchema#token').
+baseType('http://www.w3.org/2001/XMLSchema#NMTOKEN').
+baseType('http://www.w3.org/2001/XMLSchema#Name').
 baseType('http://www.w3.org/2001/XMLSchema#NCName').
 baseType('http://www.w3.org/2001/XMLSchema#NOTATION'). % unimplemented.
 baseType('http://www.w3.org/2001/XMLSchema#QName'). % unimplemented.
@@ -141,14 +141,14 @@ baseType('http://terminusdb.com/schema/xdd#url').
 baseType('http://terminusdb.com/schema/xdd#email').
 baseType('http://terminusdb.com/schema/xdd#html').
 
-/** 
+/**
  * baseTypeParent(+ChildXSDURI:uri,+ParentXSDURI:uri) is det.
  * baseTypeParent(+ChildXSDURI:uri,-ParentXSDURI:uri) is det.
  * baseTypeParent(-ChildXSDURI:uri,+ParentXSDURI:uri) is nondet.
  * baseTypeParent(?ChildXSDURI:uri,?ParentXSDURI:uri) is nondet.
  *
  * Implements the child parent relationship between basetypes.
- * 
+ *
  * We visually represent the heirarchy with whitespace - please maintain!
  */
 baseTypeParent('http://www.w3.org/2000/01/rdf-schema#XMLLiteral','http://www.w3.org/2000/01/rdf-schema#Literal').
@@ -173,7 +173,7 @@ baseTypeParent('http://www.w3.org/2001/XMLSchema#decimal','http://www.w3.org/200
       baseTypeParent('http://www.w3.org/2001/XMLSchema#short','http://www.w3.org/2001/XMLSchema#long').
         baseTypeParent('http://www.w3.org/2001/XMLSchema#byte','http://www.w3.org/2001/XMLSchema#short').
     baseTypeParent('http://www.w3.org/2001/XMLSchema#nonNegativeInteger','http://www.w3.org/2001/XMLSchema#integer').
-      baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedLong','http://www.w3.org/2001/XMLSchema#nonNegativeInteger'). 
+      baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedLong','http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
         baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedInt','http://www.w3.org/2001/XMLSchema#unsginedLong').
           baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedShort','http://www.w3.org/2001/XMLSchema#unsignedInt').
             baseTypeParent('http://www.w3.org/2001/XMLSchema#unsignedByte','http://www.w3.org/2001/XMLSchema#unsignedShort').

@@ -1,6 +1,6 @@
 #!/usr/bin/env swipl
 
-/* 
+/*
  *  This file is part of TerminusDB.
  *
  *  TerminusDB is free software: you can redistribute it and/or modify
@@ -33,14 +33,14 @@ add_library_path :-
 
 :- add_library_path.
 
-add_config_path :- 
+add_config_path :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/config',Config),
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
 
-add_test_path :- 
+add_test_path :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/test',Config),
     asserta(user:file_search_path(test, Config)).
@@ -48,7 +48,7 @@ add_test_path :-
 :- add_test_path.
 
 initialise_server_settings :-
-    file_search_path(terminus_home, BasePath),    
+    file_search_path(terminus_home, BasePath),
     !,
     atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)

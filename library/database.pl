@@ -29,11 +29,11 @@
           ]).
 
 /** <module> Implementation of database graph management
- * 
- * This module helps other modules with the representation of databases and 
- * their associated graphs by bundling them as objects with some convenience 
+ *
+ * This module helps other modules with the representation of databases and
+ * their associated graphs by bundling them as objects with some convenience
  * operators and accessors.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -62,12 +62,12 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(triplestore)).
 
-/* 
+/*
  * Database term accessors.
- * 
- * Deprecated: For backwards compatability. 
- * Use dictionary accessors. 
- */ 
+ *
+ * Deprecated: For backwards compatability.
+ * Use dictionary accessors.
+ */
 database_name(DB,Name) :-
     DB.name = Name.
 
@@ -92,42 +92,42 @@ database_error_schema(DB, Error_Schema) :-
 database_error_instance(DB, Error_Instance) :-
     DB.error_instance = Error_Instance.
 
-/** 
+/**
  * make_database(+DatabaseList:list,-Database:database) is det.
- * 
+ *
  * Create a graph from a list containing some number of graph elements.
  * [instance=Instance,schema=Schema...]
- */ 
+ */
 make_database(DatabaseList, Database) :-
     make_raw_database(DatabaseList, Database),
     schema:database_module(Database,Module),
     schema:ensure_schema_in_module(Database,Module).
 
-/** 
+/**
  * make_database(+DatabaseList:list,-Database:datatabase) is det.
- * 
+ *
  * Create a graph from a list containing some number of graph elements.
  * [instance=Instance,schema=Schema...]
- *  
+ *
  * This does NO schema compilation and is only used during initial pre-testing for cycles.
- */ 
+ */
 make_raw_database(DatabaseList, Database) :-
     dict_create(Database, database, DatabaseList).
 
-/* 
- * terminus_database_name(Database_Name) is det. 
- * 
+/*
+ * terminus_database_name(Database_Name) is det.
+ *
  * The name of the current terminus database.
- */ 
+ */
 terminus_database_name(Database_Name) :-
     config:server(Server),
     atomic_list_concat([Server,'/terminus'],Database_Name).
 
-/** 
+/**
  * terminus_context(Context : dictionary) is det.
- * 
- * JSON-LD of terminus context. 
- */ 
+ *
+ * JSON-LD of terminus context.
+ */
 terminus_context(_{doc : Doc,
                    scm : Schema,
                    terminus : 'http://terminusdb.com/schema/terminus#'
@@ -137,12 +137,12 @@ terminus_context(_{doc : Doc,
     atomic_list_concat([Server,'/terminus/schema#'],Schema).
 
 
-/* 
+/*
  * terminus_database(Database).
- * 
- * Since this is prior to all other aspects of graph 
- * management, we need to set the information manually.  
-*/ 
+ *
+ * Since this is prior to all other aspects of graph
+ * management, we need to set the information manually.
+*/
 terminus_database(Database) :-
     terminus_database_name(Database_Name),
     atomic_list_concat([Database_Name,'/',schema],Schema),
@@ -156,15 +156,15 @@ terminus_database(Database) :-
                    write_transaction=[]], EmptyDatabase),
     open_read_transaction(EmptyDatabase, Database).
 
-/* 
- * 
- * This is needed for the prefix manufacture so there is a slight 
- * complication with bootstrapping. 
- */ 
+/*
+ *
+ * This is needed for the prefix manufacture so there is a slight
+ * complication with bootstrapping.
+ */
 database_name_list(Database_Atoms) :-
     terminus_database(DB),
-    
-    findall(Database_Name, 
+
+    findall(Database_Name,
             (   xrdf(DB,DB.instance,
                      DB_Resource, rdf:type, terminus:'Database'),
                 xrdf(DB,DB.instance,
@@ -172,13 +172,13 @@ database_name_list(Database_Atoms) :-
             Database_Names),
 
     maplist(string_to_atom, Database_Names, Database_Atomised),
-    exclude(terminus_database_name, Database_Atomised, Database_Atoms). 
+    exclude(terminus_database_name, Database_Atomised, Database_Atoms).
 
 database_record_list(Databases) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name, Terminus_DB),
-    
-    findall(DB_Resource, 
+
+    findall(DB_Resource,
             ask(Terminus_DB,
                 t( DB_Resource , rdf/type , terminus/'Database')
                ),
@@ -187,11 +187,11 @@ database_record_list(Databases) :-
 database_record_schema_list(Database_Name, Schemas) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name,Terminus_DB),
-    
-    findall(Schema, 
+
+    findall(Schema,
             ask(Terminus_DB,
                 where(
-                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)),
                         t( DB_Resource , rdf/type , terminus/'Database'),
                         t( DB_Resource , terminus/schema, Schema ^^ (xsd/string))
                     )
@@ -205,12 +205,12 @@ database_record_schema_list(Database_Name, Schemas) :-
 database_record_instance_list(Database_Name,Instances) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name,Terminus_DB),
-    
-    findall(Instance, 
+
+    findall(Instance,
             ask(Terminus_DB,
                 where(
                     (
-                        t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                        t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)),
                         t( DB_Resource , rdf/type , terminus/'Database'),
                         t( DB_Resource , terminus/instance, Instance ^^ (xsd/string))
                     )
@@ -226,11 +226,11 @@ database_record_instance_list(Database_Name,Instances) :-
 database_record_inference_list(Database_Name,Inferences) :-
     terminus_database_name(Terminus_Name),
     connect(Terminus_Name,Terminus_DB),
-    
-    findall(Inference, 
+
+    findall(Inference,
             ask(Terminus_DB,
                 where(
-                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)), 
+                    (   t( DB_Resource , terminus/id, Database_Name ^^ (xsd/anyURI)),
                         t( DB_Resource , rdf/type , terminus/'Database'),
                         t( DB_Resource , terminus/inference, Inference ^^ (xsd/string))
                     )
@@ -241,10 +241,10 @@ database_record_inference_list(Database_Name,Inferences) :-
     maplist(atom_string, Inferences, Inference_Strings).
 
 
-/** 
+/**
  * make_database_from_database_name(+URI,-Database) is det.
- * 
- */ 
+ *
+ */
 make_database_from_database_name(Database_Name,Database) :-
     % Need a special case for the master database
     (   terminus_database_name(Database_Name)
@@ -252,7 +252,7 @@ make_database_from_database_name(Database_Name,Database) :-
     ;   database_record_schema_list(Database_Name,Schemata),
         database_record_inference_list(Database_Name,Inferences),
         database_record_instance_list(Database_Name,Instances),
-        
+
         make_database([name=Database_Name,
                        schema=Schemata,
                        instance=Instances,
@@ -262,12 +262,12 @@ make_database_from_database_name(Database_Name,Database) :-
                       ], Database)
     ).
 
-        
-/* 
+
+/*
  * is_schema_graph(Collection,Schema) is det.
- * 
  *
- */ 
+ *
+ */
 is_schema_graph(C,S) :-
     terminus_database_name(C),
     !,
@@ -288,14 +288,14 @@ default_instance_graph(Database,I) :-
                                      'terminus:status' : 'terminus:failure'})))
     ).
 
-/* 
+/*
  * db_size(DB_URI,Size) is det.
- * 
+ *
  * Get an approximate of the database size.
- */ 
+ */
 db_size(DB_URI,Size) :-
     aggregate_all(sum(File_Size),
-                  (   
+                  (
                       graphs(DB_URI,Graph_IDs),
                       member(Graph_ID,Graph_IDs),
                       current_checkpoint_directory(DB_URI,Graph_ID,CPD),
@@ -306,14 +306,14 @@ db_size(DB_URI,Size) :-
                   ),
                   Size).
 
-/* 
- * db_modified_datetime(+DB,-DateTimeString) is det. 
- * 
+/*
+ * db_modified_datetime(+DB,-DateTimeString) is det.
+ *
  * The last modified time
- */ 
+ */
 db_modified_datetime(DB_URI,DateTimeString) :-
     aggregate_all(max(TimeStamp),
-                  (   
+                  (
                       graphs(DB_URI,Graphs),
                       member(Graph,Graphs),
                       graph_directory(DB_URI, Graph, Path),
@@ -323,20 +323,20 @@ db_modified_datetime(DB_URI,DateTimeString) :-
     stamp_date_time(MaxTimeStamp, DateTime, 0),
     format_time(atom(DateTimeString),'%FT%T%:z', DateTime).
 
-/* 
- * db_created_datetime(+DB,-DateTimeString) is det. 
- * 
+/*
+ * db_created_datetime(+DB,-DateTimeString) is det.
+ *
  * The last modified time
- */ 
+ */
 db_created_datetime(DB_URI,DateTimeString) :-
     collection_directory(DB_URI,Path),
     time_file(Path, TimeStamp),
     stamp_date_time(TimeStamp, DateTime, 0),
     format_time(atom(DateTimeString),'%FT%T%:z', DateTime).
 
-/* 
+/*
  * open_read_transaction(+DB1, -DB2) is det.
- * 
+ *
  * Open read transaction for all named graphs.
  */
 open_read_transaction(Database1, Database2) :-
@@ -352,11 +352,11 @@ open_read_transaction(Database1, Database2) :-
              ), Graphs, NL),
     Database2 = Database1.put(database{read_transaction:NL}).
 
-/* 
+/*
  * open_write_transaction(+DB1, +Graphs, -DB2) is det.
- * 
- * Open a write transaction. 
- */ 
+ *
+ * Open a write transaction.
+ */
 open_write_transaction(Database1, Graphs, Database2) :-
     Database1.name = N,
     storage(Store),
@@ -380,7 +380,7 @@ commit_write_transaction(Database1, Database2) :-
 
 update_read_layers(RTs, [], RTs).
 update_read_layers(RTs1, [read_obj{dbid:N, graphid:G, layer: L}|Records], RTs2) :-
-    select(read_obj{dbid:N, graphid:G, layer: _}, RTs1, 
+    select(read_obj{dbid:N, graphid:G, layer: _}, RTs1,
            read_obj{dbid:N, graphid:G, layer: L}, RTs_I),
     !,
     update_read_layers(RTs_I, Records, RTs2).
@@ -390,13 +390,13 @@ update_read_layers(RTs1, [R|Records], RTs2) :-
     update_read_layers([R|RTs1], Records, RTs2).
 
 get_read_layer(Database,G,L) :-
-    Database.name = DBN, 
-    Database.read_transaction = RT, 
+    Database.name = DBN,
+    Database.read_transaction = RT,
     memberchk( read_obj{dbid: DBN, graphid: G, layer: L}, RT).
 
 get_write_builder(Database,G,W) :-
-    Database.name = DBN, 
-    Database.write_transaction = WT, 
+    Database.name = DBN,
+    Database.write_transaction = WT,
     memberchk( write_obj{dbid: DBN, graphid: G, builder: W}, WT).
 
 maybe_open_read_transaction(DB1,DB2) :-
@@ -405,11 +405,11 @@ maybe_open_read_transaction(DB1,DB2) :-
     ;   DB1 = DB2).
 
 
-/* 
- * open_update_transaction(Transaction_Records:list) is det. 
- * 
- * Opens a new database Update which can be used during the transaction. 
- */ 
+/*
+ * open_update_transaction(Transaction_Records:list) is det.
+ *
+ * Opens a new database Update which can be used during the transaction.
+ */
 open_pre_transaction([]).
 open_pre_transaction([transaction_record{
                           pre_database : Pre,
@@ -421,25 +421,25 @@ open_pre_transaction([transaction_record{
     open_write_transaction(Intermediate, Write_Graphs, Update),
     open_pre_transaction(Rest).
 
-/* 
- * open_post_transaction(Transction_Records:list) is det. 
+/*
+ * open_post_transaction(Transction_Records:list) is det.
  *
- * Opens a final database to test before pushing head. 
+ * Opens a final database to test before pushing head.
  */
 open_post_transaction([]).
 open_post_transaction([transaction_record{
                            pre_database : _,
                            update_database : Update,
                            write_graphs : _,
-                           post_database : Post}                       
+                           post_database : Post}
                        |Rest]) :-
     commit_write_transaction(Update,Post),
     open_post_transaction(Rest).
 
-/* 
- * commit_transaction(Transaction_Records:list) is det. 
- * 
- * Commits all altered graphs to head. 
+/*
+ * commit_transaction(Transaction_Records:list) is det.
+ *
+ * Commits all altered graphs to head.
  */
 commit_transaction([]).
 commit_transaction([transaction_record{ pre_database: _,
@@ -461,32 +461,32 @@ is_transaction_record(R) :-
 get_transaction_records(Options,Records) :-
     include(is_transaction_record,Options,Records).
 
-/** 
+/**
  * with_transaction(+Options,:Query_Update,:Post) is semidet.
- * 
- * Succeeds if Update and tests Post resulting in 
+ *
+ * Succeeds if Update and tests Post resulting in
  * member(witnesses(Witnesses), Options)
- * 
+ *
  * Options is a list which contains any of:
- * 
- *  * transaction_records([transaction_record{ pre_database : Pre_Database_1, 
- *                                             write_graphs : [Graph_Id_1_1... Graph_Id_1_k], 
- *                                             update_database : Update_Database_1, 
- *                                             post_database : Post_Database_1 }, 
+ *
+ *  * transaction_records([transaction_record{ pre_database : Pre_Database_1,
+ *                                             write_graphs : [Graph_Id_1_1... Graph_Id_1_k],
+ *                                             update_database : Update_Database_1,
+ *                                             post_database : Post_Database_1 },
  *                         ...
- *                         transaction_record{ pre_database : Pre_Database_n, 
- *                                             write_graphs : [Graph_Id_n_1 ... Graph_Id_n_j], 
- *                                             update_database : Update_Database_n, 
+ *                         transaction_record{ pre_database : Pre_Database_n,
+ *                                             write_graphs : [Graph_Id_n_1 ... Graph_Id_n_j],
+ *                                             update_database : Update_Database_n,
  *                                             post_database : Post_Database_n }])
- * 
+ *
  *  Specifying each of the databases which exist in the pre, update and post phases.
- *  Each database object binds in turn the layers and builders of the transaction 
+ *  Each database object binds in turn the layers and builders of the transaction
  *  in its associated read_obj / write_obj fields.
- * 
+ *
  *  * witnesses(Witnesses)
- *  
- *  Which gives a list of the witnesses of failure. 
- * 
+ *
+ *  Which gives a list of the witnesses of failure.
+ *
  */
 with_transaction(Options,Query_Update,Post) :-
     (   get_transaction_records(Options,Records)
@@ -501,19 +501,19 @@ with_transaction(Options,Query_Update,Post) :-
     ;   format(string(MSG), "Unable to process pre transaction records: ~q", [Records]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))),
-    
+
     (   call(Query_Update)
     ->  true
     ;   format(string(MSG), "Unable to perform the update requested: ~q", [Query_Update]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))),
-    
+
     (   open_post_transaction(Records)
     ->  true
     ;   format(string(MSG), "Unable to process post transaction records: ~q", [Records]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))),
-        
+
     (   call(Post)
     ->  (   memberchk(witnesses([]),Options)
         ->  (   commit_transaction(Records)
