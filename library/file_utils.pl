@@ -55,7 +55,7 @@ db_relative_path('/storage/db/').
  * 
  * Storage location for hdt files 
  */
-temp_relative_path('/temp/').
+temp_relative_path('/tmp/').
 
 /** 
  * terminus_path(-Path) is det. 

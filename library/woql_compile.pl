@@ -2,6 +2,7 @@
               compile_query/3,
               compile_query/4,
               run_query/2,
+              run_query/3,
               is_new/2,
               empty_ctx/1,
               empty_ctx/2
@@ -358,6 +359,24 @@ resolve(X^^T,literal(type(TE,XS))) -->
     },
     resolve(T,TE).
 
+resolve_possible_object(_,Y,Ye,true) -->
+    resolve(Y,Ye),
+    {   \+ \+ Ye = literal(_)  },
+    !.
+resolve_possible_object(P,Y,Ye,T) -->
+    view(database=Database),
+    resolve(Y,Yi),
+    {
+        % We need to do this at query time since the schema may be lifted...
+        T = (    validate_schema:datatypeProperty(P,Database)
+            ->  (   validate_schema:range(P,R,Database)
+                ->  Ye = literal(type(R,Yi))
+                ;   Ye = Yi
+                )
+            ;   Ye = Yi)
+    }.
+    
+
 /* 
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
@@ -414,27 +433,50 @@ enrich_graphs(Databases,Database,Enriched) :-
              Enriched).
 */
 
+
 /* 
  * run_query(JSON_In, JSON_Out) is det. 
  * 
- * Runs a WOQL query in JSON-LD WOQL syntax.
+ * Runs a WOQL query in JSON-LD WOQL syntax
+ * with pre-specified context. 
  */ 
 run_query(JSON_In, JSON_Out) :-
-    woql_context(Ctx),
-    json_woql(JSON_In, Ctx, Query),
-    run_term(Query,JSON_Out).
+    empty_ctx(CCTX),
+    run_query(JSON_In,CCTX,JSON_Out).
 
 :- use_module(library(http/http_log)).
 
+
+/* 
+ * run_query(JSON_In, CCTX, JSON_Out) is det. 
+ * 
+ * Runs a WOQL query in JSON-LD WOQL syntax
+ * with pre-specified context, with compile
+ * context CCTX.
+ */ 
+run_query(JSON_In,CCTX,JSON_Out) :-
+    woql_context(Ctx),
+    memberchk(database=Database,CCTX),
+    database_name(Database, Name),
+    get_collection_jsonld_context(Name,Ctx_Database),
+    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
+
+    http_log_stream(Log),
+    format(Log,'Ctx: ~q~n',[Ctx]),
+
+    json_woql(JSON_In, Ctx_Total, Query),
+
+    format(Log,'Query: ~q~n',[Query]),
+
+    run_term(Query,CCTX,JSON_Out).
+
 run_term(Query,JSON) :-
-    /*
-    (   \+ ground(Query)
-    ->  format(atom(M), 'Arguments are insufficiently instantiated for Query ~q', [Query]),
-        throw(instantiation_error(M))
-    ;   true),
-    */
+    empty_ctx(Ctx),
+    run_term(Query,Ctx,JSON).
+
+run_term(Query,Ctx_In,JSON) :-
     * format('~n***********~nQuery: ~q~n',[Query]),
-    compile_query(Query,Prog,Ctx_Out),
+    compile_query(Query,Prog,Ctx_In,Ctx_Out),
     * format('~n***********~nProgram: ~q~n',[Prog]),
     * format('~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
@@ -468,9 +510,10 @@ run_term(Query,JSON) :-
     
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
- 
-run_term(Query,JSON) :-
-    compile_query(Query,Prog,Ctx_Out),
+
+/*
+run_term(Query,Ctx_In,JSON) :-
+    compile_query(Query,Prog,Ctx_In,Ctx_Out),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=_Database,Ctx_Out),
     assert_program(Definitions),
@@ -490,6 +533,7 @@ run_term(Query,JSON) :-
     
     term_jsonld([bindings=Bindings,graphs=Databases],JSON),
     ignore(retract_program(Definitions)).
+*/
 
 literal_string(literal(type(_,Val)), Val).
 literal_string(literal(lang(_,Val)), Val).
@@ -856,6 +900,8 @@ compile_wf((A => B),Goal) -->
     % should be easy to extract from B
     view(write_graph=[WG]),
     {
+        http_log_stream(Log),
+        format(Log,'~nWrite Graph: ~q~n',[WG]),    
         Goal = (
             validate:document_transaction(
                          Database,
@@ -955,8 +1001,8 @@ compile_wf(get(Spec,File_Spec), Prog) -->
             ;   File_Spec = file(CSV_Path),
                 Options = []),
             dict_options(_DictOptions,Options)
-        ;   (   File_Spec = http(URI,Options)
-            ;   File_Spec = http(URI),
+        ;   (   File_Spec = remote(URI,Options)
+            ;   File_Spec = remote(URI),
                 Options = []),
             dict_options(DictOptions,Options),
             copy_remote(URI,URI,CSV_Path,DictOptions)
@@ -970,7 +1016,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
                       (   nth1(Idx,Names,N),
                           nth1(Idx,Values,Xe)
                       ->  true
-                      ;   format(atom(Msg),'No such indexed name in get: ~q with header: ~q and values: ~q',[N,Names,Values]),
+                      ;   format(atom(Msg),'No such indexed name in get: "~q" with header: "~q" and values: "~q"',[N,Names,Values]),
                           throw(http_error(syntax_error(Msg)))
                       )
               ), Spec, [], Indexing_List),

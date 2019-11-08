@@ -95,24 +95,24 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
-        WOQL = delete(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#delete_triple' : [ Subject, Predicate, Object ] } :< JSON
-    ->  json_to_woql_ast(Subject,WQA),
-        json_to_woql_ast(Predicate,WQB),
-        json_to_woql_ast(Object,WQC),
         WOQL = insert(WQA,WQB,WQC)
-    ;   _{'http://terminusdb.com/woql#delete_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
-    ->  json_to_woql_ast(Graph,WG),
-        json_to_woql_ast(Subject,WQA),
-        json_to_woql_ast(Predicate,WQB),
-        json_to_woql_ast(Object,WQC),
-        WOQL = delete(WG,WQA,WQB,WQC)
     ;   _{'http://terminusdb.com/woql#add_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
         WOQL = insert(WG,WQA,WQB,WQC)
+    ;   _{'http://terminusdb.com/woql#delete_triple' : [ Subject, Predicate, Object ] } :< JSON
+    ->  json_to_woql_ast(Subject,WQA),
+        json_to_woql_ast(Predicate,WQB),
+        json_to_woql_ast(Object,WQC),
+        WOQL = delete(WQA,WQB,WQC)
+    ;   _{'http://terminusdb.com/woql#delete_quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
+    ->  json_to_woql_ast(Graph,WG),
+        json_to_woql_ast(Subject,WQA),
+        json_to_woql_ast(Predicate,WQB),
+        json_to_woql_ast(Object,WQC),
+        WOQL = delete(WG,WQA,WQB,WQC)
     ;   _{'http://terminusdb.com/woql#when' : [ Q, U ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         json_to_woql_ast(U,WU),
@@ -149,7 +149,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = remote(File)
     ;   _{'http://terminusdb.com/woql#file' : [ File ] } :< JSON
     ->  WOQL = file(File)
-    ;   _{'http://terminusdb.com/woql#hash' : [ Base, Q, Hash ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash ] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Hash,WHash),        
@@ -192,6 +192,14 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = '^^'(V,T)
     ;   _{'@value' : V, '@lang' : L } :< JSON
     ->  WOQL = '@'(V,L)
+    ;   _{'http://terminusdb.com/woql#value' : V, '@type' : T } :< JSON
+    ->  json_to_woql_ast(V,VE),
+        string_to_atom(T,TE),
+        WOQL = '^^'(VE,TE)
+    ;   _{'http://terminusdb.com/woql#value' : V, '@lang' : L } :< JSON
+    ->  json_to_woql_ast(V,VE),
+        string_to_atom(L,LE),        
+        WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
     ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
