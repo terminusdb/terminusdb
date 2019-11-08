@@ -7,7 +7,6 @@
               get_collection_prefixes/2,
               get_collection_prefix_pairs/2,
               get_collection_prefix_list/2,
-              prefix_list_to_rapper_args/2,
               initialise_contexts/0,
               woql_context/1,
               get_collection_jsonld_context/2,
@@ -179,15 +178,6 @@ get_collection_prefix_list(Collection,List) :-
     get_collection_prefix_pairs(Collection,Pairs),
     maplist([A-B,A=B]>>true, Pairs, List).
 
-/*
- * prefix_list_to_rapper_args(Collection:atom,Prefixes:dict) is det.
- *
- * return a list of arguments for rapper.
- */
-prefix_list_to_rapper_args([],[]).
-prefix_list_to_rapper_args([P=U|Rest],['-f',Arg|Arg_Rest]) :-
-    interpolate(['xmlns:',P,'="',U,'"'],Arg),
-    prefix_list_to_rapper_args(Rest,Arg_Rest).
 
 :- dynamic woql_context/1.
 

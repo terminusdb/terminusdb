@@ -34,16 +34,8 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
 % Contacting server ....
-2 ?- pack_install(mavis). 
+2 ?- pack_install(mavis).
 % Contacting server ....
-```
-
-### Rapper
-
-Raptor2 / rapper is also a dependency. Install it with:
-
-```
-sudo apt install raptor2-utils
 ```
 
 ### Terminus Server
@@ -87,40 +79,10 @@ SWI-Prolog is needed to run terminus-server. Install SWI-PROLOG with:
 sudo dnf install pl pl-devel
 ```
 
-### HDT Library
-
-The HDT library is used as storage engine until we have implemented terminus-store to be used by terminus-server.
-
-Instructions on how to install HDT can be found on the [hdt-cpp GitHub Page](https://github.com/rdfhdt/hdt-cpp).
-
-A quick overview:
-
-1. Install the dependencies for HDT: `sudo dnf install git gcc-c++ zlib-devel make serd serd-devel autoconf libtool gzip pkgconf-pkg-config`.
-2. Clone the latest release: `git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git`
-3. Build and install hdt-cpp:
-
-```
-cd hdt-cpp
-./autogen.sh
-./configure
-make -j4
-sudo make install
-# Add the library path to the ld paths
-echo "/usr/local/lib/" | sudo tee /etc/ld.so.conf.d/local-lib.conf
-sudo ldconfig
-```
-
-### Rapper
-
-Rapper is a dependency as well. Install it with:
-
-```
-sudo dnf install raptor2 
-```
-
 ### SWIPL libraries
 
-Run SWIPL and install the required dependencies:
+Run SWIPL and install the required dependencies, note that you need to have
+rust installed to compile the dependencies:
 
 ```
 $ swipl
@@ -131,7 +93,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/GavinMendelGleason/hdt.git').
+1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
 % Contacting server ....
 2 ?- pack_install(mavis).
 % Contacting server ....
@@ -174,28 +136,13 @@ Now you are ready to interact with the HTTP server.
 1. Install all dependencies of all the required libraries:
 
 ```
-sudo pacman -S git serd swi-prolog make automake autoconf libtool zlib pkgconf raptor gcc
-```
-
-### hdt-cpp
-
-1. Clone the latest release: `git clone --branch v1.3.3 https://github.com/rdfhdt/hdt-cpp.git`
-2. Build and install hdt-cpp:
-
-```
-cd hdt-cpp
-./autogen.sh
-./configure
-make -j4
-sudo make install
-# Add the library path to the ld paths
-echo "/usr/local/lib/" | sudo tee /etc/ld.so.conf.d/local-lib.conf
-sudo ldconfig
+sudo pacman -S git serd swi-prolog make automake autoconf libtool zlib pkgconf gcc
 ```
 
 ### SWIPL libraries
 
-Run SWIPL and install the required dependencies:
+Run SWIPL and install the required dependencies, note that you need to have
+rust installed to compile the dependencies:
 
 ```
 $ swipl
@@ -206,7 +153,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/GavinMendelGleason/hdt.git').
+1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
 % Contacting server ....
 2 ?- pack_install(mavis).
 % Contacting server ....
