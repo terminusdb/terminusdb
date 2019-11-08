@@ -32,7 +32,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
+1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
 2 ?- pack_install(mavis).
 % Contacting server ....
@@ -93,7 +93,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
+1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
 2 ?- pack_install(mavis).
 % Contacting server ....
@@ -136,7 +136,7 @@ Now you are ready to interact with the HTTP server.
 1. Install all dependencies of all the required libraries:
 
 ```
-sudo pacman -S git serd swi-prolog make automake autoconf libtool zlib pkgconf gcc
+sudo pacman -S git swi-prolog make automake autoconf libtool zlib pkgconf gcc
 ```
 
 ### SWIPL libraries
@@ -153,7 +153,7 @@ Please run ?- license. for legal details.
 For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
-1 ?- pack_install('https://github.com/terminusdb/terminus_store_prolog.git').
+1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
 2 ?- pack_install(mavis).
 % Contacting server ....
