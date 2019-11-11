@@ -375,7 +375,7 @@ resolve_possible_object(P,Y,Ye,T) -->
                 )
             ;   Ye = Yi)
     }.
-    
+
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
@@ -434,11 +434,11 @@ enrich_graphs(Databases,Database,Enriched) :-
 */
 
 /*
- * run_query(JSON_In, JSON_Out) is det. 
- * 
+ * run_query(JSON_In, JSON_Out) is det.
+ *
  * Runs a WOQL query in JSON-LD WOQL syntax
- * with pre-specified context. 
- */ 
+ * with pre-specified context.
+ */
 run_query(JSON_In, JSON_Out) :-
     empty_ctx(CCTX),
     run_query(JSON_In,CCTX,JSON_Out).
@@ -446,13 +446,13 @@ run_query(JSON_In, JSON_Out) :-
 :- use_module(library(http/http_log)).
 
 
-/* 
- * run_query(JSON_In, CCTX, JSON_Out) is det. 
- * 
+/*
+ * run_query(JSON_In, CCTX, JSON_Out) is det.
+ *
  * Runs a WOQL query in JSON-LD WOQL syntax
  * with pre-specified context, with compile
  * context CCTX.
- */ 
+ */
 run_query(JSON_In,CCTX,JSON_Out) :-
     woql_context(Ctx),
     memberchk(database=Database,CCTX),
@@ -461,11 +461,11 @@ run_query(JSON_In,CCTX,JSON_Out) :-
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
 
     http_log_stream(Log),
-    format(Log,'Ctx: ~q~n',[Ctx]),
+    * format(Log,'Ctx: ~q~n',[Ctx]),
 
     json_woql(JSON_In, Ctx_Total, Query),
 
-    format(Log,'Query: ~q~n',[Query]),
+    * format(Log,'Query: ~q~n',[Query]),
 
     run_term(Query,CCTX,JSON_Out).
 
@@ -900,7 +900,7 @@ compile_wf((A => B),Goal) -->
     view(write_graph=[WG]),
     {
         http_log_stream(Log),
-        format(Log,'~nWrite Graph: ~q~n',[WG]),    
+        * format(Log,'~nWrite Graph: ~q~n',[WG]),
         Goal = (
             validate:document_transaction(
                          Database,

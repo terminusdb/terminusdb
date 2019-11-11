@@ -344,14 +344,23 @@ woql_handler(get,DB,Request) :-
 
     try_get_param('terminus:query',Request,Atom_Query),
     atom_json_dict(Atom_Query, Query, []),
-   
+
     http_log_stream(Log),
-    format(Log,'Connecting: ~q~n',[DB_URI]),
-    
+
+    format(Log,'Query: ~q~n',[Query]),
+
     connect(DB_URI,New_Ctx),
-    format(Log,'Compile context: ~q~n',[New_Ctx]),
-    
+
     run_query(Query,New_Ctx,JSON),
+
+    * format(Log,'JSON: ~q~n',[JSON]),
+
+    format(atom(Q),'~q',[Query]),
+    format(atom(J),'~q',[JSON]),
+    md5_hash(Q,Q_Hash,[]),
+    md5_hash(J,J_Hash,[]),
+
+    format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
 
     config:server(SURI),
     write_cors_headers(SURI),
