@@ -1107,7 +1107,7 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(maplist(literally,LE,LL),atomic_list_concat(LL,AE))) -->
+compile_wf(concat(L,A),(maplist(literally,LE,LL),interpolate(LL,AE))) -->
     mapm(resolve,L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
