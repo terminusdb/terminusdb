@@ -1135,6 +1135,7 @@ literally(literal(lang(_,L)), L).
 literally(X, X) :-
     (   var(X)
     ;   atom(X)
+    ;   number(X)
     ;   string(X)).
 
 compile_arith(Exp,ExpE) -->
