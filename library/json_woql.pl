@@ -154,6 +154,10 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Hash,WHash),
         WOQL = hash(WBase,WQ,WHash)
+    ;   _{'http://terminusdb.com/woql#concat' : [ List, Value ] } :< JSON
+    ->  json_to_woql_ast(List,WList),
+        json_to_woql_ast(Value,WValue),
+        WOQL = concat(WList,WValue)
     ;   _{'http://terminusdb.com/woql#start' : [ N, Q ] } :< JSON
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
@@ -198,7 +202,7 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = '^^'(VE,TE)
     ;   _{'http://terminusdb.com/woql#value' : V, '@lang' : L } :< JSON
     ->  json_to_woql_ast(V,VE),
-        string_to_atom(L,LE),        
+        string_to_atom(L,LE),
         WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
