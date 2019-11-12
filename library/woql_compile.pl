@@ -1128,11 +1128,16 @@ compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
 compile_wf(join(X,S,Y),(maplist(literally,XE,XL),join(XL,SE,YE))) -->
-    mapm(resolve,X,XE),
+    resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].
+compile_wf(Q,_) -->
+    {
+        format(atom(M), 'Unable to parse query ~q', [Q]), 
+        throw(syntax_error(M))
+    }.
 
 literally(literal(type(_,L)), L).
 literally(literal(lang(_,L)), L).
