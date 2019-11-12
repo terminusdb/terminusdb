@@ -126,8 +126,16 @@ nonNegativeInteger(I) --> natural(I) .
 nonNegativeInteger(I) --> "+", natural(I) .
 nonNegativeInteger(0) --> "-0" .
 
-decimal(M) --> integer(I), fullstop, digits(S),
-	       { string_concat("0.", S, T), number_string(E,T), M is I + E } .
+decimal(M) -->
+    integer(I), fullstop, digits(S),
+	{
+        string_concat("0.", S, T),
+        number_string(E,T),
+        % Need to eliminate the sign and add
+        % it later in order to use addition.
+        sign(I,Sign),
+        M is Sign * ((Sign * I) + E)
+    }.
 decimal(M) --> integer(M) .
 
 unsignedDecimal(M) --> natural(I), fullstop, digits(S),

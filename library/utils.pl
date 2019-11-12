@@ -150,16 +150,45 @@ intersperse(Item,[X,Y|Rest],[X,Item|New_Rest]) :-
 interpolate([],'').
 interpolate([H|T],S) :-
     atom(H),
+    !,
     interpolate(T,Rest),
-    atom_concat(H,Rest,S) , !.
+    atom_concat(H,Rest,S).
 interpolate([H|T],S) :-
-    string(H), atom_string(C,H),
+    string(H),
+    !,
+    atom_string(C,H),
     interpolate(T,Rest),
-    atom_concat(C,Rest,S) , !.
+    atom_concat(C,Rest,S).
 interpolate([H|T],S) :-
-    ground(H), term_to_atom(H,C),
-    interpolate(T,Rest) ,
-    atom_concat(C,Rest,S) , !.
+    ground(H),
+    !,
+    term_to_atom(H,C),
+    interpolate(T,Rest),
+    atom_concat(C,Rest,S).
+
+/**
+ * interpolate_string(L:list,A:atom) is det.
+ *
+ * Takes a list of values of mixed type, and appends them together as rendered atoms.
+ */
+interpolate_string([],'').
+interpolate_string([H|T],S) :-
+    string(H),
+    !,
+    interpolate_string(T,Rest),
+    string_concat(H,Rest,S).
+interpolate_string([H|T],S) :-
+    atom(H),
+    !,
+    atom_string(H,C),
+    interpolate_string(T,Rest),
+    string_concat(C,Rest,S).
+interpolate_string([H|T],S) :-
+    ground(H),
+    !,
+    term_to_atom(H,C),
+    interpolate_string(T,Rest) ,
+    string_concat(C,Rest,S).
 
 /**
  * unique_solutions(+Template,+Goal,-Collection) is det.
@@ -454,3 +483,13 @@ coerce_atom(Atom_Or_String, Atom) :-
 snoc([],Last,[Last]).
 snoc([First|Tail],Last,[First|Rest]) :-
     snoc(Tail,Last,Rest).
+
+
+/*
+ * join(List,Sep,String) is det.
+ *
+ * Joins a list of strings/atoms into a single string.
+ */
+join(List, Sep, Atom) :-
+    intersperse(Sep,List,New_List),
+    interpolate_string(New_List, Atom).

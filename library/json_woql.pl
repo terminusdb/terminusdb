@@ -158,6 +158,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(List,WList),
         json_to_woql_ast(Value,WValue),
         WOQL = concat(WList,WValue)
+    ;   _{'http://terminusdb.com/woql#join' : [ List, Sep, Value ] } :< JSON
+    ->  json_to_woql_ast(List,WList),
+        json_to_woql_ast(Sep,WSep),
+        json_to_woql_ast(Value,WValue),
+        WOQL = join(WList,WSep,WValue)
     ;   _{'http://terminusdb.com/woql#start' : [ N, Q ] } :< JSON
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
