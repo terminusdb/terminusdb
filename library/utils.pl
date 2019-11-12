@@ -27,6 +27,7 @@
               coerce_atom/2,
               xfy_list/3,
               snoc/3,
+              join/3,
               op(920,fy, *),
               '*'/1,
               op(700,xfy,<>),

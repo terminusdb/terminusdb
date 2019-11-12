@@ -1107,7 +1107,7 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(maplist(literally,LE,LL),interpolate(LL,AE))) -->
+compile_wf(concat(L,A),(maplist(literally,LE,LL),utils:interpolate(LL,AE))) -->
     mapm(resolve,L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
@@ -1127,7 +1127,7 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(maplist(literally,XE,XL),join(XL,SE,YE))) -->
+compile_wf(join(X,S,Y),(maplist(literally,XE,XL),utils:join(XL,SE,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE).
@@ -1135,7 +1135,7 @@ compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
     {
-        format(atom(M), 'Unable to parse query ~q', [Q]), 
+        format(atom(M), 'Unable to parse query ~q', [Q]),
         throw(syntax_error(M))
     }.
 
