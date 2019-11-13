@@ -185,6 +185,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
         WOQL = limit(WN, WQ)
+    ;   _{'http://terminusdb.com/woql#re' : [ Pat, String, List ] } :< JSON
+    ->  json_to_woql_ast(Pat,WPat),
+        json_to_woql_ast(String,WString),
+        json_to_woql_ast(List,WList),
+        WOQL = re(WPat, WString, WList)
     ;   _{'http://terminusdb.com/woql#order_by' : Clauses } :< JSON
     ->  snoc(Vargs,Sub_Query,Clauses),
         maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
