@@ -154,6 +154,20 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Hash,WHash),
         WOQL = hash(WBase,WQ,WHash)
+    ;   _{'http://terminusdb.com/woql#upper' : [ S, V ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(V,WV),
+        WOQL = upper(WS,WV)
+    ;   _{'http://terminusdb.com/woql#lower' : [ S, V ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(V,WV),
+        WOQL = lower(WS,WV)
+    ;   _{'http://terminusdb.com/woql#pad' : [ S, C, N, V ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(C,WC),
+        json_to_woql_ast(N,WN),
+        json_to_woql_ast(V,WV),
+        WOQL = pad(WS,WC,WN,WV)
     ;   _{'http://terminusdb.com/woql#concat' : [ List, Value ] } :< JSON
     ->  json_to_woql_ast(List,WList),
         json_to_woql_ast(Value,WValue),
@@ -215,6 +229,10 @@ json_to_woql_ast(JSON,WOQL) :-
                                      'terminus:message' :'Un-parsable Query',
                                      'vio:query' : JSON})))
     ).
+json_to_woql_ast(JSON,WOQL) :-
+    number(JSON),
+    !,
+    WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#decimal').
 json_to_woql_ast(JSON,WOQL) :-
     coerce_atom(JSON,A),
     !,

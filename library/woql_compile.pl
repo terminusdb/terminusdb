@@ -322,24 +322,6 @@ resolve(X,Xe) -->
         jsonld_id(XEx,XI)
     },
     resolve(XI,Xe).
-resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#integer',X))) -->
-    [],
-    {
-        integer(X),
-        !
-    }.
-resolve(X,literal(type('http://www.w3.org/2001/XMLSchema#decimal',X))) -->
-    [],
-    {
-        number(X),
-        !
-    }.
-resolve(X,X) -->
-    [],
-    {
-        string(X),
-        !
-    }.
 resolve(X@L,literal(lang(LE,XS))) -->
     resolve(X,XE),
     {
@@ -358,6 +340,26 @@ resolve(X^^T,literal(type(TE,XS))) -->
         ;   XE = XS)
     },
     resolve(T,TE).
+resolve(L,Le) -->
+    {
+        is_list(L)
+    },
+    mapm(resolve,L,Le).
+resolve(X,X) -->
+    {
+        string(X)
+    },
+    !.
+resolve(X,X) -->
+    {
+        atom(X)
+    },
+    !.
+resolve(X,X) -->
+    {
+        number(X)
+    },
+    !.
 
 resolve_possible_object(_,Y,Ye,true) -->
     resolve(Y,Ye),
@@ -1107,13 +1109,27 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(maplist(literally,LE,LL),utils:interpolate(LL,AE))) -->
-    mapm(resolve,L,LE),
+compile_wf(concat(L,A),(maplist(literally,LE,LL),utils:interpolate_string(LL,AE))) -->
+    resolve(L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
     resolve(S,SE),
     resolve(A,AE).
-compile_wf(format(X,A,L),format(atom(XE,A,LE))) -->
+compile_wf(pad(S,C,N,V),(literally(SE,SL),
+                         literally(CE,CL),
+                         literally(NE,NL),
+                         pad(SL,CL,NL,VE))) -->
+    resolve(S,SE),
+    resolve(C,CE),
+    resolve(N,NE),
+    resolve(V,VE).
+compile_wf(upper(S,A),string_upper(SE,AE)) -->
+    resolve(S,SE),
+    resolve(A,AE).
+compile_wf(lower(S,A),string_lower(SE,AE)) -->
+    resolve(S,SE),
+    resolve(A,AE).
+compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     resolve(X,XE),
     mapm(resolve,L,LE).
 compile_wf(X is Arith, XE is ArithE) -->
@@ -1121,13 +1137,13 @@ compile_wf(X is Arith, XE is ArithE) -->
     compile_arith(Arith,ArithE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
     resolve(WGroup,Group),
-    mapm(resolve,WTemplate,Template),
+    resolve(WTemplate,Template),
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(maplist(literally,XE,XL),utils:join(XL,SE,YE))) -->
+compile_wf(join(X,S,Y),(maplist(literally,XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE).
@@ -1135,17 +1151,32 @@ compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
     {
-        format(atom(M), 'Unable to parse query ~q', [Q]),
+        format(atom(M), 'Unable to compile AST query ~q', [Q]),
         throw(syntax_error(M))
     }.
 
-literally(literal(type(_,L)), L).
-literally(literal(lang(_,L)), L).
 literally(X, X) :-
-    (   var(X)
-    ;   atom(X)
-    ;   number(X)
-    ;   string(X)).
+    var(X),
+    !.
+literally(literal(T), L) :-
+    var(T),
+    !,
+    (   T = lang(_,L)
+    ;   T = type(_,L)).
+literally(literal(type(_,L)), L) :-
+    !.
+literally(literal(lang(_,L)), L) :-
+    !.
+literally(X^^_T, X) :-
+    !.
+literally(X@_L, X) :-
+    !.
+literally(literal(lang(_,L)), L) :-
+    !.
+literally(X, X) :-
+    (   atom(X)
+    ;   string(X)
+    ;   number(X)).
 
 compile_arith(Exp,ExpE) -->
     {

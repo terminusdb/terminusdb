@@ -7,8 +7,9 @@
               intersperse/3,
               interpolate/2,
               unique_solutions/3,
-              repeat_atom/3,
+              repeat_term/3,
               zero_pad/3,
+              pad/4,
               coerce_number/2,
               exhaust/1,
               take/3,
@@ -204,15 +205,33 @@ unique_solutions(Template, Goal, Collection) :-
     ;   Collection=[]).
 
 /**
- * repeat_atom(+A:atom,+N:int,-L:list) is det.
+ * repeat_term(+A:any,+N:int,-L:list) is det.
  *
- * Repeats an atom A, N times.
+ * Repeats a term A, N times.
  */
-repeat_atom(_A,0,[]).
-repeat_atom(A,N,[A|Z]) :-
+repeat_term(_A,0,[]).
+repeat_term(A,N,[A|Z]) :-
 	N > 0,
 	N2 is N - 1,
-	repeat_atom(A,N2,Z).
+	repeat_term(A,N2,Z).
+
+/**
+ * pad(-A1:atom,C:atom,Length:int,A2:atom) is det.
+ *
+ * Pad the atom A1, with '0' to make it length Length.
+ */
+pad(A,C,L,A2) :-
+    (   interpolate([C],S),
+        string_length(S,1)
+    ->  true
+    ;   format(atom(M), 'Not a single character in pad: ~q', [pad(A,C,L,A2)]),
+        throw(syntax_error(M))),
+	atom_chars(A,AtomList),
+	length(AtomList, L1),
+	L2 is L - L1,
+	repeat_term(S,L2,List),
+	append(List,AtomList,TotalList),
+	atom_chars(A2,TotalList).
 
 /**
  * zero_pad(-A1:atom,Length:int,A2:atom) is det.
@@ -220,12 +239,7 @@ repeat_atom(A,N,[A|Z]) :-
  * Pad the atom A1, with '0' to make it length Length.
  */
 zero_pad(A,L,A2) :-
-	atom_chars(A,AtomList),
-	length(AtomList, L1),
-	L2 is L - L1,
-	repeat_atom('0',L2,List),
-	append(List,AtomList,TotalList),
-	atom_chars(A2,TotalList).
+    pad(A,'0',L,A2).
 
 /*
  * coerce_number(S,N) is det.
