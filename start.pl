@@ -110,6 +110,6 @@ main(Argv) :-
     initialise_contexts,
     server(Argv),
     (   Argv == [test]
-    ->  run_tests.
+    ->  run_tests
     ;   true
     ).
