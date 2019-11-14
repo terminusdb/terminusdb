@@ -1,5 +1,5 @@
 :- module(database_utils,[
-              create_db/1,
+              create_db/2,
               post_create_db/1,
               delete_db/1,
               database_exists/1,
@@ -49,7 +49,7 @@ database_exists(DB_URI) :-
  *
  * Create a new empty graph
  */
-create_db(DB_URI) :-
+create_db(Terminus_DB,DB_URI) :-
 
     initialise_prefix_db(DB_URI),
     storage(Store),
@@ -58,7 +58,7 @@ create_db(DB_URI) :-
     forall(
         (
             % If none, we succeed... (headless)
-            database_record_schema_list(DB_URI,Schemata),
+            database_record_schema_list(Terminus_DB, DB_URI,Schemata),
             member(Schema,Schemata)
         ),
         safe_create_named_graph(Store,Schema,_)
@@ -68,7 +68,7 @@ create_db(DB_URI) :-
     forall(
         (
             % If none, we succeed... (legless)
-            database_record_instance_list(DB_URI,Instances),
+            database_record_instance_list(Terminus_DB, DB_URI,Instances),
             member(Instance,Instances)
         ),
         safe_create_named_graph(Store,Instance,_)
