@@ -10,3 +10,6 @@ TAGS
 httpd.log
 transcript.pl
 index.html
+config/
+storage/
+
