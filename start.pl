@@ -20,6 +20,43 @@
 
 :- initialization(main).
 
+%!  version_string(+Int:integer, -Str:string) is det
+%
+%   convert an integer form version number as supplied by
+%   the =|version|= flag of =|current_prolog_flag/2|=
+%   to a string representation
+%
+version_string(Int, Str) :-
+    Major is floor( Int / 10_000 ) rem 100,
+    Minor is floor( Int / 100 ) rem 100,
+    Patch is Int rem 100,
+    format(string(Str), '~w.~w.~w', [Major, Minor, Patch]).
+
+:- multifile prolog:message//1.
+
+prolog:message(error(version_error(Correct, Was), _)) -->
+      { version_string(Correct, C),
+        version_string(Was, W)
+      },
+      [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[C, W],
+        nl].
+
+needs_version(80003).
+
+must_be_proper_version :-
+    needs_version(Correct),
+    (   current_prolog_flag(version, Correct)
+    ->   true
+    ;
+        current_prolog_flag(version, V),
+        print_message(error,
+                      error(version_error(Correct, V), terminus_db_startup)),
+        halt
+   ).
+
+:- initialization must_be_proper_version.
+
+
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
