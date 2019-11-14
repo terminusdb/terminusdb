@@ -668,13 +668,13 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
                                      'terminus:object' : DB_URI})))).
 
 /*
- * try_db_graph(+DB:uri,-Database:database is det.
+ * try_db_graph(+DB:uri,-Database:database) is det.
  *
  * Die if we can't form a graph
  */
 try_db_graph(DB_URI,Database) :-
-    (   make_database_from_database_name(DB_URI,Database)
-    ->  true
+    (   make_database_from_database_name(DB_URI,DBM)
+    ->  open_read_transaction(DBM,Database) % let's at least get reads...
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure',

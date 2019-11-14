@@ -508,3 +508,13 @@ snoc([First|Tail],Last,[First|Rest]) :-
 join(List, Sep, Atom) :-
     intersperse(Sep,List,New_List),
     interpolate_string(New_List, Atom).
+
+/*
+ * re(Pattern, String, Matches) is det.
+ */
+re(Pattern, String, Matches) :-
+    re_matchsub(Pattern,String,Dict,[]),
+    dict_pairs(Dict,_,Pairs),
+    length(Pairs,N),
+    length(Matches,N),
+    maplist({Matches}/[Key-Value]>>nth0(Key,Matches,Value),Pairs).

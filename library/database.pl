@@ -25,6 +25,7 @@
               get_write_builder/3,
               % commit_write_transaction/2,
               maybe_open_read_transaction/2,
+              open_read_transaction/2,
               with_transaction/3
           ]).
 

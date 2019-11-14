@@ -1123,6 +1123,10 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(C,CE),
     resolve(N,NE),
     resolve(V,VE).
+compile_wf(re(P,S,L),(maplist(literally,LE,LL),re(PE,SE,LL))) -->
+    resolve(P,PE),
+    resolve(S,SE),
+    resolve(L,LE).
 compile_wf(upper(S,A),string_upper(SE,AE)) -->
     resolve(S,SE),
     resolve(A,AE).
