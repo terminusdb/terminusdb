@@ -245,9 +245,9 @@ pre_convert_node(X,A) :-
 post_convert_node(A,X) :-
     (   nonvar(X)
     ->  (   atom(X)
-        ->  string_to_atom(A,X)
+        ->  atom_string(X,A)
         ;   X = A)
-    ;   string_to_atom(A,X)).
+    ;   atom_string(X,A)).
 
 /*
  * xrdf_db(Layer,X,Y,Z) is nondet.
