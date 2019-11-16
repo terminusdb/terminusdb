@@ -252,7 +252,7 @@ json_to_woql_ast(JSON,_) :-
                                  'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
-    atom_concat('http://terminusdb.com/woql/variable/',_,A).
+    sub_atom(A, 0, _, _, 'http://terminusdb.com/woql/variable/').
 
 json_to_woql_arith(JSON,WOQL) :-
     is_dict(JSON),

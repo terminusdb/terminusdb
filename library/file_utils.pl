@@ -146,7 +146,7 @@ subdirectories(Dir,Dirs) :-
  */
 excluded_file(File) :-
     % emacs files
-    atom_concat('.#', _, File).
+    sub_atom(File, 0, _, _, '.#').
 excluded_file(File) :-
     % current directory and parent directory
     member(File, ['.','..']).
