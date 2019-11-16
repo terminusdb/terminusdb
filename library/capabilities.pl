@@ -38,14 +38,14 @@
 
 :- use_module(config(config),[]).
 :- use_module(library(crypto)).
-:- use_module(library(utils)).
-:- use_module(library(file_utils)).
-:- use_module(library(triplestore)).
-:- use_module(library(frame)).
-:- use_module(library(jsonld)).
-:- use_module(library(database)).
-:- use_module(library(database_utils)).
-:- use_module(library(sdk)).
+:- use_module(utils).
+:- use_module(file_utils).
+:- use_module(triplestore).
+:- use_module(frame).
+:- use_module(jsonld).
+:- use_module(database).
+:- use_module(database_utils).
+:- use_module(sdk).
 :- op(1050, xfx, =>).
 
 /**

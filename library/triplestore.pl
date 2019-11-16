@@ -12,19 +12,19 @@
               storage/1
           ]).
 
-:- use_module(library(terminus_store)).
-:- reexport(library(terminus_store),
+:- use_module(terminus_store).
+:- reexport(terminus_store,
             except([create_named_graph/3,
                     open_named_graph/3])).
 
-:- use_module(library(file_utils)).
-:- use_module(library(utils)).
-:- use_module(library(schema), [cleanup_schema_module/1]).
-:- use_module(library(prefixes)).
-:- use_module(library(types)).
+:- use_module(file_utils).
+:- use_module(utils).
+:- use_module(schema, [cleanup_schema_module/1]).
+:- use_module(prefixes).
+:- use_module(types).
 % feeling very circular :(
-:- use_module(library(database)).
-:- use_module(library(literals)).
+:- use_module(database).
+:- use_module(literals).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

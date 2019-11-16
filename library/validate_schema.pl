@@ -98,12 +98,12 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(database)).
-:- use_module(library(triplestore)).
-:- use_module(library(utils)).
-:- use_module(library(types)).
-:- use_module(library(base_type)).
-:- use_module(library(validate_instance)).
+:- use_module(database).
+:- use_module(triplestore).
+:- use_module(utils).
+:- use_module(types).
+:- use_module(base_type).
+:- use_module(validate_instance).
 
 /*
  * Vio JSON util

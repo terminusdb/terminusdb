@@ -27,10 +27,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(database)).
-:- use_module(library(woql_compile)).
-:- use_module(library(woql_term)).
+:- use_module(utils).
+:- use_module(database).
+:- use_module(woql_compile).
+:- use_module(woql_term).
 
 :- reexport(woql_term).
 

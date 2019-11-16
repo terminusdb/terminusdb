@@ -27,8 +27,8 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(jsonld)).
+:- use_module(utils).
+:- use_module(jsonld).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

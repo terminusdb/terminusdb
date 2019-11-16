@@ -28,12 +28,12 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(prefixes), [global_prefix_expand/2]).
-:- use_module(library(database)).
-:- use_module(library(triplestore)).
-:- use_module(library(schema_definitions)).
-:- use_module(library(schema_util)).
-:- use_module(library(utils)).
+:- use_module(prefixes, [global_prefix_expand/2]).
+:- use_module(database).
+:- use_module(triplestore).
+:- use_module(schema_definitions).
+:- use_module(schema_util).
+:- use_module(utils).
 
 :- reexport(schema_util).
 

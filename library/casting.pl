@@ -26,9 +26,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(prefixes)).
-:- use_module(library(speculative_parse)).
+:- use_module(utils).
+:- use_module(prefixes).
+:- use_module(speculative_parse).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

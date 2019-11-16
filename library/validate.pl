@@ -26,20 +26,20 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(triplestore)).
-:- use_module(library(database)).
-:- use_module(library(utils)).
-:- use_module(library(schema),[
+:- use_module(triplestore).
+:- use_module(database).
+:- use_module(utils).
+:- use_module(schema,[
                   database_module/2,
                   compile_schema_to_module/2
               ]).
-:- use_module(library(validate_schema)).
-:- use_module(library(validate_instance)).
-:- use_module(library(frame)).
-:- use_module(library(jsonld)).
+:- use_module(validate_schema).
+:- use_module(validate_instance).
+:- use_module(frame).
+:- use_module(jsonld).
 :- use_module(library(semweb/turtle)).
 
-:- use_module(library(literals)).
+:- use_module(literals).
 
 % For debugging
 :- use_module(library(http/http_log)).
