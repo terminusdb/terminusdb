@@ -234,7 +234,7 @@ expand_key(K,Context,Key,Value) :-
     ->  (   is_dict(R)
         ->  Key = Key_Candidate,
             Value = R
-        ;   string_to_atom(R,Key),
+        ;   atom_string(Key,R),
             Value = _{})
     ;   Key = Key_Candidate,
         Value = _{}).
