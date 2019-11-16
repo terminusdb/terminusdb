@@ -12,8 +12,8 @@
               storage/1
           ]).
 
-:- use_module(terminus_store).
-:- reexport(terminus_store,
+:- use_module(library(terminus_store)).
+:- reexport(library(terminus_store),
             except([create_named_graph/3,
                     open_named_graph/3])).
 
