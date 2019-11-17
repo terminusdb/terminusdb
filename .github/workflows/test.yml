@@ -9,7 +9,7 @@ jobs:
       - name: Install SWI-Prolog backend
         uses: logtalk-actions/setup-swi-prolog@master
         with:
-          swi-prolog-branch: devel
+          swi-prolog-branch: stable
           swi-prolog-version: latest
       - name: Intall required packs
         run: |
