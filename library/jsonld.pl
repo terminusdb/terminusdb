@@ -36,11 +36,11 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(pairs)).
-:- use_module(library(utils)).
+:- use_module(utils).
 :- use_module(library(http/json)).
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
-:- use_module(library(database)).
+:- use_module(database).
 
 % efficiency
 :- use_module(library(apply)).

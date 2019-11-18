@@ -31,28 +31,28 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(database)).
-:- use_module(library(woql_term)).
-:- use_module(library(utils), except([elt/2])).
-:- use_module(library(triplestore), [
+:- use_module(database).
+:- use_module(woql_term).
+:- use_module(utils, except([elt/2])).
+:- use_module(triplestore, [
                   xrdf/5,
                   insert/5,
                   delete/5
               ]).
-%:- use_module(library(schema)).
-:- use_module(library(relationships), [
+%:- use_module(schema).
+:- use_module(relationships, [
                   relationship_source_property/3,
                   relationship_target_property/3
               ]).
-:- use_module(library(inference)).
+:- use_module(inference).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 
-:- use_module(library(jsonld)).
-:- use_module(library(json_woql)).
+:- use_module(jsonld).
+:- use_module(json_woql).
 
-:- use_module(library(frame), [
+:- use_module(frame, [
                   update_object/3,
                   delete_object/2
               ]).
@@ -60,13 +60,13 @@
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
-:- use_module(library(validate_schema), [datatypeProperty/2, objectProperty/2]).
-:- use_module(library(casting), [typecast/4,hash/3]).
+:- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
+:- use_module(casting, [typecast/4,hash/3]).
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
 
-:- use_module(library(remote_file), [
+:- use_module(remote_file, [
                   copy_remote/4
               ]).
 
