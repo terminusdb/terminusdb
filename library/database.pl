@@ -174,7 +174,7 @@ database_name_list(Database_Atoms) :-
                      DB_Resource, terminus:id, literal(type(_,Database_Name)))),
             Database_Names),
 
-    maplist(string_to_atom, Database_Names, Database_Atomised),
+    maplist(atom_string, Database_Atomised, Database_Names),
     exclude(terminus_database_name, Database_Atomised, Database_Atoms).
 
 database_record_list(Databases) :-

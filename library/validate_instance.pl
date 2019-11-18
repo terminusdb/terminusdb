@@ -29,14 +29,14 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(validate_schema)).
-:- use_module(library(database)).
-:- use_module(library(triplestore)).
-:- use_module(library(utils)).
-:- use_module(library(types)).
-:- use_module(library(base_type)).
-:- use_module(library(inference)).
-:- use_module(library(expansions)).
+:- use_module(validate_schema).
+:- use_module(database).
+:- use_module(triplestore).
+:- use_module(utils).
+:- use_module(types).
+:- use_module(base_type).
+:- use_module(inference).
+:- use_module(expansions).
 :- use_module(library(http/json)).
 
 /**
@@ -635,7 +635,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double'
     ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
-        abs(M, N), Max is 2 ^ 53, N > Max
+        abs(M) > 2 ^ 53
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed double: Mantisa is massive.',

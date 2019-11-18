@@ -31,10 +31,10 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
-:- use_module(library(utils), [intersperse/3]).
-:- use_module(library(database)).
-:- use_module(library(types)).
-:- use_module(library(schema_definitions)).
+:- use_module(utils, [intersperse/3]).
+:- use_module(database).
+:- use_module(types).
+:- use_module(schema_definitions).
 
 /*
  * database_module(+Database:database, -Module:atom) is det.

@@ -133,7 +133,7 @@ decimal(M) -->
         number_string(E,T),
         % Need to eliminate the sign and add
         % it later in order to use addition.
-        sign(I,Sign),
+        Sign is sign(I),
         M is Sign * ((Sign * I) + E)
     }.
 decimal(M) --> integer(M) .

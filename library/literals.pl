@@ -147,4 +147,4 @@ storage_object(node(S),O) :-
     ->  (   atom(O)
         ->  atom_string(O,S)
         ;   O = S)
-    ;   string_to_atom(S,O)).
+    ;   atom_string(O,S)).

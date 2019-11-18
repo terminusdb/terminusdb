@@ -28,10 +28,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(validate_schema)).
-:- use_module(library(database)).
-:- use_module(library(triplestore)).
+:- use_module(utils).
+:- use_module(validate_schema).
+:- use_module(database).
+:- use_module(triplestore).
 :- use_module(library(semweb/rdf_db)).
 
 relationship_source_property(Relationship,Property,Database) :-
