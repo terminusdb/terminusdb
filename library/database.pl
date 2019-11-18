@@ -13,11 +13,11 @@
               make_database_from_database_name/2,
               database_name_list/1,
               database_record_list/1,
-              database_record_instance_list/2,
-              database_record_schema_list/2,
-              database_record_inference_list/2,
+              database_record_instance_list/3,
+              database_record_schema_list/3,
+              database_record_inference_list/3,
               is_schema_graph/2,
-              default_instance_graph/2,
+              default_instance_graph/3,
               db_size/2,
               db_modified_datetime/2,
               db_created_datetime/2,
@@ -58,6 +58,8 @@
 :- use_module(library(types)).
 :- use_module(library(sdk)).
 :- use_module(library(file_utils)).
+:- use_module(library(prolog_stack)).
+
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
@@ -185,10 +187,7 @@ database_record_list(Databases) :-
                ),
             Databases).
 
-database_record_schema_list(Database_Name, Schemas) :-
-    terminus_database_name(Terminus_Name),
-    connect(Terminus_Name,Terminus_DB),
-
+database_record_schema_list(Terminus_DB, Database_Name, Schemas) :-
     findall(Schema,
             ask(Terminus_DB,
                 where(
@@ -203,10 +202,7 @@ database_record_schema_list(Database_Name, Schemas) :-
     maplist(atom_string, Schemas, Schema_Strings).
 
 
-database_record_instance_list(Database_Name,Instances) :-
-    terminus_database_name(Terminus_Name),
-    connect(Terminus_Name,Terminus_DB),
-
+database_record_instance_list(Terminus_DB, Database_Name,Instances) :-
     findall(Instance,
             ask(Terminus_DB,
                 where(
@@ -224,9 +220,7 @@ database_record_instance_list(Database_Name,Instances) :-
 %database_record_inference_list(Database_Name,[inference]) :-
 %    terminus_database_name(Database_Name),
 %    !.
-database_record_inference_list(Database_Name,Inferences) :-
-    terminus_database_name(Terminus_Name),
-    connect(Terminus_Name,Terminus_DB),
+database_record_inference_list(Terminus_DB,Database_Name,Inferences) :-
 
     findall(Inference,
             ask(Terminus_DB,
@@ -243,16 +237,18 @@ database_record_inference_list(Database_Name,Inferences) :-
 
 
 /**
- * make_database_from_database_name(+URI,-Database) is det.
+ * make_database_from_database_name(+Terminus_DB,+URI,-Database) is det.
  *
  */
 make_database_from_database_name(Database_Name,Database) :-
     % Need a special case for the master database
     (   terminus_database_name(Database_Name)
     ->  terminus_database(Database)
-    ;   database_record_schema_list(Database_Name,Schemata),
-        database_record_inference_list(Database_Name,Inferences),
-        database_record_instance_list(Database_Name,Instances),
+    ;   terminus_database_name(Collection),
+        connect(Collection,Terminus_DB),
+        database_record_schema_list(Terminus_DB, Database_Name,Schemata),
+        database_record_inference_list(Terminus_DB, Database_Name,Inferences),
+        database_record_instance_list(Terminus_DB, Database_Name,Instances),
 
         make_database([name=Database_Name,
                        schema=Schemata,
@@ -278,10 +274,10 @@ is_schema_graph(C,S) :-
     member(S,Schemata).
 
 
-default_instance_graph(Database,I) :-
+default_instance_graph(Terminus_DB,Database,I) :-
     database_name(Database, Name),
     interpolate([Name,'/document'],I),
-    (   database_record_instance_list(Name,Instances),
+    (   database_record_instance_list(Terminus_DB, Name, Instances),
         member(I, Instances)
     ->  true
     ;   format(atom(MSG),'Unable to guess a valid document store for database: ~q', [Database]),

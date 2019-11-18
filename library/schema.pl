@@ -57,8 +57,9 @@ compile_schema_type_to_module(Database, Schema, Namespace, Type, Module) :-
                asserta(Module:X))).
 
 compile_schema_types_to_module(Database, Schema, Namespace, Types, Module) :-
+    maybe_open_read_transaction(Database, DB),
     forall(member(Type, Types),
-           compile_schema_type_to_module(Database, Schema, Namespace, Type, Module)).
+           compile_schema_type_to_module(DB, Schema, Namespace, Type, Module)).
 
 
 compile_schema_types_to_module(Database, Schema, Module) :-
@@ -84,8 +85,9 @@ basic_property(Namespace, Property) :-
         member(Property, Properties)).
 
 compile_schema_basic_properties_to_module(Database, Schema, Module) :-
+    maybe_open_read_transaction(Database, DB),
     forall(basic_property(Namespace, Property),
-           compile_schema_basic_property_to_module(Database, Schema, Namespace, Property, Module)).
+           compile_schema_basic_property_to_module(DB, Schema, Namespace, Property, Module)).
 
 rdf_prolog_list(Database, Database_Id, Object, [Head|Tail]) :-
     global_prefix_expand(rdf:first,RDF_First),
@@ -107,9 +109,10 @@ compile_schema_list_property_to_module(Database, Schema, Namespace, Property, Mo
 
 compile_schema_list_properties_to_module(Database, Schema, Module) :-
     % as far as I can tell, only four owl properties have a list as range
+    maybe_open_read_transaction(Database, DB),
     owl_list_properties(Properties),
     forall(member(Property, Properties),
-           compile_schema_list_property_to_module(Database, Schema, owl, Property, Module)).
+           compile_schema_list_property_to_module(DB, Schema, owl, Property, Module)).
 
 add_metadata_to_module(Database, Module) :-
     database_schema(Database, Schema),

@@ -1,12 +1,12 @@
 :- module(capabilities,[
-              key_auth/2,
-              key_user/2,
+              key_auth/3,
+              key_user/3,
               get_user/2,
               user_action/2,
-              auth_action_scope/3,
+              auth_action_scope/4,
               add_database_resource/3,
               delete_database_resource/1,
-              write_cors_headers/1
+              write_cors_headers/2
           ]).
 
 /** <module> Capabilities
@@ -60,10 +60,8 @@ root_user_id(Root) :-
  *
  * Key user association - goes only one way
  */
-key_user(Key, User_ID) :-
+key_user(Key, DB, User_ID) :-
     coerce_literal_string(Key,K),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
     ask(DB,
         select([User_ID],
 		       (
@@ -93,13 +91,13 @@ get_user(User_ID, User) :-
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-key_auth(Key, Auth) :-
-    key_user(Key,User_ID),
+key_auth(Key, DB, Auth) :-
+    key_user(Key,DB,User_ID),
 
     terminus_database(Database),
     terminus_context(Ctx),
 
-    user_auth_id(User_ID, Auth_ID),
+    user_auth_id(User_ID, DB, Auth_ID),
 
     document_jsonld(Auth_ID,Ctx,Database,Auth).
 
@@ -109,9 +107,7 @@ key_auth(Key, Auth) :-
  * Maybe should return the auth object - as soon as we have
  * obj embedded in woql.
  */
-user_auth_id(User_ID, Auth_ID) :-
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+user_auth_id(User_ID, DB, Auth_ID) :-
     ask(DB,
         select([Auth_ID],
 		       (
@@ -144,9 +140,7 @@ user_action(User,Action) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(Auth, Action, Resource_ID) :-
-    terminus_database_name(Collection),
-    connect(Collection, DB),
+auth_action_scope(Auth, DB, Action, Resource_ID) :-
     ask(DB,
 	    where(
             (
@@ -237,9 +231,7 @@ delete_database_resource(URI) :-
  *
  * Writes cors headers associated with Resource_URI
  */
-write_cors_headers(Resource_URI) :-
-    terminus_database_name(Collection),
-    connect(Collection, DB),
+write_cors_headers(Resource_URI, DB) :-
     % delete the object
     findall(Origin,
             ask(DB,
