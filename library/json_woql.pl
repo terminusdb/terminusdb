@@ -212,7 +212,7 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = not(WQ)
     ;   _{'http://terminusdb.com/woql#as' : [ S, V ] } :< JSON
     ->  (   _{'@value' : WS} :< S
-        ->  string_to_atom(WS,WA),
+        ->  atom_string(WA,WS),
             json_to_woql_ast(V,WV),
             WOQL = as(WA,WV)
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
@@ -228,11 +228,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = '@'(V,L)
     ;   _{'http://terminusdb.com/woql#value' : V, '@type' : T } :< JSON
     ->  json_to_woql_ast(V,VE),
-        string_to_atom(T,TE),
+        atom_string(TE,T),
         WOQL = '^^'(VE,TE)
     ;   _{'http://terminusdb.com/woql#value' : V, '@lang' : L } :< JSON
     ->  json_to_woql_ast(V,VE),
-        string_to_atom(L,LE),
+        atom_string(LE,L),
         WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
