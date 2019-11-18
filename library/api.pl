@@ -47,37 +47,37 @@
 :- use_module(library(http/http_authenticate)).
 
 % Load capabilities library
-:- use_module(library(capabilities)).
+:- use_module(capabilities).
 
 % woql libraries
-:- use_module(library(woql_compile)).
+:- use_module(woql_compile).
 
 % Default utils
-:- use_module(library(utils)).
+:- use_module(utils).
 
 % Database utils
-:- use_module(library(database_utils)).
+:- use_module(database_utils).
 
 % Database construction utils
-:- use_module(library(database)).
+:- use_module(database).
 
 % Frame and document processing
-:- use_module(library(frame)).
+:- use_module(frame).
 
 % JSON manipulation
-:- use_module(library(jsonld)).
+:- use_module(jsonld).
 
 % JSON Queries
-:- use_module(library(json_woql)).
+:- use_module(json_woql).
 
 % File processing
-:- use_module(library(file_utils), [terminus_path/1]).
+:- use_module(file_utils, [terminus_path/1]).
 
 % Validation
-:- use_module(library(validate)).
+:- use_module(validate).
 
 % Dumping turtle
-:- use_module(library(turtle_utils)).
+:- use_module(turtle_utils).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

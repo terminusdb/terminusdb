@@ -27,8 +27,8 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(jsonld)).
+:- use_module(utils).
+:- use_module(jsonld).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -147,8 +147,12 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = get(WHeader,WFile)
     ;   _{'http://terminusdb.com/woql#remote' : [ File ] } :< JSON
     ->  WOQL = remote(File)
+    ;   _{'http://terminusdb.com/woql#remote' : [ File, Dict] } :< JSON
+    ->  WOQL = remote(File,Dict)
     ;   _{'http://terminusdb.com/woql#file' : [ File ] } :< JSON
     ->  WOQL = file(File)
+    ;   _{'http://terminusdb.com/woql#file' : [ File, Dict] } :< JSON
+    ->  WOQL = file(File,Dict)
     ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash ] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
@@ -208,12 +212,14 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = not(WQ)
     ;   _{'http://terminusdb.com/woql#as' : [ S, V ] } :< JSON
     ->  (   _{'@value' : WS} :< S
-        ->  string_to_atom(WS,WA),
+        ->  atom_string(WA,WS),
             json_to_woql_ast(V,WV),
             WOQL = as(WA,WV)
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                          'terminus:message' :'No source column specified',
                                          'vio:query' : JSON}))))
+    ;   _{'http://terminusdb.com/woql#as' : [ V ] } :< JSON
+    ->  json_to_woql_ast(V,WOQL)
     ;   _{'http://terminusdb.com/woql#true' : [] } :< JSON
     ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON
@@ -222,11 +228,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = '@'(V,L)
     ;   _{'http://terminusdb.com/woql#value' : V, '@type' : T } :< JSON
     ->  json_to_woql_ast(V,VE),
-        string_to_atom(T,TE),
+        atom_string(TE,T),
         WOQL = '^^'(VE,TE)
     ;   _{'http://terminusdb.com/woql#value' : V, '@lang' : L } :< JSON
     ->  json_to_woql_ast(V,VE),
-        string_to_atom(L,LE),
+        atom_string(LE,L),
         WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
@@ -252,7 +258,7 @@ json_to_woql_ast(JSON,_) :-
                                  'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
-    atom_concat('http://terminusdb.com/woql/variable/',_,A).
+    sub_atom(A, 0, _, _, 'http://terminusdb.com/woql/variable/').
 
 json_to_woql_arith(JSON,WOQL) :-
     is_dict(JSON),

@@ -25,8 +25,8 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(prefixes)).
-:- use_module(library(triplestore)).
+:- use_module(prefixes).
+:- use_module(triplestore).
 :- use_module(library(semweb/turtle)).
 
 /**

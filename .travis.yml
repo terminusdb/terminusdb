@@ -6,11 +6,11 @@ language: shell
 stages:
   - build
   - name: deploy
-    if: branch = master
+    if: branch = master AND type != pull_request
   - name: deploy_dev
-    if: branch = dev
+    if: branch = dev AND type != pull_request
   - name: deploy_tag
-    if: tag =~ ^v
+    if: tag =~ ^v AND type != pull_request
 
 jobs:
   include:

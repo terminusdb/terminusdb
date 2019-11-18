@@ -54,19 +54,19 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(base_type)).
-:- use_module(library(triplestore)).
-:- use_module(library(validate_schema), except([document/2])).
-:- use_module(library(validate_instance)).
-:- use_module(library(inference)).
-:- use_module(library(database)).
-:- use_module(library(schema), []).
-:- use_module(library(types)).
-:- use_module(library(frame_types)).
-:- use_module(library(jsonld)).
-:- use_module(library(prefixes)).
-:- use_module(library(expansions)).
+:- use_module(utils).
+:- use_module(base_type).
+:- use_module(triplestore).
+:- use_module(validate_schema, except([document/2])).
+:- use_module(validate_instance).
+:- use_module(inference).
+:- use_module(database).
+:- use_module(schema, []).
+:- use_module(types).
+:- use_module(frame_types).
+:- use_module(jsonld).
+:- use_module(prefixes).
+:- use_module(expansions).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -676,6 +676,9 @@ fill_class_frame(Elt,_,F,DocumentFrame) :-
     % Just need one type
     !,
     append(F,[domainValue=Elt],DocumentFrame).
+fill_class_frame(Elt,DB,F,_) :-
+    format(atom(M), 'Unable to process frame for frame filling rendering the predicate semi-deterministic. Results from: ~q~n', [fill_class_frame(Elt,DB,F,_)]),
+    throw(error(M)).
 
 choose_property(Database,Property,[type=and,operands=R], Result) :-
     member(F,R),

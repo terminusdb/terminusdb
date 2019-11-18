@@ -38,8 +38,8 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 % Import global definitions
-:- use_module(library(global_prefixes)).
-:- reexport(library(global_prefixes)).
+:- use_module(global_prefixes).
+:- reexport(global_prefixes).
 
 % Use prolog persistency for prefix management.
 % We could use the DB itself but this gets a bit too metacircular!
@@ -48,15 +48,15 @@
 % Set up the database style
 :- persistent prefix(collection:atom,prefix:atom,uri:atom).
 
-:- use_module(library(file_utils)).
-:- use_module(library(utils)).
+:- use_module(file_utils).
+:- use_module(utils).
 
 % JSON manipulation
 :- use_module(library(http/json)).
 
-:- use_module(library(jsonld)).
+:- use_module(jsonld).
 
-:- use_module(library(database), [
+:- use_module(database, [
                   database_name_list/1,
                   terminus_database_name/1
               ]).

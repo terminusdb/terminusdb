@@ -31,11 +31,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(file_utils)).
-:- use_module(library(triplestore)).
-:- use_module(library(utils)).
-:- use_module(library(database)).
-:- use_module(library(expansions)).
+:- use_module(file_utils).
+:- use_module(triplestore).
+:- use_module(utils).
+:- use_module(database).
+:- use_module(expansions).
 
 /*
  * database_exists(DB_URI) is semidet.
