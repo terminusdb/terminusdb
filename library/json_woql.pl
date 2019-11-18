@@ -147,8 +147,12 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = get(WHeader,WFile)
     ;   _{'http://terminusdb.com/woql#remote' : [ File ] } :< JSON
     ->  WOQL = remote(File)
+    ;   _{'http://terminusdb.com/woql#remote' : [ File, Dict] } :< JSON
+    ->  WOQL = remote(File,Dict)
     ;   _{'http://terminusdb.com/woql#file' : [ File ] } :< JSON
     ->  WOQL = file(File)
+    ;   _{'http://terminusdb.com/woql#file' : [ File, Dict] } :< JSON
+    ->  WOQL = file(File,Dict)
     ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash ] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
@@ -214,6 +218,8 @@ json_to_woql_ast(JSON,WOQL) :-
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                          'terminus:message' :'No source column specified',
                                          'vio:query' : JSON}))))
+    ;   _{'http://terminusdb.com/woql#as' : [ V ] } :< JSON
+    ->  json_to_woql_ast(V,WOQL)
     ;   _{'http://terminusdb.com/woql#true' : [] } :< JSON
     ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON

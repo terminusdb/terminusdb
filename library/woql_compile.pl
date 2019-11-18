@@ -620,6 +620,86 @@ compile_relation(X:_C,XE,Class,Goals) -->
         )
     }.
 
+as_vars([],[]).
+as_vars([_X as Y|Rest],[Y|Vars]) :-
+    as_vars(Rest,Vars).
+
+position_vars([],[]).
+position_vars([v(V)|Rest],[v(V)|Vars]) :-
+    position_vars(Rest,Vars).
+
+/* indexing_list(Spec,Header,Values,Bindings,Result) is det.
+ *
+ * A fold over Spec into Result
+ */
+indexing_as_list([],_,_,_,[]).
+indexing_as_list([N as v(V)|Rest],Header,Values,Bindings,[Term|Result]) :-
+    member(V=Xe,Bindings),
+    Term = (   nth1(Idx,Header,N),
+               nth1(Idx,Values,Xe)
+           ->  true
+           ;   format(atom(Msg),'No such indexed name in get: "~q" with header: "~q" and values: "~q"',[N,Header,Values]),
+               throw(http_error(syntax_error(Msg)))
+           ),
+    indexing_as_list(Rest,Header,Values,Bindings,Result).
+
+indexing_position_list([],_,_,[]).
+indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
+    member(V=Xe,Bindings),
+    Term = (   nth0(N,Values,Xe)
+           ->  true
+           ;   format(atom(Msg),'No such index in get: "~q" for values: "~q"',[N,Values]),
+               throw(http_error(syntax_error(Msg)))
+           ),
+    M is N+1,
+    indexing_position_list(Rest,M,Values,Bindings,Result).
+
+indexing_term(Spec,Header,Values,Bindings,Indexing_Term) :-
+    (   indexing_as_list(Spec,Header,Values,Bindings,Indexing_List)
+    ;   indexing_position_list(Spec,0,Values,Bindings,Indexing_List)),
+    list_conjunction(Indexing_List,Indexing_Term).
+
+/*
+ * csv_term(Path,Header,Indexing,Prog,Options) is det.
+ *
+ * Create a program term Prog for a csv with Header and column reference strategy
+ * Indexing.
+ */
+csv_term(Path,Header,Values,Indexing_Term,Prog,Options) :-
+    memberchk(header("true"),Options),
+    Prog = (
+        % header row only
+        csv_read_file_row(Path, Header_Row, [line(1)|Options]),
+        Header_Row =.. [_|Header]
+    ->  csv_read_file_row(Path, Value_Row, [line(Line)|Options]),
+        Line > 1,
+        Value_Row =.. [_|Values],
+        Indexing_Term
+    ).
+csv_term(Path,_,Values,Indexing_Term,Prog,Options) :-
+    memberchk(header("false"), Options),
+    Prog = (
+        csv_read_file_row(Path, Value_Row, Options),
+        Value_Row =.. [_|Values],
+        Indexing_Term
+    ).
+csv_term(Path,Header,Values,Indexing_Term,Prog,Options) :-
+    format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
+           [csv_term(Path,Header,Values,Indexing_Term,Prog,Options)]),
+    throw(error(M)).
+
+/*
+ * turtle_term(Path,Values,Prog,Options) is det.
+ *
+ * Create a program term Prog for a csv with Header and column reference strategy
+ * Indexing.
+ */
+turtle_term(Path,Vars,Prog,Options) :-
+    Prog = (turtle:rdf_read_turtle(Path, Triples, [encoding(utf8)|Options]),
+            member(Triple,Triples),
+            literals:normalise_triple(Triple, rdf(X,P,Y)),
+            Vars = [X,P,Y]).
+
 compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
     view(database=Database).
 compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
@@ -991,49 +1071,41 @@ compile_wf(prefixes(NS,S), Prog) -->
            prefixes=NS_Old).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
-        maplist([_ as Var,Var]>>(true), Spec, Vars)
+        Default = _{
+                      'http://terminusdb.com/woql#header' : "true",
+                      'http://terminusdb.com/woql#type' : "csv"},
+
+        (   as_vars(Spec,Vars),
+            Has_Header = true
+        ;   position_vars(Spec,Vars),
+            Has_Header = false
+        )
     },
-    % Make sure all variables are bound
-    mapm(resolve,Vars,_),
-    view(bindings=B),
+
+    % Make sure all variables are given bindings
+    mapm(resolve,Vars,BVars),
+    view(bindings=Bindings),
     {
 
-        (   (   File_Spec = file(CSV_Path,Options)
-            ;   File_Spec = file(CSV_Path),
+        (   (   File_Spec = file(Path,Options)
+            ;   File_Spec = file(Path),
                 Options = []),
-            dict_options(_DictOptions,Options)
+            merge_options(Options,Default,New_Options)
         ;   (   File_Spec = remote(URI,Options)
             ;   File_Spec = remote(URI),
                 Options = []),
-            dict_options(DictOptions,Options),
-            copy_remote(URI,URI,CSV_Path,DictOptions)
+            merge_options(Options,Default,New_Options),
+            copy_remote(URI,URI,Path,New_Options)
         ),
 
-        % Index each named column in the spec
-        foldl({Names,Values,B}/
-              [N as v(V),R,[Term|R]]>>(
-                  member(V=Xe,B),
-                  Term =
-                      (   nth1(Idx,Names,N),
-                          nth1(Idx,Values,Xe)
-                      ->  true
-                      ;   format(atom(Msg),'No such indexed name in get: "~q" with header: "~q" and values: "~q"',[N,Names,Values]),
-                          throw(http_error(syntax_error(Msg)))
-                      )
-              ), Spec, [], Indexing_List),
-
-        list_conjunction(Indexing_List,Indexing),
-
-        % This should know about non-header
-        Prog = (
-            % header row only
-            csv_read_file_row(CSV_Path, Header_Row, [line(1)|Options]),
-            Header_Row =.. [_|Names]
-        ->  csv_read_file_row(CSV_Path, Value_Row, [line(Line)|Options]),
-            Line > 1,
-            Value_Row =.. [_|Values],
-            Indexing
-        )
+        (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
+        ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
+            csv_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
+        ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
+            Has_Header = false
+        ->  turtle_term(Path,BVars,Prog,New_Options)
+        ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
+            throw(error(M)))
     }.
 compile_wf(put(Spec,Query,File_Spec), Prog) -->
     {

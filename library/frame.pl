@@ -676,6 +676,9 @@ fill_class_frame(Elt,_,F,DocumentFrame) :-
     % Just need one type
     !,
     append(F,[domainValue=Elt],DocumentFrame).
+fill_class_frame(Elt,DB,F,_) :-
+    format(atom(M), 'Unable to process frame for frame filling rendering the predicate semi-deterministic. Results from: ~q~n', [fill_class_frame(Elt,DB,F,_)]),
+    throw(error(M)).
 
 choose_property(Database,Property,[type=and,operands=R], Result) :-
     member(F,R),
