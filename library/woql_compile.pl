@@ -656,17 +656,17 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
 
 indexing_term(Spec,Header,Values,Bindings,Indexing_Term) :-
     (   indexing_as_list(Spec,Header,Values,Bindings,Indexing_List)
-    ;   indexing_position_list(Spec,0,Values,Bindings,Indexing_List)),
+    ;   indexing_position_list(Spec,0,Values,Bindings,Indexing_List),
+        Header=false),
     list_conjunction(Indexing_List,Indexing_Term).
 
 /*
- * csv_term(Path,Header,Indexing,Prog,Options) is det.
+ * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
  * Create a program term Prog for a csv with Header and column reference strategy
  * Indexing.
  */
-csv_term(Path,Header,Values,Indexing_Term,Prog,Options) :-
-    memberchk(header("true"),Options),
+csv_term(Path,true,Header,Values,Indexing_Term,Prog,Options) :-
     Prog = (
         % header row only
         csv_read_file_row(Path, Header_Row, [line(1)|Options]),
@@ -676,17 +676,48 @@ csv_term(Path,Header,Values,Indexing_Term,Prog,Options) :-
         Value_Row =.. [_|Values],
         Indexing_Term
     ).
-csv_term(Path,_,Values,Indexing_Term,Prog,Options) :-
-    memberchk(header("false"), Options),
+csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
     Prog = (
         csv_read_file_row(Path, Value_Row, Options),
         Value_Row =.. [_|Values],
         Indexing_Term
     ).
-csv_term(Path,Header,Values,Indexing_Term,Prog,Options) :-
+csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
     format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
-           [csv_term(Path,Header,Values,Indexing_Term,Prog,Options)]),
+           [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
     throw(error(M)).
+
+/*
+ * bool_convert(+Bool_Id,-Bool) is det.
+ * bool_convert(-Bool_Id,+Bool) is nondet.
+ *
+ * Converts a boolean representation from json.
+ */
+bool_convert(true,true).
+bool_convert("true",true).
+bool_convert(1,true).
+bool_convert("false",false).
+bool_convert(false,false).
+bool_convert(0,false).
+
+/*
+ * convert_csv_options(+Options, -CSV_Options) is det.
+ *
+ * We need the various parsing options etc. to be implemented here
+ * by converting from URI terms to proper CSV library terms.
+ */
+convert_csv_options(Options,CSV_Options) :-
+    (   memberchk('http://terminusdb.com/woql#separator'(A),Options)
+    ->  atom_codes(A,[C]),
+        CSV_Options1 = [separator(C)]
+    ;   CSV_Options1 = []),
+
+    (   memberchk('http://terminusdb.com/woql#convert'(Bool_Str),Options)
+    ->  bool_convert(Bool_Str,Bool),
+        CSV_Options2 = [convert(Bool)]
+    ;   CSV_Options2 = CSV_Options1),
+
+    CSV_Options = CSV_Options2.
 
 /*
  * turtle_term(Path,Values,Prog,Options) is det.
@@ -1098,12 +1129,14 @@ compile_wf(get(Spec,File_Spec), Prog) -->
             copy_remote(URI,URI,Path,New_Options)
         ),
 
+        convert_csv_options(New_Options,CSV_Options),
+
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
-            csv_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
+            csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,New_Options)
         ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
             Has_Header = false
-        ->  turtle_term(Path,BVars,Prog,New_Options)
+        ->  turtle_term(Path,BVars,Prog,CSV_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
             throw(error(M)))
     }.
