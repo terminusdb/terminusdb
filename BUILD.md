@@ -19,9 +19,9 @@ manager:
 ```
 apt install swi-prolog
 ```
-Once installed, you will have to install two library dependencies from SWIPL. 
+Once installed, you will have to install two library dependencies from SWIPL.
 
-This can be done by typing: 
+This can be done by typing:
 
 ```
 $ swipl
@@ -102,7 +102,7 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 ### Terminus Server
 
-The Terminus Server source tree should then be cloned from GitHub: 
+The Terminus Server source tree should then be cloned from GitHub:
 
 ```
 git clone https://github.com/terminusdb/terminus-server
@@ -120,13 +120,13 @@ configure the server name, as shown in the example.
 utils/db_util -k "my_password_here" -s "my_server_name_here"
 ```
 
-At this point you can enter the terminusDB directory and start the server: 
+At this point you can enter the terminusDB directory and start the server:
 
 ```
 ./start.pl
 ```
 
-Now you are ready to interact with the HTTP server. 
+Now you are ready to interact with the HTTP server.
 
 
 ## Arch Linux
