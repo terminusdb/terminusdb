@@ -1,6 +1,5 @@
 :- module(triplestore, [
               destroy_graph/2,
-              check_graph_exists/2,
               sync_backing_store/0,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
@@ -66,15 +65,6 @@ destroy_graph(_DBID,GID) :-
     www_form_encode(GID,Safe_GID),
     interpolate([Path,Safe_GID,'.label'],Label),
     delete_file(Label).
-
-/**
- * check_graph_exists(+Database_ID,+G:graph_identifier) is semidet.
- *
- * checks to see is the graph id in the current graph list
- */
-check_graph_exists(_DB,G):-
-    storage(Store),
-    safe_open_named_graph(Store,G,_).
 
 /**
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
