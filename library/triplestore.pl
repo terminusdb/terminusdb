@@ -221,7 +221,7 @@ xrdf_deleted(DB,G,X,Y,Z) :-
  */
 xrdf(Database,Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
-    member(G,Gs),
+    memberchk(G,Gs),
     maybe_open_read_transaction(Database,DBR),
     get_read_layer(DBR,G,Layer),
     xrdf_db(Layer,X,Y,Z).

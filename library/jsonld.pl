@@ -534,7 +534,7 @@ get_key_document(Key,Ctx,Document,Value) :-
 
     % Transform the value to canonical form
     % if it is set so we can do comparison
-    (   member(Key,['@type', '@id']),
+    (   memberchk(Key,['@type', '@id']),
         (   atom(Value)
         ;   string(Value))
     %   We are a value that could require expansion

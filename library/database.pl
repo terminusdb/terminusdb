@@ -271,14 +271,14 @@ is_schema_graph(C,S) :-
     atomic_list_concat([C,'/schema'],S).
 is_schema_graph(C,S) :-
     database_record_schema_list(C,Schemata),
-    member(S,Schemata).
+    memberchk(S,Schemata).
 
 
 default_instance_graph(Terminus_DB,Database,I) :-
     database_name(Database, Name),
     interpolate([Name,'/document'],I),
     (   database_record_instance_list(Terminus_DB, Name, Instances),
-        member(I, Instances)
+        memberchk(I, Instances)
     ->  true
     ;   format(atom(MSG),'Unable to guess a valid document store for database: ~q', [Database]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -294,10 +294,10 @@ db_size(DB_URI,Size) :-
     aggregate_all(sum(File_Size),
                   (
                       graphs(DB_URI,Graph_IDs),
-                      member(Graph_ID,Graph_IDs),
+                      memberchk(Graph_ID,Graph_IDs),
                       current_checkpoint_directory(DB_URI,Graph_ID,CPD),
                       files(CPD,Files),
-                      member(File,Files),
+                      memberchk(File,Files),
                       interpolate([CPD,'/',File],Path),
                       size_file(Path, File_Size)
                   ),
@@ -312,7 +312,7 @@ db_modified_datetime(DB_URI,DateTimeString) :-
     aggregate_all(max(TimeStamp),
                   (
                       graphs(DB_URI,Graphs),
-                      member(Graph,Graphs),
+                      memberchk(Graph,Graphs),
                       graph_directory(DB_URI, Graph, Path),
                       time_file(Path, TimeStamp)
                   ),
