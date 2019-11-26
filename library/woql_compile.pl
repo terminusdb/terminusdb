@@ -193,7 +193,7 @@ merge_all_aux([S1|Ss],S0,S) :-
 merge_all([S0|Ss],S) :-
     merge_all_aux(Ss,S0,S).
 
-/* (already imported)
+/*
  * elt(Elt,Set) is det.
  */
 elt(Elt,Set) :-
