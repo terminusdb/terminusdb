@@ -33,7 +33,7 @@
 
 :- use_module(database).
 :- use_module(woql_term).
-:- use_module(utils, except([elt/2])).
+:- use_module(utils).
 :- use_module(triplestore, [
                   xrdf/5,
                   insert/5,
