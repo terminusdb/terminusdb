@@ -41,6 +41,7 @@ prolog:message(error(version_error(Correct, Was), _)) -->
       [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[C, W],
         nl].
 
+needs_version(80110).
 needs_version(80003).
 
 must_be_proper_version :-

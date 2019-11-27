@@ -5,11 +5,11 @@
               report_curl_command/1,
               admin_pass/1
           ]).
-                 
+
 /** <module> Test Utilities
- * 
+ *
  * Utils to assist in testing.
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -38,7 +38,7 @@
 :- use_module(library(apply_macros)).
 
 :- meta_predicate try(0).
-try(Goal) :- 
+try(Goal) :-
     format('~n*****************************************************',[]),
     format('~n* Running test ~q', [Goal]),
     format('~n*****************************************************~n',[]),
@@ -88,7 +88,7 @@ status_200(URL) :-
 
 
 /*
- * curl_json(+Args,-JSON) is semidet. 
+ * curl_json(+Args,-JSON) is semidet.
  */
 curl_json(Args,JSON) :-
     process_create(path(curl), Args,
@@ -96,9 +96,9 @@ curl_json(Args,JSON) :-
                      stderr(null),
                      process(PID)
                    ]),
-    
+
     process_wait(PID,Status),
-    
+
     (   Status=killed(Signal)
     ->  interpolate(["curl killed with signal ",Signal], M),
         format('~n~s~n', M),
@@ -108,10 +108,10 @@ curl_json(Args,JSON) :-
     json_read_dict(Out, JSON),
     close(Out).
 
-/* 
+/*
  * admin_pass(+Pass) is det.
- * 
- * Get the administrator password for testing from the environment, 
+ *
+ * Get the administrator password for testing from the environment,
  * or try the default ('root')
  */
 admin_pass(Pass) :-

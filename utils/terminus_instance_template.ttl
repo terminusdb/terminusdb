@@ -27,7 +27,9 @@ doc:terminus
     rdfs:label "Master Database"@en ;
     terminus:allow_origin "*"^^xsd:string ;    
     terminus:id "http://SERVER_NAME/terminus"^^xsd:anyURI ;
-    terminus:instance "http://SERVER_NAME/terminus/document"^^xsd:string .
+    terminus:instance "http://SERVER_NAME/terminus/document"^^xsd:string ;
+    terminus:schema "http://SERVER_NAME/terminus/schema"^^xsd:string ;
+    terminus:inference "http://SERVER_NAME/terminus/inference"^^xsd:string .
 
 doc:server
     a terminus:Server ;
