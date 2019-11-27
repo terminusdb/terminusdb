@@ -33,7 +33,7 @@
 
 :- use_module(database).
 :- use_module(woql_term).
-:- use_module(utils, except([elt/2])).
+:- use_module(utils).
 :- use_module(triplestore, [
                   xrdf/5,
                   insert/5,
@@ -193,7 +193,7 @@ merge_all_aux([S1|Ss],S0,S) :-
 merge_all([S0|Ss],S) :-
     merge_all_aux(Ss,S0,S).
 
-/* (already imported)
+/*
  * elt(Elt,Set) is det.
  */
 elt(Elt,Set) :-

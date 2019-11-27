@@ -1,5 +1,4 @@
 :- module(utils,[
-              elt/2,
               get_key/4,
               get_key/3,
               get_dict_default/4,
@@ -79,18 +78,6 @@
     (   call(Goal1)
     ->  true
     ;   call(Goal2)).
-
-/**
- * elt(+Key,+Set) is semidet.
- *
- * This predicate is true when Key is in Set
- *
- * depricated - use memberchk
- */
-elt(Key,Set) :-
-    (   member(Key,Set)
-    ->  true
-    ;   false).
 
 /**
  * get_key(+Key,+Object,-Val,+Default) is det.
