@@ -1,0 +1,287 @@
+\documentclass[10pt, a4paper, twocolumn]{article} % 10pt font size (11 and 12 also possible), A4 paper (letterpaper for US letter) and two column layout (remove for one column)
+
+\input{structure.tex} % Specifies the document structure and loads requires packages
+
+%\usepackage[utf8]{inputenc}
+%\usepackage[T2A]{fontenc}
+
+\title{Succinct Data Structures and Revision Control for Modern Databases}
+
+\author{
+  \authorstyle{Matthijs van Otterdijk\textsuperscript{1,2} and Gavin Mendel-Gleason\textsuperscript{1,3} and Kevin Feeney\textsuperscript{1,4}}
+  \newline\newline
+  \textsuperscript{1}\institution{DataChemist Ltd. {\protect\url{http://datachemist.com}}}\\
+  \textsuperscript{2}\institution{\protect\url{matthijs@datachemist.com}}\\
+  \textsuperscript{3}\institution{\protect\url{gavin@datachemist.com}}\\
+  \textsuperscript{4}\institution{\protect\url{kevin@datachemist.com}}
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\thispagestyle{firstpage}
+
+\lettrineabstract{Modern hardware architectures includes larger main
+  memory and pervasive parallelism. Modern software development
+  processes now incorporate continuous integration/continuous
+  delivery (CI/CD) coupled with version control. These fundamental
+  changes to information technology infrastructure necessitate a
+  re-appraisal of database architecture.  TerminusDB makes a radical
+  departure from historical architectures to address these
+  changes. First, we implement a graph database with a strong schema
+  so as to retain both simplicity and generality of design. Second, we
+  implement this graph using succinct immutable data structures which
+  enable more sparing use of main memory resources. Prudent use of
+  memory reduces cache contention while read-only data structures
+  simplify parallel access significantly.  Third, we adopted the
+  delta encoding approach to updates as is used in source control systems
+  such as git. This provides transaction processing and updates to our
+  immutable database data structures, recovering standard database
+  management features while also providing in addition the whole suite
+  of revision control features: branch, merge, squash, rollback, blame
+  and time-travel facilitating CI/CD approaches on data.}
+
+\section{Introduction}
+
+There has been an explosion of new database designs, including graph
+databases, key-value stores, document databases and multi-model
+databases. Yet the majority of production databases are still based on
+the RDBMS designs of the 1970s\cite{Codd:1970:RMD:362384.362685}.
+
+Meanwhile both hardware infrastructure and software design process
+have moved on significantly over the course of the last 40 years. In
+particular machines with terrabytes of RAM are now available for
+prices reasonable enough for some small and medium sized enterprises.
+
+At the same time flexible revision control systems have revolutionised
+the software development process. The maintenance of histories, of
+records of modification and the ability to roll back enables engineers
+to have confidence in making modificiations collaboratively. This is
+augmented with important features such as branching, labelling,
+rebasing, and cloning. When combined with continuous integration/continuous
+delivery\cite{65147}\cite{LAUKKANEN201755} (CI/CD) teams of
+programmers can have confidence that central repositories are
+maintained in correct states once testing and verification of have
+been passed.
+
+These two developments suggest a solution at their
+intersection. Namely the use of in-memory immutable {\em succinct}
+data structures and {\em deltas} as used in revision control
+systems. TerminusDB demonstrates how these features can be combined to
+produce a flexible transactional graph database. 
+
+\section{Design}
+
+TerminusDB is a full featured graph database management system (GDBMS)
+including a rich query language: WOQL (the Web Object Query Language).
+However, we restrict our attention here to the underlying
+datastructure design and layout which we have implemented in a
+Rust\cite{} library which we call {\em{terminus-store}}.
+
+We describe in turn the graph database model which is used, the
+succinct data structure approach, and finally how we implement
+revision control type operations using {\em deltas} which we collect
+together with some metadata into an object which we term {\em layers}.
+
+\subsection{Graph Databases}
+
+Graph databases are one of the fastest growing of the new database
+paradigms\cite{}. Since graphs are very general it is possible to
+render many database modeling techniques in a graph database. The
+simplicity and generality make it a good candidate for a {\em general
+purpose} change set orientated approach to an online transaction
+processing database.
+
+The TerminusDB infrastucture is based on the {\em RDF} standard. This
+standard specifies finite labelled directed graphs which are
+parameteric in some universe of datatypes. The names for nodes and
+labels are drawn from a set of IRIs (Internationalized Resource
+Identifiers). For TerminusDB we have chosen the {\em XSD} datatypes as
+our universe of concrete values.
+
+More formally, in TerminusDB a graph \(G\) is a set of triples drawn
+from the set \( IRI \times IRI \times (IRI \oplus XSD)\) where \(IRI\)
+is a set of valid IRIs and \(XSD\) is the set of valid XSD values.
+While some RDF databases allow multiplicity of triples (i.e. a bag),
+the choice of a set simplifies transaction processing in our setting.
+
+For schema design TerminusDB uses the OWL language, with two
+modifications to make it suitable as a schema language. Namely we
+dispense with the open world interpretation\cite{} and insist on the
+unique name assumption\cite{}. This provides us with a rich modelling
+language which can provide constraints on the allowable shapes in the
+graph.
+
+TerminusDB, following on from the RDF tradition, is not a property
+graph. However it can model properties using an intermediate nodes and
+this pattern can be made explicit in the OWL schema design. Again this
+choice leads to simplicity of the underlying representation, which, as
+we will see is important when constructing succinct data structures
+with change sets.
+
+\subsection{Succinct Data Structures}
+
+Succinct data structures\cite{Jacobson:1988:SSD:915547} are a family of
+data structures which are close in size to the information theoretic
+minimum representation. Technically they can be defined as data structures
+whose size is:
+
+\[ n + o(n) \]
+
+Where \(n\) is the information theoretic minimum size. Succinct
+representations are generally somewhat more computationally expensive
+than less compact representations with pointers when working with
+small problems. However, as the size of the datastructure grows, the
+ability to avoid new cache reads at various levels of the memory
+hierarchy (including reading information from disk) means that these
+representations can prove very speed
+competitive\cite{doi:10.1002/spe.2198} in practice.
+
+TerminusBD largely borrows its graph data structure design from
+HDT\cite{10.1007/978-3-642-30284-8_36} with some modifications which
+simplify the use of change sets. The authors originally evaluated HDT
+as a possibility for a graph which was too large to fit in memory when
+loaded into postgresql and found that queries on the resulting graph
+performed very well in practice.
+
+In particular, the primary datastructures of the HDT format are
+retained, namely {\em bit sequences} and {\em wavelet trees}.
+
+% Some refresher information here about bit sequences / wavelet trees
+% and layout?
+
+\section{Delta Encoded Databases}
+
+The use of {\em delta encoding} in software development is now
+ubiquitous due to the enormous popularity of the {\em git} revision
+control system which makes use of these techniques to store histories
+of revisions.
+
+Git stores objects which contain either the complete dataset of
+interest or the information about what is updated (deleted / added) as
+a delta. All changes to the source control system are thereby simply
+management problems of these objects.
+
+This approach exposes a number of very powerful operations to sofware
+developers collaborating on a code base. The operations include:
+
+\begin{itemize}
+\item[History] Since new updates are actually layered over previous
+  ones, developers can {\em time travel}, looking into the past,
+  rolling back to the past, or even reapplying changes to current
+  versions.
+\item[Branching] Developers can create a derived version of a given
+  code-base where additional operations can be performed without
+  disrupting the original.
+\item[Merging] When two branches diverge, the changes can be merged
+  into a single version by choosing a strategy for combining changes.
+\end{itemize}
+
+TerminusDB uses an analogous approach to updates. A given database is
+comprised of {\em layers} which stands in place of the objecs of
+git. Each layer has a unique identifier, a 20-byte name. The base
+layer contains a simple graph represented using the succinct data
+strucures already described earlier.
+
+\begin{figure}
+	\includegraphics[width=\linewidth]{layers-diagram.png} % Figure image
+	\caption{A graph composed of layers} % Figure caption
+	\label{layers} % Label for referencing with \ref{bear}
+\end{figure}
+
+Above this layer, we can have further layers. Each additional layer
+above the base layer is comprised of additional dictionaries for newly
+added subjects and objects, predicates or values.
+
+It also contains the index structures used for the base graph to
+represent {\em positive} edges which have been added to the graph. And
+we have a membership set of {\em negative} edges which describe those
+triples which have been deleted as shown in Figure~\ref{layers}.
+
+Each layer has a pointer to the previous layer which is achieved by
+referring to its 20-byte name.
+
+This immutable chain strucure allows for straightforward uncoordinated
+multi-read access.  It also allows for easy branching. Any number of
+new layers, for instance can point to the same former parent layer
+without impact.
+
+In order to manage these layers as datastores, we use a {\em label}. A
+label is a name which points to one of the 20-byte identifiers. In the
+present implementation this is a file with the name of the label
+containing the 20-byte identifier.
+
+\subsection{Write Transactions}
+
+When an update transaction is initiated, a new {\em layer builder} is
+created, which logs all newly inserted or deleted edges. When this
+{\em layer builder} is committed, it yields a {\em layer} which has
+organised the insertions in our succinct data structures.
+
+This can then be commited by {\em advancing} a label to the new
+20-byte value.
+
+% More here. 
+
+\subsection{Delta compression}
+
+As new updates are performed the database layer depth increases. Since
+the layers are essentially arranged as linked lists. This will incur a
+performance penalty requiring repeated searching for every query. In
+order to improve performance, it is possible to perform a {\em delta
+  compression} as is used in git, or even to recalculate the full
+dataset as a new base-layer. Since the layers are immutable, this
+operation can be done concurrently. Commis that occur before the
+process is completed simply layer over the squash commit with no
+visible change in the content of the database.
+
+Compressed delas of this type can allow older layers to be archived,
+or even deleted. The removal of previous layers removes the capacity
+to time-travel or to track whether the database arose from a
+branch. However, this information can be kept seperately in a metadata
+repository, as is the plan for future version of TerminusDB.
+
+\section{Future Work}
+
+Values are still stored in a relatively simple manner and uniformly
+for all data types. In future versions of store we hope to
+differentiate our indexing strategies for the various datatypes.
+
+For strings the use of succinct data structure approaches immediately
+suggests a potential candidate: the FM-index. With FM-indexing very
+large datasets could still have reasonable query times for queries
+which are typically done on full text indexes using inverted
+term-document indexing. We have yet to explore the candidates for
+numeric and date types.
+
+Currently the tracking of history and branches is implicit. We intend
+to adopt a more explicit approach, storing a graph of the various
+commits coupled with timestamps and other metadata which will
+facilitate effective management.
+
+\section{Conclusion}
+
+Collaborative CI/CD for databases as yet has not been practical due to
+the lack of tool-chain support. In the software world we have
+seen what a large impact appropriate tools can make with advent of
+git.
+
+TerminusDB makes possible these collaborative operations to the
+universe of data management.
+
+The immutable layered approach has interesting and useful synergies
+with the {\em succinct datastructure} approach that we have used for
+encoding.
+
+
+
+TerminusDB provides a practical tool for enabling branch, merge,
+rollback and the various automated and manual testing regimes which
+are faiciliated by them.
+
+\printbibliography[title={Bibliography}]
+
+\end{document}

@@ -19,11 +19,11 @@ v1.0.1
 ### Install from Docker image
 
 To install a docker image with the latest server (*RECOMMENDED*) follow the instructions 
-here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/DOCKER.md).
+here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/docs/DOCKER.md).
 
 ### Building from source
 
-In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/BUILD.md) directions. 
+In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/docs/BUILD.md) directions. 
 
 ### Open Dashboard
 
@@ -36,7 +36,7 @@ One you have installed terminus-server either from the docker image or built fro
 Terminus Server is organised to be _web native_ which means that all
 actions and activities are easily automated via a RESTful JSON-LD API.
 
-The Server API is documented [here](https://github.com/terminusdb/terminus-server/blob/master/API.md).
+The Server API is documented [here](https://github.com/terminusdb/terminus-server/blob/master/docs/API.md).
 
 ### WOQL 
 
@@ -44,7 +44,7 @@ WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph
 fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
 a native data-structure in JavaScript, Python, and Prolog.
 
-The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/SYNTAX.md).
+The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/docs/SYNTAX.md).
 
 ## Why 
 
