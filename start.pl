@@ -35,23 +35,25 @@ version_string(Int, Str) :-
 :- multifile prolog:message//1.
 
 prolog:message(error(version_error(Correct, Was), _)) -->
-      { version_string(Correct, C),
+      {
+        maplist(version_string, Correct, VersionStrings),
+        atomic_list_concat(VersionStrings, " or ", AcceptedVersions),
         version_string(Was, W)
       },
-      [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[C, W],
+      [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[AcceptedVersions, W],
         nl].
 
 needs_version(80110).
 needs_version(80003).
 
 must_be_proper_version :-
-    needs_version(Correct),
-    (   current_prolog_flag(version, Correct)
+    current_prolog_flag(version, RunningVersion),
+    (    needs_version(RunningVersion)
     ->   true
     ;
-        current_prolog_flag(version, V),
+        findall(Version, needs_version(Version), SupportedVersions),
         print_message(error,
-                      error(version_error(Correct, V), terminus_db_startup)),
+                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup)),
         halt
    ).
 
