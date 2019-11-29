@@ -88,3 +88,34 @@ eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1002/spe.2198},
 abstract = {SUMMARYSuccinct data structures provide the same functionality as their corresponding traditional data structure in compact space. We improve on functions rank and select, which are the basic building blocks of FM-indexes and other succinct data structures. First, we present a cache-optimal, uncompressed bitvector representation that outperforms all existing approaches. Next, we improve, in both space and time, on a recent result by Navarro and Providel on compressed bitvectors. Last, we show techniques to perform rank and select on 64-bit words that are up to three times faster than existing methods. In our experimental evaluation, we first show how our improvements affect cache and runtime performance of both operations on data sets larger than commonly used in the evaluation of succinct data structures. Our experiments show that our improvements to these basic operations significantly improve the runtime performance and compression effectiveness of FM-indexes on small and large data sets. To our knowledge, our improvements result in FM-indexes that are either smaller or faster than all current state of the art implementations. Copyright © 2013 John Wiley \& Sons, Ltd.},
 year = {2014}
 }
+
+@article{MARTINEZPRIETO201673,
+title = "Practical compressed string dictionaries",
+journal = "Information Systems",
+volume = "56",
+pages = "73 - 108",
+year = "2016",
+issn = "0306-4379",
+doi = "https://doi.org/10.1016/j.is.2015.08.008",
+url = "http://www.sciencedirect.com/science/article/pii/S0306437915001672",
+author = "Miguel A. Martínez-Prieto and Nieves Brisaboa and Rodrigo Cánovas and Francisco Claude and Gonzalo Navarro",
+keywords = "Compressed string dictionaries, Text processing, Text databases, Compressed data structures",
+abstract = "The need to store and query a set of strings – a string dictionary – arises in many kinds of applications. While classically these string dictionaries have accounted for a small share of the total space budget (e.g., in Natural Language Processing or when indexing text collections), recent applications in Web engines, Semantic Web (RDF) graphs, Bioinformatics, and many others handle very large string dictionaries, whose size is a significant fraction of the whole data. In these cases, string dictionary management is a scalability issue by itself. This paper focuses on the problem of managing large static string dictionaries in compressed main memory space. We revisit classical solutions for string dictionaries like hashing, tries, and front-coding, and improve them by using compression techniques. We also introduce some novel string dictionary representations built on top of recent advances in succinct data structures and full-text indexes. All these structures are empirically compared on a heterogeneous testbed formed by real-world string dictionaries. We show that the compressed representations may use as little as 5% of the original dictionary size, while supporting lookup operations within a few microseconds. These numbers outperform the state-of-the-art space/time tradeoffs in many cases. Furthermore, we enhance some representations to provide prefix- and substring-based searches, which also perform competitively. The results show that compressed string dictionaries are a useful building block for various data-intensive applications in different domains."
+}
+
+@article{DBLP:journals/semweb/FeeneyMB18,
+  author    = {Kevin Chekov Feeney and
+               Gavin Mendel{-}Gleason and
+               Rob Brennan},
+  title     = {Linked data schemata: Fixing unsound foundations},
+  journal   = {Semantic Web},
+  volume    = {9},
+  number    = {1},
+  pages     = {53--75},
+  year      = {2018},
+  url       = {https://doi.org/10.3233/SW-170271},
+  doi       = {10.3233/SW-170271},
+  timestamp = {Wed, 13 Dec 2017 15:13:19 +0100},
+  biburl    = {https://dblp.org/rec/bib/journals/semweb/FeeneyMB18},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
