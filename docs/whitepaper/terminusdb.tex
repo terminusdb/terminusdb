@@ -212,7 +212,10 @@ their association with the subject is implicit.
 
 We repeat the process for predicates to arriving at objectst and we
 have completely encoded our triples. We can see an example in
-Table~\ref{tab:graph}.
+Table~\ref{tab:graph}. We have written the vectors in this table so
+that the triples are vertically aligned, making the encoding easier to
+see. The subject ids are actually implicit in the number of \(1\)s
+encoding in the subject bit sequence and are only written for clarity.
 
 \begin{table}
 	\centering
@@ -220,11 +223,11 @@ Table~\ref{tab:graph}.
 		\toprule
 		Triples & Encoding & \\
 		\midrule
-        \(  (1, 2, 3) \)  & \(1\; 2\;\;\; 3\) & Subject Ids \\
-        \(  (1, 2, 4) \)  & \(1\; 1\; 0\; 1\) & Encoded Subject Bit Vector\\
-        \(  (2, 3, 5) \)  & \(2\; 3\; 4\; 5\) & Predicate Vector \\
-	    \(  (2, 4, 6) \)  & \(1\; 0\; 1\; 1\; 1\) & Encoded Predicate Bit Vector\\
-	    \(  (3, 5, 7) \)  & \(3\; 4\; 5\; 6\; 7\) & Objects Vector \\
+        \(  (1, 2, 3) \)  & \(1\;\;\;\;2\;\;\;\;3\) & Subject Ids \\
+        \(  (1, 2, 4) \)  & \(1\;\;\;\;1\; 0\; 1\) & Encoded Subject Bit Sequence\\
+        \(  (2, 3, 5) \)  & \(2\;\;\;\;3\; 4\; 5\) & Predicate Vector \\
+	    \(  (2, 4, 6) \)  & \(1\; 0\;  1\; 1\; 1\) & Encoded Predicate Bit Sequence\\
+	    \(  (3, 5, 7) \)  & \(3\; 4\;  5\; 6\; 7\) & Object Vector \\
 		\bottomrule
 	\end{tabular}
     \caption{Succinct Graph Representation}
