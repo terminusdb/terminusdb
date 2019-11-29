@@ -2,8 +2,9 @@
 
 \input{structure.tex} % Specifies the document structure and loads requires packages
 
-%\usepackage[utf8]{inputenc}
-%\usepackage[T2A]{fontenc}
+\newcommand{\s}[1]{\textcolor{Blue}{#1}}
+\newcommand{\p}[1]{\textcolor{Red}{#1}}
+\newcommand{\w}[1]{\textcolor{Green}{#1}}
 
 \title{Succinct Data Structures and Delta Encoding for Modern Databases}
 
@@ -79,7 +80,7 @@ TerminusDB is a full featured graph database management system (GDBMS)
 including a rich query language: WOQL (the Web Object Query Language).
 However, we restrict our attention here to the underlying
 datastructure design and layout which we have implemented in a
-Rust\cite{} library which we call {\em{terminus-store}}.
+Rust\cite{Blandy:2015:RPL:3019371} library which we call {\em{terminus-store}}.
 
 We describe in turn the graph database model which is used, the
 succinct data structure approach, and finally how we implement
@@ -194,7 +195,7 @@ value dictionary and the predicate dictionary, we can use these
 integers to encode the triples using bit sequences.
 
 Succinct sequences encode sequences drawing from some alphabet
-\(\sigma\). In the case of a bit-sequence, \(\sigma = {0,1}\). They
+\(\sigma\). In the case of a bit-sequence, \(\sigma=\{0,1\}\). They
 typically expose (at least) the following primitives:
 
 \begin{itemize}
@@ -205,17 +206,20 @@ typically expose (at least) the following primitives:
 \end{itemize}
 
 Given a sorted set of triples, for each subject identifier, in order
-from \{0-n\} where \(n\) is the number of triples, we emit a \(1\)
-followed by a \(0\) for every predicate associated in a triple with
-that subject. We can then give a raw vector of all predicates and
-their association with the subject is implicit.
+from \(\{0..n\}\) where \(n\) is the number of triples, we emit a
+\(1\) followed by a \(0\) for every predicate associated in a triple
+with that subject. We then produce a vector of all predicates used and
+the association with the subject is apparent from the position of
+zeros in the bit sequence.
 
-We repeat the process for predicates to arriving at objectst and we
-have completely encoded our triples. We can see an example in
-Table~\ref{tab:graph}. We have written the vectors in this table so
-that the triples are vertically aligned, making the encoding easier to
-see. The subject ids are actually implicit in the number of \(1\)s
-encoding in the subject bit sequence and are only written for clarity.
+We repeat the process for predicates and objects resulting in a
+complete encoded for our triples. We can see an example in
+Table~\ref{tab:graph}.  We have written the vectors in this table so
+that the triples are vertically aligned, with subjects in blue,
+predicates in red and objects in green in order to make the encoding
+easier to see. The subject ids are actually implicit in the number of
+\(1\)s encoding in the subject bit sequence and are only written in
+the table for clarity.
 
 \begin{table}
 	\centering
@@ -223,11 +227,11 @@ encoding in the subject bit sequence and are only written for clarity.
 		\toprule
 		Triples & Encoding & \\
 		\midrule
-        \(  (1, 2, 3) \)  & \(1\;\;\;\;2\;\;\;\;3\) & Subject Ids \\
-        \(  (1, 2, 4) \)  & \(1\;\;\;\;1\; 0\; 1\) & Encoded Subject Bit Sequence\\
-        \(  (2, 3, 5) \)  & \(2\;\;\;\;3\; 4\; 5\) & Predicate Vector \\
-	    \(  (2, 4, 6) \)  & \(1\; 0\;  1\; 1\; 1\) & Encoded Predicate Bit Sequence\\
-	    \(  (3, 5, 7) \)  & \(3\; 4\;  5\; 6\; 7\) & Object Vector \\
+        \(  (\s{1},\p{2},\w{3}) \)  & \(\s{1}\;\;\;\;\s{2} \;\;\;\;\s{3}\) & Subject Ids \\
+        \(  (\s{1},\p{2},\w{4}) \)  & \(   1\;\;\;\;    1\;    0\;    1\) & Encoded Subject Bit Sequence\\
+        \(  (\s{2},\p{3},\w{5}) \)  & \(\p{2}\;\;\;\;\p{3}\;\p{4}\;\p{5}\) & Predicate Vector \\
+	    \(  (\s{2},\p{4},\w{6}) \)  & \(   1\;   0\;    1\;    1\;    1\) & Encoded Predicate Bit Sequence\\
+	    \(  (\s{3},\p{5},\w{7}) \)  & \(\w{3}\;\w{4}\;\w{5}\;\w{6}\;\w{7}\) & Object Vector \\
 		\bottomrule
 	\end{tabular}
     \caption{Succinct Graph Representation}
@@ -238,8 +242,8 @@ This format allows fast lookup of triples based on query modes in
 which the subject identifier is known, as we can use \(select\) to
 find the position in the predicate vector and subsequently use the
 predicate identifier to \(select\) in the object vector. We use a
-wavelet tree to enable search starting from the predicate. Details can
-be found in \cite{10.1007/978-3-642-30284-8_36}.
+wavelet tree to enable search starting from the predicate. Details of
+this can be found in \cite{10.1007/978-3-642-30284-8_36}.
 
 \subsection{Delta Encoded Databases}
 
@@ -359,14 +363,19 @@ repository, as is the plan for future version of TerminusDB.
 
 \section{Future Work}
 
-Values are still stored in a relatively simple manner and uniformly
-for all data types. In future versions of store we hope to
-differentiate our indexing strategies for the various datatypes.
+Values are stored as strings using a plain front coding dictionary
+uniformly for all data types. Obviously this is less than ideal in
+that it causes an expansion in size for the storage of integers, dates
+and other specific types. It also means that only search from the
+beginning of the string is fast. In future versions of store we hope
+to differentiate our indexing strategies for the various datatypes in
+XSD.
 
-For strings the use of succinct data structure approaches immediately
-suggests a potential candidate: the FM-index. With FM-indexing very
-large datasets could still have reasonable query times for queries
-which are typically done on full text indexes using inverted
+For strings the use of succinct data structure immediately suggests a
+potential candidate: the
+FM-index\cite{Ferragina:2005:ICT:1082036.1082039}. With FM-indexing
+very large datasets could still have reasonable query times for
+queries which are typically done on full text indexes using inverted
 term-document indexing. We have yet to explore the candidates for
 numeric and date types.
 

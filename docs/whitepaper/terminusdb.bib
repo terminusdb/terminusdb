@@ -96,8 +96,8 @@ volume = "56",
 pages = "73 - 108",
 year = "2016",
 issn = "0306-4379",
-doi = "https://doi.org/10.1016/j.is.2015.08.008",
-url = "http://www.sciencedirect.com/science/article/pii/S0306437915001672",
+doi = {https://doi.org/10.1016/j.is.2015.08.008},
+url = {http://www.sciencedirect.com/science/article/pii/S0306437915001672},
 author = "Miguel A. Martínez-Prieto and Nieves Brisaboa and Rodrigo Cánovas and Francisco Claude and Gonzalo Navarro",
 keywords = "Compressed string dictionaries, Text processing, Text databases, Compressed data structures",
 abstract = "The need to store and query a set of strings – a string dictionary – arises in many kinds of applications. While classically these string dictionaries have accounted for a small share of the total space budget (e.g., in Natural Language Processing or when indexing text collections), recent applications in Web engines, Semantic Web (RDF) graphs, Bioinformatics, and many others handle very large string dictionaries, whose size is a significant fraction of the whole data. In these cases, string dictionary management is a scalability issue by itself. This paper focuses on the problem of managing large static string dictionaries in compressed main memory space. We revisit classical solutions for string dictionaries like hashing, tries, and front-coding, and improve them by using compression techniques. We also introduce some novel string dictionary representations built on top of recent advances in succinct data structures and full-text indexes. All these structures are empirically compared on a heterogeneous testbed formed by real-world string dictionaries. We show that the compressed representations may use as little as 5% of the original dictionary size, while supporting lookup operations within a few microseconds. These numbers outperform the state-of-the-art space/time tradeoffs in many cases. Furthermore, we enhance some representations to provide prefix- and substring-based searches, which also perform competitively. The results show that compressed string dictionaries are a useful building block for various data-intensive applications in different domains."
@@ -118,4 +118,32 @@ abstract = "The need to store and query a set of strings – a string dictionary
   timestamp = {Wed, 13 Dec 2017 15:13:19 +0100},
   biburl    = {https://dblp.org/rec/bib/journals/semweb/FeeneyMB18},
   bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
+@article{Ferragina:2005:ICT:1082036.1082039,
+ author = {Ferragina, Paolo and Manzini, Giovanni},
+ title = {Indexing Compressed Text},
+ journal = {J. ACM},
+ issue_date = {July 2005},
+ volume = {52},
+ number = {4},
+ month = jul,
+ year = {2005},
+ issn = {0004-5411},
+ pages = {552--581},
+ numpages = {30},
+ url = {http://doi.acm.org/10.1145/1082036.1082039},
+ doi = {10.1145/1082036.1082039},
+ acmid = {1082039},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {Burrows--Wheeler transform, Lempel--Ziv compressor, full-text indexing, indexing data structure, pattern searching, suffix array, suffix tree, text compression},
+}
+
+@book{Blandy:2015:RPL:3019371,
+ author = {Blandy, Jim},
+ title = {The Rust Programming Language: Fast, Safe, and Beautiful},
+ year = {2015},
+ isbn = {9781491925447},
+ publisher = {O'Reilly Media, Inc.},
 }
