@@ -72,7 +72,7 @@ These two developments suggest a solution at their
 intersection. Namely the use of in-memory immutable {\em succinct}
 data structures and {\em deltas} as used in revision control
 systems. TerminusDB demonstrates how these features can be combined to
-produce a flexible transactional graph database. 
+produce a flexible transactional graph database.
 
 \section{Design}
 
@@ -90,11 +90,10 @@ together with some metadata into an object which we term {\em layers}.
 \subsection{Graph Databases}
 
 Graph databases are one of the fastest growing of the new database
-paradigms\cite{}. Since graphs are very general it is possible to
-render many database modeling techniques in a graph database. The
-simplicity and generality make it a good candidate for a {\em general
-purpose} change set orientated approach to an online transaction
-processing database.
+paradigms. Since graphs are very general it is possible to render many
+database modeling techniques in a graph database. The simplicity and
+generality make it a good candidate for a {\em general purpose} delta
+encoded approach to an online transaction processing database.
 
 The TerminusDB infrastucture is based on the {\em RDF} standard. This
 standard specifies finite labelled directed graphs which are
@@ -286,20 +285,18 @@ strucures already described earlier.
 
 Above this layer, we can have further layers. Each additional layer
 above the base layer is comprised of additional dictionaries for newly
-added subjects and objects, predicates or values.
-
-It also contains the index structures used for the base graph to
-represent {\em positive} edges which have been added to the graph. And
-we have a membership set of {\em negative} edges which describe those
-triples which have been deleted as shown in Figure~\ref{fig:layers}.
+added subjects and objects, predicates or values. It also contains the
+index structures used for the base graph to represent {\em positive}
+edges which have been added to the graph. And we have a membership set
+of {\em negative} edges which describe those triples which have been
+deleted as shown in Figure~\ref{fig:layers}.
 
 Each layer has a pointer to the previous layer which is achieved by
 referring to its 20-byte name.
 
 This immutable chain strucure allows for straightforward uncoordinated
-multi-read access.  It also allows for easy branching. Any number of
-new layers, for instance can point to the same former parent layer
-without impact.
+multi-read access. It also allows for easy branching. Any number of
+new layers can point to the same former parent layer.
 
 In order to manage these layers as datastores, we use a {\em label}. A
 label is a name which points to one of the 20-byte identifiers. In the
@@ -342,24 +339,27 @@ Figure~\ref{workflow}.
 
 \subsection{Delta compression}
 
-As new updates are performed the database layer depth increases. Since
-the layers are essentially arranged as linked lists. This will incur a
-performance penalty requiring repeated searching for every query. In
-order to improve performance, it is possible to perform a {\em delta
-  compression} as is used in git, or even to recalculate the full
-dataset as a new base-layer. In git this step can be performed
-manually, or it will occur with a default depth threshold is passed.
+As new updates are performed the database layer depth increases. This
+will incur a performance penalty requiring repeated searching at each
+layer for every query. In order to improve performance, we can perform
+a {\em delta compression} similar to the mechnaims used in
+git. Alternatively we can recalculate the full dataset as a new
+base-layer. In git this {\em delta compression} step can be performed
+manually or it will occur when a depth threshold is passed.
 
 Since the layers are immutable, this operation can be done
 concurrently. Commis that occur before the process is completed simply
-layer over the squash commit with no visible change in the content of
+layer over the delta with no visible change in the content of
 the database.
 
 Compressed deltas of this type can allow older layers to be archived,
 or even deleted. The removal of previous layers removes the capacity
 to time-travel or to track whether the database arose from a
 branch. However, this information can be kept seperately in a metadata
-repository, as is the plan for future version of TerminusDB.
+repository allowing memory of the branching structure and other
+information about previous commits, but not the capacity to
+time-tralve to them. We plan to implement this graph metadata
+repository in future version of TerminusDB.
 
 \section{Future Work}
 
@@ -367,9 +367,9 @@ Values are stored as strings using a plain front coding dictionary
 uniformly for all data types. Obviously this is less than ideal in
 that it causes an expansion in size for the storage of integers, dates
 and other specific types. It also means that only search from the
-beginning of the string is fast. In future versions of store we hope
-to differentiate our indexing strategies for the various datatypes in
-XSD.
+beginning of the datatype is optimised. In future versions of store we
+hope to differentiate our indexing strategies for the various
+datatypes in XSD.
 
 For strings the use of succinct data structure immediately suggests a
 potential candidate: the
