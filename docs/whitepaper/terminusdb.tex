@@ -295,8 +295,10 @@ Each layer has a pointer to the previous layer which is achieved by
 referring to its 20-byte name.
 
 This immutable chain strucure allows for straightforward uncoordinated
-multi-read access. It also allows for easy branching. Any number of
-new layers can point to the same former parent layer.
+multi-read access sometimes called muliversion concurrency control
+(MVCC)\cite{Mohan:1992:EFM:130283.130306}\cite{Sadoghi:2014:RDL:2733004.2733006}. This
+approach also makes branching simple to implement. Any number of new
+layers can point to the same former parent layer.
 
 In order to manage these layers as datastores, we use a {\em label}. A
 label is a name which points to one of the 20-byte identifiers. In the
