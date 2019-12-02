@@ -207,10 +207,8 @@ verify_access(Auth, DB, Action, Scope) :-
                                               'terminus:message' : M,
                                               'terminus:object' : 'verify_access'})))).
 
-connection_authorised_user(Request, User, SURI) :-
+connection_authorised_user(Request, User, SURI, DB) :-
     fetch_authorization_data(Request, KS),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
     (   key_user(KS, DB, User_ID)
     ->  (   authenticate(Request, DB, Auth),
             verify_access(Auth,DB,terminus/get_document,SURI),
@@ -228,7 +226,7 @@ connection_authorised_user(Request, User, SURI) :-
 /*
  * reply_with_witnesses(+Resource_URI,+Witnesses) is det.
  *
- *
+
  */
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
@@ -257,9 +255,9 @@ connect_handler(options,_Request) :-
     format('~n').
 connect_handler(get,Request) :-
     config:server(SURI),
-    connection_authorised_user(Request,User, SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
+    connection_authorised_user(Request,User, SURI, DB),
     write_cors_headers(SURI, DB),
     reply_json(User).
 
