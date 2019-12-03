@@ -74,6 +74,18 @@ create_db(Terminus_DB,DB_URI) :-
         safe_create_named_graph(Store,Instance,_)
     ).
 
+create_schema(DB_URI,Schema,DB) :-
+    interpolate([DB_URI],Label),
+    interpolate([Schema,' ontology for ',DB_URI],Comment),
+    % goal expansion doesn't work here..
+    global_prefix_expand(rdf:type, Rdf_type),
+    global_prefix_expand(rdfs:label, Rdfs_label),
+    global_prefix_expand(rdfs:comment, Rdfs_comment),
+    global_prefix_expand(owl:'Ontology', OWL_ontology),
+    insert(DB, Schema, DB_URI, Rdf_type, OWL_ontology),
+    insert(DB, Schema, DB_URI, Rdfs_label, literal(lang(en,Label))),
+    insert(DB, Schema, DB_URI, Rdfs_comment, literal(lang(en,Comment))).
+
 post_create_db(DB_URI) :-
     make_database_from_database_name(DB_URI, Database),
     Schemata = Database.schema,
@@ -85,19 +97,7 @@ post_create_db(DB_URI) :-
              post_database: _Post_DB},
          witnesses(Witnesses)],
         forall(member(Schema,Schemata),
-               (
-                   interpolate([DB_URI],Label),
-                   interpolate([Schema,' ontology for ',DB_URI],Comment),
-                   % goal expansion doesn't work here..
-                   global_prefix_expand(rdf:type, Rdf_type),
-                   global_prefix_expand(rdfs:label, Rdfs_label),
-                   global_prefix_expand(rdfs:comment, Rdfs_comment),
-                   global_prefix_expand(owl:'Ontology', OWL_ontology),
-                   insert(Update_DB, Schema, DB_URI, Rdf_type, OWL_ontology),
-                   insert(Update_DB, Schema, DB_URI, Rdfs_label, literal(lang(en,Label))),
-                   insert(Update_DB, Schema, DB_URI, Rdfs_comment, literal(lang(en,Comment)))
-               )
-              ),
+               create_schema(DB_URI,Schema,Update_DB)),
         % always an ok update...
         true
     ),

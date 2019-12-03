@@ -54,7 +54,7 @@ the RDBMS designs of the 1970s\cite{Codd:1970:RMD:362384.362685}.
 
 Meanwhile both hardware infrastructure and software design process
 have moved on significantly over the course of the last 40 years. In
-particular machines with terrabytes of RAM are now available for
+particular, machines with terrabytes of RAM are now available for
 prices reasonable enough for some small and medium sized enterprises.
 
 At the same time flexible revision control systems have revolutionised
@@ -79,7 +79,7 @@ produce a flexible transactional graph database.
 TerminusDB is a full featured graph database management system (GDBMS)
 including a rich query language: WOQL (the Web Object Query Language).
 However, we restrict our attention here to the underlying
-datastructure design and layout which we have implemented in a
+data structure design and layout which we have implemented in a
 Rust\cite{Blandy:2015:RPL:3019371} library which we call {\em{terminus-store}}.
 
 We describe in turn the graph database model which is used, the
@@ -116,10 +116,10 @@ us with a rich modelling language which can provide constraints on the
 allowable shapes in the graph.
 
 TerminusDB, following on from the RDF tradition, is not a property
-graph. However it can model properties using an intermediate nodes and
+graph. However, it can model properties using an intermediate nodes and
 this pattern can be made explicit in the OWL schema design. Again this
 choice leads to simplicity of the underlying representation, which, as
-we will see is important when constructing succinct data structures
+we will see, is important when constructing succinct data structures
 with change sets.
 
 \subsection{Succinct Data Structures}
@@ -158,7 +158,7 @@ to the nature of URIs and IRIs, front-coding provides a fast
 dictionary format with significant compression of
 data\cite{MARTINEZPRIETO201673}.
 
-The primary operations exposed by the datastructure are {\em
+The primary operations exposed by the data structure are {\em
   string-id} which gives us a natural number corresponding with the
 string, and {\em id-string} which gives a string corresponding with a
 natural number.
@@ -252,7 +252,7 @@ control system which makes use of these techniques to store histories
 of revisions.
 
 Git stores objects which contain either the complete dataset of
-interest or the information about what is updated (deleted / added) as
+interest or the information about what is updated (deleted/added) as
 a delta. All changes to the source control system are thereby simply
 management problems of these objects.
 
@@ -356,7 +356,7 @@ the database.
 
 Compressed deltas of this type can allow older layers to be archived,
 or even deleted. The removal of previous layers removes the capacity
-to time-travel or to track whether the database arose from a
+to {\em time travel} or to track whether the database arose from a
 branch. However, this information can be kept seperately in a metadata
 repository allowing memory of the branching structure and other
 information about previous commits, but not the capacity to
@@ -397,7 +397,7 @@ TerminusDB makes possible these collaborative CI/CD type operations in
 the universe of data management.
 
 This is made possible because of the synergies which an immutable
-layered approach has with the {\em succinct datastructure} approach
+layered approach has with the {\em succinct data structure} approach
 that we have used for encoding.
 
 TerminusDB provides a practical tool for enabling branch, merge,

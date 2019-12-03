@@ -925,17 +925,17 @@ try_dump_schema(DB_URI, DB, Name, Request) :-
     ).
 
 /*
- * try_update_schema(+DB_URI,+Name,+TTL,-Witnesses) is det.
+ * try_update_schema(+DB_URI,+Schema_Name,+TTL,-Witnesses) is det.
  *
  */
-try_update_schema(DB_URI,Name,TTL,Witnesses) :-
-    coerce_literal_string(Name, NS),
-    atom_string(NA, NS),
+try_update_schema(DB_URI,Schema_Name,TTL,Witnesses) :-
+    coerce_literal_string(Schema_Name, Schema_String),
+    atom_string(Schema_Atom, Schema_String),
     coerce_literal_string(TTL, TTLS),
     make_database_from_database_name(DB_URI, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        schema_transaction(Database, NA, TTLStream, Witnesses),
+        schema_transaction(Database, Schema_Atom, TTLStream, Witnesses),
         close(TTLStream)
     ).
 
