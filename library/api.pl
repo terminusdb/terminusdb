@@ -122,8 +122,8 @@ http:location(root, '/', []).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(1,?).
-cors_catch(M:Goal,Request) :-
-    catch(call(M:Goal, Request),
+cors_catch(Goal,Request) :-
+    catch(call(Goal, Request),
           E,
           (   cors_enable,
               http_log_stream(Log),
