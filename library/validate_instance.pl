@@ -665,7 +665,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',
     ).
 refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
-        abs(M, N), Max is 2 ^ 24, N > Max
+        abs(M) > 2 ^ 24
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed float: mantisa is massive.',
