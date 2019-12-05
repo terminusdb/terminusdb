@@ -17,6 +17,7 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(semweb/turtle)).
 :- use_module(library(literals)).
+:- use_module(library(triplestore)).
 
 /*****************************************************
  * Utils
@@ -48,10 +49,6 @@ hostname(Hostname) :-
         ->  atom_string(Hostname,Hostname_String)
         ;   Hostname = localhost)
     ;   Hostname = localhost).
-
-safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
-    www_form_encode(Graph_ID,Safe_Graph_ID),
-    create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
