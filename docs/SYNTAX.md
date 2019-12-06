@@ -265,17 +265,17 @@ This is used to update documents in the database as a single operation.
 
 Delete the object at the IRI or the IRI in the "@id" of the JSON document. The actual structure of the JSON document is currently completely ignored. 
 
-### -triple,
-`{ "-triple" : [ Subject, Predicate, Object_or_Literal ] }`
-`{ "-quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
+### delete_triple,
+`{ "delete_triple" : [ Subject, Predicate, Object_or_Literal ] }`
+`{ "delete_quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
 * Subject : Subject IRI or Variable IRI
 * Predicate : Predicate IRI or Variable IRI
 * Object\_or\_Literal : Object, Literal or Variable IRI
 
 Deletes a triple from the graph.
 
-### -quad
-`{ "-quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
+### delete_quad
+`{ "delete_quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
 * Graph : Graph IRI (or the default)
 * Subject : Subject IRI or Variable IRI
 * Predicate : Predicate IRI or Variable IRI
@@ -283,16 +283,16 @@ Deletes a triple from the graph.
 
 Deletes a quad from the graph.
 
-### +triple
-`{ "+triple" : [ Subject, Predicate, Object_or_Literal ] }`
+### add_triple
+`{ "add_triple" : [ Subject, Predicate, Object_or_Literal ] }`
 * Subject : Subject IRI or Variable IRI
 * Predicate : Predicate IRI or Variable IRI
 * Object\_or\_Literal : Object, Literal or Variable IRI
 
 Inserts the triple into the given graph IRI (or the default).
 
-### +quad
-`{ "+quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
+### add_quad
+`{ "add_quad" : [ Graph, Subject, Predicate, Object_or_Literal ] }`
 * Graph : Graph IRI (or the default)
 * Subject : Subject IRI or Variable IRI
 * Predicate : Predicate IRI or Variable IRI

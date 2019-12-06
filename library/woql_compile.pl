@@ -22,8 +22,8 @@
  *                                                                       *
  *                                                                       *
  *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       * 
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
@@ -1317,3 +1317,57 @@ list_conjunction(L,Goal) :-
     reverse(L,R),
     R = [A|Rest],
     foldl([X,Y,(X,Y)]>>true, Rest, A, Goal).
+
+/*
+ * active_graphs(Term,Dict:dict) is det.
+ *
+ * What graphs are currently active in a given query.
+ *
+ * NOTE: This can be used by capabilities assessment to determine what
+ * capabilities are necessary.
+ *
+ * Dict has the form:
+ * _{read : [Graphs], write : [Graphs]}
+ */
+active_graphs(Term, Dict) :-
+    % lazy
+    Term =.. [Functor|Args],
+    (   Functor = insert,
+        Args = [G,_,_,_]
+    ->  Dict = {write:[G]}
+    ;   Functor = delete,
+        Args = [G,_,_,_]
+    ->  Dict = {write:[G]}
+    ;   Functor = t,
+        Args = [_,_,_,G]
+    ->  Dict = {read:[G]}
+    ;   Functor = r,
+        Args = [_,_,_,G]
+    ->  Dict = {read:[G]}
+    ;   Functor = from,
+        Args = [G,P]
+    ->  active_graphs(P,G_Sub),
+        Dict = {read : [G|G_Sub.get(read) ],
+                write : G_Sub.get(write)}
+    ;   Functor = into,
+        Args = [G,P]
+    ->  active_graphs(P,G_Sub),
+        Dict = {read : G_Sub.get(read),
+                write : [G|G_Sub.get(write)]}
+    ;   map(active_graphs,Args,Results),
+        merge_active_graphs(Results,Dict)
+    ).
+
+merge_active_graphs_aux([],D,D).
+merge_active_graphs_aux([D1|Rest],D2,D) :-
+    R1 = D1.get(read),
+    W1 = D1.get(write),
+    R2 = D2.get(read),
+    W2 = D2.get(write),
+    append(R1,R2,R3),
+    append(W1,W2,W3),
+    D3 = _{read:R3,write:W3},
+    merge_active_graphs_aux(Rest,D3,D).
+
+merge_active_graphs(Results,Dictionary) :-
+    merge_active_graphs_aux(Results,_{},Dictionary).

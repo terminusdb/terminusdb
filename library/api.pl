@@ -938,7 +938,7 @@ try_update_schema(DB_URI,Schema_Name,TTL,Witnesses) :-
     make_database_from_database_name(DB_URI, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        schema_transaction(Database, Schema_Atom, TTLStream, Witnesses),
+        turtle_schema_transaction(Database, Schema_Atom, TTLStream, Witnesses),
         close(TTLStream)
     ).
 

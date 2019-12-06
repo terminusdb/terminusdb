@@ -1,5 +1,5 @@
 :- module(validate, [
-              schema_transaction/4,
+              turtle_schema_transaction/4,
               document_transaction/5
           ]).
 
@@ -73,11 +73,19 @@ test_schema(propertyTypeOverloadSC).
 test_schema(invalid_RDFS_property_SC).
 
 /*
- * schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
+ *  schema_transaction ...
+ *
+ * We need a schema transaction now - that allows for both schema and instance updates
+ * in a single transaction
+ *
+ */
+
+/*
+ * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
  *
  * Updates a schema using a turtle formatted stream.
  */
-schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
+turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
 
     % make a fresh empty graph against which to diff
     open_memory_store(Store),
