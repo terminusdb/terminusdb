@@ -206,10 +206,6 @@ is_empty_graph_name(Database_Id):-
     member(Database_Id, [false, @(false), none]),
     !.
 
-% Why is this alone?
-error:has_type(rdf_object, Rdf_Object):-
-    is_rdf_object(Rdf_Object).
-
 /*
  * is_database(Database) is semidet.
  *
