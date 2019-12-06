@@ -236,6 +236,8 @@ json_to_woql_ast(JSON,WOQL) :-
         WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
     ->  json_to_woql_ast(ID,WOQL)
+    ;   true = JSON
+    ->  WOQL = true
     ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                      'terminus:message' :'Un-parsable Query',
                                      'vio:query' : JSON})))
