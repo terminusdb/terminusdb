@@ -25,6 +25,9 @@
 
 :- use_module(global_prefixes).
 
+:- multifile user:goal_expansion/2.
+:- dynamic user:goal_expansion/2.
+
 % xrdf/5
 user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-
     nonvar(A),
