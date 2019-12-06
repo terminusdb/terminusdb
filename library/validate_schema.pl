@@ -461,8 +461,7 @@ anonymousEquivalentClass(C,CE,Database) :-
     database_schema(Database,Schema),
     equivalentClass(C,CE,Database),
     % Exactly one reference to this class, or everything will go to hell.
-    (setof(X,xrdf(Database,Schema,X,_,CE), ListX) *-> ListX = L ; L = []),
-    length(L,1).
+    bagof(X,xrdf(Database,Schema,X,_,CE), [_]).
 
 % transitive strict relation
 subClassStrict(X,Y,Database) :- subClassOf(X,Y,Database).
