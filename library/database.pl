@@ -54,16 +54,15 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(utils)).
-:- use_module(library(types)).
-:- use_module(library(sdk)).
-:- use_module(library(file_utils)).
+:- use_module(utils).
+:- use_module(types).
+:- use_module(sdk).
+:- use_module(file_utils).
+:- use_module(triplestore).
+
 :- use_module(library(prolog_stack)).
-
-
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
-:- use_module(library(triplestore)).
 
 /*
  * Database term accessors.
