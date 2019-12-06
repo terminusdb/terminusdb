@@ -1,0 +1,179 @@
+#!/usr/bin/env swipl
+% -*- mode: prolog;-*-
+
+:- initialization(main).
+
+% Set up access to the libraries
+:- prolog_load_context(directory, Dir),
+   atomic_list_concat([Dir,'/../library'],One_Up),
+   absolute_file_name(One_Up,Lib),
+   asserta(user:file_search_path(library, Lib)).
+
+:- use_module(library(literals)).
+:- use_module(library(pairs)).
+:- use_module(library(optparse)).
+:- use_module(library(semweb/turtle)).
+:- use_module(library(terminus_store)).
+:- use_module(library(triplestore)).
+
+
+/*****************************************************
+ * Opts 
+ *****************************************************/ 
+opt_spec([[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print this help')],
+
+          [opt(path),
+           type(atom),
+           shortflags([p]),
+           longflags([path]),
+           default(false),
+           help('path to hdt database to upgrade')]
+         ]).
+
+/*
+ * help(+Cmd:atom,-Help:atom) is det.
+ */
+help(Cmd,Spec,Help) :-
+    file_base_name(Cmd,Name),
+    opt_help(Spec,Help_Text),
+    format(atom(Help),'Usage: ~s [OPTIONS]~n~n~s', [Name,Help_Text]).
+
+
+program(Prog) :-
+    current_prolog_flag(associated_file,Prog).
+
+
+
+check_valid_dir(Directory) :-
+    format(string(PrefixDbFile), "~s/~s", [Directory, "/prefix.db"]),
+    exists_file(PrefixDbFile).
+
+/**
+ * add_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
+ *
+ * Reads in Turtle String and writes initial database.
+ */
+add_graph_from_turtle(TTL_Path, Builder) :-
+    format("Adding Turtle : ~s~n", [TTL_Path]),
+    % write to a temporary builder.
+    rdf_process_turtle(
+        TTL_Path,
+        {Builder}/
+        [Triples,_Resource]>>(
+            forall(member(T, Triples),
+                   (   normalise_triple(T, rdf(X,P,Y)),
+                       object_storage(Y,S),
+                       nb_add_triple(Builder, X, P, S)))),
+        []).
+
+
+/**
+ * remove_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
+ *
+ * Reads in Turtle String and writes initial database.
+ */
+remove_graph_from_turtle(TTL_Path, Builder) :-
+    format("Removing Turtle : ~s~n", [TTL_Path]),
+
+    % write to a temporary builder.
+    rdf_process_turtle(
+        TTL_Path,
+        {Builder}/
+        [Triples,_Resource]>>(
+            forall(member(T, Triples),
+                   (   normalise_triple(T, rdf(X,P,Y)),
+                       object_storage(Y,S),
+                       nb_remove_triple(Builder, X, P, S)))),
+        []).
+    % commit this builder to a temporary layer to perform a diff.
+
+prepend_digit(Digit, Result) :-
+    (   string_length(Digit, 1)
+    ->  format(string(Result), "0~s", [Digit])
+    ;   Result = Digit
+    ).
+
+
+number_from_ttl_file(TTL_File, Number) :-
+    file_base_name(TTL_File, BaseFile),
+    split_string(BaseFile, "-", "", Splitted),
+    memberchk(NumberStr, Splitted),
+    prepend_digit(NumberStr, Number).
+
+
+process_graph_from_turtle(GraphName, TTL) :-
+    store(Store),
+    open_named_graph(Store, GraphName, Graph),
+    (   nb_current(GraphName, _)
+    ->  open_write(Graph, Builder)
+    ;   open_write(Store, Builder)),
+    file_base_name(TTL, TTLBaseName),
+    (  re_match("pos", TTLBaseName)
+    -> add_graph_from_turtle(TTL, Builder)
+    ;  remove_graph_from_turtle(TTL, Builder)),
+    nb_commit(Builder,Layer),
+    nb_set_head(Graph, Layer),
+    nb_setval(GraphName, "added").
+
+process_layer(GraphName, LayerDir) :-
+    format("Processing layer: ~s~n~n", [LayerDir]),
+    format(string(PosNegWildcard), "~s/*-{neg,pos}*.ttl", [LayerDir]),
+    expand_file_name(PosNegWildcard, PosNegs),
+    map_list_to_pairs(number_from_ttl_file, PosNegs, Pairs),
+    sort(Pairs, SortedPairs),
+    pairs_values(SortedPairs, PairValues),
+    forall(member(TTL, PairValues), process_graph_from_turtle(GraphName, TTL)).
+
+layer_id(Entry, LayerId) :-
+    file_base_name(Entry, Basename),
+    prepend_digit(Basename, LayerId).
+
+process_graph(GraphDir) :-
+    % TODO: This should make the resulting layers in order
+    file_base_name(GraphDir, GraphName),
+    store(Store),
+    create_named_graph(Store, GraphName, _),
+    format(string(LayerWildcard), "~s/*", [GraphDir]),
+    expand_file_name(LayerWildcard, Entries),
+    map_list_to_pairs(layer_id, Entries, EntryPairs),
+    keysort(EntryPairs, SortedLayers),
+    forall(member(_-LayerDir, SortedLayers), process_layer(GraphName, LayerDir)).
+
+process_graphs(DirectoryList) :-
+    forall(member(Dir, DirectoryList), process_graph(Dir)).
+
+process_db_dir(Directory) :-
+    make_directory("converted"),
+    open_directory_store("converted", Store),
+    assertz(store(Store)),
+    format(string(DirWildCard), "~s/http*/http*", [Directory]),
+    expand_file_name(DirWildCard, Entries),
+    process_graphs(Entries).
+
+main(Args) :-
+
+    program(Prog),
+
+    opt_spec(Spec),
+    opt_parse(Spec,Args,Opts,_),
+
+    help(Prog,Spec,Help_Text),
+
+    (   memberchk(help(true), Opts)
+    ->  write(Help_Text),
+        halt
+    ;   memberchk(path(Path), Opts),
+        Path \= false
+    ->  true
+    ;   write(Help_Text),
+        halt),
+    (   check_valid_dir(Path)
+    ->  true
+    ;   format("Not a valid DB directory!~n"),
+        halt),
+    process_db_dir(Path).
