@@ -148,6 +148,7 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,_Key_Ctx,_Ctx,V) :-
     number(V),
     !.
+expand_value(true,_Key_Ctx,_Ctx,true).
 expand_value(V,Key_Ctx,_Ctx,_Value) :-
     format(atom(M),'Unknown key context ~q for value ~q', [Key_Ctx,V]),
     throw(error(M)).
