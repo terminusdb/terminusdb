@@ -29,6 +29,8 @@
               with_transaction/3
           ]).
 
+:- meta_predicate(with_transaction(+, 0, 0)).
+
 /** <module> Implementation of database graph management
  *
  * This module helps other modules with the representation of databases and
