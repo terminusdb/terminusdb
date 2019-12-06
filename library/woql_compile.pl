@@ -62,6 +62,7 @@
 
 :- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
 :- use_module(casting, [typecast/4,hash/3]).
+:- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
@@ -400,7 +401,7 @@ assert_program([Def|Remainder]) :-
 retract_program([]).
 retract_program([def(Name,Args,_Body)|Remainder]) :-
     length(Args,N),
-    abolish(woql_compile:Name/N),
+    abolish(woql_compile:(Name/N)),
     retract_program(Remainder).
 
 bookend_graphs(Databases) :-
