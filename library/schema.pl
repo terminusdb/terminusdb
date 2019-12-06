@@ -32,7 +32,6 @@
 :- use_module(database).
 :- use_module(triplestore).
 :- use_module(schema_definitions).
-:- use_module(schema_util).
 :- use_module(utils).
 
 :- reexport(schema_util).

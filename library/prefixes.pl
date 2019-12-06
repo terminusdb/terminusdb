@@ -38,7 +38,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 % Import global definitions
-:- use_module(global_prefixes).
 :- reexport(global_prefixes).
 
 % Use prolog persistency for prefix management.
