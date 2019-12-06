@@ -1,11 +1,11 @@
 :- module(api_test,[
               run_api_tests/0
           ]).
-                 
+
 /** <module> API Test
- * 
+ *
  * Tests of the HTTP API interface
- * 
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -34,11 +34,11 @@
 :- use_module(library(http/json)).
 
 
-/* 
- * run_api_tests is det. 
+/*
+ * run_api_tests is det.
  *
  * Run all structured tests of the API
- */ 
+ */
 run_api_tests :-
     try(run_connect_test),
     try(run_bad_auth_test),
@@ -51,7 +51,7 @@ run_api_tests :-
     try(run_doc_update_test),
     try(run_doc_update_get_test),
     try(run_doc_update_update_test),
-    try(run_doc_update_update_get_test), 
+    try(run_doc_update_update_get_test),
     try(run_doc_delete_test),
     try(run_doc_get_missing_test),
     %     INSTANCE_CHECKING (
@@ -73,7 +73,7 @@ run_api_tests :-
     try(run_db_create_test),
     try(run_schema_datatypes_update_test),
     try(run_bad_doc_datatype_update_test),
-    try(run_good_doc_datatype_update_test),        
+    try(run_good_doc_datatype_update_test),
     try(run_db_delete_test),
     % ) INSTANCE TERMINUS_QA_TEST
     %
@@ -83,7 +83,7 @@ run_api_tests :-
     try(run_woql_test),
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
-    try(run_woql_csv_test), 
+    try(run_woql_csv_test),
     try(run_dashboard),
     * try(run_db_metadata_test).
 
@@ -98,7 +98,7 @@ auth(Auth) :-
 run_connect_test :-
     config:server(Server),
     auth(Auth),
-    
+
     Args = ['--user', Auth,'-X','GET', Server],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -108,7 +108,7 @@ run_connect_test :-
 
 run_bad_auth_test :-
     config:server(Server),
-    
+
     Args = ['--user', ':flute','-X','GET', Server],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -129,7 +129,7 @@ run_db_create_test :-
 
     atomic_list_concat([DB_URI,'/document'], Document),
     atomic_list_concat([DB_URI,'/schema'], Schema),
-    
+
     Doc = _{'@context': _{
                             rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                             terminus:"http://terminusdb.com/schema/terminus#"
@@ -146,8 +146,8 @@ run_db_create_test :-
 
     with_output_to(
         string(Payload),
-        json_write_dict(current_output, Doc, [])        
-    ), 
+        json_write_dict(current_output, Doc, [])
+    ),
 
     atomic_list_concat([Server,'/terminus_qa_test'], URI),
     Args = ['--user',Auth,'-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
@@ -163,7 +163,7 @@ run_schema_update_test :-
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus.owl.ttl'], TTL_File),
-    
+
     atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
     read_file_to_string(TTL_File, String, []),
@@ -174,7 +174,7 @@ run_schema_update_test :-
 
     with_output_to(
         string(Payload),
-        json_write_dict(current_output, Doc, [])        
+        json_write_dict(current_output, Doc, [])
     ),
 
 
@@ -184,14 +184,14 @@ run_schema_update_test :-
     nl,json_write_dict(current_output,Term,[]),
 
     Term = _{'terminus:status' : "terminus:success"}.
-    
+
 run_schema_get_test :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
     www_form_encode(Schema,S),
     atomic_list_concat([Server,'/terminus_qa_test/schema?terminus%3Aencoding=terminus%3Aturtle&terminus&3Aturtle&terminus&3Aschema=',S],URI),
-    
+
     Args = ['--user',Auth,URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -237,7 +237,7 @@ test_update_document(Doc) :-
 
     format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
     format(string(Scm_Base), "~s~s", [Server,"/terminus_qa_test/schema#"]),
-    
+
     Doc = _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc: Doc_Base,
@@ -260,7 +260,7 @@ run_doc_update_test :-
     config:server(Server),
     auth(Auth),
 
-    test_update_document(Doc), 
+    test_update_document(Doc),
 
     with_output_to(
         string(Payload),
@@ -269,12 +269,12 @@ run_doc_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth, '-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     _{'terminus:status' : "terminus:success"} :< Term.
 
 run_doc_update_get_test :-
@@ -282,12 +282,12 @@ run_doc_update_get_test :-
     auth(Auth),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     test_update_document(Doc),
 
     % original document simulates
@@ -300,7 +300,7 @@ run_doc_update_get_test :-
 
 test_update_update_document(Doc) :-
     config:server(Server),
-    
+
     format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
     format(string(Scm_Base), "~s~s", [Server,"/terminus_qa_test/schema#"]),
 
@@ -330,7 +330,7 @@ run_doc_update_update_test :-
     auth(Auth),
 
     test_update_update_document(Doc),
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, _{'@type':"terminus:APIUpdate",
@@ -338,12 +338,12 @@ run_doc_update_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-        
+
     Term = _{'terminus:status' : "terminus:success"}.
 
 run_doc_update_update_get_test :-
@@ -353,7 +353,7 @@ run_doc_update_update_get_test :-
     test_update_update_document(Doc),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -377,12 +377,12 @@ run_db_delete_nonexistent_test :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     % This should not be a bare error
     _{'terminus:status':"terminus:failure"} :< Term.
 
 run_doc_delete_test :-
-        
+
     config:server(Server),
     auth(Auth),
 
@@ -390,11 +390,11 @@ run_doc_delete_test :-
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
 
     Args = ['--user', Auth,'-X','DELETE',URI],
-    
+
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     _{'terminus:status' : "terminus:success"} :< Term.
 
 run_doc_get_missing_test :-
@@ -403,7 +403,7 @@ run_doc_get_missing_test :-
     auth(Auth),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-    
+
     Args = ['--user',Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -423,14 +423,14 @@ run_woql_test :-
     atomic_list_concat([Server,'/terminus/'], Terminus),
     atomic_list_concat([Server,'/'], S),
 
-    Query = 
+    Query =
     _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : Terminus,
                      s : S},
       from: ["s:terminus",
              _{select: [
-                   "v:Class", "v:Label", "v:Comment", "v:Abstract", 
+                   "v:Class", "v:Label", "v:Comment", "v:Abstract",
                    _{and: [
                          _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
@@ -443,7 +443,7 @@ run_woql_test :-
               }
             ]
      },
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, Query, [])
@@ -451,12 +451,12 @@ run_woql_test :-
 
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     (   _{'bindings' : L} :< Term
     ->  length(L, N),
         N >= 8
@@ -465,16 +465,16 @@ run_woql_test :-
 run_woql_empty_error_test :-
     config:server(Server),
     auth(Auth),
-    
+
     atomic_list_concat([Server,'/terminus/woql'], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     _{'terminus:status':"terminus:failure"} :< Term.
-    
+
 run_woql_syntax_error_test :-
     config:server(Server),
     auth(Auth),
@@ -483,7 +483,7 @@ run_woql_syntax_error_test :-
     atomic_list_concat([Server,'/terminus/'], Terminus),
     atomic_list_concat([Server,'/'], S),
 
-    Query = 
+    Query =
     _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : Terminus,
@@ -491,7 +491,7 @@ run_woql_syntax_error_test :-
                      s : S},
       from: ["s:terminus",
              _{select: [
-                   "v:Class", "v:Label", "v:Comment", "v:Abstract", 
+                   "v:Class", "v:Label", "v:Comment", "v:Abstract",
                    _{fand: [
                          _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
@@ -504,7 +504,7 @@ run_woql_syntax_error_test :-
               }
             ]
      },
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, Query, [])
@@ -512,12 +512,12 @@ run_woql_syntax_error_test :-
 
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     _{'@type':"vio:WOQLSyntaxError"} :< Term.
 
 % Requires terminus_qa_test!
@@ -546,7 +546,7 @@ run_woql_update_test :-
                  'rdfs:comment':_{'@language':"en", '@value':"A WOQL updated superuser"},
                  'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
                 },
-    Query = 
+    Query =
     _{'@context' : _{scm : Scm_Base,
                      doc : Doc_Base,
                      db : QA,
@@ -558,7 +558,7 @@ run_woql_update_test :-
                               ]}
                      ]}
             ]},
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, Query, [])
@@ -566,12 +566,12 @@ run_woql_update_test :-
 
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    
+
     _{'bindings' : [ _{} ]} :< Term.
 
 % Requires terminus_qa_test!
@@ -583,7 +583,7 @@ run_woql_verify_update_test :-
     atomic_list_concat([Server,'/terminus_qa_test/'], QA),
     atomic_list_concat([Server,'/'], S),
 
-    Query = 
+    Query =
     _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : QA,
@@ -591,7 +591,7 @@ run_woql_verify_update_test :-
       from: ["s:terminus_qa_test",
              _{triple: [ "doc:admin", "rdfs:comment", "v:comment"]}
             ]},
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, Query, [])
@@ -599,7 +599,7 @@ run_woql_verify_update_test :-
 
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus_qa_test/woql?terminus%3Aquery=',Encoded], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -621,7 +621,7 @@ run_woql_csv_test :-
     atomic_list_concat([Server,'/terminus/'], Terminus),
     atomic_list_concat([Server,'/'], S),
     atomic_list_concat([Path,'/test/0CE.csv'],CSV),
-    Query = 
+    Query =
     _{'@context' : _{scm : Schema,
                      doc : Document,
                      db : Terminus,
@@ -632,7 +632,7 @@ run_woql_csv_test :-
                          _{file : [CSV]}
                        ]}
               ]},
-    
+
     with_output_to(
         string(Payload),
         json_write(current_output, Query, [])
@@ -640,7 +640,7 @@ run_woql_csv_test :-
 
     www_form_encode(Payload,Encoded),
     atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
-        
+
     Args = ['--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -654,13 +654,13 @@ run_woql_csv_test :-
           _{
               'http://terminusdb.com/woql/variable/Polity_Name':"ItRomPr",
               'http://terminusdb.com/woql/variable/Polygon':1
-          }]} :< Term. 
+          }]} :< Term.
 
 /****************************************************************
  * Instance Checking Tests
  ***************************************************************/
 
-/* 
+/*
  * To run this we need to create a 'terminus_qa_test' database first...
  */
 run_bad_comment_update_test :-
@@ -700,13 +700,13 @@ run_bad_comment_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-        
+
     _{'terminus:status':"terminus:failure",
       'terminus:witnesses': _W} :< Term.
 
@@ -748,19 +748,19 @@ run_bad_property_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
-    curl_json(Args,Term),    
+    curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-        
+
     _{'terminus:status':"terminus:failure",
       'terminus:witnesses': _W} :< Term.
 
-/************************************* 
+/*************************************
  * Datatypes schema instance checking.
- * 
+ *
  * Need to load a fresh database for this with run_db_create_test/0
  * followed by run_db_delete_test/0
  */
@@ -770,7 +770,7 @@ run_schema_datatypes_update_test :-
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/datatypes.owl.ttl'], TTL_File),
-    
+
     atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
     read_file_to_string(TTL_File, String, []),
@@ -781,7 +781,7 @@ run_schema_datatypes_update_test :-
 
     with_output_to(
         string(Payload),
-        json_write_dict(current_output, Doc, [])        
+        json_write_dict(current_output, Doc, [])
     ),
 
 
@@ -798,7 +798,7 @@ run_bad_doc_datatype_update_test :-
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
-    
+
     Doc = _{'@type':"terminus:APIUpdate",
             'terminus:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
@@ -871,13 +871,13 @@ run_bad_doc_datatype_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-        
+
     _{'terminus:status':"terminus:failure",
       'terminus:witnesses': W} :< Term,
 
@@ -889,7 +889,7 @@ run_good_doc_datatype_update_test :-
 
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
-    
+
     Doc = _{'@type':"terminus:APIUpdate",
             'terminus:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
@@ -962,15 +962,15 @@ run_good_doc_datatype_update_test :-
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
-        
+
     Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
 
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-        
+
     _{'terminus:status':"terminus:success"} :< Term.
-    % need to check witnesses but we throw an error at insert leaving only witness! 
+    % need to check witnesses but we throw an error at insert leaving only witness!
 
 run_dashboard :-
     config:server(Server),
@@ -983,7 +983,7 @@ run_db_metadata_test :-
     auth(Auth),
 
     atomic_list_concat([Server,'/terminus/metadata'], URI),
-        
+
     Args = ['--user', Auth,'-X','GET','-H','Content-Type: application/json', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
