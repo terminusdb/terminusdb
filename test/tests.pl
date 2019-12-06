@@ -3,7 +3,7 @@
           ]).
 
 /** <module> Run all tests
- * 
+ *
  * This file contains the testing regime
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
@@ -27,7 +27,7 @@
 
 :- use_module(test(api_test)).
 :- use_module(test(jsonld_test)).
-                  
+
 run_tests :-
     run_api_tests,
     run_jsonld_tests.

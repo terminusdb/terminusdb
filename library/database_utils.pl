@@ -98,7 +98,7 @@ post_create_db(DB_URI) :-
              post_database: _Post_DB},
          witnesses(Witnesses)],
         forall(member(Schema,Schemata),
-               create_schema(DB_URI,Schema,Update_DB)),
+               database_utils:create_schema(DB_URI,Schema,Update_DB)),
         % always an ok update...
         true
     ),

@@ -632,7 +632,8 @@ try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
 
     (   object_instance_graph(Doc_ID, Database, Document_Graph)
     ->  true
-    ;   default_instance_graph(Database, Document_Graph)
+    ;   terminus_database(Terminus_DB),
+        default_instance_graph(Terminus_DB, Database, Document_Graph)
     ),
 
     (   document_transaction(Database, Transaction_DB, Document_Graph,
