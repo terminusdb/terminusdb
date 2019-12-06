@@ -175,5 +175,5 @@ main(Args) :-
     (   check_valid_dir(Path)
     ->  true
     ;   format("Not a valid DB directory!~n"),
-        halt).
-    %process_db_dir(Path).
+        halt),
+    process_db_dir(Path).
