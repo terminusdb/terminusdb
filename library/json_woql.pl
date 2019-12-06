@@ -224,13 +224,13 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  WOQL = '^^'(V,T)
-    ;   _{'@value' : V, '@lang' : L } :< JSON
+    ;   _{'@value' : V, '@language' : L } :< JSON
     ->  WOQL = '@'(V,L)
     ;   _{'http://terminusdb.com/woql#value' : V, '@type' : T } :< JSON
     ->  json_to_woql_ast(V,VE),
         atom_string(TE,T),
         WOQL = '^^'(VE,TE)
-    ;   _{'http://terminusdb.com/woql#value' : V, '@lang' : L } :< JSON
+    ;   _{'http://terminusdb.com/woql#value' : V, '@language' : L } :< JSON
     ->  json_to_woql_ast(V,VE),
         atom_string(LE,L),
         WOQL = '@'(VE,LE)
