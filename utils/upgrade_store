@@ -113,7 +113,7 @@ process_graph_from_turtle(GraphName, TTL) :-
     ->  open_write(Graph, Builder)
     ;   open_write(Store, Builder)),
     file_base_name(TTL, TTLBaseName),
-    (  re_match("pos", TTLBaseName)
+    (  re_match("pos|ckp", TTLBaseName)
     -> add_graph_from_turtle(TTL, Builder)
     ;  remove_graph_from_turtle(TTL, Builder)),
     nb_commit(Builder,Layer),
@@ -122,7 +122,7 @@ process_graph_from_turtle(GraphName, TTL) :-
 
 process_layer(GraphName, LayerDir) :-
     format("Processing layer: ~s~n~n", [LayerDir]),
-    format(string(PosNegWildcard), "~s/*-{neg,pos}*.ttl", [LayerDir]),
+    format(string(PosNegWildcard), "~s/*-{neg,pos,ckp}*.ttl", [LayerDir]),
     expand_file_name(PosNegWildcard, PosNegs),
     map_list_to_pairs(number_from_ttl_file, PosNegs, Pairs),
     sort(Pairs, SortedPairs),
