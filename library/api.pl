@@ -122,8 +122,8 @@ http:location(root, '/', []).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(1,?).
-cors_catch(M:Goal,Request) :-
-    catch(call(M:Goal, Request),
+cors_catch(Goal,Request) :-
+    catch(call(Goal, Request),
           E,
           (   cors_enable,
               http_log_stream(Log),
@@ -207,13 +207,12 @@ verify_access(Auth, DB, Action, Scope) :-
                                               'terminus:message' : M,
                                               'terminus:object' : 'verify_access'})))).
 
-connection_authorised_user(Request, User) :-
+connection_authorised_user(Request, User, SURI, DB) :-
     fetch_authorization_data(Request, KS),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-
     (   key_user(KS, DB, User_ID)
-    ->  (   get_user(User_ID, User)
+    ->  (   authenticate(Request, DB, Auth),
+            verify_access(Auth,DB,terminus/get_document,SURI),
+            get_user(User_ID, User)
         ->  true
         ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                   'terminus:message' : 'Bad user object',
@@ -227,7 +226,7 @@ connection_authorised_user(Request, User) :-
 /*
  * reply_with_witnesses(+Resource_URI,+Witnesses) is det.
  *
- *
+
  */
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
@@ -255,10 +254,10 @@ connect_handler(options,_Request) :-
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    connection_authorised_user(Request,User),
+    config:server(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
-    config:server(SURI),
+    connection_authorised_user(Request,User, SURI, DB),
     write_cors_headers(SURI, DB),
     reply_json(User).
 
