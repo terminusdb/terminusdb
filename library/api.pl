@@ -79,6 +79,9 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
+:- use_module(prefixes).
+:- use_module(sdk).
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
