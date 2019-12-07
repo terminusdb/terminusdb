@@ -5,7 +5,8 @@
               run_query/3,
               is_new/2,
               empty_ctx/1,
-              empty_ctx/2
+              empty_ctx/2,
+              active_graphs/2
           ]).
 
 /** <module> WOQL Compile
@@ -1014,23 +1015,50 @@ compile_wf((A => B),Goal) -->
     view(write_graph=[WG]),
     {
         http_log_stream(Log),
-        * format(Log,'~nWrite Graph: ~q~n',[WG]),
-        Goal = (
-            validate:document_transaction(
-                         Database,
-                         UpdateDB,
-                         WG,
-                         woql_compile:(
-                             forall(ProgA,
-                                    ProgB)
-                         ),
-                         Witnesses),
-            (   Witnesses = []
-            ->  true
-            ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                      'terminus:witnesses' : Witnesses})))
+        * format(Log, '~n~nDatabase: ~q~n', [Database]),
+        active_graphs(B,Active_Graphs),
+        get_dict(schema,Database,Schemata),
+        get_dict(write,Active_Graphs,AWGs),
+        append([WG],AWGs,WGs),
+        * format(Log, '~n~nWrite Graphs: ~q~n', [WGs]),
+        intersection(WGs,Schemata,Changed_Schemata),
+        * format(Log, '~n~nWrite Schemata: ~q~n', [Changed_Schemata]),
+        % We want to choose schema free transactions whenever possible.
+        (   Changed_Schemata = []
+        ->  Goal = (
+                validate:instance_transaction(
+                             Database,
+                             UpdateDB,
+                             WGs,
+                             woql_compile:(
+                                 forall(ProgA,
+                                        ProgB)
+                             ),
+                             Witnesses),
+                (   Witnesses = []
+                ->  true
+                ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                          'terminus:witnesses' : Witnesses})))
+                )
             )
-        )
+        ;   Goal = (
+                validate:instance_schema_transaction(
+                             Database,
+                             UpdateDB,
+                             WGs,
+                             woql_compile:(
+                                 forall(ProgA,
+                                        ProgB)
+                             ),
+                             Witnesses),
+                (   Witnesses = []
+                ->  true
+                ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                          'terminus:witnesses' : Witnesses})))
+                )
+            )
+        ),
+        format(Log, '~n~nGoal: ~q~n', [Goal])
     },
     update(database=_,
            database=Database).
@@ -1334,27 +1362,35 @@ active_graphs(Term, Dict) :-
     Term =.. [Functor|Args],
     (   Functor = insert,
         Args = [G,_,_,_]
-    ->  Dict = {write:[G]}
+    ->  Dict = _{read:[],write:[G]}
     ;   Functor = delete,
         Args = [G,_,_,_]
-    ->  Dict = {write:[G]}
+    ->  Dict = _{read:[],write:[G]}
+    ;   Functor = update_object,
+        Args = [_,_]
+    ->  Dict = _{read:[],write:[]}
+    ;   Functor = update_object,
+        Args = [_]
+    ->  Dict = _{read:[],write:[]}
     ;   Functor = t,
         Args = [_,_,_,G]
-    ->  Dict = {read:[G]}
+    ->  Dict = _{read:[G],write:[]}
     ;   Functor = r,
         Args = [_,_,_,G]
-    ->  Dict = {read:[G]}
+    ->  Dict = _{read:[G],write:[]}
     ;   Functor = from,
         Args = [G,P]
     ->  active_graphs(P,G_Sub),
-        Dict = {read : [G|G_Sub.get(read) ],
-                write : G_Sub.get(write)}
+        Dict = _{read : [G|G_Sub.get(read) ],
+                 write : G_Sub.get(write)}
     ;   Functor = into,
         Args = [G,P]
     ->  active_graphs(P,G_Sub),
-        Dict = {read : G_Sub.get(read),
-                write : [G|G_Sub.get(write)]}
-    ;   map(active_graphs,Args,Results),
+        Dict = _{read : G_Sub.get(read),
+                 write : [G|G_Sub.get(write)]}
+    ;   Functor = '/'
+    ->  Dict = _{read:[],write:[]}
+    ;   maplist(active_graphs,Args,Results),
         merge_active_graphs(Results,Dict)
     ).
 
@@ -1370,4 +1406,4 @@ merge_active_graphs_aux([D1|Rest],D2,D) :-
     merge_active_graphs_aux(Rest,D3,D).
 
 merge_active_graphs(Results,Dictionary) :-
-    merge_active_graphs_aux(Results,_{},Dictionary).
+    merge_active_graphs_aux(Results,_{read:[],write:[]},Dictionary).

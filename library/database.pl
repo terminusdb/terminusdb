@@ -13,6 +13,9 @@
               make_database_from_database_name/2,
               database_name_list/1,
               database_record_list/1,
+              database_record_instance_list/2,
+              database_record_schema_list/2,
+              database_record_inference_list/2,
               database_record_instance_list/3,
               database_record_schema_list/3,
               database_record_inference_list/3,
@@ -186,6 +189,11 @@ database_record_list(Databases) :-
                ),
             Databases).
 
+database_record_schema_list(Database_Name, Schemas) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name, Terminus_DB),
+    database_record_schema_list(Terminus_DB, Database_Name, Schemas).
+
 database_record_schema_list(Terminus_DB, Database_Name, Schemas) :-
     findall(Schema,
             ask(Terminus_DB,
@@ -200,6 +208,10 @@ database_record_schema_list(Terminus_DB, Database_Name, Schemas) :-
 
     maplist(atom_string, Schemas, Schema_Strings).
 
+database_record_instance_list(Database_Name, Schemas) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name, Terminus_DB),
+    database_record_instance_list(Terminus_DB, Database_Name, Schemas).
 
 database_record_instance_list(Terminus_DB, Database_Name,Instances) :-
     findall(Instance,
@@ -216,11 +228,12 @@ database_record_instance_list(Terminus_DB, Database_Name,Instances) :-
 
     maplist(atom_string, Instances, Instance_Strings).
 
-%database_record_inference_list(Database_Name,[inference]) :-
-%    terminus_database_name(Database_Name),
-%    !.
-database_record_inference_list(Terminus_DB,Database_Name,Inferences) :-
+database_record_inference_list(Database_Name, Schemas) :-
+    terminus_database_name(Terminus_Name),
+    connect(Terminus_Name, Terminus_DB),
+    database_record_inference_list(Terminus_DB, Database_Name, Schemas).
 
+database_record_inference_list(Terminus_DB,Database_Name,Inferences) :-
     findall(Inference,
             ask(Terminus_DB,
                 where(
