@@ -11,7 +11,6 @@
               storage/1
           ]).
 
-:- use_module(library(terminus_store)).
 :- reexport(library(terminus_store),
             except([create_named_graph/3,
                     open_named_graph/3])).
@@ -117,7 +116,7 @@ sync_backing_store :-
  */
 safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
-    create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+    terminus_store:create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
  * safe_open_named_graph(+Store,+Graph_ID,-Graph_Obj) is det.
@@ -126,7 +125,7 @@ safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
  */
 safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
-    open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+    terminus_store:open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 
 /**
