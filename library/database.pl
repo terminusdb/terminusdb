@@ -67,6 +67,8 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 
+:- op(2, xfx, ^^).
+
 /*
  * Database term accessors.
  *

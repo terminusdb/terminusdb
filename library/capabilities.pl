@@ -46,6 +46,8 @@
 :- use_module(database).
 :- use_module(database_utils).
 :- use_module(sdk).
+
+:- op(2, xfx, ^^).
 :- op(1050, xfx, =>).
 
 /**
