@@ -41,6 +41,7 @@
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
 :- use_module(database).
+:- use_module(prefixes).
 
 % efficiency
 :- use_module(library(apply)).
