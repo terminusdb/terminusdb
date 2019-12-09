@@ -171,6 +171,16 @@ customise_error(http_reply(authorize(JSON))) :-
     reply_json(JSON,[status(401)]).
 customise_error(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
+customise_error(error(E)) :-
+    format(atom(EM),'Error: ~q', [E]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : EM},
+               [status(500)]).
+customise_error(error(E, CTX)) :-
+    format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : EM},
+               [status(500)]).
 customise_error(E) :-
     throw(E).
 
