@@ -32,6 +32,8 @@
               with_transaction/3
           ]).
 
+:- meta_predicate(with_transaction(+, 0, 0)).
+
 /** <module> Implementation of database graph management
  *
  * This module helps other modules with the representation of databases and
@@ -66,6 +68,8 @@
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+
+:- op(2, xfx, ^^).
 
 /*
  * Database term accessors.
