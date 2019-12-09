@@ -1018,8 +1018,10 @@ compile_wf((A => B),Goal) -->
         * format(Log, '~n~nDatabase: ~q~n', [Database]),
         active_graphs(B,Active_Graphs),
         get_dict(schema,Database,Schemata),
+        * format(Log, '~n~nSchemata: ~q~n', [Schemata]),
         get_dict(write,Active_Graphs,AWGs),
-        append([WG],AWGs,WGs),
+        * format(Log, '~n~nAWGs: ~q~n', [AWGs]),
+        union([WG],AWGs,WGs),
         * format(Log, '~n~nWrite Graphs: ~q~n', [WGs]),
         intersection(WGs,Schemata,Changed_Schemata),
         * format(Log, '~n~nWrite Schemata: ~q~n', [Changed_Schemata]),
@@ -1058,7 +1060,7 @@ compile_wf((A => B),Goal) -->
                 )
             )
         ),
-        format(Log, '~n~nGoal: ~q~n', [Goal])
+        * format(Log, '~n~nGoal: ~q~n', [Goal])
     },
     update(database=_,
            database=Database).
@@ -1400,8 +1402,10 @@ merge_active_graphs_aux([D1|Rest],D2,D) :-
     W1 = D1.get(write),
     R2 = D2.get(read),
     W2 = D2.get(write),
-    append(R1,R2,R3),
-    append(W1,W2,W3),
+    append(R1,R2,RI),
+    sort(RI,R3),
+    append(W1,W2,WI),
+    sort(WI,W3),
     D3 = _{read:R3,write:W3},
     merge_active_graphs_aux(Rest,D3,D).
 
