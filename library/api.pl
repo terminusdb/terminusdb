@@ -169,6 +169,8 @@ customise_error(http_reply(not_found(JSON))) :-
     reply_json(JSON,[status(404)]).
 customise_error(http_reply(authorize(JSON))) :-
     reply_json(JSON,[status(401)]).
+customise_error(http_reply(not_acceptable(JSON))) :-
+    reply_json(JSON,[status(406)]).
 customise_error(E) :-
     throw(E).
 
