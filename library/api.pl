@@ -302,7 +302,9 @@ dashboard_handler(get,_Request) :-
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
     config:server(SURI),
-    write_cors_headers(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI,DB),
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
