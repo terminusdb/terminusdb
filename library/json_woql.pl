@@ -168,13 +168,13 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Val,WVal),
         WOQL = idgen(WBase,WQ,WVal)
     ;   _{'http://terminusdb.com/woql#idgen' : [ Base, Q, Code, Val] } :< JSON,
-        Code = 'http://terminusdb.com/woql#concat'
+        _{'@id' : 'http://terminusdb.com/woql#concat'} :< Code
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Val,WVal),
         WOQL = idgen(WBase,WQ,WVal)
     ;   _{'http://terminusdb.com/woql#idgen' : [ Base, Q, Code, Val] } :< JSON,
-        Code = 'http://terminusdb.com/woql#hash'
+        _{'@id' : 'http://terminusdb.com/woql#hash'} :< Code
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Val,WVal),
