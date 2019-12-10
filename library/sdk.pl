@@ -30,6 +30,7 @@
 :- use_module(utils).
 :- use_module(database).
 :- use_module(woql_compile).
+:- use_module(prefixes).
 
 :- reexport(woql_term).
 
