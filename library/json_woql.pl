@@ -49,7 +49,7 @@ json_woql(JSON,Ctx,WOQL) :-
 json_to_woql_ast(JSON,WOQL) :-
     is_dict(JSON),
     !,
-    (   _{'http://terminusdb.com/woql#comment' : Clauses } :< JSON
+    (   _{'http://terminusdb.com/woql#comment' : _} :< JSON
     ->  WOQL = true
     ;   _{'http://terminusdb.com/woql#select' : Clauses } :< JSON
     ->  snoc(Vargs,Sub_Query,Clauses),

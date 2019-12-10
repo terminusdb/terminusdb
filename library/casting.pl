@@ -89,4 +89,4 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
         throw(map_error([type=cast_error,message=M]))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _, Cast) :-
-    format(string(Cast), '~w', Val).
+    format(string(Cast), '~w', [Val]).
