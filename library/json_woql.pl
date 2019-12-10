@@ -205,6 +205,11 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Query,WQuery),
         json_to_woql_ast(Collector,WCollector),
         WOQL = group_by(WSpec,WObj,WQuery,WCollector)
+    ;   _{'http://terminusdb.com/woql#typecast' : [Val,Type,Var]} :< JSON
+    ->  json_to_woql_ast(Val,WVal),
+        json_to_woql_ast(Type,WType),
+        json_to_woql_ast(Var,WVar),
+        WOQL = typecast(WVal,WType,[],WVar)
     ;   _{'http://terminusdb.com/woql#list' : Elements } :< JSON
     ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)), Elements, WOQL)
     ;   _{'http://terminusdb.com/woql#not' : [ Q ] } :< JSON
