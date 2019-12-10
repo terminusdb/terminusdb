@@ -1321,7 +1321,7 @@ compile_arith(Exp,ExpE) -->
         Exp =.. [Functor|Args],
         % lazily snarf everything named...
         % probably need to add stuff here.
-        member(Functor, ['*','-','div','/'])
+        member(Functor, ['*','-','+','div','/'])
     },
     !,
     mapm(compile_arith,Args,ArgsE),

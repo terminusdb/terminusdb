@@ -49,7 +49,9 @@ json_woql(JSON,Ctx,WOQL) :-
 json_to_woql_ast(JSON,WOQL) :-
     is_dict(JSON),
     !,
-    (   _{'http://terminusdb.com/woql#select' : Clauses } :< JSON
+    (   _{'http://terminusdb.com/woql#comment' : Clauses } :< JSON
+    ->  WOQL = true
+    ;   _{'http://terminusdb.com/woql#select' : Clauses } :< JSON
     ->  snoc(Vargs,Sub_Query,Clauses),
         maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
@@ -305,6 +307,9 @@ json_to_woql_arith(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#divide' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
         xfy_list('/', WOQL, WOQL_Args)
+    ;   _{'http://terminusdb.com/woql#div' : Args } :< JSON
+    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
+        xfy_list('div', WOQL, WOQL_Args)
     ;   is_json_var(JSON),
         WOQL = v(JSON)
     ;   throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
