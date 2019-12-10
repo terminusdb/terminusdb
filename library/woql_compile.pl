@@ -641,7 +641,7 @@ indexing_as_list([N as v(V)|Rest],Header,Values,Bindings,[Term|Result]) :-
                nth1(Idx,Values,Xe)
            ->  true
            ;   format(atom(Msg),'No such indexed name in get: "~q" with header: "~q" and values: "~q"',[N,Header,Values]),
-               throw(http_error(syntax_error(Msg)))
+               throw(error(syntax_error(Msg)))
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
 
@@ -651,7 +651,7 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     Term = (   nth0(N,Values,Xe)
            ->  true
            ;   format(atom(Msg),'No such index in get: "~q" for values: "~q"',[N,Values]),
-               throw(http_error(syntax_error(Msg)))
+               throw(error(syntax_error(Msg)))
            ),
     M is N+1,
     indexing_position_list(Rest,M,Values,Bindings,Result).
