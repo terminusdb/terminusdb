@@ -117,6 +117,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(Q,WQ),
         json_to_woql_ast(U,WU),
         WOQL = '=>'(WQ,WU)
+    ;   _{'http://terminusdb.com/woql#trim' : [ A, T ] } :< JSON
+    ->  json_to_woql_ast(A,WA),
+        json_to_woql_ast(T,WT),
+        WOQL = trim(WA,WT)
     ;   _{'http://terminusdb.com/woql#eval' : [ A, X ] } :< JSON
     ->  is_json_var(X),
         json_to_woql_arith(A, Arith),
@@ -153,11 +157,28 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = file(File)
     ;   _{'http://terminusdb.com/woql#file' : [ File, Dict] } :< JSON
     ->  WOQL = file(File,Dict)
-    ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash ] } :< JSON
+    ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
         json_to_woql_ast(Hash,WHash),
         WOQL = hash(WBase,WQ,WHash)
+    ;   _{'http://terminusdb.com/woql#idgen' : [ Base, Q, Val ] } :< JSON
+    ->  json_to_woql_ast(Base,WBase),
+        json_to_woql_ast(Q,WQ),
+        json_to_woql_ast(Val,WVal),
+        WOQL = idgen(WBase,WQ,WVal)
+    ;   _{'http://terminusdb.com/woql#idgen' : [ Base, Q, Code, Val] } :< JSON,
+        Code = 'http://terminusdb.com/woql#concat'
+    ->  json_to_woql_ast(Base,WBase),
+        json_to_woql_ast(Q,WQ),
+        json_to_woql_ast(Val,WVal),
+        WOQL = idgen(WBase,WQ,WVal)
+    ;   _{'http://terminusdb.com/woql#idgen' : [ Base, Q, Code, Val] } :< JSON,
+        Code = 'http://terminusdb.com/woql#hash'
+    ->  json_to_woql_ast(Base,WBase),
+        json_to_woql_ast(Q,WQ),
+        json_to_woql_ast(Val,WVal),
+        WOQL = hash(WBase,WQ,WVal)
     ;   _{'http://terminusdb.com/woql#upper' : [ S, V ] } :< JSON
     ->  json_to_woql_ast(S,WS),
         json_to_woql_ast(V,WV),

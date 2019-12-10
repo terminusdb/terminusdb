@@ -1,6 +1,7 @@
 :- module(casting,[
               typecast/4,
-              hash/3
+              hash/3,
+              idgen/3
           ]).
 
 /** <module> Casting
@@ -33,6 +34,15 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+
+/*
+ * idgen(+Base:uri,++Args:list(any),-Output:uri) is det.
+ *
+ * Create a safe uri starting from @Base using key @Args.
+ */
+idgen(Base,Args,Output) :-
+    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe),
+    interpolate([Base|Safe],Output).
 
 /*
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.

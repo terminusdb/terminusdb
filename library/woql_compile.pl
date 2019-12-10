@@ -62,7 +62,7 @@
 %:- use_module(query, [enrich_graph_fragment/5]).
 
 :- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
-:- use_module(casting, [typecast/4,hash/3]).
+:- use_module(casting, [typecast/4,hash/3,idgen/3]).
 :- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
 
 % This should really not be used... it is too low level - Gavin
@@ -1211,20 +1211,18 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
     }.
 compile_wf(where(P), Prog) -->
     compile_wf(P, Prog).
-compile_wf(typecast(Val,Type,_Hints,Cast), Prog) -->
+compile_wf(typecast(Val,Type,_Hints,Cast),typecast(ValE, TypeE, [], CastE)) -->
     resolve(Val,ValE),
     resolve(Type,TypeE),
-    resolve(Cast,CastE),
-    {
-        Prog = typecast(ValE, TypeE, [], CastE)
-    }.
-compile_wf(hash(Base,Args,Id), Prog) -->
+    resolve(Cast,CastE).
+compile_wf(hash(Base,Args,Id),hash(BaseE,ArgsE,IdE)) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
-    resolve(Id,IdE),
-    {
-        Prog = hash(BaseE,ArgsE,IdE)
-    }.
+    resolve(Id,IdE).
+compile_wf(idgen(Base,Args,Id),(maplist(literally,ArgsE,ArgsL),idgen(BaseE,ArgsL,IdE))) -->
+    resolve(Base, BaseE),
+    mapm(resolve,Args,ArgsE),
+    resolve(Id,IdE).
 compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
