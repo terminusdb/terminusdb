@@ -1246,7 +1246,10 @@ compile_wf(not(P),not(Q)) -->
 compile_wf(concat(L,A),(maplist(literally,LE,LL),utils:interpolate_string(LL,AE))) -->
     resolve(L,LE),
     resolve(A,AE).
-compile_wf(trim(S,A),(trim(SE,X),atom_string(AE,X))) -->
+compile_wf(trim(S,A),(literally(SE,SL),
+                      format(string(SS),'~w', SL),
+                      trim(SS,X),
+                      atom_string(AE,X))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
