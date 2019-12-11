@@ -30,6 +30,7 @@
 :- use_module(utils).
 :- use_module(prefixes).
 :- use_module(speculative_parse).
+:- use_module(jsonld).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -74,21 +75,30 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:dateTime): ~q~n',
                [Val]),
-        throw(map_error([type=cast_error,message=M]))
+        term_jsonld(Val,JVal),
+        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                      'vio:literal' : JVal,
+                      'vio:message' : M}))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:integer): ~q~n',
                [Val]),
-        throw(map_error([type=cast_error,message=M]))
+        term_jsonld(Val,JVal),
+        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                      'vio:literal' : JVal,
+                      'vio:message' : M}))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
     (   guess_number(Val,Cast)
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:decimal): ~q~n',
                [Val]),
-        throw(map_error([type=cast_error,message=M]))
+        term_jsonld(Val,JVal),
+        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                      'vio:literal' : JVal,
+                      'vio:message' : M}))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _, Cast) :-
     format(string(Cast), '~w', [Val]).
