@@ -67,8 +67,7 @@ typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
     ->  format(atom(M), 'Variable unbound in typcast to ~q', [Type]),
         throw(error(M))
-    ;   global_prefix_expand(Type,Type_URI),
-        typecast_switch(Val,Type_URI,Hint,Cast)).
+    ;   typecast_switch(Val,Type,Hint,Cast)).
 
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
