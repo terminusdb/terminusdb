@@ -26,6 +26,7 @@
               coerce_literal_string/2,
               coerce_atom/2,
               xfy_list/3,
+              yfx_list/3,
               snoc/3,
               join/3,
               op(920,fy, *),
@@ -203,11 +204,12 @@ repeat_term(A,N,[A|Z]) :-
 	repeat_term(A,N2,Z).
 
 /**
- * pad(-A1:atom,C:atom,Length:int,A2:atom) is det.
+ * pad(-A1:term,C:atom,Length:int,A2:atom) is det.
  *
- * Pad the atom A1, with '0' to make it length Length.
+ * Pad the atom A1, with C to make it length Length.
  */
-pad(A,C,L,A2) :-
+pad(T,C,L,A2) :-
+    format(atom(A), '~w', [T]),
     (   interpolate([C],S),
         string_length(S,1)
     ->  true
@@ -216,6 +218,10 @@ pad(A,C,L,A2) :-
 	atom_chars(A,AtomList),
 	length(AtomList, L1),
 	L2 is L - L1,
+    (   L2 < 0
+    ->  format(atom(M), 'Bad pad length ~q for ~q', [L,T]),
+        throw(error(M))
+    ;   true),
 	repeat_term(S,L2,List),
 	append(List,AtomList,TotalList),
 	atom_chars(A2,TotalList).
@@ -460,6 +466,22 @@ xfy_list(Op, Term, [Left|List]) :-
     xfy_list(Op, Right, List),
     !.
 xfy_list(_, Term, [Term]).
+
+
+/*
+ * yfx_list(Op, Term, List) is det.
+ *
+ * Folds a functor over a list.
+ */
+yfx_list(Op, Term, List) :-
+    reverse(List,Rev),
+    yfx_list_aux(Op,Term,Rev).
+
+yfx_list_aux(Op, Term, [Right|List]) :-
+    Term =.. [Op, Left, Right],
+    yfx_list_aux(Op, Left, List),
+    !.
+yfx_list_aux(_, Term, [Term]).
 
 
 /*

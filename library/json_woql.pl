@@ -297,19 +297,19 @@ json_to_woql_arith(JSON,WOQL) :-
     !,
     (   _{'http://terminusdb.com/woql#plus' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('+', WOQL, WOQL_Args)
+        yfx_list('+', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#minus' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('-', WOQL, WOQL_Args)
+        yfx_list('-', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#times' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('*', WOQL, WOQL_Args)
+        yfx_list('*', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#divide' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('/', WOQL, WOQL_Args)
+        yfx_list('/', WOQL, WOQL_Args)
     ;   _{'http://terminusdb.com/woql#div' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        xfy_list('div', WOQL, WOQL_Args)
+        yfx_list('div', WOQL, WOQL_Args)
     ;   _{'@id': Var } :< JSON
     ->  coerce_atom(Var,A),
         is_json_var(A),
