@@ -76,9 +76,9 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     ;   format(atom(M),'Unable to cast as (xsd:dateTime): ~q~n',
                [Val]),
         term_jsonld(Val,JVal),
-        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                      'vio:literal' : JVal,
-                      'vio:message' : M}))
+        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                              'vio:literal' : JVal,
+                                              'vio:message' : M})))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
@@ -86,9 +86,9 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     ;   format(atom(M),'Unable to cast as (xsd:integer): ~q~n',
                [Val]),
         term_jsonld(Val,JVal),
-        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                      'vio:literal' : JVal,
-                      'vio:message' : M}))
+        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                              'vio:literal' : JVal,
+                                              'vio:message' : M})))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
     (   guess_number(Val,Cast)
@@ -96,9 +96,9 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
     ;   format(atom(M),'Unable to cast as (xsd:decimal): ~q~n',
                [Val]),
         term_jsonld(Val,JVal),
-        throw(error(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                      'vio:literal' : JVal,
-                      'vio:message' : M}))
+        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                              'vio:literal' : JVal,
+                                              'vio:message' : M})))
     ).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _, Cast) :-
     format(string(Cast), '~w', [Val]).
