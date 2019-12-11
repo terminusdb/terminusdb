@@ -124,13 +124,13 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(T,WT),
         WOQL = trim(WA,WT)
     ;   _{'http://terminusdb.com/woql#eval' : [ A, X ] } :< JSON
-    ->  is_json_var(X),
+    ->  json_to_woql_arith(X, V),
         json_to_woql_arith(A, Arith),
-        WOQL = 'is'(v(X),Arith)
+        WOQL = 'is'(V,Arith)
     ;   _{'http://terminusdb.com/woql#isa' : [ X, A ] } :< JSON
-    ->  is_json_var(X),
+    ->  json_to_woql_arith(X, V),
         json_to_woql_arith(A, Arith),
-        WOQL = ':'(v(X),Arith)
+        WOQL = ':'(V,Arith)
     ;   _{'http://terminusdb.com/woql#like' : [ A, B, F ] } :< JSON
     ->  json_to_woql_ast(A,WA),
         json_to_woql_ast(B,WB),
@@ -310,8 +310,12 @@ json_to_woql_arith(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#div' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
         xfy_list('div', WOQL, WOQL_Args)
-    ;   is_json_var(JSON),
-        WOQL = v(JSON)
+    ;   _{'@id': Var } :< JSON
+    ->  coerce_atom(Var,A),
+        is_json_var(A),
+        WOQL = v(A)
+    ;   number(JSON)
+    ->  WOQL = JSON
     ;   throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
                                      'vio:query' : JSON,
                                      'terminus:status' : 'terminus:failure'})))
