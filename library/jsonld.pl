@@ -42,6 +42,9 @@
 %:- use_module(library(mavis)).
 :- use_module(database).
 
+% sgml for xsd dates.
+:- use_module(library(sgml), [xsd_time_string/3]).
+
 % efficiency
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -325,6 +328,8 @@ compress_aux(year_month(Y,M),_Ctx_Pairs, Atom) :-
 
 /*
 
+date(2017, 9, 29, 0, 0, 0, 0, 0, 0)
+
 date(Y,M,D)
 xsd:dateTime	date_time(Y,M,D,HH,MM,SS) (2,3)
 xsd:gDay	integer
@@ -346,6 +351,13 @@ compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
  *
  * expand a prolog internal json representation to dicts.
  */
+term_jsonld(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',
+                         date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM))),
+            _{'@type' : 'http://www.w3.org/2001/XMLSchema#dateTime', '@value' : Atom}) :-
+    !,
+    % Really should put the time zone in properly.
+    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
+           [Y,M,D,HH,MM,SS]).
 term_jsonld(literal(type(T,D)),_{'@type' : T, '@value' : D}).
 term_jsonld(literal(lang(L,D)),_{'@language' : L, '@value' : D}).
 term_jsonld(Term,JSON) :-
