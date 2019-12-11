@@ -72,7 +72,13 @@ nonvar_literal(lang(Lang,String), S) :-
 nonvar_literal(type(Type,String), S) :-
     (   nonvar(Type),
         nonvar(String)
-    ->  format(string(S), '~q^^~q', [String,Type])
+    ->  (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
+            String = date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM)
+        ->  format(string(Date),
+                   '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
+                   [Y,M,D,HH,MM,SS]),
+            format(string(S), '~q^^~q', [Date,Type])
+        ;   format(string(S), '~q^^~q', [String,Type]))
     ;   true).
 
 nonvar_storage(literal(L),value(V)) :-
