@@ -90,6 +90,10 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
+typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_), 'http://www.w3.org/2001/XMLSchema#decimal', _,
+                literal(type('http://www.w3.org/2001/XMLSchema#decimal',Num))) :-
+    !,
+    date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
     (   guess_number(Val,Cast)
     ->  true
