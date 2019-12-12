@@ -100,5 +100,6 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _, Cast) :-
-    format(string(Cast), '~w', [Val]).
+typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _,
+                literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
+    format(string(String), '~w', [Val]).
