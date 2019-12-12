@@ -294,7 +294,11 @@ empty_ctx(Prefixes,S0,S6) :-
     select(write_graph=_,S5,
            write_graph=Write_Graph,S6).
 
-
+/*
+ * compile_representation(S,T,V) is det.
+ *
+ * Gives the internal representation of some type T from some string S.
+ */
 compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
     !,
     guess_date(String,Date).
