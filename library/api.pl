@@ -154,11 +154,13 @@ customise_error(error(syntax_error(M),_)) :-
                [status(400)]).
 customise_error(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
+    format(atom(OA), '~q', [O]),
+    format(atom(TA), '~q', [T]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:message' : M,
-                                           'vio:type' : T,
-                                           'vio:literal' : O}]},
+                                           'vio:type' : TA,
+                                           'vio:literal' : OA}]},
                [status(400)]).
 customise_error(graph_sync_error(JSON)) :-
     reply_json(JSON,[status(500)]).

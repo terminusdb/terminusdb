@@ -1211,7 +1211,9 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
     }.
 compile_wf(where(P), Prog) -->
     compile_wf(P, Prog).
-compile_wf(typecast(Val,Type,_Hints,Cast),typecast(ValE, TypeE, [], CastE)) -->
+compile_wf(typecast(Val,Type,_Hints,Cast),
+           (literally(ValE,ValL),
+            typecast(ValL, TypeE, [], CastE))) -->
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
