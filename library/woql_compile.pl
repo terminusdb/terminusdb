@@ -61,9 +61,13 @@
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
-:- use_module(validate_schema, [datatypeProperty/2, objectProperty/2]).
+:- use_module(validate_schema, [datatypeProperty/2,
+                                objectProperty/2,
+                                basetypeSubsumptionOf/2]).
 :- use_module(casting, [typecast/4,hash/3,idgen/3]).
 :- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
+
+:- use_module(speculative_parse, [guess_date/2]).
 
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
@@ -294,7 +298,7 @@ empty_ctx(Prefixes,S0,S6) :-
 compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
     !,
     guess_date(String,Date).
-compile_representation(String,Type,String).
+compile_representation(String,_Type,String).
 
 resolve(ignore,_Something) -->
     !,
@@ -339,17 +343,17 @@ resolve(X@L,literal(lang(LE,XS))) -->
         ;   XE = XS)
     },
     resolve(L,LE).
-resolve(X^^T,literal(type(TE,XS))) -->
+resolve(X^^T,literal(type(TE,XF))) -->
     resolve(X,XE),
+    resolve(T,TE),
     {
         (   ground(XE)
         ->  (   atom(XE)
             ->  atom_string(XE,XS)
             ;   XE=XS),
             compile_representation(XS,TE,XF)
-        ;   XE = XF),
-    },
-    resolve(T,TE).
+        ;   XE = XF)
+    }.
 resolve(L,Le) -->
     {
         is_list(L)
@@ -679,8 +683,18 @@ woql_equal(AE,BE) :-
 /*
  * woql_less(AE,BE) is det.
  *
- * Quick hack works (kinda) but fails on tower of numbers subsumption.
+ * TODO: May need other cases.
  */
+woql_less(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
+          literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Y))) :-
+    !,
+    X @< Y.
+woql_less(literal(type(T1,X)),
+          literal(type(T2,Y))) :-
+    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    !,
+    X < Y.
 woql_less(AE,BE) :-
     % dodgy - should switch on type
     compare((<),AE,BE).
@@ -688,8 +702,18 @@ woql_less(AE,BE) :-
 /*
  * woql_greater(AE,BE) is det.
  *
- * Quick hack works (kinda) but fails on tower of numbers subsumption.
+ * TODO: May need other cases.
  */
+woql_greater(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
+             literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Y))) :-
+    !,
+    X @> Y.
+woql_greater(literal(type(T1,X)),
+             literal(type(T2,Y))) :-
+    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    !,
+    X > Y.
 woql_greater(AE,BE) :-
     % dodgy - should switch on type
     compare((>),AE,BE).

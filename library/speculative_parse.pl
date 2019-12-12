@@ -140,14 +140,14 @@ guess_number(Number,_Spacer,Punkt) -->
     { string_concat(Number_String,Decimal,Number)
     }.
 
+guess_date(date_time(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
+    dateTime(Y,Mo,D,H,M,S,Z,ZH,ZM),
+    !.
 guess_date(date(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
     year(Y), "-",  twoDigitNatural(Mo), "-", twoDigitNatural(D), " ", guess_time(time(H,M,S,Z,ZH,ZM)),
     !.
 guess_date(date(Y,Mo,D,0,0,0,0,0,0)) -->
     year(Y), "-",  twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    !.
-guess_date(date_time(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
-    dateTime(Y,Mo,D,H,M,S,Z,ZH,ZM),
     !.
 guess_date(date(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
     twoDigitNatural(D), "/", twoDigitNatural(Mo), "/", year(Y), " ", guess_time(time(H,M,S,Z,ZH,ZM)),
