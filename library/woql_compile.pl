@@ -663,6 +663,28 @@ indexing_term(Spec,Header,Values,Bindings,Indexing_Term) :-
     list_conjunction(Indexing_List,Indexing_Term).
 
 /*
+ * woql_equal(AE,BE) is det.
+ */
+woql_equal(AE,BE) :-
+    AE=BE.
+
+/*
+ * woql_less(AE,BE) is det.
+ *
+ * Quick hack works (kinda) but fails on tower of numbers subsumption.
+ */
+woql_less(AE,BE) :-
+    compare((<),AE,BE).
+
+/*
+ * woql_greater(AE,BE) is det.
+ *
+ * Quick hack works (kinda) but fails on tower of numbers subsumption.
+ */
+woql_greater(AE,BE) :-
+    compare((>),AE,BE).
+
+/*
  * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
  * Create a program term Prog for a csv with Header and column reference strategy
@@ -766,13 +788,13 @@ compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
     { list_conjunction(Goals,Goal) }.
-compile_wf(A=B,AE=BE) -->
+compile_wf(A=B,woql_equals(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
-compile_wf(A<B,AE<BE) -->
+compile_wf(A<B,woql_less(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
-compile_wf(A>B,AE>BE) -->
+compile_wf(A>B,woql_greater(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
 compile_wf(like(A,B,F), Goal) -->
