@@ -62,15 +62,41 @@ hash(Base,Args,Output) :-
     atom_concat(Base,Hash,Output).
 
 /*
+ * Type promotion is intended to give a type to bare literals
+ * who have not had a specified type for some reason (integers
+ * or booleans perhaps).
+ */
+maybe_promote(literal(L),literal(L)) :-
+    !.
+maybe_promote(S,literal(type('http://www.w3.org/2001/XMLSchema#string',S))) :-
+    string(S),
+    !.
+maybe_promote(S,literal(type('http://www.w3.org/2001/XMLSchema#string',S))) :-
+    atom(S),
+    !.
+maybe_promote(N,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
+    number(N),
+    !.
+
+/*
  * Presumably this should record into prov on failure.
  */
 typecast(Val, Type, Hint, Cast) :-
-    (   var(Val)
+    (   (   var(Val)
+        ->  true
+        ;   Val = literal(L),
+            var(L))
     ->  format(atom(M), 'Variable unbound in typcast to ~q', [Type]),
         throw(error(M))
-    ;   typecast_switch(Val,Type,Hint,Cast)).
+    ;   maybe_promote(Val,Promoted),
+        (   Promoted = literal(type(Source_Type,Val))
+        ->  typecast_switch(Val,Source_Type,Type,Hint,Cast)
+        ;   Promoted = literal(lang(Source_Type,Val))
+        ->  typecast_switch(Val,Source_Type,Type,Hint,Cast)
+        )
+    ).
 
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:dateTime): ~q~n',
@@ -80,7 +106,7 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:integer): ~q~n',
@@ -90,11 +116,20 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
-typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_), 'http://www.w3.org/2001/XMLSchema#decimal', _,
+typecast_switch(DS, 'http://www.w3.org/2001/XMLSchema#dateTime',
+                'http://www.w3.org/2001/XMLSchema#decimal', _,
+                literal(type('http://www.w3.org/2001/XMLSchema#decimal',Num))) :-
+    !,
+    guess_date(DS,date(Y,M,D,HH,MM,SS,Z,_,_)),
+    date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
+typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
+                _ST,
+                'http://www.w3.org/2001/XMLSchema#decimal',
+                _,
                 literal(type('http://www.w3.org/2001/XMLSchema#decimal',Num))) :-
     !,
     date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
     (   guess_number(Val,Cast)
     ->  true
     ;   format(atom(M),'Unable to cast as (xsd:decimal): ~q~n',
@@ -104,6 +139,6 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', _,
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
                 literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
     format(string(String), '~w', [Val]).

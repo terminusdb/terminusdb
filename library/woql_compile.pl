@@ -290,6 +290,12 @@ empty_ctx(Prefixes,S0,S6) :-
     select(write_graph=_,S5,
            write_graph=Write_Graph,S6).
 
+
+compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
+    !,
+    guess_date(String,Date).
+compile_representation(String,Type,String).
+
 resolve(ignore,_Something) -->
     !,
     [].
@@ -336,10 +342,12 @@ resolve(X@L,literal(lang(LE,XS))) -->
 resolve(X^^T,literal(type(TE,XS))) -->
     resolve(X,XE),
     {
-        (   ground(XE),
-            atom(XE)
-        ->  atom_string(XE,XS)
-        ;   XE = XS)
+        (   ground(XE)
+        ->  (   atom(XE)
+            ->  atom_string(XE,XS)
+            ;   XE=XS),
+            compile_representation(XS,TE,XF)
+        ;   XE = XF),
     },
     resolve(T,TE).
 resolve(L,Le) -->
@@ -674,6 +682,7 @@ woql_equal(AE,BE) :-
  * Quick hack works (kinda) but fails on tower of numbers subsumption.
  */
 woql_less(AE,BE) :-
+    % dodgy - should switch on type
     compare((<),AE,BE).
 
 /*
@@ -682,6 +691,7 @@ woql_less(AE,BE) :-
  * Quick hack works (kinda) but fails on tower of numbers subsumption.
  */
 woql_greater(AE,BE) :-
+    % dodgy - should switch on type
     compare((>),AE,BE).
 
 /*
@@ -1234,8 +1244,7 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
 compile_wf(where(P), Prog) -->
     compile_wf(P, Prog).
 compile_wf(typecast(Val,Type,_Hints,Cast),
-           (literally(ValE,ValL),
-            typecast(ValL, TypeE, [], CastE))) -->
+           (typecast(ValE, TypeE, [], CastE))) -->
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
