@@ -174,9 +174,9 @@ timeZone(-1,ZH,ZM) --> "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM) .
 timeZone(1,0,0) --> "" .
 
 % Hour, Minute, Second, ZoneSign, ZoneHour, ZoneMinute
-time(H,M,0,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Z,ZH,ZM).
 time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 			timeZone(Z,ZH,ZM) .
+time(H,M,0,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Z,ZH,ZM).
 
 year(SY) --> sign(S), fourDigitNatural(Y),
 	     { SY is S * Y }.

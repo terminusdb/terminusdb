@@ -36,7 +36,7 @@
  */
 guess_date(Val,literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Date))) :-
     atom_codes(Val,Codes),
-    phrase(guess_date(Date),Codes,[]).
+    phrase(guess_date(Date),Codes).
 
 guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',Val))) :-
     integer(Val).
@@ -140,7 +140,7 @@ guess_number(Number,_Spacer,Punkt) -->
     { string_concat(Number_String,Decimal,Number)
     }.
 
-guess_date(date_time(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
+guess_date(date(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
     dateTime(Y,Mo,D,H,M,S,Z,ZH,ZM),
     !.
 guess_date(date(Y,Mo,D,H,M,S,Z,ZH,ZM)) -->
