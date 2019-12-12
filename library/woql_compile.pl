@@ -302,7 +302,7 @@ empty_ctx(Prefixes,S0,S6) :-
 compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
     !,
     guess_date(String,Date).
-compile_representation(String,_Type,String).
+compile_representation(String,Type,literal(type(Type,String))).
 
 resolve(ignore,_Something) -->
     !,
@@ -347,7 +347,7 @@ resolve(X@L,literal(lang(LE,XS))) -->
         ;   XE = XS)
     },
     resolve(L,LE).
-resolve(X^^T,literal(type(TE,XF))) -->
+resolve(X^^T,Lit) -->
     resolve(X,XE),
     resolve(T,TE),
     {
@@ -355,8 +355,8 @@ resolve(X^^T,literal(type(TE,XF))) -->
         ->  (   atom(XE)
             ->  atom_string(XE,XS)
             ;   XE=XS),
-            compile_representation(XS,TE,XF)
-        ;   XE = XF)
+            compile_representation(XS,TE,Lit)
+        ;   Lit = literal(type(TE,XE)))
     }.
 resolve(L,Le) -->
     {
