@@ -137,12 +137,12 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(F,WF),
         WOQL = like(WA,WB,WF)
     ;   _{'http://terminusdb.com/woql#less' : [ A, B ] } :< JSON
-    ->  json_to_woql_arith(A,WA),
-        json_to_woql_arith(B,WB),
+    ->  json_to_woql_ast(A,WA),
+        json_to_woql_ast(B,WB),
         WOQL = '<'(WA,WB)
     ;   _{'http://terminusdb.com/woql#greater' : [ A, B ] } :< JSON
-    ->  json_to_woql_arith(A,WA),
-        json_to_woql_arith(B,WB),
+    ->  json_to_woql_ast(A,WA),
+        json_to_woql_ast(B,WB),
         WOQL = '>'(WA,WB)
     ;   _{'http://terminusdb.com/woql#opt' : [ Q ] } :< JSON
     ->  json_to_woql_ast(Q,WQ),
