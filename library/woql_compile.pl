@@ -1243,19 +1243,23 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(maplist(literally,LE,LL),utils:interpolate_string(LL,AE))) -->
+compile_wf(concat(L,A),(maplist(literally,LE,LL),
+                        utils:interpolate_string(LL,AE_raw),
+                        AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
     resolve(L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(literally(SE,SL),
                       format(string(SS),'~w', SL),
                       trim(SS,X),
-                      atom_string(AE,X))) -->
+                      atom_string(AE_raw,X),
+                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
                          literally(CE,CL),
                          literally(NE,NL),
-                         pad(SL,CL,NL,VE))) -->
+                         pad(SL,CL,NL,VE_raw),
+                         VE = literal(type('http://www.w3.org/2001/XMLSchema#string',VE_raw)))) -->
     resolve(S,SE),
     resolve(C,CE),
     resolve(N,NE),
