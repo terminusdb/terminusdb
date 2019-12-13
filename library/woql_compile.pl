@@ -1338,7 +1338,9 @@ compile_wf(lower(S,A),string_lower(SE,AE)) -->
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     resolve(X,XE),
     mapm(resolve,L,LE).
-compile_wf(X is Arith, (Pre_Term, XE is ArithE)) -->
+compile_wf(X is Arith, (Pre_Term,
+                        XA is ArithE,
+                        XE = literal(type('http://www.w3.org/2001/XMLSchema#decimal',XA)))) -->
     resolve(X,XE),
     compile_arith(Arith,Pre_Term,ArithE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
