@@ -3,7 +3,8 @@
               fixup_schema_literal/2,
               normalise_triple/2,
               object_storage/2,
-              storage_object/2
+              storage_object/2,
+              date_string/2
           ]).
 
 /** <module> Literals
@@ -44,6 +45,7 @@ date_string(Date,String) :-
            '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
            [Y,M,D,HH,MM,SS]).
 date_string(date(Y,M,D,HH,MM,SS,Z,ZH,ZM),String) :-
+    % So expensive! Let's do this faster somehow.
     nonvar(String),
     !,
     atom_codes(String,Codes),
