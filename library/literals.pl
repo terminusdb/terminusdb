@@ -29,6 +29,26 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+%:- use_module(xsd_parser, [dateTime//9]).
+
+/*
+ * date_string(-Date,+String) is det.
+ * date_string(+Date,-String) is det.
+ */
+date_string(Date,String) :-
+    nonvar(Date),
+    !,
+    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
+    Date = date(Y,M,D,HH,MM,SS,_Z,_ZH,_ZM),
+    format(string(String),
+           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
+           [Y,M,D,HH,MM,SS]).
+date_string(date(Y,M,D,HH,MM,SS,Z,ZH,ZM),String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Z,ZH,ZM),Codes).
+
 /*
  * fixup_schema_literal(+Literal,-Literal) is det.
  *
@@ -69,16 +89,14 @@ nonvar_literal(lang(Lang,String), S) :-
         nonvar(String)
     ->  format(string(S), '~q@~q', [String,Lang])
     ;   true).
-nonvar_literal(type(Type,String), S) :-
+nonvar_literal(type(Type,Val), S) :-
     (   nonvar(Type),
-        nonvar(String)
+        nonvar(Val)
     ->  (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
-            String = date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM)
-        ->  format(string(Date),
-                   '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
-                   [Y,M,D,HH,MM,SS]),
-            format(string(S), '~q^^~q', [Date,Type])
-        ;   format(string(S), '~q^^~q', [String,Type]))
+            Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
+        ->  date_string(Val,Date_String),
+            format(string(S), '~q^^~q', [Date_String,Type])
+        ;   format(string(S), '~q^^~q', [Val,Type]))
     ;   true).
 
 nonvar_storage(literal(L),value(V)) :-
@@ -115,26 +133,25 @@ storage_value(X,V) :-
     ->  X = V
     ;   atom_string(V,X)).
 
-storage_literal_obj(Obj, Type) :-
-    var(Type),
-    !,
-    Obj = Type.
+%storage_literal_obj(Obj, Type) :-
+%    var(Type),
+%    !,
+%    Obj = Type.
 storage_literal_obj(type(T1,X1), type(T2,X3)) :-
     storage_atom(T1,T2),
     storage_value(X1,X2),
+    writeq(T2),
     (   T2 = 'http://www.w3.org/2001/XMLSchema#dateTime'
-    ->  atom_codes(X2,Codes),
-        phrase(dateTime(Date),Codes),
-        Date = X3
+    ->  date_string(X3,X2)
     ;   X2 = X3).
 storage_literal_obj(lang(L1,X1), lang(L2,X2)) :-
     storage_atom(L1,L2),
     storage_value(X1,X2).
 
-storage_literal(A, O) :-
-    var(O),
-    !,
-    A = O.
+%storage_literal(A, O) :-
+%    var(O),
+%    !,
+%    A = O.
 storage_literal(literal(Type), literal(L)) :-
     storage_literal_obj(Type,L).
 
