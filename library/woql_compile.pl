@@ -1338,9 +1338,9 @@ compile_wf(lower(S,A),string_lower(SE,AE)) -->
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     resolve(X,XE),
     mapm(resolve,L,LE).
-compile_wf(X is Arith, XE is ArithE) -->
+compile_wf(X is Arith, (Pre_Term, XE is ArithE)) -->
     resolve(X,XE),
-    compile_arith(Arith,ArithE).
+    compile_arith(Arith,Pre_Term,ArithE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
     resolve(WGroup,Group),
     resolve(WTemplate,Template),
@@ -1384,19 +1384,20 @@ literally(X, X) :-
     ;   string(X)
     ;   number(X)).
 
-compile_arith(Exp,ExpE) -->
+compile_arith(Exp,Pre_Term,ExpE) -->
     {
         Exp =.. [Functor|Args],
         % lazily snarf everything named...
         % probably need to add stuff here.
-        member(Functor, ['*','-','+','div','/'])
+        member(Functor, ['*','-','+','div','/','floor'])
     },
     !,
-    mapm(compile_arith,Args,ArgsE),
+    mapm(compile_arith,Args,Pre_Terms,ArgsE),
     {
-        ExpE =.. [Functor|ArgsE]
+        ExpE =.. [Functor|ArgsE],
+        list_conjunction(Pre_Terms,Pre_Term)
     }.
-compile_arith(Exp,ExpE) -->
+compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
     resolve(Exp,ExpE).
 
 restrict(VL) -->

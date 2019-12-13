@@ -310,6 +310,9 @@ json_to_woql_arith(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#div' : Args } :< JSON
     ->  maplist(json_to_woql_arith,Args,WOQL_Args),
         yfx_list('div', WOQL, WOQL_Args)
+    ;   _{'http://terminusdb.com/woql#floor' : [X] } :< JSON
+    ->  json_to_woql_arith(X,WOQL_X),
+        WOQL=floor(WOQL_X)
     ;   _{'@id': Var } :< JSON
     ->  coerce_atom(Var,A),
         is_json_var(A),

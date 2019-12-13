@@ -18,6 +18,7 @@
               sfoldr/4,
               foldm/6,
               mapm/5,
+              mapm/6,
               trim/2,
               split_atom/3,
               count/3,
@@ -380,6 +381,17 @@ mapm(_P,[],[],S,S).
 mapm(P,[H|T],[HP|TP],S0,SN) :-
     call(P,H,HP,S0,S1),
     mapm(P,T,TP,S1,SN).
+
+/*
+ * mapm(P:predicate,L:list,O:list,M:list,S0:any,SN:any) is det.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(5,?,?,?,?,?).
+mapm(_P,[],[],[],S,S).
+mapm(P,[H|T],[HP|TP],[HM|TM],S0,SN) :-
+    call(P,H,HP,HM,S0,S1),
+    mapm(P,T,TP,TM,S1,SN).
 
 /**
  * count(+A:atom,+L:list,-C:int) is det.
