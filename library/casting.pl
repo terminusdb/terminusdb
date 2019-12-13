@@ -89,7 +89,6 @@ typecast(Val, Type, Hint, Cast) :-
     ->  format(atom(M), 'Variable unbound in typcast to ~q', [Type]),
         throw(error(M))
     ;   maybe_promote(Val,Promoted),
-        writeq(Promoted),
         (   Promoted = literal(type(Source_Type,Bare_Literal))
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
         ;   Promoted = literal(lang(Source_Type,Bare_Literal))
