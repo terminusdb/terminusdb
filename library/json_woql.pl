@@ -228,6 +228,10 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Query,WQuery),
         json_to_woql_ast(Collector,WCollector),
         WOQL = group_by(WSpec,WObj,WQuery,WCollector)
+    ;   _{'http://terminusdb.com/woql#length' : [A,B]} :< JSON
+    ->  json_to_woql_ast(A,WA),
+        json_to_woql_ast(B,WB),
+        WOQL = length(WA,WB)
     ;   _{'http://terminusdb.com/woql#typecast' : [Val,Type,Var]} :< JSON
     ->  json_to_woql_ast(Val,WVal),
         json_to_woql_ast(Type,WType),

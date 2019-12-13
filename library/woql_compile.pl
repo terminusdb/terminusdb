@@ -1348,6 +1348,10 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     resolve(WTemplate,Template),
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
+compile_wf(length(L,N),(length(LE,Num),
+                        NE = literal(type('http://www.w3.org/2001/XMLSchema#decimal', Num)))) -->
+    resolve(L,LE),
+    resolve(N,NE).
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
