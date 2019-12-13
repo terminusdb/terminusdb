@@ -151,6 +151,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  maplist(json_to_woql_ast,Header,WHeader),
         json_to_woql_ast(File,WFile),
         WOQL = get(WHeader,WFile)
+    ;   _{'http://terminusdb.com/woql#put' : [ Header, Query, File ] } :< JSON
+    ->  maplist(json_to_woql_ast,Header,WHeader),
+        json_to_woql_ast(Query,WQuery),
+        json_to_woql_ast(File,WFile),
+        WOQL = put(WHeader,WQuery,WFile)
     ;   _{'http://terminusdb.com/woql#remote' : [ File ] } :< JSON
     ->  WOQL = remote(File)
     ;   _{'http://terminusdb.com/woql#remote' : [ File, Dict] } :< JSON
