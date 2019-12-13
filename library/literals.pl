@@ -140,7 +140,6 @@ storage_value(X,V) :-
 storage_literal_obj(type(T1,X1), type(T2,X3)) :-
     storage_atom(T1,T2),
     storage_value(X1,X2),
-    writeq(T2),
     (   T2 = 'http://www.w3.org/2001/XMLSchema#dateTime'
     ->  date_string(X3,X2)
     ;   X2 = X3).
