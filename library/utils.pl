@@ -398,8 +398,16 @@ mapm(P,[H|T],[HP|TP],[HM|TM],S0,SN) :-
  *
  * Counts occurences of A in L.
  */
-count(_,[], 0).
-count(A,[B|L],C) :- count(A,L,K), (A=B -> C is K+1 ; C=K).
+count(Atom, List, Count) :-
+    count(List, Atom, 0, Count).
+
+count([], _, Count, Count).
+count([Head| Tail], Atom, Count0, Count) :-
+    (   Head = Atom ->
+        Count1 is Count0 + 1
+    ;   Count1 is Count0
+    ),
+    count(Tail, Atom, Count1, Count).
 
 /*
  * merge_dictionaries(+Dict1,+Dict2,-Dict3) is det.
