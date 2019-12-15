@@ -100,6 +100,18 @@ initialise_server_settings :-
 
 :- initialise_server_settings.
 
+add_plugin_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/plugins',Config),
+    asserta(user:file_search_path(plugins, Config)).
+
+initialise_plugin_registry :-
+    file_search_path(terminus_home, BasePath),
+    !,
+    atom_concat(BasePath, '/plugins/registry.pl', Settings_Path).
+
+:- initialise_plugin_registry.
+
 :- use_module(library(api)).
 :- use_module(library(server)).
 :- use_module(library(upgrade_db)).
@@ -107,6 +119,8 @@ initialise_server_settings :-
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
 :- use_module(test(tests)).
+% Plugins
+:- use_module(plugins(registry)).
 
 main(Argv) :-
     maybe_upgrade,
