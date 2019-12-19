@@ -293,9 +293,12 @@ main(Args) :-
         write_config_file(Config_Tpl_Path, Config_Path, Server,
                           Port, Workers),
 
-        example_registry_path(Dir,Example_Registry_Path),
         registry_path(Dir,Registry_Path),
-        copy_file(Example_Registry_Path, Registry_Path),
+        (   exists_file(Registry_Path)
+        ->  true
+        ;   example_registry_path(Dir,Example_Registry_Path),
+            copy_file(Example_Registry_Path, Registry_Path)
+        ),
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(Server, Port, Protocol, Key, Dir)
