@@ -1325,8 +1325,9 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(C,CE),
     resolve(N,NE),
     resolve(V,VE).
-compile_wf(re(P,S,L),(maplist(literally,LE,LL),(literally(PE,PL),
-                                                utils:re(PL,SE,LL)))) -->
+compile_wf(re(P,S,L),(maplist(literally,LE,LL),
+                      literally(PE,PL),
+                      utils:re(PL,SE,LL))) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
