@@ -1,3 +1,3 @@
 [submodule "terminus-ontologies"]
 	path = terminus-schema
-	url = git@github.com:terminusdb/terminus-schema
+	url = https://github.com/terminusdb/terminus-schema
