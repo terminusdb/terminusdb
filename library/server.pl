@@ -56,4 +56,4 @@ server(_Argv) :-
         sync_backing_store,
 	    http_delete_handler(id(busy_loading))),
     format("~n% Welcome to TerminusDB's terminus-server! ~n", [Server]),
-    format("% You can view your server in a browser at '~s/dashboard' ~n~n", [Server]).
+    format("% You can view your server in a browser at '~s/console' ~n~n", [Server]).

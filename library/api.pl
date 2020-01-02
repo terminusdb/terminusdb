@@ -93,7 +93,7 @@ http:location(root, '/', []).
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(root(dashboard), cors_catch(dashboard_handler(Method)),
+:- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
 :- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
@@ -279,15 +279,15 @@ connect_handler(get,Request) :-
     reply_json(User).
 
 /*
- * dashboard_handler(+Method,+Request) is det.
+ * console_handler(+Method,+Request) is det.
  */
-dashboard_handler(options,_Request) :-
+console_handler(options,_Request) :-
     config:server(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
     format('~n').
-dashboard_handler(get,_Request) :-
+console_handler(get,_Request) :-
     terminus_path(Path),
     interpolate([Path,'/storage/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
