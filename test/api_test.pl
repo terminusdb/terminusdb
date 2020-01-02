@@ -972,9 +972,9 @@ run_good_doc_datatype_update_test :-
     _{'terminus:status':"terminus:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness!
 
-run_dashboard :-
+run_console :-
     config:server(Server),
-    atomic_list_concat([Server,'/dashboard'], URI),
+    atomic_list_concat([Server,'/console'], URI),
     status_200(URI).
 
 
