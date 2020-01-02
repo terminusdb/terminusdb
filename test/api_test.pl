@@ -648,13 +648,24 @@ run_woql_csv_test :-
 
     _{bindings : [
           _{
-              'http://terminusdb.com/woql/variable/Polity_Name':"ItRomPr",
-              'http://terminusdb.com/woql/variable/Polygon':1
+              'http://terminusdb.com/woql/variable/Polity_Name' :
+              _{'@type' : "http://www.w3.org/2001/XMLSchema#string",
+                '@value' : "ItRomPr"}
+              ,
+              'http://terminusdb.com/woql/variable/Polygon':
+              _{'@type' : "http://www.w3.org/2001/XMLSchema#decimal",
+                '@value' : 1}
           },
           _{
-              'http://terminusdb.com/woql/variable/Polity_Name':"ItRomPr",
-              'http://terminusdb.com/woql/variable/Polygon':1
-          }]} :< Term.
+              'http://terminusdb.com/woql/variable/Polity_Name':
+              _{'@type' : "http://www.w3.org/2001/XMLSchema#string",
+                '@value' : "ItRomPr"}
+              ,
+              'http://terminusdb.com/woql/variable/Polygon':
+              _{'@type' : "http://www.w3.org/2001/XMLSchema#decimal",
+                '@value' : 1}
+          }
+      ]} :< Term.
 
 /****************************************************************
  * Instance Checking Tests
@@ -977,6 +988,9 @@ run_console :-
     atomic_list_concat([Server,'/console'], URI),
     status_200(URI).
 
+% TODO: need an order by test here.
+run_order_by :-
+    true.
 
 run_db_metadata_test :-
     config:server(Server),

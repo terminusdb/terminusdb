@@ -723,6 +723,26 @@ woql_greater(AE,BE) :-
     compare((>),AE,BE).
 
 /*
+ * term_literal(Value, Value_Cast) is det.
+ *
+ * Casts a bare object from prolog to a typed object
+ */
+term_literal(Term, Term) :-
+    var(Term),
+    !.
+term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#string', String))) :-
+    atom(Term),
+    !,
+    atom_string(Term,String).
+term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#string', Term))) :-
+    string(Term),
+    !.
+term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#decimal', Term))) :-
+    number(Term),
+    !.
+
+
+/*
  * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
  * Create a program term Prog for a csv with Header and column reference strategy
@@ -735,13 +755,15 @@ csv_term(Path,true,Header,Values,Indexing_Term,Prog,Options) :-
         Header_Row =.. [_|Header]
     ->  csv_read_file_row(Path, Value_Row, [line(Line)|Options]),
         Line > 1,
-        Value_Row =.. [_|Values],
+        Value_Row =.. [_|Pre_Values],
+        maplist(term_literal,Pre_Values,Values),
         Indexing_Term
     ).
 csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
     Prog = (
         csv_read_file_row(Path, Value_Row, Options),
-        Value_Row =.. [_|Values],
+        Value_Row =.. [_|Pre_Values],
+        maplist(term_literal,Pre_Values,Values),
         Indexing_Term
     ).
 csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-

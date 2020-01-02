@@ -222,11 +222,16 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(String,WString),
         json_to_woql_ast(List,WList),
         WOQL = re(WPat, WString, WList)
-    ;   _{'http://terminusdb.com/woql#order_by' : Clauses } :< JSON
-    ->  snoc(Vargs,Sub_Query,Clauses),
-        maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vargs,WOQL_Args),
-        json_to_woql_ast(Sub_Query,Sub_WOQL),
-        WOQL = order_by(WOQL_Args,Sub_WOQL)
+    ;   _{'http://terminusdb.com/woql#order_by' : [ Template, Query ] } :< JSON
+    ->  json_to_woql_ast(Template,WTemplate),
+        json_to_woql_ast(Query,WQuery),
+        WOQL = order_by(WTemplate,WQuery)
+    ;   _{'http://terminusdb.com/woql#asc' : Vars } :< JSON
+    ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vars,WVars),
+        WOQL = asc(WVars)
+    ;   _{'http://terminusdb.com/woql#desc' : Vars } :< JSON
+    ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vars,WVars),
+        WOQL = desc(WVars)
     ;   _{'http://terminusdb.com/woql#group_by' : [Spec,Obj,Query,Collector]} :< JSON
     ->  json_to_woql_ast(Spec,WSpec),
         json_to_woql_ast(Obj,WObj),
