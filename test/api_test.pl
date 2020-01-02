@@ -84,7 +84,7 @@ run_api_tests :-
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
     try(run_woql_csv_test),
-    try(run_dashboard),
+    try(run_console),
     * try(run_db_metadata_test).
 
 /****************************************************************
