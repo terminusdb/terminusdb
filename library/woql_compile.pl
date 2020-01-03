@@ -1399,6 +1399,7 @@ literally(X, X) :-
     var(X),
     !.
 literally(literal(T), L) :-
+    % this adds choice points - is this avoidable?
     var(T),
     !,
     (   T = lang(_,L)
