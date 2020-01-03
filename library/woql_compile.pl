@@ -1392,7 +1392,7 @@ compile_wf(Q,_) -->
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
-    litearlly(H,HL),
+    literally(H,HL),
     literal_list(T,TL).
 
 literally(X, X) :-
