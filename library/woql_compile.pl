@@ -738,8 +738,7 @@ term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#string', Term)
     string(Term),
     !.
 term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#decimal', Term))) :-
-    number(Term),
-    !.
+    number(Term).
 
 
 /*
@@ -1302,7 +1301,7 @@ compile_wf(hash(Base,Args,Id),hash(BaseE,ArgsE,IdE)) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(idgen(Base,Args,Id),(maplist(literally,ArgsE,ArgsL),idgen(BaseE,ArgsL,IdE))) -->
+compile_wf(idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),idgen(BaseE,ArgsL,IdE))) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
@@ -1326,7 +1325,7 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(maplist(literally,LE,LL),
+compile_wf(concat(L,A),(literal_list(LE,LL),
                         utils:interpolate_string(LL,AE_raw),
                         AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
     resolve(L,LE),
@@ -1347,7 +1346,7 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(C,CE),
     resolve(N,NE),
     resolve(V,VE).
-compile_wf(re(P,S,L),(maplist(literally,LE,LL),
+compile_wf(re(P,S,L),(literal_list(LE,LL),
                       literally(PE,PL),
                       utils:re(PL,SE,LL))) -->
     resolve(P,PE),
@@ -1379,7 +1378,7 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(maplist(literally,XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
+compile_wf(join(X,S,Y),(literal_list(XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE).
@@ -1390,6 +1389,11 @@ compile_wf(Q,_) -->
         format(atom(M), 'Unable to compile AST query ~q', [Q]),
         throw(syntax_error(M))
     }.
+
+literal_list([],[]).
+literal_list([H|T],[HL|TL]) :-
+    litearlly(H,HL),
+    literal_list(T,TL).
 
 literally(X, X) :-
     var(X),
@@ -1411,8 +1415,11 @@ literally(literal(lang(_,L)), L) :-
     !.
 literally(X, X) :-
     (   atom(X)
+    ->  true
     ;   string(X)
-    ;   number(X)).
+    ->  true
+    ;   number(X)
+    ).
 
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
