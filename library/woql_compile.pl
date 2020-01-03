@@ -344,7 +344,8 @@ resolve(X@L,literal(lang(LE,XS))) -->
         (   ground(XE),
             atom(XE)
         ->  atom_string(XE,XS)
-        ;   XE = XS)
+        ;   XE = XS),
+        !
     },
     resolve(L,LE).
 resolve(X^^T,Lit) -->
@@ -356,11 +357,13 @@ resolve(X^^T,Lit) -->
             ->  atom_string(XE,XS)
             ;   XE=XS),
             compile_representation(XS,TE,Lit)
-        ;   Lit = literal(type(TE,XE)))
+        ;   Lit = literal(type(TE,XE))),
+        !
     }.
 resolve(L,Le) -->
     {
-        is_list(L)
+        is_list(L),
+        !
     },
     mapm(resolve,L,Le).
 resolve(X,X) -->
