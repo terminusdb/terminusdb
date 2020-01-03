@@ -760,14 +760,16 @@ csv_term(Path,true,Header,Values,Indexing_Term,Prog,Options) :-
         Value_Row =.. [_|Pre_Values],
         maplist(term_literal,Pre_Values,Values),
         Indexing_Term
-    ).
+    ),
+    !.
 csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
     Prog = (
         csv_read_file_row(Path, Value_Row, Options),
         Value_Row =.. [_|Pre_Values],
         maplist(term_literal,Pre_Values,Values),
         Indexing_Term
-    ).
+    ),
+    !.
 csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
     format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
            [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
