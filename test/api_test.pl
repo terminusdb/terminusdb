@@ -84,6 +84,7 @@ run_api_tests :-
     try(run_woql_empty_error_test),
     try(run_woql_syntax_error_test),
     try(run_woql_csv_test),
+    try(run_woql_instantiation_test),
     try(run_console),
     * try(run_db_metadata_test).
 
@@ -667,6 +668,31 @@ run_woql_csv_test :-
           }
       ]} :< Term.
 
+run_woql_instantiation_test :-
+    config:server(Server),
+    auth(Auth),
+
+    Query = _{trim: ["v:Something_to_Trim","v:Output"]},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
+
+    Args = ['--user', Auth,'-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    % test here.
+    _{
+        'terminus:message' : _,
+        'terminus:status' :"terminus:failure"
+    } :< Term.
+
 /****************************************************************
  * Instance Checking Tests
  ***************************************************************/
@@ -989,7 +1015,7 @@ run_console :-
     status_200(URI).
 
 % TODO: need an order by test here.
-run_order_by :-
+run_woql_order_by :-
     true.
 
 run_db_metadata_test :-

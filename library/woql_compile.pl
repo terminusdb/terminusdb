@@ -499,12 +499,12 @@ run_term(Query,JSON) :-
 run_term(Query,Ctx_In,JSON) :-
     * format('~n***********~nQuery: ~q~n',[Query]),
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    * format('~n***********~nProgram: ~q~n',[Prog]),
-    * format('~n***********~nCtx: ~q~n',[Ctx_Out]),
+    http_log_stream(Log),
+    format(Log,'~n***********~nProgram: ~q~n',[Prog]),
+    format(Log,'~n***********~nCtx: ~q~n',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=_Database,Ctx_Out),
 
-    * http_log_stream(Log),
     * format(Log,'~n~nWe are here -1 ~n~n',[]),
 
     assert_program(Definitions),
@@ -515,7 +515,12 @@ run_term(Query,Ctx_In,JSON) :-
             (   elt(output_graphs=OGs,Ctx_Out),
                 % sets head to graph start and tail to the empty list.
                 bookend_graphs(OGs),
-                call(Prog),
+                catch(
+                    call(Prog),
+                    error(instantiation_error, C),
+                    % We need to find the offending unbound culprit here
+                    report_instantiation_error(C,Ctx_Out)
+                ),
                 elt(bindings=B,Ctx_Out)
             ),
             BGs),
@@ -532,6 +537,35 @@ run_term(Query,Ctx_In,JSON) :-
 
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
+
+get_varname(Var,[X=Y|_Rest],Name) :-
+    Y == Var,
+    !,
+    Name = X.
+get_varname(Var,[_|Rest],Name) :-
+    get_varname(Var,Rest,Name).
+
+guess_varnames([],[]).
+guess_varnames([X=Y|Rest],[X|Names]) :-
+    var(Y),
+    !,
+    guess_varnames(Rest,Names).
+guess_varnames([_|Rest],Names) :-
+    guess_varnames(Rest,Names).
+
+report_instantiation_error(context(Pred,Var),Ctx) :-
+    memberchk(bindings=B,Ctx),
+    get_varname(Var,B,Name),
+    !,
+    format(string(MSG), "The variable: ~q is unbound while being proceed in the AST operator ~q, but must be instantiated", [Name,Pred]),
+    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                          'terminus:message' : MSG}))).
+report_instantiation_error(context(Pred,_),Ctx) :-
+    memberchk(bindings=B,Ctx),
+    guess_varnames(B,Names),
+    format(string(MSG), "The variables: ~q are unbound, one of which was a problem while being proceed in the AST operator ~q, which but must be instantiated", [Names,Pred]),
+    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                          'terminus:message' : MSG}))).
 
 /*
 run_term(Query,Ctx_In,JSON) :-
@@ -1336,7 +1370,7 @@ compile_wf(concat(L,A),(literal_list(LE,LL),
     resolve(L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(literally(SE,SL),
-                      format(string(SS),'~w', SL),
+                      atom_string(SL,SS),
                       trim(SS,X),
                       atom_string(AE_raw,X),
                       AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
