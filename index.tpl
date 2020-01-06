@@ -4,7 +4,8 @@
 	    <meta charset="utf-8">
 	    <title>Terminus DB Management Dashboard</title>
 	    <link rel="shortcut icon" type="image/png" href="https://terminusdb.com/t/favicon.png"/>
-	    <link rel="stylesheet" type="text/css" href="https://terminusdb.com/t/terminus.css"/>
+	    <link rel="stylesheet" type="text/css" href="https://terminusdb.github.io/terminus-dashboard/dist/css/basic.css">
+	    <link rel="stylesheet" type="text/css" href="https://terminusdb.github.io/terminus-dashboard/dist/css/theme.css">
 	</head>
 	<BODY>
 	<div class="terminus-client-ui">
@@ -35,8 +36,8 @@
 				</td>
 			</tr>
 	</table>
-	    <script src="https://terminusdb.com/t/terminus-client.min.js"></script>
-	    <script src="https://terminusdb.com/t/terminus-dashboard.min.js"></script> 
+	    <script src="https://terminusdb.github.io/terminus-dashboard/dist/terminus-client.min.js"></script>
+	    <script src="https://terminusdb.github.io/terminus-dashboard/dist/terminus-dashboard.min.js"></script>
 		<script>
 		let TerminusConfig = {
 			controls: [
