@@ -51,6 +51,7 @@ server(_Argv) :-
 			 [ priority(1000),
 			   hide_children(true),
 			   id(busy_loading),
+               time_limit(infinite),
 			   prefix
 			 ]),
         sync_backing_store,

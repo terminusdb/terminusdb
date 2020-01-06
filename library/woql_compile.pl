@@ -519,7 +519,7 @@ run_term(Query,Ctx_In,JSON) :-
                     call(Prog),
                     error(instantiation_error, C),
                     % We need to find the offending unbound culprit here
-                    report_instantiation_error(C,Ctx_Out)
+                    report_instantiation_error(Prog,C,Ctx_Out)
                 ),
                 elt(bindings=B,Ctx_Out)
             ),
@@ -553,14 +553,14 @@ guess_varnames([X=Y|Rest],[X|Names]) :-
 guess_varnames([_|Rest],Names) :-
     guess_varnames(Rest,Names).
 
-report_instantiation_error(context(Pred,Var),Ctx) :-
+report_instantiation_error(_Prog,context(Pred,Var),Ctx) :-
     memberchk(bindings=B,Ctx),
     get_varname(Var,B,Name),
     !,
     format(string(MSG), "The variable: ~q is unbound while being proceed in the AST operator ~q, but must be instantiated", [Name,Pred]),
     throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                           'terminus:message' : MSG}))).
-report_instantiation_error(context(Pred,_),Ctx) :-
+report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     memberchk(bindings=B,Ctx),
     guess_varnames(B,Names),
     format(string(MSG), "The variables: ~q are unbound, one of which was a problem while being proceed in the AST operator ~q, which but must be instantiated", [Names,Pred]),

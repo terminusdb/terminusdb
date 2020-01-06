@@ -31,6 +31,7 @@
 :- use_module(prefixes).
 :- use_module(speculative_parse).
 :- use_module(jsonld).
+:- use_module(literals).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -136,6 +137,11 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
+typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
+                literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
+    Date = date(_Y,_M,_D,_HH,_MM,_SS,_Z,_OH,_OM),
+    !,
+    date_string(Date,String).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
                 literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
     format(string(String), '~w', [Val]).
