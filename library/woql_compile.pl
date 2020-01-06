@@ -719,6 +719,13 @@ indexing_term(Spec,Header,Values,Bindings,Indexing_Term) :-
  * woql_equal(AE,BE) is det.
  */
 woql_equal(AE,BE) :-
+    nonvar(AE),
+    nonvar(BE),
+    % Probably strictly should check subsumption
+    AE = literal(type(_T1,Y)),
+    BE = literal(type(_T2,Y)),
+    !.
+woql_equal(AE,BE) :-
     AE=BE.
 
 /*
