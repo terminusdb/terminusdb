@@ -886,7 +886,7 @@ compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
 compile_wf(X:C,Goal) -->
     compile_node(X:C,_,Goals),
     { list_conjunction(Goals,Goal) }.
-compile_wf(A=B,woql_equals(AE,BE)) -->
+compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
 compile_wf(A<B,woql_less(AE,BE)) -->
