@@ -1473,7 +1473,7 @@ compile_arith(Exp,Pre_Term,ExpE) -->
         Exp =.. [Functor|Args],
         % lazily snarf everything named...
         % probably need to add stuff here.
-        member(Functor, ['*','-','+','div','/','floor'])
+        member(Functor, ['*','-','+','div','/','floor', '**'])
     },
     !,
     mapm(compile_arith,Args,Pre_Terms,ArgsE),
