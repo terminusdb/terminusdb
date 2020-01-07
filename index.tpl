@@ -7,17 +7,17 @@
 		<link rel="shortcut icon" type="image/png" href="https://terminusdb.com/t/favicon.png"/>
 		<script src="https://d3js.org/d3.v5.min.js"></script>
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.css">
+		<link rel="stylesheet" href="https://terminusdb.github.io/terminus-dashboard/dist/css/theme.css">
 	 <script src="https://terminusdb.github.io/terminus-dashboard/dist/terminus-dashboard.min.js"></script>
-	</script>
 	</head>
-	<BODY>
+	<body>
 	<div class="terminus-client-ui">
 		<table class="terminus-client-table-layout" style="width: 100%">
 			<tr class="main-table-height">
 				<td class='terminus-control-panel terminus-control-panel-table-layout'>
 					<table class="terminus-application-controls terminus-control-panel-layout" style='width: 350px;'>
 						<tr><th class="terminus-logo">
-							 <img src='css/img/TerminusDB_Logo_Original.png' class='terminus-logo-container'></img></th></tr>
+							 <img src='https://terminusdb.github.io/terminus-dashboard/dist/css/img/TerminusDB_Logo_Original.png' class='terminus-logo-container'></img></th></tr>
 						<tr><td class="terminus-application-control terminus-client-body"
 								id="terminus-control-panel" ></td></tr>
 						<tr><td class="terminus-application-control terminus-expolrer-body terminus-explorer-hide"
@@ -83,5 +83,6 @@
 		}
 		
 		loadTerminatorWhenReady();
-	</script>
-</BODY>
+        </script>
+        </body>
+</html>
