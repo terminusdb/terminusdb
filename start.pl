@@ -118,7 +118,7 @@ initialise_server_settings :-
 %:- use_module(plugins(registry)).
 
 main(Argv) :-
-    maybe_upgrade,
+    %maybe_upgrade,
     initialise_prefix_db,
     initialise_contexts,
     server(Argv),
