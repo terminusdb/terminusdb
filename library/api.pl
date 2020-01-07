@@ -96,6 +96,10 @@ http:location(root, '/', []).
 :- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
+% Deprecated!
+:- http_handler(root(dashboard), cors_catch(console_handler(Method)),
+                [method(Method),
+                 methods([options,get])]).
 :- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
                 [method(Method),
                  methods([options,post,delete])]).
