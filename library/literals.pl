@@ -59,11 +59,13 @@ date_string(date(Y,M,D,HH,MM,SS,Z,ZH,ZM),String) :-
 fixup_schema_literal(literal(lang(Lang,S)),literal(lang(Lang,String))) :-
     (   atom(S)
     ->  atom_string(S,String)
-    ;   S = String).
+    ;   S = String),
+    !.
 fixup_schema_literal(literal(type(Type,S)),literal(type(Type,String))) :-
     (   atom(S)
     ->  atom_string(S,String)
-    ;   S = String).
+    ;   S = String),
+    !.
 fixup_schema_literal(literal(L),literal(lang(en,String))) :-
     (   atom(L)
     ->  atom_string(L,String)
