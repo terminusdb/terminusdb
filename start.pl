@@ -115,7 +115,7 @@ initialise_server_settings :-
 :- use_module(library(sdk)).
 :- use_module(test(tests)).
 % Plugins
-:- use_module(plugins(registry)).
+%:- use_module(plugins(registry)).
 
 main(Argv) :-
     maybe_upgrade,
