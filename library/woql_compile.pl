@@ -690,10 +690,13 @@ position_vars([v(V)|Rest],[v(V)|Vars]) :-
 indexing_as_list([],_,_,_,[]).
 indexing_as_list([N as v(V)|Rest],Header,Values,Bindings,[Term|Result]) :-
     member(V=Xe,Bindings),
-    Term = (   nth1(Idx,Header,N),
-               nth1(Idx,Values,Xe)
-           ->  true
-           ;   format(atom(Msg),'No such indexed name in get: "~q" with header: "~q" and values: "~q"',[N,Header,Values]),
+    Term = (   nth1(Idx,Header,N)
+           ->  (   nth1(Idx,Values,Value)
+               ->  Value = Xe
+               ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
+                   throw(error(syntax_error(Msg)))
+               )
+           ;   format(string(Msg),"No such indexed name in get: ~q with header: ~q and values: ~q giving",[N,Header,Values]),
                throw(error(syntax_error(Msg)))
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
@@ -703,7 +706,7 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     member(V=Xe,Bindings),
     Term = (   nth0(N,Values,Xe)
            ->  true
-           ;   format(atom(Msg),'No such index in get: "~q" for values: "~q"',[N,Values]),
+           ;   format(string(Msg),"No such index in get: ~q for values: ~q",[N,Values]),
                throw(error(syntax_error(Msg)))
            ),
     M is N+1,
