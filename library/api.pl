@@ -157,6 +157,11 @@ customise_error(error(syntax_error(M),_)) :-
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : M}]},
                [status(400)]).
+customise_error(error(syntax_error(M))) :-
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                           'vio:literal' : M}]},
+               [status(400)]).
 customise_error(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
     format(atom(OA), '~q', [O]),
