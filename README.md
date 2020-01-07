@@ -25,9 +25,9 @@ here: [running the terminus-server from docker](https://github.com/terminusdb/te
 
 In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/docs/BUILD.md) directions. 
 
-### Open Dashboard
+### Open Console
 
-One you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/dashboard". (for instance "http://localhost:6363/dashboard").
+One you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (for instance "http://localhost:6363/console").
 
 ## Documentation 
 
