@@ -18,12 +18,6 @@
 					<table class="terminus-application-controls terminus-control-panel-layout" style='width: 350px;'>
 						<tr><th class="terminus-logo">
 							 <img src='css/img/TerminusDB_Logo_Original.png' class='terminus-logo-container'></img></th></tr>
-						<!--<tr><th class='terminus-dashboard-btn-group' style='display:flex;'>
-							<button class='terminus-dashboard-btn terminus-dashboard-selected' id = "terminus-client-btn">
-									Dashboard</button>
-							<button class='terminus-dashboard-btn' id = "terminus-explorer-btn">
-								    API Explorer</button>
-						</th></tr>-->
 						<tr><td class="terminus-application-control terminus-client-body"
 								id="terminus-control-panel" ></td></tr>
 						<tr><td class="terminus-application-control terminus-expolrer-body terminus-explorer-hide"
