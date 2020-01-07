@@ -110,6 +110,7 @@ http:location(root, '/', []).
                  methods([options,get,post,delete])]).
 :- http_handler(root(DB/woql), cors_catch(woql_handler(Method,DB)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,get,post,delete])]).
 :- http_handler(root(DB/search), cors_catch(search_handler(Method,DB)),
                 [method(Method),
@@ -173,6 +174,11 @@ customise_error(http_reply(authorize(JSON))) :-
     reply_json(JSON,[status(401)]).
 customise_error(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
+customise_error(time_limit_exceeded) :-
+    reply_json(_{'terminus:status' : 'teriminus:error',
+                 'terminus:message' : 'Connection timed out'
+               },
+               [status(408)]).
 customise_error(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
     reply_json(_{'terminus:status' : 'terminus:failure',
