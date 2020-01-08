@@ -19,6 +19,7 @@ Next run:
 ```docker run -it --name terminus-server -d -v terminus_storage:/app/terminusdb/newstorage -v terminus_config:/app/terminusdb/newconfig -p 6363:6363  --rm  terminusdb/terminus-server:latest```
 
 
+
 3. This will create two volumes: one to persist your database data and one to persist your configuration.
 
 You can configure the following environment variables to taste using the `-e ENV_NAME=value` in the docker command above:
