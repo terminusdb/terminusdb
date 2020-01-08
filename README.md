@@ -12,14 +12,19 @@ which utilise the powerful features of graph search and graph storage.
 
 ## Latest Version 
 
-v1.0.1
+v1.1.1
 
 ## Getting Started
 
-### Install from Docker image
+### Install from Docker image (*RECOMMENDED*)
 
-To install a docker image with the latest server (*RECOMMENDED*) follow the instructions 
-here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/docs/DOCKER.md).
+#### Linux Users
+
+For Linux we recommend you use our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
+
+#### Windows & Mac Users 
+
+To install a docker image with the latest server follow the instructions here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/docs/DOCKER.md).
 
 ### Building from source
 
