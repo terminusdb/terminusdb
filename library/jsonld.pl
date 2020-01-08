@@ -41,6 +41,7 @@
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
 :- use_module(database).
+:- use_module(prefixes).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).
