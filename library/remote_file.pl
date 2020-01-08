@@ -39,12 +39,12 @@ copy_remote(Remote, Name, File, Options) :-
         format(atom(File), "~w/~w-~w", [Dir,Safe,Time]),
         (   memberchk(user(User),Options),
             memberchk(password(Pass),Options),
-            format(atom(CMD), 'curl -s -u "~w:~w" "~w" > "~w"',
+            format(atom(CMD), 'curl -s --fail -u "~w:~w" "~w" > "~w"',
                    [User,Pass,Remote,File]),
             shell(CMD)
         ->  true
             % or try with no pass..
-        ;   format(atom(CMD), 'curl -s "~w" > "~w"', [Remote,File]),
+        ;   format(atom(CMD), 'curl -s --fail "~w" > "~w"', [Remote,File]),
             shell(CMD))
     ->  true
     ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
