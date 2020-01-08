@@ -110,14 +110,13 @@ The [Python client libraries] Coming Soon...
 
 ## Future 
 
-We are eagerly awaiting the release of our new highly scalable lock-free storage layer, 
-[terminus-store](https://github.com/terminusdb/terminus-store), which will be integrated 
-into Terminus-server in a future release.
+We are working hard on our collaboration and data-ops features. They
+should be available by the end of February 2020.
 
 ## TODO
 
-* Write tests for Document API
-* Add optimisations to document expansion in JSON-LD avoiding duplicate expansions
+* Improve error handling and logging
+* Convert frames into valid JSON-LD
 
 ## Contact 
 
@@ -128,6 +127,12 @@ You can write the authors, or connect to us on FreeNode IRC on the `#TerminusDB`
 Gavin Mendel-Gleason <gavin@datachemist.com>
 
 Matthijs van Otterdijk <matthijs@datachemist.com>
+
+Robin de Rooij <robin@datachemist.com>
+
+Anne Ogborn <annie@datachemist.com>
+
+[Paulo Moura](https://github.com/pmoura)
 
 Put your Name here by contributing!
 
