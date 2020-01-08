@@ -52,7 +52,7 @@ In order to build from source, follow the [build from source](https://github.com
 
 ### Open Console
 
-One you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (for instance "http://localhost:6363/console").
+Once you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (the default is: <a href=""http://localhost:6363/console"" target="_blank">"http://localhost:6363/console"</a>).
 
 ## Documentation 
 
