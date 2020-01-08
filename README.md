@@ -7,6 +7,12 @@
    ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║
    ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
 
+                ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
+                ██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+                ███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+                ╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+                ███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+                ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
 ```
 
 # Terminus Server
@@ -20,6 +26,9 @@ Terminus Server provides TerminusDB with a RESTful API for interacting
 with knowledge graphs via the JSON-LD exchange format. This means you
 can easily string together applications within your own toolchain
 which utilise the powerful features of graph search and graph storage.
+
+We use an advanced git-like model storing append only changes to
+graphs represented in concise datastructures using [terminus-store](https://github.com/terminusdb/terminus-store).
 
 ## Latest Version 
 
@@ -93,10 +102,11 @@ The [Python client libraries] Coming Soon...
 
 ## Changes in this Version 
 
-* Added additional typing information and documentation
-* Added database bootstrapping for access permissions and controls using the capabilities ontology
-* Added database initialisation utility 
-* Added code for instance and schema checking
+* Now with our own [terminus-store](https://github.com/terminusdb/terminus-store) backend!
+* Extended WOQL to greater functionality for string and arithmetic processing
+* Better date handling in WOQL
+* Improved type casting in WOQL 
+* Improvements to query processing speed
 
 ## Future 
 
