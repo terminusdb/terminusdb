@@ -733,7 +733,8 @@ try_db_uri(DB,DB_URI) :-
  * Die if we can't form a document uri.
  */
 try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
-    (   interpolate([DB_URI,'/',document, '/',Doc_ID],Doc_URI)
+    www_form_encode(Doc_ID,Doc_ID_Safe),
+    (   interpolate([DB_URI,'/',document, '/',Doc_ID_Safe],Doc_URI)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s can not be constructed in ~s', [DB_URI,Doc_ID]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
