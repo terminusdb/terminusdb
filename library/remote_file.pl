@@ -40,14 +40,14 @@ copy_remote(Remote, Name, File, Options) :-
         (   memberchk(user(User),Options),
             memberchk(password(Pass),Options),
             format(atom(Log_File), "~w/~w.log", [Dir,Safe]),
-            format(atom(CMD), 'wget --http-user="~w" --http-password="~w" "~w" -O "~w" -o "~w"',
-                   [User,Pass,Remote,File,Log_File]),
+            format(atom(CMD), 'curl -s -u "~w:~w" "~w" > "~w"',
+                   [User,Pass,Remote,File]),
             shell(CMD)
         ->  true
             % or try with no pass..
         ;   format(atom(Log_File), "~w/~w.log", [Dir,Safe]),
-            format(atom(CMD), 'wget "~w" -O "~w" -o "~w"',
-                   [Remote,File,Log_File]),
+            format(atom(CMD), 'curl -s "~w" > "~w"',
+                   [Remote,File]),
             shell(CMD))
     ->  true
     ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
