@@ -10,6 +10,13 @@
 
 The following directions should work on debian or ubuntu.
 
+### Rust
+
+Install Rust by following the following instructions on the official
+Rust installation guide.
+
+https://www.rust-lang.org/tools/install
+
 ### SWIPL
 
 To use Terminus Server, you will need the SWIPL installation of
@@ -71,6 +78,14 @@ Now you are ready to interact with the HTTP server.
 These instructions have been tested on Fedora 30 and might result in different results depending on your
 Fedora / Red Hat release.
 
+
+### Rust
+
+Install Rust by following the following instructions on the official
+Rust installation guide.
+
+https://www.rust-lang.org/tools/install
+
 ### SWIPL
 
 SWI-Prolog is needed to run terminus-server. Install SWI-PROLOG with:
@@ -130,6 +145,14 @@ Now you are ready to interact with the HTTP server.
 
 
 ## Arch Linux
+
+
+### Rust
+
+Install Rust by following the following instructions on the official
+Rust installation guide.
+
+https://www.rust-lang.org/tools/install
 
 ### Library dependencies
 
