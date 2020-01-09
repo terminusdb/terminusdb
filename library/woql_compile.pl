@@ -1397,7 +1397,8 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(V,VE).
 compile_wf(re(P,S,L),(literal_list(LE,LL),
                       literally(PE,PL),
-                      utils:re(PL,SE,LL))) -->
+                      literally(SE,SL),
+                      utils:re(PL,SL,LL))) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).

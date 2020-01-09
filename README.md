@@ -7,6 +7,12 @@
    ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║
    ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
 
+                ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
+                ██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+                ███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+                ╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+                ███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+                ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
 ```
 
 # Terminus Server
@@ -20,6 +26,9 @@ Terminus Server provides TerminusDB with a RESTful API for interacting
 with knowledge graphs via the JSON-LD exchange format. This means you
 can easily string together applications within your own toolchain
 which utilise the powerful features of graph search and graph storage.
+
+We use an advanced git-like model storing append only changes to
+graphs represented in concise datastructures using [terminus-store](https://github.com/terminusdb/terminus-store).
 
 ## Latest Version 
 
@@ -93,21 +102,21 @@ The [Python client libraries] Coming Soon...
 
 ## Changes in this Version 
 
-* Added additional typing information and documentation
-* Added database bootstrapping for access permissions and controls using the capabilities ontology
-* Added database initialisation utility 
-* Added code for instance and schema checking
+* Now with our own [terminus-store](https://github.com/terminusdb/terminus-store) backend!
+* Extended WOQL to greater functionality for string and arithmetic processing
+* Better date handling in WOQL
+* Improved type casting in WOQL 
+* Improvements to query processing speed
 
 ## Future 
 
-We are eagerly awaiting the release of our new highly scalable lock-free storage layer, 
-[terminus-store](https://github.com/terminusdb/terminus-store), which will be integrated 
-into Terminus-server in a future release.
+We are working hard on our collaboration and data-ops features. They
+should be available by the end of February 2020.
 
 ## TODO
 
-* Write tests for Document API
-* Add optimisations to document expansion in JSON-LD avoiding duplicate expansions
+* Improve error handling and logging
+* Convert frames into valid JSON-LD
 
 ## Contact 
 
@@ -118,6 +127,12 @@ You can write the authors, or connect to us on FreeNode IRC on the `#TerminusDB`
 Gavin Mendel-Gleason <gavin@datachemist.com>
 
 Matthijs van Otterdijk <matthijs@datachemist.com>
+
+Robin de Rooij <robin@datachemist.com>
+
+Anne Ogborn <annie@datachemist.com>
+
+[Paulo Moura](https://github.com/pmoura)
 
 Put your Name here by contributing!
 
