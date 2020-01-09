@@ -41,8 +41,6 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
-2 ?- pack_install(mavis).
-% Contacting server ....
 ```
 
 ### Terminus Server
@@ -110,8 +108,6 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
-2 ?- pack_install(mavis).
-% Contacting server ....
 ```
 
 
@@ -177,8 +173,6 @@ For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
-% Contacting server ....
-2 ?- pack_install(mavis).
 % Contacting server ....
 ```
 
