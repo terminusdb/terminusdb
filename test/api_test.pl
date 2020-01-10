@@ -82,7 +82,7 @@ run_api_tests :-
     try(run_get_filled_frame_test),
     try(run_woql_test),
     try(run_woql_empty_error_test),
-    try(run_woql_external_file_test),
+    %try(run_woql_external_file_test),
     try(run_woql_syntax_error_test),
     try(run_woql_csv_test),
     try(run_woql_instantiation_test),
@@ -469,10 +469,37 @@ run_woql_external_file_test :-
     config:server(Server),
     auth(Auth),
 
-    atomic_list_concat([Server,'/terminus/woql', '?terminus%3Aquery=%7B%22get%22%3A%5B%5B%7B%22as%22%3A%5B%7B%22%40value%22%3A%22councillor_a%22%7D%2C%22v%3ARep_A%22%5D%7D%2C%7B%22as%22%3A%5B%7B%22%40value%22%3A%22councillor_b%22%7D%2C%22v%3ARep_B%22%5D%7D%2C%7B%22as%22%3A%5B%7B%22%40value%22%3A%22party_a%22%7D%2C%22v%3AParty_A%22%5D%7D%2C%7B%22as%22%3A%5B%7B%22%40value%22%3A%22party_b%22%7D%2C%22v%3AParty_B%22%5D%7D%2C%7B%22as%22%3A%5B%7B%22%40value%22%3A%22distance%22%7D%2C%22v%3ADistance%22%5D%7D%5D%2C%7B%22remote%22%3A%5B%22https%3A%2F%2Fterminusdb.com%2Ft%2Fdata%2Fcouncil%2Fweighted_similarity.csv%22%5D%7D%5D%2C%22%40context%22%3A%7B%22rdf%22%3A%22http%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%22%2C%22rdfs%22%3A%22http%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%22%2C%22xsd%22%3A%22http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%22%2C%22owl%22%3A%22http%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%22%2C%22tcs%22%3A%22http%3A%2F%2Fterminusdb.com%2Fschema%2Ftcs%23%22%2C%22xdd%22%3A%22http%3A%2F%2Fterminusdb.com%2Fschema%2Fxdd%23%22%2C%22v%22%3A%22http%3A%2F%2Fterminusdb.com%2Fwoql%2Fvariable%2F%22%2C%22terminus%22%3A%22http%3A%2F%2Fterminusdb.com%2Fschema%2Fterminus%23%22%2C%22vio%22%3A%22http%3A%2F%2Fterminusdb.com%2Fschema%2Fvio%23%22%2C%22doc%22%3A%22http%3A%2F%2Flocalhost%3A6363%2Fterminus%2Fdocument%2F%22%2C%22scm%22%3A%22http%3A%2F%2Flocalhost%3A6363%2Fterminus%2Fschema%23%22%2C%22db%22%3A%22http%3A%2F%2Flocalhost%3A6363%2Fterminus%2F%22%7D%7D'], URI),
+    Query = _{'@context':_{'rdf':"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                           'rdfs':"http://www.w3.org/2000/01/rdf-schema#",
+                           'xsd':"http://www.w3.org/2001/XMLSchema#",
+                           'owl':"http://www.w3.org/2002/07/owl#",
+                           'tcs':"http://terminusdb.com/schema/tcs#",
+                           'xdd':"http://terminusdb.com/schema/xdd#",
+                           'v':"http://terminusdb.com/woql/variable/",
+                           'terminus':"http://terminusdb.com/schema/terminus#",
+                           'vio':"http://terminusdb.com/schema/vio#",
+                           'doc':"http://localhost:6363/terminus/document/",
+                           'scm':"http://localhost:6363/terminus/schema#",
+                           'db':"http://localhost:6363/terminus/"},
+              'get':[[_{'as':[_{'@value':"councillor_a"},"v:Rep_A"]},
+                      _{'as':[_{'@value':"councillor_b"},"v:Rep_B"]},
+                      _{'as':[_{'@value':"party_a"},"v:Party_A"]},
+                      _{'as':[_{'@value':"party_b"},"v:Party_B"]},
+                      _{'as':[_{'@value':"distance"},"v:Distance"]}],
+                     _{'remote':["https://terminusdb.com/t/data/council/weighted_similarity.csv"]}
+                    ]},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload, Encoded),
+    atomic_list_concat([Server,'/terminus/woql', '?terminus%3Aquery=', Encoded], URI),
     Args = ['-s', '--user', Auth,'-X','GET',URI],
     report_curl_command(Args),
-    curl_json(Args,Term).
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]).
 
 run_woql_empty_error_test :-
     config:server(Server),
