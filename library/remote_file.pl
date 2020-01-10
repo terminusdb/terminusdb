@@ -2,6 +2,8 @@
               copy_remote/4
           ]).
 
+:- use_module(library(http/http_open)).
+
 /** <module> Remote File
  *
  * Remote file manipulation
@@ -39,14 +41,13 @@ copy_remote(Remote, Name, File, Options) :-
         format(atom(File), "~w/~w-~w", [Dir,Safe,Time]),
         (   memberchk(user(User),Options),
             memberchk(password(Pass),Options),
-            format(atom(CMD), 'curl -s --fail -u "~w:~w" "~w" > "~w"',
-                   [User,Pass,Remote,File]),
-            shell(CMD)
+            http_open(Remote, In, [authorization(basic(User,Pass))])
         ->  true
             % or try with no pass..
-        ;   format(atom(CMD), 'curl -s --fail "~w" > "~w"', [Remote,File]),
-            shell(CMD))
-    ->  true
+        ;   http_open(Remote, In, []))
+    ->  open(File, write, FileBuffer),
+        copy_stream_data(In, FileBuffer),
+        close(FileBuffer)
     ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
         throw(error(M))
     ).
