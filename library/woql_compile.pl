@@ -519,7 +519,7 @@ run_term(Query,Ctx_In,JSON) :-
                     call(Prog),
                     error(instantiation_error, C),
                     % We need to find the offending unbound culprit here
-                    report_instantiation_error(Prog,C,Ctx_Out)
+                    woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
                 ),
                 elt(bindings=B,Ctx_Out)
             ),
