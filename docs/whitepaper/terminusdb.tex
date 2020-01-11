@@ -28,7 +28,7 @@
 \lettrineabstract{Modern hardware architectures includes larger main
   memory and pervasive parallelism. Modern software development
   processes now incorporate continuous integration/continuous
-  delivery (CI/CD) coupled with version control. These fundamental
+  delivery (CI/CD) coupled with revision control. These fundamental
   changes to information technology infrastructure necessitate a
   re-appraisal of database architecture.  TerminusDB makes a radical
   departure from historical architectures to address these
@@ -50,23 +50,26 @@
 There has been an explosion of new database designs, including graph
 databases, key-value stores, document databases and multi-model
 databases. Yet the majority of production databases are still based on
-the RDBMS designs of the 1970s\cite{Codd:1970:RMD:362384.362685}.
+the RDBMS designs of the 1970s\cite{Codd:1970:RMD:362384.362685}. This
+has become a bottleneck in an increasingly automated modern technology
+operations environment.
 
 Meanwhile both hardware infrastructure and software design process
 have moved on significantly over the course of the last 40 years. In
 particular, machines with terrabytes of RAM are now available for
 prices reasonable enough for some small and medium sized enterprises.
 
-At the same time flexible revision control systems have revolutionised
-the software development process. The maintenance of histories, of
-records of modification and the ability to roll back enables engineers
-to have confidence in making modificiations collaboratively. This is
-augmented with important features such as branching, labelling,
-rebasing, and cloning. When combined with continuous integration/continuous
+At the same time, flexible revision control systems have
+revolutionised the software development process. The maintenance of
+histories, of records of modification and the ability to roll back
+enables engineers to have confidence in making modificiations
+collaboratively. This is augmented with important features such as
+branching, labelling, rebasing, and cloning. When combined with
+continuous integration/continuous
 delivery\cite{65147}\cite{LAUKKANEN201755} (CI/CD) teams of
 programmers can have confidence that central repositories are
-maintained in correct states once testing and verification of have
-been passed.
+maintained in correct states such that they can be safely deployed
+once testing and verification of have been passed.
 
 These two developments suggest a solution at their
 intersection. Namely the use of in-memory immutable {\em succinct}
@@ -85,7 +88,7 @@ Rust\cite{Blandy:2015:RPL:3019371} library which we call {\em{terminus-store}}.
 We describe in turn the graph database model which is used, the
 succinct data structure approach, and finally how we implement
 revision control type operations using {\em deltas} which we collect
-together with some metadata into an object which we term {\em layers}.
+together with some metadata into objects which we term {\em layers}.
 
 \subsection{Graph Databases}
 
@@ -116,11 +119,13 @@ us with a rich modelling language which can provide constraints on the
 allowable shapes in the graph.
 
 TerminusDB, following on from the RDF tradition, is not a property
-graph. However, it can model properties using an intermediate nodes and
-this pattern can be made explicit in the OWL schema design. Again this
-choice leads to simplicity of the underlying representation, which, as
-we will see, is important when constructing succinct data structures
-with change sets.
+graph. However, OWL extends RDF graphs with powerful abstractions such
+as classes, restrictions and strongly typed properties. We can choose
+to interpret objects as either nodes or relationships as we please. In
+a logical sense, property graphs are equivalent to a single view of a
+more expressive OWL graph. This choice leads to simplicity of the
+underlying representation, which, as we will see, is important when
+constructing succinct data structures with change sets.
 
 \subsection{Succinct Data Structures}
 
@@ -134,7 +139,7 @@ whose size is:
 Where \(n\) is the information theoretic minimum size. Succinct
 representations are generally somewhat more computationally expensive
 than less compact representations with pointers when working with
-small problems. However, as the size of the datastructure grows, the
+small datasets. However, as the size of the datastructure grows, the
 ability to avoid new cache reads at various levels of the memory
 hierarchy (including reading information from disk) means that these
 representations can prove very speed
@@ -145,7 +150,7 @@ HDT\cite{10.1007/978-3-642-30284-8_36} with some modifications which
 simplify the use of change sets. The authors originally evaluated HDT
 as a possibility for a graph which was too large to fit in memory when
 loaded into postgresql and found that queries on the resulting graph
-performed very well in practice.
+performed much better in HDT\cite{gleason_feeney2018}.
 
 In particular, the primary datastructures of the HDT format are
 retained, namely {\em front coded dictionaries}, {\em bit sequences}
@@ -186,7 +191,7 @@ which are shared. An example is given in Table~\ref{tab:pfc}. The
 position in the dictionary gives us the implicit natural number
 identifier.
 
-\subsubsection{Succinct Graphs Encoding}
+\subsubsection{Succinct Graph Encoding}
 
 Once subject, object and property of an edge have been appropriately
 converted into integers by use of the subject-object dictionary, the
@@ -224,7 +229,7 @@ the table for clarity.
 	\centering
 	\begin{tabular}{l|l|l}
 		\toprule
-		Triples & Encoding & \\
+		Triples & Encoding & Description \\
 		\midrule
         \(  (\s{1},\p{2},\w{3}) \)  & \(\s{1}\;\;\;\;\s{2} \;\;\;\;\s{3}\) & Subject Ids \\
         \(  (\s{1},\p{2},\w{4}) \)  & \(   1\;\;\;\;    1\;    0\;    1\) & Encoded Subject Bit Sequence\\
@@ -271,11 +276,31 @@ developers collaborating on a code base. The operations include:
   into a single version by choosing a strategy for combining changes.
 \end{itemize}
 
-TerminusDB uses an analogous approach to updates. A given database is
-comprised of {\em layers} which stands in place of the objecs of
-git. Each layer has a unique identifier, a 20-byte name. The base
-layer contains a simple graph represented using the succinct data
-strucures already described earlier.
+These features have powered a revolution in software engineering and
+elevated the importance of dev-ops automation in modern IT
+infrastructures. It would be nice if we could apply them to databases
+too and similarly elevate the field of data-ops. However, git itself
+is not the solution – git is squarely focused on code management and
+data and code differ in some important fundamental characteristics.
+
+Codebases can be adequately modelled as a hierarchy of directories
+containing files, with changes modelled as the addition or subtraction
+of lines of text to these files. Databases, by contrast, lack a
+universal navigation and addressing mechanism like the filesystem,
+they often have complex internal structures which govern the
+granularity of updates. They cannot usefully be reduced to the same
+universal unit of comparison as used by code: the line of text. Given
+that databases can be many times larger than even the biggest
+code-base, the fineness of the granularity of diffs is an important
+performance factor.
+
+TerminusDB uses nodes and edges, replete with classes and restrictions
+to model the structure of data – enabling a fine-granularity in
+expression of changes. Otherwise it uses a similar approach to git for
+expressing updates. A given database is comprised of layers which
+stand in place of the objects of git. Each layer is identified by a
+unique 20-byte name. The base layer contains a simple graph
+represented using the succinct data structures described earlier.
 
 \begin{figure}
 	\includegraphics[width=\linewidth]{layers-diagram.png} % Figure image
@@ -330,6 +355,16 @@ problem of coordination in the face of side-effects is reduced to the
 problem of label management, simplifying much of the architecture. A
 schematic of the workflow of the write transaction is given in
 Figure~\ref{workflow}.
+
+Automated checking of data constraints is particularly important if we
+are to confidently merge database branches that might have divergent
+schemas or mutually inconsistent states (e.g. where we have a property
+with a cardinality of exactly one in both branches, but with a
+different value in each). At a minimum, we need to ensure that merging
+branches does not result in the database entering an inconsistent
+state and hence, although constraint checking is beyond the scope of
+this paper, it is a critical piece of the puzzle in enabling automated
+data-ops\cite{}.
 
 \begin{figure}
 	\includegraphics[width=\linewidth]{query_write_commit_head} % Figure image
