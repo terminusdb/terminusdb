@@ -154,8 +154,12 @@
 %----------------------------------------------------------------------------------------
 
 %\usepackage[backend=bibtex,style=authoryear,natbib=true]{biblatex} % Use the bibtex backend with the authoryear citation style (which resembles APA)
-\usepackage[backend=bibtex,natbib=true]{biblatex}
+\usepackage[backend=bibtex,style=nature,natbib=true,maxbibnames=99]{biblatex}
 
 \addbibresource{terminusdb.bib} % The filename of the bibliography
 
 \usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliography
+
+\usepackage{etoolbox}
+\apptocmd{\sloppy}{\hbadness 10000\relax}{}{}
+
