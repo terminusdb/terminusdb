@@ -11,7 +11,7 @@
 \author{
   \authorstyle{Matthijs van Otterdijk\textsuperscript{1,2} and Gavin Mendel-Gleason\textsuperscript{1,3} and Kevin Feeney\textsuperscript{1,4}}
   \newline\newline
-  \textsuperscript{1}\institution{DataChemist Ltd. {\protect\url{http://datachemist.com}}}\\
+  \textsuperscript{1}\institution{TerminusDB {\protect\url{http://terminusdb.com}}}\\
   \textsuperscript{2}\institution{\protect\url{matthijs@datachemist.com}}\\
   \textsuperscript{3}\institution{\protect\url{gavin@datachemist.com}}\\
   \textsuperscript{4}\institution{\protect\url{kevin@datachemist.com}}
@@ -379,13 +379,13 @@ data-ops\cite{gleason2018}.
 As new updates are performed the database layer depth increases. This
 will incur a performance penalty requiring repeated searching at each
 layer for every query. In order to improve performance, we can perform
-a {\em delta compression} similar to the mechnaims used in
+a {\em delta compression} similar to the mechanisms used in
 git. Alternatively we can recalculate the full dataset as a new
 base-layer. In git this {\em delta compression} step can be performed
 manually or it will occur when a depth threshold is passed.
 
 Since the layers are immutable, this operation can be done
-concurrently. Commis that occur before the process is completed simply
+concurrently. Commits that occur before the process is completed simply
 layer over the delta with no visible change in the content of
 the database.
 
@@ -395,7 +395,7 @@ to {\em time travel} or to track whether the database arose from a
 branch. However, this information can be kept seperately in a metadata
 repository allowing memory of the branching structure and other
 information about previous commits, but not the capacity to
-time-tralve to them. We plan to implement this graph metadata
+time-travel to them. We plan to implement this graph metadata
 repository in future version of TerminusDB.
 
 \section{Future Work}
