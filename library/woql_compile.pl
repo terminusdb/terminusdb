@@ -391,7 +391,7 @@ resolve_possible_object(P,Y,Ye,T) -->
     resolve(Y,Yi),
     {
         % We need to do this at query time since the schema may be lifted...
-        T = (    validate_schema:datatypeProperty(P,Database)
+        T = (    validate_schema:datatype_property(P,Database)
             ->  (   validate_schema:range(P,R,Database)
                 ->  Ye = literal(type(R,Yi))
                 ;   Ye = Yi
