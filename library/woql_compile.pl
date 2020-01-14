@@ -61,9 +61,9 @@
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
-:- use_module(validate_schema, [datatypeProperty/2,
-                                objectProperty/2,
-                                basetypeSubsumptionOf/2]).
+:- use_module(validate_schema, [datatype_property/2,
+                                object_property/2,
+                            basetype_subsumption_of/2]).
 :- use_module(casting, [typecast/4,hash/3,idgen/3]).
 :- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
 

@@ -45,8 +45,8 @@
 :- use_module(library(http/http_log)).
 
 % Required for consistency
-pre_test_schema(classCycleSC).
-pre_test_schema(propertyCycleSC).
+pre_test_schema(class_cycle_SC).
+pre_test_schema(property_cycle_SC).
 
 /**
  * test_schema(-Pred:atom) is nondet.
@@ -54,22 +54,22 @@ pre_test_schema(propertyCycleSC).
  * This predicate gives each available schema constraint.
  */
 % Restrictions on schemas
-test_schema(noImmediateClassSC).
-test_schema(noImmediateDomainSC).
-test_schema(noImmediateRangeSC).
+test_schema(no_immediate_class_SC).
+test_schema(no_immediate_domain_SC).
+test_schema(no_immediate_range_SC).
 %test_schema(notUniqueClassLabelSC).
 %test_schema(notUniqueClassSC).
 %test_schema(notUniquePropertySC). % still useful with annotationOverloadSC?
 %test_schema(schemaBlankNodeSC). % should never be used.
-test_schema(annotationOverloadSC).
+test_schema(annotation_overload_SC).
 % OWL DL constraints
-test_schema(orphanClassSC).
-test_schema(orphanPropertySC).
-test_schema(invalidRangeSC).
-test_schema(invalidDomainSC).
-test_schema(domainNotSubsumedSC).
-test_schema(rangeNotSubsumedSC).
-test_schema(propertyTypeOverloadSC).
+test_schema(orphan_class_SC).
+test_schema(orphan_property_SC).
+test_schema(invalid_range_SC).
+test_schema(invalid_domain_SC).
+test_schema(domain_not_subsumed_SC).
+test_schema(range_not_subsumed_SC).
+test_schema(property_type_overload_SC).
 test_schema(invalid_RDFS_property_SC).
 
 /*

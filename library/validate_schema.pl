@@ -1,78 +1,77 @@
 :- module(validate_schema,[
-              % OWL semantics
-	          class/2,
-              immediateClass/2,
+              class/2,
+              immediate_class/2,
               restriction/2,
-              classOrRestriction/2,
-		      subClassOf/3,
-              unionOf/3,
-              intersectionOf/3,
-              subClassStrict/3,
-		      disjointUnionOf/3,
+              class_or_restriction/2,
+              sub_class_of/3,
+              union_of/3,
+              intersection_of/3,
+              sub_class_strict/3,
+              disjoint_union_of/3,
               label/3,
               comment/3,
-		      subsumptionOf/3,
-              strictSubsumptionOf/3,
-              complementOf/3,
-		      tcs_tag/3,
+              subsumption_of/3,
+              strict_subsumption_of/3,
+              complement_of/3,
+              tcs_tag/3,
               document/2,
 
-		      unionOfList/3,
-              intersectionOfList/3,
-              disjointUnionOfList/3,
-		      oneOfList/3,
+              union_of_list/3,
+              intersection_of_list/3,
+              disjoint_union_of_list/3,
+              one_of_list/3,
 
-		      datatypeProperty/2,
-              objectProperty/2,
-              annotationProperty/2,
-		      property/2,
-              subPropertyOf/3,
-              subsumptionPropertiesOf/3,
-		      range/3,
+              datatype_property/2,
+              object_property/2,
+              annotation_property/2,
+              property/2,
+              sub_property_of/3,
+              subsumption_properties_of/3,
+              range/3,
               domain/3,
-              anyRange/3,
-              anyDomain/3,
-		      mostSpecificDomain/3,
-              mostSpecificRange/3,
-		      collect/4,
-              functionalProperty/2,
-		      inverseFunctionalProperty/2,
-              restrictionOnProperty/3,
-		      datatypeSubsumptionOf/3,
-              basetypeSubsumptionOf/2,
-		      customDatatype/2,
+              any_range/3,
+              any_domain/3,
+              most_specific_domain/3,
+              most_specific_range/3,
+              collect/4,
+              functional_property/2,
+              inverse_functional_property/2,
+              restriction_on_property/3,
+              datatype_subsumption_of/3,
+              basetype_subsumption_of/2,
+              custom_datatype/2,
               datatype/2,
-		      strictSubsumptionPropertiesOf/3,
-		      orphanProperty/4,
-		      rdfMetaProperty/1,
-              rdfsProperty/1,
-		      % SC == Schema Constraints
-		      % constraints must be pred/2
+              strict_subsumption_properties_of/3,
+              orphan_property/4,
+              rdf_meta_property/1,
+              rdfs_property/1,
+              % SC == Schema Constraints
+              % constraints must be pred/2
 
-		      % REQUIRED Best Practice
-		      classCycleSC/2,               % Best Practice
-		      propertyCycleSC/2,            % Best Practice
+              % REQUIRED Best Practice
+              class_cycle_SC/2,               % Best Practice
+              property_cycle_SC/2,            % Best Practice
 
-		      % Best practice
-		      noImmediateDomainSC/2,
-              noImmediateRangeSC/2,         % Best Practice
-		      % schemaBlankNodeSC/2,
-              notUniqueClassLabelSC/2,      % Best Practice
-		      notUniqueClassSC/2,
-              notUniquePropertySC/2,        % Best Practice
-		      noImmediateClassSC/2,
-		      annotationOverloadSC/2,
-		      propertyTypeOverloadSC/2,
+              % Best practice
+              no_immediate_domain_SC/2,
+              no_immediate_range_SC/2,         % Best Practice
+              % schema_blank_node_SC/2,
+              not_unique_class_label_SC/2,      % Best Practice
+              not_unique_class_SC/2,
+              not_unique_property_SC/2,        % Best Practice
+              no_immediate_class_SC/2,
+              annotation_overload_SC/2,
+              property_type_overload_SC/2,
 
-		      % OWL DL (Constraint)
-		      orphanClassSC/2,              % OWL
-		      orphanPropertySC/2,           % OWL
-		      invalidDomainSC/2,
-              invalidRangeSC/2,             % OWL
-		      domainNotSubsumedSC/2,
-              rangeNotSubsumedSC/2,         % OWL
+              % OWL DL (Constraint)
+              orphan_class_SC/2,              % OWL
+              orphan_property_SC/2,           % OWL
+              invalid_domain_SC/2,
+              invalid_range_SC/2,             % OWL
+              domain_not_subsumed_SC/2,
+              range_not_subsumed_SC/2,         % OWL
               invalid_RDFS_property_SC/2    % OWL
-	      ]).
+          ]).
 
 /** <module> Schema Validation
  *
@@ -131,8 +130,8 @@ Classes
 */
 
 /**
- * immediateClass(?X:uri_or_id, +Database:database) is nondet.
- * immediateClass(+X:uri_or_id, +Database:database) is det.
+ * immediate_class(?X:uri_or_id, +Database:database) is nondet.
+ * immediate_class(+X:uri_or_id, +Database:database) is det.
  *
  * Check to see if class definitions are immediate (best practices) rather than inferred.
  *
@@ -140,21 +139,21 @@ Classes
  *        a non-inferred rfds or owl Class.
  * @param Schema Atom idntifying the current schema graph.
 */
-% :- rdf_meta immediateClass(r,o).
-immediateClass(X,Database) :-
+% :- rdf_meta immediate_class(r,o).
+immediate_class(X,Database) :-
     database_schema(Database,Schema),
     xrdf(Database, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Class').
-immediateClass(X,Database) :-
+immediate_class(X,Database) :-
     database_schema(Database,Schema),
     xrdf(Database, Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
-immediateClass('http://www.w3.org/2002/07/owl#Thing',_).
-immediateClass('http://www.w3.org/2002/07/owl#Nothing',_).
+immediate_class('http://www.w3.org/2002/07/owl#Thing',_).
+immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
 % This makes me nevious... [ Gavin ]
-immediateClass('http://www.w3.org/2002/07/owl#Ontology', _).
+immediate_class('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
-immediateClass('http://terminusdb.com/schema/tcs#Entity', _).
-immediateClass('http://terminusdb.com/schema/tcs#Document', _).
-immediateClass('http://terminusdb.com/schema/tcs#Relationship', _).
+immediate_class('http://terminusdb.com/schema/tcs#Entity', _).
+immediate_class('http://terminusdb.com/schema/tcs#Document', _).
+immediate_class('http://terminusdb.com/schema/tcs#Relationship', _).
 
 
 %% class(?X:uri_or_id, +Schema:database is nondet
@@ -166,9 +165,9 @@ immediateClass('http://terminusdb.com/schema/tcs#Relationship', _).
 %        an inferred rfds or owl Class.
 % @param Database object with the current schema graph.
 %% :- rdf_meta class(r,o).
-class(X,Database) :- immediateClass(X,Database).
-class(X,Database) :- subClassOf(X,Y,Database), class(Y,Database).
-class(X,Database) :- equivalentClass(X,Y,Database), class(Y,Database).
+class(X,Database) :- immediate_class(X,Database).
+class(X,Database) :- sub_class_of(X,Y,Database), class(Y,Database).
+class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
 
 % restriction(+R:uri_or_id, +Database:database is nondet.
 %
@@ -182,24 +181,24 @@ restriction(R,Database) :-
     database_schema(Database,Schema),
     xrdf(Database, Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
 restriction(R,Database) :-
-    subClassOf(R,R2,Database),
+    sub_class_of(R,R2,Database),
     restriction(R2,Database).
 restriction(R,Database) :-
-    equivalentClass(R,R2,Database),
+    equivalent_class(R,R2,Database),
     restriction(R2,Database).
 
-%% noImmediateClassSC(+Database:database -Reason:any) is nondet
+%% no_immediate_class_SC(+Database:database -Reason:any) is nondet
 %
 % Check to see if a class is used without a class definition.
 %
 % @param Schema Database idntifying the current schema graph.
 % @param Reason A prolog representation of a JSON Linked Data structure
 %               detailing the violation.
-noImmediateClassSC(Database, Reason) :-
+no_immediate_class_SC(Database, Reason) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
     domain(P,X,Database),
-    \+ immediateClass(X,Database), \+ restriction(X,Database),
+    \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a domain for property ',P,' but is not defined'], Message),
     Reason = _{
                  '@type' : 'vio:InvalidClassInDomain',
@@ -207,21 +206,21 @@ noImmediateClassSC(Database, Reason) :-
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
              }.
-noImmediateClassSC(Database, Reason) :-
+no_immediate_class_SC(Database, Reason) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
     range(P,X,Database),
-    \+ immediateClass(X,Database), \+ restriction(X,Database),
+    \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a range for property ',P,' but is not defined'], Message),
     Reason = _{
-                 '@type' : 'vio:InvalidClassInRange',
+                 '@type' : 'vio:Invalid_classIn_range',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
              }.
-noImmediateClassSC(Database, Reason) :-
-    subClassOf(X,Y,Database),
-    \+ customDatatype(X,Database), \+ immediateClass(X,Database), \+ restriction(X,Database),
+no_immediate_class_SC(Database, Reason) :-
+    sub_class_of(X,Y,Database),
+    \+ custom_datatype(X,Database), \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',Y,' is not a superclass of a defined class ',X], Message),
     Reason = _{
                  '@type' : 'vio:ClassInheritanceVioltion',
@@ -229,9 +228,9 @@ noImmediateClassSC(Database, Reason) :-
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
-noImmediateClassSC(Database, Reason) :-
-    intersectionOf(X,Y,Database),
-    \+ immediateClass(X,Database), \+ restriction(X,Database),
+no_immediate_class_SC(Database, Reason) :-
+    intersection_of(X,Y,Database),
+    \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',X,' is an intersection of ', Y,' but not a defined class'], Message),
     Reason = _{
                  '@type' : 'vio:ClassInheritanceVioltion',
@@ -239,9 +238,9 @@ noImmediateClassSC(Database, Reason) :-
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
-noImmediateClassSC(Database, Reason) :-
-    unionOf(X,Y,Database),
-    \+ immediateClass(Y,Database), \+ restriction(Y,Database),
+no_immediate_class_SC(Database, Reason) :-
+    union_of(X,Y,Database),
+    \+ immediate_class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a defined class ',Y], Message),
     Reason = _{
                  '@type' : 'vio:ClassInheritanceVioltion',
@@ -250,258 +249,258 @@ noImmediateClassSC(Database, Reason) :-
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 
-%% restrctionOnProperty(?CR:uri_or_id, ?P:uri_or_id, +Database:database) is nondet
+%% restrction_on_property(?CR:uri_or_id, ?P:uri_or_id, +Database:database) is nondet
 %
 % Defines the relation between properties and their restrictions.
 %
 % @param CR A restriction class specified as a URI_OR_ID
 % @param P A property specified as a URI_OR_ID
 % @param Database the current graph
-restrictionOnProperty(CR,P,Database) :-
+restriction_on_property(CR,P,Database) :-
     database_schema(Database,Schema),
 	xrdf(Database,Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
 	restriction(CR,Database).
-restrictionOnProperty(CR,P,Database) :-
-	strictSubsumptionPropertiesOf(P,Q,Database),
-	restrictionOnProperty(CR,Q,Database).
+restriction_on_property(CR,P,Database) :-
+	strict_subsumption_properties_of(P,Q,Database),
+	restriction_on_property(CR,Q,Database).
 
-%% classOrRestriction(?X:uri_or_id, +Database:database is nondet
+%% class_or_restriction(?X:uri_or_id, +Database:database is nondet
 %
 % All URI_OR_IDs which are either a class or restriction.
 %
 % @param X A class or restriction class specified as a URI_OR_ID
 % @param Database The current graph
-classOrRestriction(X,Database) :- class(X,Database).
-classOrRestriction(X,Database) :- restriction(X,Database).
+class_or_restriction(X,Database) :- class(X,Database).
+class_or_restriction(X,Database) :- restriction(X,Database).
 
 % TODO: compound is vague, reasons should have a specification.
 
-%% notUniqueClass(+Y:uri_or_id, +Database:database -Reason:any) is nondet
+%% not_unique_class(+Y:uri_or_id, +Database:database -Reason:any) is nondet
 %
 % Is a class multiply defined?
 %
 % @param Y A class specified as a URI_OR_ID
 % @param Schema The current schema graph
-notUniqueClass(Y, Database, Reason) :-
-    classOrRestriction(Y, Database),
-    bagof(Y, classOrRestriction(Y, Database), L),
+not_unique_class(Y, Database, Reason) :-
+    class_or_restriction(Y, Database),
+    bagof(Y, class_or_restriction(Y, Database), L),
     \+ length(L,1),
     interpolate(['The class or restriction ',Y,
 		         ' is not a unique. Some existing class has this identifier'],
 		        Message),
     Reason = _{
-                 '@type' : 'vio:InvalidClassViolation',
+                 '@type' : 'vio:Invalid_classViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
-notUniqueClassSC(Database,Reason) :- notUniqueClass(_,Database,Reason).
+not_unique_class_SC(Database,Reason) :- not_unique_class(_,Database,Reason).
 
 
 %% collect(+collection:atom, +Database_ID:graph_identifier, +X:uri_or_id, -L:any) is semidet.
 %
 % Collect the RDF list into a prolog list.
 % It may be better to treat lists programmatically through rdf rather than
-% collect them, using a derived predicate like rdfListMembership
+% collect them, using a derived predicate like rdf_listMembership
 %
 % @param X The URI_OR_ID of an RDF list
 % @param L Term
 % @param Database The current graph
 collect(_,_,'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil',[]) :-
     !.
-collect(Database,DatabaseAtom,X,[H|T]) :-
-    xrdf(Database,DatabaseAtom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',H),
+collect(Database,Database_atom,X,[H|T]) :-
+    xrdf(Database,Database_atom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',H),
     !, % assume one result
-    xrdf(Database,DatabaseAtom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Y),
+    xrdf(Database,Database_atom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Y),
     !, % assume one result
-    collect(Database,DatabaseAtom,Y,T).
+    collect(Database,Database_atom,Y,T).
 
-%% subClassOf(?Child:uri_or_id,?Parent:uri_or_id,+Database:database is nondet
+%% sub_class_of(?Child:uri_or_id,?Parent:uri_or_id,+Database:database is nondet
 %
 % One step subclassing (only gives the immediate child-parent class relationship)
 %
 % @param Child Child class URI_OR_ID
 % @param Parent Parent class URI_OR_ID.
-subClassOf(Child,Parent,Database) :-
+sub_class_of(Child,Parent,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent).
 
-%% unionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
+%% union_of(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be a union of.
 %
 % @param Super The class URI_OR_ID which is the union of other classes.
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Database The current graph
-unionOf(C,U,Database) :-
+union_of(C,U,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
     collect(Database,Schema,ListObj,L),
     member(U,L).
 
-%% unionOfList(+Super:uri_or_id,-Sub:list(uri_or_id),+Database:database is det
+%% union_of_list(+Super:uri_or_id,-Sub:list(uri_or_id),+Database:database is det
 %
 % Gives a list of URI_OR_IDs which are solutions for which the Super URI_OR_ID is determined to be a union of.
 %
 % @param Super The class URI_OR_ID which is the union of other classes.
 % @param Sub The class URI_OR_ID which is unioned to form the Super class.
 % @param Database The current graph
-unionOfList(C,UList,Database) :-
+union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
     collect(Database,Schema,ListObj,UList),
     % This looks so dubious, I hope I didn't write it.
     !.
 
-%% disjointUnionOf(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
+%% disjoint_union_of(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be a union of.
 %
 % @param Super The class URI_OR_ID which is the disjoint union of other classes.
 % @param Sub A class URI_OR_ID which is disjointly unioned to form the Super class.
 % @param Database The current graph
-%% :- rdf_meta disjointUnionOf(r,r,o).
-disjointUnionOf(C,U,Database) :-
+%% :- rdf_meta disjoint_union_of(r,r,o).
+disjoint_union_of(C,U,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
     collect(Database,Schema,ListObj,L),
     member(U,L).
 
-%% disjointUnionOfList(+Super:uri_or_id,-SubList:list(uri_or_id),+Database:database is det
+%% disjoint_union_of_list(+Super:uri_or_id,-Sub_list:list(uri_or_id),+Database:database is det
 %
 % Gives URI_OR_ID solutions as a list for which the Super URI_OR_ID is determined to be a djsoint union of.
 %
 % @param Super The class URI_OR_ID which is the disjoint union of other classes.
-% @param SubList The prolog list of class URI_OR_IDs which are disjointly unioned to form the Super class.
+% @param Sub_list The prolog list of class URI_OR_IDs which are disjointly unioned to form the Super class.
 % @param Database The current schema graph.
-%% :- rdf_meta disjointUnionOfList(r,r,o).
-disjointUnionOfList(C,UList,Database) :-
+%% :- rdf_meta disjoint_unionOf_list(r,r,o).
+disjoint_union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
     collect(Database,Schema,ListObj,UList),
     % DUBIOUS
     !.
 
-%% intersectionOf(?Inter:uri_or_id,?Class:uri_or_id,+Database:database is nondet
+%% intersection_of(?Inter:uri_or_id,?Class:uri_or_id,+Database:database is nondet
 %
 % Gives URI_OR_ID solutions for which the Super URI_OR_ID is determined to be an intersection.
 %
 % @param Inter The class URI_OR_ID which is the intersection of the Class URI_OR_ID.
 % @param Class A class URI_OR_ID of which Inter is an intersection.
 % @param Database The current schema graph
-%% :- rdf_meta intersectionOf(r,r,o).
-intersectionOf(C,I,Database) :-
+%% :- rdf_meta intersection_of(r,r,o).
+intersection_of(C,I,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
     collect(Database,Schema,ListObj,L),
     member(I,L).
 
-%% disjointUnionOfList(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:database is det
+%% disjoint_union_of_list(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:database is det
 %
 % Gives URI_OR_ID solutions as a list for which the Super URI_OR_ID is determined to be an intersection.
 %
 % @param Inter The class URI_OR_ID which is the disjoint union of other classes.
 % @param Classes The prolog list of class URI_OR_IDs which are intersected.
 % @param Database The current schema graph.
-%% :- rdf_meta intersectionOfList(r,r,o).
-intersectionOfList(C,IList,Database) :-
+%% :- rdf_meta intersection_of_list(r,r,o).
+intersection_of_list(C,IList,Database) :-
     database_schema(Database,Schema),
     xrdf(Database, Schema, C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
     collect(Database,Schema,ListObj,IList),
     !.
 
-%% oneOf(?CC:uri_or_id,?X:uri_or_id,+Database:database is det
+%% one_of(?CC:uri_or_id,?X:uri_or_id,+Database:database is det
 %
 % Gives elements which are members of a class by enumeration.
 %
 % @param Collection,Schema,CC The class URI_OR_ID of which X isr.
 % @param X The URI_OR_ID of the element which is a member of CC.
 % @param Database The current schema graph.
-%% :- rdf_meta oneOf(r,r,o).
-oneOf(CC,X,Database) :-
+%% :- rdf_meta one_of(r,r,o).
+one_of(CC,X,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
     collect(Database,Schema,ListObj,OneList),
     member(X,OneList).
 
-%% oneOfList(+CC:uri_or_id,-OneList:list(uri_or_id),+Database:database is det
+%% one_of_list(+CC:uri_or_id,-OneList:list(uri_or_id),+Database:database is det
 %
 % Gives a prolog list of elements associated with an enumerated class.
 %
 % @param CC The class URI_OR_ID of which X is a member.
 % @param OneList The URI_OR_ID list of elements which are members of CC.
 % @param Database The current schema graph.
-%% :- rdf_meta oneOfList(r,r,o).
-oneOfList(C,OneList,Database) :-
+%% :- rdf_meta one_of_list(r,r,o).
+one_of_list(C,OneList,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,C,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
     collect(Database,Schema,ListObj,OneList).
 
-%% :- rdf_meta complementOf(r,r,o).
-complementOf(CC,CN,Database) :-
+%% :- rdf_meta complement_of(r,r,o).
+complement_of(CC,CN,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CC,'http://www.w3.org/2002/07/owl#complementOf',CN).
 
-%% :- rdf_meta datatypeComplementOf(r,r,o).
-datatypeComplementOf(CC,CN,Database) :-
+%% :- rdf_meta datatype_complementOf(r,r,o).
+datatype_complementOf(CC,CN,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CC,'http://www.w3.org/2002/07/owl#datatypeComplementOf',CN).
 
-%% :- rdf_meta equivalentClass(r,r,o).
-equivalentClass(CC,CE,Database) :-
+%% :- rdf_meta equivalent_class(r,r,o).
+equivalent_class(CC,CE,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CC,'http://www.w3.org/2002/07/owl#equivalentClass',CE).
 
 /*  Previous code for equivalent class.
-    xrdf(CC,'http://www.w3.org/2002/07/owl#equivalentClass',ListObj,Schema),
+    xrdf(CC,'http://www.w3.org/2002/07/owl#equivalent_class',ListObj,Schema),
     collect(ListObj,L,Schema),
     member(CE,L). */
 
-%% :- rdf_meta equivalentClass(r,r,o).
-anonymousEquivalentClass(C,CE,Database) :-
+%% :- rdf_meta equivalent_class(r,r,o).
+anonymous_equivalentClass(C,CE,Database) :-
     database_schema(Database,Schema),
-    equivalentClass(C,CE,Database),
+    equivalent_class(C,CE,Database),
     % Exactly one reference to this class, or everything will go to hell.
     bagof(X,xrdf(Database,Schema,X,_,CE), [_]).
 
 % transitive strict relation
-subClassStrict(X,Y,Database) :- subClassOf(X,Y,Database).
-subClassStrict(X,Z,Database) :- subClassOf(X,Y,Database), subClassStrict(Y,Z, Database).
+sub_class_strict(X,Y,Database) :- sub_class_of(X,Y,Database).
+sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y,Z, Database).
 
 % Implements class subsumption
-% - complementOf classes do not give subsumption properly yet (unimplemented).
+% - complement_of classes do not give subsumption properly yet (unimplemented).
 %   Requires anti-subsumption predicate
-% - oneOf should probably have individual sets for both CC, CP
+% - one_of should probably have individual sets for both CC, CP
 %
 % static solutions first.
-subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_).
-subsumptionOf('http://terminusdb.com/schema/tcs#Entity','http://terminusdb.com/schema/tcs#Document',_).
-subsumptionOf('http://terminusdb.com/schema/tcs#Relationship','http://terminusdb.com/schema/tcs#Document',_).
-subsumptionOf(CC,CC,Database) :-
-    immediateClass(CC,Database).
-subsumptionOf(CC,CP,Database) :-
-    subClassOf(CC,CZ,Database),
-    subsumptionOf(CZ,CP,Database).
-subsumptionOf(CC,CP,Database) :-
-    immediateClass(CC,Database),
-    unionOf(CZ,CC,Database),
-    subsumptionOf(CZ,CP,Database).
-subsumptionOf(CC,CP,Database) :-
-    immediateClass(CC,Database),
-    disjointUnionOf(CZ,CC,Database),
-    subsumptionOf(CZ,CP,Database).
-subsumptionOf(CC,CP,Database) :-
-    immediateClass(CC,Database),
-    intersectionOf(CC,CZ,Database),
-    subsumptionOf(CZ,CP,Database).
-subsumptionOf(CC,CP,Database) :-
-    anonymousEquivalentClass(CC,CZ,Database),
-    subsumptionOf(CZ,CP,Database).
-subsumptionOf(CC,CP,Database) :- % datatypes
+subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
+subsumption_of('http://terminusdb.com/schema/tcs#Entity','http://terminusdb.com/schema/tcs#Document',_).
+subsumption_of('http://terminusdb.com/schema/tcs#Relationship','http://terminusdb.com/schema/tcs#Document',_).
+subsumption_of(CC,CC,Database) :-
+    immediate_class(CC,Database).
+subsumption_of(CC,CP,Database) :-
+    sub_class_of(CC,CZ,Database),
+    subsumption_of(CZ,CP,Database).
+subsumption_of(CC,CP,Database) :-
+    immediate_class(CC,Database),
+    union_of(CZ,CC,Database),
+    subsumption_of(CZ,CP,Database).
+subsumption_of(CC,CP,Database) :-
+    immediate_class(CC,Database),
+    disjoint_union_of(CZ,CC,Database),
+    subsumption_of(CZ,CP,Database).
+subsumption_of(CC,CP,Database) :-
+    immediate_class(CC,Database),
+    intersection_of(CC,CZ,Database),
+    subsumption_of(CZ,CP,Database).
+subsumption_of(CC,CP,Database) :-
+    anonymous_equivalentClass(CC,CZ,Database),
+    subsumption_of(CZ,CP,Database).
+subsumption_of(CC,CP,Database) :- % datatypes
     datatype(CC,Database),
-    datatypeSubsumptionOf(CC,CP,Database).
+    datatype_subsumption_of(CC,CP,Database).
 
-%% :- rdf_meta customDatatype(r,o).
-customDatatype(X,Database) :-
+%% :- rdf_meta custom_datatype(r,o).
+custom_datatype(X,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
 
@@ -510,96 +509,96 @@ customDatatype(X,Database) :-
  * datatype(-X:uri_or_id,+Database:database is det.
  */
 %% :- rdf_meta datatype(r,o).
-datatype(X,Database) :- customDatatype(X,Database).
-datatype(X,_) :- baseType(X).
+datatype(X,Database) :- custom_datatype(X,Database).
+datatype(X,_) :- base_type(X).
 
 % implements strict class subsumption (CC < CP) [Needs fully instantiated arguments]
-%% :- rdf_meta strictSubsumptionOf(r,r,o).
-strictSubsumptionOf(CC,'http://www.w3.org/2002/07/owl#Thing',_) :- CC \= 'http://www.w3.org/2002/07/owl#Thing'.
-strictSubsumptionOf('http://www.w3.org/2002/07/owl#Nothing',CP,_) :- CP \= 'http://www.w3.org/2002/07/owl#Nothing'.
-strictSubsumptionOf(CC,CP,Database) :-
-    subClassOf(CC,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :-
+%% :- rdf_meta strict_subsumption_of(r,r,o).
+strict_subsumption_of(CC,'http://www.w3.org/2002/07/owl#Thing',_) :- CC \= 'http://www.w3.org/2002/07/owl#Thing'.
+strict_subsumption_of('http://www.w3.org/2002/07/owl#Nothing',CP,_) :- CP \= 'http://www.w3.org/2002/07/owl#Nothing'.
+strict_subsumption_of(CC,CP,Database) :-
+    sub_class_of(CC,CP,Database).
+strict_subsumption_of(CC,CP,Database) :-
     class(CC,Database),
-    unionOf(CP,CC,Database).
-strictSubsumptionOf(CC,CP,Database) :-
+    union_of(CP,CC,Database).
+strict_subsumption_of(CC,CP,Database) :-
     class(CC,Database),
-    intersectionOf(CC,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :-
-    subClassOf(CC,CZ,Database),
-    strictSubsumptionOf(CZ,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :-
+    intersection_of(CC,CP,Database).
+strict_subsumption_of(CC,CP,Database) :-
+    sub_class_of(CC,CZ,Database),
+    strict_subsumption_of(CZ,CP,Database).
+strict_subsumption_of(CC,CP,Database) :-
     class(CC,Database),
-    unionOf(CZ,CC,Database),
-    strictSubsumptionOf(CZ,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :-
+    union_of(CZ,CC,Database),
+    strict_subsumption_of(CZ,CP,Database).
+strict_subsumption_of(CC,CP,Database) :-
     class(CC,Database),
-    disjointUnionOf(CZ,CC,Database),
-    strictSubsumptionOf(CZ,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :-
+    disjoint_union_of(CZ,CC,Database),
+    strict_subsumption_of(CZ,CP,Database).
+strict_subsumption_of(CC,CP,Database) :-
     class(CC,Database),
-    intersectionOf(CC,CZ,Database),
-    strictSubsumptionOf(CZ,CP,Database).
-strictSubsumptionOf(CC,CP,Database) :- % xsd and custom data types
-    datatypeStrictSubsumptionOf(CC,CP,Database).
+    intersection_of(CC,CZ,Database),
+    strict_subsumption_of(CZ,CP,Database).
+strict_subsumption_of(CC,CP,Database) :- % xsd and custom data types
+    datatype_strict_subsumption_of(CC,CP,Database).
 
 
 
 
 /**
- * basetypeSubsumptionOf(?Sub,?Super) is nondet.
+ * basetype_subsumption_of(?Sub,?Super) is nondet.
  *
  * Implements the subsumption latice for concrete base types by making use of reflexivity and
- * baseTypeParent\2.
+ * base_type_parent\2.
  */
-%% :- rdf_meta basetypeSubsumptionOf(r,r).
-basetypeSubsumptionOf(T,T) :- baseType(T).
-basetypeSubsumptionOf(Sub,Super) :-
-    baseTypeParent(Sub,Parent), basetypeSubsumptionOf(Parent,Super).
+%% :- rdf_meta basetype_subsumption_of(r,r).
+basetype_subsumption_of(T,T) :- base_type(T).
+basetype_subsumption_of(Sub,Super) :-
+    base_type_parent(Sub,Parent), basetype_subsumption_of(Parent,Super).
 
 /**
- * datatypeSubsumptionOf(?Sub,?Super,+Database:database is nondet.
+ * datatype_subsumption_of(?Sub,?Super,+Database:database is nondet.
  *
  * Implements the subsumption latice for datatypes by making use of reflexivity and
- * baseTypeParent\2.
+ * base_type_parent\2.
  */
-%% :- rdf_meta datatypeSubsumptionOf(r,r).
-datatypeSubsumptionOf(T,T,Database) :- datatype(T,Database).
-datatypeSubsumptionOf(Sub,Super,Database) :-
-    customDatatype(Sub,Database),
-    unionOf(Super,Sub,Database).
-datatypeSubsumptionOf(Sub,Super,Database) :-
-    customDatatype(Sub,Database),
-    intersectionOf(Sub,Super,Database).
-datatypeSubsumptionOf(Sub,Super,Database) :-
+%% :- rdf_meta datatype_subsumption_of(r,r).
+datatype_subsumption_of(T,T,Database) :- datatype(T,Database).
+datatype_subsumption_of(Sub,Super,Database) :-
+    custom_datatype(Sub,Database),
+    union_of(Super,Sub,Database).
+datatype_subsumption_of(Sub,Super,Database) :-
+    custom_datatype(Sub,Database),
+    intersection_of(Sub,Super,Database).
+datatype_subsumption_of(Sub,Super,Database) :-
     % This only works because of the strict hierarchy (no derived union / intersections)
-    customDatatype(Sub,Database),
-    datatypeComplementOf(Sub,CN,Database),
-    \+ datatypeSubsumptionOf(CN,Super,Database).
-datatypeSubsumptionOf(Sub,Super,Database) :-
-    baseTypeParent(Sub,Parent), datatypeSubsumptionOf(Parent,Super,Database).
+    custom_datatype(Sub,Database),
+    datatype_complementOf(Sub,CN,Database),
+    \+ datatype_subsumption_of(CN,Super,Database).
+datatype_subsumption_of(Sub,Super,Database) :-
+    base_type_parent(Sub,Parent), datatype_subsumption_of(Parent,Super,Database).
 
 /**
- * datatypeSubsumptionOf(?Sub,?Super,+Database:database is nondet.
+ * datatype_subsumption_of(?Sub,?Super,+Database:database is nondet.
  *
  * Implements strict (non reflexive) subsumption latice for datatypes by
- * baseTypeParent\2.
+ * base_type_parent\2.
  */
-%% :- rdf_meta datatypeStrictSubsumptionOf(r,r).
-datatypeStrictSubsumptionOf(Sub,Super,_) :-
-    baseTypeParent(Sub,Super).
-datatypeStrictSubsumptionOf(Sub,Super,Database) :-
+%% :- rdf_meta datatype_strict_subsumption_of(r,r).
+datatype_strict_subsumption_of(Sub,Super,_) :-
+    base_type_parent(Sub,Super).
+datatype_strict_subsumption_of(Sub,Super,Database) :-
     % DDD probably need one more clause for each owl custom build property
-    baseTypeParent(Sub,Parent),
-    datatypeSubsumptionOf(Parent,Super,Database).
+    base_type_parent(Sub,Parent),
+    datatype_subsumption_of(Parent,Super,Database).
 
 /**
- * orphanClassSC(+Database:database-Reason:vio) is nondet.
+ * orphan_class_SC(+Database:database-Reason:vio) is nondet.
  *
  * Find all orphaned classes in Schema.
  */
-orphanClassSC(Database, Reason) :-
-    subClassOf(X,Y,Database),
+orphan_class_SC(Database, Reason) :-
+    sub_class_of(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a subclass of a valid class ',Y], Message),
     Reason = _{
@@ -608,8 +607,8 @@ orphanClassSC(Database, Reason) :-
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
-orphanClassSC(Database, Reason) :-
-    intersectionOf(X,Y,Database),
+orphan_class_SC(Database, Reason) :-
+    intersection_of(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X, ' is not an intersection of a valid class ',Y], Message),
     Reason = _{
@@ -618,8 +617,8 @@ orphanClassSC(Database, Reason) :-
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
-orphanClassSC(Database, Reason) :-
-    unionOf(X,Y,Database),
+orphan_class_SC(Database, Reason) :-
+    union_of(X,Y,Database),
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a valid class ',Y], Message),
     Reason = _{
@@ -630,31 +629,31 @@ orphanClassSC(Database, Reason) :-
              }.
 
 % Cycles in subsumption diagram
-classCycleHelp(C,S,[],_) :- get_assoc(C,S,true), !.
-classCycleHelp(C,S,[K|P],Database) :-
-    subClassOf(K,C,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    unionOf(C,K,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    disjointUnionOf(C,K,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    intersectionOf(K,C,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    equivalentClass(K,C,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    complementOf(K,C,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
-classCycleHelp(C,S,[K|P],Database) :-
-    datatypeComplementOf(K,C,Database),
-    put_assoc(C,S,true,S2), classCycleHelp(K,S2,P,Database).
+class_cycle_help(C,S,[],_) :- get_assoc(C,S,true), !.
+class_cycle_help(C,S,[K|P],Database) :-
+    sub_class_of(K,C,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    union_of(C,K,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    disjoint_union_of(C,K,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    intersection_of(K,C,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    equivalent_class(K,C,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    complement_of(K,C,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
+class_cycle_help(C,S,[K|P],Database) :-
+    datatype_complementOf(K,C,Database),
+    put_assoc(C,S,true,S2), class_cycle_help(K,S2,P,Database).
 
-classCycle(C,P,Database,Reason) :-
-    empty_assoc(S), classCycleHelp(C,S,P,Database),
+class_cycle(C,P,Database,Reason) :-
+    empty_assoc(S), class_cycle_help(C,S,P,Database),
     interpolate(['Class, ',C,' has a class cycle with path: ', P], Message),
     pathify(P,JSON),
     Reason = _{
@@ -664,67 +663,67 @@ classCycle(C,P,Database,Reason) :-
                  'vio:class' : _{ '@value' : C, '@type' : 'xsd:anyURI' }
              }.
 
-classCycleSC(Database,Reason) :- classCycle(_,_,Database,Reason), !.
+class_cycle_SC(Database,Reason) :- class_cycle(_,_,Database,Reason), !.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Properties
 
 /*
-:- rdf_meta rdfsProperty(r).
-rdfsProperty(rdfs:label).
-rdfsProperty(rdfs:comment).
-rdfsProperty(rdfs:seeAlso).
+:- rdf_meta rdfs_property(r).
+rdfs_property(rdfs:label).
+rdfs_property(rdfs:comment).
+rdfs_property(rdfs:seeAlso).
 */
 
-%:- rdf_meta rdfMetaProperty(r).
-rdfMetaProperty('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
+%:- rdf_meta rdf_meta_property(r).
+rdf_meta_property('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
 
-%:- rdf_meta rdfsDatatypeProperty(r).
-rdfsDatatypeProperty('http://www.w3.org/2000/01/rdf-schema#label').
-rdfsDatatypeProperty('http://www.w3.org/2000/01/rdf-schema#comment').
+%:- rdf_meta rdfs_datatypeProperty(r).
+rdfs_datatypeProperty('http://www.w3.org/2000/01/rdf-schema#label').
+rdfs_datatypeProperty('http://www.w3.org/2000/01/rdf-schema#comment').
 
-%:- rdf_meta rdfsObjectProperty(r).
-rdfsObjectProperty('http://www.w3.org/2000/01/rdf-schema#seeAlso').
+%:- rdf_meta rdfs_objectProperty(r).
+rdfs_objectProperty('http://www.w3.org/2000/01/rdf-schema#seeAlso').
 
-%:- rdf_meta rdfsProperty(r).
-rdfsProperty(P) :- rdfsDatatypeProperty(P).
-rdfsProperty(P) :- rdfsObjectProperty(P).
+%:- rdf_meta rdfs_property(r).
+rdfs_property(P) :- rdfs_datatypeProperty(P).
+rdfs_property(P) :- rdfs_objectProperty(P).
 
-%:- rdf_meta rdfProperty(r,o).
-rdfProperty(P,Database) :-
+%:- rdf_meta rdf_property(r,o).
+rdf_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#Property').
 
-%:- rdf_meta datatypeProperty(r,o).
-datatypeProperty(P,Database) :-
+%:- rdf_meta datatype_property(r,o).
+datatype_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
-datatypeProperty(P,_) :- rdfsDatatypeProperty(P).
+datatype_property(P,_) :- rdfs_datatypeProperty(P).
 
-%:- rdf_meta annotationProperty(r,o).
-annotationProperty(P,Database) :-
+%:- rdf_meta annotation_property(r,o).
+annotation_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
 % Gavin nuked on Sep 20th 2019
-%annotationProperty(P,Database) :-
-%    subsumptionPropertiesOf(P,'http://terminusdb.com/schema/tcs#pseudo_property', Database).
+%annotation_property(P,Database) :-
+%    subsumption_properties_of(P,'http://terminusdb.com/schema/tcs#pseudo_property', Database).
 
 
-%:- rdf_meta functionalProperty(r,o).
-functionalProperty(P,Database) :-
+%:- rdf_meta functional_property(r,o).
+functional_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#FunctionalProperty').
 
-%:- rdf_meta inverseFunctionalProperty(r,o).
-inverseFunctionalProperty(P,Database) :-
+%:- rdf_meta inverse_functional_property(r,o).
+inverse_functional_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#InverseFunctionalProperty').
 
-%:- rdf_meta objectProperty(r,o).
-objectProperty(P,Database) :-
+%:- rdf_meta object_property(r,o).
+object_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
-objectProperty(P,_) :- rdfsObjectProperty(P).
+object_property(P,_) :- rdfs_objectProperty(P).
 
 /**
  * property(?P,+Database:database is nondet.
@@ -734,17 +733,17 @@ objectProperty(P,_) :- rdfsObjectProperty(P).
 %:- rdf_meta property(r,o).
 property(P,Database) :-
     % Don't predicate over annotations (even if they are otherwise declared as properties).
-    (   annotationProperty(P,Database)
+    (   annotation_property(P,Database)
     *-> fail
-    ;   (   datatypeProperty(P, Database)
-        ;   objectProperty(P,Database)
-        ;   rdfProperty(P,Database)
+    ;   (   datatype_property(P, Database)
+        ;   object_property(P,Database)
+        ;   rdf_property(P,Database)
         )
     ).
 
-%uniqueProperty(P,Database) :- property(P,Database), bagof(P2, property(P2,Database), L), count(P,L,1).
+%unique_property(P,Database) :- property(P,Database), bagof(P2, property(P2,Database), L), count(P,L,1).
 
-notUniqueProperty(P,Database,Reason) :-
+not_unique_property(P,Database,Reason) :-
     property(P,Database),
     bagof(P, property(P,Database), L),
     \+ length(L,1),
@@ -757,19 +756,19 @@ notUniqueProperty(P,Database,Reason) :-
                  'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
              }.
 
-propertyTypeOverloadSC(Database,Reason) :-
-    datatypeProperty(P,Database), objectProperty(P,Database),
-    interpolate([P,' is an objectProperty and a datatypeProperty'], Message),
+property_type_overload_SC(Database,Reason) :-
+    datatype_property(P,Database), object_property(P,Database),
+    interpolate([P,' is an object_property and a datatype_property'], Message),
     Reason= _{
                 '@type' : 'vio:PropertyTypeOverload',
                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
 	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' }
             }.
 
-annotationOverloadSC(Database,Reason) :-
-    (datatypeProperty(P,Database) ; objectProperty(P,Database) ; rdfProperty(P,Database)),
-    annotationProperty(P,Database),
-    interpolate([P,' is defined as a property and defined as an annotationProperty'], Message),
+annotation_overload_SC(Database,Reason) :-
+    (datatype_property(P,Database) ; object_property(P,Database) ; rdf_property(P,Database)),
+    annotation_property(P,Database),
+    interpolate([P,' is defined as a property and defined as an annotation_property'], Message),
     Reason= _{
                 '@type' : 'vio:PropertyTypeOverload',
                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
@@ -777,115 +776,115 @@ annotationOverloadSC(Database,Reason) :-
             }.
 
 /**
- * notUniquePropertySC(+Database:database-Reason:any) is nondet.
+ * not_unique_property_SC(+Database:database-Reason:any) is nondet.
  *
  * All redundantly defined properties.
  */
-notUniquePropertySC(Database,Reason) :-
-    notUniqueProperty(_,Database, Reason).
+not_unique_property_SC(Database,Reason) :-
+    not_unique_property(_,Database, Reason).
 
 % One step subproperty relation
-%:- rdf_meta subPropertyOf(r,r,o).
-subPropertyOf(X,Y,Database) :-
+%:- rdf_meta sub_property_of(r,r,o).
+sub_property_of(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
+    xrdf(Database,Schema,X,'http://www.w3.org/2000/01/rdf-schema#sub_propertyOf',Y).
 
 /**
- * subsumptionPropertiesOf(?PChild,?PParent,+Database:database is nondet.
+ * subsumption_properties_of(?PChild,?PParent,+Database:database is nondet.
  *
  * Transitive reflexive closure of Subproperty relation.
  */
-%:- rdf_meta subsumptionPropertiesOf(r,r,o).
-subsumptionPropertiesOf(PC,PC,_).
-subsumptionPropertiesOf(PC,PP,Database) :-
-    subPropertyOf(PC, PZ, Database),
-    subsumptionPropertiesOf(PZ,PP,Database).
-subsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
-    objectProperty(PC,Database).
-subsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
-    datatypeProperty(PC,Database).
+%:- rdf_meta subsumption_properties_of(r,r,o).
+subsumption_properties_of(PC,PC,_).
+subsumption_properties_of(PC,PP,Database) :-
+    sub_property_of(PC, PZ, Database),
+    subsumption_properties_of(PZ,PP,Database).
+subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
+    object_property(PC,Database).
+subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
+    datatype_property(PC,Database).
 
 /**
- * strictSubsumptionPropertiesOf(?PChild,?PParent,-Database:database is nondet.
+ * strict_subsumption_properties_of(?PChild,?PParent,-Database:database is nondet.
  *
  * Non-reflexive subsumption relation for properties in Database.
  */
-%:- rdf_meta strictSubsumptionPropertiesOf(r,r,o).
-strictSubsumptionPropertiesOf(PC,PP,Database) :-
-    subPropertyOf(PC, PP, Database).
-strictSubsumptionPropertiesOf(PC,PP,Database) :-
-    subPropertyOf(PC, PZ, Database),
-    subsumptionPropertiesOf(PZ,PP,Database).
-strictSubsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
-    PC \= 'http://www.w3.org/2002/07/owl#topObjectProperty',
-    objectProperty(PC,Database).
-strictSubsumptionPropertiesOf(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
-    PC \= 'http://www.w3.org/2002/07/owl#topDataProperty',
-    datatypeProperty(PC,Database).
+%:- rdf_meta strict_subsumption_properties_of(r,r,o).
+strict_subsumption_properties_of(PC,PP,Database) :-
+    sub_property_of(PC, PP, Database).
+strict_subsumption_properties_of(PC,PP,Database) :-
+    sub_property_of(PC, PZ, Database),
+    subsumption_properties_of(PZ,PP,Database).
+strict_subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
+    PC \= 'http://www.w3.org/2002/07/owl#top_objectProperty',
+    object_property(PC,Database).
+strict_subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
+    PC \= 'http://www.w3.org/2002/07/owl#top_dataProperty',
+    datatype_property(PC,Database).
 
-orphanProperty(X,Y,Database,Reason) :-     % is a subproperty of Y but Y is not a valid property
-    subPropertyOf(X,Y,Database),
-    \+ property(Y,Database), \+ annotationProperty(Y,Database),
+orphan_property(X,Y,Database,Reason) :-     % is a subproperty of Y but Y is not a valid property
+    sub_property_of(X,Y,Database),
+    \+ property(Y,Database), \+ annotation_property(Y,Database),
     interpolate([X,' is a sub-property of', Y,' which is not designated as a property of any type in the schema!' ], Message),
     Reason= _{
-                '@type' : 'vio:PropertyInheritanceViolation',
+                '@type' : 'vio:Property_inheritanceViolation',
                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
 	            'vio:property' :  _{ '@value' : X, '@type' : 'xsd:anyURI' },
                 'vio:parent_property' :  _{ '@value' : Y, '@type' : 'xsd:anyURI' }
             }.
-orphanProperty(P,R,Database,Reason) :-  % property has a range but it is not the property of a Classs
+orphan_property(P,R,Database,Reason) :-  % property has a range but it is not the property of a Classs
 	range(P,R,Database),
-    \+ property(P,Database), \+ annotationProperty(P,Database),
+    \+ property(P,Database), \+ annotation_property(P,Database),
 	interpolate([P,' has a range, but is not designated as a property of any type in the schema!'],Message),
     Reason= _{
-                '@type' : 'vio:UntypedPropertyWithRange',
+                '@type' : 'vio:Untyped_propertyWith_range',
                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
 	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' },
                 'vio:range' :  _{ '@value' : R, '@type' : 'xsd:anyURI' }
             }.
-orphanProperty(P,D,Database,Reason) :-     %% property has a domain but it is not the property of a Classs
+orphan_property(P,D,Database,Reason) :-     %% property has a domain but it is not the property of a Classs
 	domain(P,D,Database),
-    \+ property(P,Database), \+ annotationProperty(P,Database),
+    \+ property(P,Database), \+ annotation_property(P,Database),
     interpolate([P,' has a domain, but is not designated as a property of any type in the schema!'],Message),
     Reason= _{
-                '@type' : 'vio:UntypedPropertyWithDomain',
+                '@type' : 'vio:Untyped_propertyWith_domain',
                 'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
 	            'vio:property' :  _{ '@value' : P, '@type' : 'xsd:anyURI' },
                 'vio:domain' :  _{ '@value' : D, '@type' : 'xsd:anyURI' }
             }.
 
 /**
- * orphanPropertySC(+Database:database-Reason:any) is nondet.
+ * orphan_property_SC(+Database:database-Reason:any) is nondet.
  *
  * All properties which are referred to, but which do not have definitions.
  */
-orphanPropertySC(Database,Reason) :-
-    orphanProperty(_,_,Database,Reason).
+orphan_property_SC(Database,Reason) :-
+    orphan_property(_,_,Database,Reason).
 
-% subProperty cycles
+% sub_property cycles
 
-propertyCycleHelp(P,S,[],_) :- get_assoc(P,S,true), !.
-propertyCycleHelp(P,S,[Q|T],Database) :-
-    property(P,Database), subPropertyOf(Q,P,Database), put_assoc(P, S, true, S2),
-    propertyCycleHelp(Q,S2,T,Database).
+property_cycle_help(P,S,[],_) :- get_assoc(P,S,true), !.
+property_cycle_help(P,S,[Q|T],Database) :-
+    property(P,Database), sub_property_of(Q,P,Database), put_assoc(P, S, true, S2),
+    property_cycle_help(Q,S2,T,Database).
 
-propertyCycle(P,PC,Database,Reason) :-
-    empty_assoc(S), propertyCycleHelp(P,S,PC,Database),
+property_cycle(P,PC,Database,Reason) :-
+    empty_assoc(S), property_cycle_help(P,S,PC,Database),
     interpolate(['Property class ', P, ' has a cycle with path: ', PC], Message),
     pathify(PC, JSON),
     Reason = _{
                  '@type' : 'vio:ClassCycle',
-                 'vio:property_cycle' : JSON,
+                 'vio:propertyCycle' : JSON,
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' }
              }.
 
 /**
- * propertyCycleSC(+Database:database-Reason:any) is nondet.
+ * property_cycle_SC(+Database:database-Reason:any) is nondet.
  *
  * All property subsumption cycles in Database.
  */
-propertyCycleSC(Database,Reason) :- propertyCycle(_,_,Database,Reason).
+property_cycle_SC(Database,Reason) :- property_cycle(_,_,Database,Reason).
 
 /**
  * range(?P:uri, ?R:uri, +Database:database is nondet.
@@ -903,31 +902,31 @@ range(P,R,Database) :-
  * the places in which to "clip" the graph.
  */
 document(Class,Database) :-
-	subsumptionOf(Class,'http://terminusdb.com/schema/tcs#Document', Database).
+	subsumption_of(Class,'http://terminusdb.com/schema/tcs#Document', Database).
 
 /**
- * anyRange(?P,?R,+Database:database is nondet.
+ * any_range(?P,?R,+Database:database is nondet.
  *
  * Determine if R is a viable range for P.
  * This must be ordered according to Hasse diagram!
  */
-%:- rdf_meta anyRange(r,r,o).
-anyRange('http://www.w3.org/2002/07/owl#topObjectProperty','http://www.w3.org/2002/07/owl#Thing',_).
-anyRange('http://www.w3.org/2002/07/owl#topDataProperty','http://www.w3.org/2000/01/rdf-schema#Literal',_).
-anyRange('http://www.w3.org/2000/01/rdf-schema#label','http://www.w3.org/2001/XMLSchema#string',_).
-anyRange('http://www.w3.org/2000/01/rdf-schema#comment','http://www.w3.org/2001/XMLSchema#string',_).
-anyRange(P,R,Database) :-
+%:- rdf_meta any_range(r,r,o).
+any_range('http://www.w3.org/2002/07/owl#topObjectProperty','http://www.w3.org/2002/07/owl#Thing',_).
+any_range('http://www.w3.org/2002/07/owl#topDataProperty','http://www.w3.org/2000/01/rdf-schema#Literal',_).
+any_range('http://www.w3.org/2000/01/rdf-schema#label','http://www.w3.org/2001/XMLSchema#string',_).
+any_range('http://www.w3.org/2000/01/rdf-schema#comment','http://www.w3.org/2001/XMLSchema#string',_).
+any_range(P,R,Database) :-
     range(P,R,Database).
-anyRange(P,R,Database) :-
-    strictSubsumptionPropertiesOf(P,P2,Database),
-    anyRange(P2,R,Database).
-anyRange(OP,R,Database) :-
+any_range(P,R,Database) :-
+    strict_subsumption_properties_of(P,P2,Database),
+    any_range(P2,R,Database).
+any_range(OP,R,Database) :-
     database_inference(Database,Inference),
     xrdf(Database,Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
-    anyDomain(P,R,Database).
+    any_domain(P,R,Database).
 
-%:- rdf_meta mostSpecificRange(r,r,o).
-mostSpecificRange(P,R,Database) :- anyRange(P,R,Database), !.
+%:- rdf_meta most_specific_range(r,r,o).
+most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
 
 /**
  * domain(P:uri,D:uri,Database:database) is nondet.
@@ -939,50 +938,50 @@ domain(P,D,Database) :-
     xrdf(Database,Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /**
- * anyDomain(?P,?R,+Database:database) is nondet.
+ * any_domain(?P,?R,+Database:database) is nondet.
  *
  * Determine if R is a viable domain for P.
  */
-%:- rdf_meta anyDomain(r,r,o).
-anyDomain('http://www.w3.org/2002/07/owl#topObjectProperty',
+%:- rdf_meta any_domain(r,r,o).
+any_domain('http://www.w3.org/2002/07/owl#topObjectProperty',
           'http://www.w3.org/2002/07/owl#Thing',_).
-anyDomain('http://www.w3.org/2002/07/owl#topDataProperty',
+any_domain('http://www.w3.org/2002/07/owl#topDataProperty',
           'http://www.w3.org/2000/01/rdf-schema#Literal',_).
-anyDomain('http://www.w3.org/2000/01/rdf-schema#label',D,Database) :-
+any_domain('http://www.w3.org/2000/01/rdf-schema#label',D,Database) :-
     document(D,Database).
-anyDomain('http://www.w3.org/2000/01/rdf-schema#comment',D,Database) :-
+any_domain('http://www.w3.org/2000/01/rdf-schema#comment',D,Database) :-
     document(D,Database).
-anyDomain(P,R,Database) :-
+any_domain(P,R,Database) :-
     domain(P,R,Database).
-anyDomain(OP,R,Database) :-
+any_domain(OP,R,Database) :-
     database_inference(Database,Inference),
     xrdf(Database,Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
-    anyRange(P,R,Database).
-anyDomain(P,R,Database) :-
-    strictSubsumptionPropertiesOf(P,P2,Database),
-    anyDomain(P2,R,Database).
+    any_range(P,R,Database).
+any_domain(P,R,Database) :-
+    strict_subsumption_properties_of(P,P2,Database),
+    any_domain(P2,R,Database).
 
 % TODO inverse isn't enough! need to do more inference
 
-%:- rdf_meta mostSpecificDomain(r,r,o).
-mostSpecificDomain(P,R,Database) :- anyDomain(P,R,Database), !.
+%:- rdf_meta most_specific_domain(r,r,o).
+most_specific_domain(P,R,Database) :- any_domain(P,R,Database), !.
 
 /**
- * noImmediateDomainSC(+Database:database-Reason:vio) is nondet.
+ * no_immediate_domain_SC(+Database:database-Reason:vio) is nondet.
  *
  * All properties which do not have a specified domain.
  */
-noImmediateDomainSC(Database,Reason) :-
+no_immediate_domain_SC(Database,Reason) :-
     property(P,Database),
-    \+ rdfsProperty(P),
+    \+ rdfs_property(P),
     \+ domain(P,_,Database),
-    (   datatypeProperty(P,Database)
+    (   datatype_property(P,Database)
     ->  M='Data property '
-    ;   annotationProperty(P,Database)
+    ;   annotation_property(P,Database)
     ->  M='Annotation property '
-    ;   objectProperty(P,Database)
+    ;   object_property(P,Database)
     ->  M='Object property '
-    ;   rdfProperty(P,Database)
+    ;   rdf_property(P,Database)
     ->  M='Rdf Property '
     ;   M='Unknown Property '),
     interpolate([M, P, ' has no specified domain.'], Message),
@@ -993,21 +992,21 @@ noImmediateDomainSC(Database,Reason) :-
              }.
 
 /**
- * noImmediateRangeSC(+Database:database-Reason:vio) is nondet.
+ * no_immediate_range_SC(+Database:database-Reason:vio) is nondet.
  *
  * All properties which do not have a specified range.
  */
-noImmediateRangeSC(Database,Reason) :-
+no_immediate_range_SC(Database,Reason) :-
     property(P,Database),
-    \+ rdfsProperty(P),
+    \+ rdfs_property(P),
     \+ range(P,_,Database),
-    (   datatypeProperty(P,Database)
+    (   datatype_property(P,Database)
     ->  M='Data property '
-    ;   annotationProperty(P,Database)
+    ;   annotation_property(P,Database)
     ->  M='Annotation property '
-    ;   objectProperty(P,Database)
+    ;   object_property(P,Database)
     ->  M='Object property '
-    ;   rdfProperty(P,Database)
+    ;   rdf_property(P,Database)
     ->  M='Rdf Property '
     ;   M='Unknown Property '),
     interpolate([M, P, ' has no specified range.'], Message),
@@ -1018,11 +1017,11 @@ noImmediateRangeSC(Database,Reason) :-
              }.
 
 /**
- * invalidDomainSC(+Database:database-Reason:any) is nondet.
+ * invalid_domain_SC(+Database:database-Reason:any) is nondet.
  *
  * Finds all domains that are not valid classes for a given property in Database.
  */
-invalidDomainSC(Database,Reason) :-
+invalid_domain_SC(Database,Reason) :-
     property(P,Database),
     domain(P,D,Database),
     \+ class(D,Database),
@@ -1041,19 +1040,19 @@ invalidDomainSC(Database,Reason) :-
  */
 invalid_RDFS_property_SC(Database,Reason) :-
     database_schema(Database,Schema),
-    rdfsProperty(P),
+    rdfs_property(P),
     xrdf(Database,Schema,_,P,Y),
     refute_basetype_elt(Y,'http://www.w3.org/2001/XMLSchema#string',Reason).
 
 /**
- * invalidRangeSC(+Database:database-Reason:any) is nondet.
+ * invalid_range_SC(+Database:database-Reason:any) is nondet.
  *
  * Finds all ranges that are not valid classes for a given property in Database.
  */
-invalidRangeSC(Database,Reason) :-
-    datatypeProperty(P,Database),
+invalid_range_SC(Database,Reason) :-
+    datatype_property(P,Database),
     range(P,R,Database),
-    \+ datatype(R,Database), \+ rdfsProperty(P),
+    \+ datatype(R,Database), \+ rdfs_property(P),
     interpolate(['DataProperty Range ', R, ' is not a valid (or implemented) datatype for property ', P,'.'], Message),
     Reason = _{
                  '@type' : 'vio:PropertyWithUndefinedRange',
@@ -1061,21 +1060,21 @@ invalidRangeSC(Database,Reason) :-
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
              }.
-invalidRangeSC(Database,Reason) :-
-    objectProperty(P,Database),
+invalid_range_SC(Database,Reason) :-
+    object_property(P,Database),
     range(P,R,Database),
-    \+ class(R,Database), \+ rdfsProperty(P),
-    interpolate(['ObjectProperty Range ',R,' is not a valid range for property ',P,'.'],Message),
+    \+ class(R,Database), \+ rdfs_property(P),
+    interpolate(['Object_property Range ',R,' is not a valid range for property ',P,'.'],Message),
     Reason = _{
                  '@type' : 'vio:PropertyWithUndefinedRange',
                  'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:range' : _{ '@value' : R, '@type' : 'xsd:anyURI'}
              }.
-invalidRangeSC(Database,Reason) :-
-    rdfProperty(P,Database),
+invalid_range_SC(Database,Reason) :-
+    rdf_property(P,Database),
     range(P,R,Database),
-    \+ class(R,Database), \+ baseType(R),
+    \+ class(R,Database), \+ base_type(R),
     interpolate(['rdf:Property range ',R,' is not a valid range for property ',P,'.'],Message),
     Reason = _{
                  '@type' : 'vio:PropertyWithUndefinedRange',
@@ -1089,94 +1088,94 @@ invalidRangeSC(Database,Reason) :-
 % Logging / Turn off for production
 :- use_module(library(http/http_log)).
 /**
- * domainNotSubsumedsC(+Database:database-Reason:any) is nondet.
+ * domain_notSubsumedsC(+Database:database-Reason:any) is nondet.
  *
  * All domains which can not validly be subsumed within a property subsumption hierarchy for
  * the Database .
  */
-domainNotSubsumedSC(Database,Reason) :-
+domain_not_subsumed_SC(Database,Reason) :-
     property(P,Database),
-    strictSubsumptionPropertiesOf(P,P2,Database),
+    strict_subsumption_properties_of(P,P2,Database),
     domain(P,D,Database), domain(P2,D2,Database), % DDD too many solutions
     %http_log_stream(Log),
     %current_output(Log),
-    %findall(X, subsumptionOf(D,X,Database), L),
+    %findall(X, subsumption_of(D,X,Database), L),
     %nl(Log), nl(Log), write(Log, 'Subsumptions: '), write_canonical(Log, L), nl(Log), nl(Log),
     %nl(Log), nl(Log), write(Log, 'Listing: '), write_canonical(Log, L), nl(Log), nl(Log),
-    \+ subsumptionOf(D, D2, Database),
+    \+ subsumption_of(D, D2, Database),
     interpolate(['Invalid domain on property ', P,
 		         ', due to failure of domain subsumption.'], Message),
     Reason = _{
                  '@type' : 'vio:PropertyDomainNotSubsumed',
                  'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
-                 'vio:parent_property' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
+                 'vio:parentProperty' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
                  'vio:class' : _{ '@value' : D, '@type' : 'xsd:anyURI'},
                  'vio:parent' : _{ '@value' : D2, '@type' : 'xsd:anyURI'},
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
              }.
 
 /**
- * rangeNotSubsumedSC(+Database:database-Reason:any) is nondet.
+ * range_not_subsumed_SC(+Database:database-Reason:any) is nondet.
  *
  * Database constraint determining that ranges must be valid
  * a property through its entire subsumption chain.
  */
-rangeNotSubsumedSC(Database,Reason) :-
+range_not_subsumed_SC(Database,Reason) :-
     property(P,Database),
-    strictSubsumptionPropertiesOf(P,P2,Database),
+    strict_subsumption_properties_of(P,P2,Database),
     range(P,R,Database), range(P2,R2,Database), % DDD too many solutions
-    \+ subsumptionOf(R, R2, Database),
+    \+ subsumption_of(R, R2, Database),
     interpolate(['Invalid range on property ', P,
 		         ', due to failure of range subsumption.'], Message),
     Reason = _{
                  '@type' : 'vio:PropertyRangeNotSubsumed',
                  'vio:property' : _{ '@value' : P, '@type' : 'xsd:anyURI' },
-                 'vio:parent_property' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
+                 'vio:parentProperty' : _{ '@value' : P2, '@type' : 'xsd:anyURI' },
                  'vio:class' : _{ '@value' : R, '@type' : 'xsd:anyURI'},
                  'vio:parent' : _{ '@value' : R2, '@type' : 'xsd:anyURI'},
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'}
              }.
 
-schemaSubjectBlankNode(X,Database) :-
+schema_subject_blank_node(X,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,X,_,_),
     is_bnode(X).
 
-schemaPredicateBlankNode(Y,Database) :-
+schema_predicate_blank_node(Y,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,_,Y,_),
     is_bnode(Y).
 
-schemaObjectBlankNode(Z,Database) :-
+schema_object_blank_node(Z,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,_,_,Z),
     is_bnode(Z).
 
 /**
- * schemaBlankNodeSC(+Database:database-Reason:any) is nondet.
+ * schema_blankNodeSC(+Database:database-Reason:any) is nondet.
  *
  * Is this a blank node in the schema.
  */
 /*
-schemaBlankNodeSC(Database,Reason) :-
-    schemaSubjectBlankNode(X,Database),
+schema_blankNodeSC(Database,Reason) :-
+    schema_subject_blank_node(X,Database),
     interpolate(['The subject ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='DatabaseBlankNodeViolation',
-	    bestPractice=literal(type('xsd:boolean',true)),
+    Reason=['rdf:type'='Database_blankNode_violation',
+	    best_practice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    subject=X].
-schemaBlankNodeSC(Database,Reason) :-
-    schemaPredicateBlankNode(X,Database),
+schema_blankNodeSC(Database,Reason) :-
+    schema_predicate_blank_node(X,Database),
     interpolate(['The predicate ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='DatabaseBlankNodeViolation',
-	    bestPractice=literal(type('xsd:boolean',true)),
+    Reason=['rdf:type'='Database_blankNode_violation',
+	    best_practice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    predicate=X].
-schemaBlankNodeSC(Database,Reason) :-
-    schemaObjectBlankNode(X,Database),
+schema_blankNodeSC(Database,Reason) :-
+    schema_object_blank_node(X,Database),
     interpolate(['The object ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='DatabaseBlankNodeViolation',
-	    bestPractice=literal(type('xsd:boolean',true)),
+    Reason=['rdf:type'='Database_blankNode_violation',
+	    best_practice=literal(type('xsd:boolean',true)),
 	    message=Message,
 	    object=X].
 */
@@ -1215,15 +1214,15 @@ tcs_tag(X,Y,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,X, 'http://terminusdb.com/schema/tcs#tag', Y).
 
-classHasLabel(X,Y,Database) :- class(X,Database), label(X,Y,Database).
-%classHasNoLabel(X,Database) :- class(X,Database), \+ label(X,_,Database).
+class_has_label(X,Y,Database) :- class(X,Database), label(X,Y,Database).
+%class_hasNo_label(X,Database) :- class(X,Database), \+ label(X,_,Database).
 
-classHasOneLabel(X,Database) :-
-    classHasLabel(X,Label,Database),
-    bagof(label(Y,Label2), classHasLabel(Y,Label2,Database), L), count(label(X,Label),L,1).
+class_has_one_label(X,Database) :-
+    class_has_label(X,Label,Database),
+    bagof(label(Y,Label2), class_has_label(Y,Label2,Database), L), count(label(X,Label),L,1).
 
-notUniqueClassLabel(X,Database,Reason) :-
-    \+ classHasOneLabel(X,Database),
+not_unique_class_label(X,Database,Reason) :-
+    \+ class_has_one_label(X,Database),
     interpolate(['Class ', X,' does not have exactly one lable.'], Message),
     Reason = _{
                  '@type' : 'vio:DuplicateClassLabelViolation',
@@ -1232,8 +1231,8 @@ notUniqueClassLabel(X,Database,Reason) :-
              }.
 
 /**
- * notUniqueClassLabelSC(+Database:database -Reason:vio) is nondet.
+ * not_unique_class_label_SC(+Database:database -Reason:vio) is nondet.
  *
  * What it says on the tin: every non unique label in Database as a schema constraint.
  */
-notUniqueClassLabelSC(Database,Reason) :- notUniqueClassLabel(_,Database,Reason).
+not_unique_class_label_SC(Database,Reason) :- not_unique_class_label(_,Database,Reason).
