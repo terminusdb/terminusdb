@@ -7,12 +7,6 @@
    ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║
    ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
 
-                ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗
-                ██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
-                ███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
-                ╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
-                ███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
-                ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝
 ```
 
 # Terminus Server
@@ -38,13 +32,9 @@ v1.1.1
 
 ### Install from Docker image (*RECOMMENDED*)
 
-#### Linux Users
+For allusers, we recommend you use our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
 
-For Linux we recommend you use our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
-
-#### Windows & Mac Users 
-
-To install a docker image with the latest server follow the instructions here: [running the terminus-server from docker](https://github.com/terminusdb/terminus-server/blob/master/docs/DOCKER.md).
+Please clone the terminus-quickstart repo and follow the instructions there.
 
 ### Building from source
 
