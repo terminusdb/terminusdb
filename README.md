@@ -32,9 +32,9 @@ v1.1.1
 
 ### Install from Docker image (*RECOMMENDED*)
 
-For allusers, we recommend you use our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
+For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
 
-Please clone the terminus-quickstart repo and follow the instructions there.
+Follow the instructions there.
 
 ### Building from source
 
