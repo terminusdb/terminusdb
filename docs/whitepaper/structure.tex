@@ -162,8 +162,8 @@
 \usepackage{csquotes}
 \usepackage[
     backend=biber,
-    style=alphabetic,
-    citestyle=authoryear,
+    backref=true,
+    style=apa,
     %    natbib=true,
     maxbibnames=99]{biblatex}
 \DeclareLanguageMapping{american}{american-apa}
@@ -171,8 +171,9 @@
 
 \addbibresource{terminusdb.bib} % The filename of the bibliography
 
-%\usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliography
+%\usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliographyuu
 
 \usepackage{etoolbox}
 \apptocmd{\sloppy}{\hbadness 10000\relax}{}{}
 
+%\usepackage{hyperref}

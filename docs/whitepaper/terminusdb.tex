@@ -50,7 +50,7 @@
 There has been an explosion of new database designs, including graph
 databases, key-value stores, document databases, and multi-model
 databases. Yet the majority of production databases are still based on
-the RDBMS designs of the 1970s\cite{Codd:1970:RMD:362384.362685}. This
+the RDBMS designs of the 1970s\autocite{Codd:1970:RMD:362384.362685}. This
 has become a bottleneck in an increasingly automated modern technology
 operations environment.
 
@@ -66,7 +66,7 @@ enables engineers to have confidence in making modificiations
 collaboratively. This is augmented with important features such as
 branching, labelling, rebasing, and cloning. When combined with
 continuous integration/continuous
-delivery\cite{65147}\cite{LAUKKANEN201755} (CI/CD) teams of
+delivery\autocite{65147}\autocite{LAUKKANEN201755} (CI/CD) teams of
 programmers can have confidence that central repositories are
 maintained in correct states such that they can be safely deployed
 once testing and verification have been passed.
@@ -83,7 +83,7 @@ TerminusDB is a full featured graph database management system (GDBMS)
 with a rich query language: WOQL (the Web Object Query Language).
 However, we restrict our attention here to the underlying data
 structure design and layout which we have implemented in a
-Rust\cite{Blandy:2015:RPL:3019371} library which we call
+Rust\autocite{Blandy:2015:RPL:3019371} library which we call
 {\em{terminus-store}}.
 
 We describe in turn the graph database model which is used, the
@@ -116,7 +116,7 @@ the choice of a set simplifies transaction processing in our setting.
 For schema design, TerminusDB uses the OWL language with two
 modifications to make it suitable as a schema language. Namely, we
 dispense with the open world interpretation and insist on the unique
-name assumption\cite{DBLP:journals/semweb/FeeneyMB18}. This provides
+name assumption\autocite{DBLP:journals/semweb/FeeneyMB18}. This provides
 us with a rich modelling language which can provide constraints on the
 allowable shapes in the graph.
 
@@ -131,7 +131,7 @@ when constructing succinct data structures with change sets.
 
 \subsection{Succinct Data Structures}
 
-Succinct data structures\cite{Jacobson:1988:SSD:915547} are a family of
+Succinct data structures\autocite{Jacobson:1988:SSD:915547} are a family of
 data structures which are close in size to the information theoretic
 minimum representation. Technically, they can be defined as data structures
 whose size is:
@@ -145,14 +145,14 @@ small datasets. However, as the size of the datastructure grows, the
 ability to avoid new cache reads at various levels of the memory
 hierarchy (including reading information from disk) means that these
 representations can prove very speed
-competitive\cite{doi:10.1002/spe.2198} in practice.
+competitive\autocite{doi:10.1002/spe.2198} in practice.
 
 TerminusDB largely borrows its graph data structure design from
-HDT\cite{10.1007/978-3-642-30284-8_36} with some modifications which
+HDT\autocite{10.1007/978-3-642-30284-8_36} with some modifications which
 simplify the use of change sets. The authors originally evaluated HDT
 as a possibility for a graph which was too large to fit in memory when
 loaded into postgresql and found that queries on the resulting graph
-performed much better in HDT\cite{gleason_feeney2018}.
+performed much better in HDT\autocite{gleason_feeney2018}.
 
 In particular, the primary datastructures of the HDT format are
 retained, namely {\em front coded dictionaries}, {\em bit sequences}
@@ -163,7 +163,7 @@ and {\em wavelet trees}.
 Due to the unusual quantity of shared prefixes found in RDF data due
 to the nature of URIs and IRIs, front-coding provides a fast
 dictionary format with significant compression of
-data\cite{MARTINEZPRIETO201673}.
+data\autocite{MARTINEZPRIETO201673}.
 
 The primary operations exposed by the data structure are {\em
   string-id} which gives us a natural number corresponding with the
@@ -249,7 +249,7 @@ which the subject identifier is known, as we can use \(select\) to
 find the position in the predicate vector and subsequently use the
 predicate identifier to \(select\) in the object vector. We use a
 wavelet tree to enable search starting from the predicate. Details of
-this can be found in \cite{10.1007/978-3-642-30284-8_36}.
+this can be found in \autocite{10.1007/978-3-642-30284-8_36}.
 
 \subsection{Delta Encoded Databases}
 
@@ -323,7 +323,7 @@ referring to its 20-byte name.
 
 This immutable chain structure allows for straightforward uncoordinated
 multi-read access sometimes called multiversion concurrency control
-(MVCC)\cite{Mohan:1992:EFM:130283.130306}\cite{Sadoghi:2014:RDL:2733004.2733006}. This
+(MVCC)\autocite{Mohan:1992:EFM:130283.130306}\autocite{Sadoghi:2014:RDL:2733004.2733006}. This
 approach also makes branching simple to implement. Any number of new
 layers can point to the same former parent layer.
 
@@ -366,7 +366,7 @@ different value in each). At a minimum, we need to ensure that merging
 branches does not result in the database entering an inconsistent
 state and hence, although constraint checking is beyond the scope of
 this paper, it is a critical piece of the puzzle in enabling automated
-data-ops\cite{gleason2018}.
+data-ops\autocite{gleason2018}.
 
 \begin{figure}
 	\includegraphics[width=\linewidth]{query_write_commit_head} % Figure image
@@ -412,7 +412,7 @@ the various datatypes in XSD.
 
 For strings, the use of succinct data structure immediately suggests a
 potential candidate: the
-FM-index\cite{Ferragina:2005:ICT:1082036.1082039}. With FM-indexing,
+FM-index\autocite{Ferragina:2005:ICT:1082036.1082039}. With FM-indexing,
 very large datasets could still have reasonable query times for
 queries which are typically done on full text indexes using inverted
 term-document indexing. We have yet to explore the candidates for
