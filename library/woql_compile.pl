@@ -647,10 +647,10 @@ compile_node(X,XE,[]) -->
 compile_node_or_lit(PE,X:C,XE,XGoals) -->
     !,
     view(database=G),
-    (   { datatypeProperty(PE,G) }
+    (   { datatype_property(PE,G) }
     ->  resolve(X,XE),
         { XGoals=[] }
-    ;   { objectProperty(PE,G) }
+    ;   { object_property(PE,G) }
     ->  compile_node(X:C,XE,XGoals)
     ;   { format(atom(M), 'Unknown property ~q in graph ~q~n', [PE,G]),
           throw(syntax_error(M)) }
@@ -742,8 +742,8 @@ woql_less(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
     X @< Y.
 woql_less(literal(type(T1,X)),
           literal(type(T2,Y))) :-
-    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
     X < Y.
 woql_less(AE,BE) :-
@@ -761,8 +761,8 @@ woql_greater(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
     X @> Y.
 woql_greater(literal(type(T1,X)),
              literal(type(T2,Y))) :-
-    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
     X > Y.
 woql_greater(AE,BE) :-
