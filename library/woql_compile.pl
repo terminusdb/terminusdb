@@ -1402,10 +1402,10 @@ compile_wf(re(P,S,L),(literal_list(LE,LL),
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
-compile_wf(upper(S,A),string_upper(SE,AE)) -->
+compile_wf(upper(S,A),(literally(SE,SL),string_upper(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
-compile_wf(lower(S,A),string_lower(SE,AE)) -->
+compile_wf(lower(S,A),(literally(SE,SL),string_lower(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
