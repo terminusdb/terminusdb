@@ -678,16 +678,16 @@ rdfs_property(rdfs:seeAlso).
 %:- rdf_meta rdf_meta_property(r).
 rdf_meta_property('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
 
-%:- rdf_meta rdfs_datatypeProperty(r).
-rdfs_datatypeProperty('http://www.w3.org/2000/01/rdf-schema#label').
-rdfs_datatypeProperty('http://www.w3.org/2000/01/rdf-schema#comment').
+%:- rdf_meta rdfs_datatype_property(r).
+rdfs_datatype_property('http://www.w3.org/2000/01/rdf-schema#label').
+rdfs_datatype_property('http://www.w3.org/2000/01/rdf-schema#comment').
 
-%:- rdf_meta rdfs_objectProperty(r).
-rdfs_objectProperty('http://www.w3.org/2000/01/rdf-schema#seeAlso').
+%:- rdf_meta rdfs_object_property(r).
+rdfs_object_property('http://www.w3.org/2000/01/rdf-schema#seeAlso').
 
 %:- rdf_meta rdfs_property(r).
-rdfs_property(P) :- rdfs_datatypeProperty(P).
-rdfs_property(P) :- rdfs_objectProperty(P).
+rdfs_property(P) :- rdfs_datatype_property(P).
+rdfs_property(P) :- rdfs_object_property(P).
 
 %:- rdf_meta rdf_property(r,o).
 rdf_property(P,Database) :-
@@ -698,7 +698,7 @@ rdf_property(P,Database) :-
 datatype_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
-datatype_property(P,_) :- rdfs_datatypeProperty(P).
+datatype_property(P,_) :- rdfs_datatype_property(P).
 
 %:- rdf_meta annotation_property(r,o).
 annotation_property(P,Database) :-
@@ -723,7 +723,7 @@ inverse_functional_property(P,Database) :-
 object_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
-object_property(P,_) :- rdfs_objectProperty(P).
+object_property(P,_) :- rdfs_object_property(P).
 
 /**
  * property(?P,+Database:database is nondet.
