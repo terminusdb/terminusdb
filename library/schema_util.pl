@@ -3,7 +3,7 @@
               database_module/2,
               collection_schema_module/3,
               % utils
-              calculate_subsumptionOf/3,
+              calculate_subsumption_of/3,
               document/2
           ]).
 
@@ -55,48 +55,48 @@ collection_schema_module(Collection,_,Collection).
     % fine grained graph based cache coherence for now.
 
 
-calculate_subsumptionOf(CC, CP, Database) :-
+calculate_subsumption_of(CC, CP, Database) :-
     is_database(Database),
     !,
     database_module(Database, Module),
-    calculate_subsumptionOf(CC, CP, Module).
+    calculate_subsumption_of(CC, CP, Module).
 
-calculate_subsumptionOf(_,'http://www.w3.org/2002/07/owl#Thing',_).
-calculate_subsumptionOf('http://www.w3.org/2002/07/owl#Nothing',_,_).
+calculate_subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
+calculate_subsumption_of('http://www.w3.org/2002/07/owl#Nothing',_,_).
 % Always available...
-calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Document',
+calculate_subsumption_of('http://terminusdb.com/schema/tcs#Document',
                         'http://terminusdb.com/schema/tcs#Document',_).
-calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Entity',
+calculate_subsumption_of('http://terminusdb.com/schema/tcs#Entity',
                         'http://terminusdb.com/schema/tcs#Entity',_).
-calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Relationship',
+calculate_subsumption_of('http://terminusdb.com/schema/tcs#Relationship',
                         'http://terminusdb.com/schema/tcs#Relationship',_).
 % Subsumed by Document
-calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Relationship',
+calculate_subsumption_of('http://terminusdb.com/schema/tcs#Relationship',
                         'http://terminusdb.com/schema/tcs#Document',_).
-calculate_subsumptionOf('http://terminusdb.com/schema/tcs#Entity',
+calculate_subsumption_of('http://terminusdb.com/schema/tcs#Entity',
                         'http://terminusdb.com/schema/tcs#Document',_).
 % Structural rules
-calculate_subsumptionOf(CC, CC, Module) :-
+calculate_subsumption_of(CC, CC, Module) :-
     Module:class(CC).
-calculate_subsumptionOf(CC, CP, Module) :-
+calculate_subsumption_of(CC, CP, Module) :-
     Module:subClassOf(CC, CZ),
-    calculate_subsumptionOf(CZ, CP, Module).
-calculate_subsumptionOf(CC, CP, Module) :-
+    calculate_subsumption_of(CZ, CP, Module).
+calculate_subsumption_of(CC, CP, Module) :-
     Module:class(CC),
     Module:unionOf(CZ, CC),
-    calculate_subsumptionOf(CZ,CP,Module).
-calculate_subsumptionOf(CC, CP, Module) :-
+    calculate_subsumption_of(CZ,CP,Module).
+calculate_subsumption_of(CC, CP, Module) :-
     Module:class(CC),
     Module:disjointUnionOf(CZ, CC),
-    calculate_subsumptionOf(CZ, CP, Module).
-calculate_subsumptionOf(CC, CP, Module) :-
+    calculate_subsumption_of(CZ, CP, Module).
+calculate_subsumption_of(CC, CP, Module) :-
     Module:class(CC),
     Module:intersectionOf(CC, CZ),
-    calculate_subsumptionOf(CZ, CP, Module).
-calculate_subsumptionOf(CC, CP, Module) :-
+    calculate_subsumption_of(CZ, CP, Module).
+calculate_subsumption_of(CC, CP, Module) :-
     % the tbox version does extra work in anonymousEquivalentClass, but why?
     Module:equivalentClass(CC, CZ),
-    calculate_subsumptionOf(CZ, CP, Module).
+    calculate_subsumption_of(CZ, CP, Module).
 
 term_expansion(generate_owl_predicates, Terms) :-
     findall(Predicate,
@@ -132,7 +132,7 @@ document(Class, Database) :-
     is_database(Database),
     !,
     database_module(Database, Module),
-    Module:subsumptionOf(Class, 'http://terminusdb.com/schema/tcs#Document').
+    Module:subsumption_of(Class, 'http://terminusdb.com/schema/tcs#Document').
 
 document(Class, Module) :-
-    Module:subsumptionOf(Class, 'http://terminusdb.com/schema/tcs#Document').
+    Module:subsumption_of(Class, 'http://terminusdb.com/schema/tcs#Document').

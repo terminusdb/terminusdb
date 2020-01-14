@@ -151,7 +151,7 @@ class_properties(Class, Database, PropertiesPrime) :-
     ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label',
                             'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   DocumentProperties=[]),
-    (   setof(Super,schema:subsumptionOf(Class,Super,Database),Classes),
+    (   setof(Super,schema:subsumption_of(Class,Super,Database),Classes),
         setof(P,
               S^(member(S,Classes),
                  validate_schema:domain(P,S,Database)),
@@ -358,7 +358,7 @@ property_restriction(P,Database,R) :-
  * excluding owl:Nothing or abstract classes.
  */
 classes_below(Class,Database,BelowList) :-
-    unique_solutions(Below,schema:subsumptionOf(Below,Class,Database),Classes),
+    unique_solutions(Below,schema:subsumption_of(Below,Class,Database),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(

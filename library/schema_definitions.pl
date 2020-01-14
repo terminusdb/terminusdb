@@ -112,7 +112,7 @@ owl_types([allDifferent,
            namedIndividual]).
 
 metadata_predicates([schema/2]).
-calculated_predicates([subsumptionOf/2]).
+calculated_predicates([subsumption_of/2]).
 util_predicates([document/1]).
 
 schema_predicate(Predicate) :-
