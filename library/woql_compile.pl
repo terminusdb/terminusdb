@@ -1395,6 +1395,23 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(C,CE),
     resolve(N,NE),
     resolve(V,VE).
+compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
+                                    literally(BE,BL),
+                                    literally(LE,LL),
+                                    literally(AE,AL),
+                                    literally(SubE,SubL),
+                                    sub_string(SL,BL,LL,AL,SubL),
+                                    unliterally(SL,SE),
+                                    unliterally(BL,BE),
+                                    unliterally(LL,LE),
+                                    unliterally(AL,AE),
+                                    unliterally(SubL,SubE)
+                                   )) -->
+    resolve(S,SE),
+    resolve(B,BE),
+    resolve(L,LE),
+    resolve(A,AE),
+    resolve(Sub,SubE).
 compile_wf(re(P,S,L),(literal_list(LE,LL),
                       literally(PE,PL),
                       literally(SE,SL),
@@ -1444,6 +1461,22 @@ literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
     literally(H,HL),
     literal_list(T,TL).
+
+literal_string(Literal, String) :-
+    is_string(String),
+    !,
+    Literal = literal(type('http://www.w3.org/2001/XMLSchema#string',String)).
+literal_string(Literal, String) :-
+    is_literal(Literal),
+    !,
+    (   Literal = literal(type(_,String))
+    ;   Literal = literal(lang(_,String))
+    ).
+literal_string(Literal, String) :-
+    % TODO: Make this report different error messages in
+    % different circumstances.
+    format(string(M), 'Unable to translate literal ~q to string ~q', [Literal,String]),
+    throw(type_error(M)).
 
 literally(X, X) :-
     var(X),
