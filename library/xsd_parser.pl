@@ -346,9 +346,9 @@ decimalRange(X,X) --> decimal(X).
 decimalRange(X,Y) --> "[" , whitespace, decimal(X), whitespace,
 					  "," , whitespace, decimal(Y), whitespace,
 					  "]" .
-integerRange(X,X) --> positiveInteger(X).
-integerRange(X,Y) --> "[" , whitespace, positiveInteger(X), whitespace,
-					 "," , whitespace, positiveInteger(Y), whitespace,
+integerRange(X,X) --> integer(X).
+integerRange(X,Y) --> "[" , whitespace, integer(X), whitespace,
+					 "," , whitespace, integer(Y), whitespace,
 					 "]" .
 
 gYearRange(X,X) --> gYear(X,_,_,_).
