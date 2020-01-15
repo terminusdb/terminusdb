@@ -1462,23 +1462,7 @@ literal_list([H|T],[HL|TL]) :-
     literally(H,HL),
     literal_list(T,TL).
 
-literal_string(Literal, String) :-
-    is_string(String),
-    !,
-    Literal = literal(type('http://www.w3.org/2001/XMLSchema#string',String)).
-literal_string(Literal, String) :-
-    is_literal(Literal),
-    !,
-    (   Literal = literal(type(_,String))
-    ;   Literal = literal(lang(_,String))
-    ).
-literal_string(Literal, String) :-
-    % TODO: Make this report different error messages in
-    % different circumstances.
-    format(string(M), 'Unable to translate literal ~q to string ~q', [Literal,String]),
-    throw(type_error(M)).
-
-literally(X, X) :-
+literally(X, _X) :-
     var(X),
     !.
 literally(literal(T), L) :-
@@ -1495,8 +1479,6 @@ literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
-literally(literal(lang(_,L)), L) :-
-    !.
 literally(X, X) :-
     (   atom(X)
     ->  true
@@ -1504,6 +1486,43 @@ literally(X, X) :-
     ->  true
     ;   number(X)
     ).
+
+unliterally(X,Y) :-
+    var(Y),
+    !,
+    Y = literal(type('http://www.w3.org/2001/XMLSchema#string',X)).
+unliterally(X,Y) :-
+    string(X),
+    !,
+    (   (   Y = literal(type(Type,X))
+        ;   Y = X^^Type),
+        (   var(Type)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
+        ;   % subsumption test here.
+            true)
+    ;   (   Y = literal(lang(Lang,X))
+        ;   Y = X@Lang),
+        (   var(Lang)
+        ->  Lang = en
+        ;   true)
+    ).
+unliterally(X,Y) :-
+    number(X),
+    !,
+    (   (   Y = literal(type(Type,X))
+        ;   Y = X^^Type),
+        (   var(Type)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   % subsumption test here.
+            true)
+    ;   (   Y = literal(lang(Lang,X))
+        ;   Y = X@Lang),
+        (   var(Lang)
+        ->  Lang = en
+        ;   true)
+    ).
+
+
 
 compile_arith(Exp,Pre_Term,ExpE) -->
     {

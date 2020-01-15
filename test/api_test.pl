@@ -844,7 +844,7 @@ run_schema_datatypes_update_test :-
     auth(Auth),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/datatypes.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/examples/datatypes.owl.ttl'], TTL_File),
 
     atomic_list_concat([Server,'/terminus_qa_test/schema'], URI),
 
