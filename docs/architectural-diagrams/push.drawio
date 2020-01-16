@@ -1,1 +1,84 @@
-<mxfile host="www.draw.io" modified="2020-01-15T15:38:36.651Z" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:71.0) Gecko/20100101 Firefox/71.0" etag="3x6W9zEo_xCei6hDjakQ" version="12.5.3" type="device"><diagram id="DiHW2JVI0iZqQplOBpY-" name="Page-1">5VrbcpswEP0aP7bDxdjmsbm0zUzaZJLptH2UYQ20AlFJ2KZfXwnEHSfq2LHr9CVGRxISu+doV1Im9mW8/UBRGn4iPuCJZfjbiX01sSx35oq/EshLwLEVENDILyGzAR6j36BAQ6FZ5APrNOSEYB6lXdAjSQIe72CIUrLpNlsR3B01RQEMgEcP4SH6NfJ5WKILx2jwjxAFYTWyaaiaGFWNFcBC5JNNC7KvJ/YlJYSXT/H2ErC0XWWXst/7HbX1xCgkXKdDcBdf2DfJh/wG3z3g6cPvIF69sdXceF59MPji+1WRUB6SgCQIXzfoBSVZ4oN8qyFKTZtbQlIBmgL8AZznypko40RAIY+xqi3HlAPt/BQFMZJRD56Yf0UJRAPgT7Sb1gYXRAUSA6e56EcBIx6tu/NAijJB3a7uek8iMUPLUOy2psq3itzW3Oi+opyX6tX4Rjy0ptFAhcf+wntqwmuEM/UJE2uGhR0u/GgtHgP5mGYsnEhulDVLWlVUiBi61XzkDRR+ZcC4dvtNxMPCuDHhMLHEtxmYCEmJ3yVFiReWGEr8Vqu6anyQPksxFiuAZOMmjDg8pqigyUasQWNcWwPlsH2abUN2VB0WTsfLrnLyplkPzErkYWstWBi7+dRhwt+6fXbmop1qitbZU7R7GXmqoy1MyE/RKEvbRP7ycCtfnshZ+XHx6y/3kJ9+1x4rnpEGYmkZMVfRVjLjEFqxjN6KaA7F4o5oxX0prVTjd/x41upxNNXjnlI9zsDqIkHjyONtoTCggmxlMJDfIpIm4MhHHBXpoEgnxe/H63dX/wKzzUWX2fZ0JAzYI9SuwcNze37mVF5oUtk8aSRY6ESCLMUEyXwGoxwoe5WLu91Ld2fWUAKLYyZCpjVwzWdy5ppwdTWxw1fH0YRp64jiO+wUwn/ho8UpXeQOPLSRQTdEa6jCqv1+4AgakniZsaNsrCyju7FyjFOvJ8MNNVBKVIqSZsUbVhFlfGA3FqJUPjIO0lAp0EjMSWQ3JXTflJ8zbLFgKxYfyNC9dXvMzsfdwZpauysKqdC5dihlmecBY1KYRG7KmMwtzye6zq2el1znxGqY6TiJJK2U/qWTnubYp9Kbh0nmH2W1mjo9/8w1VfSCGwCt1DT/l6KwMDbNv6n+ReG7LLx1quLVtl15lavSAaO3qbuD3kWI48Rv69WdXGgb3jzp2YU5PLwYUZVH4jjiRQqlpa1jJlbTeW+jNnJWMRZK+tcXhzPpMBkVidVryKx6QWHunDq1qlaJ17Ns1Pe+zy4b+97y7Wf44eYhS31UnHS27wGM8npshmJJz2TJ0sJcBkbL4uqcrApFsBDkcZI6DS3vyuorsn7fujkfHn+cIJWdGUdLZUWxuUIv71Wb/0Owr/8A</diagram></mxfile>
+<mxfile host="www.draw.io" modified="2020-01-16T14:10:17.462Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36" etag="QlbxwNSnlUTU_swD1gYx" version="12.5.5" type="github">
+  <diagram id="DiHW2JVI0iZqQplOBpY-" name="Page-1">
+    <mxGraphModel dx="761" dy="394" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="BVri8iUSmkrGGl_odF36-1" value="" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="269" width="250" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-1" target="gOmB3InGyIlORl4Rzgmf-4" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="239" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-1" value="&lt;div&gt;push &lt;br&gt;&lt;/div&gt;&lt;div&gt;request&lt;/div&gt;&lt;div&gt;with remote, local branch, and remote branch&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="185" y="59" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-4" target="gOmB3InGyIlORl4Rzgmf-5" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-4" value="&lt;div&gt;look up remote URL in meta-metadata db&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="200" y="179" width="90" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="BVri8iUSmkrGGl_odF36-3" target="gOmB3InGyIlORl4Rzgmf-9" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-5" value="contact remote server" style="whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+          <mxGeometry x="205" y="300" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-8" target="gOmB3InGyIlORl4Rzgmf-15" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-8" value="&lt;div&gt;upload layers&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+          <mxGeometry x="340" y="620" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-12" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-9" target="gOmB3InGyIlORl4Rzgmf-11" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-13" value="&lt;div&gt;Yes&lt;/div&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-9" target="gOmB3InGyIlORl4Rzgmf-8" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-9" value="we have HEAD?" style="rhombus;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="205" y="500" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-11" value="error, pull first" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="500" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-14" value="&lt;div&gt;report&lt;/div&gt;&lt;div&gt;success to user&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+          <mxGeometry x="720" y="595" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-16" value="&lt;div&gt;on remote&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="450" y="570" width="120" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-18" value="&lt;div&gt;yes&lt;/div&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="gOmB3InGyIlORl4Rzgmf-15" target="gOmB3InGyIlORl4Rzgmf-21" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-15" target="gOmB3InGyIlORl4Rzgmf-19" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-15" value="&lt;div&gt;commit?&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="470" y="640" width="80" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-19" value="errror, pull first" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" parent="1" vertex="1">
+          <mxGeometry x="450" y="750" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-21" target="gOmB3InGyIlORl4Rzgmf-14" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-21" value="update admin db with&amp;nbsp; label of pushed data and branch&amp;nbsp; pushed to" style="whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+          <mxGeometry x="600" y="595" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="BVri8iUSmkrGGl_odF36-3" value="&lt;span style=&quot;white-space: normal&quot;&gt;get metadata graph HEAD&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="212.5" y="410" width="65" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="BVri8iUSmkrGGl_odF36-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="gOmB3InGyIlORl4Rzgmf-5" target="BVri8iUSmkrGGl_odF36-3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="245.0000000000001" y="380" as="sourcePoint"/>
+            <mxPoint x="245.0000000000001" y="500" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
