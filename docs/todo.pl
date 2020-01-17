@@ -22,6 +22,15 @@
     epic_story/2,
     props/2.
 
+
+		 /*******************************
+		 *  Convenience Utils           *
+		 *******************************/
+
+story_props(Name, Props) :-
+    props(Name, Props).   % for now
+
+
 %!  epic(-EpicName:atom) is nondet
 %
 %   @arg EpicName the name of an epic
@@ -77,11 +86,21 @@ if log_listener_install not called, rust falls back to writing to stdout.\n'),
               ])
             ]).
 
+story(rebase).
+props(rebase,
+      [ desc('User can rebase'),
+        tasks([
+            'Calculate delta between two branch refs',
+            'Create a new layer with the delta',
+            'Check constraints of new layer',
+            'Report error to user if constraints not satisfied',
+            'Write all the commits from derived branch to repo metadata graph',
+            'return success to user'
+        ])
+      ]).
 
-		 /*******************************
-		 *  Convenience Utils           *
-		 *******************************/
 
-story_props(Name, Props) :-
-    props(Name, Props).   % for now
+props('Calculate delta between two branch refs',
+      [desc('delta: calculated ephemeral fixup and woql fixup')]).
+
 
