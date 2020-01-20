@@ -1267,6 +1267,7 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
     update(database=Old_Database,
            database=Database),
+    % TODO: Extend with optiosn for various file types.
     { file_spec_path_options(GS, Path, _{}, Options),
       extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
     },
