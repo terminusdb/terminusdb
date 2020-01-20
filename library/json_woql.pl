@@ -100,6 +100,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  WOQL = delete(Doc)
+    ;   _{'http://terminusdb.com/woql#with' : [ Graph, Path, Query] } :< JSON
+    ->  json_to_woql_ast(Graph,WGraph),
+        json_to_woql_ast(Path,WPath),
+        json_to_woql_ast(Query,WQuery),
+        WOQL = with(WGraph,WPath,WQuery)
     ;   _{'http://terminusdb.com/woql#add_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),

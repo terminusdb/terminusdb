@@ -15,20 +15,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, under version 3 of the License.        *
  *                                                                       *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       * 
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -49,6 +49,8 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
+
+:- use_module(temp_graph).
 
 :- use_module(jsonld).
 :- use_module(json_woql).
@@ -1261,6 +1263,16 @@ compile_wf(prefixes(NS,S), Prog) -->
     compile_wf(S, Prog),
     update(prefixes=_,
            prefixes=NS_Old).
+compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
+    resolve(GN,GName),
+    update(database=Old_Database,
+           database=Database),
+    { file_spec_path_options(GS, Path, _{}, Options),
+      extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
+    },
+    compile_wf(Q,Sub_Query),
+    update(database=_,
+           database=Old_Database).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
         Default = _{
@@ -1278,18 +1290,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
     {
-
-        (   (   File_Spec = file(Path,Options)
-            ;   File_Spec = file(Path),
-                Options = []),
-            merge_options(Options,Default,New_Options)
-        ;   (   File_Spec = remote(URI,Options)
-            ;   File_Spec = remote(URI),
-                Options = []),
-            merge_options(Options,Default,New_Options),
-            copy_remote(URI,URI,Path,New_Options)
-        ),
-
+        file_spec_path_options(File_Spec, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1456,6 +1457,23 @@ compile_wf(Q,_) -->
         format(atom(M), 'Unable to compile AST query ~q', [Q]),
         throw(syntax_error(M))
     }.
+
+/*
+ * file_spec_path_options(File_Spec,Path,Default, Options) is semidet.
+ *
+ * Converts a file spec into a referenceable file path which can be opened as a stream.
+ */
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = file(Path,Options)
+    ;   File_Spec = file(Path),
+        Options = []),
+    merge_options(Options,Default,New_Options).
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = remote(URI,Options)
+    ;   File_Spec = remote(URI),
+        Options = []),
+    merge_options(Options,Default,New_Options),
+    copy_remote(URI,URI,Path,New_Options).
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-

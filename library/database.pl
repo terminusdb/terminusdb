@@ -289,7 +289,6 @@ is_schema_graph(C,S) :-
     database_record_schema_list(C,Schemata),
     memberchk(S,Schemata).
 
-
 default_instance_graph(Terminus_DB,Database,I) :-
     database_name(Database, Name),
     interpolate([Name,'/document'],I),
