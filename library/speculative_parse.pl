@@ -84,13 +84,13 @@ guess_integer_range(Val,literal(type('http://terminusdb.com/schema/xdd#integerRa
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
-    phrase(integerRange(_,_),Codes).
+    phrase((whites,integerRange(_,_),whites),Codes).
 
 guess_decimal_range(Val,literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val))) :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
-    phrase(decimalRange(_,_),Codes).
+    phrase((whites,decimalRange(_,_),whites),Codes).
 
 triplet(Number_String) -->
     digit(A), digit(B), digit(C),
