@@ -1,6 +1,8 @@
 :- module(speculative_parse, [guess_date/2,
                               guess_number/2,
-                              guess_integer/2
+                              guess_integer/2,
+                              guess_integer_range/2,
+                              guess_decimal_range/2
                              ]).
 
 /** <module> Speculative Parse
@@ -56,7 +58,7 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
     phrase((whites,
             integer(N),
             whites),
-           Codes,[]),
+           Codes),
     !.
 guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result))) :-
     (   atom(Val)
@@ -77,6 +79,18 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result)
             whites),
            Codes),
     number_string(Result,Ans).
+
+guess_integer_range(Val,literal(type('http://terminusdb.com/schema/xdd#integerRange', Val))) :-
+    (   atom(Val)
+    ;   string(Val)),
+    atom_codes(Val,Codes),
+    phrase(integerRange(_,_),Codes).
+
+guess_decimal_range(Val,literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val))) :-
+    (   atom(Val)
+    ;   string(Val)),
+    atom_codes(Val,Codes),
+    phrase(decimalRange(_,_),Codes).
 
 triplet(Number_String) -->
     digit(A), digit(B), digit(C),
