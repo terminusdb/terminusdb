@@ -120,7 +120,9 @@ initialise_server_settings :-
 main(Argv) :-
     %maybe_upgrade,
     initialise_prefix_db,
+    debug(terminus(main), 'prefix_db initialized', []),
     initialise_contexts,
+    debug(terminus(main), 'initialise_contexts completed', []),
     server(Argv),
     (   Argv == [test]
     ->  run_tests
