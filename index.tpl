@@ -58,7 +58,7 @@
 			}
 		};
 
-		TerminusConfig.location = {server: "~s://~s:~d", key: "~s"};
+		TerminusConfig.location = {server: "~s", key: "~s"};
 		
 		function loadTerminatorWhenReady(){
 			if (typeof TerminusDashboard != "undefined"){
