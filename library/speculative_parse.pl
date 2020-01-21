@@ -29,7 +29,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(xsd_parser).
-:- use_module(library(dcg/basics), [whites//0]).
+:- use_module(library(dcg/basics), [whites//0, blanks//0]).
 
 /*
  * guess_date(+Val,-Date) is nondet.
@@ -84,13 +84,13 @@ guess_integer_range(Val,literal(type('http://terminusdb.com/schema/xdd#integerRa
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
-    phrase((whites,integerRange(_,_),whites),Codes).
+    phrase((blanks,integerRange(_,_),blanks),Codes).
 
 guess_decimal_range(Val,literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val))) :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
-    phrase((whites,decimalRange(_,_),whites),Codes).
+    phrase((blanks,decimalRange(_,_),blanks),Codes).
 
 triplet(Number_String) -->
     digit(A), digit(B), digit(C),
