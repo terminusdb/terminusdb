@@ -1,0 +1,92 @@
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+
+<http://terminusdb.com/schema/xdd>
+  a owl:Ontology ;
+  rdfs:label "Extended Datatype Definitions"@en ;
+  rdfs:comment "Extensions to the xsd datatype systems to add some generally useful basic datatypes"@en ;
+  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
+  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+xdd:coordinate
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "Coordinate"@en ;
+  rdfs:comment "A longitude / latitude pair making up a coordinate."@en .
+
+xdd:coordinatePolyline
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "Coordinate Polyline"@en ;
+  rdfs:comment "A JSON list of coordinates."@en .
+
+xdd:coordinatePolygon
+  a rdfs:Datatype ;
+  rdfs:label "Coordinate Polygon"@en ;
+  tcs:refines xdd:coordinatePolyline ;
+  rdfs:comment "A JSON list of coordinates forming a closed polygon."@en .
+
+xdd:range
+  a rdfs:Datatype ;
+  tcs:tag tcs:abstract ;
+  rdfs:label "Range"@en ;
+  rdfs:comment "Abstract datatype representing a value that is within a range of values. Enables uncertainty to be encoded directly in the data"@en .
+
+xdd:dateRange
+  a rdfs:Datatype ;
+  rdfs:label "Date Range"@en ;
+  tcs:refines xdd:range ;
+  rdfs:comment "A date (YYYY-MM-DD) or an uncertain date range [YYYY-MM-DD1,YYYY-MM-DD2]. Enables uncertainty to be encoded directly in the data"@en .
+
+xdd:gYearRange
+  a rdfs:Datatype ;
+  rdfs:label "Year Range"@en ;
+  tcs:refines xdd:range ;
+  rdfs:comment "A year (e.g. 1999) or an uncertain range of years: (e.g. [1999,2001]). Enables uncertainty to be encoded directly in the data"@en .
+
+xdd:integerRange
+  a rdfs:Datatype ;
+  tcs:refines xdd:range ;
+  rdfs:label "Integer Range"@en ;
+  rdfs:comment "Either an integer (e.g. 30) or an uncertain range of integers [28,30]. Enables uncertainty to be encoded directly in the data"@en.
+
+xdd:decimalRange
+  a rdfs:Datatype ;
+  rdfs:label "Decimal Range"@en ;
+  tcs:refines xdd:range ;
+  rdfs:comment "Either a decimal value (e.g. 23.34) or an uncertain range of decimal values (e.g.[23.4, 4.143]. Enables uncertainty to be encoded directly in the data"@en .
+
+xdd:pesel
+  a rdfs:Datatype ;
+  rdfs:label "PESEL"@en ;
+  tcs:refines xsd:integer ;
+  rdfs:comment "A Polish official PESEL ID. see: https://en.wikipedia.org/wiki/PESEL"@en .
+
+xdd:email
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "Email"@en ;
+  rdfs:comment "A valid email address"@en .
+
+xdd:url
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "URL"@en ;
+  rdfs:comment "A valid http(s) URL"@en .
+
+xdd:html
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "HTML"@en ;
+  rdfs:comment "A string with embedded HTML"@en .
+
+xdd:json
+  a rdfs:Datatype ;
+  tcs:refines xsd:string ;
+  rdfs:label "JSON"@en ;
+  rdfs:comment "A JSON encoded string"@en .
+

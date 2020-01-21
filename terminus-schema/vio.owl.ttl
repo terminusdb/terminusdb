@@ -1,0 +1,446 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
+
+<https://datachemist.net/ontology/vio>
+  a owl:Ontology ;
+  rdfs:label "Terminus Violations Schema"@en ;
+  rdfs:comment "Schema describing all of the errors and violations that can be detected by the Terminus DB Engine and the structure of the documents produced"@en ;
+  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en, "Kitty Jose"@en;
+  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+vio:ViolationReport
+  rdfs:label "Violation Report"@en ;
+  rdfs:comment "A report of violations found in quality-testing of a document or graph fragment"@en ;
+  a owl:Class ;
+  rdfs:subClassOf tcs:Entity.
+
+vio:InstanceDataViolationReport
+  rdfs:label "Instance Data Violation Report"@en ;
+  rdfs:comment "A report of violations of schema rules encountered in quality-testing of instance data"@en;
+  a owl:Class ;
+  rdfs:subClassOf tcs:Entity, vio:ViolationReport, vio:RestrictInstanceViolation .
+
+vio:SchemaViolationReport
+  rdfs:label "Schema Violation Report"@en ;
+  rdfs:comment "A report of violations encountered in quality-testing of schema rules"@en;
+  a owl:Class ;
+  rdfs:subClassOf tcs:Entity, vio:ViolationReport, vio:RestrictSchemaViolation .
+
+vio:violation
+  rdfs:label "Violation"@en ;
+  rdfs:comment "The set of violations that make up the violation report"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain vio:ViolationReport ;
+  rdfs:range vio:Violation .  
+
+vio:RestrictSchemaViolation
+  a owl:Restriction ;
+  rdfs:label "Schema Violation"@en;
+  rdfs:comment "Restricts schema violation reports to only including schema violations"@en;
+  owl:onProperty vio:violation ;
+  owl:allValuesFrom vio:SchemaViolation.
+
+vio:RestrictInstanceViolation
+  a owl:Restriction ;
+  rdfs:label "Insgtance Data Violation"@en;
+  rdfs:comment "Restricts Instance Data violation reports to only including instance data violations"@en;
+  owl:onProperty vio:violation ;
+  owl:allValuesFrom vio:InstanceDataViolation.
+
+vio:Violation
+  rdfs:label "Violation"@en ;
+  tcs:tag tcs:abstract;
+  rdfs:comment "A specific violation of a reasoning rule"@en ;
+  rdfs:subClassOf vio:MessageCardinalityRestriction;
+  a owl:Class .
+
+vio:message
+  rdfs:label "Message"@en ;
+  rdfs:comment "The textual message to the user explaining the violation - every violation has an associated message"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:Violation ;
+  rdfs:range xsd:string .
+
+vio:MessageCardinalityRestriction
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  rdfs:label "Mandatory Unique Message"@en;
+  rdfs:comment "Every violation contains exactly one message string"@en;
+  a owl:Restriction ;
+  owl:onProperty vio:message .
+  
+vio:SchemaViolation
+  tcs:tag tcs:abstract;
+  rdfs:label "Schema Violation"@en ;
+  rdfs:comment "A Violation of the rules relating to valid schema definition. 
+  Schema violations indicate an attempt to change a schema into an invalid state 
+  - a situation where prevention is always much better than cure!"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:Violation .
+
+vio:ClassViolation
+  tcs:tag tcs:abstract;
+  rdfs:label "Class Violation"@en ;
+  rdfs:comment "A violation that relates to a class definition in the schema"@en;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassCardinalityRestriction, vio:SchemaViolation .
+
+vio:class
+  rdfs:label "Class"@en ;
+  rdfs:comment "The specific class whose definition contains the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ClassViolation ;
+  rdfs:range xsd:string .
+
+vio:ClassCardinalityRestriction
+  a owl:Restriction ;
+  rdfs:label "Mandatory Class"@en;
+  rdfs:comment "Every class violation is associated with exactly one class"@en;
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty vio:class .
+
+vio:DuplicateClassLabelViolation
+  rdfs:label "Duplicate Class Label Violation"@en ;
+  rdfs:comment "The class should have a single, unique label in any language"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassViolation .
+
+vio:InvalidClassViolation
+  rdfs:label "Invalid Class Violation"@en ;
+  rdfs:comment "A class referred to is not defined or is invalid"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassViolation .
+
+vio:ClassInheritanceVioltion
+  rdfs:label "Class Inheritance Violation"@en ;
+  rdfs:comment "The violation is related to class inheritance"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassViolation, vio:ViolationWithParent, vio:ParentCardinalityRestriction.
+
+vio:ViolationWithParent
+ a owl:Class;
+ rdfs:label "Violation with Parent"@en;
+ rdfs:comment "A violation which relates to the parent of a class or instance"@en;
+ tcs:tag tcs:abstract.
+
+vio:parent
+  rdfs:label "Parent Class"@en ;
+  rdfs:comment "The parent class related to the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithParent ;
+  rdfs:range xsd:string .
+
+vio:ParentCardinalityRestriction
+  a owl:Restriction ;
+  rdfs:label "Mandatory Parent"@en;
+  rdfs:comment "Every class inheritance violation is associated with exactly one parent class"@en;
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty vio:parent.
+
+vio:InvalidIntersectionViolation
+  rdfs:label "Invalid Intersection Violation"@en ;
+  rdfs:comment "The class is defined as an intersection including an invalid class"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassInheritanceVioltion .
+
+vio:InvalidParentViolation
+  rdfs:label "Invalid Parent Violation"@en ;
+  rdfs:comment "The parent class is not a valid class"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassInheritanceVioltion .
+
+vio:InvalidUnionViolation
+  rdfs:label "Invalid Union Violation"@en ;
+  rdfs:comment "The class is defined as a union that includes an invalid class"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassInheritanceVioltion .
+
+vio:ClassCycle
+  rdfs:label "Class Cycle"@en ;
+  rdfs:comment "A cyclical inheritance pattern"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassViolation .
+
+vio:path
+  rdfs:label "Path"@en ;
+  rdfs:comment "The path that amounts to a cycle in the class inheritance hierarchy"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain vio:ClassCycle ;
+  rdfs:range vio:ListEntry .
+
+vio:ListEntry
+  rdfs:label "List Entry"@en ;
+  rdfs:comment "An entry in a list of paths"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:IndexCardinalityRestriction, vio:PathComponentCardinalityRestriction .
+  
+vio:index
+  rdfs:label "Index"@en ;
+  rdfs:comment "The position in the inheritance cycle chain"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ListEntry ;
+  rdfs:range xsd:nonNegativeInteger .
+
+vio:IndexCardinalityRestriction
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  a owl:Restriction ;
+  rdfs:label "Single Mandatory Index"@en;
+  rdfs:comment "Every List Entry in an inheritance must have a single index"@en;  
+  owl:onProperty vio:index .
+
+vio:path_component
+  rdfs:label "Path Component"@en ;
+  rdfs:comment "The particular class in this step in the inheritance cycle chain"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ListEntry ;
+  rdfs:range xsd:string.
+
+vio:PathComponentCardinalityRestriction
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  a owl:Restriction ;
+  rdfs:label "Single Mandatory Class"@en;
+  rdfs:comment "Every List Entry in an inheritance must have a single class component"@en;  
+  owl:onProperty vio:path_component .
+
+vio:PropertyViolation
+  rdfs:label "Property Violation"@en ;
+  a owl:Class ;
+  tcs:tag tcs:abstract;
+  rdfs:comment "A violation that relates to a property definition in the schema"@en;
+  rdfs:subClassOf vio:PropertyCardinalityRestriction, vio:SchemaViolation .
+
+vio:property
+  rdfs:label "Property"@en ;
+  rdfs:comment "The property in which the specification error is found"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:PropertyViolation ;
+  rdfs:range xsd:string .
+
+vio:PropertyCardinalityRestriction
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  a owl:Restriction ;
+  rdfs:label "Mandatory Property"@en;
+  rdfs:comment "Every property violation is associated with exactly one property"@en;
+  owl:onProperty vio:property .
+
+vio:NonUniquePropertyName
+  rdfs:label "Non Unique Property Name"@en ;
+  rdfs:comment "Property Names must be unique"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyViolation .
+
+vio:DuplicatePropertyLabelViolation
+  rdfs:label "Duplicate Property Label Violation"@en ;
+  rdfs:comment "The property should have a unique label"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyViolation .
+
+vio:PropertyTypeOverload
+  rdfs:label "Property Type Overload"@en ;
+  rdfs:comment "The property is defined as both an object property and a datatype property"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyViolation .
+
+vio:PropertyInheritanceViolation
+  rdfs:label "Property Inheritance Violation"@en ;
+  rdfs:comment "A violation that relates to property inheritance"@en ;
+  a owl:Class ;
+  tcs:tag tcs:abstract ;
+  rdfs:subClassOf vio:PropertyViolation, vio:ParentPropertyCardinalityRestriction .
+  
+vio:parent_property
+  rdfs:label "Parent Property"@en ;
+  rdfs:comment "The parent property that is associated with the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:PropertyInheritanceViolation ;
+  rdfs:range xsd:string.
+
+vio:ParentPropertyCardinalityRestriction
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  a owl:Restriction ;
+  rdfs:label "Mandatory Parent Property"@en;
+  rdfs:comment "Every inherticance property violation is associated with exactly one parent property"@en;
+  owl:onProperty vio:parent_property .
+
+vio:OrphanPropertyViolation
+  rdfs:label "Orphan Property Violation"@en ;
+  rdfs:comment "The property inherits from an undefined property"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyInheritanceViolation .
+
+vio:UntypedPropertyViolation
+  rdfs:label "Untyped Property Violation"@en ;
+  rdfs:comment "The property does not have a valid definition that enables it to be identified as either a datatype or an object property"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyViolation .
+
+vio:UntypedPropertyWithDomain
+  rdfs:label "Untyped Property With Domain"@en ;
+  rdfs:comment "A property that is specified as having a domain but has no valid definition or type"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:UntypedPropertyViolation .
+
+vio:domain
+  rdfs:label "Domain"@en ;
+  rdfs:comment "The class that is defined as being the domain of the invalid property"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:UntypedPropertyWithDomain ;
+  rdfs:range xsd:string .
+
+vio:UntypedPropertyWithRange
+  rdfs:label "Untyped Property With Range"@en ;
+  rdfs:comment "A property that is specified as having a range but has no valid definition or type"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:UntypedPropertyViolation .
+
+vio:range
+  rdfs:label "Range"@en ;
+  rdfs:comment "The class that is the defined as being the range of the invalid property"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:UntypedPropertyWithRange ;
+  rdfs:range xsd:string.
+
+vio:UntypedPropertyWithParent
+  rdfs:label "Untyped Property with Parent"@en ;
+  rdfs:comment "A property that is specified as having a parent property but has no defined type"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:PropertyInheritanceViolation, vio:UntypedPropertyViolation .
+
+vio:PropertyDomainNotSubsumed
+  rdfs:label "Property Domain Not Subsumed"@en ;
+  rdfs:comment "The property has a domain but the domain is not subsumed by the parent domain"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ClassInheritanceVioltion, vio:PropertyInheritanceViolation .
+
+vio:PropertyRangeNotSubsumed
+  rdfs:label "Property Range Not Subsumed"@en ;
+  a owl:Class ;
+  rdfs:comment "The property has a range but that range is not subsumed by the range of the parent property"@en;
+  rdfs:subClassOf vio:ClassInheritanceVioltion, vio:PropertyInheritanceViolation .
+
+vio:InvalidClassInProperty
+  rdfs:label "Invalid Class in Property"@en ;
+  rdfs:comment "An invalid class is referred to in a property definition"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InvalidClassViolation, vio:PropertyViolation .
+
+vio:InvalidClassInDomain
+  rdfs:label "Invalid Class in Domain"@en ;
+  rdfs:comment "The domain of a property refers to an invalid class"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InvalidClassInProperty .
+
+vio:InvalidClassInRange
+  rdfs:label "Invalid Class in Range"@en ;
+  rdfs:comment "A class referred to in a range is invalid"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InvalidClassInProperty .
+
+vio:InstanceDataViolation
+  rdfs:label "Instance Violation"@en ;
+  rdfs:comment "A Violation of the rules defined in the schema, related to instance data. 
+  Instance Data violations indicate situations where the data does not conform to the rules defined in the schema"@en ;
+  a owl:Class ;
+  tcs:tag tcs:abstract ;
+  rdfs:subClassOf vio:Violation .
+
+vio:ViolationWithSubject
+  rdfs:label "Violation with Subject"@en ;
+  rdfs:comment "An instance data violation that is related to a specific subject (ID / URL) element"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InstanceDataViolation .
+
+vio:subject
+  rdfs:label "Subject"@en ;
+  rdfs:comment "The subject of the triple that relates to the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithSubject ;
+  rdfs:range xsd:string .
+
+vio:ViolationWithPredicate
+  rdfs:label "Violation with Predicate"@en ;
+  rdfs:comment "An instance data violation that is associated with a particular predicate encountered in the data."@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InstanceDataViolation .
+ 
+vio:predicate
+  rdfs:label "Predicate"@en ;
+  rdfs:comment "The relevant predicate in a violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithPredicate ;
+  rdfs:range xsd:string .
+
+vio:CardinalityViolation
+  rdfs:label "Cardinality Violation"@en ;
+  rdfs:comment "An instance data violation of a cardinality rule (cardinality rules apply to subject / predicate combinations)"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ViolationWithSubject, vio:ViolationWithPredicate .
+
+vio:ViolationWithObject
+  rdfs:label "Violation with Object"@en ;
+  rdfs:comment "An instance data violation that is associated with a particular object"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InstanceDataViolation .
+
+vio:object
+  rdfs:label "Object ID"@en ;
+  rdfs:comment "The object ID (URL) relevant to the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithObject ;
+  rdfs:range xsd:string .
+
+vio:ViolationWithDatatypeObject
+  rdfs:label "Violation with Datatype Object"@en ;
+  rdfs:comment "An instance data violation that is associated with a particular literal value"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:InstanceDataViolation .
+
+vio:literal
+  rdfs:label "Literal Value"@en ;
+  rdfs:comment "The datatype object / literal related to the violation"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithDatatypeObject ;
+  rdfs:range xsd:anySimpleType.
+
+vio:DatatypeSubsumptionViolation
+  rdfs:label "Datatype Subsumption Violation"@en ;
+  rdfs:comment "The datatype parent has a violation"@en ;
+  a owl:Class ;
+  rdfs:subClassOf vio:ViolationWithDatatypeObject .
+  
+vio:parent_type
+  rdfs:label "Parent Type"@en ;
+  rdfs:comment "Subsuming Type"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:DatatypeSubsumptionViolation ;
+  rdfs:range xsd:string .
+
+vio:base_type
+  rdfs:label "Base Type"@en ;
+  rdfs:comment "Subsumed Type"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain vio:ViolationWithDatatypeObject ;
+  rdfs:range xsd:string .
+
+
+ vio:PropertyCycleViolation 
+   rdfs:label "Property Cycle"@en ;
+   rdfs:comment "A cycle in a property inheritance hierarchy"@en ;
+   a owl:Class.
+   
+vio:UntypedInstance
+   rdfs:label "Untyped Instance"@en;
+   rdfs:comment "A subject is used without a rdf:type being defined for it"@en. 
+   a owl:Class;
+   rdfs:subClassOf vio:ViolationWithSubject.
+
+vio:InstanceSubsumptionViolation      
+   rdfs:label "Instance Subsumption Violation"@en;
+   rdfs:comment "An instance subject has an invalid parent"@en. 
+   a owl:Class;
+   rdfs:subClassOf vio:ViolationWithSubject, vio:ViolationWithParent.
+

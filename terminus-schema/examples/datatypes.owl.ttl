@@ -1,0 +1,508 @@
+	@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+	@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+	@prefix owl: <http://www.w3.org/2002/07/owl#> .
+	@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+	@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+	@prefix datatypes: <http://terminusdb.com/schema/datatypes#> .
+	
+	datatypes:DatatypeHolder
+	  a owl:Class ;
+	  rdfs:subClassOf tcs:Entity;
+	  rdfs:comment "An entity that contains an example of every atomic datatype (non-compound) supported by the DB"@en;
+	  rdfs:label "Datatype Examples"@en .
+	
+	datatypes:link
+	  a owl:ObjectProperty;
+	  rdfs:label "Document Link Type"@en;
+	  rdfs:domain datatypes:DatatypeHolder;
+	  rdfs:range datatypes:DatatypeHolder.  
+	
+	datatypes:coord
+	  rdfs:label "xdd:coordinate"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:coordinate .
+	
+	datatypes:coordline
+	  rdfs:label "xdd:coordinatePolyline"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:coordinatePolyline .
+	
+	datatypes:coordpoly
+	  rdfs:label "xdd:coordinatePolygon"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:coordinatePolygon .
+	
+	datatypes:dateRange
+	  rdfs:label "xdd:dateRange"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:dateRange .
+	
+	datatypes:gYearRange
+	  rdfs:label "xdd:gYearRange"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:gYearRange .
+	
+	datatypes:integerRange
+	  rdfs:label "xdd:integerRange"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:integerRange .
+	
+	datatypes:decimalRange
+	  rdfs:label "xdd:decimalRange"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:decimalRange .
+	
+	datatypes:email
+	  rdfs:label "xdd:email"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:email .
+	
+	datatypes:html
+	  rdfs:label "xdd:html"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:html .
+	
+	datatypes:url
+	  rdfs:label "xdd:url"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:url .
+	
+	datatypes:anySimpleType
+	  rdfs:label "xsd:anySimpleType"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:anySimpleType .
+	
+	datatypes:boolean
+	  rdfs:label "xsd:boolean"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:boolean .
+	
+	datatypes:decimal
+	  rdfs:label "xsd:decimal"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:decimal .
+	
+	datatypes:double
+	  rdfs:label "xsd:double"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:double .
+	
+	datatypes:float
+	  rdfs:label "xsd:float"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:float .
+	
+	datatypes:time
+	  rdfs:label "xsd:time"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:time .
+	
+	datatypes:date
+	  rdfs:label "xsd:date"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:date .
+	
+	datatypes:dateTime
+	  rdfs:label "xsd:dateTime"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:dateTime .
+	
+	datatypes:dateTimeStamp
+	  rdfs:label "xsd:dateTimeStamp"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:dateTimeStamp .
+	
+	datatypes:gYear
+	  rdfs:label "xsd:gYear"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:gYear .
+	
+	datatypes:gYearMonth
+	  rdfs:label "xsd:gYearMonth"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:gYearMonth .
+	
+	datatypes:gMonth
+	  rdfs:label "xsd:gMonth"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xsd:gMonth .
+	
+	datatypes:json
+	  rdfs:label "xdd:JSON"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain datatypes:DatatypeHolder ;
+	  rdfs:range xdd:json .
+	
+	
+	tcs:rights
+	  a owl:DatatypeProperty ;
+	  rdfs:range xsd:string ;
+	  rdfs:domain owl:Ontology ;
+	  rdfs:label "Rights"@en ;
+	  rdfs:comment "The statement of rights of the owner"@en .
+	
+	tcs:author
+	  a owl:DatatypeProperty ;
+	  rdfs:domain owl:Ontology ;
+	  rdfs:range xsd:string ;
+	  rdfs:label "Author"@en ;
+	  rdfs:comment "The authors who developed the ontology"@en .
+	
+	tcs:license
+	  a owl:ObjectProperty ;
+	  rdfs:domain owl:Ontology ;
+	  rdfs:range owl:Thing ;
+	  rdfs:label "License"@en ;
+	  rdfs:comment "The license governing the use of the resource"@en .
+	
+	tcs:Tag
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Tag"@en ;
+	  rdfs:comment "Abstract class representing a tag that can be added to an element to qualify it"@en .
+	
+	tcs:ClassTag
+	  a owl:Class ;
+	  rdfs:label "Class Tags"@en ;
+	  rdfs:subClassOf tcs:Enumerated, tcs:Tag ;
+	  rdfs:comment "Tags that can be added to classes to add meta information"@en ;
+	  owl:oneOf ( tcs:abstract ) .
+	
+	tcs:abstract
+	  rdfs:label "Abstract"@en ;
+	  rdfs:comment "Indicates that the class is abstract - purely a logical construct, no base instantiations exist"@en ;
+	  a tcs:ClassTag .
+	
+	tcs:Document
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Document Class"@en ;
+	  rdfs:comment "A class used to designate the primary data objects managed by the system - relationships and entities"@en .
+	
+	tcs:Entity
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:subClassOf tcs:Document ;
+	  rdfs:label "Entity Class"@en ;
+	  rdfs:comment "The class of entities (business objects / documents) managed by the system"@en .
+	
+	tcs:Relationship
+	  a owl:Class ;
+	  rdfs:subClassOf tcs:Document ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Relationship"@en ;
+	  rdfs:comment "The class of relationship objects - documents which relate other entities together"@en .
+	
+	tcs:Enumerated
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Enumerated Set"@en ;
+	  rdfs:comment "A class representing enumerated types / choice sets"@en .
+	
+	tcs:TemporallyScoped
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:comment "The class of things that are temporally scoped"@en ;
+	  rdfs:label "Temporally Scoped"@en .
+	
+	tcs:GeographicallyScoped
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:comment "The class of things that are geographically scoped"@en ;
+	  rdfs:label "Geographically Scoped"@en .
+	
+	tcs:GeotemporallyScoped
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:comment "The class of things that are geo-temporally scoped"@en ;
+	  rdfs:label "Geo Temporally Scoped"@en .
+	
+	tcs:geography
+	  a owl:ObjectProperty ;
+	  rdfs:label "Geographic Scope"@en ;
+	  rdfs:comment "The geographic scope in which the associated data is considered to exist"@en ;
+	  rdfs:domain tcs:GeographicallyScoped ;
+	  rdfs:range tcs:GeographicScoping .
+	
+	tcs:temporality
+	  a owl:ObjectProperty ;
+	  rdfs:label "Temporal Scope"@en ;
+	  rdfs:comment "The time-scope in which the associated data is considered to exist"@en ;
+	  rdfs:domain tcs:TemporallyScoped ;
+	  rdfs:range tcs:TemporalScoping .
+	
+	tcs:geotemporality
+	  a owl:ObjectProperty ;
+	  rdfs:label "Geotemporal Scope"@en ;
+	  rdfs:comment "The geo-temporal scope in which the associated data is considered to exist"@en ;
+	  rdfs:domain tcs:GeotemporallyScoped ;
+	  rdfs:range tcs:GeotemporalScoping .
+	
+	tcs:TemporalScoping
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Temporal Scoping"@en ;
+	  rdfs:comment "Class representing all types of temporal scoping"@en .
+	
+	tcs:GeotemporalScoping
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Geotemporal Scoping"@en ;
+	  rdfs:comment "Class representing all types of geotemporal scoping"@en .
+	
+	tcs:GeographicScoping
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Geographic Scoping"@en ;
+	  rdfs:comment "Class representing all types of geographic scoping"@en .
+	
+	tcs:TimePoint
+	  a owl:Class ;
+	  rdfs:label "Point in Time"@en ;
+	  rdfs:comment "Class representing things that are associated with points in time"@en ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:subClassOf tcs:TemporalScoping, tcs:SingleTimepoint .
+	
+	tcs:TimeRange
+	  rdfs:label "Time Range"@en ;
+	  a owl:Class ;
+	  rdfs:comment "A Time Range that may have a start and an end time."@en ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:subClassOf tcs:TemporalScoping, tcs:SingleRangeLimits .
+	
+	tcs:start
+	  rdfs:label "Start"@en ;
+	  rdfs:comment "The start of a time range, when the associated data is considered to begin its existance"@en ;
+	  a owl:ObjectProperty ;
+	  rdfs:range tcs:TimePoint ;
+	  rdfs:domain tcs:TimeRange .
+	
+	tcs:end
+	  rdfs:label "End"@en ;
+	  rdfs:comment "The end of a time range, when the associated data is considered to cease existance"@en ;
+	  a owl:ObjectProperty ;
+	  rdfs:range tcs:TimePoint ;
+	  rdfs:domain tcs:TimeRange .
+	
+	tcs:SingleRangeLimits
+	  a owl:Restriction ;
+	  owl:onProperty tcs:start, tcs:end ;
+	  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+	  rdfs:label "Single Range"@en ;
+	  rdfs:comment "Time ranges can have at most 1 start and 1 end"@en .
+	
+	tcs:SingleTimepoint
+	  a owl:Restriction ;
+	  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+	  rdfs:label "Single Time Point"@en ;
+	  rdfs:comment "Time Points have exactly one value"@en .
+	
+	tcs:QualifiedByConfidence
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Qualified by Confidence"@en ;
+	  rdfs:comment "Class representing all objects that can have an associated confidence qualifier"@en .
+	
+	tcs:QualifiedByConfidencePercentage
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Qualified By Confidence %"@en ;
+	  rdfs:comment "Signifies objects which can have a confidence value associated with them that is expressed as a demical precentage, 100 - 0"@en ;
+	  rdfs:subClassOf tcs:QualifiedByConfidence, tcs:SinglePercentageConfidence .
+	
+	tcs:SinglePercentageConfidence
+	  a owl:Restriction ;
+	  owl:onProperty tcs:percent ;
+	  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+	  rdfs:label "Single Percentage"@en ;
+	  rdfs:comment "Only one confidence percentage value allowed"@en .
+	
+	tcs:percent
+	  rdfs:label "Confidence %"@en ;
+	  rdfs:comment "The confidence, expressed as a percentage probability, that the value us true"@en ;
+	  a owl:DatatypeProperty ;
+	  rdfs:domain tcs:QualifiedByConfidencePercentage ;
+	  rdfs:range xsd:decimal .
+	
+	tcs:QualifiedByConfidenceTag
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Qualified By Confidence Tag"@en ;
+	  rdfs:comment "Signifies objects which can have a confidence value associated with them that is expressed as a semantic tag"@en ;
+	  rdfs:subClassOf tcs:QualifiedByConfidence .
+	
+	tcs:confidence_tag
+	  rdfs:label "Confidence Tag"@en ;
+	  rdfs:comment "How certain is the data?"@en ;
+	  a owl:ObjectProperty ;
+	  rdfs:domain tcs:QualifiedByConfidenceTag ;
+	  rdfs:range tcs:ConfidenceTag .
+	
+	tcs:ConfidenceTag
+	  rdfs:label "Content Tags"@en ;
+	  rdfs:comment "Tags that can be added to annotations to indicate confidence in the value of some piece data"@en ;
+	  a owl:Class ;
+	  rdfs:subClassOf tcs:Enumerated ;
+	  owl:oneOf (
+	   tcs:inferred
+	   tcs:disputed
+	   tcs:uncertain
+	   tcs:dubious
+	 ) .
+	
+	tcs:inferred
+	  rdfs:label "Inferred"@en ;
+	  rdfs:comment "The value has been logically inferred from other evidence"@en ;
+	  a tcs:ConfidenceTag, tcs:ClassTag .
+	
+	tcs:dubious
+	  rdfs:label "Dubious"@en ;
+	  rdfs:comment "The evidence suggests this value is dubious - there is low confidence in its truth"@en ;
+	  a tcs:ConfidenceTag .
+	
+	tcs:disputed
+	  rdfs:label "Disputed"@en ;
+	  rdfs:comment "The evidence is disputed - some believe this data to be incorrect"@en ;
+	  a tcs:ConfidenceTag .
+	
+	tcs:uncertain
+	  rdfs:label "Uncertain"@en ;
+	  rdfs:comment "The evidence has a high degree of uncertainty"@en ;
+	  a tcs:ConfidenceTag .
+	
+	tcs:Annotation
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Annotation"@en ;
+	  rdfs:comment "An Annotation object is interpreted as qualifying or extending the value of the data it annotates"@en .
+	
+	tcs:Provenance
+	  a owl:Class ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Provenance"@en ;
+	  rdfs:comment "A Provenance Object contains information about the provenance (source, origin, updates) of the object that it annotates"@en .
+	
+	tcs:relationship_property
+	  a owl:DatatypeProperty ;
+	  rdfs:label "Relationship Property"@en ;
+	  rdfs:domain tcs:Relationship ;
+	  rdfs:range xsd:anyURI ;
+	  rdfs:comment "Used to identify the property of the relationship object that is specifically a source or target property"@en .
+	
+	tcs:relationship_source
+	  a owl:DatatypeProperty ;
+	  rdfs:domain tcs:Relationship ;
+	  rdfs:range xsd:anyURI ;
+	  rdfs:label "Relationship Source"@en ;
+	  rdfs:comment "Signfies a property that points to the source of a relationship"@en ;
+	  rdfs:subPropertyOf tcs:relationship_property .
+	
+	tcs:relationship_target
+	  a owl:DatatypeProperty ;
+	  rdfs:domain tcs:Relationship ;
+	  rdfs:range xsd:anyURI ;
+	  rdfs:label "Relationship Target"@en ;
+	  rdfs:comment "A Property that points to the target of a relationship"@en ;
+	  rdfs:subPropertyOf tcs:relationship_property .
+	
+	xdd:coordinate
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "Coordinate"@en ;
+	  rdfs:comment "A longitude / latitude pair making up a coordinate."@en .
+	
+	xdd:coordinatePolyline
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "Coordinate Polyline"@en ;
+	  rdfs:comment "A JSON list of coordinates."@en .
+	
+	xdd:coordinatePolygon
+	  a rdfs:Datatype ;
+	  rdfs:label "Coordinate Polygon"@en ;
+	  tcs:refines xdd:coordinatePolyline ;
+	  rdfs:comment "A JSON list of coordinates forming a closed polygon."@en .
+	
+	xdd:range
+	  a rdfs:Datatype ;
+	  tcs:tag tcs:abstract ;
+	  rdfs:label "Range"@en ;
+	  rdfs:comment "Abstract datatype representing a value that is within a range of values. Enables uncertainty to be encoded directly in the data"@en .
+	
+	xdd:dateRange
+	  a rdfs:Datatype ;
+	  rdfs:label "Date Range"@en ;
+	  tcs:refines xdd:range ;
+	  rdfs:comment "A date (YYYY-MM-DD) or an uncertain date range [YYYY-MM-DD1,YYYY-MM-DD2]. Enables uncertainty to be encoded directly in the data"@en .
+	
+	xdd:gYearRange
+	  a rdfs:Datatype ;
+	  rdfs:label "Year Range"@en ;
+	  tcs:refines xdd:range ;
+	  rdfs:comment "A year (e.g. 1999) or an uncertain range of years: (e.g. [1999,2001]). Enables uncertainty to be encoded directly in the data"@en .
+	
+	xdd:integerRange
+	  a rdfs:Datatype ;
+	  tcs:refines xdd:range ;
+	  rdfs:label "Integer Range"@en ;
+	  rdfs:comment "Either an integer (e.g. 30) or an uncertain range of integers [28,30]. Enables uncertainty to be encoded directly in the data"@en.
+	
+	xdd:decimalRange
+	  a rdfs:Datatype ;
+	  rdfs:label "Decimal Range"@en ;
+	  tcs:refines xdd:range ;
+	  rdfs:comment "Either a decimal value (e.g. 23.34) or an uncertain range of decimal values (e.g.[23.4, 4.143]. Enables uncertainty to be encoded directly in the data"@en .
+	
+	xdd:pesel
+	  a rdfs:Datatype ;
+	  rdfs:label "PESEL"@en ;
+	  tcs:refines xsd:integer ;
+	  rdfs:comment "A Polish official PESEL ID. see: https://en.wikipedia.org/wiki/PESEL"@en .
+	
+	xdd:email
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "Email"@en ;
+	  rdfs:comment "A valid email address"@en .
+	
+	xdd:url
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "URL"@en ;
+	  rdfs:comment "A valid http(s) URL"@en .
+	
+	xdd:html
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "HTML"@en ;
+	  rdfs:comment "A string with embedded HTML"@en .
+	
+	xdd:json
+	  a rdfs:Datatype ;
+	  tcs:refines xsd:string ;
+	  rdfs:label "JSON"@en ;
+	  rdfs:comment "A JSON encoded string"@en .
+	
+	  
