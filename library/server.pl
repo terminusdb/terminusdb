@@ -54,14 +54,16 @@ server(_Argv) :-
                            time_limit(infinite),
 			   prefix
 			 ]),
-            sync_backing_store,
-	    http_delete_handler(id(busy_loading))),
-       print_message(banner, welcome('terminus-server', Server)).
+            (   sync_backing_store,
+                print_message(banner, welcome('terminus-server', Server))
+            ),
+	    http_delete_handler(id(busy_loading))).
+
 
 % See https://github.com/terminusdb/terminus-server/issues/91
 %  TODO replace this with a proper page
 %
-busy_handler(_) :-
+busy_loading(_) :-
     reply_html_page(
         title('Still Loading'),
         \loading_page).
@@ -74,10 +76,10 @@ loading_page -->
 
 :- multifile prolog:message//1.
 
-prolog:message(welcome('terminus-server', Server) -->
+prolog:message(welcome('terminus-server', Server)) -->
          [ '~N% Welcome to TerminusDB\'s terminus-server!',
          nl,
          '% You can view your server in a browser at \'~s/console\''-[Server],
          nl,
          nl
-         ]).
+         ].
