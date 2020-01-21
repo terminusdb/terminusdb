@@ -1,3 +1,3 @@
 [submodule "terminus-schema"]
-	path = terminus-schema
-	url = https://github.com/terminusdb/terminus-schema
+       path = terminus-schema
+       url = https://github.com/terminusdb/terminus-schema
