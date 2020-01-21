@@ -67,6 +67,7 @@ run_api_tests :-
     try(run_woql_update_test),
     try(run_woql_verify_update_test),
     try(run_db_delete_test),
+    try(run_woql_re_test),
     % ) UPDATE_WOQL_CHECKING
     %
     % INSTANCE TERMINUS_QA_TEST (
@@ -730,6 +731,40 @@ run_woql_instantiation_test :-
         'terminus:message' : _,
         'terminus:status' :"terminus:failure"
     } :< Term.
+
+
+run_woql_re_test :-
+    config:server(Server),
+    auth(Auth),
+
+    Query =  _{re: [_{'@value': ".*/candidate/(.*)",'@type': "xsd:string"},
+                    "/candidate/asdfadsf",
+                    _{list: ["v:AllDI","v:IDURL_Extension"]}]},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
+
+    Args = ['--user', Auth,'-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{bindings: [
+          _{'http://terminusdb.com/woql/variable/AllDI':
+            _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	          '@value':"http://terminusdb.com/woql#/candidate/asdfadsf"},
+            'http://terminusdb.com/woql/variable/IDURL_Extension':
+            _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	          '@value':"asdfadsf"}}
+      ]} :< Term.
+
+
+
 
 /****************************************************************
  * Instance Checking Tests

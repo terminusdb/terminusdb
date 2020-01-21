@@ -1412,10 +1412,14 @@ compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
     resolve(L,LE),
     resolve(A,AE),
     resolve(Sub,SubE).
-compile_wf(re(P,S,L),(literal_list(LE,LL),
-                      literally(PE,PL),
+compile_wf(re(P,S,L),(literally(PE,PL),
                       literally(SE,SL),
-                      utils:re(PL,SL,LL))) -->
+                      literal_list(LE,LL),
+                      utils:re(PL,SL,LL),
+                      unliterally(PL,PE),
+                      unliterally(SL,SE),
+                      unliterally_list(LL,LE)
+                     )) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
@@ -1487,6 +1491,11 @@ literally(X, X) :-
     ;   number(X)
     ).
 
+unliterally_list([],[]).
+unliterally_list([H|T],[HL|TL]) :-
+    unliterally(H,HL),
+    unliterally_list(T,TL).
+
 unliterally(X,Y) :-
     var(Y),
     !,
@@ -1500,12 +1509,18 @@ unliterally(X,Y) :-
         ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
         ;   % subsumption test here.
             true)
+    ->  true
     ;   (   Y = literal(lang(Lang,X))
         ;   Y = X@Lang),
         (   var(Lang)
         ->  Lang = en
         ;   true)
     ).
+unliterally(X,Y) :-
+    atom(X),
+    atom(Y),
+    !,
+    X = Y.
 unliterally(X,Y) :-
     number(X),
     !,
