@@ -305,6 +305,22 @@ Inserts the triple into the given graph IRI (or the default).
 
 For every Solution to Query, perform Update. "_when Query, then Update_"
 
+### with
+```
+{ "with" : [ Graph_Name,
+             Source_Spec,
+             Query
+           ]}
+```
+* Graph\_Name := A string describing the full graph name URI.
+* Source\_Spec := A string describing the source using either "file" or "remote".
+
+Allows you to create a temporary graph from a file locally or at a
+remote location based on the type of the file and TerminusDB's file
+format ontologies. RDF is read in "pure", whereas CSVs are read into a
+generic ontology. Query is then executed in a context in which the
+graph is available for querying.
+
 ### trim
 `{ "trim" : [ String , Trimmed_String ] }`
 * String := An xsd:string
@@ -342,16 +358,18 @@ Subtract A\_2 from A\_1.
 
 ### times
 `{ "times" : [ A_1 , A_2, ... A_n ] }`
-* A_i := An arithmetic expression.
+* A\_i := An arithmetic expression.
 
 Multiply A\_1 by A\_2.
 
-### divide 
+### divide
 `{ "divide" : [ A_1 , A_2, ... A_n ] }`
-* A_i := An arithmetic expression.
+* A\_i := An arithmetic expression.
 
 Divide A\_1 by A\_2.
 
 ### exp
 `{ "exp" : [ A_1 , A_2] }`
-* A_i := An arithmetic expression.
+* A\_i := An arithmetic expression.
+
+

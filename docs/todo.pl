@@ -105,3 +105,4 @@ props('Calculate delta between two branch refs',
       [desc('delta: calculated ephemeral fixup and woql fixup')]).
 
 
+assigned(gavin, 'Calculate delta between two branch refs').
