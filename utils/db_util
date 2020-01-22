@@ -99,11 +99,11 @@ opt_spec([[opt(help),
            default(''),
            help('set the server name')],
 
-          [opt(ingress_url),
+          [opt(public_url),
            type(atom),
-           longflags([ingress_url]),
+           longflags([public_url]),
            default(false),
-           help('set the ingress URL')],
+           help('set the public URL')],
 
           [opt(workers),
            type(integer),
@@ -224,7 +224,7 @@ write_index_file(Index_Tpl_Path, Index_Path, URL, Key) :-
     format(Stream, Tpl_String, [URL,Key]),
     close(Stream).
 
-initialize_database(Ingress_URL, Server, Port, Protocol, Key, Dir) :-
+initialize_database(Public_URL, Server, Port, Protocol, Key, Dir) :-
         example_instance_ttl(Dir,Example_Instance_TTL),
 
         example_inference_ttl(Dir,Example_Inference_TTL),
@@ -244,12 +244,12 @@ initialize_database(Ingress_URL, Server, Port, Protocol, Key, Dir) :-
         index_path(Dir,Index_Path),
 
         crypto_password_hash(Key,Hash, [cost(15)]),
-        (   Ingress_URL \= false,
-            INGRESS_URL = Ingress_URL
-        ;   format(atom(INGRESS_URL), '~s://~s:~d', [Protocol, Server, Port])
+        (   Public_URL \= false,
+            PUBLIC_URL = Public_URL
+        ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
         ),
 
-        write_index_file(Index_Tpl_Path, Index_Path, INGRESS_URL, Key),
+        write_index_file(Index_Tpl_Path, Index_Path, PUBLIC_URL, Key),
 
         copy_file(Example_Instance_TTL, Instance_TTL_Path),
         copy_file(Example_Inference_TTL, Inference_TTL_Path),
@@ -311,7 +311,7 @@ main(Args) :-
         ),
 
         (   memberchk(onlyconfig(false), Opts),
-            memberchk(ingress_url(URL), Opts)
+            memberchk(public_url(URL), Opts)
         ->  initialize_database(URL, Server, Port, Protocol, Key, Dir)
         ;   true
         ),
