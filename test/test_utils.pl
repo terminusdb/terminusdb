@@ -13,7 +13,7 @@
  * Printing during tests goes through two pipelines.
  *
  * Actual test output is sent to print_message with a **Kind** of
- * `testing`. Use test_format for most things.
+ * `testing`. Use test_format/3 for most things.
  *
  * progress of testing is reported to `debug/3` with a topic of
  * `terminus(testing_progress(Msg))`, where `Msg` in
@@ -48,6 +48,18 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 
+:- meta_predicate test_format(:, +, +).
+
+%!  test_format(+Goal:callable, +Format:text, +Args:list) is det
+%
+%   print the message formed as in [[format/2]] for message from
+%   test Goal.
+%
+%   @arg Goal a callable term, the argument to [[try/1]], name of our
+%   test
+%   @arg Format string (an atom) as in [[format/2]]
+%   @arg Args list of arguments for the format string
+%
 test_format(Goal, Format, Args) :-
     print_message(testing, test_format(Goal, Format, Args)).
 
@@ -61,6 +73,10 @@ prolog:message(test_format(Goal, Format, Args)) -->
 
 :- meta_predicate try(0).
 
+%!  try(+Goal:callable) is semidet
+%
+%   calls `Goal` as once, writing debug information,
+%
 try(Goal) :-
     test_format(Goal, '~N* Running test ~q', [Goal]),
     debug(terminus(testing_progress(run)), 'running ~q', [Goal]),

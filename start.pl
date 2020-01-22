@@ -101,9 +101,21 @@ initialise_server_settings :-
     atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
-    ;   format("CRITICAL ERROR: Server can't be started because the configuration is missing~n~nRun: ~s/utils/db_util first~n", BasePath),
+    ;   print_message(error, server_missing_config(BasePath)),
         halt(10)
     ).
+
+:-multifile prolog:message//1.
+
+prolog_message(server_missing_config(BasePath)) -->
+    [
+    'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
+    nl,
+    nl,
+    'Run: ~s/utils/db_util first'-[BasePath],
+    nl
+    ].
+
 
 :- initialise_server_settings.
 

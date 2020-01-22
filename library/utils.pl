@@ -440,23 +440,6 @@ command(Cmd) :-
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
 
-
-/*
- * debug(+Topic, +Stream, +Format, :Args) is det.
- *
- * Format a message if debug topic is enabled. Similar to format/3.
- *
- * This is debug/3 with a specified stream.
- */
-/*
-debug(Topic, Format, Args) :-
-    debugging(Topic, true, To),
-    !,
-    print_debug(Topic, To, Format, Args).
-debug(_, _, _).
-*/
-
-
 /*
  * coerce_literal_string(+S_or_L, -S) is det.
  *

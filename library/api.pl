@@ -134,8 +134,7 @@ cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
           (   cors_enable,
-              http_log_stream(Log),
-              format(Log,'Error: ~q~n',[E]),
+              http_log('~NError: ~q~n',[E]),
               customise_error(E)
           )
          ),
@@ -230,8 +229,7 @@ authenticate(Request, DB, Auth) :-
                                      'terminus:message' : 'Not a valid key'})))).
 
 verify_access(Auth, DB, Action, Scope) :-
-    * http_log_stream(Log),
-    * format(Log,'Goal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
+    http_log('~NGoal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
     (   auth_action_scope(Auth, DB, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
@@ -263,8 +261,7 @@ connection_authorised_user(Request, User, SURI, DB) :-
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
 
-    http_log_stream(Log),
-    format(Log,'~nWitnesses~qn',[Witnesses]),
+    http_log('~NWitnesses~qn',[Witnesses]),
 
     (   Witnesses = []
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
@@ -325,32 +322,20 @@ db_handler(options,_DB,_Request) :-
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-
-    http_log_stream(Log),
-    format(Log,'About to authenticate~n',[]),
-
+    http_log('~NAbout to authenticate~n',[]),
     terminus_database_name(Collection),
     connect(Collection,DBC),
     /* POST: Create database */
     authenticate(Request, DBC, Auth),
-
-    format(Log,'Authenticaticated~n',[]),
-
+    http_log('~NAuthenticaticated~n',[]),
     config:server(Server),
-
     verify_access(Auth,DBC,terminus/create_database,Server),
-
-    format(Log,'Access verified~n',[]),
-
+    http_log('~NAccess verified~n',[]),
     try_get_param('terminus:document',Request,Doc),
-
-    format(Log,'Doc ~q~n',[Doc]),
-
+    http_log('~NDoc ~q~n',[Doc]),
     try_db_uri(DB,DB_URI),
     try_create_db(DB,DB_URI,Doc),
-
-    format(Log,'Database Constructed ~q~n',[DB_URI]),
-
+    http_log('~NDatabase Constructed ~q~n',[DB_URI]),
     config:server(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(_{'terminus:status' : 'terminus:success'}).
@@ -372,9 +357,11 @@ db_handler(delete,DB,Request) :-
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
-/**
- * woql_handler(+Request:http_request) is det.
- */
+% ! woql_handler(+Method:atom, +DB:database, +Request:http_request) is
+% det
+%
+%  @TBD  somebody who knows this code please fill this in
+%
 woql_handler(options,_DB,_Request) :-
     config:server(SURI),
     terminus_database_name(Collection),
@@ -387,38 +374,26 @@ woql_handler(get,DB,Request) :-
     % Actually we need to pull the query from the request, process it
     % and get a list of necessary capabilities to check.
     authenticate(Request, DBC, Auth),
-
     try_db_uri(DB,DB_URI),
-
     verify_access(Auth,DBC,terminus/woql_select,DB_URI),
-
-    try_get_param('terminus:query',Request,Atom_Query),
+    try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
     atom_json_dict(Atom_Query, Query, []),
-
-    http_log_stream(Log),
-
-    format(Log,'Query: ~q~n',[Query]),
-
+    http_log('~NQuery: ~q~n',[Query]),
     connect(DB_URI,New_Ctx),
-
     run_query(Query,New_Ctx,JSON),
-
-    * format(Log,'JSON: ~q~n',[JSON]),
-
+    http_log('~NJSON: ~q~n',[JSON]),
     format(atom(Q),'~q',[Query]),
     format(atom(J),'~q',[JSON]),
     md5_hash(Q,Q_Hash,[]),
     md5_hash(J,J_Hash,[]),
-
-    format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
-
+    http_log('~N~q-~q~n',[Q_Hash,J_Hash]),
     config:server(SURI),
     write_cors_headers(SURI, DBC),
-    reply_json(JSON).
+    reply_json_dict(JSON).
 
-/**
- * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
- */
+%!  document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det
+%
+%
 document_handler(options,DB,_Doc_ID,_Request) :-
     terminus_database_name(Collection),
     connect(Collection,DBC),
@@ -445,16 +420,13 @@ document_handler(get, DB, Doc_ID, Request) :-
     % This feels a bit ugly... but perhaps not
     (   get_param('terminus:encoding',Request,'terminus:frame')
     ->  try_get_filled_frame(Doc_URI,Database,JSON),
-        %http_log_stream(Log),
-        %format(Log, 'Writing Frame JSON-LD:', []),
+        %http_log('Writing Frame JSON-LD:', []),
         %json_write_dict(Log,JSON),
         true
-    ;   try_get_document(Doc_URI,Database,JSON)),
-
+    ;   try_get_document(Doc_URI,Database,JSON)
+    ),
     write_cors_headers(DB_URI, DBC),
-
-    reply_json(JSON).
-
+    reply_json_dict(JSON).
 document_handler(post, DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
 
@@ -851,8 +823,7 @@ try_create_db(DB,DB_URI,Doc) :-
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
-            (   http_log_stream(Log),
-                format(Log,'~n~q~n',[create_db(DB_URI)]),
+            (   http_log('~N~q~n',[create_db(DB_URI)]),
                 terminus_database_name(Collection),
                 connect(Collection,Terminus_DB),
                 create_db(Terminus_DB, DB_URI)

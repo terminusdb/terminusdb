@@ -45,6 +45,8 @@
 %   If any of the individual tests fail, run_tests will fail.
 %
 run_tests :-
+    debug(terminus(testing_progress(run)), 'starting tests', []),
     run_api_tests,
-    run_jsonld_tests.
+    run_jsonld_tests,
+    debug(terminus(testing_progress(run)), 'all tests succeeded', []).
 
