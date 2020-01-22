@@ -286,7 +286,7 @@ terminus:frame
   rdfs:comment "A document encoded as a JSON frame (complete with all available meta-data about its type)"@en ;
   a terminus:DocumentEncoding.
 
-terminus:jsonld`
+terminus:jsonld
   rdfs:label "JSON LD"@en ;
   rdfs:comment "Basic JSON-LD document encoding"@en ;
   a terminus:DocumentEncoding.
