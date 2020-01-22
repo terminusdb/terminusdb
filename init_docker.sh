@@ -8,6 +8,6 @@ if [ ! -f /app/terminusdb/storage/prefix.db ]; then
     /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --ingress_url "$INGRESS_URL"
 fi
 if [ ! -f /app/terminusdb/config/config.pl ]; then
-    /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --only-config
+    /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --ingress_url "$INGRESS_URL" --only-config
 fi
 /app/terminusdb/start.pl
