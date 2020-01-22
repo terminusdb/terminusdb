@@ -304,7 +304,7 @@ console_handler(options,_Request) :-
     format('~n').
 console_handler(get,_Request) :-
     terminus_path(Path),
-    interpolate([Path,'/storage/index.html'], Index_Path),
+    interpolate([Path,'/config/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
     config:server(SURI),
     terminus_database_name(Collection),

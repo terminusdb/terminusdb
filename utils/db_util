@@ -180,7 +180,7 @@ config_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/config-template.tpl'], Path).
 
 index_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../storage/index.html'], Path).
+    atomic_list_concat([Dir, '/../config/index.html'], Path).
 
 index_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../index.tpl'], Path).
