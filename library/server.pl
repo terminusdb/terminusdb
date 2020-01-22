@@ -34,6 +34,7 @@
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(triplestore).
+:- use_module(library(http/html_write)).
 
 server(_Argv) :-
     config:server(Server),

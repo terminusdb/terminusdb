@@ -107,7 +107,7 @@ initialise_server_settings :-
 
 :-multifile prolog:message//1.
 
-prolog_message(server_missing_config(BasePath)) -->
+prolog:message(server_missing_config(BasePath)) -->
     [
     'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
     nl,
