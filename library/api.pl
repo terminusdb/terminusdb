@@ -280,13 +280,13 @@ reply_with_witnesses(Resource_URI, DB, Witnesses) :-
  * connect_handler(+Method,+Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     connection_authorised_user(Request,User, SURI, DB),
@@ -297,7 +297,7 @@ connect_handler(get,Request) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(options,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
@@ -306,7 +306,7 @@ console_handler(get,_Request) :-
     terminus_path(Path),
     interpolate([Path,'/config/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
@@ -318,7 +318,7 @@ console_handler(get,_Request) :-
  */
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI,DB),
@@ -336,7 +336,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Authenticaticated~n',[]),
 
-    config:server(Server),
+    config:public_server_url(Server),
 
     verify_access(Auth,DBC,terminus/create_database,Server),
 
@@ -351,8 +351,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Database Constructed ~q~n',[DB_URI]),
 
-    config:server(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(Server, DBC),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
@@ -360,15 +359,14 @@ db_handler(delete,DB,Request) :-
     connect(Collection,DBC),
     authenticate(Request, DBC, Auth),
 
-    config:server(Server),
+    config:public_server_url(Server),
 
     verify_access(Auth, DBC, terminus/delete_database,Server),
 
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    config:server(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(Server, DBC),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -376,7 +374,7 @@ db_handler(delete,DB,Request) :-
  * woql_handler(+Request:http_request) is det.
  */
 woql_handler(options,_DB,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DBC),
     write_cors_headers(SURI, DBC),
@@ -412,7 +410,7 @@ woql_handler(get,DB,Request) :-
 
     format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
 
-    config:server(SURI),
+    config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(JSON).
 
@@ -529,7 +527,7 @@ frame_handler(get, DB, Request) :-
 
     try_class_frame(Class_URI,Database,Frame),
 
-    config:server(SURI),
+    config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(Frame).
 
@@ -720,7 +718,7 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
  * Die if we can't form a document uri.
  */
 try_db_uri(DB,DB_URI) :-
-    (   config:server(Server_Name),
+    (   config:public_server_url(Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
     ;   throw(http_reply(not_found(_{'terminus:message' : 'Database resource can not be found',
@@ -947,7 +945,7 @@ try_dump_schema(DB_URI, DB, Name, Request) :-
                         graph_to_turtle(DB_URI, Name, Stream)
                     )
                 ),
-                config:server(SURI),
+                config:public_server_url(SURI),
                 write_cors_headers(SURI, DB),
                 reply_json(String)
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),

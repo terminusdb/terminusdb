@@ -5,7 +5,7 @@
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix doc: <http://SERVER_NAME/terminus/document/> .
+@prefix doc: <SERVER_NAME/terminus/document/> .
 
 doc:access_all_areas
     a terminus:ServerCapability ;
@@ -26,15 +26,15 @@ doc:terminus
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
     terminus:allow_origin "*"^^xsd:string ;
-    terminus:id "http://SERVER_NAME/terminus"^^xsd:anyURI ;
-    terminus:instance "http://SERVER_NAME/terminus/document"^^xsd:string ;
-    terminus:schema "http://SERVER_NAME/terminus/schema"^^xsd:string ;
-    terminus:inference "http://SERVER_NAME/terminus/inference"^^xsd:string .
+    terminus:id "SERVER_NAME/terminus"^^xsd:anyURI ;
+    terminus:instance "SERVER_NAME/terminus/document"^^xsd:string ;
+    terminus:schema "SERVER_NAME/terminus/schema"^^xsd:string ;
+    terminus:inference "SERVER_NAME/terminus/inference"^^xsd:string .
 
 doc:server
     a terminus:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
-    terminus:id "http://SERVER_NAME"^^xsd:anyURI ;
+    terminus:id "SERVER_NAME"^^xsd:anyURI ;
     terminus:allow_origin "*"^^xsd:string ;
     terminus:resource_includes doc:terminus .
