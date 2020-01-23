@@ -97,6 +97,7 @@ The [Python client libraries] Coming Soon...
 * Better date handling in WOQL
 * Improved type casting in WOQL 
 * Improvements to query processing speed
+* We now have decoupled public URI from internal database URI
 
 ## Future 
 
