@@ -346,10 +346,9 @@ db_handler(post,DB,R) :-
 
     format(Log,'Doc ~q~n',[Doc]),
 
-    try_db_uri(DB,DB_URI),
     try_create_db(DB,DB_URI,Doc),
 
-    format(Log,'Database Constructed ~q~n',[DB_URI]),
+    format(Log,'Database Constructed ~q~n',[DB]),
 
     config:server(SURI),
     write_cors_headers(SURI, DBC),
@@ -834,25 +833,25 @@ get_param(Key,Request,Value) :-
  *
  * Try to create a database and associate resources
  */
-try_create_db(DB,DB_URI,Doc) :-
+try_create_db(DB,Doc) :-
     % Try to create the database resource first.
     with_mutex(
-        DB_URI,
+        DB,
         (       % create the collection if it doesn't exist
-            (   database_exists(DB_URI)
+            (   database_exists(DB)
             ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                       'terminus:message' : 'Database already exists',
                                                       'terminus:method' : 'terminus:create_database'})))
             ;   true),
 
-            (   add_database_resource(DB,DB_URI,Doc)
+            (   add_database_resource(DB,Doc)
             ->  true
-            ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB_URI]),
+            ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
             (   http_log_stream(Log),
-                format(Log,'~n~q~n',[create_db(DB_URI)]),
+                format(Log,'~n~q~n',[create_db(DB)]),
                 terminus_database_name(Collection),
                 connect(Collection,Terminus_DB),
                 create_db(Terminus_DB, DB_URI)
