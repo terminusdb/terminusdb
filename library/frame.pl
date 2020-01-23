@@ -134,9 +134,9 @@ all_document_iris(Database, IRIs) :-
 add_most_specific_property(Database,P,PList,Rp) :-
     % write('P: '),writeq(P),nl,
     member(Q,PList), % write('Q: '),writeq(Q),nl,
-    (   subsumptionPropertiesOf(P,Q,Database)
+    (   subsumption_properties_of(P,Q,Database)
     *-> select(Q,PList,PListp), Rp=[P|PListp] % ,write('P < Q'),nl
-    ;   subsumptionPropertiesOf(Q,P,Database)
+    ;   subsumption_properties_of(Q,P,Database)
     *-> Rp=PList % ,write('Q < P'), nl
     ;   Rp=[P|PList]),
     % Hail mary - makes me so uncomfortable.
@@ -151,7 +151,7 @@ class_properties(Class, Database, PropertiesPrime) :-
     ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label',
                             'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   DocumentProperties=[]),
-    (   setof(Super,schema:subsumptionOf(Class,Super,Database),Classes),
+    (   setof(Super,schema:subsumption_of(Class,Super,Database),Classes),
         setof(P,
               S^(member(S,Classes),
                  validate_schema:domain(P,S,Database)),
@@ -169,11 +169,11 @@ class_properties(Class, Database, PropertiesPrime) :-
 
 %:- rdf_meta has_formula(r,o).
 has_formula(Class,Database) :-
-    (   subClassOf(Class,_,Database)
-    ;   intersectionOf(Class,_,Database)
-    ;   unionOf(Class,_,Database)
-    ;   disjointUnionOf(Class,_,Database)
-    ;   oneOfList(Class,_,Database)
+    (   sub_class_of(Class,_,Database)
+    ;   intersection_of(Class,_,Database)
+    ;   union_of(Class,_,Database)
+    ;   disjoint_union_of(Class,_,Database)
+    ;   one_of_list(Class,_,Database)
     ).
 
 % restriction_type(+Class:uri, -Restriction:restriction_formula, +Database:database is nondet.
@@ -269,31 +269,31 @@ error:has_type(class_formula,X) :-
 %:- rdf_meta class_assertion(o,r,t).
 class_assertion(Database, Class, (Class<Solns)) :-
     %class(Class),
-    setof(Sol, Y^(subClassOf(Class,Y,Database),
+    setof(Sol, Y^(sub_class_of(Class,Y,Database),
                   class_formula(Y, Database, Sol)),
           Solns).
 class_assertion(Database, Class, (Class=and(Solns))) :-
     %class(Class,Database),
-    setof(Sol,Y^(intersectionOf(Class,Y,Database),
+    setof(Sol,Y^(intersection_of(Class,Y,Database),
                  class_formula(Y,Database,Sol)),
           Solns).
 class_assertion(Database,Class,(Class=or(Solns))) :-
     %class(Class,Database),
-    setof(Sol,Y^(unionOf(Class,Y,Database),
+    setof(Sol,Y^(union_of(Class,Y,Database),
                  class_formula(Y,Database,Sol)),
           Solns).
 class_assertion(Database,Class,(Class=xor(Solns))) :-
     %class(Class,Database),
-    setof(Sol,Y^(disjointUnionOf(Class,Y,Database),
+    setof(Sol,Y^(disjoint_union_of(Class,Y,Database),
                  class_formula(Y,Database,Sol)),
           Solns).
 class_assertion(Database,Class,(Class=oneOf(OneList))) :-
-    oneOfList(Class,OneList,Database).
+    one_of_list(Class,OneList,Database).
 class_assertion(Database,Class,RType) :-
     restriction(Class,Database),
     restriction_type(Class,RType,Database).
 class_assertion(Database,Class,class(Class)) :-
-    immediateClass(Class,Database),
+    immediate_class(Class,Database),
     \+ restriction(Class,Database),
     \+ has_formula(Class,Database).
 
@@ -345,7 +345,7 @@ decorate_elements([Elt|Rest],Database,[MLC|Restp]) :-
  * a result of a restriction class.
  */
 property_restriction(P,Database,R) :-
-    (   functionalProperty(P,Database)
+    (   functional_property(P,Database)
     ->  R=[uri=P,property=P,cardinality=1]
     ;   R=true
     ).
@@ -358,7 +358,7 @@ property_restriction(P,Database,R) :-
  * excluding owl:Nothing or abstract classes.
  */
 classes_below(Class,Database,BelowList) :-
-    unique_solutions(Below,schema:subsumptionOf(Below,Class,Database),Classes),
+    unique_solutions(Below,schema:subsumption_of(Below,Class,Database),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
@@ -465,10 +465,10 @@ select_restriction(P,[type=xor,operands=Operands],G,Restriction) :-
     convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
     simplify_restriction_list(xor,NewOperands,Restriction).
 select_restriction(P,[uri=U,property=Q|R],G,[uri=U,property=P|R]) :-
-    subsumptionPropertiesOf(P,Q,G),
+    subsumption_properties_of(P,Q,G),
     !.
 select_restriction(_,[uri=_,property=_|_],_,true) :-
-    !. % \+ subsumptionPropertiesOf(P,Q,Database).
+    !. % \+ subsumption_properties_of(P,Q,Database).
 select_restriction(_,true,_,true).
 
 
@@ -501,9 +501,9 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    |RecordRemainder]) :-
     % Checking for pseudo_properties, which denote annotations and other opaque linking
     % we don't want to generate a frame here at all.
-    annotationProperty(Property,Database),
+    annotation_property(Property,Database),
     !,
-    mostSpecificRange(Property,Range,Database),
+    most_specific_range(Property,Range,Database),
     property_record(Database,Property,RecordRemainder),
     calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
 apply_restriction(Class,Property,Database,Restriction_Formula,
@@ -513,7 +513,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    restriction=Restriction,
                    range=Range
                    |RecordRemainder]) :-
-    mostSpecificRange(Property,Range,Database),
+    most_specific_range(Property,Range,Database),
     datatype(Range,Database),
     % We only just found out that we've no alternatives now after testing data type..
     !,
@@ -527,7 +527,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    restriction=Restriction,
                    frame=[type=document,class=Range|RTail]
                    |RecordRemainder]) :-
-    mostSpecificRange(Property,Range,Database),
+    most_specific_range(Property,Range,Database),
     class(Range,Database),
     schema:document(Range,Database),
     % We are a document frame.
@@ -545,9 +545,9 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    restriction=Restriction,
                    frame=Frame
                    |RecordRemainder]) :-
-    mostSpecificRange(Property,Range,Database),
+    most_specific_range(Property,Range,Database),
     class(Range,Database),
-    oneOfList(Range,OneList,Database),
+    one_of_list(Range,OneList,Database),
     % We are an document frame.
     !,
     Frame = [type=oneOf, elements=DecoratedOneList],
@@ -563,7 +563,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    frame=Frame,
                    restriction=Restriction
                    |RecordRemainder]) :-
-    mostSpecificRange(Property,Range,Database),
+    most_specific_range(Property,Range,Database),
     class(Range,Database),
     % Object property but not an document
     !,
@@ -654,7 +654,7 @@ fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     % A class choice (the choice has already been made...)
     !,
     %format('Elt: ~q~n', [Elt]),
-    instanceClass(Elt,Class,Database),
+    instance_class(Elt,Class,Database),
     %format('Class: ~q~n', [Class]),
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp),
     %format('Fsp: ~q~n', [Fsp]),
@@ -696,10 +696,10 @@ choose_property(Database,P,[R|Rest], [R|Result]) :-
     member(property=Q,R),
     !,
     % Can this be correct?
-    subsumptionPropertiesOf(P,Q,Database), !,
+    subsumption_properties_of(P,Q,Database), !,
     choose_property(Database,P,Rest,Result).
 choose_property(Database,P,[R|FrameRest], Result) :-
-    \+ (member(property=Q,R), subsumptionPropertiesOf(P,Q,Database)),
+    \+ (member(property=Q,R), subsumption_properties_of(P,Q,Database)),
     choose_property(Database,P,FrameRest,Result), !.
 choose_property(_Database,_P,[], []) :- !.
 
@@ -710,7 +710,7 @@ class_property_frame(Class, Property, Database, PropertyFrame) :-
 
 % get filled frame for document
 document_filled_frame(Document,Database,Filled) :-
-    instanceClass(Document,Class,Database),
+    instance_class(Document,Class,Database),
     class_frame(Class,Database,Frame),
     fill_class_frame(Document,Database,Frame,Filled).
 
@@ -725,7 +725,7 @@ document_filled_frame(Document,Database,Filled) :-
 realiser(Elt,Frame,Database,Depth,['@type'=Class,
                                    '@id'=Elt
                                    |Realisers]) :-
-    instanceClass(Elt,Class,Database),
+    instance_class(Elt,Class,Database),
     realise_frame(Elt,Frame,Database,Depth,Realisers).
 
 /*

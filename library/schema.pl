@@ -118,15 +118,15 @@ add_metadata_to_module(Database, Module) :-
     Module:asserta(schema(Database, Schema)).
 
 precalculate_subsumptions(Database, Module) :-
-    Module:dynamic(subsumptionOf/2),
+    Module:dynamic(subsumption_of/2),
     unique_solutions(CC-CP,
-                     (   schema_util:calculate_subsumptionOf(CC,CP,Database),
+                     (   schema_util:calculate_subsumption_of(CC,CP,Database),
                          ground(CC),
                          ground(CP)),
                      Pairs),
 
     forall(member(CC-CP, Pairs),
-           asserta(Module:subsumptionOf(CC, CP))).
+           asserta(Module:subsumption_of(CC, CP))).
 
 compile_util_predicates(Module) :-
     util_predicates(Predicates),

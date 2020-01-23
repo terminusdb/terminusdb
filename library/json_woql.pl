@@ -89,10 +89,22 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(A,WQA),
         json_to_woql_ast(B,WQB),
         WOQL = '='(WQA,WQB)
+    ;   _{'http://terminusdb.com/woql#substring' : [String, Before, Length, After, Substring] } :< JSON
+    ->  json_to_woql_ast(String, WString),
+        json_to_woql_ast(Before, WBefore),
+        json_to_woql_ast(Length, WLength),
+        json_to_woql_ast(After, WAfter),
+        json_to_woql_ast(Substring, WSubstring),
+        WOQL = sub_string(WString,WBefore,WLength,WAfter,WSubstring)
     ;   _{'http://terminusdb.com/woql#update' : [ Doc ] } :< JSON
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  WOQL = delete(Doc)
+    ;   _{'http://terminusdb.com/woql#with' : [ Graph, Path, Query] } :< JSON
+    ->  json_to_woql_ast(Graph,WGraph),
+        json_to_woql_ast(Path,WPath),
+        json_to_woql_ast(Query,WQuery),
+        WOQL = with(WGraph,WPath,WQuery)
     ;   _{'http://terminusdb.com/woql#add_triple' : [ Subject, Predicate, Object ] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),

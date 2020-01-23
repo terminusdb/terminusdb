@@ -5,7 +5,7 @@
 @prefix tcs: <http://terminusdb.com/schema/schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix doc: <http://SERVER_NAME/terminus/document/> .
+@prefix doc: <SERVER_NAME/terminus/document/> .
 
 terminus:authority_scope owl:propertyChainAxiom
     ( terminus:authority_scope terminus:resource_includes ) .

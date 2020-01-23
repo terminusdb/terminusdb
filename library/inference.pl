@@ -66,6 +66,10 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
 inferredEdge(X,OP,Y,Database) :-
     database_instance(Database,Instance),
     xrdf(Database,Instance,X,OP,Y).
+inferredEdge(_,_,_,Database) :-
+    database_inference(Database,[]),
+    !,
+    fail.
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
     xrdf(Database,Inference,OP,rdf:type,owl:'TransitiveProperty'),

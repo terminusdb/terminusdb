@@ -154,12 +154,26 @@
 %----------------------------------------------------------------------------------------
 
 %\usepackage[backend=bibtex,style=authoryear,natbib=true]{biblatex} % Use the bibtex backend with the authoryear citation style (which resembles APA)
-\usepackage[backend=bibtex,style=nature,natbib=true,maxbibnames=99]{biblatex}
+% ?style=nature?
+%\usepackage{biblatex-apa}
+%\usepackage[backend=bibtex,style=apa6,natbib=true,maxbibnames=99]{biblatex}
+
+%\usepackage[american]{babel}
+\usepackage{csquotes}
+\usepackage[
+    backend=biber,
+    backref=true,
+    style=apa,
+    %    natbib=true,
+    maxbibnames=99]{biblatex}
+\DeclareLanguageMapping{american}{american-apa}
+
 
 \addbibresource{terminusdb.bib} % The filename of the bibliography
 
-\usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliography
+%\usepackage[autostyle=true]{csquotes} % Required to generate language-dependent quotes in the bibliographyuu
 
 \usepackage{etoolbox}
 \apptocmd{\sloppy}{\hbadness 10000\relax}{}{}
 
+%\usepackage{hyperref}

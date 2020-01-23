@@ -1,5 +1,5 @@
 :- module(validate_instance,[
-              instanceClass/3,
+              instance_class/3,
               most_specific_type/3,
               refute_insertion/5,
               refute_deletion/5,
@@ -56,15 +56,15 @@ most_specific_type(Document, Document_Type, Database):-
 get_ordered_instance_classes(Document, Sorted, Database) :-
     findall(
         Class,
-        instanceClass(Document, Class, Database),
+        instance_class(Document, Class, Database),
         Classes
     ),
 
     predsort(
         {Database}/[Delta,C1,C2]>>
-        (   strictSubsumptionOf(C1, C2, Database)
+        (   strict_subsumption_of(C1, C2, Database)
         ->  Delta = (<)
-        ;   strictSubsumptionOf(C2, C1, Database)
+        ;   strict_subsumption_of(C2, C1, Database)
         ->  Delta = (>)
         ;   C1 = C2
         ->  Delta = (=)
@@ -72,14 +72,14 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
     ).
 
 /**
- * instanceClass(?X:uri, ?C:uri, +Database:database is nondet.
+ * instance_class(?X:uri, ?C:uri, +Database:database is nondet.
  *
  * Determines the class C identified with the instance X.
  */
-instanceClass(X, Y, Database) :-
+instance_class(X, Y, Database) :-
     database_instance(Database,Instance),
     xrdf(Database,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
-instanceClass(X, Y, Database) :-
+instance_class(X, Y, Database) :-
     database_schema(Database,Schema), % instances can also exist in the schema
     xrdf(Database,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 
@@ -174,8 +174,8 @@ refute_insertion(Database,X,P,Y,Reason) :-
  * Refute that X is at class C.
  */
 refute_node_at_class(Database,X,Class,Reason) :-
-    (   instanceClass(X,IC,Database)
-    ->  (   subsumptionOf(IC,Class,Database)
+    (   instance_class(X,IC,Database)
+    ->  (   subsumption_of(IC,Class,Database)
         ->  false
         ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
             Reason = _{
@@ -215,9 +215,9 @@ forall R \in Resrictions |- R < dom(p) => S |- R p Ca card
  */
 refute_all_restrictions(Database,X,P,Reason) :-
     % Domain existence must be checked separately
-    instanceClass(X,C,Database),
-    restrictionOnProperty(CR,P,Database),
-    subsumptionOf(CR,C,Database),
+    instance_class(X,C,Database),
+    restriction_on_property(CR,P,Database),
+    subsumption_of(CR,C,Database),
     % check to see does X satisfy each restriction
 	refute_restriction(Database,X,CR,P,Reason).
 
@@ -412,7 +412,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
  * Determines of ?P is actually a functional property or not.
  */
 refute_functional_property(X,P,Y,Database,Reason) :-
-    functionalProperty(P,Database),
+    functional_property(P,Database),
     database_instance(Database,Instance),
     xrdf(Database,Instance,X,P,_),
     card(X,P,_,Database,N),
@@ -433,7 +433,7 @@ refute_functional_property(X,P,Y,Database,Reason) :-
  */
 refute_inverse_functional_property(X,P,Y,Database,Reason) :-
     database_instance(Database,Instance),
-    inverseFunctionalProperty(P,Database),
+    inverse_functional_property(P,Database),
     xrdf(Database,Instance,_,P,Y),
     card(_,P,Y,Database,N),
     N \= 1,
@@ -499,7 +499,7 @@ refute_basetype_elt(literal(type(T,S)),'http://www.w3.org/2001/XMLSchema#string'
                  }
     ).
 refute_basetype_elt(literal(type(T2,_)),T1,Reason) :-
-    (   \+ basetypeSubsumptionOf(T1,T2)
+    (   \+ basetype_subsumption_of(T1,T2)
     ->  Reason = _{
                      '@type' : 'vio:DataTypeSubsumptionViolation',
                      'vio:message' : 'Could not subsume type1:required_type with type2:found_type',

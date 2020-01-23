@@ -99,6 +99,12 @@ opt_spec([[opt(help),
            default(''),
            help('set the server name')],
 
+          [opt(public_url),
+           type(atom),
+           longflags([public_url]),
+           default(false),
+           help('set the public URL')],
+
           [opt(workers),
            type(integer),
            shortflags([w]),
@@ -165,7 +171,7 @@ instance_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/instance.ttl'], Path).
 
 instance_name(Host,Name) :-
-    atomic_list_concat(['http://',Host,'/terminus/document'],Name).
+    atomic_list_concat([Host,'/terminus/document'],Name).
 
 config_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config.pl'], Path).
@@ -174,7 +180,7 @@ config_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/config-template.tpl'], Path).
 
 index_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../storage/index.html'], Path).
+    atomic_list_concat([Dir, '/../config/index.html'], Path).
 
 index_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../index.tpl'], Path).
@@ -183,7 +189,7 @@ inference_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/inference.ttl'], Path).
 
 inference_name(Host,Name) :-
-    atomic_list_concat(['http://',Host,'/terminus/inference'],Name).
+    atomic_list_concat([Host,'/terminus/inference'],Name).
 
 ttl_path(Dir, Path) :-
     atomic_list_concat([Dir,'1-ckp.ttl'], Path).
@@ -192,7 +198,7 @@ schema_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/schema.ttl'], Path).
 
 schema_name(Host,Name) :-
-    atomic_list_concat(['http://',Host,'/terminus/schema'],Name).
+    atomic_list_concat([Host,'/terminus/schema'],Name).
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
@@ -202,61 +208,58 @@ replace_in_file(Path, Pattern, With) :-
     write(FileStream, NewFileString),
     close(FileStream).
 
-write_config_file(Config_Tpl_Path, Config_Path, Server_Name, Port, Workers) :-
+write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, Workers) :-
     open(Config_Tpl_Path, read, Tpl_Stream),
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
     open(Config_Path, write, Stream),
-    format(Stream, Tpl_String, [Server_Name, Port, Workers]),
+    format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
     close(Stream).
 
-write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server_Name, Port, Key) :-
+write_index_file(Index_Tpl_Path, Index_Path, URL, Key) :-
     open(Index_Tpl_Path, read, Tpl_Stream),
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
     open(Index_Path, write, Stream),
-    format(Stream, Tpl_String, [Protocol,Server_Name,Port,Key]),
+    format(Stream, Tpl_String, [URL,Key]),
     close(Stream).
 
-initialize_database(Server, Port, Protocol, Key, Dir) :-
-        example_instance_ttl(Dir,Example_Instance_TTL),
+initialize_database(Public_URL, Key, Dir) :-
+    example_instance_ttl(Dir,Example_Instance_TTL),
 
-        example_inference_ttl(Dir,Example_Inference_TTL),
-        example_schema_ttl(Dir,Example_Schema_TTL),
+    example_inference_ttl(Dir,Example_Inference_TTL),
+    example_schema_ttl(Dir,Example_Schema_TTL),
 
-        atomic_list_concat([Server, ":", Port], ServerPort),
+    database_path(Dir,DB_Path),
+    make_directory_path(DB_Path),
+    delete_directory_contents(DB_Path),
 
-        database_path(Dir,DB_Path),
-        make_directory_path(DB_Path),
-        delete_directory_contents(DB_Path),
+    instance_path(Dir,Instance_TTL_Path),
+    inference_path(Dir,Inference_TTL_Path),
+    schema_path(Dir,Schema_TTL_Path),
 
-        instance_path(Dir,Instance_TTL_Path),
-        inference_path(Dir,Inference_TTL_Path),
-        schema_path(Dir,Schema_TTL_Path),
+    crypto_password_hash(Key,Hash, [cost(15)]),
 
-        index_template_path(Dir, Index_Tpl_Path),
-        index_path(Dir,Index_Path),
+    copy_file(Example_Instance_TTL, Instance_TTL_Path),
+    copy_file(Example_Inference_TTL, Inference_TTL_Path),
+    copy_file(Example_Schema_TTL, Schema_TTL_Path),
+    replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
+    replace_in_file(Inference_TTL_Path, "SERVER_NAME", Public_URL),
+    replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
+    replace_in_file(Schema_TTL_Path, "SERVER_NAME", Public_URL),
 
-        crypto_password_hash(Key,Hash, [cost(15)]),
-        write_index_file(Index_Tpl_Path, Index_Path, Protocol, Server,
-                         Port, Key),
+    instance_name(Public_URL,Instance_Name),
+    create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
+    schema_name(Public_URL,Schema_Name),
+    create_graph_from_turtle(DB_Path,Schema_Name,Schema_TTL_Path),
+    inference_name(Public_URL,Inference_Name),
+    create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),
+    format('Successfully updated admin key!!~n').
 
-        copy_file(Example_Instance_TTL, Instance_TTL_Path),
-        copy_file(Example_Inference_TTL, Inference_TTL_Path),
-        copy_file(Example_Schema_TTL, Schema_TTL_Path),
-        replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-        replace_in_file(Inference_TTL_Path, "SERVER_NAME", ServerPort),
-        replace_in_file(Instance_TTL_Path, "SERVER_NAME", ServerPort),
-        replace_in_file(Schema_TTL_Path, "SERVER_NAME", ServerPort),
-
-        instance_name(ServerPort,Instance_Name),
-        create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
-        schema_name(ServerPort,Schema_Name),
-        create_graph_from_turtle(DB_Path,Schema_Name,Schema_TTL_Path),
-        inference_name(ServerPort,Inference_Name),
-        create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),
-        format('Successfully updated admin key!!~n').
-
+initialize_index(URL, Key, Dir) :-
+    index_template_path(Dir, Index_Tpl_Path),
+    index_path(Dir,Index_Path),
+    write_index_file(Index_Tpl_Path, Index_Path, URL, Key).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -288,9 +291,14 @@ main(Args) :-
         memberchk(port(Port), Opts),
         memberchk(workers(Workers), Opts),
         memberchk(protocol(Protocol), Opts),
+        memberchk(public_url(Public_URL), Opts),
+        (   Public_URL \= false
+        ->  PUBLIC_URL = Public_URL
+        ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
+        ),
         config_template_path(Dir, Config_Tpl_Path),
         config_path(Dir,Config_Path),
-        write_config_file(Config_Tpl_Path, Config_Path, Server,
+        write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
                           Port, Workers),
 
         registry_path(Dir,Registry_Path),
@@ -300,8 +308,10 @@ main(Args) :-
             copy_file(Example_Registry_Path, Registry_Path)
         ),
 
+        initialize_index(PUBLIC_URL, Key, Dir),
+
         (   memberchk(onlyconfig(false), Opts)
-        ->  initialize_database(Server, Port, Protocol, Key, Dir)
+        ->  initialize_database(PUBLIC_URL, Key, Dir)
         ;   true
         ),
         halt

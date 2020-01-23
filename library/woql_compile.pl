@@ -15,20 +15,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, under version 3 of the License.        *
  *                                                                       *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       * 
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -50,6 +50,8 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 
+:- use_module(temp_graph).
+
 :- use_module(jsonld).
 :- use_module(json_woql).
 
@@ -61,9 +63,9 @@
 % We may need to patch this in again...
 %:- use_module(query, [enrich_graph_fragment/5]).
 
-:- use_module(validate_schema, [datatypeProperty/2,
-                                objectProperty/2,
-                                basetypeSubsumptionOf/2]).
+:- use_module(validate_schema, [datatype_property/2,
+                                object_property/2,
+                            basetype_subsumption_of/2]).
 :- use_module(casting, [typecast/4,hash/3,idgen/3]).
 :- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
 
@@ -391,7 +393,7 @@ resolve_possible_object(P,Y,Ye,T) -->
     resolve(Y,Yi),
     {
         % We need to do this at query time since the schema may be lifted...
-        T = (    validate_schema:datatypeProperty(P,Database)
+        T = (    validate_schema:datatype_property(P,Database)
             ->  (   validate_schema:range(P,R,Database)
                 ->  Ye = literal(type(R,Yi))
                 ;   Ye = Yi
@@ -637,7 +639,7 @@ compile_node(X:C,XE,Goals) -->
     {
         database_instance(G,I),
         Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                 once(schema:subsumptionOf(D,CE,G))
+                 once(schema:subsumption_of(D,CE,G))
                 ]
     }.
 compile_node(X,XE,[]) -->
@@ -647,10 +649,10 @@ compile_node(X,XE,[]) -->
 compile_node_or_lit(PE,X:C,XE,XGoals) -->
     !,
     view(database=G),
-    (   { datatypeProperty(PE,G) }
+    (   { datatype_property(PE,G) }
     ->  resolve(X,XE),
         { XGoals=[] }
-    ;   { objectProperty(PE,G) }
+    ;   { object_property(PE,G) }
     ->  compile_node(X:C,XE,XGoals)
     ;   { format(atom(M), 'Unknown property ~q in graph ~q~n', [PE,G]),
           throw(syntax_error(M)) }
@@ -670,7 +672,7 @@ compile_relation(X:_C,XE,Class,Goals) -->
         ->  Goals=[]
         ;   database_instance(G,I),
             Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                     once(schema:subsumptionOf(D,ClassE,G))
+                     once(schema:subsumption_of(D,ClassE,G))
                     ]
         )
     }.
@@ -742,8 +744,8 @@ woql_less(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
     X @< Y.
 woql_less(literal(type(T1,X)),
           literal(type(T2,Y))) :-
-    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
     X < Y.
 woql_less(AE,BE) :-
@@ -761,8 +763,8 @@ woql_greater(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
     X @> Y.
 woql_greater(literal(type(T1,X)),
              literal(type(T2,Y))) :-
-    basetypeSubsumptionOf(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetypeSubsumptionOf(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
+    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
     X > Y.
 woql_greater(AE,BE) :-
@@ -915,7 +917,7 @@ compile_wf(like(A,B,F), Goal) -->
                                   literal_string(BE,BS),
                                   isub(AS, BS, true, F)))))
     }.
-compile_wf(A << B,schema:subsumptionOf(AE,BE,G)) -->
+compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
     view(database=G).
@@ -1261,6 +1263,17 @@ compile_wf(prefixes(NS,S), Prog) -->
     compile_wf(S, Prog),
     update(prefixes=_,
            prefixes=NS_Old).
+compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
+    resolve(GN,GName),
+    update(database=Old_Database,
+           database=Database),
+    % TODO: Extend with optiosn for various file types.
+    { file_spec_path_options(GS, Path, _{}, Options),
+      extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
+    },
+    compile_wf(Q,Sub_Query),
+    update(database=_,
+           database=Old_Database).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
         Default = _{
@@ -1278,18 +1291,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
     {
-
-        (   (   File_Spec = file(Path,Options)
-            ;   File_Spec = file(Path),
-                Options = []),
-            merge_options(Options,Default,New_Options)
-        ;   (   File_Spec = remote(URI,Options)
-            ;   File_Spec = remote(URI),
-                Options = []),
-            merge_options(Options,Default,New_Options),
-            copy_remote(URI,URI,Path,New_Options)
-        ),
-
+        file_spec_path_options(File_Spec, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1395,17 +1397,38 @@ compile_wf(pad(S,C,N,V),(literally(SE,SL),
     resolve(C,CE),
     resolve(N,NE),
     resolve(V,VE).
-compile_wf(re(P,S,L),(literal_list(LE,LL),
-                      literally(PE,PL),
+compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
+                                    literally(BE,BL),
+                                    literally(LE,LL),
+                                    literally(AE,AL),
+                                    literally(SubE,SubL),
+                                    sub_string(SL,BL,LL,AL,SubL),
+                                    unliterally(SL,SE),
+                                    unliterally(BL,BE),
+                                    unliterally(LL,LE),
+                                    unliterally(AL,AE),
+                                    unliterally(SubL,SubE)
+                                   )) -->
+    resolve(S,SE),
+    resolve(B,BE),
+    resolve(L,LE),
+    resolve(A,AE),
+    resolve(Sub,SubE).
+compile_wf(re(P,S,L),(literally(PE,PL),
                       literally(SE,SL),
-                      utils:re(PL,SL,LL))) -->
+                      literal_list(LE,LL),
+                      utils:re(PL,SL,LL),
+                      unliterally(PL,PE),
+                      unliterally(SL,SE),
+                      unliterally_list(LL,LE)
+                     )) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
-compile_wf(upper(S,A),string_upper(SE,AE)) -->
+compile_wf(upper(S,A),(literally(SE,SL),string_upper(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
-compile_wf(lower(S,A),string_lower(SE,AE)) -->
+compile_wf(lower(S,A),(literally(SE,SL),string_lower(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
@@ -1440,12 +1463,29 @@ compile_wf(Q,_) -->
         throw(syntax_error(M))
     }.
 
+/*
+ * file_spec_path_options(File_Spec,Path,Default, Options) is semidet.
+ *
+ * Converts a file spec into a referenceable file path which can be opened as a stream.
+ */
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = file(Path,Options)
+    ;   File_Spec = file(Path),
+        Options = []),
+    merge_options(Options,Default,New_Options).
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = remote(URI,Options)
+    ;   File_Spec = remote(URI),
+        Options = []),
+    merge_options(Options,Default,New_Options),
+    copy_remote(URI,URI,Path,New_Options).
+
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
     literally(H,HL),
     literal_list(T,TL).
 
-literally(X, X) :-
+literally(X, _X) :-
     var(X),
     !.
 literally(literal(T), L) :-
@@ -1462,8 +1502,6 @@ literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
-literally(literal(lang(_,L)), L) :-
-    !.
 literally(X, X) :-
     (   atom(X)
     ->  true
@@ -1471,6 +1509,53 @@ literally(X, X) :-
     ->  true
     ;   number(X)
     ).
+
+unliterally_list([],[]).
+unliterally_list([H|T],[HL|TL]) :-
+    unliterally(H,HL),
+    unliterally_list(T,TL).
+
+unliterally(X,Y) :-
+    var(Y),
+    !,
+    Y = literal(type('http://www.w3.org/2001/XMLSchema#string',X)).
+unliterally(X,Y) :-
+    string(X),
+    !,
+    (   (   Y = literal(type(Type,X))
+        ;   Y = X^^Type),
+        (   var(Type)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
+        ;   % subsumption test here.
+            true)
+    ;   (   Y = literal(lang(Lang,X))
+        ;   Y = X@Lang),
+        (   var(Lang)
+        ->  Lang = en
+        ;   true)
+    ).
+unliterally(X,Y) :-
+    atom(X),
+    atom(Y),
+    !,
+    X = Y.
+unliterally(X,Y) :-
+    number(X),
+    !,
+    (   (   Y = literal(type(Type,X))
+        ;   Y = X^^Type),
+        (   var(Type)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   % subsumption test here.
+            true)
+    ;   (   Y = literal(lang(Lang,X))
+        ;   Y = X@Lang),
+        (   var(Lang)
+        ->  Lang = en
+        ;   true)
+    ).
+
+
 
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
