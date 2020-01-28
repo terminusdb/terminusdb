@@ -72,6 +72,40 @@
 :- op(2, xfx, ^^).
 
 /*
+ * database_repository(+DB_Name,-Repo_Obj) is det.
+ *
+ * This takes a database name and returns a repository
+ * object.
+ *
+ * A repository object contains the graph with all existing branches
+ * and how to access them (graphs and their heads).
+ *
+ */
+database_repository(DB_Name,
+                    Repository_Name,
+                    repository{ database_name : DB_Name,
+                                repository_name : Repository_Name,
+                                graph : L}
+                   ) :-
+    storage(Store),
+    safe_open_named_graph(Store,DB_Name,Obj),
+    head(Obj, L).
+
+
+database_repository(DB_Name, Repository) :-
+    database_repository(DB_Name, local, Repository).
+
+
+repository_branch(repository{ database_name : _,
+                              repository_name : _,
+                              graph : L }, Branch_Name, Branch) :-
+    terminus_branch_class(C),
+    global_prefix_expand(terminus:'Branch', Branch),
+    global_prefix_expand(rdf:type, IsA),
+    xrdf_db(L,X,P,Z),
+    
+
+/*
  * Database term accessors.
  *
  * Deprecated: For backwards compatability.

@@ -854,15 +854,15 @@ try_create_db(DB,Doc) :-
                 format(Log,'~n~q~n',[create_db(DB)]),
                 terminus_database_name(Collection),
                 connect(Collection,Terminus_DB),
-                create_db(Terminus_DB, DB_URI)
+                create_db(Terminus_DB, DB)
             ->  true
-            ;   format(atom(MSG), 'Database ~s could not be created', [DB_URI]),
+            ;   format(atom(MSG), 'Database ~s could not be created', [DB]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
-            (   post_create_db(DB_URI)
+            (   post_create_db(DB)
             ->  true
-            ;   format(atom(MSG), 'Unable to perform post-creation updates: ~s', [DB_URI]),
+            ;   format(atom(MSG), 'Unable to perform post-creation updates: ~s', [DB]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'}))))
 
@@ -873,18 +873,18 @@ try_create_db(DB,Doc) :-
  *
  * Attempt to delete a database given its URI
  */
-try_delete_db(DB_URI) :-
+try_delete_db(DB) :-
     with_mutex(
-        DB_URI,
-        (   (   delete_db(DB_URI)
+        DB,
+        (   (   delete_db(DB)
             ->  true
-            ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB_URI]),
+            ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
-            (   delete_database_resource(DB_URI)
+            (   delete_database_resource(DB)
             ->  true
-            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB_URI]),
+            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB]),
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'}))))
         )).
@@ -929,13 +929,13 @@ try_class_frame(Class,Database,Frame) :-
                                       'terminus:class' : Class})))).
 
 /*
- * try_dump_schema(DB_URI, Request) is det.
+ * try_dump_schema(DB, Request) is det.
  *
  * Write schema to current stream
  */
-try_dump_schema(DB_URI, DB, Name, Request) :-
+try_dump_schema(DB, Name, Request) :-
     with_mutex(
-        DB_URI,
+        DB,
         (
             try_get_param('terminus:encoding', Request, Encoding),
             (   coerce_literal_string(Encoding, ES),
@@ -943,7 +943,7 @@ try_dump_schema(DB_URI, DB, Name, Request) :-
             ->  with_output_to(
                     string(String),
                     (   current_output(Stream),
-                        graph_to_turtle(DB_URI, Name, Stream)
+                        graph_to_turtle(DB, Name, Stream)
                     )
                 ),
                 config:server(SURI),
@@ -959,14 +959,14 @@ try_dump_schema(DB_URI, DB, Name, Request) :-
     ).
 
 /*
- * try_update_schema(+DB_URI,+Schema_Name,+TTL,-Witnesses) is det.
+ * try_update_schema(+DB,+Schema_Name,+TTL,-Witnesses) is det.
  *
  */
-try_update_schema(DB_URI,Schema_Name,TTL,Witnesses) :-
+try_update_schema(DB,Schema_Name,TTL,Witnesses) :-
     coerce_literal_string(Schema_Name, Schema_String),
     atom_string(Schema_Atom, Schema_String),
     coerce_literal_string(TTL, TTLS),
-    make_database_from_database_name(DB_URI, Database),
+    make_database_from_database_name(DB, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
         turtle_schema_transaction(Database, Schema_Atom, TTLStream, Witnesses),
@@ -976,8 +976,8 @@ try_update_schema(DB_URI,Schema_Name,TTL,Witnesses) :-
 /*
  * try_get_metadata(+DB_URI,+Name,+TTL,-Witnesses) is det.
  *
- *
  */
+/*
 try_get_metadata(DB_URI,JSON) :-
     (   db_size(DB_URI,Size)
     ->  true
@@ -1003,3 +1003,4 @@ try_get_metadata(DB_URI,JSON) :-
                                                   '@type' : 'xsd:dateTime'},
              'terminus:database_size' : _{'@value' : Size,
                                           '@type' : 'xsd:nonNegativeInteger'}}.
+*/

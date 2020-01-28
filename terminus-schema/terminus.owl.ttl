@@ -206,9 +206,9 @@ terminus:Database
   a owl:Class ;
   rdfs:subClassOf terminus:Resource .
 
-terminus:database_repository
-  rdfs:label "Repository"@en ;
-  rdfs:comment "The repository management graph reference "@en ;
+terminus:database_name
+  rdfs:label "Database Name"@en ;
+  rdfs:comment "The database name which is used as a reference to the repository graph"@en ;
   a owl:DatatypeProperty ;
   rdfs:range xsd:string ;
   rdfs:domain terminus:Database .
@@ -341,6 +341,13 @@ terminus:Branch
   rdf:subClassOf terminus:Ref ;
   rdfs:comment "This is a repo branch"@en ;
   rdfs:label "Branch"@en .
+
+terminus:branch_name
+  a owl:DatatypeProperty ;
+  rdfs:comment "Name of a branch"@en ;
+  rdfs:domain terminus:Branch ;
+  rdfs:label "name"@en ;
+  rdfs:range xsd:string .
 
 terminus:instance
   a owl:ObjectProperty ;
