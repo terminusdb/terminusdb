@@ -1463,7 +1463,7 @@ compile_wf(join(X,S,Y),(literal_list(XE,XL),
     resolve(Y,YE).
 compile_wf(sum(X,Y),(literal_list(XE,XL),
                      literally(YE,YL),
-                     sum(XL,YL),
+                     sumlist(XL,YL),
                      unliterally_list(XL,XE),
                      unliterally(YL,YE))) -->
     resolve(X,XE),
