@@ -1360,8 +1360,10 @@ compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
-compile_wf(order_by(L,S),order_by(LE,Prog)) -->
-    mapm(resolve,L,LE),
+compile_wf(asc(L),asc(LE)) -->
+    mapm(resolve,L,LE).
+compile_wf(order_by(L,S),order_by(Spec,Prog)) -->
+    compile_wf(L, Spec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
