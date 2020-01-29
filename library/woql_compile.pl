@@ -1362,7 +1362,7 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(asc(X),asc(XE)) -->
     resolve(X,XE).
-compile_wf(order_by(L,S),order_by(Spec,Prog)) -->
+compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
     mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
