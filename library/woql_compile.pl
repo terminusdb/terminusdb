@@ -1451,9 +1451,22 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(literal_list(XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
+compile_wf(join(X,S,Y),(literal_list(XE,XL),
+                        literally(SE,SL),
+                        literally(YE,YL),
+                        utils:join(XL,SL,YE),
+                        unliterally_list(XL,XE),
+                        unliterally(SL,SE),
+                        unliterally(YL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
+    resolve(Y,YE).
+compile_wf(sum(X,Y),(literal_list(XE,XL),
+                     literally(YE,YL),
+                     sum(XL,YL),
+                     unliterally_list(XL,XE),
+                     unliterally(YL,YE))) -->
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].

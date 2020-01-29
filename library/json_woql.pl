@@ -221,6 +221,10 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Sep,WSep),
         json_to_woql_ast(Value,WValue),
         WOQL = join(WList,WSep,WValue)
+    ;   _{'http://terminusdb.com/woql#sum' : [ List, Value ] } :< JSON
+    ->  json_to_woql_ast(List,WList),
+        json_to_woql_ast(Value,WValue),
+        WOQL = sum(WList,WValue)
     ;   _{'http://terminusdb.com/woql#start' : [ N, Q ] } :< JSON
     ->  json_to_woql_arith(N,WN),
         json_to_woql_ast(Q,WQ),
