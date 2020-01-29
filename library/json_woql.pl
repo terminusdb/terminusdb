@@ -238,10 +238,10 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(String,WString),
         json_to_woql_ast(List,WList),
         WOQL = re(WPat, WString, WList)
-    ;   _{'http://terminusdb.com/woql#order_by' : [ Template, Query ] } :< JSON
-    ->  json_to_woql_ast(Template,WTemplate),
+    ;   _{'http://terminusdb.com/woql#order_by' : [ Templates, Query ] } :< JSON
+    ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)), Templates, WTemplates),
         json_to_woql_ast(Query,WQuery),
-        WOQL = order_by(WTemplate,WQuery)
+        WOQL = order_by(WTemplates,WQuery)
     ;   _{'http://terminusdb.com/woql#asc' : Vars } :< JSON
     ->  maplist([V1,V2]>>(json_to_woql_ast(V1,V2)),Vars,WVars),
         WOQL = asc(WVars)
