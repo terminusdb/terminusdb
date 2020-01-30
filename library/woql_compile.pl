@@ -1360,8 +1360,10 @@ compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
-compile_wf(order_by(L,S),order_by(LE,Prog)) -->
-    mapm(resolve,L,LE),
+compile_wf(asc(X),asc(XE)) -->
+    resolve(X,XE).
+compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
+    mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
@@ -1451,9 +1453,22 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(literal_list(XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
+compile_wf(join(X,S,Y),(literal_list(XE,XL),
+                        literally(SE,SL),
+                        literally(YE,YL),
+                        utils:join(XL,SL,YE),
+                        unliterally_list(XL,XE),
+                        unliterally(SL,SE),
+                        unliterally(YL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
+    resolve(Y,YE).
+compile_wf(sum(X,Y),(literal_list(XE,XL),
+                     literally(YE,YL),
+                     sumlist(XL,YL),
+                     unliterally_list(XL,XE),
+                     unliterally(YL,YE))) -->
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].

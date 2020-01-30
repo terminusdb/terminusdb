@@ -547,3 +547,4 @@ re(Pattern, String, Matches) :-
     length(Pairs,N),
     length(Matches,N),
     maplist({Matches}/[Key-Value]>>nth0(Key,Matches,Value),Pairs).
+

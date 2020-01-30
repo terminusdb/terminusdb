@@ -12,6 +12,7 @@
   "upper" : {"@type" : "@id"},
   "lower" : {"@type" : "@id"},
   "pad" : {"@type" : "@id"},
+  "sum" : {"@type" : "@id"},
   "from" : {"@type" : "@id"},
   "into" : {"@type" : "@id"},
   "select" : {"@type" : "@id"},
