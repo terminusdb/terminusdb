@@ -41,7 +41,16 @@ guess_date(Val,literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Date))) 
     phrase(guess_date(Date),Codes).
 
 guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',Val))) :-
-    integer(Val).
+    integer(Val),
+    !.
+guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',N))) :-
+    (   atom(Val)
+    ;   string(Val)),
+    atom_codes(Val, Codes),
+    phrase((whites,
+            integer(N),
+            whites),
+           Codes).
 
 /*
  * guess_number(+Val,-Number) is nondet. (or det?)
