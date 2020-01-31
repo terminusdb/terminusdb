@@ -216,12 +216,12 @@ write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, W
     format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
     close(Stream).
 
-write_index_file(Index_Tpl_Path, Index_Path, URL) :-
+write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
     open(Index_Tpl_Path, read, Tpl_Stream),
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
     open(Index_Path, write, Stream),
-    format(Stream, Tpl_String, [URL]),
+    format(Stream, Tpl_String, [URL, Password]),
     close(Stream).
 
 initialize_database(Public_URL, Key, Dir) :-
@@ -256,10 +256,10 @@ initialize_database(Public_URL, Key, Dir) :-
     create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),
     format('Successfully updated admin key!!~n').
 
-initialize_index(URL, Dir) :-
+initialize_index(URL, Dir, Password) :-
     index_template_path(Dir, Index_Tpl_Path),
     index_path(Dir,Index_Path),
-    write_index_file(Index_Tpl_Path, Index_Path, URL).
+    write_index_file(Index_Tpl_Path, Index_Path, URL, Password).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -308,7 +308,7 @@ main(Args) :-
             copy_file(Example_Registry_Path, Registry_Path)
         ),
 
-        initialize_index(PUBLIC_URL, Dir),
+        initialize_index(PUBLIC_URL, Dir, Key),
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(PUBLIC_URL, Key, Dir)
