@@ -105,6 +105,7 @@ http:location(root, '/', []).
                  methods([options,post,delete])]).
 :- http_handler(root(DB/schema), cors_catch(schema_handler(Method,DB)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,get,post])]).
 :- http_handler(root(DB/frame), cors_catch(frame_handler(Method,DB)),
                 [method(Method),
