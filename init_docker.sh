@@ -4,9 +4,10 @@ ADMIN_PASS=${ADMIN_PASS:-root}
 SERVER_PORT=${SERVER_PORT:-6363}
 WORKERS=${WORKERS:-8}
 PUBLIC_URL=${PUBLIC_URL:-false}
-if [ ! -f /app/terminusdb/storage/prefix.db ]; then
-    /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL"
+FILE_DIR=${FILE_DIR:-/app/terminusdb}
+if [ ! -f "$FILE_DIR"/storage/prefix.db ]; then
+    "$FILE_DIR"/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL"
 else
-    /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --only-config
+    "$FILE_DIR"/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --only-config
 fi
-/app/terminusdb/start.pl
+"$FILE_DIR"/start.pl
