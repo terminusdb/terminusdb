@@ -1386,8 +1386,7 @@ compile_wf(concat(L,A),(literal_list(LE,LL),
 compile_wf(trim(S,A),(literally(SE,SL),
                       atom_string(SL,SS),
                       trim(SS,X),
-                      atom_string(AE_raw,X),
-                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
+                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',X)))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
