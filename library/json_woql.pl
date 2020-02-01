@@ -99,7 +99,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#update' : [ Doc ] } :< JSON
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
-    ->  WOQL = delete(Doc)
+    ->  WOQL = delete_object(Doc)
     ;   _{'http://terminusdb.com/woql#with' : [ Graph, Path, Query] } :< JSON
     ->  json_to_woql_ast(Graph,WGraph),
         json_to_woql_ast(Path,WPath),
