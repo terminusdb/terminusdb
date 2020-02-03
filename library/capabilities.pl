@@ -252,11 +252,11 @@ write_cors_headers(Resource_URI, DB) :-
     write_domains(Origins, Out),
     format(Out,'\n',[]).
 
-write_domains([], _).
+write_domains([], Out) :-
+    write(' '),
+    config:public_server_url(SURI),
+    write(Out, SURI).
 write_domains([Domain| Domains], Out) :-
     write(Out, Domain),
-    (   Domains == []
-    ->  true
-    ;   write(' '),
-        write_domains(Domains, Out)
-    ).
+    write(' '),
+    write_domains(Domains, Out).
