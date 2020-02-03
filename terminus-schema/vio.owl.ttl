@@ -115,7 +115,7 @@ vio:InvalidClassViolation
   a owl:Class ;
   rdfs:subClassOf vio:ClassViolation .
 
-vio:ClassInheritanceVioltion
+vio:ClassInheritanceViolation
   rdfs:label "Class Inheritance Violation"@en ;
   rdfs:comment "The violation is related to class inheritance"@en ;
   a owl:Class ;
@@ -145,19 +145,19 @@ vio:InvalidIntersectionViolation
   rdfs:label "Invalid Intersection Violation"@en ;
   rdfs:comment "The class is defined as an intersection including an invalid class"@en ;
   a owl:Class ;
-  rdfs:subClassOf vio:ClassInheritanceVioltion .
+  rdfs:subClassOf vio:ClassInheritanceViolation .
 
 vio:InvalidParentViolation
   rdfs:label "Invalid Parent Violation"@en ;
   rdfs:comment "The parent class is not a valid class"@en ;
   a owl:Class ;
-  rdfs:subClassOf vio:ClassInheritanceVioltion .
+  rdfs:subClassOf vio:ClassInheritanceViolation .
 
 vio:InvalidUnionViolation
   rdfs:label "Invalid Union Violation"@en ;
   rdfs:comment "The class is defined as a union that includes an invalid class"@en ;
   a owl:Class ;
-  rdfs:subClassOf vio:ClassInheritanceVioltion .
+  rdfs:subClassOf vio:ClassInheritanceViolation .
 
 vio:ClassCycle
   rdfs:label "Class Cycle"@en ;
@@ -314,13 +314,13 @@ vio:PropertyDomainNotSubsumed
   rdfs:label "Property Domain Not Subsumed"@en ;
   rdfs:comment "The property has a domain but the domain is not subsumed by the parent domain"@en ;
   a owl:Class ;
-  rdfs:subClassOf vio:ClassInheritanceVioltion, vio:PropertyInheritanceViolation .
+  rdfs:subClassOf vio:ClassInheritanceViolation, vio:PropertyInheritanceViolation .
 
 vio:PropertyRangeNotSubsumed
   rdfs:label "Property Range Not Subsumed"@en ;
   a owl:Class ;
   rdfs:comment "The property has a range but that range is not subsumed by the range of the parent property"@en;
-  rdfs:subClassOf vio:ClassInheritanceVioltion, vio:PropertyInheritanceViolation .
+  rdfs:subClassOf vio:ClassInheritanceViolation, vio:PropertyInheritanceViolation .
 
 vio:InvalidClassInProperty
   rdfs:label "Invalid Class in Property"@en ;
