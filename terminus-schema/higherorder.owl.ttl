@@ -1,4 +1,7 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 tcs:tag
   rdfs:label "Class Tag"@en ;

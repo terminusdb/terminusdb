@@ -1,4 +1,5 @@
 :- module(config,[
+              public_server_url/1,
               server/1,
               server_name/1,
               server_port/1,
@@ -10,6 +11,7 @@
 
 server_name('http://~s').
 server_port(~d).
+public_server_url('~s').
 
 server(Server) :-
     server_name(Name),

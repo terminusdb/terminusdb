@@ -145,3 +145,33 @@ typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
                 literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
     format(string(String), '~w', [Val]).
+typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
+    (   atom(Val)
+    ->  true
+    ;   string(Val)),
+    !,
+    (   guess_integer_range(Val,Cast)
+    ->  true
+    ;    format(atom(M),'Unable to cast as (xdd:integerRange): ~q~n',
+                [Val]),
+         throw(map_error([type=cast_error,message=M]))
+    ).
+typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
+    integer(Val),
+    !,
+    Cast = literal(type('http://terminusdb.com/schema/xdd#integerRange', Val)).
+typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Cast) :-
+    (   atom(Val)
+    ->  true
+    ;   string(Val)),
+    !,
+    (   guess_decimal_range(Val,Cast)
+    ->  true
+    ;   format(atom(M),'Unable to cast as (xdd:decimalRange): ~q~n',
+               [Val]),
+        throw(map_error([type=cast_error,message=M]))
+    ).
+typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Cast) :-
+    number(Val),
+    !,
+    Cast = literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val)).

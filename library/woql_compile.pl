@@ -15,20 +15,20 @@
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
- *  This file is part of TerminusDB.                                      *
+ *  This file is part of TerminusDB.                                     *
  *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
  *  it under the terms of the GNU General Public License as published by *
  *  the Free Software Foundation, under version 3 of the License.        *
  *                                                                       *
  *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       * 
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
  *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -49,6 +49,8 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
+
+:- use_module(temp_graph).
 
 :- use_module(jsonld).
 :- use_module(json_woql).
@@ -1261,6 +1263,17 @@ compile_wf(prefixes(NS,S), Prog) -->
     compile_wf(S, Prog),
     update(prefixes=_,
            prefixes=NS_Old).
+compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
+    resolve(GN,GName),
+    update(database=Old_Database,
+           database=Database),
+    % TODO: Extend with optiosn for various file types.
+    { file_spec_path_options(GS, Path, _{}, Options),
+      extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
+    },
+    compile_wf(Q,Sub_Query),
+    update(database=_,
+           database=Old_Database).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
         Default = _{
@@ -1278,18 +1291,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
     {
-
-        (   (   File_Spec = file(Path,Options)
-            ;   File_Spec = file(Path),
-                Options = []),
-            merge_options(Options,Default,New_Options)
-        ;   (   File_Spec = remote(URI,Options)
-            ;   File_Spec = remote(URI),
-                Options = []),
-            merge_options(Options,Default,New_Options),
-            copy_remote(URI,URI,Path,New_Options)
-        ),
-
+        file_spec_path_options(File_Spec, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1358,8 +1360,10 @@ compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
-compile_wf(order_by(L,S),order_by(LE,Prog)) -->
-    mapm(resolve,L,LE),
+compile_wf(asc(X),asc(XE)) -->
+    resolve(X,XE).
+compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
+    mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
@@ -1382,8 +1386,7 @@ compile_wf(concat(L,A),(literal_list(LE,LL),
 compile_wf(trim(S,A),(literally(SE,SL),
                       atom_string(SL,SS),
                       trim(SS,X),
-                      atom_string(AE_raw,X),
-                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
+                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',X)))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
@@ -1449,9 +1452,22 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(literal_list(XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
+compile_wf(join(X,S,Y),(literal_list(XE,XL),
+                        literally(SE,SL),
+                        literally(YE,YL),
+                        utils:join(XL,SL,YE),
+                        unliterally_list(XL,XE),
+                        unliterally(SL,SE),
+                        unliterally(YL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
+    resolve(Y,YE).
+compile_wf(sum(X,Y),(literal_list(XE,XL),
+                     literally(YE,YL),
+                     sumlist(XL,YL),
+                     unliterally_list(XL,XE),
+                     unliterally(YL,YE))) -->
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].
@@ -1460,6 +1476,23 @@ compile_wf(Q,_) -->
         format(atom(M), 'Unable to compile AST query ~q', [Q]),
         throw(syntax_error(M))
     }.
+
+/*
+ * file_spec_path_options(File_Spec,Path,Default, Options) is semidet.
+ *
+ * Converts a file spec into a referenceable file path which can be opened as a stream.
+ */
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = file(Path,Options)
+    ;   File_Spec = file(Path),
+        Options = []),
+    merge_options(Options,Default,New_Options).
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = remote(URI,Options)
+    ;   File_Spec = remote(URI),
+        Options = []),
+    merge_options(Options,Default,New_Options),
+    copy_remote(URI,URI,Path,New_Options).
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-

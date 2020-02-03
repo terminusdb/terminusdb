@@ -85,25 +85,39 @@ database_repository(DB_Name,
                     Repository_Name,
                     repository{ database_name : DB_Name,
                                 repository_name : Repository_Name,
-                                graph : L}
+                                schema : [S],
+                                instance : [L]}
                    ) :-
     storage(Store),
     safe_open_named_graph(Store,DB_Name,Obj),
     head(Obj, L).
 
-
 database_repository(DB_Name, Repository) :-
     database_repository(DB_Name, local, Repository).
 
-
+/*
+ * repository_branch(Repo_Obj, Branch_Name, Branch_Obj) is det.
+ *
+ * Loads a branch object. For bootstrapping reasons this must
+ * do all graph queries manually (no use of the ontology.
+ *
+ * This means that ontological changes have to be carefully synced.
+ */
 repository_branch(repository{ database_name : _,
                               repository_name : _,
-                              graph : L }, Branch_Name, Branch) :-
-    terminus_branch_class(C),
-    global_prefix_expand(terminus:'Branch', Branch),
+                              graph : L }, Branch_Name,
+                  branch{
+                      database_name : _,
+                      repository_name : _,
+                      branch_name : _,
+                      instance : _,
+                      schema : _
+                      inference : _
+                  }) :-
+    global_prefix_expand(terminus:'Branch', Branch_Class),
     global_prefix_expand(rdf:type, IsA),
-    xrdf_db(L,X,P,Z),
-    
+    xrdf_db(L,Branch,IsA,Branch_Class),
+    xrdf_db(
 
 /*
  * Database term accessors.
@@ -163,7 +177,7 @@ make_raw_database(DatabaseList, Database) :-
  * The name of the current terminus database.
  */
 terminus_database_name(Database_Name) :-
-    config:server(Server),
+    config:public_server_url(Server),
     atomic_list_concat([Server,'/terminus'],Database_Name).
 
 /**
@@ -175,7 +189,7 @@ terminus_context(_{doc : Doc,
                    scm : Schema,
                    terminus : 'http://terminusdb.com/schema/terminus#'
                   }) :-
-    config:server(Server),
+    config:public_server_url(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),
     atomic_list_concat([Server,'/terminus/schema#'],Schema).
 
@@ -322,7 +336,6 @@ is_schema_graph(C,S) :-
 is_schema_graph(C,S) :-
     database_record_schema_list(C,Schemata),
     memberchk(S,Schemata).
-
 
 default_instance_graph(Terminus_DB,Database,I) :-
     database_name(Database, Name),
