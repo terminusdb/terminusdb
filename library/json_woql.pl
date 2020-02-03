@@ -99,12 +99,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#update' : [ Doc ] } :< JSON
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
-    ->  (   _{'@id' : ID} :< Doc
-        ->   WOQL = delete_object(ID)
-        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
-                                         'terminus:message' :'No ID specified in deleted object',
-                                         'vio:query' : JSON})))
-        )
+    ->  WOQL = delete_object(Doc)
     ;   _{'http://terminusdb.com/woql#with' : [ Graph, Path, Query] } :< JSON
     ->  json_to_woql_ast(Graph,WGraph),
         json_to_woql_ast(Path,WPath),
