@@ -79,6 +79,9 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
+% Time travel
+:- use_module(time_travel).
+
 :- use_module(prefixes).
 :- use_module(sdk).
 
