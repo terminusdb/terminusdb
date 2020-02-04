@@ -248,14 +248,15 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
                      rdfs='http://www.w3.org/2000/01/rdf-schema#'],
            definitions=[],
            collection='https://example.org',
-          database=_,
+           database=_,
+           files=[],
            used=_Used,
            bound=3,
            module=M,
            bindings=[]]) :-
     gensym(module_,M).
 
-empty_ctx(S0,S6) :-
+empty_ctx(S0,S7) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
     elt(database=Database,S0),
@@ -263,6 +264,7 @@ empty_ctx(S0,S6) :-
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -274,15 +276,18 @@ empty_ctx(S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
-empty_ctx(Prefixes,S0,S6) :-
+empty_ctx(Prefixes,S0,S7) :-
     empty_ctx(S),
     elt(database=Database,S0),
     elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -294,7 +299,9 @@ empty_ctx(Prefixes,S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
 /*
  * compile_representation(S,T,V) is det.
@@ -821,6 +828,22 @@ csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
            [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
     throw(error(M)).
 
+json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
+    setup_call_cleanup(
+        open(Path,read,In),
+        json_read_dict(In,Dict,[]),
+        close(In)
+    ),
+    get_dict(columns,Dict,Pre_Header),
+    maplist([Str,Atom]>>atom_string(Atom,Str),Pre_Header,Header),
+    get_dict(data,Dict,Rows),
+    Prog = (
+        member(Row,Rows),
+        maplist(term_literal,Row,Values),
+        Indexing_Term
+    ).
+
+
 /*
  * bool_convert(+Bool_Id,-Bool) is det.
  * bool_convert(-Bool_Id,+Bool) is nondet.
@@ -1267,8 +1290,9 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
     update(database=Old_Database,
            database=Database),
+    view(files=Files),
     % TODO: Extend with optiosn for various file types.
-    { file_spec_path_options(GS, Path, _{}, Options),
+    { file_spec_path_options(GS, Files, Path, _{}, Options),
       extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
     },
     compile_wf(Q,Sub_Query),
@@ -1290,8 +1314,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     % Make sure all variables are given bindings
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
+    view(files=Files),
     {
-        file_spec_path_options(File_Spec, Path, Default, New_Options),
+        file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1301,8 +1326,8 @@ compile_wf(get(Spec,File_Spec), Prog) -->
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
         ;   memberchk('http://terminusdb.com/woql#type'("panda_json"),New_Options)
-        ->  pandas_indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
-            json_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,New_Options)
+        ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
+            json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
             throw(error(M)))
     }.
@@ -1485,22 +1510,24 @@ compile_wf(Q,_) -->
  *
  * Converts a file spec into a referenceable file path which can be opened as a stream.
  */
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = file(Path,Options)
     ;   File_Spec = file(Path),
         Options = []),
     merge_options(Options,Default,New_Options).
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = remote(URI,Options)
     ;   File_Spec = remote(URI),
         Options = []),
     merge_options(Options,Default,New_Options),
     copy_remote(URI,URI,Path,New_Options).
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
-    (   File_Spec = post(Path,Options)
-    ;   File_Spec = post(Path),
+file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
+    (   File_Spec = post(Name,Options)
+    ;   File_Spec = post(Name),
         Options = []),
-    merge_options(Options,Default,New_Options).
+    atom_string(Name_Atom,Name),
+    merge_options(Options,Default,New_Options),
+    memberchk(Name_Atom=file(_Original,Path), Files).
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-

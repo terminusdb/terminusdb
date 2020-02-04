@@ -802,7 +802,9 @@ run_woql_file_upload :-
     atomic_list_concat([Server,'/terminus/woql'], URI),
 
     % Expand into a get from post.
-    Query =  true,
+    Query =  _{get : [ [_{as : [_{'@value' : "col 2"}, "v:Col_2"]}],
+                       _{post : ["my_json_file", _{type : "panda_json"}]}
+                     ]},
 
     with_output_to(
         string(Payload),
@@ -810,9 +812,9 @@ run_woql_file_upload :-
     ),
 
     www_form_encode(Payload,Encoded),
-    atomic_list_concat(['query="',Encoded,'"'], Q),
+    atomic_list_concat(['terminus:query="',Encoded,'"'], Q),
 
-    atomic_list_concat(['upload=@"test/simple.json"'], Upload),
+    atomic_list_concat(['my_json_file=@"test/simple.json"'], Upload),
 
     Args = ['--user', Auth,'-F',Q,'-F',Upload,'-X','POST',URI],
     report_curl_command(Args),

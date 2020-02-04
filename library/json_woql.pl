@@ -181,6 +181,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = file(File)
     ;   _{'http://terminusdb.com/woql#file' : [ File, Dict] } :< JSON
     ->  WOQL = file(File,Dict)
+    ;   _{'http://terminusdb.com/woql#post' : [ File ] } :< JSON
+    ->  WOQL = post(File)
+    ;   _{'http://terminusdb.com/woql#post' : [ File, Dict] } :< JSON
+    ->  WOQL = post(File,Dict)
     ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),

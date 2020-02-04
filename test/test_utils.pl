@@ -105,10 +105,7 @@ curl_json(Args,JSON) :-
         fail
     ;   true),
 
-    current_output(Std_IO),
-    copy_stream_data(Out, Std_IO),
-    JSON=1,
-    %json_read_dict(Out, JSON),
+    json_read_dict(Out, JSON),
     close(Out).
 
 /*
