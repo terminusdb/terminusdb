@@ -31,6 +31,7 @@
  */
 
 :- use_module(library(utils)).
+:- use_module(library(file_utils)).
 :- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
 
@@ -91,10 +92,12 @@ status_200(URL) :-
  * curl_json(+Args,-JSON) is semidet.
  */
 curl_json(Args,JSON) :-
+    terminus_path(Path),
     process_create(path(curl), Args,
                    [ stdout(pipe(Out)),
-                     stderr(null),
-                     process(PID)
+                     stderr(std),
+                     process(PID),
+                     cwd(Path)
                    ]),
 
     process_wait(PID,Status),
@@ -105,7 +108,10 @@ curl_json(Args,JSON) :-
         fail
     ;   true),
 
-    json_read_dict(Out, JSON),
+    catch(json_read_dict(Out, JSON),
+          _,
+          JSON = _{'terminus:status' : 'terminus:failure'}),
+
     close(Out).
 
 /*

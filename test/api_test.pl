@@ -820,7 +820,19 @@ run_woql_file_upload :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    writeq(Term).
+
+    _{bindings:
+      [_{'http://terminusdb.com/woql/variable/Col_2':
+         _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	       '@value':"b"
+          }
+        },
+       _{'http://terminusdb.com/woql/variable/Col_2':
+         _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	       '@value':"d"
+          }
+        }
+      ]} :< Term.
 
 /****************************************************************
  * Instance Checking Tests
