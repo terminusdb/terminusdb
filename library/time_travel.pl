@@ -78,10 +78,18 @@ layer_history(Layer,[layer(Layer,Time)|History]) :-
 
 revert(Tag, Layer) :-
     db_path(Path),
-    interpolate([Path, '/', Tag, '.label'], Label),
+    sanitise_file_name(Tag,Safe_Tag),
+    interpolate([Path, '/', Safe_Tag, '.label'], Label),
+    layer_history(Layer, Hist),
+    length(Hist, N),
+
     setup_call_cleanup(
         open(Label, write, Stream),
-        write(Stream,Layer),
+        (   write(Stream, N),
+            nl(Stream),
+            write(Stream,Layer),
+            nl(Stream)
+        ),
         close(Stream)
     ).
 
