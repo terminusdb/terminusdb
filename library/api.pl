@@ -41,6 +41,9 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 
+% multipart
+:- use_module(library(http/http_multipart_plugin)).
+
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
@@ -384,6 +387,46 @@ woql_handler(options,_DB,_Request) :-
     write_cors_headers(SURI, DBC),
     format('~n').
 woql_handler(get,DB,Request) :-
+    % Should test for read-only query here.
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, DBC, Auth),
+
+    try_db_uri(DB,DB_URI),
+
+    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+
+    try_get_param('terminus:query',Request,Atom_Query),
+    atom_json_dict(Atom_Query, Query, []),
+
+    http_log_stream(Log),
+
+    format(Log,'Query: ~q~n',[Query]),
+
+    connect(DB_URI,New_Ctx),
+
+    run_query(Query,New_Ctx,JSON),
+
+    * format(Log,'JSON: ~q~n',[JSON]),
+
+    format(atom(Q),'~q',[Query]),
+    format(atom(J),'~q',[JSON]),
+    md5_hash(Q,Q_Hash,[]),
+    md5_hash(J,J_Hash,[]),
+
+    format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json(JSON).
+woql_handler(post,DB,R) :-
+    http_log_stream(Log),
+    format(Log,'Request: ~q~n',[R]),
+
+    add_payload_to_request(R,Request),
+
     terminus_database_name(Collection),
     connect(Collection,DBC),
     % Actually we need to pull the query from the request, process it
@@ -911,13 +954,27 @@ try_atom_json(Atom,JSON) :-
  * This should really be done automatically at request time
  * using the endpoint wrappers so we don't forget to do it.
  */
+add_payload_to_request(Request,[multipart(Parts)|Request]) :-
+    mulitpart_post_request(Request),
+    !,
+    http_log_stream(Log),
+    format(Log,'Request: ~q~n',[Request]),
+
+    http_read_data(Request, Parts, [json_object(dict),on_filename(save_post_file)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     member(method(post), Request),
     member(content_type('application/json'), Request),
     !,
-
     http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,Request).
+
+save_post_file(In, file(Filename, File), Options) :-
+    option(filname(Filename), Options),
+    setup_call_cleanup(
+        tmp_file_stream(octet, File, Out),
+        copy_stream_data(In, Out),
+        close(Out)
+    ).
 
 /*
  * try_class_frame(Class,Database,Frame) is det.

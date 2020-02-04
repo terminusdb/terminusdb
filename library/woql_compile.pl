@@ -1300,6 +1300,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
+        ;   memberchk('http://terminusdb.com/woql#type'("panda_json"),New_Options)
+        ->  pandas_indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
+            json_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
             throw(error(M)))
     }.
@@ -1493,6 +1496,11 @@ file_spec_path_options(File_Spec,Path,Default,New_Options) :-
         Options = []),
     merge_options(Options,Default,New_Options),
     copy_remote(URI,URI,Path,New_Options).
+file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+    (   File_Spec = post(Path,Options)
+    ;   File_Spec = post(Path),
+        Options = []),
+    merge_options(Options,Default,New_Options).
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-

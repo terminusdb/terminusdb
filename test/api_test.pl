@@ -68,6 +68,7 @@ run_api_tests :-
     try(run_woql_verify_update_test),
     try(run_woql_re_test),
     try(run_woql_typecast_test),
+    try(run_woql_file_upload),
     try(run_db_delete_test),
     % ) UPDATE_WOQL_CHECKING
     %
@@ -792,6 +793,32 @@ run_woql_typecast_test :-
                   'http://terminusdb.com/woql/variable/Res2':
                   _{'@type':"http://terminusdb.com/schema/xdd#decimalRange",'@value':"[1.1,2.2]"}}
                ]} :< Term.
+
+
+run_woql_file_upload :-
+    config:server(Server),
+    auth(Auth),
+
+    atomic_list_concat([Server,'/terminus/woql'], URI),
+
+    % Expand into a get from post.
+    Query =  true,
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat(['query="',Encoded,'"'], Q),
+
+    atomic_list_concat(['upload=@"test/simple.json"'], Upload),
+
+    Args = ['--user', Auth,'-F',Q,'-F',Upload,'-X','POST',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+    writeq(Term).
 
 /****************************************************************
  * Instance Checking Tests
