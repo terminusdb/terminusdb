@@ -1,0 +1,52 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+tcs:tag
+  rdfs:label "Class Tag"@en ;
+  rdfs:comment "Qualifies a class in the schema with a tag"@en ;
+  rdfs:domain owl:Class;
+  a owl:ObjectProperty ;
+  rdfs:range tcs:ClassTag .
+
+tcs:source_property
+  a owl:ObjectProperty ;
+  rdfs:label "Relationship Source"@en ;
+  rdfs:comment "A special property of a relationship - the property that points to the relationship's source"@en ;
+  rdfs:subPropertyOf tcs:pseudo_property .
+
+tcs:target_property
+  a owl:ObjectProperty ;
+  rdfs:label "Relationship Target"@en ;
+  rdfs:comment "A special property of a relationship - the property that points to the relationship's target"@en ;
+  rdfs:subPropertyOf tcs:pseudo_property .
+
+tcs:annotates
+  a owl:ObjectProperty ;
+  rdfs:subPropertyOf tcs:pseudo_property ;
+  rdfs:label "Annotates"@en ;
+  rdfs:comment "Generic Annotation Property - a special property that enables automatic interlinking between horizontally partitioned graphs"@en ;
+  rdfs:domain tcs:Annotation, tcs:Provenance ;
+  rdfs:range owl:Thing .
+
+tcs:annotates_value
+  a owl:DatatypeProperty ;
+  rdfs:subPropertyOf tcs:pseudo_property ;
+  rdfs:label "Annotates Value"@en ;
+  rdfs:comment "The annotated value is considered to be qualified by this predicate. This enables annotations of specific datatype property values"@en ;
+  rdfs:domain tcs:Annotation, tcs:Provenance ;
+  rdfs:range xsd:anySimpleType .
+
+tcs:pseudo_property
+  a owl:ObjectProperty ;
+  rdfs:label "Pseudeo Property"@en ;
+  rdfs:comment "A pseudo property is an abstraction of a property that has a special significance for interlinking between documents in the schema"@en .
+
+tcs:annotates_property
+  a owl:DatatypeProperty ;
+  rdfs:label "Annotates Property"@en ;
+  rdfs:comment "The annotated property - with all its values - is considered to be qualified / extended by this predicate. This enables direct annotations on datatype properties"@en ;
+  rdfs:subPropertyOf tcs:pseudo_property ;
+  rdfs:domain tcs:Annotation, tcs:Provenance .
+
