@@ -129,7 +129,7 @@ make_raw_database(DatabaseList, Database) :-
  * The name of the current terminus database.
  */
 terminus_database_name(Database_Name) :-
-    config:server(Server),
+    config:public_server_url(Server),
     atomic_list_concat([Server,'/terminus'],Database_Name).
 
 /**
@@ -141,7 +141,7 @@ terminus_context(_{doc : Doc,
                    scm : Schema,
                    terminus : 'http://terminusdb.com/schema/terminus#'
                   }) :-
-    config:server(Server),
+    config:public_server_url(Server),
     atomic_list_concat([Server,'/terminus/document/'],Doc),
     atomic_list_concat([Server,'/terminus/schema#'],Schema).
 
