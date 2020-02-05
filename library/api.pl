@@ -41,6 +41,9 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 
+% multipart
+:- use_module(library(http/http_multipart_plugin)).
+
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
@@ -79,6 +82,9 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
+% Time travel
+:- use_module(time_travel).
+
 :- use_module(prefixes).
 :- use_module(sdk).
 
@@ -105,6 +111,7 @@ http:location(root, '/', []).
                  methods([options,post,delete])]).
 :- http_handler(root(DB/schema), cors_catch(schema_handler(Method,DB)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,get,post])]).
 :- http_handler(root(DB/frame), cors_catch(frame_handler(Method,DB)),
                 [method(Method),
@@ -280,13 +287,13 @@ reply_with_witnesses(Resource_URI, DB, Witnesses) :-
  * connect_handler(+Method,+Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     connection_authorised_user(Request,User, SURI, DB),
@@ -297,16 +304,16 @@ connect_handler(get,Request) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(options,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
     format('~n').
 console_handler(get,_Request) :-
     terminus_path(Path),
-    interpolate([Path,'/storage/index.html'], Index_Path),
+    interpolate([Path,'/config/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
@@ -318,7 +325,7 @@ console_handler(get,_Request) :-
  */
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI,DB),
@@ -336,7 +343,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Authenticaticated~n',[]),
 
-    config:server(Server),
+    config:public_server_url(Server),
 
     verify_access(Auth,DBC,terminus/create_database,Server),
 
@@ -351,8 +358,7 @@ db_handler(post,DB,R) :-
 
     format(Log,'Database Constructed ~q~n',[DB_URI]),
 
-    config:server(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(Server, DBC),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
@@ -360,15 +366,14 @@ db_handler(delete,DB,Request) :-
     connect(Collection,DBC),
     authenticate(Request, DBC, Auth),
 
-    config:server(Server),
+    config:public_server_url(Server),
 
     verify_access(Auth, DBC, terminus/delete_database,Server),
 
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    config:server(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(Server, DBC),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -376,12 +381,13 @@ db_handler(delete,DB,Request) :-
  * woql_handler(+Request:http_request) is det.
  */
 woql_handler(options,_DB,_Request) :-
-    config:server(SURI),
+    config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DBC),
     write_cors_headers(SURI, DBC),
     format('~n').
 woql_handler(get,DB,Request) :-
+    % Should test for read-only query here.
     terminus_database_name(Collection),
     connect(Collection,DBC),
     % Actually we need to pull the query from the request, process it
@@ -412,7 +418,39 @@ woql_handler(get,DB,Request) :-
 
     format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
 
-    config:server(SURI),
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json(JSON).
+woql_handler(post,DB,R) :-
+    add_payload_to_request(R,Request),
+
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, DBC, Auth),
+
+    try_db_uri(DB,DB_URI),
+
+    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+
+    try_get_param('terminus:query',Request,Atom_Query),
+    atom_json_dict(Atom_Query, Query, []),
+
+    http_log_stream(Log),
+
+    format(Log,'Query: ~q~n',[Request]),
+
+    connect(DB_URI,New_Ctx),
+
+    collect_posted_files(Request,Files),
+    Ctx = [files=Files|New_Ctx],
+
+    (   run_query(Query,Ctx,JSON)
+    ->  true
+    ;   JSON = _{bindings : []}),
+
+    config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(JSON).
 
@@ -529,7 +567,7 @@ frame_handler(get, DB, Request) :-
 
     try_class_frame(Class_URI,Database,Frame),
 
-    config:server(SURI),
+    config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(Frame).
 
@@ -720,7 +758,7 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
  * Die if we can't form a document uri.
  */
 try_db_uri(DB,DB_URI) :-
-    (   config:server(Server_Name),
+    (   config:public_server_url(Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
     ;   throw(http_reply(not_found(_{'terminus:message' : 'Database resource can not be found',
@@ -757,7 +795,18 @@ try_db_graph(DB_URI,Database) :-
 /*
  * try_get_param(Key,Request:request,Value) is det.
  *
+ * Get a parameter from the request independent of request variety.
  */
+try_get_param(Key,Request,Value) :-
+    % GET or POST (but not application/json)
+    memberchk(method(post), Request),
+    memberchk(multipart(Parts), Request),
+    !,
+    (   memberchk(Key=Encoded_Value, Parts)
+    ->  uri_encoded(query_value, Value, Encoded_Value)
+    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Parts]),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG})))).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
@@ -909,13 +958,46 @@ try_atom_json(Atom,JSON) :-
  * This should really be done automatically at request time
  * using the endpoint wrappers so we don't forget to do it.
  */
+add_payload_to_request(Request,[multipart(Parts)|Request]) :-
+    memberchk(method(post), Request),
+    memberchk(content_type(ContentType), Request),
+    http_parse_header_value(
+        content_type, ContentType,
+        media(multipart/'form-data', _)
+    ),
+    !,
+
+    http_read_data(Request, Parts, [on_filename(save_post_file)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     member(method(post), Request),
     member(content_type('application/json'), Request),
     !,
-
     http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,Request).
+
+/*
+ * save_post_file(In,File_Spec,Options) is det.
+ *
+ * Saves a temporary octet stream to a file. Used for multipart
+ * file passing via POST.
+ */
+save_post_file(In, file(Filename, File), Options) :-
+    option(filename(Filename), Options),
+    setup_call_cleanup(
+        tmp_file_stream(octet, File, Out),
+        copy_stream_data(In, Out),
+        close(Out)
+    ).
+
+/*
+ * Make a collection of all posted files for
+ * use in a Context via WOQL's get/3.
+ */
+collect_posted_files(Request,Files) :-
+    memberchk(multipart(Parts), Request),
+    !,
+    include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
+collect_posted_files(_Request,[]).
 
 /*
  * try_class_frame(Class,Database,Frame) is det.
@@ -947,7 +1029,7 @@ try_dump_schema(DB_URI, DB, Name, Request) :-
                         graph_to_turtle(DB_URI, Name, Stream)
                     )
                 ),
-                config:server(SURI),
+                config:public_server_url(SURI),
                 write_cors_headers(SURI, DB),
                 reply_json(String)
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),

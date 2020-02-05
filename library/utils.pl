@@ -518,6 +518,19 @@ coerce_atom(Atom_Or_String, Atom) :-
     ).
 
 /*
+ * coerce_string(Atom_Or_String,String) is semidet.
+ *
+ * Coerces Atom_Or_String to a String if it is an atom or string
+ * but fails otherwise.
+ */
+coerce_string(Atom_Or_String, String) :-
+    (   atom(Atom_Or_String)
+    ->  atom_string(Atom_Or_String, String)
+    ;   string(Atom_Or_String)
+    ->  Atom_Or_String = String
+    ).
+
+/*
  * snoc(Rest,Last,List) is det.
  *
  * Adds an element to the end of the list (or extracts it when run backwards).
@@ -547,3 +560,4 @@ re(Pattern, String, Matches) :-
     length(Pairs,N),
     length(Matches,N),
     maplist({Matches}/[Key-Value]>>nth0(Key,Matches,Value),Pairs).
+

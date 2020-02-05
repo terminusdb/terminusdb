@@ -1,0 +1,729 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix doc: <http://195.201.12.87:6365/Seshat/document/> .
+@prefix scm: <http://195.201.12.87:6365/Seshat/schema#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix tbs: <http://terminusdb.com/schema/tbs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
+@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+scm:NonNegativeIntegerQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tbs:NonNegativeInteger, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "NonNegativeInteger"@en ;
+  rdfs:comment "NonNegativeInteger QualifiedByConfidenceTag "@en .
+
+
+
+
+
+scm:IntegerQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tbs:Integer, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "Integer"@en ;
+  rdfs:comment "Integer QualifiedByConfidenceTag "@en .
+
+
+
+scm:CoordinatePolygonQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tbs:CoordinatePolygon, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "CoordinatePolygon"@en ;
+  rdfs:comment "CoordinatePolygon QualifiedByConfidenceTag "@en .
+
+
+
+scm:TimePointDateQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tcs:TimePoint, tbs:Date, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "TimePoint"@en ;
+  rdfs:comment "TimePoint Date QualifiedByConfidenceTag "@en .
+
+scm:TimePointDateTimeQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tcs:TimePoint, tbs:DateTime, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "TimePoint"@en ;
+  rdfs:comment "TimePoint DateTime QualifiedByConfidenceTag "@en .
+
+scm:DecimalRangeQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tbs:DecimalRange, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "DecimalRange"@en ;
+  rdfs:comment "DecimalRange QualifiedByConfidenceTag "@en .
+
+
+scm:TimePointGYearQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tcs:TimePoint, tbs:GYear, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "TimePoint"@en ;
+  rdfs:comment "TimePoint GYear QualifiedByConfidenceTag "@en .
+
+scm:TimePointGYearRangeQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf tcs:TimePoint, tbs:GYearRange, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "TimePoint"@en ;
+  rdfs:comment "TimePoint GYearRange QualifiedByConfidenceTag "@en .
+
+
+
+scm:end
+  rdfs:label "End"@en ;
+  rdfs:comment "The end date of the duration"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PeriodOfDuration ;
+  rdfs:range scm:TimePointGYearRangeQualifiedByConfidenceTag .
+
+scm:start
+  rdfs:label "Start"@en ;
+  rdfs:comment "The start date of the duration"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PeriodOfDuration ;
+  rdfs:range scm:TimePointGYearRangeQualifiedByConfidenceTag .
+
+
+scm:special_sites
+  rdfs:label "Special Sites"@en ;
+  rdfs:comment "The types of special sites that are associated with the polity - primarily useful for coding archaneologically known societies."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:SpecialSites .
+
+scm:specialized_public_buildings
+  rdfs:label "Specialized Public Buildings"@en ;
+  rdfs:comment "The types of buildings that were built or maintained by the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:SpecializedPublicBuildings .
+
+scm:supra-cultural_entity
+  rdfs:label "Supra-cultural Entity"@en ;
+  rdfs:comment "Political Authorities can be embedded within larger-scale cultural groupings of polities or quasipolities. These are sometimes referred to as \"civilizations\". For example, medieval European kingdoms were part of Latin Christendom. During the periods of disunity in China, warring states there, nevertheless, belonged to the same Chinese cultural sphere. Archaeologists often use \"archaeological traditions\" to denote such large-scale cultural entities (for example, Peregrine's Atlas of Cultural Evolution). Note, 'supracultural entity' refers to cultural interdependence, and is distinct from a political confederation or alliance, which is coded under 'supra-polity relations."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range tbs:String .
+
+scm:supra-cultural_scale
+  rdfs:label "Supra-cultural Scale"@en ;
+  rdfs:comment "An estimate of the area encompassed by the supracultural entity - in km squared."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range tbs:Integer .
+
+scm:supra-polity_relations
+  rdfs:label "Supra-polity relations"@en ;
+  rdfs:comment "What was the relationship between this political authority and larger / higher order power."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:Supra-PolityRelations .
+
+scm:transport_infrastructure
+  rdfs:label "Transport Infrastructure"@en ;
+  rdfs:comment "The types of transport infrastructure that were built or maintained by the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:TransportInfrastructure .
+
+scm:types_of_written_material
+  rdfs:label "Types of Written Material"@en ;
+  rdfs:comment "The types or genres of written material associated with the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:TypesOfWrittenMaterial .
+
+scm:writing_system
+  rdfs:label "Writing System"@en ;
+  rdfs:comment "The types of written records associated with the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalAuthority ;
+  rdfs:range scm:WritingSystem .
+
+scm:political_evolution
+  rdfs:label "Political Evolution"@en ;
+  rdfs:comment "The ways in which a political authority can evolve into another one"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalEvolution ;
+  rdfs:range scm:PoliticalEvolutionChoiceBoxQualifiedByConfidenceTag .
+
+scm:PoliticalEvolutionChoiceBoxQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf scm:PoliticalEvolutionChoiceBox, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "PoliticalEvolutionChoiceBox"@en ;
+  rdfs:comment "PoliticalEvolutionChoiceBox QualifiedByConfidenceTag "@en .
+
+scm:PoliticalEvolutionChoiceBox
+  a owl:Class ;
+  rdfs:subClassOf tbs:Box ;
+  rdfs:label "Political Evolution Choice"@en ;
+  rdfs:comment "The ways in which a political authority can evolve into another one"@en .
+
+scm:politicalevolutionchoicebox_box
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PoliticalEvolutionChoiceBox ;
+  rdfs:range scm:PoliticalEvolutionChoice ;
+  rdfs:label "Political Evolution Choice"@en ;
+  rdfs:comment "The ways in which a political authority can evolve into another one"@en .
+
+scm:agricultural_diversity
+  rdfs:label "Agricultural Diversity"@en ;
+  rdfs:comment "IV-4-2. Agricultural Diversity [AR-SV-3; AR-SV-5]."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:AgriculturalDiversity .
+ 
+ scm:alternative_food_sources
+  rdfs:label "Alternative Food Sources."@en ;
+  rdfs:comment "IV-4-3. Alternative Food Sources. [AR-SV-7] [AR-SV-9] [AR-SV-11] "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:AlternativeFoodSources .
+
+scm:burial_variation
+  rdfs:label "Burial Variation"@en ;
+  rdfs:comment "Variation in burials and burial goods"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:BurialVariation .
+
+scm:ceremonials
+  rdfs:label "Ceremonials"@en ;
+  rdfs:comment "Prominent Community Ceremonials [AR-TL-6] (based on Murdock and Wilson 1972)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:Ceremonials .
+
+scm:community_integration
+  rdfs:label "Community Integration"@en ;
+  rdfs:comment "Community integration, sum of scores [AR-TL-5] (based on Murdock and Wilson 1972)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:CommunityIntegration .
+
+scm:corporate_exclusionary
+  rdfs:label "Corporate Exclusionary"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:CorporateExclusionary .
+
+scm:dependent_variables
+  rdfs:label "Dependent Variables"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:TheDependentVariables .
+
+scm:food_storage
+  rdfs:label "Food Storage"@en ;
+  rdfs:comment "IV-4-1. Food Storage."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:FoodStorage .
+
+scm:housing_variation
+  rdfs:label "Housing Variation"@en ;
+  rdfs:comment "Variation in housing or house compounds. "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:HousingVariation .
+
+scm:infrastructure
+  rdfs:label "Infrastructure"@en ;
+  rdfs:comment "Extra Infrastructure Variables For Resilience"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:Infrastructure .
+
+scm:looseness_tightness
+  rdfs:label "Looseness / Tightness"@en ;
+  rdfs:comment "Community integration, sum of scores [AR-TL-5] (based on Murdock and Wilson 1972)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:LoosenessTightness .
+
+scm:provenance_note
+  rdfs:label "Provenance Note"@en ;
+  rdfs:comment "The place to put special notices about the provenance of data in the page"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:StringQualifiedByConfidenceTag .
+
+scm:religion_ritual
+  rdfs:label "Religion & Ritual"@en ;
+  rdfs:comment "The religious, ritualisatic and normative ideologicial aspects of the society"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Polity ;
+  rdfs:range scm:ReligionRitual .
+
+scm:couriers
+  rdfs:label "Couriers"@en ;
+  rdfs:comment "Full-time professional couriers."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PostalSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:fastest_individual_communication
+  rdfs:label "Fastest Individual Communication"@en ;
+  rdfs:comment "This is the fastest time (in days) an individual can travel from the capital city to the most outlying provincial capital (if one exists), usually keeping within the boundaries of the polity. This might be by ship, horse, horse relay, or on foot, or a combination."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PostalSystem ;
+  rdfs:range tbs:Decimal.
+
+scm:general_service
+  rdfs:label "General Service"@en ;
+  rdfs:comment "A postal service that not only serves the ruler's needs, but carries mail for private citizens."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PostalSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:postal_stations
+  rdfs:label "Postal Stations"@en ;
+  rdfs:comment "Specialized buildings exclusively devoted to the postal service."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PostalSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:military_officers
+  rdfs:label "Military Officers"@en ;
+  rdfs:comment "Full-time specialist military officers."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Professions ;
+  rdfs:range scm:EpistemicState .
+
+scm:priesthood
+  rdfs:label "Priesthood"@en ;
+  rdfs:comment "Codes the presence of full-time specialist religious officials."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Professions ;
+  rdfs:range scm:EpistemicState .
+
+scm:soldiers
+  rdfs:label "Soldiers"@en ;
+  rdfs:comment "Full-time specialist paid soldiers."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Professions ;
+  rdfs:range scm:EpistemicState .
+
+scm:drinking_water_supply
+  rdfs:label "Drinking Water Supply"@en ;
+  rdfs:comment "Encodes the historical presence of systems to supply drinking water to the public."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PubliclyOwnedUtilitarianBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:food_storage_sites
+  rdfs:label "Food Storage Sites"@en ;
+  rdfs:comment "The historical presence of specialized structures (grain siloes...) for storing food."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PubliclyOwnedUtilitarianBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:irrigation_systems
+  rdfs:label "Irrigation Systems"@en ;
+  rdfs:comment "Encodes the historical presence of irrigation systems."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PubliclyOwnedUtilitarianBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:markets
+  rdfs:label "Markets"@en ;
+  rdfs:comment "Encodes the historical presence of markets."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PubliclyOwnedUtilitarianBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:utilitarian_public_buildings
+  rdfs:label "Utilitarian Public Buildings"@en ;
+  rdfs:comment "Encodes the historical presence of public utilities. Typical examples include aqueducts, sewers, and granaries (which are also included as separate variables). In the narrative annotations, examples of utilitarian buildings and the most impressive/costly/large ones are included."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:PubliclyOwnedUtilitarianBuildings ;
+  rdfs:range scm:EpistemicState .
+
+
+scm:frequency_per_participant
+  rdfs:label "Frequency per participant"@en ;
+  rdfs:comment "The frequency of the society's most frequent collective ritual (frequency of individuals' active participation)."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range scm:Frequency .
+
+scm:high_gods
+  rdfs:label "High Gods"@en ;
+  rdfs:comment "A high god follows the definition of Guy Swanson (1960: chapter III and appendix 1) as \"a spiritual being who is believed to have created all reality and/or to be its ultimate governor, even though his sole act was to create other spirits who, in turn, created or control the natural world\"… (1) \"Absent or not reported,\" (2) \"Present but not active in human affairs,\" (3) \"Present and active in human affairs but not supportive of human morality\" and (4) \"Present, active, and specifically supportive of human morality\" (Divale 2000).\""@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range scm:HighGods .
+
+scm:human_sacrifice
+  rdfs:label "Human Sacrifice"@en ;
+  rdfs:comment """0-5/Unknown To code this
+HS scale first code special kinds listed below. Then use the explanation
+below to assign a numerical code. Indicate uncertainty and disagreement
+in the usual way.5: HS of high-status or relative is present (or both)
+4: HS of low-status, but not high status/relative 3: HS of out-group
+only 2: HS is condemned by an influential figure 1: HS is not practiced
+0: Official cult forbids HS (the official cult is defined in the Rituals
+section)"""@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range tbs:String .
+
+scm:supernatural_enforcement_of_fairness
+  rdfs:label "Supernatural enforcement of fairness"@en ;
+  rdfs:comment "Supernatural punishment/reward related to \"fairness\" (sharing of resources; e.g., dividing disputed resources, bargaining, redistribution of wealth)."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range scm:EpistemicState .
+
+scm:supernatural_enforcement_of_group_loyalty
+  rdfs:label "Supernatural enforcement of group loyalty"@en ;
+  rdfs:comment "Supernatural punishment/reward related to the need to remain loyal to UNRELATED members of the same group (e.g., helping coreligionists, going to war for one's group)."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range scm:EpistemicState .
+
+scm:supernatural_enforcement_of_reciprocity
+  rdfs:label "Supernatural enforcement of reciprocity"@en ;
+  rdfs:comment "Supernatural punishment / reward related to reciprocity (e.g., fulfilling contracts, returning gifts, repaying debts, upholding trust)."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:ReligionRitual ;
+  rdfs:range scm:EpistemicState .
+
+scm:source_of_income
+  rdfs:label "Source of Income"@en ;
+  rdfs:comment "A source of income"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SourceOfIncome ;
+  rdfs:range scm:IncomeSourceChoiceBoxQualifiedByConfidenceTag .
+
+scm:IncomeSourceChoiceBoxQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf scm:IncomeSourceChoiceBox, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "IncomeSourceChoiceBox"@en ;
+  rdfs:comment "IncomeSourceChoiceBox QualifiedByConfidenceTag "@en .
+
+scm:IncomeSourceChoiceBox
+  a owl:Class ;
+  rdfs:subClassOf tbs:Box ;
+  rdfs:label "Source of Income"@en ;
+  rdfs:comment "The various categories of income source"@en .
+
+scm:incomesourcechoicebox_box
+  a owl:ObjectProperty ;
+  rdfs:domain scm:IncomeSourceChoiceBox ;
+  rdfs:range scm:IncomeSourceChoice ;
+  rdfs:label "Source of Income"@en ;
+  rdfs:comment "The various categories of income source"@en .
+
+scm:burial_site
+  rdfs:label "Burial Site"@en ;
+  rdfs:comment "Encodes the historical presence of burial sites, dissociated from settlement habitation, with monumental features."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:ceremonial_site
+  rdfs:label "Ceremonial site"@en ;
+  rdfs:comment "Encodes the historical presence of sites that were specifically used for ceremonies."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:enclosure
+  rdfs:label "Enclosure"@en ;
+  rdfs:comment "Encodes the historical presence of 'enclosures': a clearly demarcated special-purpose area. It can be separated from surrounding land by earthworks (including banks or ditches), walls, or fencing. It may be as small as a few meters across, or encompass many hectares. It is non-residential, but could serve numerous purposes, both practical (animal pens) as well as religious and ceremonial."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:mine_or_quarry
+  rdfs:label "Mine or Quarry"@en ;
+  rdfs:comment "Encodes the historical presence of mines or quarries within the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:other_site
+  rdfs:label "Other Site"@en ;
+  rdfs:comment "Encodes the historical presence of specialised non-residential sites. A description of the site is provided in the notes."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:special_site
+  rdfs:label "Special Site"@en ;
+  rdfs:comment "Encodes the historical presence of sites not associated with residential areas. This variable is primarily useful for distinguishing archaeologically known societies"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:trading_emporia
+  rdfs:label "Trading Emporia"@en ;
+  rdfs:comment "Encodes the historical presence of trading settlements characterised by their peripheral locations, on the shore at the edge of a polity, a lack of infrastructure (typically those in Europe contained no churches) and often of a short-lived nature. They include isolated caravanserai along trade routes."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecialSites ;
+  rdfs:range scm:EpistemicState .
+
+scm:communal_buildings
+  rdfs:label "Communal Buildings"@en ;
+  rdfs:comment "This encodes the historical presence of Communal buildings. It distinguishes between settlements that consist of only private households (coded 'absent') and settlements where there are communal buildings which could be used for a variety of uses (coded 'present')."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecializedPublicBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:entertainment_buildings
+  rdfs:label "Entertainment Buildings"@en ;
+  rdfs:comment "Encodes the historical presence of specialist entertainment buildings. These include theaters, arenas, race tracks."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecializedPublicBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:knowledge_information_buildings
+  rdfs:label "Knowledge / Information Buildings"@en ;
+  rdfs:comment "Encodes the historical presence of specialist information / knowledge buildings. These include astronomic observatories, libraries, and museums."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecializedPublicBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:special_purpose_houses
+  rdfs:label "Special Purpose Houses"@en ;
+  rdfs:comment "Encodes the historical presence of houses that were used in a distinctive or special manner. This code reflects differentiation between houses."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecializedPublicBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:symbolic_buildings
+  rdfs:label "Symbolic Buildings"@en ;
+  rdfs:comment "Encodes the historical presence of specialized purely symbolic buildings. <P>These are non-utilitarian constructions that display symbols, or are themselves symbols of the community or polity (or a ruler as a symbol of the polity). Examples include Taj Mahal mausoleum, Trajan's Column, Ashoka's Pillars, Qin Shih Huang's Terracota Army, the Statue of Liberty. Has to be constructed by humans, so sacred groves or mountains are not symbolic buildings. A palace is also not a symbolic building, because it has other, utilitarian functions (houses the ruler).</P>"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SpecializedPublicBuildings ;
+  rdfs:range scm:EpistemicState .
+
+scm:has_standardization
+  rdfs:label "Has Standardization"@en ;
+  rdfs:comment "The standard nature of a feature"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Standardization ;
+  rdfs:range scm:StandardizationChoiceBoxQualifiedByConfidenceTag .
+
+scm:StandardizationChoiceBoxQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf scm:StandardizationChoiceBox, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "StandardizationChoiceBox"@en ;
+  rdfs:comment "StandardizationChoiceBox QualifiedByConfidenceTag "@en .
+
+scm:StandardizationChoiceBox
+  a owl:Class ;
+  rdfs:subClassOf tbs:Box ;
+  rdfs:label "Standardization"@en ;
+  rdfs:comment "The standard nature of a feature"@en .
+
+scm:standardizationchoicebox_box
+  a owl:ObjectProperty ;
+  rdfs:domain scm:StandardizationChoiceBox ;
+  rdfs:range scm:StandardizationChoice ;
+  rdfs:label "Standardization"@en ;
+  rdfs:comment "The standard nature of a feature"@en .
+
+scm:supra-polity_relations
+  rdfs:label "Supra-Polity Relations"@en ;
+  rdfs:comment "The categories of relationships between a polity and its paramount power "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:Supra-PolityRelations ;
+  rdfs:range scm:SupraPolityRelationsChoiceBoxQualifiedByConfidenceTag .
+
+scm:SupraPolityRelationsChoiceBoxQualifiedByConfidenceTag
+  a owl:Class ;
+  rdfs:subClassOf scm:SupraPolityRelationsChoiceBox, tcs:QualifiedByConfidenceTag ;
+  rdfs:label "SupraPolityRelationsChoiceBox"@en ;
+  rdfs:comment "SupraPolityRelationsChoiceBox QualifiedByConfidenceTag "@en .
+
+scm:SupraPolityRelationsChoiceBox
+  a owl:Class ;
+  rdfs:subClassOf tbs:Box ;
+  rdfs:label "Supra-Polity Relations Choice"@en ;
+  rdfs:comment "A choice of relationships between a polity and its paramount power "@en .
+
+scm:suprapolityrelationschoicebox_box
+  a owl:ObjectProperty ;
+  rdfs:domain scm:SupraPolityRelationsChoiceBox ;
+  rdfs:range scm:SupraPolityRelationsChoice ;
+  rdfs:label "Supra-Polity Relations Choice"@en ;
+  rdfs:comment "A choice of relationships between a polity and its paramount power "@en .
+
+scm:change_in_community_scale
+  rdfs:label "Change in Community Scale"@en ;
+  rdfs:comment "DV-4-1.  Change in Community Scale and Complexity [AR-ST-6]"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeInSize .
+
+scm:change_in_conflict
+  rdfs:label "Change in Conflict"@en ;
+  rdfs:comment "DV-3. Conflict.  Proxied by AR-ST-3:  "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeSize .
+
+scm:change_in_population
+  rdfs:label "Change in Population"@en ;
+  rdfs:comment "DV-1. Migration"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeSize .
+
+scm:change_in_regional_complexity
+  rdfs:label "Change in Regional Complexity"@en ;
+  rdfs:comment "DV-4-2 Change in Regional Scale and Complexity [AR-ST-7]"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeInSize .
+
+scm:change_in_ritual_complexity
+  rdfs:label "Change in Ritual Complexity"@en ;
+  rdfs:comment "DV-4-3 Change in Communal Ritual [AR-ST-8]  "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeInSize .
+
+scm:famine_disease
+  rdfs:label "Famine / Disease"@en ;
+  rdfs:comment "DV-2. Famine and Disease.  "@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TheDependentVariables ;
+  rdfs:range scm:ChangeSize .
+
+
+scm:bridges
+  rdfs:label "Bridges"@en ;
+  rdfs:comment "Encodes the historical presence of bridges that were either built or maintained by the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TransportInfrastructure ;
+  rdfs:range scm:EpistemicState .
+
+scm:canals
+  rdfs:label "Canals"@en ;
+  rdfs:comment "Encodes the historical presence of canals or artificial waterways that were built or maintained by the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TransportInfrastructure ;
+  rdfs:range scm:EpistemicState .
+
+scm:ports
+  rdfs:label "Ports"@en ;
+  rdfs:comment "Encodes the historical presence of ports that were either built or maintained by the political authority. These include river ports. Direct historical or archaeological evidence of Ports is absent when no port has been excavated or all evidence of such has been obliterated. Indirect historical or archaeological data is absent when there is no evidence that suggests that the polity engaged in maritime or riverine trade, conflict, or transportation, such as evidence of merchant shipping, administrative records of customs duties, or evidence that at the same period of time a trading relation in the region had a port (for example, due to natural processes, there is little evidence of ancient ports in delta Egypt at a time we know there was a timber trade with the Levant). When evidence for the variable itself is available the code is 'present.' When other forms of evidence suggests the existence of the variable (or not) the code may be 'inferred present' (or 'inferred absent'). When indirect evidence is <i>not</i> available the code will be either absent, temporal uncertainty, suspected unknown, or unknown."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TransportInfrastructure ;
+  rdfs:range scm:EpistemicState .
+
+scm:roads
+  rdfs:label "Roads"@en ;
+  rdfs:comment "Encodes the historical presence of roads that were either built or maintained by the political authority."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TransportInfrastructure ;
+  rdfs:range scm:EpistemicState .
+
+scm:calendar
+  rdfs:label "Calendar"@en ;
+  rdfs:comment "Written calendar or dating system"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:fiction
+  rdfs:label "Fiction"@en ;
+  rdfs:comment "Written fictional works - including poetry, novels, short-stories, etc (poetry will be factored out in future versions of the codebook."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:history
+  rdfs:label "History"@en ;
+  rdfs:comment "Written history existed"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:lists_and_tables
+  rdfs:label "Lists and Tables"@en ;
+  rdfs:comment "Written lists, tables and classifications (e.g. debt lists, tax-lists...)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:philosophy
+  rdfs:label "Philosophy"@en ;
+  rdfs:comment "Written philosophical treatises"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:practical_literature
+  rdfs:label "Practical Literature"@en ;
+  rdfs:comment "Practical guides and manuals to help people do useful stuff. For example manuals on agriculture, military, cooking, etc"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:religious_literature
+  rdfs:label "Religious Literature "@en ;
+  rdfs:comment "Religious literature differs from the sacred texts. For example, it may provide commentary on the sacred texts, or advice on how to live a virtuous life."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:sacred_texts
+  rdfs:label "Sacred Texts"@en ;
+  rdfs:comment "Sacred Texts originate from supernatural agents (deities), or are directly inspired by them."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:science
+  rdfs:label "Science"@en ;
+  rdfs:comment "Written scientific works, including mathematics, natural sciences, social sciences"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:TypesOfWrittenMaterial ;
+  rdfs:range scm:EpistemicState .
+
+scm:mnemonic_devices
+  rdfs:label "Mnemonic devices"@en ;
+  rdfs:comment "Marks that serve as memory devices that help people recall larger pieces of information"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:non-phonetic_writing
+  rdfs:label "Non-phonetic Writing"@en ;
+  rdfs:comment "this refers to the kind of script - non-phonetic scripts do not represent the sound of the word but attach symbols to the meaning."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:non-written_records
+  rdfs:label "Non-written Records"@en ;
+  rdfs:comment "Knoweldge representation systems that do not use writing - using color, material, etc to convey meaning. e.g., quipu https://en.wikipedia.org/wiki/Quipu"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:phonetic_alphabet
+  rdfs:label "Phonetic Alphabet"@en ;
+  rdfs:comment "this refers to the kind of script - phonetic scripts have alphabets with letters and combinations of letters which represent sounds."@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:script
+  rdfs:label "Script"@en ;
+  rdfs:comment "A system for writing symbols that have meaning attached to them. (note that if written records are present, then so is script by defintion)"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+
+scm:written_records
+  rdfs:label "Written Records"@en ;
+  rdfs:comment "These are more than short and fragmentary inscriptions, such as found on tombs or runic stones. There must be several sentences strung together, at the very minimum. For example, royal proclamations from Mesopotamia and Egypt qualify as written records"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain scm:WritingSystem ;
+  rdfs:range scm:EpistemicState .
+ 

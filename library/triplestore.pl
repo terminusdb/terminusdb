@@ -147,12 +147,9 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  * Insert triple into transaction layer
  */
 insert(DB,G,X,Y,Z) :-
-    (   xrdf(DB,[G],X,Y,Z)
-    ->  true
-    ;   object_storage(Z,S),
-        get_write_builder(DB,G,Builder),
-        nb_add_triple(Builder, X, Y, S)
-    ).
+    object_storage(Z,S),
+    get_write_builder(DB,G,Builder),
+    ignore(nb_add_triple(Builder, X, Y, S)).
 
 /**
  * delete(+DB,+G,+Builder,+X,+Y,+Z) is det.
@@ -160,11 +157,9 @@ insert(DB,G,X,Y,Z) :-
  * Delete quad from transaction predicates.
  */
 delete(DB,G,X,Y,Z) :-
-    (   xrdf(DB,[G],X,Y,Z)
-    ->  object_storage(Z,S),
-        get_write_builder(DB,G,Builder),
-        nb_remove_triple(Builder,X,Y,S)
-    ;   true).
+    object_storage(Z,S),
+    get_write_builder(DB,G,Builder),
+    ignore(nb_remove_triple(Builder,X,Y,S)).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).

@@ -248,14 +248,15 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
                      rdfs='http://www.w3.org/2000/01/rdf-schema#'],
            definitions=[],
            collection='https://example.org',
-          database=_,
+           database=_,
+           files=[],
            used=_Used,
            bound=3,
            module=M,
            bindings=[]]) :-
     gensym(module_,M).
 
-empty_ctx(S0,S6) :-
+empty_ctx(S0,S7) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
     elt(database=Database,S0),
@@ -263,6 +264,7 @@ empty_ctx(S0,S6) :-
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -274,15 +276,18 @@ empty_ctx(S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
-empty_ctx(Prefixes,S0,S6) :-
+empty_ctx(Prefixes,S0,S7) :-
     empty_ctx(S),
     elt(database=Database,S0),
     elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -294,7 +299,9 @@ empty_ctx(Prefixes,S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
 /*
  * compile_representation(S,T,V) is det.
@@ -821,6 +828,22 @@ csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
            [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
     throw(error(M)).
 
+json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
+    setup_call_cleanup(
+        open(Path,read,In),
+        json_read_dict(In,Dict,[]),
+        close(In)
+    ),
+    get_dict(columns,Dict,Pre_Header),
+    maplist([Str,Atom]>>atom_string(Atom,Str),Pre_Header,Header),
+    get_dict(data,Dict,Rows),
+    Prog = (
+        member(Row,Rows),
+        maplist(term_literal,Row,Values),
+        Indexing_Term
+    ).
+
+
 /*
  * bool_convert(+Bool_Id,-Bool) is det.
  * bool_convert(-Bool_Id,+Bool) is nondet.
@@ -1267,8 +1290,9 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
     update(database=Old_Database,
            database=Database),
+    view(files=Files),
     % TODO: Extend with optiosn for various file types.
-    { file_spec_path_options(GS, Path, _{}, Options),
+    { file_spec_path_options(GS, Files, Path, _{}, Options),
       extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
     },
     compile_wf(Q,Sub_Query),
@@ -1290,8 +1314,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     % Make sure all variables are given bindings
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
+    view(files=Files),
     {
-        file_spec_path_options(File_Spec, Path, Default, New_Options),
+        file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1300,6 +1325,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
+        ;   memberchk('http://terminusdb.com/woql#type'("panda_json"),New_Options)
+        ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
+            json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
             throw(error(M)))
     }.
@@ -1360,8 +1388,10 @@ compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
-compile_wf(order_by(L,S),order_by(LE,Prog)) -->
-    mapm(resolve,L,LE),
+compile_wf(asc(X),asc(XE)) -->
+    resolve(X,XE).
+compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
+    mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
@@ -1384,8 +1414,7 @@ compile_wf(concat(L,A),(literal_list(LE,LL),
 compile_wf(trim(S,A),(literally(SE,SL),
                       atom_string(SL,SS),
                       trim(SS,X),
-                      atom_string(AE_raw,X),
-                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
+                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',X)))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
@@ -1414,10 +1443,14 @@ compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
     resolve(L,LE),
     resolve(A,AE),
     resolve(Sub,SubE).
-compile_wf(re(P,S,L),(literal_list(LE,LL),
-                      literally(PE,PL),
+compile_wf(re(P,S,L),(literally(PE,PL),
                       literally(SE,SL),
-                      utils:re(PL,SL,LL))) -->
+                      literal_list(LE,LL),
+                      utils:re(PL,SL,LL),
+                      unliterally(PL,PE),
+                      unliterally(SL,SE),
+                      unliterally_list(LL,LE)
+                     )) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
@@ -1447,9 +1480,22 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     mapm(resolve,X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(literal_list(XE,XL),literally(SE,SL),utils:join(XL,SL,YE))) -->
+compile_wf(join(X,S,Y),(literal_list(XE,XL),
+                        literally(SE,SL),
+                        literally(YE,YL),
+                        utils:join(XL,SL,YE),
+                        unliterally_list(XL,XE),
+                        unliterally(SL,SE),
+                        unliterally(YL,YE))) -->
     resolve(X,XE),
     resolve(S,SE),
+    resolve(Y,YE).
+compile_wf(sum(X,Y),(literal_list(XE,XL),
+                     literally(YE,YL),
+                     sumlist(XL,YL),
+                     unliterally_list(XL,XE),
+                     unliterally(YL,YE))) -->
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(true,true) -->
     [].
@@ -1464,17 +1510,24 @@ compile_wf(Q,_) -->
  *
  * Converts a file spec into a referenceable file path which can be opened as a stream.
  */
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = file(Path,Options)
     ;   File_Spec = file(Path),
         Options = []),
     merge_options(Options,Default,New_Options).
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = remote(URI,Options)
     ;   File_Spec = remote(URI),
         Options = []),
     merge_options(Options,Default,New_Options),
     copy_remote(URI,URI,Path,New_Options).
+file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
+    (   File_Spec = post(Name,Options)
+    ;   File_Spec = post(Name),
+        Options = []),
+    atom_string(Name_Atom,Name),
+    merge_options(Options,Default,New_Options),
+    memberchk(Name_Atom=file(_Original,Path), Files).
 
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
@@ -1506,6 +1559,11 @@ literally(X, X) :-
     ;   number(X)
     ).
 
+unliterally_list([],[]).
+unliterally_list([H|T],[HL|TL]) :-
+    unliterally(H,HL),
+    unliterally_list(T,TL).
+
 unliterally(X,Y) :-
     var(Y),
     !,
@@ -1525,6 +1583,11 @@ unliterally(X,Y) :-
         ->  Lang = en
         ;   true)
     ).
+unliterally(X,Y) :-
+    atom(X),
+    atom(Y),
+    !,
+    X = Y.
 unliterally(X,Y) :-
     number(X),
     !,

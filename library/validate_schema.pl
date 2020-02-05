@@ -223,7 +223,7 @@ no_immediate_class_SC(Database, Reason) :-
     \+ custom_datatype(X,Database), \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',Y,' is not a superclass of a defined class ',X], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -233,7 +233,7 @@ no_immediate_class_SC(Database, Reason) :-
     \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate(['The class ',X,' is an intersection of ', Y,' but not a defined class'], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -243,7 +243,7 @@ no_immediate_class_SC(Database, Reason) :-
     \+ immediate_class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a defined class ',Y], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -602,7 +602,7 @@ orphan_class_SC(Database, Reason) :-
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a subclass of a valid class ',Y], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -612,7 +612,7 @@ orphan_class_SC(Database, Reason) :-
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X, ' is not an intersection of a valid class ',Y], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
@@ -622,7 +622,7 @@ orphan_class_SC(Database, Reason) :-
     \+ class(Y,Database), \+ restriction(Y,Database),
     interpolate(['The class ',X,' is not a union of a valid class ',Y], Message),
     Reason = _{
-                 '@type' : 'vio:ClassInheritanceVioltion',
+                 '@type' : 'vio:ClassInheritanceViolation',
 	             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:class' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }

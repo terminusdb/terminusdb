@@ -62,9 +62,9 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
 
     predsort(
         {Database}/[Delta,C1,C2]>>
-        (   strictSubsumptionOf(C1, C2, Database)
+        (   strict_subsumption_of(C1, C2, Database)
         ->  Delta = (<)
-        ;   strictSubsumptionOf(C2, C1, Database)
+        ;   strict_subsumption_of(C2, C1, Database)
         ->  Delta = (>)
         ;   C1 = C2
         ->  Delta = (=)
