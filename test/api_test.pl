@@ -811,8 +811,8 @@ run_woql_file_upload :-
         json_write(current_output, Query, [])
     ),
 
-    www_form_encode(Payload,Encoded),
-    atomic_list_concat(['terminus:query="',Encoded,'"'], Q),
+
+    atomic_list_concat(['terminus:query=',Payload,';type=application/json'], Q),
 
     atomic_list_concat(['my_json_file=@"test/simple.json"'], Upload),
 
