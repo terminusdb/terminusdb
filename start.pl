@@ -126,10 +126,15 @@ prolog:message(server_missing_config(BasePath)) -->
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
 :- use_module(test(tests)).
+:- use_module(library(http/http_log)).
 % Plugins
 %:- use_module(plugins(registry)).
 
 main(Argv) :-
+    get_time(Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    http_log('terminus-server started at ~w (utime ~w) args ~w~n',
+             [StrTime, Now, Argv]),
     %maybe_upgrade,
     initialise_prefix_db,
     debug(terminus(main), 'prefix_db initialized', []),
