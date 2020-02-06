@@ -155,19 +155,22 @@ cors_catch(_,_Request) :-
                [status(400)]).
 
 customise_error(syntax_error(M)) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(syntax_error(M),_)) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(syntax_error(M))) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
