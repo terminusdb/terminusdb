@@ -10,6 +10,17 @@
  *
  * Utils to assist in testing.
  *
+ * Printing during tests goes through two pipelines.
+ *
+ * Actual test output is sent to print_message with a **Kind** of
+ * `testing`. Use test_format/3 for most things.
+ *
+ * progress of testing is reported to `debug/3` with a topic of
+ * `terminus(testing_progress(Msg))`, where `Msg` in
+ * `[run, error, fail]`
+ *
+ * Debug output should go through `debug/3`
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -38,22 +49,48 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 
+:- meta_predicate test_format(:, +, +).
+
+%!  test_format(+Goal:callable, +Format:text, +Args:list) is det
+%
+%   print the message formed as in [[format/2]] for message from
+%   test Goal.
+%
+%   @arg Goal a callable term, the argument to [[try/1]], name of our
+%   test
+%   @arg Format string (an atom) as in [[format/2]]
+%   @arg Args list of arguments for the format string
+%
+test_format(Goal, Format, Args) :-
+    print_message(testing, test_format(Goal, Format, Args)).
+
+:- multifile prolog:message//1.
+
+prolog:message(test_format(Goal, Format, Args)) -->
+    [
+           '~Ntest ~q:'-[Goal],
+           Format-Args
+       ].
+
 :- meta_predicate try(0).
+
+%!  try(+Goal:callable) is semidet
+%
+%   calls `Goal` as once, writing debug information,
+%
 try(Goal) :-
-    format('~n*****************************************************',[]),
-    format('~n* Running test ~q', [Goal]),
-    format('~n*****************************************************~n',[]),
+    test_format(Goal, '~N* Running test ~q', [Goal]),
+    debug(terminus(testing_progress(run)), 'running ~q', [Goal]),
     (   catch(Goal, Error, true)
     ->  (   var(Error)
         ->  true
-        ;   format('~n+++++++++++++++++++++++++++++++++++++++++++++++++++++', []),
-            format('~n+ ERROR! Could not successfully run ~q: ~q',[Goal,Error]),
-            format('~n+++++++++++++++++++++++++++++++++++++++++++++++++++++~n', []),
+        ;   test_format(Goal, '~N+ ERROR! Could not successfully run ~q: ~q',[Goal,Error]),
+            debug(terminus(testing_progress(error)), 'ERROR! Could not successfully run ~q: ~q',[Goal,Error]),
             fail
         )
-    ;   format('~n+++++++++++++++++++++++++++++++++++++++++++++++++++++', []),
-        format('~n+ FAIL! Could not successfully run ~q',[Goal]),
-        format('~n+++++++++++++++++++++++++++++++++++++++++++++++++++++~n', []),
+    ;
+        test_format(Goal, '~N+ FAIL! Could not successfully run ~q',[Goal]),
+        debug(terminus(testing_progress(fail)), 'FAIL! Could not successfully run ~q',[Goal]),
         fail
     ).
 
@@ -81,8 +118,11 @@ write_args(Args) :-
     format('~n',[]).
 
 report_curl_command(Args) :-
-    format('~nRunning command: curl ',[]),
-    write_args(Args).
+    prolog_current_frame(Frame),
+    prolog_frame_attribute(Frame, parent, Parent),
+    prolog_frame_attribute(Parent, predicate_indicator, PredIndicator),
+    with_output_to(string(ArgStr), write_args(Args)),
+    test_format(PredIndicator, '~NRunning command: curl ~w',[ArgStr]).
 
 status_200(URL) :-
     http_open(URL, _, [status_code(200)]).

@@ -101,9 +101,21 @@ initialise_server_settings :-
     atom_concat(BasePath, '/config/config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
-    ;   format("CRITICAL ERROR: Server can't be started because the configuration is missing~n~nRun: ~s/utils/db_util first~n", BasePath),
+    ;   print_message(error, server_missing_config(BasePath)),
         halt(10)
     ).
+
+:-multifile prolog:message//1.
+
+prolog:message(server_missing_config(BasePath)) -->
+    [
+    'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
+    nl,
+    nl,
+    'Run: ~s/utils/db_util first'-[BasePath],
+    nl
+    ].
+
 
 :- initialise_server_settings.
 
@@ -114,13 +126,20 @@ initialise_server_settings :-
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
 :- use_module(test(tests)).
+:- use_module(library(http/http_log)).
 % Plugins
 %:- use_module(plugins(registry)).
 
 main(Argv) :-
+    get_time(Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    http_log('terminus-server started at ~w (utime ~w) args ~w~n',
+             [StrTime, Now, Argv]),
     %maybe_upgrade,
     initialise_prefix_db,
+    debug(terminus(main), 'prefix_db initialized', []),
     initialise_contexts,
+    debug(terminus(main), 'initialise_contexts completed', []),
     server(Argv),
     (   Argv == [test]
     ->  run_tests

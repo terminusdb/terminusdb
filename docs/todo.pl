@@ -74,6 +74,7 @@ story_props(Name, Props) :-
 story(logging).
 props(logging,
             [ desc('developers are able to look at logs from running server'),
+              assigned(annie),
               long_desc(
 'Logging from server and from store, with all logging redirected through print_message/3 and the print_message pipeline.\n\
 if log_listener_install not called, rust falls back to writing to stdout.\n'),

@@ -148,13 +148,13 @@ skolemise(DBI,GraphI,Naming) :-
     object_blank_node_triples(Triples,DBI,GraphI),
     name(Triples,OpenTriples,[],Naming1),
 
-    %format('Naming: ~q~n',[Naming1]),
+    debug(terminus(skolemize), 'Naming: ~q~n',[Naming1]),
 
-    %format('OpenTriples: ~q~n',[OpenTriples]),
+    debug(terminus(skolemize), 'OpenTriples: ~q~n',[OpenTriples]),
 
     sort(OpenTriples,SortedTriples),
     maplist([t(_,_,C),C]>>true,SortedTriples,Open),
 
-    %format('Open: ~q~n',[Open]),
+    debug(terminus(skolemize), 'Open: ~q~n',[Open]),
 
     traverse(Open,Naming1,Naming,DBI,GraphI).

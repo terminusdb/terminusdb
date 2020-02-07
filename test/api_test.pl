@@ -40,6 +40,7 @@
  * Run all structured tests of the API
  */
 run_api_tests :-
+    debug(terminus(testing_progress(run)), 'running api tests', []),
     try(run_connect_test),
     try(run_bad_auth_test),
     %
@@ -90,7 +91,8 @@ run_api_tests :-
     try(run_woql_csv_test),
     try(run_woql_instantiation_test),
     try(run_console),
-    * try(run_db_metadata_test).
+    * try(run_db_metadata_test),
+    debug(terminus(testing_progress(run)), 'completed api tests', []).
 
 /****************************************************************
  * Basic API tests
