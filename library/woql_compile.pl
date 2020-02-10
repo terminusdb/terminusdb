@@ -1478,7 +1478,7 @@ compile_wf(length(L,N),(length(LE,Num),
     resolve(L,LE),
     resolve(N,NE).
 compile_wf(member(X,Y),member(XE,YE)) -->
-    mapm(resolve,X,XE),
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(join(X,S,Y),(literal_list(XE,XL),
                         literally(SE,SL),
