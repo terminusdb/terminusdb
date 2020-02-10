@@ -221,6 +221,11 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(N,WN),
         json_to_woql_ast(V,WV),
         WOQL = pad(WS,WC,WN,WV)
+    ;   _{'http://terminusdb.com/woql#split' : [ S, P, L ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(P,WP),
+        json_to_woql_ast(L,WL),
+        WOQL = split(WS,WP,WL)
     ;   _{'http://terminusdb.com/woql#concat' : [ List, Value ] } :< JSON
     ->  json_to_woql_ast(List,WList),
         json_to_woql_ast(Value,WValue),

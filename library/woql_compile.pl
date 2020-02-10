@@ -1443,6 +1443,17 @@ compile_wf(re(P,S,L),(literally(PE,PL),
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
+compile_wf(split(S,P,L),(literally(SE,SL),
+                         literally(PE,PL),
+                         literal_list(LE,LL),
+                         split_string(SL,PL,"",LL),
+                         unliterally(SL,SE),
+                         unliterally(PL,PE),
+                         unliterally_list(LL,LE)
+                        )) -->
+    resolve(S,SE),
+    resolve(P,PE),
+    resolve(L,LE).
 compile_wf(upper(S,A),(literally(SE,SL),string_upper(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
@@ -1527,6 +1538,9 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     merge_options(Options,Default,New_Options),
     memberchk(Name_Atom=file(_Original,Path), Files).
 
+literal_list(X, _X) :-
+    var(X),
+    !.
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
     literally(H,HL),
