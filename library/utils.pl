@@ -21,6 +21,7 @@
               mapm/6,
               trim/2,
               split_atom/3,
+              pattern_string_split/3,
               count/3,
               merge_dictionaries/3,
               command/1,
@@ -359,6 +360,13 @@ split_atom(Atom,Delimiter,Result) :-
     split_string(Atom,Delimiter,'',Strings),
     maplist([S,A]>>(atom_string(A,S)), Strings, Result).
 
+
+/*
+ * pattern_string_split(Pattern,String,List) is det.
+ */
+pattern_string_split(Pattern,String,List) :-
+    re_split(Pattern,String,L),
+    once(intersperse(_,List,L)).
 
 /*
  * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.

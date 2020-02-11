@@ -1446,7 +1446,7 @@ compile_wf(re(P,S,L),(literally(PE,PL),
 compile_wf(split(S,P,L),(literally(SE,SL),
                          literally(PE,PL),
                          literal_list(LE,LL),
-                         split_string(SL,PL,"",LL),
+                         utils:pattern_string_split(PL,SL,LL),
                          unliterally(SL,SE),
                          unliterally(PL,PE),
                          unliterally_list(LL,LE)
