@@ -1210,8 +1210,7 @@ compile_wf((A => B),Goal) -->
                                                           'terminus:witnesses' : Witnesses})))
                 )
             )
-        ),
-        * format(Log, '~n~nGoal: ~q~n', [Goal])
+        )
     },
     update(database=_,
            database=Database).
