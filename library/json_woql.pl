@@ -294,6 +294,15 @@ json_to_woql_ast(JSON,WOQL) :-
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                          'terminus:message' :'No source column specified',
                                          'vio:query' : JSON}))))
+    ;   _{'http://terminusdb.com/woql#as' : [ S, V, T ] } :< JSON
+    ->  (   _{'@value' : WS} :< S
+        ->  atom_string(WA,WS),
+            json_to_woql_ast(V,WV),
+            json_to_woql_ast(T,WT),
+            WOQL = as(WA,WV,WT)
+        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'No source column specified',
+                                         'vio:query' : JSON}))))
     ;   _{'http://terminusdb.com/woql#as' : [ V ] } :< JSON
     ->  json_to_woql_ast(V,WOQL)
     ;   _{'http://terminusdb.com/woql#true' : [] } :< JSON

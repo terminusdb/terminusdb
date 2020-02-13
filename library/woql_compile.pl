@@ -612,8 +612,8 @@ expand(C,C) --> [], {atom(C)}.
 patch_binding(X,Y) :-
     (   var(X)
     ->  Y=unknown
-    ;   (   \+ \+ (X = literal(type(X,Y)),
-                   (var(X) ; var(Y)))
+    ;   (   \+ \+ (X = literal(type(A,B)),
+                   (var(A) ; var(B)))
         ->  Y = unknown
         ;   X = Y)
     ;   X=Y).
@@ -675,7 +675,9 @@ compile_relation(X:_C,XE,Class,Goals) -->
     }.
 
 as_vars([],[]).
-as_vars([_X as Y|Rest],[Y|Vars]) :-
+as_vars([as(_X,Y)|Rest],[Y|Vars]) :-
+    as_vars(Rest,Vars).
+as_vars([as(_X,Y,_T)|Rest],[Y|Vars]) :-
     as_vars(Rest,Vars).
 
 position_vars([],[]).
@@ -687,11 +689,16 @@ position_vars([v(V)|Rest],[v(V)|Vars]) :-
  * A fold over Spec into Result
  */
 indexing_as_list([],_,_,_,[]).
-indexing_as_list([N as v(V)|Rest],Header,Values,Bindings,[Term|Result]) :-
+indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
+    (   As_Clause = as(N,v(V))
+    ->  Type = none
+    ;   As_Clause = as(N,v(V),Type)),
     member(V=Xe,Bindings),
     Term = (   nth1(Idx,Header,N)
            ->  (   nth1(Idx,Values,Value)
-               ->  Value = Xe
+               ->  (   Type = none
+                   ->  Value = Xe
+                   ;   typecast(Value,Type,[],Xe))
                ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
                    throw(error(syntax_error(Msg)))
                )
