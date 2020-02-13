@@ -102,6 +102,9 @@ http:location(root, '/', []).
 :- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
+:- http_handler(root(message), cors_catch(message_handler(Method)),
+                [method(Method),
+                 methods([options,get,post])]).
 % Deprecated!
 :- http_handler(root(dashboard), cors_catch(console_handler(Method)),
                 [method(Method),
@@ -319,6 +322,37 @@ console_handler(get,_Request) :-
     write_cors_headers(SURI, DB),
     format('~n'),
     write(String).
+
+/*
+ * message_handler(+Method,+Request) is det.
+ */
+message_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+message_handler(get,Request) :-
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+message_handler(post,R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+    reply_json(_{'terminus:status' : 'terminus:success'}).
 
 /**
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.

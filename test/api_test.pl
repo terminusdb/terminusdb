@@ -1173,3 +1173,26 @@ run_db_metadata_test :-
     nl,json_write_dict(current_output,Term,[]),
 
     _{ '@type' : "terminus:DatabaseMetadata"} :< Term.
+
+run_message_test :-
+    config:server(Server),
+    auth(Auth),
+
+    atomic_list_concat([Server,'/message'], URI),
+
+    Message = _{'@type':"terminus:APIUpdate",
+                'terminus:message' : _{some : "Payload"}
+               },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{'terminus:status' : 'terminus:success'} :< Term.
