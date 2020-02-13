@@ -1166,7 +1166,6 @@ compile_wf((A => B),Goal) -->
     % should be easy to extract from B
     view(write_graph=[WG]),
     {
-        http_log_stream(Log),
         debug(terminus(woql_compile(compile_wf)), 'Database: ~q', [Database]),
         active_graphs(B,Active_Graphs),
         get_dict(schema,Database,Schemata),

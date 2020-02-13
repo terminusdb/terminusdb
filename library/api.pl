@@ -144,7 +144,7 @@ cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
           (   cors_enable,
-              http_log('~NError: ~q~n',[E]),
+              http_log('~N[Error] ~q~n',[E]),
               customise_error(E)
           )
          ),
@@ -242,7 +242,6 @@ authenticate(Request, DB, Auth) :-
                                      'terminus:message' : 'Not a valid key'})))).
 
 verify_access(Auth, DB, Action, Scope) :-
-    http_log('~NGoal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
     (   auth_action_scope(Auth, DB, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
@@ -273,8 +272,6 @@ connection_authorised_user(Request, User, SURI, DB) :-
  */
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
-
-    http_log('~NWitnesses~qn',[Witnesses]),
 
     (   Witnesses = []
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
@@ -366,20 +363,15 @@ db_handler(options,_DB,_Request) :-
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    http_log('~NAbout to authenticate~n',[]),
     terminus_database_name(Collection),
     connect(Collection,DBC),
     /* POST: Create database */
     authenticate(Request, DBC, Auth),
-    http_log('~NAuthenticaticated~n',[]),
     config:public_server_url(Server),
     verify_access(Auth,DBC,terminus/create_database,Server),
-    http_log('~NAccess verified~n',[]),
     try_get_param('terminus:document',Request,Doc),
-    http_log('~NDoc ~q~n',[Doc]),
     try_db_uri(DB,DB_URI),
     try_create_db(DB,DB_URI,Doc),
-    http_log('~NDatabase Constructed ~q~n',[DB_URI]),
     write_cors_headers(Server, DBC),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
@@ -421,15 +413,12 @@ woql_handler(get,DB,Request) :-
     verify_access(Auth,DBC,terminus/woql_select,DB_URI),
     try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
     atom_json_dict(Atom_Query, Query, []),
-    http_log('~NQuery: ~q~n',[Query]),
+
+    http_log('~N[Query] ~s~n',[Atom_Query]),
+
     connect(DB_URI,New_Ctx),
     run_query(Query,New_Ctx,JSON),
-    http_log('~NJSON: ~q~n',[JSON]),
-    format(atom(Q),'~q',[Query]),
-    format(atom(J),'~q',[JSON]),
-    md5_hash(Q,Q_Hash,[]),
-    md5_hash(J,J_Hash,[]),
-    http_log('~N~q-~q~n',[Q_Hash,J_Hash]),
+
     config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
     reply_json(JSON).
@@ -449,9 +438,7 @@ woql_handler(post,DB,R) :-
     try_get_param('terminus:query',Request,Atom_Query),
     atom_json_dict(Atom_Query, Query, []),
 
-    http_log_stream(Log),
-
-    format(Log,'Query: ~q~n',[Request]),
+    http_log('~N[Query] ~s~n',[Atom_Query]),
 
     connect(DB_URI,New_Ctx),
 
@@ -909,8 +896,7 @@ try_create_db(DB,DB_URI,Doc) :-
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
-            (   http_log('~N~q~n',[create_db(DB_URI)]),
-                terminus_database_name(Collection),
+            (   terminus_database_name(Collection),
                 connect(Collection,Terminus_DB),
                 create_db(Terminus_DB, DB_URI)
             ->  true

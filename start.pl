@@ -105,6 +105,15 @@ initialise_server_settings :-
         halt(10)
     ).
 
+initialise_log_settings :-
+    file_search_path(terminus_home, BasePath),
+    !,
+    (   getenv('TERMINUS_LOG_PATH', Log_Path)
+    ->  true
+    ;   atom_concat(BasePath,'/storage/httpd.log', Log_Path)),
+
+    set_setting(http:logfile, Log_Path).
+
 :-multifile prolog:message//1.
 
 prolog:message(server_missing_config(BasePath)) -->
@@ -140,6 +149,8 @@ main(Argv) :-
     debug(terminus(main), 'prefix_db initialized', []),
     initialise_contexts,
     debug(terminus(main), 'initialise_contexts completed', []),
+    initialise_log_settings,
+    debug(terminus(main), 'initialise_log_settings completed', []),
     server(Argv),
     (   Argv == [test]
     ->  run_tests
