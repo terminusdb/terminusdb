@@ -1196,4 +1196,4 @@ run_message_test :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status' : 'terminus:success'} :< Term.
+    _{'terminus:status' : "terminus:success"} :< Term.
