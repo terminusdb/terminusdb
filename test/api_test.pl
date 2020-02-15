@@ -89,6 +89,7 @@ run_api_tests :-
     %try(run_woql_external_file_test),
     try(run_woql_syntax_error_test),
     try(run_woql_csv_test),
+    try(run_message_test),
     try(run_woql_instantiation_test),
     try(run_console),
     * try(run_db_metadata_test),
