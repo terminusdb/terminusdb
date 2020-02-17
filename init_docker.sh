@@ -1,4 +1,5 @@
 #!/bin/sh
+SERVER_MODE=${SERVER_MODE:-attach}
 SERVER_NAME=${SERVER_NAME:-localhost}
 ADMIN_PASS=${ADMIN_PASS:-root}
 SERVER_PORT=${SERVER_PORT:-6363}
@@ -10,4 +11,4 @@ if [ ! -f "$FILE_DIR"/storage/prefix.db ]; then
 else
     "$FILE_DIR"/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --only-config
 fi
-"$FILE_DIR"/start.pl
+nohup swipl --no-tty --quiet -f "$FILE_DIR"/start.pl

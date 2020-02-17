@@ -117,12 +117,20 @@ initialise_server_settings :-
 % Plugins
 %:- use_module(plugins(registry)).
 
+:- on_signal(hup, _, hup).
+
+hup(_Signal) :-
+  thread_send_message(main, stop).
+
 main(Argv) :-
     %maybe_upgrade,
     initialise_prefix_db,
     initialise_contexts,
     server(Argv),
-    (   Argv == [test]
-    ->  run_tests
-    ;   true
-    ).
+    run(Argv).
+
+run([test]) :-
+  run_tests.
+run([serve]) :-
+  thread_get_message(stop).
+run(_).
