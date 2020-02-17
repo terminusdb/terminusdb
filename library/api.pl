@@ -349,6 +349,11 @@ message_handler(post,R) :-
     ),
 
     http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 /**
