@@ -248,14 +248,15 @@ empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
                      rdfs='http://www.w3.org/2000/01/rdf-schema#'],
            definitions=[],
            collection='https://example.org',
-          database=_,
+           database=_,
+           files=[],
            used=_Used,
            bound=3,
            module=M,
            bindings=[]]) :-
     gensym(module_,M).
 
-empty_ctx(S0,S6) :-
+empty_ctx(S0,S7) :-
     empty_ctx(S),
     elt(prefixes=Prefixes,S0),
     elt(database=Database,S0),
@@ -263,6 +264,7 @@ empty_ctx(S0,S6) :-
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -274,15 +276,18 @@ empty_ctx(S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
-empty_ctx(Prefixes,S0,S6) :-
+empty_ctx(Prefixes,S0,S7) :-
     empty_ctx(S),
     elt(database=Database,S0),
     elt(write_graph=Write_Graph,S0),
     elt(module=M,S0),
     elt(definitions=D,S0),
     elt(collection=C,S0),
+    elt(files=Files,S0),
     select(prefixes=_,S,
            prefixes=Prefixes,S1),
     select(database=_,S1,
@@ -294,7 +299,9 @@ empty_ctx(Prefixes,S0,S6) :-
     select(collection=_,S4,
            collection=C,S5),
     select(write_graph=_,S5,
-           write_graph=Write_Graph,S6).
+           write_graph=Write_Graph,S6),
+    select(files=_,S6,
+           files=Files,S7).
 
 /*
  * compile_representation(S,T,V) is det.
@@ -484,14 +491,9 @@ run_query(JSON_In,CCTX,JSON_Out) :-
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
-
-    http_log_stream(Log),
-    * format(Log,'Ctx: ~q~n',[Ctx]),
-
+    http_log('Ctx: ~q~n',[Ctx]),
     json_woql(JSON_In, Ctx_Total, Query),
-
-    * format(Log,'Query: ~q~n',[Query]),
-
+    * http_log('Query: ~q~n',[Query]),
     run_term(Query,CCTX,JSON_Out).
 
 run_term(Query,JSON) :-
@@ -499,20 +501,15 @@ run_term(Query,JSON) :-
     run_term(Query,Ctx,JSON).
 
 run_term(Query,Ctx_In,JSON) :-
-    * format('~n***********~nQuery: ~q~n',[Query]),
+    debug(terminus(woql_compile(run_term)), 'Query: ~q',[Query]),
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    http_log_stream(Log),
-    format(Log,'~n***********~nProgram: ~q~n',[Prog]),
-    format(Log,'~n***********~nCtx: ~q~n',[Ctx_Out]),
+    debug(terminus(woql_compile(run_term)), 'Program: ~q',[Prog]),
+    debug(terminus(woql_compile(run_term)), 'Ctx: ~q',[Ctx_Out]),
     elt(definitions=Definitions,Ctx_Out),
     elt(database=_Database,Ctx_Out),
-
-    * format(Log,'~n~nWe are here -1 ~n~n',[]),
-
+    debug(terminus(woql_compile(run_term)),'We are here -1',[]),
     assert_program(Definitions),
-
-    * format(Log,'~n~nWe are here -0.5 ~n~n',[]),
-
+    debug(terminus(woql_compile(run_term)),'We are here -0.5',[]),
     findall((B-OGs),
             (   elt(output_graphs=OGs,Ctx_Out),
                 % sets head to graph start and tail to the empty list.
@@ -535,7 +532,7 @@ run_term(Query,Ctx_In,JSON) :-
     % maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
     Database_List= E_Databases,
 
-    * format(Log,'~n~nWe are here 1 ~n~n',[]),
+    debug(terminus(woql_compile(run_term)), 'We are here 1',[]),
 
     term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
     ignore(retract_program(Definitions)).
@@ -615,8 +612,8 @@ expand(C,C) --> [], {atom(C)}.
 patch_binding(X,Y) :-
     (   var(X)
     ->  Y=unknown
-    ;   (   \+ \+ (X = literal(type(X,Y)),
-                   (var(X) ; var(Y)))
+    ;   (   \+ \+ (X = literal(type(A,B)),
+                   (var(A) ; var(B)))
         ->  Y = unknown
         ;   X = Y)
     ;   X=Y).
@@ -678,7 +675,9 @@ compile_relation(X:_C,XE,Class,Goals) -->
     }.
 
 as_vars([],[]).
-as_vars([_X as Y|Rest],[Y|Vars]) :-
+as_vars([as(_X,Y)|Rest],[Y|Vars]) :-
+    as_vars(Rest,Vars).
+as_vars([as(_X,Y,_T)|Rest],[Y|Vars]) :-
     as_vars(Rest,Vars).
 
 position_vars([],[]).
@@ -690,11 +689,16 @@ position_vars([v(V)|Rest],[v(V)|Vars]) :-
  * A fold over Spec into Result
  */
 indexing_as_list([],_,_,_,[]).
-indexing_as_list([N as v(V)|Rest],Header,Values,Bindings,[Term|Result]) :-
+indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
+    (   As_Clause = as(N,v(V))
+    ->  Type = none
+    ;   As_Clause = as(N,v(V),Type)),
     member(V=Xe,Bindings),
     Term = (   nth1(Idx,Header,N)
            ->  (   nth1(Idx,Values,Value)
-               ->  Value = Xe
+               ->  (   Type = none
+                   ->  Value = Xe
+                   ;   typecast(Value,Type,[],Xe))
                ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
                    throw(error(syntax_error(Msg)))
                )
@@ -820,6 +824,22 @@ csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
     format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
            [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
     throw(error(M)).
+
+json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
+    setup_call_cleanup(
+        open(Path,read,In),
+        json_read_dict(In,Dict,[]),
+        close(In)
+    ),
+    get_dict(columns,Dict,Pre_Header),
+    maplist([Str,Atom]>>atom_string(Atom,Str),Pre_Header,Header),
+    get_dict(data,Dict,Rows),
+    Prog = (
+        member(Row,Rows),
+        maplist(term_literal,Row,Values),
+        Indexing_Term
+    ).
+
 
 /*
  * bool_convert(+Bool_Id,-Bool) is det.
@@ -1000,7 +1020,7 @@ compile_wf(p(P,Args),Goal) -->
     {
         select(G=g(OG,_-T0,FH-FT),Gs0,
                G=g(OG,T0-T1,FH-FT),Gs1),
-        %format('***************~nPredicate: ~n~q-~q~n',[T0,T1]),
+        debug(terminus(woql_compile(compile_wf)), 'Predicate: ~q-~q',[T0,T1]),
 
         Pred =.. [P,Used,Bound,OG,T0-T1,FH-FT|RArgs],
         Goal = (   Used > Bound
@@ -1099,7 +1119,7 @@ compile_wf(r(X,R,Y,G),Goal) -->
         relationship_source_property(RClassID,P,Database),
         relationship_target_property(RClassID,Q,Database),
 
-        %format('***************~nRelation:~n~q-~q~n',[T0,T1]),
+        debug(terminus(woql_compile(compile_wf)), 'Relation: ~q-~q',[T0,T1]),
 
         append([[xrdf(C,I,RE,P,XE),
                  xrdf(C,I,RE,Q,YE,I),
@@ -1117,12 +1137,12 @@ compile_wf((A;B),(ProgA;ProgB)) -->
     compile_wf(B,ProgB),
     peak(S2),
     {
-        %format('***************~nBefore disjunctions(0)~n'),
-        %format('***************~nProgram: ~n~q~n',[(ProgA;ProgB)]),
+        debug(terminus(woql_compile(compile_wf)), 'Before disjunctions(0)', []),
+        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[(ProgA;ProgB)]),
         %elt(current_output_graph=G,S2),
         %elt(output_graphs=OGs,S2),
         %elt(G=g(_,T0-T1,_),OGs),
-        %format('***************~nAfter disjunctions (2): ~n~q-~q~n',[T0,T1]),
+        % debug(terminus(woql_compile(compile_wf)), 'After disjunctions (2): ~q-~q',[T0,T1]),
         %format('***************~nProgram: ~n~q~n',[(ProgA;ProgB)]),
         merge(S1,S2,S3)
         %format('***************~nAfter merge: ~n~q-~q~n',[T0,T1]),
@@ -1133,7 +1153,7 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
     compile_wf(B,ProgB),
     {
-        %format('***************~nConjunctive Program: ~n~q~n',[(ProgA,ProgB)])
+        debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
 compile_wf((A => B),Goal) -->
     view(database=Database),
@@ -1146,17 +1166,16 @@ compile_wf((A => B),Goal) -->
     % should be easy to extract from B
     view(write_graph=[WG]),
     {
-        http_log_stream(Log),
-        * format(Log, '~n~nDatabase: ~q~n', [Database]),
+        debug(terminus(woql_compile(compile_wf)), 'Database: ~q', [Database]),
         active_graphs(B,Active_Graphs),
         get_dict(schema,Database,Schemata),
-        * format(Log, '~n~nSchemata: ~q~n', [Schemata]),
+        debug(terminus(woql_compile(compile_wf)), 'Schemata: ~q', [Schemata]),
         get_dict(write,Active_Graphs,AWGs),
-        * format(Log, '~n~nAWGs: ~q~n', [AWGs]),
+        debug(terminus(woql_compile(compile_wf)), 'AWGs: ~q', [AWGs]),
         union([WG],AWGs,WGs),
-        * format(Log, '~n~nWrite Graphs: ~q~n', [WGs]),
+        debug(terminus(woql_compile(compile_wf)), 'Write Graphs: ~q', [WGs]),
         intersection(WGs,Schemata,Changed_Schemata),
-        * format(Log, '~n~nWrite Schemata: ~q~n', [Changed_Schemata]),
+        debug(terminus(woql_compile(compile_wf)), 'Write Schemata: ~q', [Changed_Schemata]),
         % We want to choose schema free transactions whenever possible.
         (   Changed_Schemata = []
         ->  Goal = (
@@ -1191,8 +1210,7 @@ compile_wf((A => B),Goal) -->
                                                           'terminus:witnesses' : Witnesses})))
                 )
             )
-        ),
-        * format(Log, '~n~nGoal: ~q~n', [Goal])
+        )
     },
     update(database=_,
            database=Database).
@@ -1204,33 +1222,32 @@ compile_wf(all(P), Prog) -->
     % and using tail append
     % bindings probably also need to be difference lists
     view(bindings=Old_Bindings),
-    %{ format('******************~nGot here~n') },
+    debug_wf('Got here'),
     compile_wf(P, Single),
-    %{ format('******************~nGot here 0.5~n') },
+    debug_wf('Got here 0.5'),
     view(current_output_graph=G),
-    %{ format('******************~nGot here 1~n') },
-
+    debug_wf('Got here 1'),
     update(output_graphs=OGs0,
            output_graphs=OGs1),
-    %{ format('******************~nGot here 2~n') },
-
+    debug_wf('Got here 2'),
     update(bindings=_,
            bindings=Old_Bindings),
-    {   %format('******************~nGot here 3~n'),
+    debug_wf('Got here 3'),
+    {
         % These are the variables which occur in
         % our goal... OG, OH...
         select(G=g(OG,OH-OT,OFH-OFT),OGs0,
                G=New_G,OGs1),
-        %format('******************~nProgram: ~q~n',[Single]),
-        %format('******************~nProgram: ~q~n',[OFT]),
+        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[Single]),
+        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[OFT]),
         Prog=once(% one aggregate is enough
                  sfoldr(
                      % fold predicate
                      [g(G0,H0-T0,FH0-FT0),
                       g(_,H1-T1,FH1-FT1),
                       g(G2,H2-T2,FH2-FT2)]>>(
-                         %format('********incoming: ~q~n',[FH0-FT0]),
-                         %format('********update: ~q~n',[FH1-FT1]),
+                         debug(terminus(woql_compile(compile_wf)), 'incoming: ~q~n',[FH0-FT0]),
+                         debug(terminus(woql_compile(compile_wf)), 'update: ~q~n',[FH1-FT1]),
                          G0=G2,
                          H0=H2,   T0=H1, T2=T1,
                          FH0=FH2, FT0=FH1, FT2=FT1
@@ -1256,7 +1273,7 @@ compile_wf(depth(N,P), Prog) -->
     update(bound=_,
            bound=D).
 compile_wf(prefixes(NS,S), Prog) -->
-    %{ format('~n~nDO YOU HEAR ME~n~n~q~n', [NS]) },
+    debug_wf('DO YOU HEAR ME ~q', [NS]),
     update(prefixes=NS_Old,
            prefixes=NS_New),
     { append(NS, NS_Old, NS_New) },
@@ -1267,8 +1284,9 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
     update(database=Old_Database,
            database=Database),
+    view(files=Files),
     % TODO: Extend with optiosn for various file types.
-    { file_spec_path_options(GS, Path, _{}, Options),
+    { file_spec_path_options(GS, Files, Path, _{}, Options),
       extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
     },
     compile_wf(Q,Sub_Query),
@@ -1290,8 +1308,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     % Make sure all variables are given bindings
     mapm(resolve,Vars,BVars),
     view(bindings=Bindings),
+    view(files=Files),
     {
-        file_spec_path_options(File_Spec, Path, Default, New_Options),
+        file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
@@ -1300,6 +1319,9 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
+        ;   memberchk('http://terminusdb.com/woql#type'("panda_json"),New_Options)
+        ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
+            json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
             throw(error(M)))
     }.
@@ -1426,6 +1448,17 @@ compile_wf(re(P,S,L),(literally(PE,PL),
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE).
+compile_wf(split(S,P,L),(literally(SE,SL),
+                         literally(PE,PL),
+                         literal_list(LE,LL),
+                         utils:pattern_string_split(PL,SL,LL),
+                         unliterally(SL,SE),
+                         unliterally(PL,PE),
+                         unliterally_list(LL,LE)
+                        )) -->
+    resolve(S,SE),
+    resolve(P,PE),
+    resolve(L,LE).
 compile_wf(upper(S,A),(literally(SE,SL),string_upper(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
@@ -1450,7 +1483,7 @@ compile_wf(length(L,N),(length(LE,Num),
     resolve(L,LE),
     resolve(N,NE).
 compile_wf(member(X,Y),member(XE,YE)) -->
-    mapm(resolve,X,XE),
+    resolve(X,XE),
     resolve(Y,YE).
 compile_wf(join(X,S,Y),(literal_list(XE,XL),
                         literally(SE,SL),
@@ -1477,23 +1510,42 @@ compile_wf(Q,_) -->
         throw(syntax_error(M))
     }.
 
+debug_wf(Lit) -->
+    { debug(terminus(woql_compile(compile_wf)), '~w', [Lit]) },
+    [].
+
+debug_wf(Fmt, Args) -->
+    { debug(terminus(woql_compile(compile_wf)), Fmt, Args) },
+    [].
+
+
 /*
  * file_spec_path_options(File_Spec,Path,Default, Options) is semidet.
  *
  * Converts a file spec into a referenceable file path which can be opened as a stream.
  */
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = file(Path,Options)
     ;   File_Spec = file(Path),
         Options = []),
     merge_options(Options,Default,New_Options).
-file_spec_path_options(File_Spec,Path,Default,New_Options) :-
+file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = remote(URI,Options)
     ;   File_Spec = remote(URI),
         Options = []),
     merge_options(Options,Default,New_Options),
     copy_remote(URI,URI,Path,New_Options).
+file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
+    (   File_Spec = post(Name,Options)
+    ;   File_Spec = post(Name),
+        Options = []),
+    atom_string(Name_Atom,Name),
+    merge_options(Options,Default,New_Options),
+    memberchk(Name_Atom=file(_Original,Path), Files).
 
+literal_list(X, _X) :-
+    var(X),
+    !.
 literal_list([],[]).
 literal_list([H|T],[HL|TL]) :-
     literally(H,HL),

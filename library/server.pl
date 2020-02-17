@@ -34,27 +34,53 @@
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(triplestore).
+:- use_module(library(http/html_write)).
 
 server(_Argv) :-
     config:server(Server),
     config:server_port(Port),
     config:server_workers(Workers),
     config:server_worker_options(_Settings),
-	config:http_options(HTTPOptions),
-	http_server(http_dispatch,
+    config:http_options(HTTPOptions),
+    http_server(http_dispatch,
 		        [ port(Port),
 		          workers(Workers)
 		          | HTTPOptions
 		        ]),
-	setup_call_cleanup(
+        setup_call_cleanup(
 	    http_handler(root(.), busy_loading,
 			 [ priority(1000),
 			   hide_children(true),
 			   id(busy_loading),
-               time_limit(infinite),
+                           time_limit(infinite),
 			   prefix
 			 ]),
-        sync_backing_store,
-	    http_delete_handler(id(busy_loading))),
-    format("~n% Welcome to TerminusDB's terminus-server! ~n", [Server]),
-    format("% You can view your server in a browser at '~s/console' ~n~n", [Server]).
+            (   sync_backing_store,
+                print_message(banner, welcome('terminus-server', Server))
+            ),
+	    http_delete_handler(id(busy_loading))).
+
+
+% See https://github.com/terminusdb/terminus-server/issues/91
+%  TODO replace this with a proper page
+%
+busy_loading(_) :-
+    reply_html_page(
+        title('Still Loading'),
+        \loading_page).
+
+loading_page -->
+    html([
+        h1('Still loading'),
+        p('TerminusDB is still synchronizing backing store')
+    ]).
+
+:- multifile prolog:message//1.
+
+prolog:message(welcome('terminus-server', Server)) -->
+         [ '~N% Welcome to TerminusDB\'s terminus-server!',
+         nl,
+         '% You can view your server in a browser at \'~s/console\''-[Server],
+         nl,
+         nl
+         ].

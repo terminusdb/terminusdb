@@ -384,7 +384,7 @@ normalise_restriction([type=sub, operands=Results],N) :-
     !,
     maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
     exclude([X]>>(X=true),Normalised,Result),
-    debug(normalise,'normalise_restriction sub: ~p',[Result]),
+    debug(terminus(frame(normalise)),'normalise_restriction sub: ~p',[Result]),
     (   exclude([F]>>(F=[type=T|_], member(T,[and,sub])), Result, [])
     ->  foldl([F,R,O]>>(F=[type=_,operands=Fs], append(Fs,R,O)),Result,[],Acc)
     ;   Acc=Result),
@@ -393,7 +393,7 @@ normalise_restriction([type=and, operands=Results],N) :-
     !,
     maplist([X,Y]>>normalise_restriction(X,Y),Results,Normalised),
     exclude([X]>>(X=true),Normalised,Result),
-    debug(normalise,'normalise_restriction and: ~p',[Result]),
+    debug(terminus(frame(normalise)),'normalise_restriction and: ~p',[Result]),
     (   exclude([F]>>(F=[type=T|_], member(T,[and,sub])), Result, [])
     ->  foldl([F,R,O]>>(F=[type=_,operands=Fs], append(Fs,R,O)),Result,[],Acc)
     ;   Acc=Result),
@@ -609,8 +609,9 @@ class_frame_aux(Class, Database, Frame) :-
     (   class_formula(Class,Database,Formula)
     ->  restriction_formula(Formula,Database,RestrictionFormula),
         class_properties(Class,Database,Properties),
-        * format('Class: ~q~n Formula: ~q~n Properties ~q~n',[Class,Formula,Properties]),
-        debug(restriction,'Restriction: ~p',[RestrictionFormula]),
+        debug(terminus(frame(restriction)),
+              'Class: ~q~n Formula: ~q~n Properties ~q~n',[Class,Formula,Properties]),
+        debug(terminus(frame(restriction)),'Restriction: ~p',[RestrictionFormula]),
         calculate_frame(Class,Properties,RestrictionFormula,Database,Frame)
     ;   Frame = [type=failure, message='No Class Formula!', class=Class]).
 
@@ -653,16 +654,16 @@ fill_class_frame(Elt,Database,[[type=restriction|_]|Rest],Frames) :-
 fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     % A class choice (the choice has already been made...)
     !,
-    %format('Elt: ~q~n', [Elt]),
+    debug(terminus(frame(fill)), 'Elt: ~q~n', [Elt]),
     instance_class(Elt,Class,Database),
-    %format('Class: ~q~n', [Class]),
+    debug(terminus(frame(fill)), 'Class: ~q~n', [Class]),
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp),
-    %format('Fsp: ~q~n', [Fsp]),
+    debug(terminus(frame(fill)), 'Fsp: ~q~n', [Fsp]),
     include({Class}/[Frame]>>(
                 forall(member(Prop_Frame,Frame),
                        member(domain=Class, Prop_Frame))
             ), Fsp, Filtered),
-    debug(frame,'fill_class_frame/4 choice Filtered: ~q~n', [Filtered]),
+    debug(terminus(frame(fill)),'fill_class_frame/4 choice Filtered: ~q~n', [Filtered]),
     Filtered = [Fsp_Filtered].
 fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
     member(type=Type, C),
@@ -1024,8 +1025,8 @@ update_object(ID, Obj, Database) :-
     jsonld_triples(New_Obj,Ctx,Database,New),
     object_edges(ID,Database,Old),
 
-    debug(frame,'~nNew: ~q~n', [New]),
-    debug(frame,'~nOld: ~q~n', [Old]),
+    debug(terminus(frame(fill)),'~nNew: ~q~n', [New]),
+    debug(terminus(frame(fill)),'~nOld: ~q~n', [Old]),
     % Don't back out now.  both above should be det so we don't have to do this.
     !,
     subtract(New,Old,Inserts),

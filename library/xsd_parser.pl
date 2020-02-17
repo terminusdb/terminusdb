@@ -175,6 +175,8 @@ timeZone(1,0,0) --> "" .
 
 % Hour, Minute, Second, ZoneSign, ZoneHour, ZoneMinute
 time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+			".", threeDigitNatural(_), timeZone(Z,ZH,ZM).
+time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 			timeZone(Z,ZH,ZM) .
 time(H,M,0,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Z,ZH,ZM).
 
@@ -186,7 +188,7 @@ date(SY,Mo,D,Z,ZH,ZM) -->
 
 dateTime(SY,Mo,D,H,M,S,Z,ZH,ZM) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time(H,M,S,Z,ZH,ZM) .
+    "T", time(H,M,S,Z,ZH,ZM).
 
 
 gYear(Y,Z,ZH,ZM) --> year(Y), timeZone(Z,ZH,ZM) .

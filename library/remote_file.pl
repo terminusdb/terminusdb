@@ -35,19 +35,16 @@
  *
  */
 copy_remote(Remote, Name, File, Options) :-
-    (   get_time(Time),
-        sanitise_file_name(Name,Safe),
-        temp_path(Dir),
-        format(atom(File), "~w/~w-~w", [Dir,Safe,Time]),
+    (
         (   memberchk(user(User),Options),
             memberchk(password(Pass),Options),
             http_open(Remote, In, [authorization(basic(User,Pass))])
         ->  true
             % or try with no pass..
         ;   http_open(Remote, In, []))
-    ->  open(File, write, FileBuffer),
-        copy_stream_data(In, FileBuffer),
-        close(FileBuffer)
+    ->  tmp_file_stream(text, File, Stream),
+        copy_stream_data(In, Stream),
+        close(Stream)
     ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
         throw(error(M))
     ).

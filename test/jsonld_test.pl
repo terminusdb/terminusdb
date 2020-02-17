@@ -1,14 +1,14 @@
 :- module(jsonld_test,[
               run_jsonld_tests/0
           ]).
-                 
+
 /** <module> JSON-LD Test
- * 
- * Tests of the JSON-LD libraries. The JSON-LD "@context" manipulation is 
- * relatively complex we need to have some sanity checks to make sure that 
- * things don't go too haywire. This is also complex because there are 
- * numerous equivalent forms. 
- * 
+ *
+ * Tests of the JSON-LD libraries. The JSON-LD "@context" manipulation is
+ * relatively complex we need to have some sanity checks to make sure that
+ * things don't go too haywire. This is also complex because there are
+ * numerous equivalent forms.
+ *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *
  *  This file is part of TerminusDB.                                     *
@@ -32,13 +32,15 @@
 :- use_module(test(test_utils)).
 :- use_module(library(utils)).
 :- use_module(library(jsonld)).
-:- use_module(library(http/json)). 
+:- use_module(library(http/json)).
 
 run_jsonld_tests :-
-    try(run_woql_expand).
+    debug(terminus(testing_progress(run)), 'running jsonld tests', []),
+    try(run_woql_expand),
+    debug(terminus(testing_progress(run)), 'running api tests', []).
 
-run_woql_expand :- 
-    Doc = _{'@context' : 
+run_woql_expand :-
+    Doc = _{'@context' :
             _{'@version': 1.1,
               '@base': "http://terminusdb.com/woql",
               '@vocab' : "#",
@@ -47,10 +49,10 @@ run_woql_expand :-
               'tcs' : "http://terminusdb.com/schema/tcs#",
               'v' : "http://terminusdb.com/woql/variable/",
               'select' : _{'@type' : "@id"},
-              'from' : _{'@type' : "@id"}, 
+              'from' : _{'@type' : "@id"},
               'and' : _{'@type' : "@id"},
-              'triple' : _{'@type' : "@id"},   
-              'eq' : _{'@type' : "@id"}, 
+              'triple' : _{'@type' : "@id"},
+              'eq' : _{'@type' : "@id"},
               'sub' : _{'@type' : "@id"},
               'opt' : _{'@type' : "@id"}
              },
@@ -77,4 +79,4 @@ run_woql_expand :-
                     [_{'@id':'http://terminusdb.com/woql/variable/d'},
                      _{'@id':'http://terminusdb.com/woql/variable/e'},
                      _{'@id':'http://terminusdb.com/woql/variable/f'}]}]}]}.
-    
+

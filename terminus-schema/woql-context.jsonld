@@ -12,6 +12,8 @@
   "upper" : {"@type" : "@id"},
   "lower" : {"@type" : "@id"},
   "pad" : {"@type" : "@id"},
+  "split" : {"@type" : "@id"},
+  "member" : {"@type" : "@id"},
   "sum" : {"@type" : "@id"},
   "from" : {"@type" : "@id"},
   "into" : {"@type" : "@id"},

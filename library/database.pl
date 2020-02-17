@@ -537,3 +537,30 @@ with_transaction(Options,Query_Update,Post) :-
     ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))).
+
+
+		 /*******************************
+		 *     MISSING PREDICATES       *
+		 *******************************/
+
+
+collection_directory(DB_URI,Path) :-
+    throw(error(system_error,
+      context(collection_directory(DB_URI, Path), 'collection_directory/2 does not exist'))).
+
+
+current_checkpoint_directory(A,B,C) :-
+    throw(error(system_error,
+      context(current_checkpoint_directory(A, B, C),
+              'current_checkpoint_directory/3 does not exist'))).
+
+
+graph_directory(A,B,C) :-
+    throw(error(system_error,
+      context(graph_directory(A, B, C),
+              'graph_directory/3 does not exist'))).
+
+graphs(A,B) :-
+    throw(error(system_error,
+      context(graphs(A,B), 'graphs/2 does not exist'))).
+
