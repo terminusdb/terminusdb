@@ -11,4 +11,4 @@ if [ ! -f /app/terminusdb/storage/prefix.db ]; then
 else
     /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --autologin=$AUTOLOGIN --only-config
 fi
-nohup swipl --no-tty --quiet -f "$FILE_DIR"/start.pl
+nohup swipl --no-tty --quiet -f "$FILE_DIR"/start.pl $SERVER_MODE
