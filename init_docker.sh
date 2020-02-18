@@ -12,9 +12,5 @@ else
     /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --autologin="$AUTOLOGIN" --only-config
 fi
 
-if [ "$SERVER_MODE" = "serve" ]; then 
-  nohup swipl --no-tty --quiet -f "$FILE_DIR"/start.pl "$SERVER_MODE"
-else
-  /app/terminusdb/start.pl "$SERVER_MODE"
-fi
+/app/terminusdb/start.pl "$SERVER_MODE"
 
