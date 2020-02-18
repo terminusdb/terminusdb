@@ -1,4 +1,4 @@
-FROM terminusdb/terminus_store_prolog:v0.9.1
+FROM terminusdb/terminus_store_prolog:v0.9.4
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

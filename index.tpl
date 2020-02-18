@@ -57,8 +57,12 @@
 			}
 		};
 
-		TerminusConfig.location = {server: "~s", key: "~s"};
-		
+          let server = "~s";
+          let key = "~s";
+          if (key) {
+              TerminusConfig.location = {server: server, key: key};
+          }
+
 		function loadTerminatorWhenReady(){
 			if (typeof TerminusDashboard != "undefined"){
 				initTerminator();
@@ -81,7 +85,7 @@
 			var nlocation = (TerminusConfig && TerminusConfig.location) ? TerminusConfig.location : false;
 			terminator.draw(pconfig, nlocation);
 		}
-		
+
 		loadTerminatorWhenReady();
         </script>
         </body>

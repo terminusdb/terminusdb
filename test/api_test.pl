@@ -40,6 +40,7 @@
  * Run all structured tests of the API
  */
 run_api_tests :-
+    debug(terminus(testing_progress(run)), 'running api tests', []),
     try(run_connect_test),
     try(run_bad_auth_test),
     %
@@ -68,6 +69,7 @@ run_api_tests :-
     try(run_woql_verify_update_test),
     try(run_woql_re_test),
     try(run_woql_typecast_test),
+    try(run_woql_file_upload),
     try(run_db_delete_test),
     % ) UPDATE_WOQL_CHECKING
     %
@@ -87,9 +89,11 @@ run_api_tests :-
     %try(run_woql_external_file_test),
     try(run_woql_syntax_error_test),
     try(run_woql_csv_test),
+    try(run_message_test),
     try(run_woql_instantiation_test),
     try(run_console),
-    * try(run_db_metadata_test).
+    * try(run_db_metadata_test),
+    debug(terminus(testing_progress(run)), 'completed api tests', []).
 
 /****************************************************************
  * Basic API tests
@@ -793,6 +797,46 @@ run_woql_typecast_test :-
                   _{'@type':"http://terminusdb.com/schema/xdd#decimalRange",'@value':"[1.1,2.2]"}}
                ]} :< Term.
 
+
+run_woql_file_upload :-
+    config:server(Server),
+    auth(Auth),
+
+    atomic_list_concat([Server,'/terminus/woql'], URI),
+
+    % Expand into a get from post.
+    Query =  _{get : [ [_{as : [_{'@value' : "col 2"}, "v:Col_2"]}],
+                       _{post : ["my_json_file", _{type : "panda_json"}]}
+                     ]},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+
+    atomic_list_concat(['terminus:query=',Payload,';type=application/json'], Q),
+
+    atomic_list_concat(['my_json_file=@"test/simple.json"'], Upload),
+
+    Args = ['--user', Auth,'-F',Q,'-F',Upload,'-X','POST',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{bindings:
+      [_{'http://terminusdb.com/woql/variable/Col_2':
+         _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	       '@value':"b"
+          }
+        },
+       _{'http://terminusdb.com/woql/variable/Col_2':
+         _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+	       '@value':"d"
+          }
+        }
+      ]} :< Term.
+
 /****************************************************************
  * Instance Checking Tests
  ***************************************************************/
@@ -1130,3 +1174,26 @@ run_db_metadata_test :-
     nl,json_write_dict(current_output,Term,[]),
 
     _{ '@type' : "terminus:DatabaseMetadata"} :< Term.
+
+run_message_test :-
+    config:server(Server),
+    auth(Auth),
+
+    atomic_list_concat([Server,'/message'], URI),
+
+    Message = _{'@type':"terminus:APIUpdate",
+                'terminus:message' : _{some : "Payload"}
+               },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    Args = ['--user', Auth,'-d',Payload,'-X','POST','-H','Content-Type: application/json', URI],
+
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    _{'terminus:status' : "terminus:success"} :< Term.

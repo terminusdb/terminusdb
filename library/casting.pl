@@ -98,10 +98,12 @@ typecast(Val, Type, Hint, Cast) :-
             throw(error(M))
         )
     ).
-
+typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Val) :-
+    /* It might be wise to check URI validity */
+    !.
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
-    ->  true
+    ->  !
     ;   format(atom(M),'Unable to cast as (xsd:dateTime): ~q~n',
                [Val]),
         term_jsonld(Val,JVal),
@@ -111,7 +113,7 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) 
     ).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
-    ->  true
+    ->  !
     ;   format(atom(M),'Unable to cast as (xsd:integer): ~q~n',
                [Val]),
         term_jsonld(Val,JVal),

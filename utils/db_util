@@ -92,6 +92,12 @@ opt_spec([[opt(help),
            default(false),
            help('Only generate config file, not database')],
 
+          [opt(autologin),
+           type(boolean),
+           longflags(['autologin']),
+           default(false),
+           help('Automatically login on generated HTML for terminus-console.')],
+
           [opt(server),
            type(atom),
            shortflags([s]),
@@ -308,7 +314,11 @@ main(Args) :-
             copy_file(Example_Registry_Path, Registry_Path)
         ),
 
-        initialize_index(PUBLIC_URL, Dir, Key),
+        memberchk(autologin(AutoLogin), Opts),
+        (   AutoLogin
+        ->  initialize_index(PUBLIC_URL, Dir, Key)
+        ;   initialize_index(PUBLIC_URL, Dir, "")
+        ),
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(PUBLIC_URL, Key, Dir)

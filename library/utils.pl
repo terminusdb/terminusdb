@@ -21,6 +21,7 @@
               mapm/6,
               trim/2,
               split_atom/3,
+              pattern_string_split/3,
               count/3,
               merge_dictionaries/3,
               command/1,
@@ -361,6 +362,13 @@ split_atom(Atom,Delimiter,Result) :-
 
 
 /*
+ * pattern_string_split(Pattern,String,List) is det.
+ */
+pattern_string_split(Pattern,String,List) :-
+    re_split(Pattern,String,L),
+    once(intersperse(_,List,L)).
+
+/*
  * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.
  *
  * Monadic fold over state
@@ -439,23 +447,6 @@ command(Cmd) :-
             process_wait(PID,_Status)),
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
-
-
-/*
- * debug(+Topic, +Stream, +Format, :Args) is det.
- *
- * Format a message if debug topic is enabled. Similar to format/3.
- *
- * This is debug/3 with a specified stream.
- */
-/*
-debug(Topic, Format, Args) :-
-    debugging(Topic, true, To),
-    !,
-    print_debug(Topic, To, Format, Args).
-debug(_, _, _).
-*/
-
 
 /*
  * coerce_literal_string(+S_or_L, -S) is det.
