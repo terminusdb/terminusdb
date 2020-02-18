@@ -139,6 +139,11 @@ prolog:message(server_missing_config(BasePath)) -->
 % Plugins
 %:- use_module(plugins(registry)).
 
+:- on_signal(hup, _, hup).
+
+hup(_Signal) :-
+  thread_send_message(main, stop).
+
 main(Argv) :-
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
@@ -152,7 +157,10 @@ main(Argv) :-
     initialise_log_settings,
     debug(terminus(main), 'initialise_log_settings completed', []),
     server(Argv),
-    (   Argv == [test]
-    ->  run_tests
-    ;   true
-    ).
+    run(Argv).
+
+run([test]) :-
+  run_tests.
+run([serve]) :-
+  thread_get_message(stop).
+run(_).

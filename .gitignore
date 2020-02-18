@@ -12,3 +12,5 @@ transcript.pl
 index.html
 config/
 storage/
+nohup.out
+plugins/registry.pl
