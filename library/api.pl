@@ -338,6 +338,12 @@ message_handler(get,Request) :-
     ),
 
     http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+
     reply_json(_{'terminus:status' : 'terminus:success'}).
 message_handler(post,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
@@ -354,6 +360,7 @@ message_handler(post,R) :-
     terminus_database_name(Collection),
     connect(Collection,DB),
     write_cors_headers(SURI, DB),
+
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 /**
