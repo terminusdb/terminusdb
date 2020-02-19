@@ -12,5 +12,9 @@ else
     /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --autologin="$AUTOLOGIN" --only-config
 fi
 
+echo "SERVER_MODE $SERVER_MODE"
+echo "SERVER_NAME $SERVER_NAME"
+echo "PUBLIC_URL $PUBLIC_URL"
+echo "AUTO_LOGIN $AUTOLOGIN"
 /app/terminusdb/start.pl "$SERVER_MODE"
 
