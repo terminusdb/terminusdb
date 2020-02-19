@@ -122,6 +122,8 @@ Robin de Rooij <robin@datachemist.com>
 
 Anne Ogborn <annie@datachemist.com>
 
+Dmytri Kleiner <dk@datachemist.com>
+
 [Paulo Moura](https://github.com/pmoura)
 
 Put your Name here by contributing!
