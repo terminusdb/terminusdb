@@ -92,11 +92,17 @@ opt_spec([[opt(help),
            default(false),
            help('Only generate config file, not database')],
 
+          [opt(autoattach),
+           type(boolean),
+           longflags(['autoattach']),
+           default(true),
+           help('Automatically attach console to server on same host')],
+
           [opt(autologin),
            type(boolean),
            longflags(['autologin']),
            default(false),
-           help('Automatically login on generated HTML for terminus-console.')],
+           help('Automatically login to console.')],
 
           [opt(server),
            type(atom),
@@ -185,6 +191,18 @@ config_path(Dir,Path) :-
 config_template_path(Dir,Path) :-
     atomic_list_concat([Dir, '/config-template.tpl'], Path).
 
+index_url(PublicUrl, PublicUrl, Opts) :-
+    memberchk(autoattach(AutoAttach), Opts),
+    AutoAttach,
+    !.
+index_url(_, "", _).
+
+index_key(Key, Key, Opts) :-
+    memberchk(autologin(AutoLogin), Opts),
+    AutoLogin,
+    !.
+index_key(_, "", _).
+
 index_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/index.html'], Path).
 
@@ -262,10 +280,13 @@ initialize_database(Public_URL, Key, Dir) :-
     create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),
     format('Successfully updated admin key!!~n').
 
-initialize_index(URL, Dir, Password) :-
-    index_template_path(Dir, Index_Tpl_Path),
-    index_path(Dir,Index_Path),
-    write_index_file(Index_Tpl_Path, Index_Path, URL, Password).
+
+initialize_index(Url, Dir, Key, Opts) :-
+    index_key(Key, Password, Opts),
+    index_url(Url, PublicUrl, Opts),
+    index_template_path(Dir, IndexTplPath),
+    index_path(Dir,IndexPath),
+    write_index_file(IndexTplPath, IndexPath, PublicUrl, Password).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -314,11 +335,7 @@ main(Args) :-
             copy_file(Example_Registry_Path, Registry_Path)
         ),
 
-        memberchk(autologin(AutoLogin), Opts),
-        (   AutoLogin
-        ->  initialize_index(PUBLIC_URL, Dir, Key)
-        ;   initialize_index(PUBLIC_URL, Dir, "")
-        ),
+        initialize_index(PUBLIC_URL, Dir, Key, Opts),
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(PUBLIC_URL, Key, Dir)
