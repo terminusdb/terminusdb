@@ -57,11 +57,14 @@
 			}
 		};
 
-          let server = "~s";
-          let key = "~s";
-          if (key) {
-              TerminusConfig.location = {server: server, key: key};
-          }
+		let server = "~s";
+    let key = "~s";
+    if (server) {
+      TerminusConfig.attach_server = server;
+    }
+    if (key) {
+      TerminusConfig.location = {server: server, key: key};
+    }
 
 		function loadTerminatorWhenReady(){
 			if (typeof TerminusDashboard != "undefined"){
