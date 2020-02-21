@@ -87,6 +87,7 @@ directly through clients you should look at the documentation on our
 * Better date handling in WOQL
 * Improved type casting in WOQL
 * Improvements to query processing speed
+* We now have decoupled public URI from internal database URI
 
 ## Future
 
@@ -111,6 +112,8 @@ Matthijs van Otterdijk <matthijs@datachemist.com>
 Robin de Rooij <robin@datachemist.com>
 
 Anne Ogborn <annie@datachemist.com>
+
+Dmytri Kleiner <dk@datachemist.com>
 
 [Paulo Moura](https://github.com/pmoura)
 
