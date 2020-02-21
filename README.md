@@ -18,11 +18,14 @@ graph representation designed specifically for the web-age.
 
 Terminus Server provides TerminusDB with a RESTful API for interacting
 with knowledge graphs via the JSON-LD exchange format. This means you
-can easily string together applications within your own toolchain
-which utilise the powerful features of graph search and graph storage.
+can easily compose applications within your own toolchain which
+utilise the powerful features of graph search and graph storage.
 
 We use an advanced git-like model storing append only changes to
-graphs represented in concise datastructures using [terminus-store](https://github.com/terminusdb/terminus-store).
+graphs represented in concise datastructures using
+[terminus-store](https://github.com/terminusdb/terminus-store). You
+can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](https://github.com/terminusdb/terminusdb-knowledge/blob/master/succinct-data-structures-whitepaper/terminusdb.pdf)
+whitepaper.
 
 ## Latest Version
 
