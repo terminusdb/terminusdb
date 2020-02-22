@@ -81,6 +81,34 @@ test_schema(invalid_RDFS_property_SC).
  */
 
 /*
+ * schema_validation_skippable(+Update_DB, +Schema, +Layer)
+ *
+ * Checks whether the DB should be fully checked after a schema change.
+ * Should be validated if triples are deleted in the schema or when a
+ * constraint has been added.
+ */
+schema_validation_skippable(Update_DB, Schema, Layer) :-
+    forall((xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
+            \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
+           schema_triple_deletion_no_check(A_Old, B_Old, C_Old)
+    ),
+    forall((xrdf_db(Layer,A_New,B_New,C_New),
+             \+ xrdf(Update_DB,[Schema], A_New, B_New, C_New)),
+           schema_triple_addition_no_check(A_New, B_New, C_New)
+    ).
+
+schema_triple_addition_no_check(_, _, 'http://www.w3.org/2002/07/owl#Restriction'):-
+    !,
+    false.
+schema_triple_addition_no_check(_, _, _):-
+    !,
+    true.
+
+schema_triple_deletion_no_check(_, _, _):-
+    false.
+
+
+/*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
  *
  * Updates a schema using a turtle formatted stream.
@@ -146,11 +174,14 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                     % Winning!
                 ;   % TODO: We do not need to perform a global check of instances
                     % Better would be a local check derived from schema delta.
-                    findall(Witness,
-                            (   database_instance(Post_DB, Instance),
-                                xrdf(Post_DB,Instance,E,F,G),
-                                refute_insertion(Post_DB,E,F,G,Witness)),
-                            Witnesses)
+                    (    schema_validation_skippable(Update_DB, Schema, Layer)
+                    ->   true
+                    ;    findall(Witness,
+                              (   database_instance(Post_DB, Instance),
+                                  xrdf(Post_DB,Instance,E,F,G),
+                                  refute_insertion(Post_DB,E,F,G,Witness)),
+                              Witnesses)
+                    )
 
                 )
             ),
