@@ -101,7 +101,6 @@ should be available by the end of February 2020.
 
 * Improve error handling and logging
 * Convert frames into valid JSON-LD
-* Convert WOQL queries to be querable JSON-LD
 
 ## Contact
 
