@@ -38,7 +38,7 @@
  */
 guess_date(Val,literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Date))) :-
     atom_codes(Val,Codes),
-    phrase(guess_date(Date),Codes).
+    once(phrase(guess_date(Date),Codes)).
 
 guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',Val))) :-
     integer(Val),

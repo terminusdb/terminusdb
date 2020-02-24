@@ -41,6 +41,9 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 
+% multipart
+:- use_module(library(http/http_multipart_plugin)).
+
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
@@ -79,6 +82,9 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
+% Time travel
+:- use_module(time_travel).
+
 :- use_module(prefixes).
 :- use_module(sdk).
 
@@ -96,6 +102,9 @@ http:location(root, '/', []).
 :- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
+:- http_handler(root(message), cors_catch(message_handler(Method)),
+                [method(Method),
+                 methods([options,get,post])]).
 % Deprecated!
 :- http_handler(root(dashboard), cors_catch(console_handler(Method)),
                 [method(Method),
@@ -135,8 +144,7 @@ cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
           (   cors_enable,
-              http_log_stream(Log),
-              format(Log,'Error: ~q~n',[E]),
+              http_log('~N[Error] ~q~n',[E]),
               customise_error(E)
           )
          ),
@@ -149,19 +157,22 @@ cors_catch(_,_Request) :-
                [status(400)]).
 
 customise_error(syntax_error(M)) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(syntax_error(M),_)) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(syntax_error(M))) :-
+    format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                           'vio:literal' : M}]},
+                                           'vio:literal' : OM}]},
                [status(400)]).
 customise_error(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
@@ -231,8 +242,6 @@ authenticate(Request, DB, Auth) :-
                                      'terminus:message' : 'Not a valid key'})))).
 
 verify_access(Auth, DB, Action, Scope) :-
-    * http_log_stream(Log),
-    * format(Log,'Goal: ~q~n',[auth_action_scope(Auth, Action, Scope)]),
     (   auth_action_scope(Auth, DB, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
@@ -263,9 +272,6 @@ connection_authorised_user(Request, User, SURI, DB) :-
  */
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
-
-    http_log_stream(Log),
-    format(Log,'~nWitnesses~qn',[Witnesses]),
 
     (   Witnesses = []
     ->  reply_json(_{'terminus:status' : 'terminus:success'})
@@ -314,6 +320,49 @@ console_handler(get,_Request) :-
     format('~n'),
     write(String).
 
+/*
+ * message_handler(+Method,+Request) is det.
+ */
+message_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+message_handler(get,Request) :-
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+message_handler(post,R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+
 /**
  * db_handler(Request:http_request,Method:atom,DB:atom) is det.
  */
@@ -326,31 +375,15 @@ db_handler(options,_DB,_Request) :-
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-
-    http_log_stream(Log),
-    format(Log,'About to authenticate~n',[]),
-
     terminus_database_name(Collection),
     connect(Collection,DBC),
     /* POST: Create database */
     authenticate(Request, DBC, Auth),
-
-    format(Log,'Authenticaticated~n',[]),
-
     config:public_server_url(Server),
-
     verify_access(Auth,DBC,terminus/create_database,Server),
-
-    format(Log,'Access verified~n',[]),
-
     try_get_param('terminus:document',Request,Doc),
-
-    format(Log,'Doc ~q~n',[Doc]),
-
+    try_db_uri(DB,DB_URI),
     try_create_db(DB,DB_URI,Doc),
-
-    format(Log,'Database Constructed ~q~n',[DB]),
-
     write_cors_headers(Server, DBC),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
@@ -370,9 +403,11 @@ db_handler(delete,DB,Request) :-
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
-/**
- * woql_handler(+Request:http_request) is det.
- */
+% ! woql_handler(+Method:atom, +DB:database, +Request:http_request) is
+% det
+%
+%  @TBD  somebody who knows this code please fill this in
+%
 woql_handler(options,_DB,_Request) :-
     config:public_server_url(SURI),
     terminus_database_name(Collection),
@@ -380,6 +415,28 @@ woql_handler(options,_DB,_Request) :-
     write_cors_headers(SURI, DBC),
     format('~n').
 woql_handler(get,DB,Request) :-
+    % Should test for read-only query here.
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, DBC, Auth),
+    try_db_uri(DB,DB_URI),
+    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+    try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
+    atom_json_dict(Atom_Query, Query, []),
+
+    http_log('~N[Query] ~s~n',[Atom_Query]),
+
+    connect(DB_URI,New_Ctx),
+    run_query(Query,New_Ctx,JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json(JSON).
+woql_handler(post,DB,R) :-
+    add_payload_to_request(R,Request),
+
     terminus_database_name(Collection),
     connect(Collection,DBC),
     % Actually we need to pull the query from the request, process it
@@ -393,30 +450,24 @@ woql_handler(get,DB,Request) :-
     try_get_param('terminus:query',Request,Atom_Query),
     atom_json_dict(Atom_Query, Query, []),
 
-    http_log_stream(Log),
-
-    format(Log,'Query: ~q~n',[Query]),
+    http_log('~N[Query] ~s~n',[Atom_Query]),
 
     connect(DB_URI,New_Ctx),
 
-    run_query(Query,New_Ctx,JSON),
+    collect_posted_files(Request,Files),
+    Ctx = [files=Files|New_Ctx],
 
-    * format(Log,'JSON: ~q~n',[JSON]),
-
-    format(atom(Q),'~q',[Query]),
-    format(atom(J),'~q',[JSON]),
-    md5_hash(Q,Q_Hash,[]),
-    md5_hash(J,J_Hash,[]),
-
-    format(Log,'~q-~q~n',[Q_Hash,J_Hash]),
+    (   run_query(Query,Ctx,JSON)
+    ->  true
+    ;   JSON = _{bindings : []}),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, DBC),
-    reply_json(JSON).
+    reply_json_dict(JSON).
 
-/**
- * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
- */
+%!  document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det
+%
+%
 document_handler(options,DB,_Doc_ID,_Request) :-
     terminus_database_name(Collection),
     connect(Collection,DBC),
@@ -443,16 +494,13 @@ document_handler(get, DB, Doc_ID, Request) :-
     % This feels a bit ugly... but perhaps not
     (   get_param('terminus:encoding',Request,'terminus:frame')
     ->  try_get_filled_frame(Doc_URI,Database,JSON),
-        %http_log_stream(Log),
-        %format(Log, 'Writing Frame JSON-LD:', []),
+        %http_log('Writing Frame JSON-LD:', []),
         %json_write_dict(Log,JSON),
         true
-    ;   try_get_document(Doc_URI,Database,JSON)),
-
+    ;   try_get_document(Doc_URI,Database,JSON)
+    ),
     write_cors_headers(DB_URI, DBC),
-
-    reply_json(JSON).
-
+    reply_json_dict(JSON).
 document_handler(post, DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
 
@@ -755,7 +803,18 @@ try_db_graph(DB_URI,Database) :-
 /*
  * try_get_param(Key,Request:request,Value) is det.
  *
+ * Get a parameter from the request independent of request variety.
  */
+try_get_param(Key,Request,Value) :-
+    % GET or POST (but not application/json)
+    memberchk(method(post), Request),
+    memberchk(multipart(Parts), Request),
+    !,
+    (   memberchk(Key=Encoded_Value, Parts)
+    ->  uri_encoded(query_value, Value, Encoded_Value)
+    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Parts]),
+        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : MSG})))).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
@@ -849,9 +908,7 @@ try_create_db(DB,Doc) :-
                 throw(http_reply(not_found(_{'terminus:message' : MSG,
                                              'terminus:status' : 'terminus:failure'})))),
 
-            (   http_log_stream(Log),
-                format(Log,'~n~q~n',[create_db(DB)]),
-                terminus_database_name(Collection),
+            (   terminus_database_name(Collection),
                 connect(Collection,Terminus_DB),
                 create_db(Terminus_DB, DB)
             ->  true
@@ -907,13 +964,46 @@ try_atom_json(Atom,JSON) :-
  * This should really be done automatically at request time
  * using the endpoint wrappers so we don't forget to do it.
  */
+add_payload_to_request(Request,[multipart(Parts)|Request]) :-
+    memberchk(method(post), Request),
+    memberchk(content_type(ContentType), Request),
+    http_parse_header_value(
+        content_type, ContentType,
+        media(multipart/'form-data', _)
+    ),
+    !,
+
+    http_read_data(Request, Parts, [on_filename(save_post_file)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     member(method(post), Request),
     member(content_type('application/json'), Request),
     !,
-
     http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,Request).
+
+/*
+ * save_post_file(In,File_Spec,Options) is det.
+ *
+ * Saves a temporary octet stream to a file. Used for multipart
+ * file passing via POST.
+ */
+save_post_file(In, file(Filename, File), Options) :-
+    option(filename(Filename), Options),
+    setup_call_cleanup(
+        tmp_file_stream(octet, File, Out),
+        copy_stream_data(In, Out),
+        close(Out)
+    ).
+
+/*
+ * Make a collection of all posted files for
+ * use in a Context via WOQL's get/3.
+ */
+collect_posted_files(Request,Files) :-
+    memberchk(multipart(Parts), Request),
+    !,
+    include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
+collect_posted_files(_Request,[]).
 
 /*
  * try_class_frame(Class,Database,Frame) is det.

@@ -99,7 +99,12 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#update' : [ Doc ] } :< JSON
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
-    ->  WOQL = delete_object(Doc)
+    ->  (   _{'@id' : ID} :< Doc
+        ->   WOQL = delete_object(ID)
+        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'No ID specified in deleted object',
+                                         'vio:query' : JSON})))
+        )
     ;   _{'http://terminusdb.com/woql#with' : [ Graph, Path, Query] } :< JSON
     ->  json_to_woql_ast(Graph,WGraph),
         json_to_woql_ast(Path,WPath),
@@ -176,6 +181,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = file(File)
     ;   _{'http://terminusdb.com/woql#file' : [ File, Dict] } :< JSON
     ->  WOQL = file(File,Dict)
+    ;   _{'http://terminusdb.com/woql#post' : [ File ] } :< JSON
+    ->  WOQL = post(File)
+    ;   _{'http://terminusdb.com/woql#post' : [ File, Dict] } :< JSON
+    ->  WOQL = post(File,Dict)
     ;   _{'http://terminusdb.com/woql#unique' : [ Base, Q, Hash] } :< JSON
     ->  json_to_woql_ast(Base,WBase),
         json_to_woql_ast(Q,WQ),
@@ -212,6 +221,15 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(N,WN),
         json_to_woql_ast(V,WV),
         WOQL = pad(WS,WC,WN,WV)
+    ;   _{'http://terminusdb.com/woql#split' : [ S, P, L ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(P,WP),
+        json_to_woql_ast(L,WL),
+        WOQL = split(WS,WP,WL)
+    ;   _{'http://terminusdb.com/woql#member' : [ S, L ] } :< JSON
+    ->  json_to_woql_ast(S,WS),
+        json_to_woql_ast(L,WL),
+        WOQL = member(WS,WL)
     ;   _{'http://terminusdb.com/woql#concat' : [ List, Value ] } :< JSON
     ->  json_to_woql_ast(List,WList),
         json_to_woql_ast(Value,WValue),
@@ -273,6 +291,15 @@ json_to_woql_ast(JSON,WOQL) :-
         ->  atom_string(WA,WS),
             json_to_woql_ast(V,WV),
             WOQL = as(WA,WV)
+        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'No source column specified',
+                                         'vio:query' : JSON}))))
+    ;   _{'http://terminusdb.com/woql#as' : [ S, V, T ] } :< JSON
+    ->  (   _{'@value' : WS} :< S
+        ->  atom_string(WA,WS),
+            json_to_woql_ast(V,WV),
+            json_to_woql_ast(T,WT),
+            WOQL = as(WA,WV,WT)
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                          'terminus:message' :'No source column specified',
                                          'vio:query' : JSON}))))

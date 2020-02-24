@@ -72,6 +72,16 @@
 :- op(2, xfx, ^^).
 
 /*
+ * terminus_repository_schema(Schema) is det.
+ *
+ * Returns the name of the repository schema
+ */
+terminus_repository_schema(Schema) :-
+    db_path(Path),
+    www_form_encode('terminus-repository-schema',Safe_GID),
+    interpolate([Path,Safe_GID,'.label'],Label)
+
+/*
  * database_repository(+DB_Name,-Repo_Obj) is det.
  *
  * This takes a database name and returns a repository
@@ -85,12 +95,16 @@ database_repository(DB_Name,
                     Repository_Name,
                     repository{ database_name : DB_Name,
                                 repository_name : Repository_Name,
-                                schema : [S],
-                                instance : [L]}
+                                schema : [SL],
+                                inference : [],
+                                instance : [IL]}
                    ) :-
     storage(Store),
-    safe_open_named_graph(Store,DB_Name,Obj),
-    head(Obj, L).
+    terminus_repository_schema(Schema),
+    safe_open_named_graph(Store,Schema,Schema_Obj),
+    safe_open_named_graph(Store,DB_Name,Instance_Obj),
+    head(Schema_Obj, SL),
+    head(Instance_Obj, IL).
 
 database_repository(DB_Name, Repository) :-
     database_repository(DB_Name, local, Repository).
@@ -585,3 +599,30 @@ with_transaction(Options,Query_Update,Post) :-
     ;   format(string(MSG), "Unable to run post_condition: ~q", [Post]),
         throw(http_reply(not_acceptable(_{'terminus:status' : 'terminus:error',
                                          'terminus:message' : MSG})))).
+
+
+		 /*******************************
+		 *     MISSING PREDICATES       *
+		 *******************************/
+
+
+collection_directory(DB_URI,Path) :-
+    throw(error(system_error,
+      context(collection_directory(DB_URI, Path), 'collection_directory/2 does not exist'))).
+
+
+current_checkpoint_directory(A,B,C) :-
+    throw(error(system_error,
+      context(current_checkpoint_directory(A, B, C),
+              'current_checkpoint_directory/3 does not exist'))).
+
+
+graph_directory(A,B,C) :-
+    throw(error(system_error,
+      context(graph_directory(A, B, C),
+              'graph_directory/3 does not exist'))).
+
+graphs(A,B) :-
+    throw(error(system_error,
+      context(graphs(A,B), 'graphs/2 does not exist'))).
+

@@ -72,7 +72,7 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
     ).
 
 /**
- * instance_class(?X:uri, ?C:uri, +Database:database is nondet.
+ * instance_class(?X:uri, ?C:uri, +Database:database) is nondet.
  *
  * Determines the class C identified with the instance X.
  */
@@ -1225,3 +1225,14 @@ refute_basetype_elt(X,'http://www.w3.org/2000/01/rdf-schema#anySimpleType',Reaso
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:anySimpleType'}
                  }
     ).
+
+
+
+		 /*******************************
+		 *  MISSING PREDICATES          *
+		 *******************************/
+
+strictSubsumptionOf(A,B,C) :-
+    throw(error(system_error,
+      context(strictSubsumptionOf(A, B, C),
+              'strictSubsumptionOf/3 does not exist'))).

@@ -2,7 +2,6 @@
 <html lang="en">
 	<head>
 	    <meta charset="utf-8">
-            <base href="https://terminusdb.github.io/terminus-dashboard/dist/" target="_blank">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 	    <title>Terminus DB Management Dashboard</title>
 		<link rel="shortcut icon" type="image/png" href="https://terminusdb.com/t/favicon.png"/>
@@ -60,10 +59,13 @@
 
 		let server = "~s";
     let key = "~s";
+    if (server) {
+      TerminusConfig.attach_server = server;
+    }
     if (key) {
       TerminusConfig.location = {server: server, key: key};
     }
-		
+
 		function loadTerminatorWhenReady(){
 			if (typeof TerminusDashboard != "undefined"){
 				initTerminator();
@@ -86,7 +88,7 @@
 			var nlocation = (TerminusConfig && TerminusConfig.location) ? TerminusConfig.location : false;
 			terminator.draw(pconfig, nlocation);
 		}
-		
+
 		loadTerminatorWhenReady();
         </script>
         </body>

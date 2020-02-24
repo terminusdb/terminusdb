@@ -80,7 +80,7 @@ ask(Server,Pre_Term) :-
     select(bindings=_,Server,
            bindings=Bindings_Out,New_Ctx),
     compile_query(Term,Prog,New_Ctx,_),
-    debug(sdk,'Program: ~q~n', [Prog]),
+    debug(terminus(sdk),'Program: ~q~n', [Prog]),
     woql_compile:Prog.
 
 ask(Pre_Term) :-
