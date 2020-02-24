@@ -88,6 +88,8 @@ test_schema(invalid_RDFS_property_SC).
  * constraint has been added.
  */
 schema_validation_skippable(Update_DB, Schema, Layer) :-
+    \+ xrdf(Update_DB, [Schema], _, _, 'http://www.w3.org/2002/07/owl#Restriction'),
+    !,
     forall((xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
             \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
            schema_triple_deletion_no_check(A_Old, B_Old, C_Old)
