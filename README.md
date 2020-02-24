@@ -106,6 +106,10 @@ should be available by the end of February 2020.
 
 You can write the authors, or connect to us on FreeNode IRC on the `#TerminusDB` channel.
 
+### Vulnerabilities
+
+Please report security vulnerabilities to <security@datachemist.com>.
+
 ## Authors
 
 Gavin Mendel-Gleason <gavin@datachemist.com>
