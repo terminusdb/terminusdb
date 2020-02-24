@@ -72,6 +72,58 @@
 :- op(2, xfx, ^^).
 
 /*
+ * Types:
+ *
+ * graph_descriptor --> named_graph{ name : atom } | ref_graph{ name : atom }
+ *
+ * A named_graph refers to a file in the store - this has to be made unique so we don't get
+ * collisions between different databases. Currently only used for the terminus and database graph
+ * - one per repository. This uses the file label mechanism.
+ *
+ * A ref_graph resolves a layer id to a graph.
+ *
+ * database_desctiptor --> terminus_descriptor{ schema : list(graph_descriptor)
+ *                                              instance : list(graph_descriptor)
+ *                                              inference : list(graph_descriptor)
+ *                       | database_descriptor{ database_name : atom,
+ *                                              schema : list(graph_descriptor)
+ *                                              instance : list(graph_descriptor)
+ *                                              inference : list(graph_descriptor)}
+ *                       | repository_descriptor{ database_name : atom,
+ *                                                repository_name : atom,
+ *                                                schema : list(graph_descriptor)
+ *                                                instance : list(graph_descriptor)
+ *                                                inference : list(graph_descriptor)}
+ *                       | branch_descriptor{ database_name : atom,
+ *                                            repository_name : atom,
+ *                                            branch_name : atom,
+ *                                            schema : list(graph_descriptor)
+ *                                            instance : list(graph_descriptor)
+ *                                            inference : list(graph_descriptor)}
+ *
+ * terminus_descriptor: refers to the core database with user and database management.
+ * This database refers to the various database descriptors which can be opened "by name"
+ * using the label mechanism.
+ *
+ * database_descriptor: is a per database graph collections that store information about all
+ * local and remotes which exist
+ *
+ * repository descriptors: is used to refer to the branchs that exist in a given repository.
+ *
+ * branch_descriptors: refers to the precise graph collection which is a 'normal' database
+ * object used in WOQL.
+ *
+ * Transaction management requires that we advance a file system label associated with the
+ * repository descriptor when we have performed a full transaction. All other multi-graph
+ * management is done within the graphs associated with the repository descriptor.
+ *
+ * The type polymorphism is designed to allow WOQL read transactions to work identically over
+ * all of these cases. However, *write* transactions have to be done differently on each of
+ * these by case, however triple writes can be done identically.
+ */
+
+
+/*
  * terminus_repository_schema(Schema) is det.
  *
  * Returns the name of the repository schema
@@ -79,7 +131,78 @@
 terminus_repository_schema(Schema) :-
     db_path(Path),
     www_form_encode('terminus-repository-schema',Safe_GID),
-    interpolate([Path,Safe_GID,'.label'],Label)
+    interpolate([Path,Safe_GID,'.label'],Label).
+
+/*
+ * open_read_obj(Graph_Descriptor, Layer) is det.
+ *
+ * named_graph{ name : _ }
+ *
+ * layer_graph{ layer : _ }
+ */
+open_read_obj(graph{ name : Name }, Layer) :-
+    storage(Store),
+    safe_open_named_graph(Store,G,Obj),
+    head_obj(Obj,Layer).
+open_read_obj(graph{ ref : Ref }, Layer) :-
+    storage(Store),
+    % TODO: Need to actually make this exist.
+    open_ref_graph(Store,G,Obj),
+    head_obj(Obj,Layer).
+
+/*
+ * descriptor_read_obj(Descriptor, Write_Mask, Read_Mask, Read_Obj) is det.
+ *
+ * Impements the logic which allows us to special-case the
+ * opening of descriptors for repository, branch and graph.
+ *
+ * @Descriptor has type repository{ ... } | branch{ ... }
+ * @Write_Mask has type list(descriptor)
+ *             This opens read queryes  for No mask means everything is opened
+ */
+descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
+    Repository = database{ database_name : DB_Name,
+                           schema : [SL],
+                           inference : [],
+                           instance : [IL]},
+    !,
+    maplist([S,read_object(descriptor : S, layer : L}]
+            >>(member(S, Read_Mask)
+                open_read_obj(S, L)), SL, Schema_Read_Objects),
+    maplist([I,read_object(descriptor : I, layer : L}]
+            >>(open_read_obj(I, L)), IL, Instance_Read_Objects),
+    query_obj{ instance_read_objects : Instance_Read_Objects,
+               schema_read_objects : Schema_Read_Objects,
+               inference_read_objects : [],
+               instance_write_objects : [],
+               inference_write_objects : [],
+               schema_write_objects : [] }
+    true.
+descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
+    Repository = repository{ database_name : DB_Name,
+                             repository_name : Repository_Name,
+                             schema : [SL],
+                             inference : [],
+                             instance : [IL]},
+    !,
+    maplist([S,L]>>(open_read_obj(S, L)), SL, Schema_Read_Objects),
+    maplist([I,L]>>(open_read_obj(I, L)), IL, Instance_Read_Objects),
+    query_obj{ instance_read_objects : Instance_Read_Objects,
+               schema_read_objects : Schema_Read_Objects,
+               inference_read_objects : [],
+               instance_write_objects : [],
+               inference_write_objects : [],
+               schema_write_objects : [] }
+    true.
+descriptor_query(Branch, Read_Mask, Write_Mask, Query_Obj) :-
+    Branch = branch{ database_name : DB_Name,
+                     repository_name : Repository_Name,
+                     branch_name : Branch_Name,
+                     schema : Schema_List,
+                     inference : Inf_List,
+                     instance : Instance_List },
+    !,
+    true. 
 
 /*
  * database_repository(+DB_Name,-Repo_Obj) is det.
@@ -119,7 +242,9 @@ database_repository(DB_Name, Repository) :-
  */
 repository_branch(repository{ database_name : _,
                               repository_name : _,
-                              graph : L }, Branch_Name,
+                              instance : LI,
+                              inference : LInf,
+                              instance : []}, Branch_Name,
                   branch{
                       database_name : _,
                       repository_name : _,
