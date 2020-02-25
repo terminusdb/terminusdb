@@ -74,32 +74,28 @@
 /*
  * Types:
  *
- * graph_descriptor --> named_graph{ name : atom } | ref_graph{ name : atom }
+ * graph_descriptor --> named_graph{ name : atom }
+ *                    | ref_graph{ layer_id : atom }
  *
  * A named_graph refers to a file in the store - this has to be made unique so we don't get
  * collisions between different databases. Currently only used for the terminus and database graph
  * - one per repository. This uses the file label mechanism.
  *
- * A ref_graph resolves a layer id to a graph.
+ * A ref_graph is a layer id that can be resolved to a graph.
  *
- * database_desctiptor --> terminus_descriptor{ schema : list(graph_descriptor)
- *                                              instance : list(graph_descriptor)
- *                                              inference : list(graph_descriptor)
- *                       | database_descriptor{ database_name : atom,
- *                                              schema : list(graph_descriptor)
- *                                              instance : list(graph_descriptor)
- *                                              inference : list(graph_descriptor)}
- *                       | repository_descriptor{ database_name : atom,
- *                                                repository_name : atom,
- *                                                schema : list(graph_descriptor)
- *                                                instance : list(graph_descriptor)
- *                                                inference : list(graph_descriptor)}
- *                       | branch_descriptor{ database_name : atom,
- *                                            repository_name : atom,
- *                                            branch_name : atom,
- *                                            schema : list(graph_descriptor)
- *                                            instance : list(graph_descriptor)
- *                                            inference : list(graph_descriptor)}
+ * collection_descriptor --> terminus_descriptor
+ *                         | database_descriptor{ database_name : atom,
+ *                                                instance : list(graph_descriptor)}
+ *                         | repository_descriptor{ database_descriptor : database_descriptor,
+ *                                                  repository_layer : layer,
+ *                                                  repository_name : atom,
+ *                                                  instance : list(graph_descriptor)}
+ *                         | ref_descriptor{ repository_descriptor: repository_descriptor,
+ *                                           ref_layer : layer,
+ *                                           ref_name : atom,
+ *                                           schema : list(graph_descriptor)
+ *                                           instance : list(graph_descriptor)
+ *                                           inference : list(graph_descriptor)}
  *
  * terminus_descriptor: refers to the core database with user and database management.
  * This database refers to the various database descriptors which can be opened "by name"
@@ -119,7 +115,21 @@
  *
  * The type polymorphism is designed to allow WOQL read transactions to work identically over
  * all of these cases. However, *write* transactions have to be done differently on each of
- * these by case, however triple writes can be done identically.
+ * these by case, though triple writes can be done identically.
+ *
+ * read_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer}
+ * write_obj ---> write_obj{ descriptor : graph_descriptor, write : Layer_Builder}
+ * query_object ---> query_object{ collection_descriptor : collection_descriptor,
+ *                                 instance_read_objects : list(read_obj),
+ *                                 schema_read_objects : list(read_obj),
+ *                                 inference_read_objects : list(read_obj),
+ *                                 instance_write_objects : list(write_obj),
+ *                                 schema_write_objects : list(read_obj),
+ *                                 inference_write_objects : list(read_obj) }
+ *
+ * transaction_object ---> transaction_object{ collection_descriptors : list(collection_descriptor),
+ *                                             query_objs : list(query_objs),
+ *                                             post_objs : list(query_objs) }
  */
 
 
@@ -133,76 +143,145 @@ terminus_repository_schema(Schema) :-
     www_form_encode('terminus-repository-schema',Safe_GID),
     interpolate([Path,Safe_GID,'.label'],Label).
 
-/*
- * open_read_obj(Graph_Descriptor, Layer) is det.
+/**
+ * open_read_obj(Graph_Descriptor : graph_descriptor, Read_Object : read_object) is det.
  *
- * named_graph{ name : _ }
- *
- * layer_graph{ layer : _ }
+ * opens a graph descriptor with a querable read object.
  */
-open_read_obj(graph{ name : Name }, Layer) :-
+open_read_obj(Graph, read_obj{ descriptor : Graph, read : Layer }) :-
+    Graph = named_graph{ name : Name },
     storage(Store),
-    safe_open_named_graph(Store,G,Obj),
-    head_obj(Obj,Layer).
-open_read_obj(graph{ ref : Ref }, Layer) :-
+    safe_open_named_graph(Store,Name,Obj),
+    head(Obj,Layer).
+open_read_obj(Graph, read_obj{ descriptor : Graph, read : Layer }) :-
+    Graph = ref_graph{ layer_id : Layer_ID },
     storage(Store),
-    % TODO: Need to actually make this exist.
-    open_ref_graph(Store,G,Obj),
-    head_obj(Obj,Layer).
+    store_id_layer(Store,Layer_ID,Layer).
 
-/*
- * descriptor_read_obj(Descriptor, Write_Mask, Read_Mask, Read_Obj) is det.
+/**
+ * open_write_obj(Graph_Descriptor : graph_descriptor, Write_Object : write_object) is det.
+ *
+ * opens a graph descriptor with a writer builder.
+ */
+open_write_obj(Graph, write_obj{ descriptor : Graph, write : Layer_Builder }) :-
+    Graph = named_graph{ name : Name },
+    storage(Store),
+    safe_open_named_graph(Store,Name,Obj),
+    open_write(Obj,Layer_Builder).
+open_write_obj(Graph, write_obj{ descriptor : Graph, write : Layer_Builder }) :-
+    Graph = ref_graph{ layer_id : Layer_ID },
+    storage(Store),
+    store_id_layer(Store,Layer_ID,Layer),
+    open_write(Layer,Layer_Builder).
+
+included_read_objects(Graph_Desriptors, Read_Graph_Descriptors, Read_Objects) :-
+    include({Read_Graph_Descriptors}/[X]>>memberchk(X,Read_Graph_Descriptors),
+            Graph_Descriptors,
+            Read_Descriptors),
+    maplist([Descriptor,Read_Obj]>>open_read_obj(Descriptor,Read_Obj),
+            Read_Descriptors, Read_Objects).
+
+included_write_objects(Graph_Desriptors, Read_Graph_Descriptors, Read_Objects) :-
+    include({Read_Graph_Descriptors}/[X]>>memberchk(X,Read_Graph_Descriptors),
+            Graph_Descriptors,
+            Read_Descriptors),
+    maplist([Descriptor,Read_Obj]>>open_write_obj(Descriptor,Read_Obj),
+            Read_Descriptors, Read_Objects).
+
+/**
+ * descriptor_query(Descriptor, Write_Mask, Read_Mask, Query_Obj) is det.
  *
  * Impements the logic which allows us to special-case the
  * opening of descriptors for repository, branch and graph.
  *
  * @Descriptor has type repository{ ... } | branch{ ... }
  * @Write_Mask has type list(descriptor)
- *             This opens read queryes  for No mask means everything is opened
+ *             This opens read queries. No mask means everything is opened.
  */
-descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
-    Repository = database{ database_name : DB_Name,
-                           schema : [SL],
-                           inference : [],
-                           instance : [IL]},
+descriptor_query(Collection_Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Query_Obj) :-
+    Collection_Descriptor = database_descriptor{
+                                database_name : DB_Name,
+                                instance : IL
+                            },
     !,
-    maplist([S,read_object(descriptor : S, layer : L}]
-            >>(member(S, Read_Mask)
-                open_read_obj(S, L)), SL, Schema_Read_Objects),
-    maplist([I,read_object(descriptor : I, layer : L}]
-            >>(open_read_obj(I, L)), IL, Instance_Read_Objects),
-    query_obj{ instance_read_objects : Instance_Read_Objects,
-               schema_read_objects : Schema_Read_Objects,
-               inference_read_objects : [],
-               instance_write_objects : [],
-               inference_write_objects : [],
-               schema_write_objects : [] }
-    true.
+    layer_ontology(Layer_Ontology_Name),
+    Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
+    repository_ontology(Repository_Ontology_Name),
+    Repository_Ontology_Graph = named_graph{ name : Repository_Ontology_Name },
+
+    % Get hard coded layer and repository schema read/write objects
+    Schema_Graphs = [Repository_Ontology_Graph, Layer_Ontology_Graph],
+    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Read_Schema_Objects),
+    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
+
+    % Get instance read/write objects
+    include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
+    include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
+
+    Query_Obj = query_obj{
+                    collection_descriptor : Collection_Descriptor,
+                    instance_read_objects : Instance_Read_Objects,
+                    schema_read_objects : Schema_Read_Objects,
+                    inference_read_objects : [],
+                    instance_write_objects : Write_Instance_Objects,
+                    inference_write_objects : [],
+                    schema_write_objects : Schema_Write_Objects
+                }.
 descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
-    Repository = repository{ database_name : DB_Name,
-                             repository_name : Repository_Name,
-                             schema : [SL],
-                             inference : [],
-                             instance : [IL]},
+    Collection_Descriptor = repository_descriptor{
+                                database_descriptor : _DB,
+                                repository_layer : _Layer,
+                                repository_name : _Name,
+                                instance : IL
+                            },
     !,
-    maplist([S,L]>>(open_read_obj(S, L)), SL, Schema_Read_Objects),
-    maplist([I,L]>>(open_read_obj(I, L)), IL, Instance_Read_Objects),
-    query_obj{ instance_read_objects : Instance_Read_Objects,
-               schema_read_objects : Schema_Read_Objects,
-               inference_read_objects : [],
-               instance_write_objects : [],
-               inference_write_objects : [],
-               schema_write_objects : [] }
-    true.
+    layer_ontology(Layer_Ontology_Name),
+    Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
+    ref_ontology(Ref_Ontology_Name),
+    Repository_Ontology_Graph = named_graph{ name : Repository_Ontology_Name },
+
+    % Get hard coded layer and repository schema read/write objects
+    Schema_Graphs = [Ref_Ontology_Graph, Layer_Ontology_Graph],
+    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Read_Schema_Objects),
+    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
+
+    % Get instance read/write objects
+    include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
+    include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
+
+    Query_Obj = query_obj{
+                    collection_descriptor : Collection_Descriptor,
+                    instance_read_objects : Read_Instance_Objects,
+                    schema_read_objects : Read_Schema_Objects,
+                    inference_read_objects : [],
+                    instance_write_objects : Write_Instance_Objects,
+                    schema_write_objects : Write_Schema_Objects,
+                    inference_write_objects : []
+                }.
 descriptor_query(Branch, Read_Mask, Write_Mask, Query_Obj) :-
-    Branch = branch{ database_name : DB_Name,
-                     repository_name : Repository_Name,
-                     branch_name : Branch_Name,
-                     schema : Schema_List,
-                     inference : Inf_List,
-                     instance : Instance_List },
+    Branch = ref_descriptor{ database_name : DB_Name,
+                             repository_name : Repository_Name,
+                             branch_name : Branch_Name,
+                             schema : Schema_List,
+                             inference : Inf_List,
+                             instance : Instance_List },
     !,
-    true. 
+    true.
+
+/*
+ * database_name_to_descriptor(?DB_Name : atom, ?Database_Descriptor : collection_descriptor) is semidet.
+ *
+ * Gets a database name descriptor
+ */
+database_name_descriptor(DB_Name, database_descriptor{
+                                      database_name : DB_Name,
+                                      instance : [
+                                          named_graph{
+                                              name : DB_Name
+                                          }
+                                      ]}).
+
+database_repository_descriptor(Query_Obj, 
 
 /*
  * database_repository(+DB_Name,-Repo_Obj) is det.

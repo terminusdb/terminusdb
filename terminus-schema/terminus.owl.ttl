@@ -250,7 +250,7 @@ terminus:inference
 terminus:APIUpdate
   a owl:Class;
   rdfs:label "API Update"@en;
-  rdfs:comment "A document that amounts to an update request, sent to the API"@en.
+  rdfs:comment "A document that amounts to an update request, sent to the API"@en .
 
 terminus:id
   a owl:DatatypeProperty ;
