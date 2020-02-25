@@ -89,6 +89,8 @@ test_schema(invalid_RDFS_property_SC).
  */
 schema_validation_skippable(Update_DB, Schema, Layer) :-
     \+ xrdf(Update_DB, [Schema], _, _, 'http://www.w3.org/2002/07/owl#Restriction'),
+    \+ xrdf(Update_DB, [Schema], _, _, 'http://www.w3.org/2002/07/owl#FunctionalProperty'),
+    \+ xrdf(Update_DB, [Schema], _, _, 'http://www.w3.org/2002/07/owl#InverseFunctionalProperty'),
     !,
     forall((xrdf(Update_DB,[Schema], A_Old, B_Old, C_Old),
             \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
@@ -99,12 +101,8 @@ schema_validation_skippable(Update_DB, Schema, Layer) :-
            schema_triple_addition_no_check(A_New, B_New, C_New)
     ).
 
-schema_triple_addition_no_check(_, _, 'http://www.w3.org/2002/07/owl#Restriction'):-
-    !,
-    false.
-schema_triple_addition_no_check(_, _, _):-
-    !,
-    true.
+schema_triple_addition_no_check(_, _, C):-
+    C \= 'http://www.w3.org/2002/07/owl#Restriction'.
 
 schema_triple_deletion_no_check(_, _, _):-
     false.
