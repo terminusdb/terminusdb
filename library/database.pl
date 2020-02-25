@@ -51,15 +51,15 @@
  * A ref_graph is a layer id that can be resolved to a graph.
  *
  * collection_descriptor --> terminus_descriptor
- *                         | database_descriptor{ database_name : atom,
+ *                         | database_descriptor{ database_name : uri,
  *                                                instance : list(graph_descriptor)}
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
  *                                                  repository_layer : layer,
- *                                                  repository_name : atom,
+ *                                                  repository_name : uri,
  *                                                  instance : list(graph_descriptor)}
  *                         | ref_descriptor{ repository_descriptor: repository_descriptor,
  *                                           ref_layer : layer,
- *                                           ref_name : atom,
+ *                                           ref_name : uri,
  *                                           schema : list(graph_descriptor)
  *                                           instance : list(graph_descriptor)
  *                                           inference : list(graph_descriptor)}
@@ -87,6 +87,7 @@
  * read_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer}
  * write_obj ---> write_obj{ descriptor : graph_descriptor, write : Layer_Builder}
  * query_object ---> query_object{ collection_descriptor : collection_descriptor,
+ *                                 <parent : maybe(query_object>,
  *                                 instance_read_objects : list(read_obj),
  *                                 schema_read_objects : list(read_obj),
  *                                 inference_read_objects : list(read_obj),
@@ -358,8 +359,83 @@ collect_query_objects(Query_Objects,
             Query_Objects,
             Toplevel_Repo_Query_Objects),
 
-    maplist(
+    maplist([Ref_Query_Object,Repo_Query_Object]>>(
+                Ref_Query_Object.parent = Repo_Query_Object),
+            Ref_Query_Objects,
+            Second_Level_Repo_Query_Objects),
 
+    union(Toplevel_Repo_Query_Objects,
+          Second_Level_Repo_Query_Objects,
+          Repo_Query_Objects),
+
+    include([Query_Object]>>(database_descriptor{} :< Query_Object.collection_descriptor),
+            Query_Objects,
+            Toplevel_Label_Query_Objects),
+
+    maplist([Repo_Query_Object,Label_Query_Object]>>(
+                Repo_Query_Object.parent = Label_Query_Object),
+            Repo_Query_Objects,
+            Second_Level_Label_Query_Objects),
+
+    union(Toplevel_Label_Query_Objects,
+          Second_Level_Label_Query_Objects,
+          Label_Query_Objects).
+
+set_ref_head(Ref_Query_Object) :-
+    Ref_Name = Ref_Query_Object.descriptor.ref_name,
+    Repo_Query_Object = Ref_Query_Object.parent,
+    Repo_Query_Object.instance_read_objects = [Repo_Layer],
+    open_write(Repo_Layer, Repo_WB),
+
+    Repo_Instance_Read_Objects = Repo_Query_Object.instance_read_objects,
+    maplist([Repo_Instance_Read_Object,Layer_ID]>>
+            (layer_to_id(Repo_Instance_Read_Object.read, Layer_ID)),
+            Repo_Instance_Read_Objects, Instance_Layer_IDs),
+
+    Repo_Schema_Read_Objects = Repo_Query_Object.schema_read_objects,
+    maplist([Repo_Schema_Read_Object,Layer_ID]>>
+            (layer_to_id(Repo_Schema_Read_Object.read, Layer_ID)),
+            Repo_Schema_Read_Objects, Schema_Layer_IDs),
+
+    Repo_Inference_Read_Objects = Repo_Query_Object.inference_read_objects,
+    maplist([Repo_Inference_Read_Object,Layer_ID]>>
+            (layer_to_id(Repo_Inference_Read_Object.read, Layer_ID)),
+            Repo_Inference_Read_Objects, Inference_Layer_IDs),
+
+    atomic_list_concat([Ref_Name,'/document/'],Ref_Base),
+
+    maplist({Ref_Base,Repo_WB}/[Layer_Id]>>
+            write_repository_commit(Repo_WB,Ref_Base,Layer_Id),
+            Instance_Layer_Ids).
+
+write_repository_commit(Write_Builder,Ref_Base,Layer_Id) :-
+    global_prefix_expand(terminus:'Commit', CommitType),
+    global_prefix_expand(terminus:'Layer', LayerType),
+    global_prefix_expand(terminus:commit_layer, CommitLayerProp),
+    global_prefix_expand(terminus:layer_id, LayerIDProp),
+    global_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
+    global_prefix_expand(rdf:type, RDFType),
+    global_prefix_expand(xsd:string, XSDString),
+    global_prefix_expand(xsd:integer, XSDInteger),
+    object_storage(literal(Layer_Id,XSDString), Layer_Literal),
+    atomic_list_concat([Ref_Base,'Layer'],Layer_Base),
+    idgen(Layer_Base ,[Layer_Id], Layer_URI),
+    random_uri(Ref_Base,'Commit',Commit_URI),
+    get_time(Time),
+    UnixTime is floor(Time),
+    number_string(UnixTime,UnixTimeString),
+    object_storage(literal(UnixTimeString,XSDString), Layer_Literal),
+    nb_add_triple(Write_Builder, Layer_URI, RDFType, LayerType),
+    nb_add_triple(Write_Builder, Commit_URI, CommitLayerProp, Layer_URI),
+    nb_add_triple(Write_Builder, Layer_URI, LayerIDProp, Layer_Literal),
+    nb_add_triple(Write_Builder, Commit_URI, CommitTimestampProp, Timestamp_Literal).
+
+random_uri(Base,Type,URI) :-
+    atomic_list_concat([Base,Type],Type_Base),
+    Size is 2 ** (20 * 8),
+    random(0, Size, Num),
+    format(atom(Random), '~36r', [Num]),
+    idgen(Type_Base ,[Random], URI).
 
 set_heads(Query_Objects) :-
     % split query objects by type (ref, repo, label)
