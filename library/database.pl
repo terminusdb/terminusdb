@@ -310,6 +310,7 @@ with_transaction(Pre_Descriptors,
                  Witnesses) :-
     % turn descriptors into query objects
     between(1,5,_),
+    % this guy has to be responsible for opening writers in a reasonable way, so that we don't get multiple versions of a layer builder for a repo graph.
     maplist({Read_Descriptors, Write_Descriptors}/[Pre_Descriptor, Query_Object]>>(descriptor_query(Pre_Descriptor, Read_Descriptors, Write_Descriptors, Query_Object)),
             Pre_Descriptors,
             Update_Query_Objects),
@@ -327,7 +328,6 @@ with_transaction(Pre_Descriptors,
     % set heads (magic!)
     set_heads(Post_Query_Objects),
     !.
-
 with_transaction(Pre_Descriptors,
                  Read_Descriptors,
                  Write_Descriptors,
@@ -337,3 +337,37 @@ with_transaction(Pre_Descriptors,
                  Post,
                  Witnesses) :-
     die('too many transaction retries, dying.').
+
+descriptor_compare('=', Left, Right) :-
+    Left.descriptor = Right.descriptor,
+    !.
+descriptor_compare('<', Left, Right) :-
+    Left @< Right,
+    !.
+descriptor_compare('>', _Left, _Right).
+
+collect_query_objects(Query_Objects,
+                      Ref_Query_Objects,
+                      Repo_Query_Objects,
+                      Label_Query_Objects) :-
+    include([Query_Object]>>(ref_descriptor{} :< Query_Object.collection_descriptor),
+            Query_Objects,
+            Ref_Query_Objects),
+
+    include([Query_Object]>>(repository_descriptor{} :< Query_Object.collection_descriptor),
+            Query_Objects,
+            Toplevel_Repo_Query_Objects),
+
+    maplist(
+
+
+set_heads(Query_Objects) :-
+    % split query objects by type (ref, repo, label)
+    collect_query_objects(Query_Objects,
+                          Ref_Query_Objects,
+                          Repo_Query_Objects,
+                          Label_Query_Objects),
+    % set heads for all the refs
+    maplist(set_ref_head, Ref_Query_Objects),
+    maplist(set_repo_head, Repo_Query_Objects),
+    maplist(set_label_head, Label_Query_Objects).
