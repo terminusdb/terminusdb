@@ -34,7 +34,7 @@
 	</table>
 	</div>
 	<script>
-
+		window.css_base="https://terminusdb.github.io/terminus-dashboard/dist/"
 		let TerminusConfig = {
 			controls: ["collaborate", "server", "db", "import_schema", "create_database",
 						"get_document", "get_schema", "update_schema", "woql_select"],
