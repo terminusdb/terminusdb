@@ -88,7 +88,9 @@
  * read_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer}
  * write_obj ---> write_obj{ descriptor : graph_descriptor, write : Layer_Builder}
  * query_object ---> query_object{ collection_descriptor : collection_descriptor,
- *                                 <parent : maybe(query_object>, % except for database descriptors
+ *                                 <parent : query_object>, % except for database descriptors
+ *                                 commit_author : string,
+ *                                 commit_message : string,
  *                                 instance_read_objects : list(read_obj),
  *                                 schema_read_objects : list(read_obj),
  *                                 inference_read_objects : list(read_obj),
@@ -110,7 +112,7 @@
 terminus_repository_schema(Schema) :-
     db_path(Path),
     www_form_encode('terminus-repository-schema',Safe_GID),
-    interpolate([Path,Safe_GID,'.label'],Label).
+    interpolate([Path,Safe_GID,'.label'],Schema).
 
 /**
  * open_read_obj(Graph_Descriptor : graph_descriptor, Read_Object : read_object) is det.
@@ -150,7 +152,7 @@ included_read_objects(Graph_Descriptors, Read_Graph_Descriptors, Read_Objects) :
     maplist([Descriptor,Read_Obj]>>open_read_obj(Descriptor,Read_Obj),
             Read_Descriptors, Read_Objects).
 
-included_write_objects(Graph_Desriptors, Read_Graph_Descriptors, Read_Objects) :-
+included_write_objects(Graph_Descriptors, Read_Graph_Descriptors, Read_Objects) :-
     include({Read_Graph_Descriptors}/[X]>>memberchk(X,Read_Graph_Descriptors),
             Graph_Descriptors,
             Read_Descriptors),
@@ -235,21 +237,22 @@ descriptor_query(Branch, Read_Mask, Write_Mask, Query_Obj) :-
                              inference : Inf_List,
                              instance : Instance_List },
     !,
+    % TODO: Not actually written
     true.
 
 update_read_objects([], New_Read_Objects, New_Read_Objects).
-update_read_objects([Old_Read_Object|Old_Read_Objects], New_Read_Objects, Result) :-
+update_read_objects([Old_Read_Object|Old_Read_Objects], New_Read_Objects, Results) :-
     memberchk(read_obj{ descriptor: Old_Read_Object.descriptor, read: _}, New_Read_Objects),
     !,
-    update_read_objects(Old_Read_Objects, New_Read_Objects, Result).
+    update_read_objects(Old_Read_Objects, New_Read_Objects, Results).
 update_read_objects([Old_Read_Object|Old_Read_Objects], New_Read_Objects, [Old_Read_Object|Results]) :-
-    update_read_objects(Old_Read_Objects, New_Read_Objects, Result).
+    update_read_objects(Old_Read_Objects, New_Read_Objects, Results).
 
 commit_write_object(write_obj{
                        descriptor: Graph_Descriptor,
                        write: Layer_Builder
                    },
-                    read_obj {
+                    read_obj{
                         descriptor: Graph_Descriptor,
                         read: Layer
                     }) :-
@@ -309,7 +312,7 @@ with_transaction(Pre_Descriptors,
                  Post_Query_Objects,
                  Query_Update,
                  Post,
-                 Witnesses) :-
+                 _Witnesses) :-
     % turn descriptors into query objects
     between(1,5,_),
     % this guy has to be responsible for opening writers in a reasonable way, so that we don't get multiple versions of a layer builder for a repo graph.
@@ -408,76 +411,64 @@ set_ref_head(Ref_Query_Object) :-
             Instance_Layers),
 
     maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer]>>
-            write_ref_commit(schema,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+            write_layer_to_commit(schema,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
             Schema_Layers),
 
     maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer_ID]>>
-            write_ref_commit(inference,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
-            Inference_Layers),
-
-    move_repository_ref_head(Repo_Layer,
-                             Repo_WB,
-                             Ref_Query_Object.descriptor,
-                             Instance_Commit_IDs,
-                             Schema_Commit_IDs,
-                             Inference_Commit_IDs),
-
-    nb_commit(Repo_WB, Repo_Layer),
-    % what graph? This has to be filled!
-    nb_set_head(Graph,Repo_Layer).
+            write_layer_to_commit(inference,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+            Inference_Layers).
 
 :- table metadata_prefix_expand/2
 metadata_prefix_expand(Prefixed_URI,URI) :-
     global_prefix_expand(Prefixed_URI, CommitType).
 
-write_ref_commit(Ref_Layer_Builder,Last_Commit_URI,Commit_URI) :-
-    metadata_prefix_expand(terminus:'Commit', CommitType),
-    metadata_prefix_expand(rdf:type, RDFType),
-    metadata_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
-    unix_time_string_now(UnixTimeString),
-    object_storage(literal(UnixTimeString,XSDString), Timestamp_Literal),
-    nb_add_triple(Write_Builder, Commit_URI, RDFType, CommitType),
+write_ref_commit(Ref_Layer_Builder,Ref_URI,Author,Last_Commit_URI,Commit_URI) :-
+    metadata_prefix_expand(terminus:'Commit', Commit_Type),
+    metadata_prefix_expand(rdf:type, RDF_Type),
+    metadata_prefix_expand(xsd:string, XSD_String),
+    metadata_prefix_expand(terminus:ref_commit, Ref_Commit_Prop),
+    metadata_prefix_expand(terminus:commit_parent, Parent_Prop),
+    metadata_prefix_expand(terminus:commit_timestamp, Commit_Timestamp_Prop),
+    metadata_prefix_expand(terminus:commit_author, Author_Prop),
+    metadata_prefix_expand(terminus:'Branch', Branch_Type),
+    metadata_prefix_expand(terminus:no_commit, No_Commit_URI),
+    unix_time_string_now(Unix_Time_String),
+    object_storage(literal(Unix_Time_String,XSD_String), Timestamp_Literal),
+    object_storage(literal(Author,XSD_String), Author_Literal),
+    nb_add_triple(Write_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
+    (   Last_Commit_URI = No_Commit_URI
+    ->  true
+    ;   nb_remove_triple(Write_Builder, Ref_URI, Ref_Commit_Prop, node(Last_Commit_URI)),
+        nb_add_triple(Write_Builder, Commit_URI, Parent_Prop, node(Last_Commit_URI))),
+    nb_add_triple(Write_Builder, Ref_URI, Ref_Commit_Prop, node(Commit_URI)),
+    nb_add_triple(Write_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
+    nb_add_triple(Write_Builder, Commit_URI, Commit_Timestamp_Prop, value(Timestamp_Literal)),
+    nb_add_triple(Write_Builder, Commit_URI, Author_Prop, value(Author_Literal)).
 
-
-write_layer_to_commit(Type,Layer,Layer_Builder,Ref_Base,Layer_ID,Commit_URI) :-
-    metadata_prefix_expand(terminus:Type, GraphProperty),
-    metadata_prefix_expand(terminus:'Layer', LayerType),
-    metadata_prefix_expand(terminus:layer_id, LayerIDProp),
-    metadata_prefix_expand(rdf:type, RDFType),
-    metadata_prefix_expand(xsd:string, XSDString),
-    metadata_prefix_expand(xsd:integer, XSDInteger),
-    object_storage(literal(Layer_ID,XSDString), Layer_Literal),
+write_layer_to_commit(Type,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI) :-
+    metadata_prefix_expand(terminus:Type, Graph_Property),
+    metadata_prefix_expand(terminus:'Layer', Layer_Type),
+    metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
+    metadata_prefix_expand(terminus:layer_parent, Layer_Parent_Prop),
+    metadata_prefix_expand(rdf:type, RDF_Type),
+    metadata_prefix_expand(xsd:string, XSD_String),
+    metadata_prefix_expand(xsd:integer, XSD_Integer),
+    layer_to_id(Layer,Layer_ID),
+    object_storage(literal(Layer_ID,XSD_String), Layer_Literal),
     atomic_list_concat([Ref_Base,'Layer'],Layer_Base),
+    parent(Layer,Parent),
+    layer_to_id(Parent,Parent_Layer_ID),
     idgen(Layer_Base ,[Layer_ID], Layer_URI),
-    nb_add_triple(Write_Builder, Layer_URI, RDFType, LayerType),
-    nb_add_triple(Write_Builder, Commit_URI, CommitLayerProp, Layer_URI),
-    nb_add_triple(Write_Builder, Layer_URI, LayerIDProp, Layer_Literal),
-    nb_add_triple(Write_Builder, Commit_URI, CommitTimestampProp, Timestamp_Literal).
+    idgen(Layer_Base ,[Parent_Layer_ID], Parent_Layer_URI),
+    nb_add_triple(Write_Builder, Layer_URI, RDF_Type, node(Layer_Type)),
+    nb_add_triple(Write_Builder, Commit_URI, Graph_Property, node(Layer_URI)),
+    nb_add_triple(Write_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal)),
+    nb_add_triple(Write_Builder, Layer_URI, Layer_Parent_Prop, node(Parent_Layer_ID)).
 
-unix_time_string_now(UnixTimeString) :-
+unix_time_string_now(Unix_Time_String) :-
     get_time(Time),
-    UnixTime is floor(Time),
-    number_string(UnixTime,UnixTimeString).
-
-move_repository_ref_head(Repo_WB,
-                         Ref_Query_Object_Descriptor,
-                         Instance_Commit_IDs,
-                         Schema_Commit_IDs,
-                         Inference_Commit_IDs) :-
-    metadata_prefix_expand(terminus:'Graph', GraphType),
-    (   is_branch(Ref_Query_Object_Descriptor)
-    ->  metadata_prefix_expand(terminus:'Branch', RefType)
-    ;   is_tag(Ref_Query_Object_Descriptor)
-    ->  metadata_prefix_expand(terminus:'Tag', RefType)
-    ;   metadata_prefix_expand(terminus:'????', RefType)
-    ),
-
-    metadata_prefix_expand(terminus:commit_layer, CommitLayerProp),
-    metadata_prefix_expand(terminus:layer_id, LayerIDProp),
-    metadata_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
-
-    true.
-
+    Unix_Time is floor(Time),
+    number_string(Unix_Time,Unix_Time_String).
 
 random_uri(Base,Type,URI) :-
     atomic_list_concat([Base,Type],Type_Base),
@@ -486,13 +477,32 @@ random_uri(Base,Type,URI) :-
     format(atom(Random), '~36r', [Num]),
     idgen(Type_Base ,[Random], URI).
 
+set_repo_head(Repo_Query_Object - Ref_Query_Objects) :-
+    maplist([]>>(), Ref_Query_Objects,
+    Repo_Query_Object
+    true.
+
+query_object_parents(Query_Objects,Query_Object_Candidates, Child_Parent_Pairs) :-
+    findall(Query_Object - Associated_Parent,
+            (   member(Query_Object,Query_Objects),
+                convlist({Query_Object}/[Candidate_Query_Object]>>
+                         descriptor_compare((=),Query_Object.parent.descriptor,
+                                                Candidate_Query_Object.descriptor),
+                         Query_Objects, Associated_Parents))
+            Child_Parent_Pairs).
+
 set_heads(Query_Objects) :-
     % split query objects by type (ref, repo, label)
     collect_query_objects(Query_Objects,
                           Ref_Query_Objects,
                           Repo_Query_Objects,
                           Label_Query_Objects),
+
     % set heads for all the refs
     maplist(set_ref_head, Ref_Query_Objects),
-    maplist(set_repo_head, Repo_Query_Objects),
-    maplist(set_label_head, Label_Query_Objects).
+
+    query_object_parents(Repo_Query_Objects, Ref_Query_Objects, Repo_Refs),
+    maplist(set_repo_head, Repo_Refs),
+
+    query_object_parents(Label_Query_Objects, Repo_Query_Objects, Label_Repos),
+    maplist(set_label_head, Label_Repos).
