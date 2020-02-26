@@ -233,28 +233,30 @@ peak(S0,S0,S0).
 return(S0,_,S0).
 
 /*
- * Ctx is a context object which has some of the following attributes:
- * [attribute=Value]
+ * Ctx is a context object which is used in WOQL queries to
+ * keep track of state.
  *
-   prefixes = [P=foo, Q=bar]  % which prefixes are expanded
-   bindings = [v=bar]         % bindings for variables
-   bound = N                  % Current number of bindings
-
+ * store_id --> store_id{ descriptor : graph_descriptor,
+ *                        id : integer }
+ * store_ids = list(store_id)
+ * var_binding ---> var_binding{ prolog_var : var,
+ *                               store_ids : store_ids,
+ *                               value : Value }
+ * var_bindings = list(var_binding)
+ *
+ * query_context ---> query_context{ <current_output_graph : write_obj>,
+ *                                   <prefixes : context>,
+ *                                   query_objects : list(query_object),
+ *                                   bindings : list(var_binding),
+ *                                   selected = list(var_binding)
+ *                                }
  */
-empty_ctx([output_graphs=[default=g(_G,_H-_T,_F-_FT)], % fresh vars
-           current_output_graph=default,
-           write_graph=_,
-           prefixes=[rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-                     rdfs='http://www.w3.org/2000/01/rdf-schema#'],
-           definitions=[],
-           collection='https://example.org',
-           database=_,
-           files=[],
-           used=_Used,
-           bound=3,
-           module=M,
-           bindings=[]]) :-
-    gensym(module_,M).
+empty_ctx(query_context{
+              bindings: [],
+              selected: [],
+              prefixes: Prefixes
+          }) :-
+    default_prefixes(Prefixes).
 
 empty_ctx(S0,S7) :-
     empty_ctx(S),

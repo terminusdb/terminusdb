@@ -694,6 +694,7 @@ set_heads_for_db(Database_Name - Query_Objects) :-
 
     query_object_parents(Repo_Query_Objects, New_Ref_Query_Objects, Repo_Refs),
 
+    % set everything from repos into the layer builder
     maplist(set_repo_head(Layer_Builder), Repo_Refs, New_Repo_Query_Objects),
     nb_commit(Layer_Builder, NewLayer),
     storage(Store),

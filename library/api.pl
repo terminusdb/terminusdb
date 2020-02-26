@@ -96,6 +96,7 @@
 :- dynamic http:location/3.
 http:location(root, '/', []).
 
+
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
@@ -122,7 +123,7 @@ http:location(root, '/', []).
 :- http_handler(root(DB/document/DocID), cors_catch(document_handler(Method,DB,DocID)),
                 [method(Method),
                  methods([options,get,post,delete])]).
-:- http_handler(root(DB/woql), cors_catch(woql_handler(Method,DB)),
+:- http_handler(root(woql/DBID/RefID), cors_catch(woql_handler(Method,DB)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,get,post,delete])]).
