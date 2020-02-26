@@ -100,6 +100,8 @@ nonvar_literal(type(Type,Val), S) :-
             Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
         ->  date_string(Val,Date_String),
             format(string(S), '~q^^~q', [Date_String,Type])
+        ;   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ->  format(string(S), '~f^^~q', [Val, Type])
         ;   format(string(S), '~q^^~q', [Val,Type]))
     ;   true).
 
