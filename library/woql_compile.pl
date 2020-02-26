@@ -91,147 +91,6 @@
 :- op(2, xfx, @).
 :- op(2, xfx, ^^).
 
-merge_output_graphs(OGs1,OGs2,OGs3) :-
-    merge_output_graphs_aux(OGs1,OGs2,[],OGs3).
-
-merge_output_graphs_aux([G=g(O1,_H1-T1,_FH1-FT1)|OGs1],
-                        OGs2,
-                        Seen,
-                        [G=g(Output,Head-_,Fringe_Head-_)|OGs3]) :-
-    member(G=g(O2,_H2-T2,_FH2-FT2),OGs2),
-    !,
-    Output=O1,
-    Output=O2,
-    Head=T1,
-    Head=T2,
-    Fringe_Head=FT1,
-    Fringe_Head=FT2,
-    merge_output_graphs_aux(OGs1, OGs2,[G|Seen],OGs3).
-merge_output_graphs_aux([G=g(OG,H-T,FH-FT)|Rest],
-                        OGs1,
-                        Seen,
-                        [G=g(OG,H-T,FH-FT)|OGs]) :-
-    % \+ member(G=_,OGs1),
-    merge_output_graphs_aux(Rest, OGs1, Seen, OGs).
-merge_output_graphs_aux([], OGs2, Seen, OGs3) :-
-    exclude([G=_]>>(member(G,Seen)), OGs2, OGs3).
-
-/*
- * merge_output_bindings(Bindings0,Bindings1,Bindings_Merged) is det.
- *
- * merge bindings such that co-bindings get the same binding variables.
- */
-merge_output_bindings(A, B, C) :-
-    union(A,B,C).
-
-merge_graph(Database_List0,Database_List1,Database_List2) :-
-    % in both
-    convlist({Database_List1}/[Name=graph(T0,G0,F0),
-                            Name=graph(T2,G2,F2)]>>(
-                member(Name=graph(T1,G1,F1),Database_List1),
-                append(T0,T1,T2),
-                append(G0,G1,G2),
-                append(F0,F1,F2)),
-             Database_List0,Database_List_Same),
-    % in first
-    convlist({Database_List1}/[Name=graph(T0,G0,F0),
-                            Name=graph(T0,G0,F0)]>>(
-                 \+ member(Name=_,Database_List1)),
-             Database_List0,Database_List_Left),
-    % in second
-    convlist({Database_List0}/[Name=graph(T0,G0,F0),
-                            Name=graph(T0,G0,F0)]>>(
-                 \+ member(Name=_,Database_List0)),
-             Database_List1,Database_List_Right),
-    append([Database_List_Same,
-            Database_List_Left,
-            Database_List_Right],
-           Database_List2).
-
-
-merge_graphs_aux([],G,G).
-merge_graphs_aux([G0|Gs],G1,Out) :-
-    merge_graph(G0,G1,Result),
-    merge_graphs_aux(Gs,Result,Out).
-
-merge_graphs(Gs,G) :-
-    merge_graphs_aux(Gs,[],G).
-
-/*
- * merge(S0,S1,SM) is det.
- *
- * We need to merge multiple states into a signal state for output.
- *
- * we use S0 as the prototype
- */
-merge(S0,S1,SM) :-
-    member(output_graphs=OGs0,S0),
-    member(output_graphs=OGs1,S1),
-    merge_output_graphs(OGs0,OGs1,OGs),
-
-    member(bindings=B0,S0),
-    member(bindings=B1,S1),
-    merge_output_bindings(B0,B1,Bindings),
-
-    member(prefixes=Prefixes,S0),
-    member(database=Database,S0),
-    member(write_graph=Write_Graph,S0),
-    member(definitions=Definitions,S0),
-    member(bound=Bound,S1),
-    member(used=Used,S1),
-    member(module=M,S1),
-    member(collection=C,S1),
-    SM=[output_graphs=OGs,
-        current_output_graph=default,
-        definitions=Definitions,
-        prefixes=Prefixes,
-       database=Database,
-        write_graph=Write_Graph,
-        collection=C,
-        used=Used,
-        bound=Bound,
-        module=M,
-        bindings=Bindings].
-
-merge_all_aux([],S,S).
-merge_all_aux([S1|Ss],S0,S) :-
-    merge(S0,S1,S2),
-    merge_all_aux(Ss,S2,S).
-
-merge_all([S0|Ss],S) :-
-    merge_all_aux(Ss,S0,S).
-
-/*
- * elt(Elt,Set) is det.
- */
-elt(Elt,Set) :-
-    (   member(Elt, Set)
-    ->  true
-    ;   format(atom(M), 'Element (~q) does not appear in set (~q)', [Elt,Set]),
-        throw(error(M))
-    ).
-
-is_new(Elt,TDB) :-
-    (   var(TDB)
-    ->  true
-    ;   TDB = []
-    ->  true
-    ;   TDB=[Elt|_Rest]
-    ->  false
-    ;   TDB=[_|Rest],
-        is_new(Elt,Rest)).
-
-/* Monadic selection */
-update(C0,C1,S0,S1) :-
-    select(C0,S0,C1,S1).
-
-view(C0,S0,S0) :-
-    elt(C0,S0).
-
-peak(S0,S0,S0).
-
-return(S0,_,S0).
-
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
@@ -244,12 +103,79 @@ return(S0,_,S0).
  *                               value : Value }
  * var_bindings = list(var_binding)
  *
- * query_context ---> query_context{ <current_output_graph : write_obj>,
+ * query_context ---> query_context{ <current_output_graph : graph_descriptor>,
  *                                   <prefixes : context>,
  *                                   query_objects : list(query_object),
  *                                   bindings : list(var_binding),
  *                                   selected = list(var_binding)
  *                                }
+ */
+
+/*******
+ * Mondic DCG management
+ *
+ * We use DCG's to simplify tracking the state of the WOQL query compiler.
+ */
+/*
+ * get_param(Elt,Set) is det.
+ */
+get_param(Key,Value,Set) :-
+    Value = Set.Key.
+
+is_new(Elt,TDB) :-
+    (   var(TDB)
+    ->  true
+    ;   TDB = []
+    ->  true
+    ;   TDB=[Elt|_Rest]
+    ->  false
+    ;   TDB=[_|Rest],
+        is_new(Elt,Rest)).
+
+/* Monadic selection */
+update(Key,C0,C1,S0,S1) :-
+    C0 = S0.Key,
+    C1 = S1.Key,
+    S1 = S0.K1.put(_{ Key : C0 }).
+
+view(Key,C0,S0,S0) :-
+    C0 = S0.Key.
+
+swap(Key,C0,C1,S0,S1) :-
+    C0 = S0.Key,
+    C1 = S1.Key.
+
+put(Key, C0, S0, S1) :-
+    S1 = S0.put(_{Key : C0}).
+
+peak(S0,S0,S0).
+
+return(S0,_,S0).
+
+/*
+ * merge(S0,S1,SM) is det.
+ *
+ * We need to merge multiple states into a signal state for output.
+ *
+ * we use S0 as the "merge in set"
+ */
+merge(S0) -->
+    {
+        S0.get(bindings, B0)
+    },
+
+    view(bindings,B1),
+
+    {
+        merge_output_bindings(B0,B1,Bindings)
+    },
+
+    put(bindings,Bindings).
+
+/*
+ * empty_ctx(Ctx) is det.
+ *
+ * Empty Ctx to start with.
  */
 empty_ctx(query_context{
               bindings: [],
@@ -258,52 +184,27 @@ empty_ctx(query_context{
           }) :-
     default_prefixes(Prefixes).
 
-empty_ctx(S0,S7) :-
-    empty_ctx(S),
-    elt(prefixes=Prefixes,S0),
-    elt(database=Database,S0),
-    elt(write_graph=Write_Graph,S0),
-    elt(module=M,S0),
-    elt(definitions=D,S0),
-    elt(collection=C,S0),
-    elt(files=Files,S0),
-    select(prefixes=_,S,
-           prefixes=Prefixes,S1),
-    select(database=_,S1,
-          database=Database,S2),
-    select(module=_,S2,
-           module=M,S3),
-    select(definitions=_,S3,
-           definitions=D,S4),
-    select(collection=_,S4,
-           collection=C,S5),
-    select(write_graph=_,S5,
-           write_graph=Write_Graph,S6),
-    select(files=_,S6,
-           files=Files,S7).
+/*
+ * prototype_empty_ctx(S0,S1) is det.
+ *
+ * updates a context, keeping only global info
+ */
+empty_ctx -->
+    view(prefixes,Prefixes),
+    view(query_objects,Query_Objects),
+    view(files,Files),
 
-empty_ctx(Prefixes,S0,S7) :-
-    empty_ctx(S),
-    elt(database=Database,S0),
-    elt(write_graph=Write_Graph,S0),
-    elt(module=M,S0),
-    elt(definitions=D,S0),
-    elt(collection=C,S0),
-    elt(files=Files,S0),
-    select(prefixes=_,S,
-           prefixes=Prefixes,S1),
-    select(database=_,S1,
-          database=Database,S2),
-    select(module=_,S2,
-           module=M,S3),
-    select(definitions=_,S3,
-           definitions=D,S4),
-    select(collection=_,S4,
-           collection=C,S5),
-    select(write_graph=_,S5,
-           write_graph=Write_Graph,S6),
-    select(files=_,S6,
-           files=Files,S7).
+    { empty_ctx(S0)
+    },
+    return(S0),
+
+    put(prefixes,Prefixes),
+    put(query_objects,Query_Objects),
+    put(files,Files).
+
+empty_ctx(Prefixes) -->
+    empty_ctx,
+    put(prefixes, Prefixes).
 
 /*
  * compile_representation(S,T,V) is det.
@@ -315,6 +216,11 @@ compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) 
     guess_date(String,Date).
 compile_representation(String,Type,literal(type(Type,String))).
 
+/*
+ * resolve(ID,Resolution, S0, S1) is det.
+ *
+ * TODO: This needs a good going over. Way too much duplication of effort.
+ */
 resolve(ignore,_Something) -->
     !,
     [].
