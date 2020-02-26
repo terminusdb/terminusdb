@@ -1,4 +1,5 @@
 :- module(database,[
+              with_transaction/8
           ]).
 
 /** <module> Implementation of database graph management
@@ -338,25 +339,22 @@ commit_write_object(write_obj{
                     }) :-
     terminus_store:nb_commit(Layer_Builder, Layer).
 
-/* TODO: This seems completely wrong. Probably need to use 'put' due to polymorphism */
-commit_query_object(query_object{
-                        collection_descriptor: Collection_Descriptor,
-                        instance_read_objects: Instance_Read_Objects,
-                        inference_read_objects: Inference_Read_Objects,
-                        schema_read_objects: Schema_Read_Objects,
-                        instance_write_objects: Instance_Write_Objects,
-                        inference_write_objects: Inference_Write_Objects,
-                        schema_write_objects: Schema_Write_Objects
-                    },
-                    query_object {
-                        collection_descriptor: Collection_Descriptor,
-                        instance_read_objects: New_Instance_Read_Objects,
-                        inference_read_objects: New_Inference_Read_Objects,
-                        schema_read_objects: New_Schema_Read_Objects,
-                        instance_write_objects: [],
-                        inference_write_objects: [],
-                        schema_write_objects: []
-                        }) :-
+/**
+ * commit_query_object(Query_Object, Commited_Query_Object) is det.
+ *
+ * Changes associated write objects to new read objects in the Query_Object.
+ */
+commit_query_object(Query_Object,New_Query_Object) :-
+    query_object{
+        collection_descriptor: Collection_Descriptor,
+        instance_read_objects: Instance_Read_Objects,
+        inference_read_objects: Inference_Read_Objects,
+        schema_read_objects: Schema_Read_Objects,
+        instance_write_objects: Instance_Write_Objects,
+        inference_write_objects: Inference_Write_Objects,
+        schema_write_objects: Schema_Write_Objects
+    } :< Query_Object,
+
     maplist(commit_write_object,
             Instance_Write_Objects,
             Committed_Instance_Objects),
@@ -369,7 +367,14 @@ commit_query_object(query_object{
 
     update_read_objects(Instance_Read_Objects, Committed_Instance_Objects, New_Instance_Read_Objects),
     update_read_objects(Schema_Read_Objects, Committed_Schema_Objects, New_Schema_Read_Objects),
-    update_read_objects(Inference_Read_Objects, Committed_Inference_Objects, New_Inference_Read_Objects).
+    update_read_objects(Inference_Read_Objects, Committed_Inference_Objects, New_Inference_Read_Objects),
+
+    New_Query_Object = Query_Object.put(_{instance_read_objects: New_Instance_Read_Objects,
+                                          inference_read_objects: New_Inference_Read_Objects,
+                                          schema_read_objects: New_Schema_Read_Objects,
+                                          instance_write_objects: [],
+                                          inference_write_objects: [],
+                                          schema_write_objects: []}).
 
 die(Message) :-
     throw(not_acceptable(_{'terminus:status': 'terminus:error',
@@ -415,6 +420,17 @@ open_descriptor_queries(Descriptors, Read_Descriptors, Write_Descriptors, Query_
     maplist([_Descriptor=Query_Object,Query_Object]>>true, Sorted_Map, Query_Objects).
 
 /**
+ * terminus_max_retries(-Retries) is det.
+ *
+ * Environmental setable to give the number of times to try optimistic concurrency.
+ */
+terminus_max_retries(Retries) :-
+    getenv('TERMINUS_TRANSACTION_RETRIES', Retries_Atom),
+    !,
+    atom_number(Retries_Atom, Retries).
+terminus_max_retries(5).
+
+/**
  * with_transaction(+Pre_Descriptors, +Read_Descriptors, +Write_Descriptors, :Query_Update, :Post, -Witnesses) is semidet.
  */
 :- meta_predicate with_transaction(+,+,+,+,+,:,:,-).
@@ -427,7 +443,9 @@ with_transaction(Pre_Descriptors,
                  Post,
                  _Witnesses) :-
     % turn descriptors into query objects
-    between(1,5,_),
+    terminus_max_retries(Max_Retries),
+
+    between(1,Max_Retries,_),
     % Get unique query objects per descriptor
     open_descriptor_queries(Pre_Descriptors, Read_Descriptors, Write_Desriptors, Update_Query_Objects),
     % call update_query which will use those query objects
