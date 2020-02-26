@@ -59,7 +59,8 @@
  *                                                  instance : list(graph_descriptor)}
  *                         | ref_descriptor{ repository_descriptor: repository_descriptor,
  *                                           ref_layer : layer,
- *                                           ref_name : uri,
+ *                                           ref_name : uri, % the name of the thing advancing
+ *                                           last_commit : uri, % the base of the commit
  *                                           schema : list(graph_descriptor)
  *                                           instance : list(graph_descriptor)
  *                                           inference : list(graph_descriptor)}
@@ -87,13 +88,13 @@
  * read_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer}
  * write_obj ---> write_obj{ descriptor : graph_descriptor, write : Layer_Builder}
  * query_object ---> query_object{ collection_descriptor : collection_descriptor,
- *                                 <parent : maybe(query_object>,
+ *                                 <parent : maybe(query_object>, % except for database descriptors
  *                                 instance_read_objects : list(read_obj),
  *                                 schema_read_objects : list(read_obj),
  *                                 inference_read_objects : list(read_obj),
  *                                 instance_write_objects : list(write_obj),
- *                                 schema_write_objects : list(read_obj),
- *                                 inference_write_objects : list(read_obj) }
+ *                                 schema_write_objects : list(write_obj),
+ *                                 inference_write_objects : list(write_obj) }
  *
  * transaction_object ---> transaction_object{ collection_descriptors : list(collection_descriptor),
  *                                             query_objs : list(query_objs),
@@ -383,52 +384,100 @@ collect_query_objects(Query_Objects,
 
 set_ref_head(Ref_Query_Object) :-
     Ref_Name = Ref_Query_Object.descriptor.ref_name,
-    Repo_Query_Object = Ref_Query_Object.parent,
-    Repo_Query_Object.instance_read_objects = [Repo_Layer],
-    open_write(Repo_Layer, Repo_WB),
+    Last_Commit = Ref_Query_Object.descriptor.last_commit,
+    Ref_Query_Object.instance_read_objects = [Ref_Layer],
+    open_write(Ref_Layer, Ref_Layer_Builder),
 
-    Repo_Instance_Read_Objects = Repo_Query_Object.instance_read_objects,
-    maplist([Repo_Instance_Read_Object,Layer_ID]>>
-            (layer_to_id(Repo_Instance_Read_Object.read, Layer_ID)),
-            Repo_Instance_Read_Objects, Instance_Layer_IDs),
+    Ref_Instance_Read_Objects = Ref_Query_Object.instance_read_objects,
+    maplist([Ref_Instance_Read_Object]>>(Ref_Instance_Read_Object.read),
+            Ref_Instance_Read_Objects, Instance_Layers),
+    Ref_Schema_Read_Objects = Ref_Query_Object.schema_read_objects,
+    maplist([Ref_Schema_Read_Object]>>(Ref_Schema_Read_Object.read),
+            Ref_Schema_Read_Objects, Schema_Layers),
+    Ref_Inference_Read_Objects = Ref_Query_Object.inference_read_objects,
+    maplist([Ref_Inference_Read_Object]>>(Ref_Inference_Read_Object.read),
+            Ref_Inference_Read_Objects, Inference_Layers),
 
-    Repo_Schema_Read_Objects = Repo_Query_Object.schema_read_objects,
-    maplist([Repo_Schema_Read_Object,Layer_ID]>>
-            (layer_to_id(Repo_Schema_Read_Object.read, Layer_ID)),
-            Repo_Schema_Read_Objects, Schema_Layer_IDs),
-
-    Repo_Inference_Read_Objects = Repo_Query_Object.inference_read_objects,
-    maplist([Repo_Inference_Read_Object,Layer_ID]>>
-            (layer_to_id(Repo_Inference_Read_Object.read, Layer_ID)),
-            Repo_Inference_Read_Objects, Inference_Layer_IDs),
 
     atomic_list_concat([Ref_Name,'/document/'],Ref_Base),
-
-    maplist({Ref_Base,Repo_WB}/[Layer_Id]>>
-            write_repository_commit(Repo_WB,Ref_Base,Layer_Id),
-            Instance_Layer_Ids).
-
-write_repository_commit(Write_Builder,Ref_Base,Layer_Id) :-
-    global_prefix_expand(terminus:'Commit', CommitType),
-    global_prefix_expand(terminus:'Layer', LayerType),
-    global_prefix_expand(terminus:commit_layer, CommitLayerProp),
-    global_prefix_expand(terminus:layer_id, LayerIDProp),
-    global_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
-    global_prefix_expand(rdf:type, RDFType),
-    global_prefix_expand(xsd:string, XSDString),
-    global_prefix_expand(xsd:integer, XSDInteger),
-    object_storage(literal(Layer_Id,XSDString), Layer_Literal),
-    atomic_list_concat([Ref_Base,'Layer'],Layer_Base),
-    idgen(Layer_Base ,[Layer_Id], Layer_URI),
     random_uri(Ref_Base,'Commit',Commit_URI),
-    get_time(Time),
-    UnixTime is floor(Time),
-    number_string(UnixTime,UnixTimeString),
-    object_storage(literal(UnixTimeString,XSDString), Layer_Literal),
+    write_ref_commit(Ref_Layer_Builder, Last_Commit, Commit_URI),
+
+    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer]>>
+            write_layer_to_commit(instance,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+            Instance_Layers),
+
+    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer]>>
+            write_ref_commit(schema,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+            Schema_Layers),
+
+    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer_ID]>>
+            write_ref_commit(inference,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+            Inference_Layers),
+
+    move_repository_ref_head(Repo_Layer,
+                             Repo_WB,
+                             Ref_Query_Object.descriptor,
+                             Instance_Commit_IDs,
+                             Schema_Commit_IDs,
+                             Inference_Commit_IDs),
+
+    nb_commit(Repo_WB, Repo_Layer),
+    % what graph? This has to be filled!
+    nb_set_head(Graph,Repo_Layer).
+
+:- table metadata_prefix_expand/2
+metadata_prefix_expand(Prefixed_URI,URI) :-
+    global_prefix_expand(Prefixed_URI, CommitType).
+
+write_ref_commit(Ref_Layer_Builder,Last_Commit_URI,Commit_URI) :-
+    metadata_prefix_expand(terminus:'Commit', CommitType),
+    metadata_prefix_expand(rdf:type, RDFType),
+    metadata_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
+    unix_time_string_now(UnixTimeString),
+    object_storage(literal(UnixTimeString,XSDString), Timestamp_Literal),
+    nb_add_triple(Write_Builder, Commit_URI, RDFType, CommitType),
+
+
+write_layer_to_commit(Type,Layer,Layer_Builder,Ref_Base,Layer_ID,Commit_URI) :-
+    metadata_prefix_expand(terminus:Type, GraphProperty),
+    metadata_prefix_expand(terminus:'Layer', LayerType),
+    metadata_prefix_expand(terminus:layer_id, LayerIDProp),
+    metadata_prefix_expand(rdf:type, RDFType),
+    metadata_prefix_expand(xsd:string, XSDString),
+    metadata_prefix_expand(xsd:integer, XSDInteger),
+    object_storage(literal(Layer_ID,XSDString), Layer_Literal),
+    atomic_list_concat([Ref_Base,'Layer'],Layer_Base),
+    idgen(Layer_Base ,[Layer_ID], Layer_URI),
     nb_add_triple(Write_Builder, Layer_URI, RDFType, LayerType),
     nb_add_triple(Write_Builder, Commit_URI, CommitLayerProp, Layer_URI),
     nb_add_triple(Write_Builder, Layer_URI, LayerIDProp, Layer_Literal),
     nb_add_triple(Write_Builder, Commit_URI, CommitTimestampProp, Timestamp_Literal).
+
+unix_time_string_now(UnixTimeString) :-
+    get_time(Time),
+    UnixTime is floor(Time),
+    number_string(UnixTime,UnixTimeString).
+
+move_repository_ref_head(Repo_WB,
+                         Ref_Query_Object_Descriptor,
+                         Instance_Commit_IDs,
+                         Schema_Commit_IDs,
+                         Inference_Commit_IDs) :-
+    metadata_prefix_expand(terminus:'Graph', GraphType),
+    (   is_branch(Ref_Query_Object_Descriptor)
+    ->  metadata_prefix_expand(terminus:'Branch', RefType)
+    ;   is_tag(Ref_Query_Object_Descriptor)
+    ->  metadata_prefix_expand(terminus:'Tag', RefType)
+    ;   metadata_prefix_expand(terminus:'????', RefType)
+    ),
+
+    metadata_prefix_expand(terminus:commit_layer, CommitLayerProp),
+    metadata_prefix_expand(terminus:layer_id, LayerIDProp),
+    metadata_prefix_expand(terminus:commit_timestamp, CommitTimestampProp),
+
+    true.
+
 
 random_uri(Base,Type,URI) :-
     atomic_list_concat([Base,Type],Type_Base),
