@@ -139,9 +139,10 @@ nonNegativeInteger(I) --> natural(I) .
 nonNegativeInteger(I) --> "+", natural(I) .
 nonNegativeInteger(0) --> "-0" .
 
+% TODO: decimal drops precision because of scientific notation of number_string
 decimal(M) -->
-    integer(I), fullstop, digits(S),
-	{
+    integer(I), fullstop, digits(S), {
+        !,
         string_concat("0.", S, T),
         number_string(E,T),
         % Need to eliminate the sign and add
