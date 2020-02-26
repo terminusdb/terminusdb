@@ -638,16 +638,13 @@ update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer) :-
     nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).
 
 
-set_repo_head(Repo_Query_Object - Ref_Query_Objects, New_Repo_Query_Object) :-
-    open_write(Repo_Query_Object.repository_layer, Repo_Layer_Builder),
+set_repo_head(Layer_Builder, Repo_Query_Object - Ref_Query_Objects, New_Repo_Query_Object) :-
     Repo_Name = Repo_Query_Object.descriptor.repo_name,
-    maplist({Repo_Name, Repo_Layer_Builder}/[Ref_Query_Object]>>([Layer] = Ref_Query_Object.instance_read_objects,
-                                                                 URI = Ref_Query_Object.descriptor.ref_name,
-                                                                 update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer)),
-            Ref_Query_Objects),
-
-    nb_commit(Repo_Layer_Builder, Repo_Layer),
-    New_Repo_Query_Object = Repo_Query_Object.put(_{instance_read_object: [New_Repo_Layer]}).
+    maplist({Repo_Name, Layer_Builder}/[Ref_Query_Object]>>(
+                [Layer] = Ref_Query_Object.instance_read_objects,
+                URI = Ref_Query_Object.descriptor.ref_name,
+                update_repository_data(Repo_Name, Layer_Builder, URI, Layer)),
+            Ref_Query_Objects).
 
 query_object_parents(Query_Objects,Query_Object_Candidates, Child_Parent_Pairs) :-
     findall(Query_Object - Associated_Parents,
@@ -658,18 +655,53 @@ query_object_parents(Query_Objects,Query_Object_Candidates, Child_Parent_Pairs) 
                          Query_Objects, Associated_Parents))
             Child_Parent_Pairs).
 
-set_heads(Query_Objects) :-
+query_object_layer([Query_Object|Query_Objects], Layer) :-
+    database_descriptor{} :< Query_Object.descriptor,
+    !,
+    Query_Object.instance_read_objects = [Read_Obj],
+    Layer = Read_Obj.read.
+query_object_layer([_|Query_Objects], Layer) :-
+    query_object_layer(Query_Objects, Layer).
+
+set_heads_for_db(Database_Name - Query_Objects) :-
+    query_object_layer(Query_Objects, Layer),
+    open_write(Layer, Layer_Builder),
     % split query objects by type (ref, repo, label)
     collect_query_objects(Query_Objects,
                           Ref_Query_Objects,
                           Repo_Query_Objects,
                           Label_Query_Objects),
-
     % set heads for all the refs
     maplist(set_ref_head, Ref_Query_Objects, New_Ref_Query_Objects),
 
     query_object_parents(Repo_Query_Objects, New_Ref_Query_Objects, Repo_Refs),
-    maplist(set_repo_head, Repo_Refs, New_Repo_Query_Objects),
 
-    query_object_parents(Label_Query_Objects, New_Repo_Query_Objects, Label_Repos),
-    maplist(set_label_head, Label_Repos).
+    maplist(set_repo_head(Layer_Builder), Repo_Refs, New_Repo_Query_Objects),
+    nb_commit(Layer_Builder, NewLayer),
+    storage(Store),
+    safe_open_named_graph(Store, Database_Name, Graph_Object),
+    % Finally we can set the HEAD after we did all
+    nb_set_head(Graph_Object, NewLayer).
+
+
+query_object_database_name(Descriptor, Database_Name) :-
+    database_descriptor{database_name: Database_Name} :< Descriptor.
+query_object_database_name(Descriptor, Database_Name) :-
+    ref_descriptor{repository_descriptor: Repository_Descriptor} :< Descriptor,
+    query_object_database_name(Repository_Descriptor, Database_Name).
+query_object_database_name(Descriptor, Database_Name) :-
+    terminus_descriptor = Descriptor,
+    terminus_database_name(Database_Name).
+query_object_database_name(Descriptor, Database_Name) :-
+    repository_descriptor{database_descriptor: Database_Descriptor} :< Descriptor,
+    query_object_database_name(Database_Descriptor, Database_Name).
+
+set_heads(Query_Objects) :-
+    % split query objects by type (ref, repo, label)
+    findall(Database_Name - Query_Object, (
+                member(Query_Object, Query_Objects),
+                query_object_database_name(Query_Object, Database_Name)
+            ), Database_Name_Query_Objects)
+    % Resulting structure of group_pairs DatabaseName-[list of query objects]
+    group_pairs_by_key(Database_Name_Query_Objects, Database_Query_Objects),
+    maplist(set_heads_for_db, Database_Query_Objects).
