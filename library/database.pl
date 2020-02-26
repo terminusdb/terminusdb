@@ -54,13 +54,13 @@
  *                         | database_descriptor{ database_name : uri,
  *                                                instance : list(graph_descriptor)}
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
- *                                                  repository_layer : layer,
  *                                                  repository_name : uri,
  *                                                  instance : list(graph_descriptor)}
  *                         | ref_descriptor{ repository_descriptor: repository_descriptor,
- *                                           ref_layer : layer,
  *                                           ref_name : uri, % the name of the thing advancing
  *                                           last_commit : uri, % the base of the commit
+ *                                           author : string,
+ *                                           message : string,
  *                                           schema : list(graph_descriptor)
  *                                           instance : list(graph_descriptor)
  *                                           inference : list(graph_descriptor)}
@@ -87,10 +87,10 @@
  *
  * read_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer}
  * write_obj ---> write_obj{ descriptor : graph_descriptor, write : Layer_Builder}
- * query_object ---> query_object{ collection_descriptor : collection_descriptor,
- *                                 <parent : query_object>, % except for database descriptors
- *                                 commit_author : string,
- *                                 commit_message : string,
+ * query_object ---> query_object{ descriptor : collection_descriptor,
+ *                                 <parent : query_object>, % except for database/terminus descriptors
+ *                                 <commit_author : string>, % only ref_descriptors
+ *                                 <commit_message : string>, % only ref_descriptors
  *                                 instance_read_objects : list(read_obj),
  *                                 schema_read_objects : list(read_obj),
  *                                 inference_read_objects : list(read_obj),
@@ -160,20 +160,65 @@ included_write_objects(Graph_Descriptors, Read_Graph_Descriptors, Read_Objects) 
             Read_Descriptors, Read_Objects).
 
 /**
- * descriptor_query(Descriptor, Write_Mask, Read_Mask, Query_Obj) is det.
+ * descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map) is det.
  *
  * Impements the logic which allows us to special-case the
  * opening of descriptors for repository, branch and graph.
  *
- * @Descriptor has type repository{ ... } | branch{ ... }
- * @Write_Mask has type list(descriptor)
- *             This opens read queries. No mask means everything is opened.
+ * It opens descriptors like an onion, avoiding duplicate opens with a Map.
+ *
+ * @Descriptor has type collection_descriptor
+ * @Read_Graph_Descriptor has type list(collection_descriptor)
+ *                        This specifies which read queries to open.
+ * @Write_Graph_Descriptor has type list(collection_descriptor)
+ *                         This specifies which write queries to open.
+ * @Map has type list(descriptor=query_object)
+ *      Keeps track of the descriptors which have already been opened so we are monotonic
+ * @New_Map has type list(descriptor=query_object)
+ *      Updated map
  */
-descriptor_query(Collection_Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Query_Obj) :-
-    Collection_Descriptor = database_descriptor{
-                                database_name : DB_Name,
-                                instance : IL
-                            },
+descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, Map) :-
+    memberchk(Descriptor=_, Map),
+    !.
+descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
+                 [terminus_descriptor=Query_Object|Map]) :-
+
+    terminus_schema(Schema_Name),
+    Schema_Graph = named_graph{ name : Schema_Name },
+
+    terminus_instance(Instance_Name),
+    Instance_Graph = named_graph{ name : Instance_Name },
+
+    terminus_instance(Instance_Name),
+    Inference_Graph = named_graph{ name : Inference_Name },
+
+    % Get hard coded schema read/write objects
+    include_read_objects([Schema_Graph],Read_Graph_Descriptors, Schema_Read_Objects),
+    include_write_objects([Schema_Graph],Write_Graph_Descriptors, Schema_Write_Objects),
+
+    % Get hard coded instance read/write objects
+    include_read_objects([Instance_Graph],Read_Graph_Descriptors,Instance_Read_Objects),
+    include_write_objects([Instance_Graph],Write_Graph_Descriptors, Instance_Write_Objects),
+
+    % Get hard coded inference read/write objects
+    include_read_objects([Inference_Graph],Read_Graph_Descriptors,Inference_Read_Objects),
+    include_write_objects([Inference_Graph],Write_Graph_Descriptors,Inference_Write_Objects),
+
+    Query_Object = query_obj{
+                       descriptor : Collection_Descriptor,
+                       instance_read_objects : Instance_Read_Objects,
+                       schema_read_objects : Schema_Read_Objects,
+                       inference_read_objects : Inference_Read_Objects,
+                       instance_write_objects : Instance_Write_Objects,
+                       inference_write_objects : Inference_Write_Objects,
+                       schema_write_objects : Schema_Write_Objects
+                   }.
+descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
+                 [Descriptor=Query_Object|Map]) :-
+    Descriptor = database_descriptor{
+                     database_name : DB_Name,
+                     instance : IL
+                 },
     !,
     layer_ontology(Layer_Ontology_Name),
     Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
@@ -189,23 +234,28 @@ descriptor_query(Collection_Descriptor, Read_Graph_Descriptors, Write_Graph_Desc
     include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
     include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
 
-    Query_Obj = query_obj{
-                    collection_descriptor : Collection_Descriptor,
-                    instance_read_objects : Instance_Read_Objects,
-                    schema_read_objects : Schema_Read_Objects,
-                    inference_read_objects : [],
-                    instance_write_objects : Write_Instance_Objects,
-                    inference_write_objects : [],
-                    schema_write_objects : Schema_Write_Objects
-                }.
-descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
-    Collection_Descriptor = repository_descriptor{
-                                database_descriptor : _DB,
-                                repository_layer : _Layer,
-                                repository_name : _Name,
-                                instance : IL
-                            },
+    Query_Object = query_obj{
+                       descriptor : Collection_Descriptor,
+                       instance_read_objects : Instance_Read_Objects,
+                       schema_read_objects : Schema_Read_Objects,
+                       inference_read_objects : [],
+                       instance_write_objects : Write_Instance_Objects,
+                       inference_write_objects : [],
+                       schema_write_objects : Schema_Write_Objects
+                   }.
+descriptor_query(Repository, Read_Mask, Write_Mask, Map,
+                 [Descriptor=Query_Object|New_Map]) :-
+    Descriptor = repository_descriptor{
+                     database_descriptor : DB,
+                     repository_name : _Name,
+                     author : Author,
+                     message : Message,
+                     instance : IL
+                 },
     !,
+    descriptor_query(DB, Read_Mask, Write_Mask, Map, New_Map),
+    memberchk(DB,New_Map, Parent_Query_Obj),
+
     layer_ontology(Layer_Ontology_Name),
     Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
     ref_ontology(Ref_Ontology_Name),
@@ -220,25 +270,55 @@ descriptor_query(Repository, Read_Mask, Write_Mask, Query_Obj) :-
     include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
     include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
 
-    Query_Obj = query_obj{
-                    collection_descriptor : Collection_Descriptor,
-                    instance_read_objects : Read_Instance_Objects,
-                    schema_read_objects : Read_Schema_Objects,
-                    inference_read_objects : [],
-                    instance_write_objects : Write_Instance_Objects,
-                    schema_write_objects : Write_Schema_Objects,
-                    inference_write_objects : []
-                }.
-descriptor_query(Branch, Read_Mask, Write_Mask, Query_Obj) :-
-    Branch = ref_descriptor{ database_name : DB_Name,
-                             repository_name : Repository_Name,
-                             branch_name : Branch_Name,
-                             schema : Schema_List,
-                             inference : Inf_List,
-                             instance : Instance_List },
+    Query_Object = query_obj{
+                       parent : Parent_Query_Obj,
+                       descriptor : Descriptor,
+                       instance_read_objects : Read_Instance_Objects,
+                       schema_read_objects : Read_Schema_Objects,
+                       inference_read_objects : [],
+                       instance_write_objects : Write_Instance_Objects,
+                       schema_write_objects : Write_Schema_Objects,
+                       inference_write_objects : []
+                   }.
+descriptor_query(Descriptor, Read_Mask, Write_Mask, Map,
+                 [Descriptor=Query_Object|New_Map]) :-
+    Descriptor = ref_descriptor{ repository_descriptor : Repository_Descriptor,
+                                 ref_name : Ref_Name,
+                                 last_commit : Last_Commit,
+                                 repository_name : Repository_Name,
+                                 author : Author,
+                                 message : Message,
+                                 schema : Schema_List,
+                                 inference : Inf_List,
+                                 instance : Instance_List },
     !,
-    % TODO: Not actually written
-    true.
+    descriptor_query(Repository_Descriptor, Read_Mask, Write_Mask, Map, New_Map),
+    memberchk(Repository_Descriptor, New_Map, Parent_Query_Obj),
+
+    % Get schema read/write objects
+    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Schema_Read_Objects),
+    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Schema_Write_Objects),
+
+    % Get instance read/write objects
+    include_read_objects(Instance_List,Read_Graph_Descriptors, Instance_Read_Objects),
+    include_write_objects(Instance_List,Write_Graph_Descriptors, Instance_Write_Objects),
+
+    % Get inference read/write objects
+    include_read_objects(Inference_List,Read_Graph_Descriptors, Inference_Read_Objects),
+    include_write_objects(Inference_List,Write_Graph_Descriptors, Inference_Write_Objects),
+
+    Query_Obj = query_obj{
+                    parent : Parent_Query_Obj,
+                    descriptor : Descriptor,
+                    commit_message : Message,
+                    commit_author : Author,
+                    instance_read_objects : Instance_Read_Objects,
+                    schema_read_objects : Schema_Read_Objects,
+                    inference_read_objects : Inference_Read_Objects,
+                    instance_write_objects : Instance_Write_Objects,
+                    schema_write_objects : Schema_Write_Objects,
+                    inference_write_objects : Inference_Write_Objects
+                }.
 
 update_read_objects([], New_Read_Objects, New_Read_Objects).
 update_read_objects([Old_Read_Object|Old_Read_Objects], New_Read_Objects, Results) :-
@@ -258,6 +338,7 @@ commit_write_object(write_obj{
                     }) :-
     terminus_store:nb_commit(Layer_Builder, Layer).
 
+/* TODO: This seems completely wrong. Probably need to use 'put' due to polymorphism */
 commit_query_object(query_object{
                         collection_descriptor: Collection_Descriptor,
                         instance_read_objects: Instance_Read_Objects,
@@ -301,6 +382,38 @@ call_or_die(Call, Message) :-
     ->  true
     ;   die(Message)).
 
+
+/**
+ * open_descriptor_queries_uniquely(Descriptors, Read_Descriptors, Write_Descriptors, Query_Objects, Map) is det.
+ *
+ * Only creates one object per descriptor - actually a fold.
+ */
+open_descriptor_queries_uniquely([], _Read_Descriptors, _Write_Descriptors, [], _Map).
+open_descriptor_queries_uniquely([Descriptor|Descriptors], Read_Descriptors, Write_Descriptors,
+                                 Query_Objects, Map) :-
+    descriptor_query(Descriptor, Read_Descriptors, Write_Descriptors,
+                     Descriptor_Query_Objects, Map, New_Map),
+    % difference list anyone?
+    append(Descriptor_Query_Objects,New_Query_Objects,Query_Objects),
+    open_descriptor_queries_uniquely(Descriptors, Read_Descriptors,
+                                     Write_Descriptors, New_Query_Objects, New_Map).
+
+key_equal((=), X=_, X=_).
+key_equal((<), X=_, Y=_) :-
+    X @< Y.
+key_equal((>), X=_, Y=_) :-
+    X @> Y.
+
+/**
+ * open_descriptor_queries(Descriptors, Read_Descriptors, Write_Descriptors, Query_Objects) is det.
+ *
+ * open descriptors responsibly
+ */
+open_descriptor_queries(Descriptors, Read_Descriptors, Write_Descriptors, Query_Objects) :-
+    open_descriptor_queries_uniquely(Descriptors, Read_Descriptors, Write_Descriptors, [], Map),
+    presort(key_equal,Map,Sorted_Map),
+    maplist([_Descriptor=Query_Object,Query_Object]>>true, Sorted_Map, Query_Objects).
+
 /**
  * with_transaction(+Pre_Descriptors, +Read_Descriptors, +Write_Descriptors, :Query_Update, :Post, -Witnesses) is semidet.
  */
@@ -315,10 +428,8 @@ with_transaction(Pre_Descriptors,
                  _Witnesses) :-
     % turn descriptors into query objects
     between(1,5,_),
-    % this guy has to be responsible for opening writers in a reasonable way, so that we don't get multiple versions of a layer builder for a repo graph.
-    maplist({Read_Descriptors, Write_Descriptors}/[Pre_Descriptor, Query_Object]>>(descriptor_query(Pre_Descriptor, Read_Descriptors, Write_Descriptors, Query_Object)),
-            Pre_Descriptors,
-            Update_Query_Objects),
+    % Get unique query objects per descriptor
+    open_descriptor_queries(Pre_Descriptors, Read_Descriptors, Write_Desriptors, Update_Query_Objects),
     % call update_query which will use those query objects
     call_or_die(Query_Update, 'unable to perform the query'),
 
