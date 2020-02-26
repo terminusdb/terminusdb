@@ -65,6 +65,15 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
     ;   string(Val)),
     atom_codes(Val,Codes),
     phrase((whites,
+            decimal(N),
+            whites),
+           Codes),
+    !.
+guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
+    (   atom(Val)
+    ;   string(Val)),
+    atom_codes(Val,Codes),
+    phrase((whites,
             integer(N),
             whites),
            Codes),
