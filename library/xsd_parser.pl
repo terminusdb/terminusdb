@@ -88,8 +88,8 @@ notslash --> anyBut('/').
  *  Number stuff  *
  ******************/
 
-sign(1) --> "+".
-sign(-1) --> "-".
+sign(1) --> "+", !.
+sign(-1) --> "-", !.
 sign(1) --> "".
 
 
@@ -117,8 +117,9 @@ fourDigitNatural(N) --> digit(A), digit(B), digit(C), digit(D),
 			{ string_concat(A,B,S1), string_concat(S1,C,S2), string_concat(S2,D,S3), number_string(N,S3) } .
 
 
-digits(T) --> digit(X), digits(S),
+digits(T) --> digit(X), digits(S), !,
 	      { string_concat(X, S, T) } .
+
 digits(S) --> digit(S) .
 
 natural(N) --> digits(S),
@@ -141,13 +142,12 @@ nonNegativeInteger(0) --> "-0" .
 
 % TODO: decimal drops precision because of scientific notation of number_string
 decimal(M) -->
-    integer(I), fullstop, digits(S), {
-        !,
+    sign(Sign), natural(I), fullstop, digits(S),
+	{
         string_concat("0.", S, T),
         number_string(E,T),
         % Need to eliminate the sign and add
         % it later in order to use addition.
-        Sign is sign(I),
         M is Sign * ((Sign * I) + E)
     }.
 decimal(M) --> integer(M) .
