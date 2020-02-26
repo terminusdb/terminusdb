@@ -385,7 +385,7 @@ collect_query_objects(Query_Objects,
           Second_Level_Label_Query_Objects,
           Label_Query_Objects).
 
-set_ref_head(Ref_Query_Object) :-
+set_ref_head(Ref_Query_Object, New_Ref_Query_Object) :-
     Ref_Name = Ref_Query_Object.descriptor.ref_name,
     Last_Commit = Ref_Query_Object.descriptor.last_commit,
     Ref_Query_Object.instance_read_objects = [Ref_Layer],
@@ -416,7 +416,10 @@ set_ref_head(Ref_Query_Object) :-
 
     maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer_ID]>>
             write_layer_to_commit(inference,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
-            Inference_Layers).
+            Inference_Layers),
+
+    nb_commit(Ref_Layer_Builder, New_Ref_Layer),
+    New_Ref_Query_Object = Ref_Query_Object.put(_{instance_read_object: [New_Ref_Layer]}).
 
 :- table metadata_prefix_expand/2
 metadata_prefix_expand(Prefixed_URI,URI) :-
@@ -455,7 +458,7 @@ write_layer_to_commit(Type,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI
     metadata_prefix_expand(xsd:integer, XSD_Integer),
     layer_to_id(Layer,Layer_ID),
     object_storage(literal(Layer_ID,XSD_String), Layer_Literal),
-    atomic_list_concat([Ref_Base,'Layer'],Layer_Base),
+    atomic_list_concat([Ref_Base,'/document/Layer'],Layer_Base),
     parent(Layer,Parent),
     layer_to_id(Parent,Parent_Layer_ID),
     idgen(Layer_Base ,[Layer_ID], Layer_URI),
@@ -477,13 +480,66 @@ random_uri(Base,Type,URI) :-
     format(atom(Random), '~36r', [Num]),
     idgen(Type_Base ,[Random], URI).
 
-set_repo_head(Repo_Query_Object - Ref_Query_Objects) :-
-    maplist([]>>(), Ref_Query_Objects,
-    Repo_Query_Object
-    true.
+nb_remove_shadow_layer(Layer_Builder, Repo_Name, Layer_Id) :-
+    metadata_prefix_expand(terminus:'ShadowLayer', Layer_Type),
+    metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
+    metadata_prefix_expand(rdf:type, RDF_Type),
+    metadata_prefix_expand(xsd:string, XSD_String),
+
+    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+
+    idgen(Layer_Base, [Layer_Id], Layer_URI),
+    object_storage(literal(Layer_Id,XSD_String), Layer_Literal),
+
+    ignore(nb_remove_triple(Layer_Builder, Layer_URI, RDF_Type, node(Layer_Type))),
+    ignore(nb_remove_triple(Layer_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal))).
+
+nb_add_shadow_layer(Layer_Builder, Repo_Name, Layer_Id) :-
+    metadata_prefix_expand(terminus:'ShadowLayer', Layer_Type),
+    metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
+    metadata_prefix_expand(rdf:type, RDF_Type),
+    metadata_prefix_expand(xsd:string, XSD_String),
+
+    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+
+    idgen(Layer_Base, [Layer_Id], Layer_URI),
+    object_storage(literal(Layer_Id,XSD_String), Layer_Literal),
+
+    nb_add_triple(Layer_Builder, Layer_URI, RDF_Type, node(Layer_Type)),
+    nb_add_triple(Layer_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal)).
+
+
+update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer) :-
+    layer_to_id(Layer, Layer_Id),
+    parent(Layer, Parent),
+    layer_to_id(Parent, Parent_Id),
+
+    metadata_prefix_expand(terminus:repository_head, Repository_Head_Property),
+    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+
+    idgen(Layer_Base, [Layer_Id], Layer_URI),
+    idgen(Layer_Base, [Parent_Id], Parent_URI),
+
+    nb_remove_shadow_layer(Repo_Layer_Builder, Parent_URI),
+    nb_add_shadow_layer(Repo_Layer_Builder, Layer_Id),
+
+    nb_remove_triple(URI, Repository_Head_Property, node(Parent_URI)),
+    nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).
+
+
+set_repo_head(Repo_Query_Object - Ref_Query_Objects, New_Repo_Query_Object) :-
+    open_write(Repo_Query_Object.repository_layer, Repo_Layer_Builder),
+    Repo_Name = Repo_Query_Object.descriptor.repo_name,
+    maplist({Repo_Name, Repo_Layer_Builder}/[Ref_Query_Object]>>([Layer] = Ref_Query_Object.instance_read_objects,
+                                                                 URI = Ref_Query_Object.descriptor.ref_name,
+                                                                 update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer)),
+            Ref_Query_Objects),
+
+    nb_commit(Repo_Layer_Builder, Repo_Layer),
+    New_Repo_Query_Object = Repo_Query_Object.put(_{instance_read_object: [New_Repo_Layer]}).
 
 query_object_parents(Query_Objects,Query_Object_Candidates, Child_Parent_Pairs) :-
-    findall(Query_Object - Associated_Parent,
+    findall(Query_Object - Associated_Parents,
             (   member(Query_Object,Query_Objects),
                 convlist({Query_Object}/[Candidate_Query_Object]>>
                          descriptor_compare((=),Query_Object.parent.descriptor,
@@ -499,10 +555,10 @@ set_heads(Query_Objects) :-
                           Label_Query_Objects),
 
     % set heads for all the refs
-    maplist(set_ref_head, Ref_Query_Objects),
+    maplist(set_ref_head, Ref_Query_Objects, New_Ref_Query_Objects),
 
-    query_object_parents(Repo_Query_Objects, Ref_Query_Objects, Repo_Refs),
-    maplist(set_repo_head, Repo_Refs),
+    query_object_parents(Repo_Query_Objects, New_Ref_Query_Objects, Repo_Refs),
+    maplist(set_repo_head, Repo_Refs, New_Repo_Query_Objects),
 
-    query_object_parents(Label_Query_Objects, Repo_Query_Objects, Label_Repos),
+    query_object_parents(Label_Query_Objects, New_Repo_Query_Objects, Label_Repos),
     maplist(set_label_head, Label_Repos).

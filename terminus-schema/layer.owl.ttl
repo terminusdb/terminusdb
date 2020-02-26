@@ -28,9 +28,15 @@ terminus:LayerParentRestriction
   owl:onProperty terminus:layer_parent ;
   owl:maxCardinality "1"^^xsd:nonNegativeInteger .
 
+terminus:ShadowLayer
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document, terminus:LayerIdRestriction ;
+  rdfs:comment "A kind of Layer with no parent information, implicitely associated with a real layer "@en ;
+  rdfs:label "Shadow Layer"@en .
+
 terminus:Layer
   a owl:Class ;
-  rdfs:subClassOf terminus:LayerIdRestriction , terminus:LayerParentRestriction ;
+  rdfs:subClassOf terminus:ShadowLayer , terminus:LayerParentRestriction ;
   rdfs:comment "A Layer object with its identifying information "@en ;
   rdfs:label "Layer"@en .
 
@@ -38,7 +44,7 @@ terminus:layer_id
   a owl:DatatypeProperty ;
   rdfs:comment "A property holding the layer"@en ;
   rdfs:label "Layer ID"@en ;
-  rdfs:domain terminus:Layer ;
+  rdfs:domain terminus:ShadowLayer ;
   rdfs:range xsd:string .
 
 terminus:layer_parent
@@ -47,4 +53,3 @@ terminus:layer_parent
   rdfs:label "Layer ID"@en ;
   rdfs:domain terminus:Layer ;
   rdfs:range terminus:Layer .
-
