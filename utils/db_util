@@ -171,10 +171,10 @@ template_terminus_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/terminus_instance_template.ttl'], Path).
 
 terminus_inference_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/terminus_inference_template.ttl'], Path).
+    atomic_list_concat([Dir,'/../terminus-schema/terminus_inference.owl.ttl'], Path).
 
 terminus_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
+    atomic_list_concat([Dir,'/../terminus-schema/terminus_schema.owl.ttl'], Path).
 
 repository_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir, '/../terminus-schema/repository.owl.ttl'], Path).
@@ -191,9 +191,6 @@ database_path(Dir,Path) :-
 
 instance_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/instance.ttl'], Path).
-
-instance_name(Host,Name) :-
-    atomic_list_concat([Host,'/terminus/document'],Name).
 
 config_path(Dir,Path) :-
     atomic_list_concat([Dir, '/../config/config.pl'], Path).
@@ -222,17 +219,11 @@ index_template_path(Dir,Path) :-
 inference_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/inference.ttl'], Path).
 
-inference_name(Host,Name) :-
-    atomic_list_concat([Host,'/terminus/inference'],Name).
-
 ttl_path(Dir, Path) :-
     atomic_list_concat([Dir,'1-ckp.ttl'], Path).
 
 schema_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../tmp/schema.ttl'], Path).
-
-schema_name(Host,Name) :-
-    atomic_list_concat([Host,'/terminus/schema'],Name).
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
@@ -280,13 +271,14 @@ initialize_database(Public_URL, Key, Dir) :-
     copy_file(Example_Instance_TTL, Instance_TTL_Path),
     replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
     replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
-    instance_name(Public_URL,Instance_Name),
+
+    terminus_instance_name(Instance_Name),
     create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
 
-    schema_name(Public_URL,Schema_Name),
+    terminus_schema_name(Schema_Name),
     create_graph_from_turtle(DB_Path,Schema_Name,Terminus_Schema_TTL),
 
-    inference_name(Public_URL,Inference_Name),
+    terminus_inference_name(Inference_Name),
     create_graph_from_turtle(DB_Path,Inference_Name,Terminus_Inference_TTL),
 
     layer_ontology(Layer_Name),

@@ -187,26 +187,26 @@ descriptor_query(Descriptor, _Read_Graph_Descriptors, _Write_Graph_Descriptors, 
 descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
                  [terminus_descriptor=Query_Object|Map]) :-
 
-    terminus_schema(Schema_Name),
+    terminus_schema_name(Schema_Name),
     Schema_Graph = named_graph{ name : Schema_Name },
 
-    terminus_instance(Instance_Name),
+    terminus_instance_name(Instance_Name),
     Instance_Graph = named_graph{ name : Instance_Name },
 
-    terminus_inference(Inference_Name),
+    terminus_inference_name(Inference_Name),
     Inference_Graph = named_graph{ name : Inference_Name },
 
     % Get hard coded schema read/write objects
-    include_read_objects([Schema_Graph],Read_Graph_Descriptors, Schema_Read_Objects),
-    include_write_objects([Schema_Graph],Write_Graph_Descriptors, Schema_Write_Objects),
+    included_read_objects([Schema_Graph],Read_Graph_Descriptors, Schema_Read_Objects),
+    included_write_objects([Schema_Graph],Write_Graph_Descriptors, Schema_Write_Objects),
 
     % Get hard coded instance read/write objects
-    include_read_objects([Instance_Graph],Read_Graph_Descriptors,Instance_Read_Objects),
-    include_write_objects([Instance_Graph],Write_Graph_Descriptors, Instance_Write_Objects),
+    included_read_objects([Instance_Graph],Read_Graph_Descriptors,Instance_Read_Objects),
+    included_write_objects([Instance_Graph],Write_Graph_Descriptors, Instance_Write_Objects),
 
     % Get hard coded inference read/write objects
-    include_read_objects([Inference_Graph],Read_Graph_Descriptors,Inference_Read_Objects),
-    include_write_objects([Inference_Graph],Write_Graph_Descriptors,Inference_Write_Objects),
+    included_read_objects([Inference_Graph],Read_Graph_Descriptors,Inference_Read_Objects),
+    included_write_objects([Inference_Graph],Write_Graph_Descriptors,Inference_Write_Objects),
 
     Query_Object = query_obj{
                        descriptor : terminus_descriptor,
@@ -230,12 +230,12 @@ descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Ma
 
     % Get hard coded layer and repository schema read/write objects
     Schema_Graphs = [Repository_Ontology_Graph, Layer_Ontology_Graph],
-    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Schema_Read_Objects),
-    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Schema_Write_Objects),
+    included_read_objects(Schema_Graphs,Read_Graph_Descriptors, Schema_Read_Objects),
+    included_write_objects(Schema_Graphs,Write_Graph_Descriptors, Schema_Write_Objects),
 
     % Get instance read/write objects
-    include_read_objects(IL,Read_Graph_Descriptors,Instance_Read_Objects),
-    include_write_objects(IL,Write_Graph_Descriptors, Instance_Write_Objects),
+    included_read_objects(IL,Read_Graph_Descriptors,Instance_Read_Objects),
+    included_write_objects(IL,Write_Graph_Descriptors, Instance_Write_Objects),
 
     Query_Object = query_obj{
                        descriptor : Descriptor,
@@ -263,12 +263,12 @@ descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Ma
 
     % Get hard coded layer and repository schema read/write objects
     Schema_Graphs = [Repository_Ontology_Graph, Layer_Ontology_Graph],
-    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Read_Schema_Objects),
-    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
+    included_read_objects(Schema_Graphs,Read_Graph_Descriptors, Read_Schema_Objects),
+    included_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
 
     % Get instance read/write objects
-    include_read_objects(Instances,Read_Graph_Descriptors,Read_Instance_Objects),
-    include_write_objects(Instances,Write_Graph_Descriptors, Write_Instance_Objects),
+    included_read_objects(Instances,Read_Graph_Descriptors,Read_Instance_Objects),
+    included_write_objects(Instances,Write_Graph_Descriptors, Write_Instance_Objects),
 
     Query_Object = query_obj{
                        parent : Parent_Query_Obj,
@@ -294,16 +294,16 @@ descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Ma
     memberchk(Repository_Descriptor, New_Map, Parent_Query_Obj),
 
     % Get schema read/write objects
-    include_read_objects(Schema_List,Read_Graph_Descriptors, Schema_Read_Objects),
-    include_write_objects(Schema_List,Write_Graph_Descriptors, Schema_Write_Objects),
+    included_read_objects(Schema_List,Read_Graph_Descriptors, Schema_Read_Objects),
+    included_write_objects(Schema_List,Write_Graph_Descriptors, Schema_Write_Objects),
 
     % Get instance read/write objects
-    include_read_objects(Instance_List,Read_Graph_Descriptors, Instance_Read_Objects),
-    include_write_objects(Instance_List,Write_Graph_Descriptors, Instance_Write_Objects),
+    included_read_objects(Instance_List,Read_Graph_Descriptors, Instance_Read_Objects),
+    included_write_objects(Instance_List,Write_Graph_Descriptors, Instance_Write_Objects),
 
     % Get inference read/write objects
-    include_read_objects(Inference_List,Read_Graph_Descriptors, Inference_Read_Objects),
-    include_write_objects(Inference_List,Write_Graph_Descriptors, Inference_Write_Objects),
+    included_read_objects(Inference_List,Read_Graph_Descriptors, Inference_Read_Objects),
+    included_write_objects(Inference_List,Write_Graph_Descriptors, Inference_Write_Objects),
 
     Query_Object = query_obj{
                        parent : Parent_Query_Obj,
