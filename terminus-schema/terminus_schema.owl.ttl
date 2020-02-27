@@ -214,6 +214,19 @@ terminus:database_name
   rdfs:range xsd:string ;
   rdfs:domain terminus:Database .
 
+terminus:Finalized
+  rdfs:label "Finalized"@en ;
+  rdfs:comment "Class for finalized database marker" ;
+  a owl:Class ;
+  owl:oneOf (terminus:finalized) .
+
+terminus:database_finalized
+  rdfs:label "Finalized"@en ;
+  rdfs:comment "The database has been fully constructed"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:range terminus:Finalized ;
+  rdfs:domain terminus:Database .
+
 terminus:allow_origin
   rdfs:label "Allow Requests from"@en ;
   rdfs:comment "Specify which domains can access this database from the web. Set to \"*\" for universal access. Sets the HTTP Access-Control-Allow-Origin header. "@en ;
@@ -226,27 +239,6 @@ terminus:Server
   rdfs:comment "A Resource Object Representing the Database Server itself"@en ;
   a owl:Class ;
   rdfs:subClassOf terminus:Resource .
-
-terminus:schema
-  a owl:DatatypeProperty ;
-  rdfs:label "schema"@en ;
-  rdfs:comment "A schema graph associated with the given database. All schema graphs are unioned."@en ;
-  rdfs:domain terminus:Database ;
-  rdfs:range xsd:string .
-
-terminus:instance
-  a owl:DatatypeProperty ;
-  rdfs:label "document"@en ;
-  rdfs:comment "A document / instance graph associated with the given database. All instance graphs are unioned"@en ;
-  rdfs:domain terminus:Database ;
-  rdfs:range xsd:string .
-
-terminus:inference
-  a owl:DatatypeProperty ;
-  rdfs:label "inference"@en ;
-  rdfs:comment "An inference graph associated with the given database. All inference graphs are unioned"@en ;
-  rdfs:domain terminus:Database ;
-  rdfs:range xsd:string .
 
 terminus:APIUpdate
   a owl:Class;

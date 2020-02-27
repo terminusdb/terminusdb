@@ -4,7 +4,12 @@
               ref_ontology/1,
               terminus_instance_name/1,
               terminus_inference_name/1,
-              terminus_schema_name/1
+              terminus_schema_name/1,
+              rdf_type_uri/1,
+              xsd_string_type_uri/1,
+              database_class_uri/1,
+              database_name_property_uri/1,
+              finalized_element_uri/1
           ]).
 
 /** <module> Terminus Bootstrap
@@ -42,3 +47,11 @@ repository_ontology('http://terminusdb.com/schema/repository').
 
 ref_ontology('http://terminusdb.com/schema/ref').
 
+%%% various URIs that we use often
+rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
+xsd_string_type_uri('http://www.w3.org/2001/XMLSchema#string').
+
+%%% URIs from terminus schema
+database_class_uri('http://terminusdb.com/schema/terminus#Database').
+database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
+finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
