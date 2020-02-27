@@ -93,19 +93,21 @@ nonvar_literal(lang(Lang,String), S) :-
         nonvar(String)
     ->  format(string(S), '~q@~q', [String,Lang])
     ;   true).
+nonvar_literal(type(Type,Val), _) :-
+    % Skip all the other checks when either type or val is a variable
+    var(Type); var(Val),
+    !.
+nonvar_literal(type('http://www.w3.org/2001/XMLSchema#dateTime', Val), S) :-
+    Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM),
+    date_string(Val,Date_String),
+    !,
+    format(string(S), '~q^^~q', [Date_String,'http://www.w3.org/2001/XMLSchema#dateTime']).
+nonvar_literal(type('http://www.w3.org/2001/XMLSchema#decimal',Val), S) :-
+    phrase(xsd_parser:decimal(_), Val),
+    !,
+    format(string(S), '~f^^~q', [Val, 'http://www.w3.org/2001/XMLSchema#decimal']).
 nonvar_literal(type(Type,Val), S) :-
-    (   nonvar(Type),
-        nonvar(Val)
-    ->  (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
-            Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
-        ->  date_string(Val,Date_String),
-            format(string(S), '~q^^~q', [Date_String,Type])
-            % Check now to see if type and values are decimals
-        ;   (Type = 'http://www.w3.org/2001/XMLSchema#decimal',
-             phrase(xsd_parser:decimal(_), Val))
-            ->  format(string(S), '~f^^~q', [Val, Type])
-        ;   format(string(S), '~q^^~q', [Val,Type]))
-    ;   true).
+    format(string(S), '~q^^~q', [Val,Type]).
 
 nonvar_storage(literal(L),value(V)) :-
     !,
