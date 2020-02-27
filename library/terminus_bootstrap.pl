@@ -57,4 +57,4 @@ database_name_property_uri('http://terminusdb.com/schema/terminus#database_name'
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
 
 %%% URIs from repository schema
-respository_class_uri('http://terminusdb.com/schema/repository#Local').
+local_repository_class_uri('http://terminusdb.com/schema/repository#Local').

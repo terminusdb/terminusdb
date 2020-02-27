@@ -89,17 +89,20 @@ create_repo_graph(Name,Repo_Builder) :-
     storage(Store),
     safe_create_named_graph(Store,Name,Graph),
     open_write(Layer, Builder),
-    repository_class_uri(Class),
-    rdf_type_uri(RDFType),
+    local_repository_class_uri(Local_Class_Uri),
+    rdf_type_uri(Rdf_Type_Uri),
     atomic_list_concat(['terminus:///', Name, '/document/Local'], Local_Base),
     idgen(Local_Base, [], Local_URI),
 
+    % TODO: is this really all there is to do?
     nb_add_triple(Repo_Builder,
                   Local_URI,
                   Rdf_Type_Uri,
-                  node(Database_Class_Uri)),
+                  node(Local_Class_Uri)).
 
-    true.
+create_ref_layer(Repo_Builder, Ref_Layer) :-
+    % How do I open a layer with no label?
+    .
 
 create_db(Name) :-
     % insert new db object into the terminus db

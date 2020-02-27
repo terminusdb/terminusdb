@@ -129,6 +129,8 @@ zip([],[],[]).
  * intersperse(+Item,+List,-Output) is det.
  *
  * Puts an element between every element of a list.
+ *
+ * TODO: Leaves impossible choice-points around...
  */
 intersperse(_,[],[]).
 intersperse(_,[X],[X]).
@@ -369,7 +371,6 @@ pattern_string_split(Pattern,String,List) :-
     re_split(Pattern,String,L),
     once(intersperse(_,List,L)).
 
-
 /*
  * merge_separator_split(+Merge, +Separator,-Split) is det.
  * merge_separator_split(-Merge, +Separator,+Split) is det.
@@ -383,7 +384,7 @@ merge_separator_split(Merge, Separator, Split) :-
     ground(Split),
     var(Merge),
     !,
-    intersperse(Separator, Split, Merge_List),
+    once(intersperse(Separator, Split, Merge_List)),
     atomic_list_concat(Merge_List, Merge).
 merge_separator_split(Merge, Separator, Split) :-
     ground(Merge),
