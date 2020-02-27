@@ -5,6 +5,7 @@
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
 
 <http://terminusdb.com/schema/terminus>
   a owl:Ontology ;

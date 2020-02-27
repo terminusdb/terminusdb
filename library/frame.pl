@@ -65,7 +65,6 @@
 :- use_module(types).
 :- use_module(frame_types).
 :- use_module(jsonld).
-:- use_module(prefixes).
 :- use_module(expansions).
 
 :- use_module(library(apply)).

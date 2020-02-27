@@ -36,6 +36,7 @@
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(terminus_bootstrap)).
 
 :- op(2, xfx, ^^).
 
@@ -98,6 +99,8 @@
  *                                 instance_write_objects : list(write_obj),
  *                                 schema_write_objects : list(write_obj),
  *                                 inference_write_objects : list(write_obj) }
+ *
+ * TODO: Does this exist? Should it?
  *
  * transaction_object ---> transaction_object{ collection_descriptors : list(collection_descriptor),
  *                                             query_objs : list(query_objs),
@@ -178,7 +181,7 @@ included_write_objects(Graph_Descriptors, Read_Graph_Descriptors, Read_Objects) 
  * @New_Map has type list(descriptor=query_object)
  *      Updated map
  */
-descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, Map) :-
+descriptor_query(Descriptor, _Read_Graph_Descriptors, _Write_Graph_Descriptors, Map, Map) :-
     memberchk(Descriptor=_, Map),
     !.
 descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
@@ -190,7 +193,7 @@ descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descri
     terminus_instance(Instance_Name),
     Instance_Graph = named_graph{ name : Instance_Name },
 
-    terminus_instance(Instance_Name),
+    terminus_inference(Inference_Name),
     Inference_Graph = named_graph{ name : Inference_Name },
 
     % Get hard coded schema read/write objects
@@ -206,7 +209,7 @@ descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descri
     include_write_objects([Inference_Graph],Write_Graph_Descriptors,Inference_Write_Objects),
 
     Query_Object = query_obj{
-                       descriptor : Collection_Descriptor,
+                       descriptor : terminus_descriptor,
                        instance_read_objects : Instance_Read_Objects,
                        schema_read_objects : Schema_Read_Objects,
                        inference_read_objects : Inference_Read_Objects,
@@ -216,11 +219,43 @@ descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descri
                    }.
 descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
                  [Descriptor=Query_Object|Map]) :-
-    Descriptor = database_descriptor{
-                     database_name : DB_Name,
-                     instance : IL
-                 },
+    database_descriptor{
+        instance : IL
+    } :< Descriptor,
     !,
+    layer_ontology(Layer_Ontology_Name),
+    Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
+    repository_ontology(Repository_Ontology_Name),
+    Repository_Ontology_Graph = named_graph{ name : Repository_Ontology_Name },
+
+    % Get hard coded layer and repository schema read/write objects
+    Schema_Graphs = [Repository_Ontology_Graph, Layer_Ontology_Graph],
+    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Schema_Read_Objects),
+    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Schema_Write_Objects),
+
+    % Get instance read/write objects
+    include_read_objects(IL,Read_Graph_Descriptors,Instance_Read_Objects),
+    include_write_objects(IL,Write_Graph_Descriptors, Instance_Write_Objects),
+
+    Query_Object = query_obj{
+                       descriptor : Descriptor,
+                       instance_read_objects : Instance_Read_Objects,
+                       schema_read_objects : Schema_Read_Objects,
+                       inference_read_objects : [],
+                       instance_write_objects : Instance_Write_Objects,
+                       inference_write_objects : [],
+                       schema_write_objects : Schema_Write_Objects
+                   }.
+descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
+                 [Descriptor=Query_Object|New_Map]) :-
+    repository_descriptor{
+        database_descriptor : DB,
+        instance : Instances
+    } :< Descriptor,
+    !,
+    descriptor_query(DB, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map),
+    memberchk(DB,New_Map, Parent_Query_Obj),
+
     layer_ontology(Layer_Ontology_Name),
     Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
     repository_ontology(Repository_Ontology_Name),
@@ -232,44 +267,8 @@ descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Ma
     include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
 
     % Get instance read/write objects
-    include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
-    include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
-
-    Query_Object = query_obj{
-                       descriptor : Collection_Descriptor,
-                       instance_read_objects : Instance_Read_Objects,
-                       schema_read_objects : Schema_Read_Objects,
-                       inference_read_objects : [],
-                       instance_write_objects : Write_Instance_Objects,
-                       inference_write_objects : [],
-                       schema_write_objects : Schema_Write_Objects
-                   }.
-descriptor_query(Repository, Read_Mask, Write_Mask, Map,
-                 [Descriptor=Query_Object|New_Map]) :-
-    Descriptor = repository_descriptor{
-                     database_descriptor : DB,
-                     repository_name : _Name,
-                     author : Author,
-                     message : Message,
-                     instance : IL
-                 },
-    !,
-    descriptor_query(DB, Read_Mask, Write_Mask, Map, New_Map),
-    memberchk(DB,New_Map, Parent_Query_Obj),
-
-    layer_ontology(Layer_Ontology_Name),
-    Layer_Ontology_Graph = named_graph{ name : Layer_Ontology_Name },
-    ref_ontology(Ref_Ontology_Name),
-    Repository_Ontology_Graph = named_graph{ name : Repository_Ontology_Name },
-
-    % Get hard coded layer and repository schema read/write objects
-    Schema_Graphs = [Ref_Ontology_Graph, Layer_Ontology_Graph],
-    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Read_Schema_Objects),
-    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Write_Schema_Objects),
-
-    % Get instance read/write objects
-    include_read_objects(IL,Read_Graph_Descriptors,Read_Instance_Objects),
-    include_write_objects(IL,Write_Graph_Descriptors, Write_Instance_Objects),
+    include_read_objects(Instances,Read_Graph_Descriptors,Read_Instance_Objects),
+    include_write_objects(Instances,Write_Graph_Descriptors, Write_Instance_Objects),
 
     Query_Object = query_obj{
                        parent : Parent_Query_Obj,
@@ -281,24 +280,22 @@ descriptor_query(Repository, Read_Mask, Write_Mask, Map,
                        schema_write_objects : Write_Schema_Objects,
                        inference_write_objects : []
                    }.
-descriptor_query(Descriptor, Read_Mask, Write_Mask, Map,
+descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
                  [Descriptor=Query_Object|New_Map]) :-
-    Descriptor = ref_descriptor{ repository_descriptor : Repository_Descriptor,
-                                 ref_name : Ref_Name,
-                                 last_commit : Last_Commit,
-                                 repository_name : Repository_Name,
-                                 author : Author,
-                                 message : Message,
-                                 schema : Schema_List,
-                                 inference : Inf_List,
-                                 instance : Instance_List },
+    ref_descriptor{ repository_descriptor : Repository_Descriptor,
+                    message : Message,
+                    author : Author,
+                    schema : Schema_List,
+                    inference : Inference_List,
+                    instance : Instance_List } :< Descriptor,
     !,
-    descriptor_query(Repository_Descriptor, Read_Mask, Write_Mask, Map, New_Map),
+    descriptor_query(Repository_Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors,
+                     Map, New_Map),
     memberchk(Repository_Descriptor, New_Map, Parent_Query_Obj),
 
     % Get schema read/write objects
-    include_read_objects(Schema_Graphs,Read_Graph_Descriptors, Schema_Read_Objects),
-    include_write_objects(Schema_Graphs,Write_Graph_Descriptors, Schema_Write_Objects),
+    include_read_objects(Schema_List,Read_Graph_Descriptors, Schema_Read_Objects),
+    include_write_objects(Schema_List,Write_Graph_Descriptors, Schema_Write_Objects),
 
     % Get instance read/write objects
     include_read_objects(Instance_List,Read_Graph_Descriptors, Instance_Read_Objects),
@@ -308,18 +305,18 @@ descriptor_query(Descriptor, Read_Mask, Write_Mask, Map,
     include_read_objects(Inference_List,Read_Graph_Descriptors, Inference_Read_Objects),
     include_write_objects(Inference_List,Write_Graph_Descriptors, Inference_Write_Objects),
 
-    Query_Obj = query_obj{
-                    parent : Parent_Query_Obj,
-                    descriptor : Descriptor,
-                    commit_message : Message,
-                    commit_author : Author,
-                    instance_read_objects : Instance_Read_Objects,
-                    schema_read_objects : Schema_Read_Objects,
-                    inference_read_objects : Inference_Read_Objects,
-                    instance_write_objects : Instance_Write_Objects,
-                    schema_write_objects : Schema_Write_Objects,
-                    inference_write_objects : Inference_Write_Objects
-                }.
+    Query_Object = query_obj{
+                       parent : Parent_Query_Obj,
+                       descriptor : Descriptor,
+                       commit_message : Message,
+                       commit_author : Author,
+                       instance_read_objects : Instance_Read_Objects,
+                       schema_read_objects : Schema_Read_Objects,
+                       inference_read_objects : Inference_Read_Objects,
+                       instance_write_objects : Instance_Write_Objects,
+                       schema_write_objects : Schema_Write_Objects,
+                       inference_write_objects : Inference_Write_Objects
+                   }.
 
 update_read_objects([], New_Read_Objects, New_Read_Objects).
 update_read_objects([Old_Read_Object|Old_Read_Objects], New_Read_Objects, Results) :-
@@ -346,7 +343,6 @@ commit_write_object(write_obj{
  */
 commit_query_object(Query_Object,New_Query_Object) :-
     query_object{
-        collection_descriptor: Collection_Descriptor,
         instance_read_objects: Instance_Read_Objects,
         inference_read_objects: Inference_Read_Objects,
         schema_read_objects: Schema_Read_Objects,
@@ -395,13 +391,13 @@ call_or_die(Call, Message) :-
  */
 open_descriptor_queries_uniquely([], _Read_Descriptors, _Write_Descriptors, [], _Map).
 open_descriptor_queries_uniquely([Descriptor|Descriptors], Read_Descriptors, Write_Descriptors,
-                                 Query_Objects, Map) :-
+                                 Map, New_Map) :-
     descriptor_query(Descriptor, Read_Descriptors, Write_Descriptors,
-                     Descriptor_Query_Objects, Map, New_Map),
+                     Map, Middle_Map),
     % difference list anyone?
-    append(Descriptor_Query_Objects,New_Query_Objects,Query_Objects),
     open_descriptor_queries_uniquely(Descriptors, Read_Descriptors,
-                                     Write_Descriptors, New_Query_Objects, New_Map).
+                                     Write_Descriptors,
+                                     Middle_Map, New_Map).
 
 key_equal((=), X=_, X=_).
 key_equal((<), X=_, Y=_) :-
@@ -416,7 +412,7 @@ key_equal((>), X=_, Y=_) :-
  */
 open_descriptor_queries(Descriptors, Read_Descriptors, Write_Descriptors, Query_Objects) :-
     open_descriptor_queries_uniquely(Descriptors, Read_Descriptors, Write_Descriptors, [], Map),
-    presort(key_equal,Map,Sorted_Map),
+    predsort(key_equal,Map,Sorted_Map),
     maplist([_Descriptor=Query_Object,Query_Object]>>true, Sorted_Map, Query_Objects).
 
 /**
@@ -447,7 +443,7 @@ with_transaction(Pre_Descriptors,
 
     between(1,Max_Retries,_),
     % Get unique query objects per descriptor
-    open_descriptor_queries(Pre_Descriptors, Read_Descriptors, Write_Desriptors, Update_Query_Objects),
+    open_descriptor_queries(Pre_Descriptors, Read_Descriptors, Write_Descriptors, Update_Query_Objects),
     % call update_query which will use those query objects
     call_or_die(Query_Update, 'unable to perform the query'),
 
@@ -462,14 +458,14 @@ with_transaction(Pre_Descriptors,
     % set heads (magic!)
     set_heads(Post_Query_Objects),
     !.
-with_transaction(Pre_Descriptors,
-                 Read_Descriptors,
-                 Write_Descriptors,
-                 Update_Query_Objects,
-                 Post_Query_Objects,
-                 Query_Update,
-                 Post,
-                 Witnesses) :-
+with_transaction(_Pre_Descriptors,
+                 _Read_Descriptors,
+                 _Write_Descriptors,
+                 _Update_Query_Objects,
+                 _Post_Query_Objects,
+                 _Query_Update,
+                 _Post,
+                 _Witnesses) :-
     die('too many transaction retries, dying.').
 
 descriptor_compare('=', Left, Right) :-
@@ -535,24 +531,24 @@ set_ref_head(Ref_Query_Object, New_Ref_Query_Object) :-
     random_uri(Ref_Base,'Commit',Commit_URI),
     write_ref_commit(Ref_Layer_Builder, Last_Commit, Commit_URI),
 
-    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer]>>
-            write_layer_to_commit(instance,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+    maplist({Commit_URI,Ref_Base,Ref_Layer_Builder}/[Layer]>>
+            write_layer_to_commit(instance,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
             Instance_Layers),
 
-    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer]>>
-            write_layer_to_commit(schema,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+    maplist({Commit_URI,Ref_Base,Ref_Layer_Builder}/[Layer]>>
+            write_layer_to_commit(schema,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
             Schema_Layers),
 
-    maplist({Commit_URI,Ref_Layer,Ref_Base,Ref_Layer_Builder}/[Layer_ID]>>
-            write_layer_to_commit(inference,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
+    maplist({Commit_URI,Ref_Base,Ref_Layer_Builder}/[Layer]>>
+            write_layer_to_commit(inference,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
             Inference_Layers),
 
     nb_commit(Ref_Layer_Builder, New_Ref_Layer),
     New_Ref_Query_Object = Ref_Query_Object.put(_{instance_read_object: [New_Ref_Layer]}).
 
-:- table metadata_prefix_expand/2
+:- table metadata_prefix_expand/2.
 metadata_prefix_expand(Prefixed_URI,URI) :-
-    global_prefix_expand(Prefixed_URI, CommitType).
+    global_prefix_expand(Prefixed_URI, URI).
 
 write_ref_commit(Ref_Layer_Builder,Ref_URI,Author,Last_Commit_URI,Commit_URI) :-
     metadata_prefix_expand(terminus:'Commit', Commit_Type),
@@ -562,29 +558,27 @@ write_ref_commit(Ref_Layer_Builder,Ref_URI,Author,Last_Commit_URI,Commit_URI) :-
     metadata_prefix_expand(terminus:commit_parent, Parent_Prop),
     metadata_prefix_expand(terminus:commit_timestamp, Commit_Timestamp_Prop),
     metadata_prefix_expand(terminus:commit_author, Author_Prop),
-    metadata_prefix_expand(terminus:'Branch', Branch_Type),
     metadata_prefix_expand(terminus:no_commit, No_Commit_URI),
     unix_time_string_now(Unix_Time_String),
     object_storage(literal(Unix_Time_String,XSD_String), Timestamp_Literal),
     object_storage(literal(Author,XSD_String), Author_Literal),
-    nb_add_triple(Write_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
+    nb_add_triple(Ref_Layer_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
     (   Last_Commit_URI = No_Commit_URI
     ->  true
-    ;   nb_remove_triple(Write_Builder, Ref_URI, Ref_Commit_Prop, node(Last_Commit_URI)),
-        nb_add_triple(Write_Builder, Commit_URI, Parent_Prop, node(Last_Commit_URI))),
-    nb_add_triple(Write_Builder, Ref_URI, Ref_Commit_Prop, node(Commit_URI)),
-    nb_add_triple(Write_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
-    nb_add_triple(Write_Builder, Commit_URI, Commit_Timestamp_Prop, value(Timestamp_Literal)),
-    nb_add_triple(Write_Builder, Commit_URI, Author_Prop, value(Author_Literal)).
+    ;   nb_remove_triple(Ref_Layer_Builder, Ref_URI, Ref_Commit_Prop, node(Last_Commit_URI)),
+        nb_add_triple(Ref_Layer_Builder, Commit_URI, Parent_Prop, node(Last_Commit_URI))),
+    nb_add_triple(Ref_Layer_Builder, Ref_URI, Ref_Commit_Prop, node(Commit_URI)),
+    nb_add_triple(Ref_Layer_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
+    nb_add_triple(Ref_Layer_Builder, Commit_URI, Commit_Timestamp_Prop, value(Timestamp_Literal)),
+    nb_add_triple(Ref_Layer_Builder, Commit_URI, Author_Prop, value(Author_Literal)).
 
-write_layer_to_commit(Type,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI) :-
+write_layer_to_commit(Type,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI) :-
     metadata_prefix_expand(terminus:Type, Graph_Property),
     metadata_prefix_expand(terminus:'Layer', Layer_Type),
     metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
     metadata_prefix_expand(terminus:layer_parent, Layer_Parent_Prop),
     metadata_prefix_expand(rdf:type, RDF_Type),
     metadata_prefix_expand(xsd:string, XSD_String),
-    metadata_prefix_expand(xsd:integer, XSD_Integer),
     layer_to_id(Layer,Layer_ID),
     object_storage(literal(Layer_ID,XSD_String), Layer_Literal),
     atomic_list_concat([Ref_Base,'/document/Layer'],Layer_Base),
@@ -592,10 +586,10 @@ write_layer_to_commit(Type,Ref_Layer,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI
     layer_to_id(Parent,Parent_Layer_ID),
     idgen(Layer_Base ,[Layer_ID], Layer_URI),
     idgen(Layer_Base ,[Parent_Layer_ID], Parent_Layer_URI),
-    nb_add_triple(Write_Builder, Layer_URI, RDF_Type, node(Layer_Type)),
-    nb_add_triple(Write_Builder, Commit_URI, Graph_Property, node(Layer_URI)),
-    nb_add_triple(Write_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal)),
-    nb_add_triple(Write_Builder, Layer_URI, Layer_Parent_Prop, node(Parent_Layer_ID)).
+    nb_add_triple(Ref_Layer_Builder, Layer_URI, RDF_Type, node(Layer_Type)),
+    nb_add_triple(Ref_Layer_Builder, Commit_URI, Graph_Property, node(Layer_URI)),
+    nb_add_triple(Ref_Layer_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal)),
+    nb_add_triple(Ref_Layer_Builder, Layer_URI, Layer_Parent_Prop, node(Parent_Layer_URI)).
 
 unix_time_string_now(Unix_Time_String) :-
     get_time(Time),
@@ -656,7 +650,7 @@ update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer) :-
     nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).
 
 
-set_repo_head(Layer_Builder, Repo_Query_Object - Ref_Query_Objects, New_Repo_Query_Object) :-
+set_repo_head(Layer_Builder, Repo_Query_Object - Ref_Query_Objects) :-
     Repo_Name = Repo_Query_Object.descriptor.repo_name,
     maplist({Repo_Name, Layer_Builder}/[Ref_Query_Object]>>(
                 [Layer] = Ref_Query_Object.instance_read_objects,
@@ -664,16 +658,17 @@ set_repo_head(Layer_Builder, Repo_Query_Object - Ref_Query_Objects, New_Repo_Que
                 update_repository_data(Repo_Name, Layer_Builder, URI, Layer)),
             Ref_Query_Objects).
 
-query_object_parents(Query_Objects,Query_Object_Candidates, Child_Parent_Pairs) :-
+query_object_parents(Query_Objects, Query_Object_Candidates, Child_Parent_Pairs) :-
     findall(Query_Object - Associated_Parents,
             (   member(Query_Object,Query_Objects),
-                convlist({Query_Object}/[Candidate_Query_Object]>>
+                convlist({Query_Object}/[Query_Object_Candidate]>>
                          descriptor_compare((=),Query_Object.parent.descriptor,
-                                                Candidate_Query_Object.descriptor),
-                         Query_Objects, Associated_Parents))
+                                                Query_Object_Candidate.descriptor),
+                         Query_Object_Candidates,
+                         Associated_Parents)),
             Child_Parent_Pairs).
 
-query_object_layer([Query_Object|Query_Objects], Layer) :-
+query_object_layer([Query_Object|_Query_Objects], Layer) :-
     database_descriptor{} :< Query_Object.descriptor,
     !,
     Query_Object.instance_read_objects = [Read_Obj],
@@ -689,13 +684,28 @@ set_heads_for_db(Database_Name - Query_Objects) :-
                           Ref_Query_Objects,
                           Repo_Query_Objects,
                           Label_Query_Objects),
+
+    (   % If we don't have one database, we're
+        % probably
+        [_Label_Query_Object] = Label_Query_Objects
+    ->  true
+    ;   [] = Label_Query_Objects
+    ->  Format = 'No label object associated with the database ~q',
+        debug(database, Format, [Database_Name]),
+        format(atom(M), Format, [Database_Name]),
+        throw(transaction_error(M))
+    ;   Format = 'Too many label objects associated with the database ~q',
+        debug(database, Format, [Database_Name]),
+        format(atom(M), Format, [Database_Name]),
+        throw(transaction_error(M))),
+
     % set heads for all the refs
     maplist(set_ref_head, Ref_Query_Objects, New_Ref_Query_Objects),
 
     query_object_parents(Repo_Query_Objects, New_Ref_Query_Objects, Repo_Refs),
 
     % set everything from repos into the layer builder
-    maplist(set_repo_head(Layer_Builder), Repo_Refs, New_Repo_Query_Objects),
+    maplist(set_repo_head(Layer_Builder), Repo_Refs),
     nb_commit(Layer_Builder, NewLayer),
     storage(Store),
     safe_open_named_graph(Store, Database_Name, Graph_Object),
@@ -720,7 +730,7 @@ set_heads(Query_Objects) :-
     findall(Database_Name - Query_Object, (
                 member(Query_Object, Query_Objects),
                 query_object_database_name(Query_Object, Database_Name)
-            ), Database_Name_Query_Objects)
+            ), Database_Name_Query_Objects),
     % Resulting structure of group_pairs DatabaseName-[list of query objects]
     group_pairs_by_key(Database_Name_Query_Objects, Database_Query_Objects),
     maplist(set_heads_for_db, Database_Query_Objects).

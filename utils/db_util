@@ -18,6 +18,7 @@
 :- use_module(library(semweb/turtle)).
 :- use_module(library(literals)).
 :- use_module(library(triplestore)).
+:- use_module(library(terminus_bootstrap)).
 
 /*****************************************************
  * Utils
@@ -166,14 +167,23 @@ example_registry_path(Dir,Path) :-
 registry_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../plugins/registry.pl'], Path).
 
-example_instance_ttl(Dir,Path) :-
+template_terminus_instance_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/terminus_instance_template.ttl'], Path).
 
-example_inference_ttl(Dir,Path) :-
+terminus_inference_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/terminus_inference_template.ttl'], Path).
 
-example_schema_ttl(Dir,Path) :-
+terminus_schema_ttl(Dir,Path) :-
     atomic_list_concat([Dir,'/../terminus-schema/terminus.owl.ttl'], Path).
+
+repository_schema_ttl(Dir,Path) :-
+    atomic_list_concat([Dir, '/../terminus-schema/repository.owl.ttl'], Path).
+
+layer_schema_ttl(Dir,Path) :-
+    atomic_list_concat([Dir, '/../terminus-schema/layer.owl.ttl'], Path).
+
+ref_schema_ttl(Dir,Path) :-
+    atomic_list_concat([Dir, '/../terminus-schema/ref.owl.ttl'], Path).
 
 database_path(Dir,Path) :-
     atomic_list_concat([Dir,'/../storage/db/'], Pre_Path),
@@ -249,10 +259,13 @@ write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
     close(Stream).
 
 initialize_database(Public_URL, Key, Dir) :-
-    example_instance_ttl(Dir,Example_Instance_TTL),
+    template_terminus_instance_ttl(Dir,Example_Instance_TTL),
 
-    example_inference_ttl(Dir,Example_Inference_TTL),
-    example_schema_ttl(Dir,Example_Schema_TTL),
+    terminus_inference_ttl(Dir,Terminus_Inference_TTL),
+    terminus_schema_ttl(Dir,Terminus_Schema_TTL),
+    terminus_ref_ttl(Dir,Terminus_Ref_TTL),
+    terminus_layer_ttl(Dir,Terminus_Layer_TTL),
+    terminus_repository_ttl(Dir,Terminus_Repository_TTL),
 
     database_path(Dir,DB_Path),
     make_directory_path(DB_Path),
@@ -264,21 +277,30 @@ initialize_database(Public_URL, Key, Dir) :-
 
     crypto_password_hash(Key,Hash, [cost(15)]),
 
+    % Need to copy this one from a template as we alter it.
     copy_file(Example_Instance_TTL, Instance_TTL_Path),
-    copy_file(Example_Inference_TTL, Inference_TTL_Path),
-    copy_file(Example_Schema_TTL, Schema_TTL_Path),
     replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-    replace_in_file(Inference_TTL_Path, "SERVER_NAME", Public_URL),
     replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
-    replace_in_file(Schema_TTL_Path, "SERVER_NAME", Public_URL),
 
     instance_name(Public_URL,Instance_Name),
     create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
+
     schema_name(Public_URL,Schema_Name),
-    create_graph_from_turtle(DB_Path,Schema_Name,Schema_TTL_Path),
+    create_graph_from_turtle(DB_Path,Schema_Name,Terminus_Schema_TTL),
+
     inference_name(Public_URL,Inference_Name),
-    create_graph_from_turtle(DB_Path,Inference_Name,Inference_TTL_Path),
-    format('Successfully updated admin key!!~n').
+    create_graph_from_turtle(DB_Path,Inference_Name,Terminus_Inference_TTL),
+
+    layer_ontology(Layer_Name),
+    create_graph_from_turtle(DB_Path,Layer_Name,Terminus_Layer_TTL),
+
+    ref_ontology(Ref_Name),
+    create_graph_from_turtle(DB_Path,Ref_Name,Terminus_Ref_TTL),
+
+    repository_ontology(Repository_Name),
+    create_graph_from_turtle(DB_Path,Repository,Terminus_Repository_TTL),
+
+    format('Successfully initialised database!!!~n').
 
 
 initialize_index(Url, Dir, Key, Opts) :-

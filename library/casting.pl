@@ -28,7 +28,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(utils).
-:- use_module(prefixes).
 :- use_module(speculative_parse).
 :- use_module(jsonld).
 :- use_module(literals).

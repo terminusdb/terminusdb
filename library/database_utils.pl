@@ -36,7 +36,6 @@
 :- use_module(utils).
 :- use_module(database).
 :- use_module(expansions).
-:- use_module(prefixes).
 
 /*
  * database_exists(DB_URI) is semidet.

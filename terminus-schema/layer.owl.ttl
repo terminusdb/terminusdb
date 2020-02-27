@@ -4,7 +4,7 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
 
 <http://terminusdb.com/schema/layer>
   a owl:Ontology ;
@@ -14,42 +14,42 @@
   tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
   tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
-terminus:LayerIdRestriction
+layer:LayerIdRestriction
   a owl:Restriction ;
   rdfs:label "Layer ID restriction"@en ;
   rdfs:comment "Restrict layers to have one identifier"@en ;
-  owl:onProperty terminus:layer_id ;
+  owl:onProperty layer:layer_id ;
   owl:cardinality "1"^^xsd:nonNegativeInteger .
 
-terminus:LayerParentRestriction
+layer:LayerParentRestriction
   a owl:Restriction ;
   rdfs:label "Layer Restriction"@en ;
   rdfs:comment "Restricts layers to have at most one parent"@en ;
-  owl:onProperty terminus:layer_parent ;
+  owl:onProperty layer:layer_parent ;
   owl:maxCardinality "1"^^xsd:nonNegativeInteger .
 
-terminus:ShadowLayer
+layer:ShadowLayer
   a owl:Class ;
-  rdfs:subClassOf terminus:Document, terminus:LayerIdRestriction ;
+  rdfs:subClassOf layer:Document, layer:LayerIdRestriction ;
   rdfs:comment "A kind of Layer with no parent information, implicitely associated with a real layer "@en ;
   rdfs:label "Shadow Layer"@en .
 
-terminus:Layer
+layer:Layer
   a owl:Class ;
-  rdfs:subClassOf terminus:ShadowLayer , terminus:LayerParentRestriction ;
+  rdfs:subClassOf layer:ShadowLayer , layer:LayerParentRestriction ;
   rdfs:comment "A Layer object with its identifying information "@en ;
   rdfs:label "Layer"@en .
 
-terminus:layer_id
+layer:layer_id
   a owl:DatatypeProperty ;
   rdfs:comment "A property holding the layer"@en ;
   rdfs:label "Layer ID"@en ;
-  rdfs:domain terminus:ShadowLayer ;
+  rdfs:domain layer:ShadowLayer ;
   rdfs:range xsd:string .
 
-terminus:layer_parent
+layer:layer_parent
   a owl:ObjectProperty ;
   rdfs:comment "A property holding the layer parent"@en ;
   rdfs:label "Layer ID"@en ;
-  rdfs:domain terminus:Layer ;
-  rdfs:range terminus:Layer .
+  rdfs:domain layer:Layer ;
+  rdfs:range layer:Layer .

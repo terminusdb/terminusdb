@@ -27,6 +27,7 @@
 
 :- use_module(test(api_test)).
 :- use_module(test(jsonld_test)).
+:- use_module(test(transaction_test)).
 
 %!  run_tests is semidet
 %
@@ -48,5 +49,6 @@ run_tests :-
     debug(terminus(testing_progress(run)), 'starting tests', []),
     run_api_tests,
     run_jsonld_tests,
+    run_transaction_tests,
     debug(terminus(testing_progress(run)), 'all tests succeeded', []).
 

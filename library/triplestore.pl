@@ -18,7 +18,6 @@
 :- use_module(file_utils).
 :- use_module(utils).
 :- use_module(schema, [cleanup_schema_module/1]).
-:- use_module(prefixes).
 :- use_module(types).
 % feeling very circular :(
 :- use_module(database).

@@ -3,7 +3,6 @@
               compile_query/4,
               run_query/2,
               run_query/3,
-              is_new/2,
               empty_ctx/1,
               empty_ctx/2,
               active_graphs/2
@@ -104,10 +103,11 @@
  * var_bindings = list(var_binding)
  *
  * query_context ---> query_context{ <current_output_graph : graph_descriptor>,
+ *                                   <current_collection : collection_descriptor>,
  *                                   <prefixes : context>,
  *                                   query_objects : list(query_object),
  *                                   bindings : list(var_binding),
- *                                   selected = list(var_binding)
+ *                                   selected : list(var_binding)
  *                                }
  */
 
@@ -116,27 +116,15 @@
  *
  * We use DCG's to simplify tracking the state of the WOQL query compiler.
  */
-/*
- * get_param(Elt,Set) is det.
- */
-get_param(Key,Value,Set) :-
-    Value = Set.Key.
 
-is_new(Elt,TDB) :-
-    (   var(TDB)
-    ->  true
-    ;   TDB = []
-    ->  true
-    ;   TDB=[Elt|_Rest]
-    ->  false
-    ;   TDB=[_|Rest],
-        is_new(Elt,Rest)).
+get(Key,Value,Set) :-
+    Value = Set.Key.
 
 /* Monadic selection */
 update(Key,C0,C1,S0,S1) :-
     C0 = S0.Key,
     C1 = S1.Key,
-    S1 = S0.K1.put(_{ Key : C0 }).
+    S1 = S0.put(Key, C0).
 
 view(Key,C0,S0,S0) :-
     C0 = S0.Key.
@@ -146,9 +134,9 @@ swap(Key,C0,C1,S0,S1) :-
     C1 = S1.Key.
 
 put(Key, C0, S0, S1) :-
-    S1 = S0.put(_{Key : C0}).
+    S1 = S0.put(Key, C0).
 
-peak(S0,S0,S0).
+peek(S0,S0,S0).
 
 return(S0,_,S0).
 
@@ -851,95 +839,11 @@ compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
     view(database=G).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
-compile_wf(let(P,Args,Def,Query),Goal) -->
-    % Get the compilation module
-    view(module=M),
-
-    % get previous definitions
-    view(definitions=Old_Definitions),
-
-    % *** compile the predicate definition ***
-    empty_ctx,
-    % Bind formal parameters
-    mapm(resolve,Args,Rargs),
-
-    % Get the initial output graph and Tail variable.
-    view(current_output_graph=G),
-    view(output_graphs=OGS0),
-    { elt(G=g(OG,_-T,FH-FT),OGS0) },
-
-    % Get upper bound, and update the Used var.
-    update(bound=_,
-           bound=Bound),
-    update(used=Used,
-           used=New_Used),
-
-    % *** compile the body ***
-    compile_wf(Def,Body),
-
-    % Get the tail of the final output graph
-    view(output_graphs=OGS1),
-    { elt(G=g(_,HN-_,_),OGS1) },
-
-    % *** compile the goal. ****
-    empty_ctx,
-    % set fuel consumption at zero
-    update(used=_,
-           used=0),
-    compile_wf(Query,Goal),
-    update(definitions=_,
-           definitions=[Predicate|Old_Definitions]),
-    {
-        % *** Construct the program ***
-        % M: Module name,
-        % P: predicate_name,
-        % Used: amount of fuel used
-        % Bound: Max fuel
-        % OG: the entire graph so far (including unbound tail)
-        % H-T: Difference list of graph
-        % FH-FT: Difference list of fringe
-        % Rargs: Actual predicate arguments
-        Predicate_Head =.. [P, Used, Bound, OG, Head-Tail, Fringe-Fringe_Tail | Rargs],
-        Pre_Logic = (New_Used is Used + 1,
-                     (   New_Used > Bound
-                     % Push the head and tail into fringe
-                     ->  Fringe-Fringe_Tail = T-HN,
-                         % Set the incoming tail to head,
-                         % i.e. we're doing nothing for it.
-                         Head=Tail
-                     % HN is the next head - i.e. our tail
-                     ;   Head-Tail = T-HN,
-                         Fringe-Fringe_Tail=FH-FT
-                     )),
-        % Meta logical test feels very procedural...
-        Post_Logic = (   var(FH) % Empty fringe means Tail is the head.
-                     ->  FH=FT
-                     ;   true),
-        Predicate = (M:Predicate_Head :- Pre_Logic, Body, Post_Logic)
-    }.
-compile_wf(p(P,Args),Goal) -->
-    mapm(resolve, Args, RArgs),
-    view(used=Used),
-    view(bound=Bound),
-    view(module=M),
-    view(current_output_graph=G),
-    update(output_graphs=Gs0,
-           output_graphs=Gs1),
-    {
-        select(G=g(OG,_-T0,FH-FT),Gs0,
-               G=g(OG,T0-T1,FH-FT),Gs1),
-        debug(terminus(woql_compile(compile_wf)), 'Predicate: ~q-~q',[T0,T1]),
-
-        Pred =.. [P,Used,Bound,OG,T0-T1,FH-FT|RArgs],
-        Goal = (   Used > Bound
-               ->  false
-               ;   M:Pred)
-    }.
 compile_wf(t(X,P,Y),Goal) -->
     compile_node(X,XE,XGoals),
     resolve(P,PE),
     compile_node_or_lit(PE,Y,YE,YGoals),
-    view(database=G),
+    view(database,G),
     %view(current_output_graph=OG),
     %update(output_graphs=OGS1,
     %        output_graphs=OGS2),
@@ -972,91 +876,13 @@ compile_wf(t(X,P,Y,G),Goal) -->
                GoalList),
         list_conjunction(GoalList,Goal)
     }.
-compile_wf(r(X,R,Y),Goal) -->
-    compile_node(X,XE,XGoals),
-    compile_relation(R,RE,RClass,RGoals),
-    expand(RClass,RClassID),
-    compile_node(Y,YE,YGoals),
-    view(database=G),
-    view(current_output_graph=OG),
-    update(output_graphs=OGS1,
-           output_graphs=OGS2),
-    {
-        database_instance(G,I),
-        database_name(G,C),
-
-        select(OG=g(Full_G,_-T0,FH-FT),OGS1,
-               OG=g(Full_G,T0-T1,FH-FT),OGS2),
-
-        (   relationship_source_property(RClassID,P,G)
-        ->  true
-        ;   format(atom(M), 'No relationship source property ~q in ~q', [RClassID,G]),
-            throw(error(M))),
-
-        (   relationship_target_property(RClassID,Q,G)
-        ->  true
-        ;   format(atom(M), 'No relationship target property ~q in ~q', [RClassID,G]),
-            throw(error(M))),
-
-        append([[xrdf(G,I,RE,P,XE),
-                 xrdf(G,I,RE,Q,YE),
-                 is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
-                 T0=[triple(C,I,XE,RE,YE,'==>')|T1]
-                ],XGoals,RGoals,YGoals],
-               GoalList),
-
-        list_conjunction(GoalList,Goal)
-    }.
-compile_wf(r(X,R,Y,G),Goal) -->
-    compile_node(X,XE,XGoals),
-    compile_relation(R,RE,RClass,RGoals),
-    expand(RClass,RClassID),
-    compile_node(Y,YE,YGoals),
-    %view(database=G),
-    update(output_graphs=OGS1,
-           output_graphs=OGS2),
-    view(current_output_graph=OG),
-    {
-        make_database_from_database_name(G,Database),
-        database_name(Database,C),
-        database_instance(Database,I),
-
-        select(OG=g(Full_G,_-T0,FH-FT),OGS1,
-               OG=g(Full_G,T0-T1,FH-FT),OGS2),
-
-        relationship_source_property(RClassID,P,Database),
-        relationship_target_property(RClassID,Q,Database),
-
-        debug(terminus(woql_compile(compile_wf)), 'Relation: ~q-~q',[T0,T1]),
-
-        append([[xrdf(C,I,RE,P,XE),
-                 xrdf(C,I,RE,Q,YE,I),
-                 is_new(triple(C,I,XE,RE,YE,'==>'),Full_G),
-                 T0=[triple(C,I,XE,RE,YE,'==>')|T1]
-                ],XGoals,RGoals,YGoals],
-               GoalList),
-        list_conjunction(GoalList,Goal)
-    }.
 compile_wf((A;B),(ProgA;ProgB)) -->
-    peak(S0),
+    peek(S0),
     compile_wf(A,ProgA),
-    peak(S1),
+    peek(S1),
     return(S0),
     compile_wf(B,ProgB),
-    peak(S2),
-    {
-        debug(terminus(woql_compile(compile_wf)), 'Before disjunctions(0)', []),
-        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[(ProgA;ProgB)]),
-        %elt(current_output_graph=G,S2),
-        %elt(output_graphs=OGs,S2),
-        %elt(G=g(_,T0-T1,_),OGs),
-        % debug(terminus(woql_compile(compile_wf)), 'After disjunctions (2): ~q-~q',[T0,T1]),
-        %format('***************~nProgram: ~n~q~n',[(ProgA;ProgB)]),
-        merge(S1,S2,S3)
-        %format('***************~nAfter merge: ~n~q-~q~n',[T0,T1]),
-        %format('***************~nProgram: ~n~q~n',[(ProgA;ProgB)])
-    },
-    return(S3).
+    merge(S1). % merges S1 back in to current state.
 compile_wf((A,B),(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
     compile_wf(B,ProgB),

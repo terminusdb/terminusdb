@@ -85,7 +85,6 @@
 % Time travel
 :- use_module(time_travel).
 
-:- use_module(prefixes).
 :- use_module(sdk).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
