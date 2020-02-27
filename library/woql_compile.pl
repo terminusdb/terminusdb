@@ -66,7 +66,8 @@
                                 object_property/2,
                             basetype_subsumption_of/2]).
 :- use_module(casting, [typecast/4,hash/3,idgen/3]).
-:- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
+
+%:- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
 
 :- use_module(speculative_parse, [guess_date/2]).
 

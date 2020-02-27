@@ -1,4 +1,6 @@
 :- module(json_woql,[
+              woql_context/1,
+              initialise_woql_contexts/0,
               json_woql/2,
               json_woql/3
           ]).
@@ -29,10 +31,28 @@
 
 :- use_module(utils).
 :- use_module(jsonld).
+:- use_module(file_utils).
+
+:- use_module(library(http/json)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+
+:- dynamic woql_context/1.
+initialise_woql_contexts :-
+    terminus_schema_path(Path),
+    interpolate([Path,'woql-context.jsonld'],File),
+    setup_call_cleanup(
+        open(File,read,Out),
+        (   retractall(woql_context(_)),
+            json_read_dict(Out, Doc),
+            get_dict_default('@context',Doc, Ctx,_{}),
+            expand_context(Ctx, Exp),
+            assertz(woql_context(Exp))
+        ),
+        close(Out)
+    ).
 
 json_woql(JSON,WOQL) :-
     json_woql(JSON,_{},WOQL).

@@ -131,13 +131,13 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(library(api)).
 :- use_module(library(server)).
 :- use_module(library(upgrade_db)).
-:- use_module(library(prefixes)).
 % We only need this if we are interactive...
 :- use_module(library(sdk)).
 :- use_module(test(tests)).
 :- use_module(library(http/http_log)).
 % Plugins
 %:- use_module(plugins(registry)).
+:- use_module(library(json_woql),[initialise_woql_contexts]).
 
 :- on_signal(hup, _, hup).
 
@@ -149,11 +149,8 @@ main(Argv) :-
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminus-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
-    %maybe_upgrade,
-    initialise_prefix_db,
-    debug(terminus(main), 'prefix_db initialized', []),
-    initialise_contexts,
-    debug(terminus(main), 'initialise_contexts completed', []),
+    initialise_woql_contexts,
+    debug(terminus(main), 'initialise_woql_contexts completed', []),
     initialise_log_settings,
     debug(terminus(main), 'initialise_log_settings completed', []),
     server(Argv),
