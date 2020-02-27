@@ -108,8 +108,7 @@ nonvar_literal(type(Type,Val), S) :-
     nonvar(Val),
     !,
     format(string(S), '~q^^~q', [Val,Type]).
-nonvar_literal(type(_,_), _) :-
-    true.
+nonvar_literal(type(_,_), _).
 
 nonvar_storage(literal(L),value(V)) :-
     !,
