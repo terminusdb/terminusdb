@@ -1,0 +1,43 @@
+:- module(transaction_testing,[
+              transaction_tests/0
+          ]).
+
+/** <module> Transaction testing
+ *
+ * Run tests to avoid regression on transactions.
+ *
+ * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
+ *                                                                       *
+ *  This file is part of TerminusDB.                                     *
+ *                                                                       *
+ *  TerminusDB is free software: you can redistribute it and/or modify   *
+ *  it under the terms of the GNU General Public License as published by *
+ *  the Free Software Foundation, under version 3 of the License.        *
+ *                                                                       *
+ *                                                                       *
+ *  TerminusDB is distributed in the hope that it will be useful,        *
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ *  GNU General Public License for more details.                         *
+ *                                                                       *
+ *  You should have received a copy of the GNU General Public License    *
+ *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
+ *                                                                       *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+:- use_module(test(test_utils)).
+:- use_module(library(database)).
+
+transaction_tests.
+
+terminus_descriptor_read_query_test :-
+    Descriptor = terminus_descriptor,
+    Terminus_Schema = 'terminus:///terminus/schema',
+    Terminus_Instance = 'terminus:///terminus/document',
+    Terminus_Inference = 'terminus:///terminus/inference',
+    Read_Graph_Descriptors = [named_graph{ name : Terminus_Schema},
+                              named_graph{ name : Terminus_Instance},
+                              named_graph{ name : Terminus_Inference}],
+    Write_Graph_Descriptors = [],
+    database:descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, [], New_Map),
+    writeq(New_Map).
