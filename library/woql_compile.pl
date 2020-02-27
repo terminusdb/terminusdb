@@ -92,6 +92,34 @@
 :- op(2, xfx, @).
 :- op(2, xfx, ^^).
 
+/*****************************************
+ * URI Resource Resolution:
+ *
+ * We need to resolve URIs to the appropriate object - i.e. a desriptor which
+ * can be interpreted by the prolog term output by WOQL. This involves two number of specific
+ * scenarios: read and write.
+ *
+ * WOQL should *compile* to the resolving descriptor, which can then be used in the transaction to
+ * find the right query_object, allowing the transaction logic to be simplified, and eventually
+ * supporting nested transactions.
+ *
+ ** Read: Querying a specific object.
+ *
+ * Here we need to be able to read the union of the instance graphs of the appropriate query_object,
+ * against the union of schema graphs (where relevant - i.e. with subsumption).
+ *
+ * As long as the resolution leaves us with a query_object, we can treat it irrespective of the
+ * "layer of the union".
+ *
+ ** Write: Writing to a specific graph
+ *
+ * Here we need to be more directed. If we are unable to resolve to a specific graph we need to
+ * throw an error, describing the graph set which might be intended, with their specific URIs.
+ *
+ * We can default the write graph to Server://DB_Name/local/document/main
+ * Server can be defaulted to terminusHub
+ */
+
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
