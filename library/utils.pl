@@ -552,3 +552,30 @@ re(Pattern, String, Matches) :-
     length(Matches,N),
     maplist({Matches}/[Key-Value]>>nth0(Key,Matches,Value),Pairs).
 
+%!  whole_arg(+N:integer, -Var:term) is det
+
+%
+
+%   @arg N 1 based nth argument
+
+%   @arg Var the entirety of the Nth argument of this clause
+
+%
+
+%   @throws domain_error if N is invalid
+
+%
+
+whole_arg(N, Var) :-
+    prolog_current_frame(Frame),
+    prolog_frame_attribute(Frame, parent, Parent),
+    (   prolog_frame_attribute(Parent, argument(N), Var)
+    ->  true
+    ;   prolog_frame_attribute(Parent, predicate_indicator, PI),
+        strip_module(PI, Module, PIPFunctor/Arity),
+        throw(error(domain_error(domain(1, Arity), Module:PIPFunctor/Arity), context(utils:whole_arg/2,
+                                                                                     'whole_arg/2 takes a number from 1 to the argument arity')))
+    ),
+    !.
+whole_arg(_, _) :-
+    throw(error(system_error, context(utils:whole_arg/2, 'whole arg failed while trying to get its parents arity'))).
