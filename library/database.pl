@@ -125,6 +125,7 @@ terminus_repository_schema(Schema) :-
  */
 open_read_obj(Graph, read_obj{ descriptor : Graph, read : Layer }) :-
     Graph = named_graph{ name : Name },
+    !,
     storage(Store),
     safe_open_named_graph(Store,Name,Obj),
     head(Obj,Layer).
@@ -186,6 +187,7 @@ descriptor_query(Descriptor, _Read_Graph_Descriptors, _Write_Graph_Descriptors, 
     !.
 descriptor_query(terminus_descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map,
                  [terminus_descriptor=Query_Object|Map]) :-
+    !,
 
     terminus_schema_name(Schema_Name),
     Schema_Graph = named_graph{ name : Schema_Name },
