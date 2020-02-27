@@ -39,6 +39,12 @@ global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 
+default_prefixes(Defaults) :-
+    findall(Prefix-URI,
+            global_prefixes(Prefix,URI),
+            Data),
+    dict_create(Defaults, _, Data).
+
 /*
  * global_prefix_expand(+X:prefixed_uri, -URI:uri) is det.
  */

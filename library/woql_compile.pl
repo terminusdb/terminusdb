@@ -48,6 +48,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
+:- use_module(library(http/http_log)).
 
 :- use_module(temp_graph).
 
@@ -67,7 +68,7 @@
                             basetype_subsumption_of/2]).
 :- use_module(casting, [typecast/4,hash/3,idgen/3]).
 
-%:- use_module(prefixes, [get_collection_jsonld_context/2, woql_context/1]).
+:- use_module(global_prefixes, [default_prefixes/1]).
 
 :- use_module(speculative_parse, [guess_date/2]).
 
@@ -95,12 +96,21 @@
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
  *
+ *******
+ * TODO: This is complicated, punt to later
+ *
  * store_id --> store_id{ descriptor : graph_descriptor,
  *                        id : integer }
  * store_ids = list(store_id)
- * var_binding ---> var_binding{ prolog_var : var,
- *                               store_ids : store_ids,
- *                               value : Value }
+ *
+ * woql_var ---> woql_var{ prolog_var : var,
+ *                         store_ids : store_ids }
+ ******
+ *
+ * woql_var ---> var % currently snarfing prolog unification
+ *
+ * var_binding ---> var_binding{ woql_var : woql_var,
+ *                               var_name : atom }
  * var_bindings = list(var_binding)
  *
  * query_context ---> query_context{ <current_output_graph : graph_descriptor>,
@@ -195,15 +205,41 @@ empty_ctx(Prefixes) -->
     empty_ctx,
     put(prefixes, Prefixes).
 
-/*
- * compile_representation(S,T,V) is det.
- *
- * Gives the internal representation of some type T from some string S.
- */
-compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
-    !,
-    guess_date(String,Date).
-compile_representation(String,Type,literal(type(Type,String))).
+/******************************
+ * Binding management utilities
+ ******************************/
+
+/* Lookup a variable by name */
+lookup(Var_Name,Prolog_Var,[Record|B0]) :-
+    var_same(Var_Name,Record,Prolog_Var),
+    !.
+lookup(Var_Name,Prolog_Var,[Record|B0]) :-
+    lookup(Var_Name,Prolog_Var,B0,B1).
+
+
+lookup_or_extend(Var_Name, Var) -->
+    update(bindings,B0,B1),
+    {
+        (   lookup(Var_Name, Prolog_Var, B0)
+        ->  B1=B0
+        ;   B1=[var_binding{
+                    prolog_var : Prolog_Var,
+                    value : Var_Name}
+                |B0])
+    }.
+
+
+resolve_prefix(Pre:Suf,URL) -->
+    view(prefixes,Prefixes),
+    {
+        atom(X),
+        (   Full_Prefix = Prefixes.get(Pre)
+        ->  true
+        ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
+            throw(error(syntax_error,M))),
+        atomic_list_concat([Full_Prefix,Suf],URL)
+    }.
+
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -213,29 +249,12 @@ compile_representation(String,Type,literal(type(Type,String))).
 resolve(ignore,_Something) -->
     !,
     [].
-resolve(ID / Suf,U) -->
+resolve(ID:Suf,U) -->
     !,
-    resolve(ID,ID_res),
-    {
-        atomic_list_concat([ID_res,Suf],U)
-    }.
-resolve(v(X),Xe) -->
+    resolve_prefix(ID,Suf,U),
+resolve(v(Var_Name),Var) -->
     !,
-    update(bindings=B0,
-           bindings=B1),
-    {
-        (   member(X=Xe,B0)
-        ->  B1=B0
-        ;   B1=[X=Xe|B0])
-    }.
-resolve(X,Xe) -->
-    view(prefixes=Prefixes),
-    {
-        atom(X),
-        (   member(X=URI,Prefixes)
-        ->  Xe=URI
-        ;   X=Xe)
-    }.
+    lookup_or_extend(Va_Name,Var).
 resolve(X,Xe) -->
     {
         is_dict(X),
@@ -288,23 +307,23 @@ resolve(X,X) -->
     },
     !.
 
-resolve_possible_object(_,Y,Ye,true) -->
-    resolve(Y,Ye),
-    {   \+ \+ Ye = literal(_)  },
-    !.
-resolve_possible_object(P,Y,Ye,T) -->
-    view(database=Database),
-    resolve(Y,Yi),
-    {
-        % We need to do this at query time since the schema may be lifted...
-        T = (    validate_schema:datatype_property(P,Database)
-            ->  (   validate_schema:range(P,R,Database)
-                ->  Ye = literal(type(R,Yi))
-                ;   Ye = Yi
-                )
-            ;   Ye = Yi)
-    }.
 
+/*
+ * compile_representation(S,T,V) is det.
+ *
+ * Gives the internal representation of some type T from some string S.
+ */
+compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
+    !,
+    guess_date(String,Date).
+compile_representation(String,Type,literal(type(Type,String))).
+
+var_same(Var_Name,
+         var_binding{
+             prolog_var : Prolog_Var,
+             store_ids : _,
+             value : Var_Name},
+         Prolog_Var).
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
@@ -319,49 +338,6 @@ compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
     ;   format(atom(M), 'Failure to compile term ~q', [Term]),
         throw(compilation_error(M))).
 
-assert_program([]).
-assert_program([Def|Remainder]) :-
-    assertz(Def),
-    assert_program(Remainder).
-
-retract_program([]).
-retract_program([def(Name,Args,_Body)|Remainder]) :-
-    length(Args,N),
-    abolish(woql_compile:(Name/N)),
-    retract_program(Remainder).
-
-bookend_graphs(Databases) :-
-    maplist([_=g(L,L-[],_-[])]>>true, Databases).
-
-nonground_elts([A|Rest_In],[A|Rest_Out]) :-
-    \+ ground(A),
-    !,
-    nonground_elts(Rest_In,Rest_Out).
-nonground_elts([_|Rest_In],Rest_Out) :-
-    nonground_elts(Rest_In,Rest_Out).
-nonground_elts([],[]).
-
-/*
- * enrich_graphs(Databases,Database,Enriched) is det.
- *
- * DDD enrich_graph_fragment currently unimplemented...
- */
-/*
-enrich_graphs(Databases,Database,Enriched) :-
-    convlist({Database}/[G=g(L,H-[],F-[]),
-                      G=Result]>>(
-                 % just set it to something
-                 % if unbound
-                 ignore(H=[]),
-                 ignore(F=[]),
-                 ignore(L=[]),
-                 \+ L=[], % don't include if empty.
-                 enrich_graph_fragment([],H,F,Database,Result)
-             ),
-             Databases,
-             Enriched).
-*/
-
 /*
  * run_query(JSON_In, JSON_Out) is det.
  *
@@ -372,7 +348,6 @@ run_query(JSON_In, JSON_Out) :-
     empty_ctx(CCTX),
     run_query(JSON_In,CCTX,JSON_Out).
 
-:- use_module(library(http/http_log)).
 
 
 /*
@@ -400,39 +375,22 @@ run_term(Query,JSON) :-
 run_term(Query,Ctx_In,JSON) :-
     debug(terminus(woql_compile(run_term)), 'Query: ~q',[Query]),
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    debug(terminus(woql_compile(run_term)), 'Program: ~q',[Prog]),
-    debug(terminus(woql_compile(run_term)), 'Ctx: ~q',[Ctx_Out]),
-    elt(definitions=Definitions,Ctx_Out),
-    elt(database=_Database,Ctx_Out),
-    debug(terminus(woql_compile(run_term)),'We are here -1',[]),
-    assert_program(Definitions),
-    debug(terminus(woql_compile(run_term)),'We are here -0.5',[]),
-    findall((B-OGs),
-            (   elt(output_graphs=OGs,Ctx_Out),
-                % sets head to graph start and tail to the empty list.
-                bookend_graphs(OGs),
-                catch(
-                    call(Prog),
-                    error(instantiation_error, C),
-                    % We need to find the offending unbound culprit here
-                    woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
-                ),
-                elt(bindings=B,Ctx_Out)
-            ),
-            BGs),
+    Database = Ctx_Out.database,
 
-    zip(Bindings,Database_List_List,BGs),
-
-    merge_graphs(Database_List_List,Database_List),
+    findall((B,
+             (   catch(
+                     call(Prog),
+                     error(instantiation_error, C),
+                     % We need to find the offending unbound culprit here
+                     woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
+                 ),
+                 B = Ctx_Out.bindings
+             ),
+             Bindings),
 
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
-    % maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
-    Database_List= E_Databases,
 
-    debug(terminus(woql_compile(run_term)), 'We are here 1',[]),
-
-    term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
-    ignore(retract_program(Definitions)).
+    JSON = _{bindings : Patched_Bindings}.
 
 get_varname(Var,[X=Y|_Rest],Name) :-
     Y == Var,
@@ -463,30 +421,6 @@ report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                           'terminus:message' : MSG}))).
 
-/*
-run_term(Query,Ctx_In,JSON) :-
-    compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    elt(definitions=Definitions,Ctx_Out),
-    elt(database=_Database,Ctx_Out),
-    assert_program(Definitions),
-    findall((B,Gs),
-            (   elt(output_graphs=OGs,Ctx_Out),
-                % sets head to graph start and tail to the empty list.
-                bookend_graphs(OGs),
-                call(Prog),
-                elt(bindings=B1,Ctx_Out),
-                patch_bindings(B1,B),
-                % enrich_graphs(OGs,Database,Gs)
-                OGs = Gs
-            ),
-            BGs),
-
-    zip(Bindings,Databases,BGs),
-
-    term_jsonld([bindings=Bindings,graphs=Databases],JSON),
-    ignore(retract_program(Definitions)).
-*/
-
 literal_string(literal(type(_,Val)), Val).
 literal_string(literal(lang(_,Val)), Val).
 
@@ -506,6 +440,7 @@ expand(A/B,U) -->
     }.
 expand(C,C) --> [], {atom(C)}.
 
+/* TODO: Needs fixed */
 patch_binding(X,Y) :-
     (   var(X)
     ->  Y=unknown
@@ -537,21 +472,6 @@ compile_node(X:C,XE,Goals) -->
                 ]
     }.
 compile_node(X,XE,[]) -->
-    %\+ X = _:_,
-    resolve(X,XE).
-
-compile_node_or_lit(PE,X:C,XE,XGoals) -->
-    !,
-    view(database=G),
-    (   { datatype_property(PE,G) }
-    ->  resolve(X,XE),
-        { XGoals=[] }
-    ;   { object_property(PE,G) }
-    ->  compile_node(X:C,XE,XGoals)
-    ;   { format(atom(M), 'Unknown property ~q in graph ~q~n', [PE,G]),
-          throw(syntax_error(M)) }
-    ).
-compile_node_or_lit(_,X,XE,[]) -->
     %\+ X = _:_,
     resolve(X,XE).
 
@@ -812,9 +732,6 @@ compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(Y,YE),
     view(database=DB),
     view(write_graph=[WG]).
-compile_wf(X:C,Goal) -->
-    compile_node(X:C,_,Goals),
-    { list_conjunction(Goals,Goal) }.
 compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
@@ -841,33 +758,21 @@ compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
-    compile_node(X,XE,XGoals),
+    resolve(X,XE),
     resolve(P,PE),
-    compile_node_or_lit(PE,Y,YE,YGoals),
-    view(database,G),
-    %view(current_output_graph=OG),
-    %update(output_graphs=OGS1,
-    %        output_graphs=OGS2),
+    resolve(Y,YE),
+    view(database,DB),
     {
-        Search=inference:inferredEdge(XE,PE,YE,G),
-        %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
-        %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
-        append([[not_literal(XE),not_literal(PE),Search],XGoals,YGoals],
-               GoalList),
+        Search=inference:inferredEdge(XE,PE,YE,DB),
+        Goal_List = [not_literal(XE),not_literal(PE),Search]
         list_conjunction(GoalList,Goal)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
-    compile_node(X,XE,XGoals),
+    resolve(X,XE),
     resolve(P,PE),
-    compile_node_or_lit(PE,Y,YE,YGoals),
-    resolve(G,GE),
-    view(database=Database),
-    %view(current_output_graph=OG),
-    %update(output_graphs=OGS1,
-    %        output_graphs=OGS2),
+    resolve(Y,YE),
+    view(database,Database),
     {
-        %select(OG=g(Full_G,_-T0,FH-FT),OGS1,
-        %       OG=g(Full_G,T0-T1,FH-FT),OGS2),
         (   database_instance(Database,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
