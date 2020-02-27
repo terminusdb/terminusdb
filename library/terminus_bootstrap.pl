@@ -55,3 +55,6 @@ xsd_string_type_uri('http://www.w3.org/2001/XMLSchema#string').
 database_class_uri('http://terminusdb.com/schema/terminus#Database').
 database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
+
+%%% URIs from repository schema
+respository_class_uri('http://terminusdb.com/schema/repository#Local').

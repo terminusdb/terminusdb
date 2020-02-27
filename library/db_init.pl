@@ -82,14 +82,42 @@ insert_db_object(Name) :-
 prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].
 
+/**
+ * create_repo_graph(+Name,-Repo_Write_Builder)
+ */
+create_repo_graph(Name,Repo_Builder) :-
+    storage(Store),
+    safe_create_named_graph(Store,Name,Graph),
+    open_write(Layer, Builder),
+    repository_class_uri(Class),
+    rdf_type_uri(RDFType),
+    atomic_list_concat(['terminus:///', Name, '/document/Local'], Local_Base),
+    idgen(Local_Base, [], Local_URI),
+
+    nb_add_triple(Repo_Builder,
+                  Local_URI,
+                  Rdf_Type_Uri,
+                  node(Database_Class_Uri)),
+
+    true.
+
 create_db(Name) :-
     % insert new db object into the terminus db
     insert_db_object(Name),
     %.. more to come ..
 
     % create repo graph - it has name as label
+    % I think we want to commit this last...
+    create_repo_graph(Name,Repo_Builder),
+
     % create ref layer with master branch and fake first commit
+    create_ref_layer(Repo_Builder,Ref_Layer),
+
+    % create master / doc and schema
+    create_master_doc_schema(Ref_Layer,New_Ref_Layer),
+
     % write layer id as local repo in repo graph
+    finalise_repo_graph(Repo_Builder,Ref_Layer),
 
     % update terminusdb with finalized
-    true.
+    finalise_terminus(Name).

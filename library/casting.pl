@@ -36,14 +36,26 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-/*
- * idgen(+Base:uri,++Args:list(any),-Output:uri) is det.
+/**
+ * idgen(?Base:uri,?Args:list(any),++Output:uri) is det.
+ * idgen(++Base:uri,++Args:list(any),?Output:uri) is det.
  *
  * Create a safe uri starting from @Base using key @Args.
+ *
+ * NOTE: Invertibility is due to the impossibility of having a %5f
+ * as the result of a path encodig. _ translates as _ and
+ * %5f translates as %255f.
  */
 idgen(Base,Args,Output) :-
-    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe),
-    interpolate([Base|Safe],Output).
+    ground(Base),
+    ground(Args),
+    !,
+    maplist([In,Out]>>uri_encoded(path,In,Out), [Base|Args], Safe_Parts),
+    merge_separator_split(Output, '%5f',Safe_Parts).
+idgen(Base,Args,Output) :-
+    merge_separator_split(Output,'%5f',Safe_Parts),
+    maplist([In,Out]>>uri_encoded(path,In,Out), [Base|Args], Safe_Parts).
+
 
 /*
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.

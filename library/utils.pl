@@ -22,6 +22,7 @@
               trim/2,
               split_atom/3,
               pattern_string_split/3,
+              merge_separator_split/3,
               count/3,
               merge_dictionaries/3,
               command/1,
@@ -367,6 +368,27 @@ split_atom(Atom,Delimiter,Result) :-
 pattern_string_split(Pattern,String,List) :-
     re_split(Pattern,String,L),
     once(intersperse(_,List,L)).
+
+
+/*
+ * merge_separator_split(+Merge, +Separator,-Split) is det.
+ * merge_separator_split(-Merge, +Separator,+Split) is det.
+ *
+ * Splits an atom on the Separator or merges on the separator.
+ *
+ * BUG: Currently this works *only* on special character free separators,
+ * as we do not escape the separator in the pattern.
+ */
+merge_separator_split(Merge, Separator, Split) :-
+    ground(Split),
+    var(Merge),
+    !,
+    intersperse(Separator, Split, Merge_List),
+    atomic_list_concat(Merge_List, Merge).
+merge_separator_split(Merge, Separator, Split) :-
+    ground(Merge),
+    pattern_string_split(Separator, Merge, Split_Strings),
+    maplist(atom_string, Split, Split_Strings).
 
 /*
  * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.

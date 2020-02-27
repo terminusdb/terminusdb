@@ -455,42 +455,6 @@ patch_bindings([V=X|B0],[V=Y|B1]) :-
     patch_binding(X,Y),
     patch_bindings(B0,B1).
 
-/* For now, no class expressions.
-
-We should wrap URIs so this is deterministic without cut.
-
-*/
-compile_node(X:C,XE,Goals) -->
-    !,
-    resolve(X,XE),
-    expand(C,CE),
-    view(database=G),
-    {
-        database_instance(G,I),
-        Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                 once(schema:subsumption_of(D,CE,G))
-                ]
-    }.
-compile_node(X,XE,[]) -->
-    %\+ X = _:_,
-    resolve(X,XE).
-
-/* currently the same as compile node */
-compile_relation(X:_C,XE,Class,Goals) -->
-    resolve(X,XE),
-    %expand(C,CE),
-    resolve(Class,ClassE),
-    view(database=G),
-    {
-        (   X=ignore
-        ->  Goals=[]
-        ;   database_instance(G,I),
-            Goals = [xrdf(G,I,XE,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',D),
-                     once(schema:subsumption_of(D,ClassE,G))
-                    ]
-        )
-    }.
-
 as_vars([],[]).
 as_vars([as(_X,Y)|Rest],[Y|Vars]) :-
     as_vars(Rest,Vars).
@@ -796,25 +760,25 @@ compile_wf((A,B),(ProgA,ProgB)) -->
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
 compile_wf((A => B),Goal) -->
-    view(database=Database),
+    view(database,Database),
     compile_wf(A,ProgA),
-    update(database=Database,
-           database=UpdateDB),
+    update(database,Database,UpdateDB),
     % This second one should be simpler, to reflect that only writes are allowed on the right.
     compile_wf(B,ProgB),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
-    view(write_graph=[WG]),
+    view(write_graph,WG),
     {
+        % TODO: Active writes, active reads need to be separated.
         debug(terminus(woql_compile(compile_wf)), 'Database: ~q', [Database]),
         active_graphs(B,Active_Graphs),
         get_dict(schema,Database,Schemata),
         debug(terminus(woql_compile(compile_wf)), 'Schemata: ~q', [Schemata]),
-        get_dict(write,Active_Graphs,AWGs),
-        debug(terminus(woql_compile(compile_wf)), 'AWGs: ~q', [AWGs]),
-        union([WG],AWGs,WGs),
-        debug(terminus(woql_compile(compile_wf)), 'Write Graphs: ~q', [WGs]),
-        intersection(WGs,Schemata,Changed_Schemata),
+        get_dict(write,Active_Graphs,All_Write_Graphs),
+        debug(terminus(woql_compile(compile_wf)), 'All_Write_Graphs: ~q', [All_Write_Graphs]),
+        union([Write_Graph],All_Write_Graphs,Write_Graphs),
+        debug(terminus(woql_compile(compile_wf)), 'Write Graphs: ~q', [Write_Graphs]),
+        intersection(Write_Graphs,Schemata,Changed_Schemata),
         debug(terminus(woql_compile(compile_wf)), 'Write Schemata: ~q', [Changed_Schemata]),
         % We want to choose schema free transactions whenever possible.
         (   Changed_Schemata = []
@@ -822,7 +786,7 @@ compile_wf((A => B),Goal) -->
                 validate:instance_transaction(
                              Database,
                              UpdateDB,
-                             WGs,
+                             Write_Graphs,
                              woql_compile:(
                                  forall(ProgA,
                                         ProgB)
@@ -838,7 +802,7 @@ compile_wf((A => B),Goal) -->
                 validate:instance_schema_transaction(
                              Database,
                              UpdateDB,
-                             WGs,
+                             Write_Graphs,
                              woql_compile:(
                                  forall(ProgA,
                                         ProgB)
@@ -852,86 +816,32 @@ compile_wf((A => B),Goal) -->
             )
         )
     },
-    update(database=_,
-           database=Database).
+    update(database,_,Database).
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
-compile_wf(all(P), Prog) -->
-    % This needs to merge only bindings and graphs
-    % and using tail append
-    % bindings probably also need to be difference lists
-    view(bindings=Old_Bindings),
-    debug_wf('Got here'),
-    compile_wf(P, Single),
-    debug_wf('Got here 0.5'),
-    view(current_output_graph=G),
-    debug_wf('Got here 1'),
-    update(output_graphs=OGs0,
-           output_graphs=OGs1),
-    debug_wf('Got here 2'),
-    update(bindings=_,
-           bindings=Old_Bindings),
-    debug_wf('Got here 3'),
-    {
-        % These are the variables which occur in
-        % our goal... OG, OH...
-        select(G=g(OG,OH-OT,OFH-OFT),OGs0,
-               G=New_G,OGs1),
-        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[Single]),
-        debug(terminus(woql_compile(compile_wf)), 'Program: ~q',[OFT]),
-        Prog=once(% one aggregate is enough
-                 sfoldr(
-                     % fold predicate
-                     [g(G0,H0-T0,FH0-FT0),
-                      g(_,H1-T1,FH1-FT1),
-                      g(G2,H2-T2,FH2-FT2)]>>(
-                         debug(terminus(woql_compile(compile_wf)), 'incoming: ~q~n',[FH0-FT0]),
-                         debug(terminus(woql_compile(compile_wf)), 'update: ~q~n',[FH1-FT1]),
-                         G0=G2,
-                         H0=H2,   T0=H1, T2=T1,
-                         FH0=FH2, FT0=FH1, FT2=FT1
-                     ),
-                     % generator
-                     [g(OG,OH-OT,OFH-OFT)]>>(OG=OH,Single),
-                     g(Head,Head-Head,Fringe-Fringe),
-                     New_G
-                 ))
-    }.
 compile_wf(from(G,P),Goal) -->
     resolve(G,GName),
     { make_database_from_database_name(GName,Database) },
-    update(database=Old_Database,
-           database=Database),
+    update(database,Old_Database,Database),
     compile_wf(P, Goal),
-    update(database=_,
-           database=Old_Database).
-compile_wf(depth(N,P), Prog) -->
-    update(bound=D,
-           bound=N),
-    compile_wf(P, Prog),
-    update(bound=_,
-           bound=D).
+    update(database,_,Old_Database).
 compile_wf(prefixes(NS,S), Prog) -->
     debug_wf('DO YOU HEAR ME ~q', [NS]),
-    update(prefixes=NS_Old,
-           prefixes=NS_New),
+    update(prefixes,NS_Old,NS_New),
     { append(NS, NS_Old, NS_New) },
     compile_wf(S, Prog),
-    update(prefixes=_,
-           prefixes=NS_Old).
+    update(prefixes,_,NS_Old).
 compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
-    update(database=Old_Database,
-           database=Database),
+    update(database,Old_Database,Database),
     view(files=Files),
-    % TODO: Extend with optiosn for various file types.
+    % TODO: Extend with options for various file types.
     { file_spec_path_options(GS, Files, Path, _{}, Options),
       extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
     },
     compile_wf(Q,Sub_Query),
-    update(database=_,
-           database=Old_Database).
+    update(database,_,Old_Database).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
         Default = _{
@@ -947,8 +857,8 @@ compile_wf(get(Spec,File_Spec), Prog) -->
 
     % Make sure all variables are given bindings
     mapm(resolve,Vars,BVars),
-    view(bindings=Bindings),
-    view(files=Files),
+    view(bindings,Bindings),
+    view(files,Files),
     {
         file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
@@ -1030,12 +940,10 @@ compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
     resolve(G,GE),
-    update(write_graph=OG,
-           write_graph=[GE]),
+    update(write_graph,OG,[GE]),
     compile_wf(S,Goal),
     % swap old graph back in
-    update(write_graph=_,
-           write_graph=OG).
+    update(write_graph,_,OG).
 compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
