@@ -90,21 +90,41 @@ create_repo_graph(Name,Repo_Builder) :-
     safe_create_named_graph(Store,Name,Graph),
     open_write(Layer, Builder),
     local_repository_class_uri(Local_Class_Uri),
-    rdf_type_uri(Rdf_Type_Uri),
     atomic_list_concat(['terminus:///', Name, '/document/Local'], Local_Base),
     idgen(Local_Base, [], Local_URI),
 
     % TODO: is this really all there is to do?
-    nb_add_triple(Repo_Builder,
-                  Local_URI,
-                  Rdf_Type_Uri,
-                  node(Local_Class_Uri)).
+    write_instance(Repo_Builder,Local_URI,'Local',Local_Class_Uri).
 
-create_ref_layer(Repo_Builder, Ref_Layer) :-
-    % How do I open a layer with no label?
-    .
+write_instance(Builder,URI,Label,Class) :-
+    rdf_type_uri(Rdf_Type_Uri),
+    label_prop_uri(Label_Prop),
+    object_storage(literal(en, Label), Label_Literal),
+    nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
+    nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
-create_db(Name) :-
+create_ref_layer(Base_URI,Ref_Layer) :-
+    storage(Store),
+    open_write(Store,Layer_Builder),
+    branch_class_uri(Branch_Class),
+    ref_commit_prop_uri(Ref_Commit_Prop),
+    ref_no_commit_uri(No_Commit),
+
+    atomic_list_concat([Base_URI, '/', Name, '/document/Local'], Branch_URI),
+    write_instance(Layer_Builder,Branch_URI,'Local',Branch_Class),
+    nb_add_triple(Layer_Builder,Branch_URI,Ref_Commit_Prop,node(No_Commit)),
+
+    ref_settings_class_uri(Settings_Class),
+    ref_settings_base_uri_prop_uri(Settings_Prop),
+    xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
+    object_storage(literal(Xsd_Any_Uri_Type_Uri, Base_URI), Base_URI_Literal),
+    atomic_list_concat([Base_URI, '/', Name, '/document/Settings'], Settings_URI),
+    write_instance(Layer_Builder,Settings_URI,'Settings',Settings_Class),
+    nb_add_triple(Layer_Builder,Settings_URI,Settings_Prop,value(Base_URI_Literal)),
+
+    nb_commit(Layer_Builder,Ref_Layer).
+
+create_db(Name,Base_URI) :-
     % insert new db object into the terminus db
     insert_db_object(Name),
     %.. more to come ..
@@ -114,7 +134,7 @@ create_db(Name) :-
     create_repo_graph(Name,Repo_Builder),
 
     % create ref layer with master branch and fake first commit
-    create_ref_layer(Repo_Builder,Ref_Layer),
+    create_ref_layer(Base_URI,Ref_Layer),
 
     % create master / doc and schema
     create_master_doc_schema(Ref_Layer,New_Ref_Layer),

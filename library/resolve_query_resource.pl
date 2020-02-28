@@ -1,4 +1,5 @@
 :- module(resolve_query_resource,[
+              connect/2,
               resolve_query_resource/2
           ]).
 
@@ -26,8 +27,28 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 /*
- * We need to be able to resolve arbitrary resource URI's + a 
+ * We need to be able to resolve arbitrary resource URI's
  * to the appropriate portion of the query_object.
  *
  */
 resolve_query_resource(_,_).
+
+/*
+ * connect(+DB_Name:uri -Ctx:context) is det.
+ *
+ * Resolves a query resource to a context which includes the queryable objects.
+ */
+connect(DB_Mame,New_Ctx) :-
+    empty_ctx(Ctx),
+
+    get_database_prefix_list(DB_Name, Prefixes),
+
+    Ctx1 = Ctx.prefixes = Prefixes,
+    make_database_from_database_name(DB_Name,DB_Obj),
+    maybe_open_read_transaction(DB_Obj,DBR),
+
+    database_default_write_instance(DB_Obj,I),
+    Ctx2 = Ctx1.database = DBR,
+    Ctx3 = Ctx2.write_graph=I,
+    New_Ctx.collection=DB.
+

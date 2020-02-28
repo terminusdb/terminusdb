@@ -33,29 +33,6 @@
 
 :- reexport(woql_term).
 
-/*
- * connect(+DB:uri -Ctx:context) is det.
- */
-connect(DB,New_Ctx) :-
-    empty_ctx(Ctx),
-
-    get_collection_prefix_list(DB, Prefixes),
-
-    select(prefixes=_,Ctx,
-           prefixes=Prefixes, Ctx1),
-
-    make_database_from_database_name(DB,DB_Obj),
-    maybe_open_read_transaction(DB_Obj,DBR),
-
-    database_instance(DB_Obj,I),
-
-    select(database=_,Ctx1,
-           database=DBR,Ctx2),
-    select(write_graph=_,Ctx2,
-           write_graph=I,Ctx3),
-    select(collection=_,Ctx3,
-           collection=DB,New_Ctx).
-
 pre_term_to_term_and_bindings(Pre_Term,Term,Bindings_In,Bindings_Out) :-
     (   var(Pre_Term)
     ->  (   member(V=X,Bindings_In),

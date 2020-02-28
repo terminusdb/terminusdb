@@ -50,6 +50,8 @@ ref_ontology('http://terminusdb.com/schema/ref').
 %%% various URIs that we use often
 rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
 xsd_string_type_uri('http://www.w3.org/2001/XMLSchema#string').
+xsd_any_uri_type_uri('http://www.w3.org/2001/XMLSchema#anyURI').
+label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
 
 %%% URIs from terminus schema
 database_class_uri('http://terminusdb.com/schema/terminus#Database').
@@ -58,3 +60,11 @@ finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
 
 %%% URIs from repository schema
 local_repository_class_uri('http://terminusdb.com/schema/repository#Local').
+
+%%% URIs from ref schema
+branch_class_uri('http://terminusdb.com/schema/ref#Branch').
+ref_commit_prop_uri('http://terminusdb.com/schema/ref#ref_commit').
+ref_no_commit_uri('http://terminusdb.com/schema/ref#no_commit').
+ref_settings_class_uri('http://terminusdb.com/schema/ref#Settings').
+ref_settings_base_uri_prop_uri('http://terminusdb.com/schema/ref#settings_base_uri').
+

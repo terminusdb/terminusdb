@@ -17,6 +17,18 @@
   owl:imports <http://terminusdb.com/schema/layer> ;
   tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
+ref:Settings
+  a owl:Class ;
+  rdfs:comment "Settings classes are singletons which store information about a "@en ;
+  rdfs:label "Settings"@en .
+
+ref:settings_base_uri
+  a owl:DatatypeProperty ;
+  rdfs:comment "Base URI for the current repository"@en ;
+  rdfs:label "Base URI"@en ;
+  rdfs:domain ref:Settings ;
+  rdfs:range xsd:anyURI .
+
 ref:Branch
   a owl:Class ;
   rdf:subClassOf ref:Ref ;

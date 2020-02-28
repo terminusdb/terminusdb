@@ -96,7 +96,7 @@
  * URI Resource Resolution:
  *
  * We need to resolve URIs to the appropriate object - i.e. a desriptor which
- * can be interpreted by the prolog term output by WOQL. This involves two number of specific
+ * can be interpreted by the prolog term output by WOQL. This involves two specific
  * scenarios: read and write.
  *
  * WOQL should *compile* to the resolving descriptor, which can then be used in the transaction to
@@ -387,7 +387,8 @@ run_query(JSON_In, JSON_Out) :-
  */
 run_query(JSON_In,CCTX,JSON_Out) :-
     woql_context(Ctx),
-    memberchk(database=Database,CCTX),
+    Query_Object = CCTX.query_object,
+    /* TODO: This needs to be done earlier. */
     database_name(Database, Name),
     get_collection_jsonld_context(Name,Ctx_Database),
     merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
@@ -405,6 +406,7 @@ run_term(Query,Ctx_In,JSON) :-
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
     Database = Ctx_Out.database,
 
+    % TODO: This should probably be a forall with a write to the output stream
     findall((B,
              (   catch(
                      call(Prog),
@@ -706,24 +708,24 @@ compile_wf(delete(WG,X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database=DB).
+    view(database,DB).
 compile_wf(insert(WG,X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database=DB).
+    view(database,DB).
 compile_wf(delete(X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database=DB),
-    view(write_graph=[WG]).
+    view(database,DB),
+    view(write_graph,WG).
 compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database=DB),
-    view(write_graph=[WG]).
+    view(database,DB),
+    view(write_graph,WG).
 compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
@@ -967,8 +969,7 @@ compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
     % swap in new graph
-    resolve(G,GE),
-    update(write_graph,OG,[GE]),
+    update(write_graph,OG,G),
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph,_,OG).
