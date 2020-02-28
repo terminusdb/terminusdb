@@ -1,15 +1,31 @@
 :- module(terminus_bootstrap,[
+              terminus_instance_name/1,
+              terminus_schema_name/1,
+              terminus_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
-              terminus_instance_name/1,
-              terminus_inference_name/1,
-              terminus_schema_name/1,
+
               rdf_type_uri/1,
               xsd_string_type_uri/1,
+              xsd_any_uri_type_uri/1,
+              label_prop_uri/1,
+
               database_class_uri/1,
               database_name_property_uri/1,
-              finalized_element_uri/1
+              finalized_element_uri/1,
+
+              shadow_layer_class_uri/1,
+              layer_id_prop_uri/1,
+
+              local_repository_class_uri/1,
+              repository_head_prop_uri/1,
+
+              branch_class_uri/1,
+              ref_commit_prop_uri/1,
+              ref_no_commit_uri/1,
+              ref_settings_class_uri/1,
+              ref_settings_base_uri_prop_uri/1
           ]).
 
 /** <module> Terminus Bootstrap
@@ -58,8 +74,13 @@ database_class_uri('http://terminusdb.com/schema/terminus#Database').
 database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
 
+%% URIs from layer schema
+shadow_layer_class_uri('http://terminusdb.com/schema/layer#ShadowLayer').
+layer_id_prop_uri('http://terminusdb.com/schema/layer#layer_id').
+
 %%% URIs from repository schema
 local_repository_class_uri('http://terminusdb.com/schema/repository#Local').
+repository_head_prop_uri('http://terminusdb.com/schema/repository#repository_head').
 
 %%% URIs from ref schema
 branch_class_uri('http://terminusdb.com/schema/ref#Branch').
