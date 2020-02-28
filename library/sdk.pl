@@ -1,7 +1,7 @@
 :- module(sdk,[
-              connect/2,
               ask/2,
-              ask/1]).
+              ask/1
+          ]).
 
 /** <module> Prolog SDK
  *

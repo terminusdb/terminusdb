@@ -1,4 +1,6 @@
-:- module(db_init, []).
+:- module(db_init, [
+              create_db/2
+          ]).
 
 /** <module> Implementation of database graph management
  *
@@ -24,8 +26,11 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 :- use_module(library(terminus_store)).
 :- use_module(library(triplestore)).
+:- use_module(library(literals)).
+:- use_module(library(casting)).
 :- use_module(library(terminus_bootstrap)).
 
 db_name_uri(Name, Uri) :-
@@ -35,7 +40,7 @@ db_name_uri(Name, Uri) :-
 db_exists(Layer, Name) :-
     database_name_property_uri(Database_Name_Property_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(Xsd_String_Type_Uri, Name), Name_Literal),
+    object_storage(literal(type(Xsd_String_Type_Uri, Name)), Name_Literal),
     db_name_uri(Name, Db_Uri),
 
     triple(Layer,
@@ -48,13 +53,10 @@ insert_db_object_triples(Builder, Name) :-
     database_name_property_uri(Database_Name_Property_Uri),
     rdf_type_uri(Rdf_Type_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(Xsd_String_Type_Uri, Name), Name_Literal),
+    object_storage(literal(type(Xsd_String_Type_Uri, Name)), Name_Literal),
     db_name_uri(Name, Db_Uri),
 
-    nb_add_triple(Builder,
-                  Db_Uri,
-                  Rdf_Type_Uri,
-                  node(Database_Class_Uri)),
+    write_instance(Builder,DB_Uri,Name,Database_Class_Uri),
     nb_add_triple(Builder,
                   Db_Uri,
                   Database_Name_Property_Uri,
@@ -101,7 +103,7 @@ create_repo_graph(Name,Graph,Builder) :-
 write_instance(Builder,URI,Label,Class) :-
     rdf_type_uri(Rdf_Type_Uri),
     label_prop_uri(Label_Prop),
-    object_storage(literal(en, Label), Label_Literal),
+    object_storage(literal(lang(en, Label)), Label_Literal),
     nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
     nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
@@ -119,7 +121,7 @@ create_ref_layer(Base_URI,Ref_Layer) :-
     ref_settings_class_uri(Settings_Class),
     ref_settings_base_uri_prop_uri(Settings_Prop),
     xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
-    object_storage(literal(Xsd_Any_Uri_Type_Uri, Base_URI), Base_URI_Literal),
+    object_storage(literal(type(Xsd_Any_Uri_Type_Uri, Base_URI)), Base_URI_Literal),
     atomic_list_concat([Base_URI, '/', Name, '/document/Settings'], Settings_URI),
     write_instance(Layer_Builder,Settings_URI,'Settings',Settings_Class),
     nb_add_triple(Layer_Builder,Settings_URI,Settings_Prop,value(Base_URI_Literal)),
@@ -131,8 +133,15 @@ finalise_terminus(Name) :-
     terminus_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
+    open_write(Layer, Builder),
+    finalized_element_uri(Finalized),
+    database_finalized_prop_uri(Finalised_Prop),
 
-    
+    % Tell terminus that we are actually finalized
+    db_name_uri(Name, Db_Uri),
+    nb_add_triple(Builder,DB_Uri,Finalized_Prop,node(Finalized)),
+    nb_commit(Builder,Final),
+    nb_set_head(Graph,Final).
 
 finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
     % set local repo layer to ref layer
@@ -145,7 +154,7 @@ finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
 
     layer_id_prop_uri(Layer_Id_Prop_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(Xsd_String_Type_Uri, Layer_Id), Layer_Id_Literal),
+    object_storage(literal(type(Xsd_String_Type_Uri, Layer_Id)), Layer_Id_Literal),
     nb_add_triple(Repo_Builder, Shadow_Layer_Uri, Layer_Id_Prop_Uri, value(Layer_Id_Literal)),
 
     repository_head_prop_uri(Repository_Head_Prop_Uri),

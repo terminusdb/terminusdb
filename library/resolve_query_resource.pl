@@ -30,13 +30,14 @@
  * We need to be able to resolve arbitrary resource URI's
  * to the appropriate portion of the query_object.
  *
+ * TODO: Make this exist
  */
 resolve_query_resource(_,_).
 
 /*
  * connect(+DB_Name:uri -Ctx:context) is det.
  *
- * Resolves a query resource to a context which includes the queryable objects.
+ * Resolves a query resource uri to a context which includes the queryable objects.
  */
 connect(DB_Mame,New_Ctx) :-
     empty_ctx(Ctx),

@@ -1,7 +1,8 @@
 :- module(global_prefixes, [
               global_prefixes/2,
               global_prefix_expand/2,
-              literal_expand/2
+              literal_expand/2,
+              default_prefixes/1
           ]).
 
 /** <module> Global Prefixes
@@ -39,6 +40,9 @@ global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
 global_prefixes(owl,'http://www.w3.org/2002/07/owl#').
 
+/*
+ * TODO: Table? Use a dictionary for global_prefixes?
+ */
 default_prefixes(Defaults) :-
     findall(Prefix-URI,
             global_prefixes(Prefix,URI),

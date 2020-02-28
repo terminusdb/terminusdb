@@ -279,7 +279,7 @@ resolve(ignore,_Something) -->
     [].
 resolve(ID:Suf,U) -->
     !,
-    resolve_prefix(ID,Suf,U),
+    resolve_prefix(ID,Suf,U).
 resolve(v(Var_Name),Var) -->
     !,
     lookup_or_extend(Va_Name,Var).
@@ -407,16 +407,16 @@ run_term(Query,Ctx_In,JSON) :-
     Database = Ctx_Out.database,
 
     % TODO: This should probably be a forall with a write to the output stream
-    findall((B,
-             (   catch(
-                     call(Prog),
-                     error(instantiation_error, C),
-                     % We need to find the offending unbound culprit here
-                     woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
-                 ),
-                 B = Ctx_Out.bindings
-             ),
-             Bindings),
+    findall(B,
+            (   catch(
+                    call(Prog),
+                    error(instantiation_error, C),
+                    % We need to find the offending unbound culprit here
+                    woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
+                ),
+                B = Ctx_Out.bindings
+            ),
+            Bindings),
 
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
 
@@ -758,7 +758,7 @@ compile_wf(t(X,P,Y),Goal) -->
     view(database,DB),
     {
         Search=inference:inferredEdge(XE,PE,YE,DB),
-        Goal_List = [not_literal(XE),not_literal(PE),Search]
+        Goal_List = [not_literal(XE),not_literal(PE),Search],
         list_conjunction(GoalList,Goal)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->

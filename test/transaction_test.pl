@@ -27,6 +27,7 @@
 
 :- use_module(test(test_utils)).
 :- use_module(library(database)).
+:- use_module(library(db_init)).
 
 transaction_tests :-
     try(terminus_descriptor_read_query_test).
@@ -62,3 +63,7 @@ terminus_descriptor_read_query_test :-
                           'http://terminusdb.com/schema/terminus#authority_scope',
                           'http://www.w3.org/2002/07/owl#propertyChainAxiom',
                           _)).
+
+create_db_test :-
+    Base = 'http://localhost/',
+    create_db('Terminus_Testing_Database',Base).
