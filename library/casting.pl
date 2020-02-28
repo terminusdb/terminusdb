@@ -50,11 +50,11 @@ idgen(Base,Args,Output) :-
     ground(Base),
     ground(Args),
     !,
-    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts),
-    merge_separator_split(Output, '%5f',Safe_Parts).
+    maplist([In,Out]>>uri_encoded(path,In,Out), [Args], Safe_Parts),
+    merge_separator_split(Output, '%5f',[Base|Safe_Parts]).
 idgen(Base,Args,Output) :-
-    merge_separator_split(Output,'%5f',Safe_Parts),
-    maplist([In,Out]>>uri_encoded(path,In,Out), [Base|Args], Safe_Parts).
+    merge_separator_split(Output,'%5f',[Base|Safe_Parts]),
+    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts).
 
 
 /*
