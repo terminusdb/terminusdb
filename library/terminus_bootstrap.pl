@@ -72,6 +72,7 @@ label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
 %%% URIs from terminus schema
 database_class_uri('http://terminusdb.com/schema/terminus#Database').
 database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
+database_finalized_prop_uri('http://terminusdb.com/schema/terminus#database_finalized').
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
 
 %% URIs from layer schema

@@ -126,6 +126,14 @@ create_ref_layer(Base_URI,Ref_Layer) :-
 
     nb_commit(Layer_Builder,Ref_Layer).
 
+finalise_terminus(Name) :-
+    storage(Store),
+    terminus_instance_name(Instance_Name),
+    safe_open_named_graph(Store, Instance_Name, Graph),
+    head(Graph, Layer),
+
+    
+
 finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
     % set local repo layer to ref layer
     layer_to_id(Ref_Layer, Layer_Id),
