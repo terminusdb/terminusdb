@@ -55,10 +55,10 @@ This file deliberately has no dependencies - please do not introduce them.
  * is_literal(+X) is semidet.
  *
  */
-is_literal(literal(lang(Lang,Data))) :-
+is_literal(Data@Lang) :-
     atom(Lang),
     atom(Data).
-is_literal(literal(type(Type,_Data))) :-
+is_literal(_Data^^Type) :-
     % this should probably have the full xsd build out.
     atom(Type).
 

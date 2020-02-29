@@ -32,35 +32,21 @@
 :- use_module(library(literals)).
 :- use_module(library(casting)).
 :- use_module(library(terminus_bootstrap)).
+:- use_module(library(database_utils)).
 
-db_name_uri(Name, Uri) :-
-    % TODO make invertible (probably by making idgen invertible)
-    idgen('terminus:///terminus/document/Database', [Name], Uri).
-
-db_exists(Layer, Name) :-
-    database_name_property_uri(Database_Name_Property_Uri),
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(type(Xsd_String_Type_Uri, Name)), Name_Literal),
-    db_name_uri(Name, Db_Uri),
-
-    triple(Layer,
-           Db_Uri,
-           Database_Name_Property_Uri,
-           value(Name_Literal)).
 
 insert_db_object_triples(Builder, Name) :-
     database_class_uri(Database_Class_Uri),
     database_name_property_uri(Database_Name_Property_Uri),
-    rdf_type_uri(Rdf_Type_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(type(Xsd_String_Type_Uri, Name)), Name_Literal),
+    object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
     db_name_uri(Name, Db_Uri),
 
-    write_instance(Builder,DB_Uri,Name,Database_Class_Uri),
+    write_instance(Builder,Db_Uri,Name,Database_Class_Uri),
     nb_add_triple(Builder,
                   Db_Uri,
                   Database_Name_Property_Uri,
-                  value(Name_Literal)).
+                  Name_Literal).
 
 insert_db_object(Name) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
@@ -69,7 +55,7 @@ insert_db_object(Name) :-
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
 
-    (   db_exists(Layer, Name)
+    (   db_exists_in_layer(Layer, Name)
     ->  throw(error(database_exists(Name),
                     context(insert_db_object/1,
                             'database already exists')))
@@ -103,11 +89,11 @@ create_repo_graph(Name,Graph,Builder) :-
 write_instance(Builder,URI,Label,Class) :-
     rdf_type_uri(Rdf_Type_Uri),
     label_prop_uri(Label_Prop),
-    object_storage(literal(lang(en, Label)), Label_Literal),
+    object_storage(Label@en, Label_Literal),
     nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
     nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
-create_ref_layer(Base_URI,Ref_Layer) :-
+create_ref_layer(Name,Base_URI,Ref_Layer) :-
     storage(Store),
     open_write(Store,Layer_Builder),
     branch_class_uri(Branch_Class),
@@ -121,10 +107,10 @@ create_ref_layer(Base_URI,Ref_Layer) :-
     ref_settings_class_uri(Settings_Class),
     ref_settings_base_uri_prop_uri(Settings_Prop),
     xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
-    object_storage(literal(type(Xsd_Any_Uri_Type_Uri, Base_URI)), Base_URI_Literal),
+    object_storage(Base_URI^^Xsd_Any_Uri_Type_Uri, Base_URI_Literal),
     atomic_list_concat([Base_URI, '/', Name, '/document/Settings'], Settings_URI),
     write_instance(Layer_Builder,Settings_URI,'Settings',Settings_Class),
-    nb_add_triple(Layer_Builder,Settings_URI,Settings_Prop,value(Base_URI_Literal)),
+    nb_add_triple(Layer_Builder,Settings_URI,Settings_Prop,Base_URI_Literal),
 
     nb_commit(Layer_Builder,Ref_Layer).
 
@@ -135,11 +121,11 @@ finalise_terminus(Name) :-
     head(Graph, Layer),
     open_write(Layer, Builder),
     finalized_element_uri(Finalized),
-    database_finalized_prop_uri(Finalised_Prop),
+    database_state_prop_uri(State_Prop),
 
     % Tell terminus that we are actually finalized
     db_name_uri(Name, Db_Uri),
-    nb_add_triple(Builder,DB_Uri,Finalized_Prop,node(Finalized)),
+    nb_add_triple(Builder,Db_Uri,State_Prop,node(Finalized)),
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
@@ -154,8 +140,8 @@ finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
 
     layer_id_prop_uri(Layer_Id_Prop_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(literal(type(Xsd_String_Type_Uri, Layer_Id)), Layer_Id_Literal),
-    nb_add_triple(Repo_Builder, Shadow_Layer_Uri, Layer_Id_Prop_Uri, value(Layer_Id_Literal)),
+    object_storage(Layer_Id^^Xsd_String_Type_Uri, Layer_Id_Literal),
+    nb_add_triple(Repo_Builder, Shadow_Layer_Uri, Layer_Id_Prop_Uri, Layer_Id_Literal),
 
     repository_head_prop_uri(Repository_Head_Prop_Uri),
     nb_add_triple(Repo_Builder, Local_Uri, Repository_Head_Prop_Uri, node(Shadow_Layer_Uri)),
@@ -174,7 +160,7 @@ create_db(Name,Base_URI) :-
     create_repo_graph(Name,Repo_Graph,Repo_Builder),
 
     % create ref layer with master branch and fake first commit
-    create_ref_layer(Base_URI,Ref_Layer),
+    create_ref_layer(Name,Base_URI,Ref_Layer),
 
     % write layer id as local repo in repo graph
     finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer),

@@ -26,13 +26,60 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-/*
+/*****************************************
+ * URI Resource Resolution:
+ *
+ * We need to resolve URIs to the appropriate object - i.e. a desriptor which
+ * can be interpreted by the prolog term output by WOQL. This involves two specific
+ * scenarios: read and write.
+ *
+ * WOQL should *compile* to the resolving descriptor, which can then be used in the transaction to
+ * find the right query_object, allowing the transaction logic to be simplified, and eventually
+ * supporting nested transactions.
+ *
+ ** Read: Querying a specific object.
+ *
+ * Here we need to be able to read the union of the instance graphs of the appropriate query_object,
+ * against the union of schema graphs (where relevant - i.e. with subsumption).
+ *
+ * As long as the resolution leaves us with a query_object, we can treat it irrespective of the
+ * "layer of the union".
+ *
+ ** Write: Writing to a specific graph
+ *
+ * Here we need to be more directed. If we are unable to resolve to a specific graph we need to
+ * throw an error, describing the graph set which might be intended, with their specific URIs.
+ *
+ * We can default the write graph to Server://DB_Name/local/document/main
+ * Server can be defaulted to terminusHub
+ */
+
+/**
+ * resolve_query_resource(Uri, Descriptor) is semidet.
+ *
  * We need to be able to resolve arbitrary resource URI's
  * to the appropriate portion of the query_object.
  *
  * TODO: Make this exist
  */
-resolve_query_resource(_,_).
+resolve_query_resource('terminus:///terminus/',terminus_descriptor).
+resolve_query_resource(URI, X) :-
+    % The generic full path for a resource is:
+    %
+    %
+    % Queryable resource:
+    % protocol://server/database => protocol://server/database/local/master
+    %
+    % Graph resource:
+    % protocol://server/database => protocol://server/database/local/master/instance/main
+    % protocol://server/database/repository/ref/{instance,schema,inference}/graph_name
+    % protocol://server/database/ is short for protocol://server/database/master/instance
+    %
+    % Repo metadata?:
+    %
+    % protocol://server/repository/ref
+    %
+    true.
 
 /*
  * connect(+DB_Name:uri -Ctx:context) is det.

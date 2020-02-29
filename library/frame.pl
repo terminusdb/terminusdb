@@ -54,6 +54,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(utils).
 :- use_module(base_type).
 :- use_module(triplestore).
@@ -92,13 +95,13 @@ get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Document,LabelProp,literal(lang(_,Label))),
+    xrdf(Collection,Instance,Document,LabelProp,Label@_),
     !.
 get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Document,LabelProp,literal(type(_,Label))),
+    xrdf(Collection,Instance,Document,LabelProp,Label@_),
     !.
 
 get_some_label(E,Database,L) :-
@@ -191,34 +194,34 @@ restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) 
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:minCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:minCardinality,Card_Str^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:maxCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:maxCardinality,Card_Str^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:cardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:cardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:minQualifiedCardinality,literal(type(_Type, CardStr))),
+    xrdf(Database,Schema,CR,owl:minQualifiedCardinality,Card_Str^^_),
     xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality,literal(type(_Type,CardStr))),
+    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
     xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
     xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:qualifiedCardinality,literal(type(_Type,CardStr))),
+    xrdf(Database,Schema,CR,owl:qualifiedCardinality,CardStr^^_),
     xrdf(Database,Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-

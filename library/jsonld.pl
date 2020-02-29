@@ -35,6 +35,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(library(pairs)).
 :- use_module(utils).
 :- use_module(library(http/json)).
@@ -355,15 +358,14 @@ compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
  *
  * expand a prolog internal json representation to dicts.
  */
-term_jsonld(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',
-                         date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM))),
+term_jsonld(date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM)^^'http://www.w3.org/2001/XMLSchema#dateTime',
             _{'@type' : 'http://www.w3.org/2001/XMLSchema#dateTime', '@value' : Atom}) :-
     !,
     % Really should put the time zone in properly.
     format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
            [Y,M,D,HH,MM,SS]).
-term_jsonld(literal(type(T,D)),_{'@type' : T, '@value' : D}).
-term_jsonld(literal(lang(L,D)),_{'@language' : L, '@value' : D}).
+term_jsonld(D^^T,_{'@type' : T, '@value' : D}).
+term_jsonld(D@L,_{'@language' : L, '@value' : D}).
 term_jsonld(Term,JSON) :-
     is_list(Term),
     maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),
@@ -505,11 +507,11 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
                   '@value' : Data
                  }
         ->  atom_string(Atom_Type,Type),
-            Triples = [(C,G,ID,Pred,literal(type(Atom_Type,Data)))]
+            Triples = [(C,G,ID,Pred,Data^^Atom_Type)]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
         ->  atom_string(Atom_Lang,Lang),
-            Triples = [(C,G,ID,Pred,literal(lang(Atom_Lang,Data)))]
+            Triples = [(C,G,ID,Pred,Data@Atom_Lang)]
         ;   jsonld_id(V,Val),
             jsonld_triples_aux(V,Ctx,Database,Rest),
             Triples = [(C,G,ID,Pred,Val)|Rest])
@@ -520,9 +522,9 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
         append(Triples_List, Triples)
     ;   string(V)
     ->  atom_string(A,V),
-        Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',A)))]
+        Triples = [(C,G,ID,Pred,A^^'http://www.w3.org/2001/XMLSchema#string')]
     ;   atom(V)
-    ->  Triples = [(C,G,ID,Pred,literal(type('http://www.w3.org/2001/XMLSchema#string',V)))]
+    ->  Triples = [(C,G,ID,Pred,V^^'http://www.w3.org/2001/XMLSchema#string')]
     ;   Triples = [(C,G,ID,Pred,V)]).
 
 

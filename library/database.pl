@@ -39,12 +39,18 @@
 :- use_module(library(terminus_bootstrap)).
 
 :- op(2, xfx, ^^).
+:- op(2, xfx, @).
 
 /*
  * Types:
  *
- * graph_descriptor --> named_graph{ name : atom }
- *                    | ref_graph{ layer_id : atom }
+ * graph_descriptor --> labelled_graph{ name : atom }
+ *                    | id_graph{ layer_id : atom }
+ *                    | named_graph{ db_name : atom ,
+ *                                   repository_name : atom ,
+ *                                   branch_name : atom,
+ *                                   type : atom,
+ *                                   name : atom }
  *
  * A named_graph refers to a file in the store - this has to be made unique so we don't get
  * collisions between different databases. Currently only used for the terminus and database graph
@@ -562,7 +568,7 @@ write_ref_commit(Ref_Layer_Builder,Ref_URI,Author,Last_Commit_URI,Commit_URI) :-
     metadata_prefix_expand(terminus:commit_author, Author_Prop),
     metadata_prefix_expand(terminus:no_commit, No_Commit_URI),
     unix_time_string_now(Unix_Time_String),
-    object_storage(literal(Unix_Time_String,XSD_String), Timestamp_Literal),
+    object_storage(Unix_Time_String^^XSD_String, Timestamp_Literal),
     object_storage(literal(Author,XSD_String), Author_Literal),
     nb_add_triple(Ref_Layer_Builder, Commit_URI, RDF_Type, node(Commit_Type)),
     (   Last_Commit_URI = No_Commit_URI

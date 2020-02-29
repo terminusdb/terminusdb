@@ -28,6 +28,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(xsd_parser).
 :- use_module(library(dcg/basics), [whites//0, blanks//0]).
 
@@ -36,14 +39,14 @@
  *
  * Guess some possible dates.
  */
-guess_date(Val,literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Date))) :-
+guess_date(Val,Date^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     atom_codes(Val,Codes),
     once(phrase(guess_date(Date),Codes)).
 
-guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',Val))) :-
+guess_integer(Val,Val^^'http://www.w3.org/2001/XMLSchema#integer') :-
     integer(Val),
     !.
-guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',N))) :-
+guess_integer(Val,N^^'http://www.w3.org/2001/XMLSchema#integer') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val, Codes),
@@ -57,10 +60,10 @@ guess_integer(Val,literal(type('http://www.w3.org/2001/XMLSchema#integer',N))) :
  *
  * Guess some possible numbers.
  */
-guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Val))) :-
+guess_number(Val,Val^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Val),
     !.
-guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
+guess_number(Val,N^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
@@ -69,7 +72,7 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
             whites),
            Codes),
     !.
-guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result))) :-
+guess_number(Val,Result^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
@@ -79,7 +82,7 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result)
            Codes),
     number_string(Result,Ans),
     !.
-guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result))) :-
+guess_number(Val,Result^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
@@ -89,13 +92,13 @@ guess_number(Val,literal(type('http://www.w3.org/2001/XMLSchema#decimal',Result)
            Codes),
     number_string(Result,Ans).
 
-guess_integer_range(Val,literal(type('http://terminusdb.com/schema/xdd#integerRange', Val))) :-
+guess_integer_range(Val,Val^^'http://terminusdb.com/schema/xdd#integerRange') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),
     phrase((blanks,integerRange(_,_),blanks),Codes).
 
-guess_decimal_range(Val,literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val))) :-
+guess_decimal_range(Val,Val^^'http://terminusdb.com/schema/xdd#decimalRange') :-
     (   atom(Val)
     ;   string(Val)),
     atom_codes(Val,Codes),

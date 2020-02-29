@@ -1,9 +1,9 @@
 :- module(database_utils,[
-              create_db/2,
-              post_create_db/1,
-              delete_db/1,
+              db_name_uri/2,
+              db_exists_in_layer/2,
+              db_finalized_in_layer/2,
               database_exists/1,
-              extend_database_defaults/3
+              terminus_graph_layer/2
           ]).
 
 /** <module> Database Utilities
@@ -31,48 +31,63 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(file_utils).
 :- use_module(triplestore).
 :- use_module(utils).
 :- use_module(database).
 :- use_module(expansions).
+:- use_module(terminus_bootstrap).
+:- use_module(literals, [object_storage/2]).
+:- use_module(casting, [idgen/3]).
+
+/*
+ * db_name_uri(+Name,-Uri) is det.
+ * db_name_uri(-Name,+Uri) is det.
+ *
+ * Make a fully qualified Uri from Name or vice-versa
+ */
+db_name_uri(Name, Uri) :-
+    idgen('terminus:///terminus/document/Database', [Name], Uri).
+
+db_exists_in_layer(Layer, Name) :-
+    database_name_property_uri(Database_Name_Property_Uri),
+    xsd_string_type_uri(Xsd_String_Type_Uri),
+    object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
+    db_name_uri(Name, Db_Uri),
+
+    triple(Layer,
+           Db_Uri,
+           Database_Name_Property_Uri,
+           Name_Literal).
+
+db_finalized_in_layer(Layer,Name) :-
+    finalized_element_uri(Finalized),
+    database_state_prop_uri(State_Prop),
+
+    db_name_uri(Name, Db_Uri),
+    triple(Layer,Db_Uri,State_Prop,node(Finalized)).
+
+/**
+ * terminus_graph_layer(-Graph,-Layer) is det.
+ *
+ * Get the document graph for Terminus as a Layer
+ */
+terminus_graph_layer(Graph,Layer) :-
+    storage(Store),
+    terminus_instance_name(Instance_Name),
+    safe_open_named_graph(Store, Instance_Name, Graph),
+    head(Graph, Layer).
 
 /*
  * database_exists(DB_URI) is semidet.
- */
-database_exists(DB_URI) :-
-    database_name_list(Databases),
-    memberchk(DB_URI,Databases).
-
-/**
- * create_db(+DB:atom) is semidet.
  *
- * Create a new empty graph
  */
-create_db(Terminus_DB,DB_URI) :-
-
-    initialise_prefix_db(DB_URI),
-    storage(Store),
-
-    % Set up schemata
-    forall(
-        (
-            % If none, we succeed... (headless)
-            database_record_schema_list(Terminus_DB, DB_URI,Schemata),
-            member(Schema,Schemata)
-        ),
-        safe_create_named_graph(Store,Schema,_)
-    ),
-
-    % Set up instance graphs
-    forall(
-        (
-            % If none, we succeed... (legless)
-            database_record_instance_list(Terminus_DB, DB_URI,Instances),
-            member(Instance,Instances)
-        ),
-        safe_create_named_graph(Store,Instance,_)
-    ).
+database_exists(Name) :-
+    terminus_graph_layer(_Graph,Layer),
+    db_exists_in_layer(Layer,Name).
 
 create_schema(DB_URI,Schema,DB) :-
     interpolate([DB_URI],Label),
@@ -83,69 +98,5 @@ create_schema(DB_URI,Schema,DB) :-
     global_prefix_expand(rdfs:comment, Rdfs_comment),
     global_prefix_expand(owl:'Ontology', OWL_ontology),
     insert(DB, Schema, DB_URI, Rdf_type, OWL_ontology),
-    insert(DB, Schema, DB_URI, Rdfs_label, literal(lang(en,Label))),
-    insert(DB, Schema, DB_URI, Rdfs_comment, literal(lang(en,Comment))).
-
-post_create_db(DB_URI) :-
-    make_database_from_database_name(DB_URI, Database),
-    Schemata = Database.schema,
-    with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             write_graphs: Schemata,
-             update_database: Update_DB,
-             post_database: _Post_DB},
-         witnesses(Witnesses)],
-        forall(member(Schema,Schemata),
-               database_utils:create_schema(DB_URI,Schema,Update_DB)),
-        % always an ok update...
-        true
-    ),
-    % Succeed only if the witnesses are empty.
-    Witnesses = [].
-
-% evil much? Unlikely to be safe.
-delete_db(DB) :-
-    db_path(Path),
-    www_form_encode(DB,DBID),
-    interpolate(['^(?<name>',DBID,'.*).label$'],Pattern),
-    files(Path,Files),
-    forall(
-        (   member(File,Files),
-            re_matchsub(Pattern,File,Sub,[])
-        ),
-        (
-            interpolate([Path,File],QFile),
-            get_time(Time),
-            interpolate([Path,Sub.name,'-',Time,'.deleted'],Deleted_File),
-            rename_file(QFile,Deleted_File)
-        )
-    ).
-
-/*
- * should probably go in JSON-LD
- */
-add_dictionary_default(Doc, Key, Default, New_Doc) :-
-    % hairy logic - can this be simplified?
-    (   get_dict(Key, Doc, Result)
-    ->  (   is_list(Result)
-        ->  (   member(Res, Result),
-                select_dict(Res, Default, _Rest)
-            ->  Doc = New_Doc
-            ;   put_dict(Key, Doc, [Default|Result], New_Doc)
-            )
-        ;   (   select_dict(Result, Default, _Rest)
-            ->  Doc = New_Doc
-            ;   put_dict(Key, Doc, [Default,Result], New_Doc)))
-    ;   put_dict(Key, Doc, Default, New_Doc)
-    ).
-
-extend_database_defaults(URI,Doc,Ext) :-
-    format(string(Document),'~s~s',([URI,'/document'])),
-    add_dictionary_default(Doc, 'http://terminusdb.com/schema/terminus#instance',
-                           _{'@value':Document, '@type':'http://www.w3.org/2001/XMLSchema#string'},
-                           Doc1),
-    format(string(Schema),'~s~s',([URI,'/schema'])),
-    add_dictionary_default(Doc1, 'http://terminusdb.com/schema/terminus#schema',
-                           _{'@value':Schema, '@type':'http://www.w3.org/2001/XMLSchema#string'},
-                           Ext).
+    insert(DB, Schema, DB_URI, Rdfs_label, Label@en),
+    insert(DB, Schema, DB_URI, Rdfs_comment, Comment@en).

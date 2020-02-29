@@ -27,6 +27,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(utils).
 :- use_module(speculative_parse).
 :- use_module(jsonld).
@@ -78,15 +81,18 @@ hash(Base,Args,Output) :-
  * who have not had a specified type for some reason (integers
  * or booleans perhaps).
  */
-maybe_promote(literal(L),literal(L)) :-
+maybe_promote(X^^Type,X^^Type) :-
     !.
-maybe_promote(S,literal(type('http://www.w3.org/2001/XMLSchema#string',S))) :-
+maybe_promote(X@Lang,X@Lang) :-
+    !.
+maybe_promote(S,S^^'http://www.w3.org/2001/XMLSchema#string') :-
     string(S),
     !.
-maybe_promote(S,literal(type('http://www.w3.org/2001/XMLSchema#string',S))) :-
-    atom(S),
-    !.
-maybe_promote(N,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
+maybe_promote(A,S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom(A),
+    !,
+    atom_string(A,S).
+maybe_promote(N,N^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(N),
     !.
 
@@ -94,16 +100,13 @@ maybe_promote(N,literal(type('http://www.w3.org/2001/XMLSchema#decimal',N))) :-
  * Presumably this should record into prov on failure.
  */
 typecast(Val, Type, Hint, Cast) :-
-    (   (   var(Val)
-        ->  true
-        ;   Val = literal(L),
-            var(L))
+    (   var(Val)
     ->  format(atom(M), 'Variable unbound in typcast to ~q', [Type]),
         throw(error(M))
     ;   maybe_promote(Val,Promoted),
-        (   Promoted = literal(type(Source_Type,Bare_Literal))
+        (   Promoted = Bare_Literal^^Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
-        ;   Promoted = literal(lang(Source_Type,Bare_Literal))
+        ;   Promoted = Bare_Literal@Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
         ;   format(atom(M), 'No possible cast ~q', [typecast(Val, Type, Hint, Cast)]),
             throw(error(M))
@@ -139,7 +142,7 @@ typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
                 _ST,
                 'http://www.w3.org/2001/XMLSchema#decimal',
                 _,
-                literal(type('http://www.w3.org/2001/XMLSchema#decimal',Num))) :-
+                Num^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
     date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
@@ -154,12 +157,12 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :
                                               'vio:message' : M})))
     ).
 typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
-                literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
+                String^^'http://www.w3.org/2001/XMLSchema#string') :-
     Date = date(_Y,_M,_D,_HH,_MM,_SS,_Z,_OH,_OM),
     !,
     date_string(Date,String).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
-                literal(type('http://www.w3.org/2001/XMLSchema#string',String))) :-
+                String^^'http://www.w3.org/2001/XMLSchema#string') :-
     format(string(String), '~w', [Val]).
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
     (   atom(Val)
@@ -175,7 +178,7 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Ca
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
     integer(Val),
     !,
-    Cast = literal(type('http://terminusdb.com/schema/xdd#integerRange', Val)).
+    Cast = Val^^'http://terminusdb.com/schema/xdd#integerRange'.
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Cast) :-
     (   atom(Val)
     ->  true
@@ -190,4 +193,4 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Ca
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Cast) :-
     number(Val),
     !,
-    Cast = literal(type('http://terminusdb.com/schema/xdd#decimalRange', Val)).
+    Cast = Val^^'http://terminusdb.com/schema/xdd#decimalRange'.

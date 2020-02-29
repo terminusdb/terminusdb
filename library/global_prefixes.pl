@@ -56,8 +56,8 @@ global_prefix_expand(Prefix:X, URI) :-
     global_prefixes(Prefix,Base),
     atomic_list_concat([Base,X],URI).
 
-literal_expand(literal(type(T,D)), literal(type(E,D))) :-
+literal_expand(D^^T, D^^E) :-
     nonvar(T),
     !,
     global_prefix_expand(T,E).
-literal_expand(literal(lang(L,D)), literal(lang(L,D))).
+literal_expand(D@L, D@L).

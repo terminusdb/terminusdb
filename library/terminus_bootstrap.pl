@@ -13,7 +13,9 @@
 
               database_class_uri/1,
               database_name_property_uri/1,
+              database_state_prop_uri/1,
               finalized_element_uri/1,
+              deleting_element_uri/1,
 
               shadow_layer_class_uri/1,
               layer_id_prop_uri/1,
@@ -72,8 +74,11 @@ label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
 %%% URIs from terminus schema
 database_class_uri('http://terminusdb.com/schema/terminus#Database').
 database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
-database_finalized_prop_uri('http://terminusdb.com/schema/terminus#database_finalized').
+database_state_prop_uri('http://terminusdb.com/schema/terminus#database_state').
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
+deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
+
+
 
 %% URIs from layer schema
 shadow_layer_class_uri('http://terminusdb.com/schema/layer#ShadowLayer').

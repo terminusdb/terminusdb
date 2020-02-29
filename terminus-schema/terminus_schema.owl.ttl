@@ -214,17 +214,27 @@ terminus:database_name
   rdfs:range xsd:string ;
   rdfs:domain terminus:Database .
 
-terminus:Finalized
+terminus:finalized
+  a terminus:DatabaseState ;
   rdfs:label "Finalized"@en ;
-  rdfs:comment "Class for finalized database marker" ;
-  a owl:Class ;
-  owl:oneOf (terminus:finalized) .
+  rdfs:comment "The database has been fully constructed"@en .
 
-terminus:database_finalized
-  rdfs:label "Finalized"@en ;
-  rdfs:comment "The database has been fully constructed"@en ;
-  a owl:DatatypeProperty ;
-  rdfs:range terminus:Finalized ;
+terminus:deleting
+  a terminus:DatabaseState ;
+  rdfs:label "Deleting"@en ;
+  rdfs:comment "TerminusDB is in the process of deleting your database"@en .
+
+terminus:DatabaseState
+  rdfs:label "Database State"@en ;
+  rdfs:comment "Class for keeping information about the state of a database." ;
+  a owl:Class ;
+  owl:oneOf ( terminus:finalized terminus:deleting ) .
+
+terminus:database_state
+  rdfs:label "State"@en ;
+  rdfs:comment "The databases current state"@en ;
+  a owl:ObjectProperty ;
+  rdfs:range terminus:DatabaseState ;
   rdfs:domain terminus:Database .
 
 terminus:allow_origin

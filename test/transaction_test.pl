@@ -28,9 +28,13 @@
 :- use_module(test(test_utils)).
 :- use_module(library(database)).
 :- use_module(library(db_init)).
+:- use_module(library(database_utils)).
+:- use_module(library(db_delete)).
 
 transaction_tests :-
-    try(terminus_descriptor_read_query_test).
+    try(terminus_descriptor_read_query_test),
+    try(create_db_test),
+    try(delete_db_test).
 
 terminus_descriptor_read_query_test :-
     Descriptor = terminus_descriptor,
@@ -64,6 +68,14 @@ terminus_descriptor_read_query_test :-
                           'http://www.w3.org/2002/07/owl#propertyChainAxiom',
                           _)).
 
+test_db_name('Terminus_Testing_Database').
+test_base('http://localhost/').
+
 create_db_test :-
-    Base = 'http://localhost/',
-    create_db('Terminus_Testing_Database',Base).
+    test_base(Base),
+    test_db_name(Name),
+    create_db(Name,Base).
+
+delete_db_test :-
+    test_db_name(Name),
+    delete_db(Name).

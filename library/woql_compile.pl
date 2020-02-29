@@ -92,34 +92,6 @@
 :- op(2, xfx, @).
 :- op(2, xfx, ^^).
 
-/*****************************************
- * URI Resource Resolution:
- *
- * We need to resolve URIs to the appropriate object - i.e. a desriptor which
- * can be interpreted by the prolog term output by WOQL. This involves two specific
- * scenarios: read and write.
- *
- * WOQL should *compile* to the resolving descriptor, which can then be used in the transaction to
- * find the right query_object, allowing the transaction logic to be simplified, and eventually
- * supporting nested transactions.
- *
- ** Read: Querying a specific object.
- *
- * Here we need to be able to read the union of the instance graphs of the appropriate query_object,
- * against the union of schema graphs (where relevant - i.e. with subsumption).
- *
- * As long as the resolution leaves us with a query_object, we can treat it irrespective of the
- * "layer of the union".
- *
- ** Write: Writing to a specific graph
- *
- * Here we need to be more directed. If we are unable to resolve to a specific graph we need to
- * throw an error, describing the graph set which might be intended, with their specific URIs.
- *
- * We can default the write graph to Server://DB_Name/local/document/main
- * Server can be defaulted to terminusHub
- */
-
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
@@ -238,36 +210,32 @@ empty_ctx(Prefixes) -->
  ******************************/
 
 /* Lookup a variable by name */
-lookup(Var_Name,Prolog_Var,[Record|B0]) :-
+lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
     var_same(Var_Name,Record,Prolog_Var),
     !.
-lookup(Var_Name,Prolog_Var,[Record|B0]) :-
-    lookup(Var_Name,Prolog_Var,B0,B1).
+lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
+    lookup(Var_Name,Prolog_Var,B0).
 
-
-lookup_or_extend(Var_Name, Var) -->
+lookup_or_extend(Var_Name, Prolog_Var) -->
     update(bindings,B0,B1),
     {
         (   lookup(Var_Name, Prolog_Var, B0)
         ->  B1=B0
         ;   B1=[var_binding{
-                    prolog_var : Prolog_Var,
-                    value : Var_Name}
+                    woql_var : Prolog_Var,
+                    var_name : Var_Name}
                 |B0])
     }.
-
 
 resolve_prefix(Pre:Suf,URL) -->
     view(prefixes,Prefixes),
     {
-        atom(X),
         (   Full_Prefix = Prefixes.get(Pre)
         ->  true
         ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
             throw(error(syntax_error,M))),
         atomic_list_concat([Full_Prefix,Suf],URL)
     }.
-
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -282,7 +250,7 @@ resolve(ID:Suf,U) -->
     resolve_prefix(ID,Suf,U).
 resolve(v(Var_Name),Var) -->
     !,
-    lookup_or_extend(Va_Name,Var).
+    lookup_or_extend(Var_Name,Var).
 resolve(X,Xe) -->
     {
         is_dict(X),
@@ -291,7 +259,7 @@ resolve(X,Xe) -->
         jsonld_id(XEx,XI)
     },
     resolve(XI,Xe).
-resolve(X@L,literal(lang(LE,XS))) -->
+resolve(X@L,XS@LE) -->
     resolve(X,XE),
     {
         (   ground(XE),
@@ -310,7 +278,7 @@ resolve(X^^T,Lit) -->
             ->  atom_string(XE,XS)
             ;   XE=XS),
             compile_representation(XS,TE,Lit)
-        ;   Lit = literal(type(TE,XE))),
+        ;   Lit = XE^^TE),
         !
     }.
 resolve(L,Le) -->
@@ -344,13 +312,12 @@ resolve(X,X) -->
 compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
     !,
     guess_date(String,Date).
-compile_representation(String,Type,literal(type(Type,String))).
+compile_representation(String,Type,String^^Type).
 
 var_same(Var_Name,
          var_binding{
-             prolog_var : Prolog_Var,
-             store_ids : _,
-             value : Var_Name},
+             woql_var : Prolog_Var,
+             var_name : Var_Name},
          Prolog_Var).
 
 /*
@@ -451,30 +418,26 @@ report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                           'terminus:message' : MSG}))).
 
-literal_string(literal(type(_,Val)), Val).
-literal_string(literal(lang(_,Val)), Val).
+literal_string(Val^^_, Val).
+literal_string(Val@_, Val).
 
 not_literal(X) :-
     nonvar(X),
-    X = literal(_),
+    X = _V^^_T,
+    !,
+    false.
+not_literal(X) :-
+    nonvar(X),
+    X = _V@_T,
     !,
     false.
 not_literal(_).
-
-expand(A/B,U) -->
-    !,
-    view(prefixes=NS),
-    {
-        elt(A=URI,NS),
-        atom_concat(URI,B,U)
-    }.
-expand(C,C) --> [], {atom(C)}.
 
 /* TODO: Needs fixed */
 patch_binding(X,Y) :-
     (   var(X)
     ->  Y=unknown
-    ;   (   \+ \+ (X = literal(type(A,B)),
+    ;   (   \+ \+ (X = B^^A,
                    (var(A) ; var(B)))
         ->  Y = unknown
         ;   X = Y)
@@ -504,7 +467,7 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
     (   As_Clause = as(N,v(V))
     ->  Type = none
     ;   As_Clause = as(N,v(V),Type)),
-    member(V=Xe,Bindings),
+    lookup(V,Xe,Bindings),
     Term = (   nth1(Idx,Header,N)
            ->  (   nth1(Idx,Values,Value)
                ->  (   Type = none
@@ -520,7 +483,7 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
 
 indexing_position_list([],_,_,[]).
 indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
-    member(V=Xe,Bindings),
+    lookup(V,Xe,Bindings),
     Term = (   nth0(N,Values,Xe)
            ->  true
            ;   format(string(Msg),"No such index in get: ~q for values: ~q",[N,Values]),
@@ -542,8 +505,8 @@ woql_equal(AE,BE) :-
     nonvar(AE),
     nonvar(BE),
     % Probably strictly should check subsumption
-    AE = literal(type(_T1,Y)),
-    BE = literal(type(_T2,Y)),
+    AE = Y^^_T1,
+    BE = Y^^_T2,
     !.
 woql_equal(AE,BE) :-
     AE=BE.
@@ -553,12 +516,11 @@ woql_equal(AE,BE) :-
  *
  * TODO: May need other cases.
  */
-woql_less(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
-          literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Y))) :-
+woql_less(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
+          Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @< Y.
-woql_less(literal(type(T1,X)),
-          literal(type(T2,Y))) :-
+woql_less(X^^T1,Y^^T2) :-
     basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
     basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
@@ -572,12 +534,12 @@ woql_less(AE,BE) :-
  *
  * TODO: May need other cases.
  */
-woql_greater(literal(type('http://www.w3.org/2001/XMLSchema#dateTime',X)),
-             literal(type('http://www.w3.org/2001/XMLSchema#dateTime',Y))) :-
+woql_greater(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
+             Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @> Y.
-woql_greater(literal(type(T1,X)),
-             literal(type(T2,Y))) :-
+woql_greater(X^^T1,
+             Y^^T2) :-
     basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
     basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
@@ -594,14 +556,14 @@ woql_greater(AE,BE) :-
 term_literal(Term, Term) :-
     var(Term),
     !.
-term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#string', String))) :-
+term_literal(Term,  String^^'http://www.w3.org/2001/XMLSchema#string') :-
     atom(Term),
     !,
     atom_string(Term,String).
-term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#string', Term))) :-
+term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#string') :-
     string(Term),
     !.
-term_literal(Term, literal(type('http://www.w3.org/2001/XMLSchema#decimal', Term))) :-
+term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Term).
 
 
@@ -759,7 +721,7 @@ compile_wf(t(X,P,Y),Goal) -->
     {
         Search=inference:inferredEdge(XE,PE,YE,DB),
         Goal_List = [not_literal(XE),not_literal(PE),Search],
-        list_conjunction(GoalList,Goal)
+        list_conjunction(Goal_List,Goal)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
     resolve(X,XE),
@@ -770,11 +732,10 @@ compile_wf(t(X,P,Y,G),Goal) -->
         (   database_instance(Database,L),
             member(GE,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
-        ;   Search=xrdf(Database,[GE],XE,PE,YE)),
+        ;   Search=xrdf(Database,[G],XE,PE,YE)),
 
-        append([[not_literal(XE),not_literal(PE),Search],XGoals,YGoals],
-               GoalList),
-        list_conjunction(GoalList,Goal)
+        Goal_List = [not_literal(XE),not_literal(PE),Search],
+        list_conjunction(Goal_List,Goal)
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
     peek(S0),
@@ -928,9 +889,9 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
                            (
                                Compiled_Query,
                                maplist([Value,Data]>>(
-                                           (   Value=literal(lang(_,Data))
+                                           (   Value=Data@_
                                            ->  true
-                                           ;   Value=literal(type(_,Data))
+                                           ;   Value=Data^^_
                                            ->  true
                                            ;   Data=Value)
                                        ),
@@ -979,20 +940,20 @@ compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
 compile_wf(concat(L,A),(literal_list(LE,LL),
                         utils:interpolate_string(LL,AE_raw),
-                        AE = literal(type('http://www.w3.org/2001/XMLSchema#string',AE_raw)))) -->
+                        AE = AE_raw^^'http://www.w3.org/2001/XMLSchema#string')) -->
     resolve(L,LE),
     resolve(A,AE).
 compile_wf(trim(S,A),(literally(SE,SL),
                       atom_string(SL,SS),
                       trim(SS,X),
-                      AE = literal(type('http://www.w3.org/2001/XMLSchema#string',X)))) -->
+                      AE = X^^'http://www.w3.org/2001/XMLSchema#string')) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(pad(S,C,N,V),(literally(SE,SL),
                          literally(CE,CL),
                          literally(NE,NL),
                          pad(SL,CL,NL,VE_raw),
-                         VE = literal(type('http://www.w3.org/2001/XMLSchema#string',VE_raw)))) -->
+                         VE = VE_raw^^'http://www.w3.org/2001/XMLSchema#string')) -->
     resolve(S,SE),
     resolve(C,CE),
     resolve(N,NE),
@@ -1047,7 +1008,7 @@ compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     mapm(resolve,L,LE).
 compile_wf(X is Arith, (Pre_Term,
                         XA is ArithE,
-                        XE = literal(type('http://www.w3.org/2001/XMLSchema#decimal',XA)))) -->
+                        XE = XA^^'http://www.w3.org/2001/XMLSchema#decimal')) -->
     resolve(X,XE),
     compile_arith(Arith,Pre_Term,ArithE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
@@ -1056,7 +1017,7 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
 compile_wf(length(L,N),(length(LE,Num),
-                        NE = literal(type('http://www.w3.org/2001/XMLSchema#decimal', Num)))) -->
+                        NE =  Num^^'http://www.w3.org/2001/XMLSchema#decimal')) -->
     resolve(L,LE),
     resolve(N,NE).
 compile_wf(member(X,Y),member(XE,YE)) -->
@@ -1131,21 +1092,12 @@ literal_list([H|T],[HL|TL]) :-
 literally(X, _X) :-
     var(X),
     !.
-literally(literal(T), L) :-
-    % this adds choice points - is this avoidable?
-    var(T),
-    !,
-    (   T = lang(_,L)
-    ;   T = type(_,L)).
-literally(literal(type(_,L)), L) :-
-    !.
-literally(literal(lang(_,L)), L) :-
-    !.
 literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
 literally(X, X) :-
+    % How can this happen?
     (   atom(X)
     ->  true
     ;   string(X)
@@ -1161,19 +1113,17 @@ unliterally_list([H|T],[HL|TL]) :-
 unliterally(X,Y) :-
     var(Y),
     !,
-    Y = literal(type('http://www.w3.org/2001/XMLSchema#string',X)).
+    Y = X^^'http://www.w3.org/2001/XMLSchema#string'.
 unliterally(X,Y) :-
     string(X),
     !,
-    (   (   Y = literal(type(Type,X))
-        ;   Y = X^^Type),
+    (   Y = X^^Type,
         (   var(Type)
         ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
         ;   % subsumption test here.
             true)
     ->  true
-    ;   (   Y = literal(lang(Lang,X))
-        ;   Y = X@Lang),
+    ;   Y = X@Lang,
         (   var(Lang)
         ->  Lang = en
         ;   true)
@@ -1186,14 +1136,12 @@ unliterally(X,Y) :-
 unliterally(X,Y) :-
     number(X),
     !,
-    (   (   Y = literal(type(Type,X))
-        ;   Y = X^^Type),
+    (   Y = X^^Type,
         (   var(Type)
         ->  Type = 'http://www.w3.org/2001/XMLSchema#decimal'
         ;   % subsumption test here.
             true)
-    ;   (   Y = literal(lang(Lang,X))
-        ;   Y = X@Lang),
+    ;   Y = X@Lang,
         (   var(Lang)
         ->  Lang = en
         ;   true)
@@ -1218,10 +1166,9 @@ compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
     resolve(Exp,ExpE).
 
 restrict(VL) -->
-    update(bindings=B0,
-           bindings=B1),
+    update(bindings,B0,B1),
     {
-        include({VL}/[X=_]>>member(v(X),VL), B0, B1)
+        include({VL}/[Record]>>lookup(Record.var_name,_,VL), B0, B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true

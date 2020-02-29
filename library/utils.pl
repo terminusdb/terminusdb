@@ -602,3 +602,4 @@ whole_arg(N, Var) :-
     !.
 whole_arg(_, _) :-
     throw(error(system_error, context(utils:whole_arg/2, 'whole arg failed while trying to get its parents arity'))).
+

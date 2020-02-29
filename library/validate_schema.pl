@@ -1152,35 +1152,6 @@ schema_object_blank_node(Z,Database) :-
     is_bnode(Z).
 
 /**
- * schema_blankNodeSC(+Database:database-Reason:any) is nondet.
- *
- * Is this a blank node in the schema.
- */
-/*
-schema_blankNodeSC(Database,Reason) :-
-    schema_subject_blank_node(X,Database),
-    interpolate(['The subject ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='Database_blankNode_violation',
-	    best_practice=literal(type('xsd:boolean',true)),
-	    message=Message,
-	    subject=X].
-schema_blankNodeSC(Database,Reason) :-
-    schema_predicate_blank_node(X,Database),
-    interpolate(['The predicate ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='Database_blankNode_violation',
-	    best_practice=literal(type('xsd:boolean',true)),
-	    message=Message,
-	    predicate=X].
-schema_blankNodeSC(Database,Reason) :-
-    schema_object_blank_node(X,Database),
-    interpolate(['The object ', X, ' is a blank node'],Message),
-    Reason=['rdf:type'='Database_blankNode_violation',
-	    best_practice=literal(type('xsd:boolean',true)),
-	    message=Message,
-	    object=X].
-*/
-
-/**
  * label(?X,?Y,+Database:database is det.
  *
  * Get the rdfs:label for X as Y.

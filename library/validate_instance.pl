@@ -297,7 +297,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:minCardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     M < N, atom_number(A,M),
@@ -312,7 +312,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:maxCardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N < M, atom_number(A,M),
@@ -327,7 +327,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:cardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N \= M, atom_number(A,M),
@@ -342,7 +342,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:minQualifiedCardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
     xrdf(Database,Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
@@ -359,7 +359,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
     xrdf(Database,Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
@@ -376,7 +376,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:qualifiedCardinality,literal(type(xsd:nonNegativeInteger, CardStr))),
+    xrdf(Database,Schema,CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
     xrdf(Database,Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,N),
@@ -466,7 +466,7 @@ days_in_month(_,12,31).
 /*
  * refute_basetype_elt(+Literal,+Type,-Reason)
  */
-refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+refute_basetype_elt(S@L,'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ atom(L), term_to_atom(lang(L,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -474,7 +474,7 @@ refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string'
 			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
                  }
     ).
-refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+refute_basetype_elt(L@S,'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ (atom(S) ; string(S)), term_to_atom(lang(L,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -482,7 +482,7 @@ refute_basetype_elt(literal(lang(L,S)),'http://www.w3.org/2001/XMLSchema#string'
 			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
                  }
     ).
-refute_basetype_elt(literal(type(T,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+refute_basetype_elt(S^^T,'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ (atom(S) ; string(S)), term_to_atom(type(T,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -490,7 +490,7 @@ refute_basetype_elt(literal(type(T,S)),'http://www.w3.org/2001/XMLSchema#string'
 			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
                  }
     ).
-refute_basetype_elt(literal(type(T,S)),'http://www.w3.org/2001/XMLSchema#string',Reason) :-
+refute_basetype_elt(S^^T,'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ atom(T), term_to_atom(type(T,S),A)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -498,7 +498,7 @@ refute_basetype_elt(literal(type(T,S)),'http://www.w3.org/2001/XMLSchema#string'
 			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
                  }
     ).
-refute_basetype_elt(literal(type(T2,_)),T1,Reason) :-
+refute_basetype_elt(_^^T2,T1,Reason) :-
     (   \+ basetype_subsumption_of(T1,T2)
     ->  Reason = _{
                      '@type' : 'vio:DataTypeSubsumptionViolation',
@@ -507,7 +507,7 @@ refute_basetype_elt(literal(type(T2,_)),T1,Reason) :-
 			         'vio:parent_type' : _{ '@type' : 'xsd:string', '@value' : T2}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordinatePolygon', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#coordinatePolygon', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:coordinatePolygon(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -516,7 +516,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordin
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:coordinatePolygon'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordinatePolyline', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#coordinatePolyline', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:coordinatePolygon(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -525,7 +525,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordin
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:coordinatePolyline'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordinate', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#coordinate', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:point(_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -534,7 +534,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#coordin
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:coordinate'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#dateRange', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#dateRange', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:dateRange(_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -543,7 +543,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#dateRan
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:dateRange'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#integerRange', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#integerRange', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integerRange(_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -552,7 +552,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#integer
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:integerRange'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#decimalRange', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#decimalRange', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:decimalRange(_,_),C,[]))
 	->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -561,7 +561,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#decimal
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:decimalRange'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#gYearRange', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#gYearRange', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gYearRange(_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -570,7 +570,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#gYearRa
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:gYearRange'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#url', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#url', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:url,C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -579,7 +579,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#url', R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:url'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#email', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#email', Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:email,C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -588,7 +588,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#email',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:email'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#json', Reason) :-
+refute_basetype_elt(S^^_,'http://terminusdb.com/schema/xdd#json', Reason) :-
     (   \+ (catch(atom_json_dict(S,_,[]),_,fail))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -597,7 +597,7 @@ refute_basetype_elt(literal(type(_,S)),'http://terminusdb.com/schema/xdd#json', 
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xdd:json'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#boolean',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#boolean',Reason) :-
     (   \+ (atom_string(A,S), member(A,['true','false','1','0']))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -606,7 +606,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#boolean
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:boolean'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#decimal',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#decimal',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:decimal(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -615,7 +615,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#decimal
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:decimal'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#integer',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#integer',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -624,7 +624,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#integer
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:integer'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:double(_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -633,7 +633,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
         abs(M) > 2 ^ 53
     ->  Reason = _{
@@ -643,7 +643,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(_,E,_),C,[]),
         (   E > 970
         ;   E < -1075)
@@ -654,7 +654,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#double'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:double(_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -663,7 +663,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
         abs(M) > 2 ^ 24
     ->  Reason = _{
@@ -673,7 +673,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:double(_,E,_),C,[]),
         (   E > 104
         ;   E < -149)
@@ -684,7 +684,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#float',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#time',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#time',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:time(_,_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -693,7 +693,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#time',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:time'}
                  }
     ).
-refute_basetype_elt(literal(type(_,String)),'http://www.w3.org/2001/XMLSchema#time',Reason) :-
+refute_basetype_elt(String^^_,'http://www.w3.org/2001/XMLSchema#time',Reason) :-
     (   atom_codes(String,C), phrase(xsd_parser:time(H,M,S,Z,ZH,ZM),C,[]),
         (   H > 23
         ;   M > 59
@@ -707,7 +707,7 @@ refute_basetype_elt(literal(type(_,String)),'http://www.w3.org/2001/XMLSchema#ti
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:time'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#date',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#date',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:date(_,_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -716,7 +716,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#date',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:date'}
                  }
     ).
-refute_basetype_elt(literal(type(_,date_time(SY,Mo,D,H,M,S))),'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
+refute_basetype_elt(date_time(SY,Mo,D,H,M,S)^^_,'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
     (   (   Mo > 12
         ;   Mo < 1
         ;   days_in_month(SY,Mo,Days), D > Days
@@ -734,7 +734,7 @@ refute_basetype_elt(literal(type(_,date_time(SY,Mo,D,H,M,S))),'http://www.w3.org
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
                  }
     ).
-refute_basetype_elt(literal(type(_,Atom)),'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
+refute_basetype_elt(Atom^^_,'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
     (   atom(Atom), \+ (atom_codes(Atom,C), phrase(xsd_parser:dateTime(_,_,_,_,_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -743,7 +743,7 @@ refute_basetype_elt(literal(type(_,Atom)),'http://www.w3.org/2001/XMLSchema#date
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
                  }
     ).
-refute_basetype_elt(literal(type(_,Atom)),'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
+refute_basetype_elt(Atom^^_,'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
     (   atom(Atom), atom_codes(Atom,C), phrase(xsd_parser:dateTime(SY,Mo,D,H,M,S,Z,ZH,ZM),C,[]),
         (   Mo > 12
         ;   Mo < 1
@@ -763,7 +763,7 @@ refute_basetype_elt(literal(type(_,Atom)),'http://www.w3.org/2001/XMLSchema#date
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYear',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gYear',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gYear(_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -772,7 +772,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYear',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gYear'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYear',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gYear',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gYear(_,Z,ZH,ZM),C,[]),
         (   (\+ member(Z,[1,-1]))
         ;   ZH > 6
@@ -784,7 +784,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYear',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gYear'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gMonth',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gMonth(_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -793,7 +793,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gMonth',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gMonth(M,Z,ZH,ZM),C,[]),
         (   M > 12
         ;   M < 1
@@ -807,7 +807,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonth'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gDay',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gDay',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gDay(_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -816,7 +816,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gDay',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gDay',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gDay',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gDay(D,Z,ZH,ZM),C,[]),
         (   D < 1
         ;   D > 31
@@ -830,7 +830,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gDay',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYearMonth',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gYearMonth',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gYearMonth(_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -839,7 +839,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYearMo
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gYearMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYearMonth',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gYearMonth',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gYearMonth(_,M,Z,ZH,ZM),C,[]),
         (   M > 12
         ;   M < 1
@@ -853,7 +853,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gYearMo
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gYearMonth'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonthDay',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gMonthDay',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:gMonthDay(_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -862,7 +862,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonthD
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonthDay'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonthDay',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#gMonthDay',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:gMonthDay(M,D,Z,ZH,ZM),C,[]),
         (   M > 12
         ;   M < 1
@@ -878,7 +878,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#gMonthD
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:gMonthDay'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#duration',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#duration',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:duration(_,_,_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -887,7 +887,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#duratio
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:duration'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#yearMonthDuration',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#yearMonthDuration',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:yearMonthDuration(_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -896,7 +896,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#yearMon
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:yearMonthDuration'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#dayTimeDuration',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#dayTimeDuration',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:dayTimeDuration(_,_,_,_,_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -905,7 +905,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#dayTime
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dayTimehDuration'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#byte',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#byte',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -914,7 +914,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#byte',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:byte'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#byte',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#byte',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:integer(I),C,[]),
         (   I < -128
         ;   I > 127 )
@@ -925,7 +925,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#byte',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:byte'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#short',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#short',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -934,7 +934,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#short',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:short'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#short',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#short',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:integer(I),C,[]),
         (I < -32768 ; I > 32767 )
     ->  Reason = _{
@@ -944,7 +944,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#short',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:short'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#int',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#int',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -953,7 +953,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#int',Re
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:int'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#int',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#int',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:integer(I),C,[]),
         (   I < -2147483648
         ;   I > 2147483647 )
@@ -964,7 +964,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#int',Re
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:int'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#long',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#long',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -973,7 +973,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#long',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:long'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#long',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#long',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:integer(I),C,[]),
         (   I < -9223372036854775808
         ;   I > 9223372036854775807 )
@@ -984,7 +984,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#long',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:long'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -993,7 +993,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedByte'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
         (I < 0 ; I > 255 )
     ->  Reason = _{
@@ -1003,7 +1003,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedByte'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1012,7 +1012,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedShort'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
         (I < 0 ; I > 65535 )
     ->  Reason = _{
@@ -1022,7 +1022,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedShort'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1031,7 +1031,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedInt'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
         (I < 0 ; I > 4294967295 )
     ->  Reason = _{
@@ -1041,7 +1041,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedInt'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1050,7 +1050,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedLong'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
         (I < 0 ; I > 18446744073709551615 )
     ->  Reason = _{
@@ -1060,7 +1060,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#unsigne
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedLong'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1069,7 +1069,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiv
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:positiveInteger'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
     (   atom_codes(S,C), phrase(xsd_parser:positiveInteger(I),C,[]),
         I < 1
     ->  Reason = _{
@@ -1079,7 +1079,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#positiv
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:positiveInteger'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1088,7 +1088,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#nonNega
 	                 'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:nonNegativeInteger'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#negativeInteger',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#negativeInteger',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:negativeInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1097,7 +1097,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#negativ
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:negativeInteger'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#nonPositiveInteger',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#nonPositiveInteger',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:nonPositiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1106,7 +1106,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#nonPosi
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:nonPositiveInteger'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#base64Binary',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#base64Binary',Reason) :-
     (   \+ (atom_codes(S,C), phrase(xsd_parser:base64Binary,C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1115,7 +1115,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#base64B
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:base64Binary'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#anyURI',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#anyURI',Reason) :-
     (   \+ uri_components(S,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1124,7 +1124,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#anyURI'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:anyURI'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#language',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#language',Reason) :-
     (   \+ uri_components(xsd_parser:language,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1133,7 +1133,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#languag
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:language'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#normalizedString',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#normalizedString',Reason) :-
     (   \+ uri_components(xsd_parser:normalizedString,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1142,7 +1142,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#normali
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:normalizedString'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#token',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#token',Reason) :-
     (   \+ uri_components(xsd_parser:normalizedString,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1151,7 +1151,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#token',
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:token'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NMTOKEN',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#NMTOKEN',Reason) :-
     (   \+ uri_components(xsd_parser:nmtoken,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1160,7 +1160,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NMTOKEN
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:NMTOKEN'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#Name',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#Name',Reason) :-
     (   \+ uri_components(xsd_parser:name,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1169,7 +1169,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#Name',R
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:Name'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NCName',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#NCName',Reason) :-
     (   \+ uri_components(xsd_parser:ncname,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1178,7 +1178,7 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NCName'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:NCName'}
                  }
     ).
-refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NCName',Reason) :-
+refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#NCName',Reason) :-
     (   \+ uri_components(xsd_parser:ncname,_)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
@@ -1187,9 +1187,8 @@ refute_basetype_elt(literal(type(_,S)),'http://www.w3.org/2001/XMLSchema#NCName'
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:NCName'}
                  }
     ).
-refute_basetype_elt(literal(T),'http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',Reason) :-
-    (   (   lang(_,_) \= T
-        ;   \+ atom(T))
+refute_basetype_elt(T,'http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',Reason) :-
+    (   \+ atom(T)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed rdf:PlainLiteral',
@@ -1197,33 +1196,6 @@ refute_basetype_elt(literal(T),'http://www.w3.org/1999/02/22-rdf-syntax-ns#Plain
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'rdf:PlainLiteral'}
                  }
                  %% All that follows looks a bit dodgy...  Probably not up to spec
-    ).
-refute_basetype_elt(X,'http://www.w3.org/2000/01/rdf-schema#Literal',Reason) :-
-    (   literal(_) \= X, term_to_atom(X,T)
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed Literal',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : T},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'rdfs:Literal'}
-                 }
-    ).
-refute_basetype_elt(X,'http://www.w3.org/2000/01/rdf-schema#XMLLiteral',Reason) :-
-    (   literal(_) \= X, term_to_atom(X,T)
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed rdfs:XMLLiteral',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : T},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'rdfs:XMLLiteral'}
-                 }
-    ).
-refute_basetype_elt(X,'http://www.w3.org/2000/01/rdf-schema#anySimpleType',Reason) :-
-    (   literal(_) \= X, term_to_atom(X,T)
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed xsd:anySimpleType',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : T},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:anySimpleType'}
-                 }
     ).
 
 
