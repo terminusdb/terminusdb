@@ -92,6 +92,8 @@ connect(DB_Mame,New_Ctx) :-
     get_database_prefix_list(DB_Name, Prefixes),
 
     Ctx1 = Ctx.prefixes = Prefixes,
+    % TODO: This needs to actually work
+    resolve_
     make_database_from_database_name(DB_Name,DB_Obj),
     maybe_open_read_transaction(DB_Obj,DBR),
 

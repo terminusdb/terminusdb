@@ -659,12 +659,12 @@ turtle_term(Path,Vars,Prog,Options) :-
             Vars = [X,P,Y]).
 
 compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
-    view(database=Database).
+    view(database,Database).
 compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
-    view(database=Database),
+    view(database,Database),
     resolve(X,URI).
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
-    view(database=Database),
+    view(database,Database),
     resolve(X,URI).
 compile_wf(delete(WG,X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
@@ -710,7 +710,7 @@ compile_wf(like(A,B,F), Goal) -->
 compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
-    view(database=G).
+    view(database,G).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
@@ -729,8 +729,9 @@ compile_wf(t(X,P,Y,G),Goal) -->
     resolve(Y,YE),
     view(database,Database),
     {
+        % TODO: This is not correct
         (   database_instance(Database,L),
-            member(GE,L)
+            member(G,L)
         ->  Search=inference:inferredEdge(XE,PE,YE,Database)
         ;   Search=xrdf(Database,[G],XE,PE,YE)),
 
@@ -758,13 +759,15 @@ compile_wf((A => B),Goal) -->
     compile_wf(B,ProgB),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
-    view(write_graph,WG),
+    view(write_graph,Write_Graph),
     {
         % TODO: Active writes, active reads need to be separated.
         debug(terminus(woql_compile(compile_wf)), 'Database: ~q', [Database]),
         active_graphs(B,Active_Graphs),
         get_dict(schema,Database,Schemata),
         debug(terminus(woql_compile(compile_wf)), 'Schemata: ~q', [Schemata]),
+        get_dict(read,Active_Graphs,All_Read_Graphs),
+        debug(terminus(woql_compile(compile_wf)), 'All_Read_Graphs: ~q', [All_Read_Graphs]),
         get_dict(write,Active_Graphs,All_Write_Graphs),
         debug(terminus(woql_compile(compile_wf)), 'All_Write_Graphs: ~q', [All_Write_Graphs]),
         union([Write_Graph],All_Write_Graphs,Write_Graphs),

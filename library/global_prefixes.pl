@@ -28,6 +28,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 % internal
 global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
 global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').

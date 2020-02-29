@@ -29,6 +29,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, @).
+:- op(2, xfx, ^^).
+
 :- use_module(validate_schema).
 :- use_module(database).
 :- use_module(triplestore).

@@ -91,14 +91,11 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
 nonvar_literal(String@Lang, value(S)) :-
     nonvar(Lang),
     nonvar(String),
-    writeq(String),
-    write(first),
     !,
     format(string(S), '~q@~q', [String,Lang]).
 nonvar_literal(Val^^Type, value(S)) :-
     nonvar(Type),
     nonvar(Val),
-    write(second),
     !,
     (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
         Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
@@ -107,19 +104,14 @@ nonvar_literal(Val^^Type, value(S)) :-
     ;   format(string(S), '~q^^~q', [Val,Type])).
 nonvar_literal(Val^^Type, Val^^Type) :-
     var(Val),
-    write(tho),
     once(var(Val) ; var(Type)),
-    write(here),
     !.
 nonvar_literal(Val@Lang, Val@Lang) :-
     var(Val),
-    write(tho),
     once(var(Val) ; var(Lang)),
-    write(there),
     !.
 nonvar_literal(O, node(S)) :-
     var(O),
-    write(the),
 
     atom_string(O,S).
 
@@ -160,8 +152,6 @@ storage_literal(X1@L1,X2@L2) :-
 /*
  * Too much unnecessary marshalling...
  */
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
 storage_object(value(S),O) :-
     (   read_term_from_atom(S,Term,[])
     ->  (   Term = X^^T
