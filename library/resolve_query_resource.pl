@@ -82,23 +82,26 @@ resolve_query_resource(URI, X) :-
     true.
 
 /*
- * connect(+DB_Name:uri -Ctx:context) is det.
+ * connect(+Resource_Name:uri -Ctx:query_context) is det.
  *
- * Resolves a query resource uri to a context which includes the queryable objects.
+ * Resolves a query resource uri to a query_context which includes the queryable objects.
  */
-connect(DB_Mame,New_Ctx) :-
+connect(Resource_Name,New_Ctx) :-
     empty_ctx(Ctx),
 
     get_database_prefix_list(DB_Name, Prefixes),
 
-    Ctx1 = Ctx.prefixes = Prefixes,
+    Ctx1 = Ctx.put(prefixes, Prefixes),
     % TODO: This needs to actually work
-    resolve_
-    make_database_from_database_name(DB_Name,DB_Obj),
+    resolve_query_resource(URI,Desriptor),
+    descriptor_query(Descriptor,Query_Object),
+
+    % What do we open generically - probably needs to be refactored
     maybe_open_read_transaction(DB_Obj,DBR),
 
-    database_default_write_instance(DB_Obj,I),
-    Ctx2 = Ctx1.database = DBR,
-    Ctx3 = Ctx2.write_graph=I,
-    New_Ctx.collection=DB.
+    database_default_write_instance(DB_Obj,Instance),
+
+    Ctx2 = Ctx1.put(current_collection,DBR),
+    Ctx3 = Ctx2.put(write_graph,Instance),
+    New_Ctx = Ctx3.put(query_objects,[Query_Object]).
 
