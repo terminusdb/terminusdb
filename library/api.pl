@@ -95,43 +95,543 @@
 :- dynamic http:location/3.
 http:location(root, '/', []).
 
-
+%%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_catch(connect_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
+
+/**
+ * connect_handler(+Method,+Request:http_request) is det.
+ */
+connect_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+connect_handler(get,Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    connection_authorised_user(Request,User, SURI, DB),
+    write_cors_headers(SURI, DB),
+    reply_json(User).
+
+
+%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
+
+/*
+ * console_handler(+Method,+Request) is det.
+ */
+console_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+console_handler(get,_Request) :-
+    terminus_path(Path),
+    interpolate([Path,'/config/index.html'], Index_Path),
+    read_file_to_string(Index_Path, String, []),
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n'),
+    write(String).
+
+%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(message), cors_catch(message_handler(Method)),
                 [method(Method),
                  methods([options,get,post])]).
-% Deprecated!
-:- http_handler(root(dashboard), cors_catch(console_handler(Method)),
+
+
+/*
+ * message_handler(+Method,+Request) is det.
+ */
+message_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+message_handler(get,Request) :-
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+message_handler(post,R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+    try_get_param('terminus:message',Request,Message),
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Message, [])
+    ),
+
+    http_log('~N[Message] ~s~n',[Payload]),
+
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+
+%%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(db), cors_catch(db_create_handler(Method)),
                 [method(Method),
-                 methods([options,get])]).
-:- http_handler(root(DB), cors_catch(db_handler(Method,DB)),
+                 methods([options,post])]).
+:- http_handler(root(db/DB), cors_catch(db_delete_handler(Method,DB)),
                 [method(Method),
-                 methods([options,post,delete])]).
-:- http_handler(root(DB/schema), cors_catch(schema_handler(Method,DB)),
+                 methods([options,delete])]).
+
+/**
+ * db_create_handler(Method:atom,Request:http_request) is det.
+ */
+db_create_handler(options,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI, DB),
+    format('~n').
+db_create_handler(post,_Request) :-
+    throw(error('Not yet implemented')).
+
+/**
+ * db_handler(Method:atom,DB:atom,Request:http_request) is det.
+ */
+db_handler(options,_DB,_Request) :-
+    % database may not exist - use server for CORS
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DB),
+    write_cors_headers(SURI,DB),
+    format('~n').
+db_handler(post,DB,R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* POST: Create database */
+    authenticate(Request, DBC, Auth),
+    config:public_server_url(Server),
+    verify_access(Auth,DBC,terminus/create_database,Server),
+    try_get_param('terminus:document',Request,Doc),
+    try_db_uri(DB,DB_URI),
+    try_create_db(DB,DB_URI,Doc),
+    write_cors_headers(Server, DBC),
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+db_handler(delete,DB,Request) :-
+    /* DELETE: Delete database */
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    authenticate(Request, DBC, Auth),
+
+    config:public_server_url(Server),
+
+    verify_access(Auth, DBC, terminus/delete_database,Server),
+
+    try_db_uri(DB,DB_URI),
+    try_delete_db(DB_URI),
+
+    write_cors_headers(Server, DBC),
+
+    reply_json(_{'terminus:status' : 'terminus:success'}).
+
+%%%%%%%%%%%%%%%%%%%% Schema Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(schema/DB), cors_catch(schema_handler(Method,DB)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,get,post])]).
-:- http_handler(root(DB/frame), cors_catch(frame_handler(Method,DB)),
-                [method(Method),
-                 methods([options,get])]).
-:- http_handler(root(DB/document/DocID), cors_catch(document_handler(Method,DB,DocID)),
-                [method(Method),
-                 methods([options,get,post,delete])]).
-:- http_handler(root(woql/DBID/RefID), cors_catch(woql_handler(Method,DB)),
+:- http_handler(root(schema/DB/Branch), cors_catch(schema_handler(Method,DB,Branch)),
                 [method(Method),
                  time_limit(infinite),
-                 methods([options,get,post,delete])]).
-:- http_handler(root(DB/search), cors_catch(search_handler(Method,DB)),
+                 methods([options,get,post])]).
+:- http_handler(root(schema/DB/Branch/Graph), cors_catch(schema_handler(Method,DB,Branch,Graph)),
                 [method(Method),
-                 methods([options,get,post,delete])]).
-:- http_handler(root(DB/metadata), cors_catch(metadata_handler(Method,DB)),
+                 time_limit(infinite),
+                 methods([options,get,post])]).
+
+/*
+ * schema_handler(Mode,DB,Request) is det.
+ *
+ * Get or update a schema.
+ */
+schema_handler(options,DB,_Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI, DBC),
+    format('~n'). % send headers
+schema_handler(get,DB,Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* Read Document */
+    authenticate(Request, DBC, Auth),
+
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/get_schema,DB_URI),
+
+    % Let's do a default schema if we can't find one.
+    catch(
+        try_get_param('terminus:schema',Request,Name),
+        _,
+        interpolate([DB_URI,'/schema'],Name)
+    ),
+
+    try_dump_schema(DB_URI, DBC, Name, Request).
+schema_handler(post,DB,R) :- % should this be put?
+    add_payload_to_request(R,Request), % this should be automatic.
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+
+    /* Read Document */
+    authenticate(Request, DBC, Auth),
+
+    % We should make it so we can pun documents and IDs
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/update_schema,DB_URI),
+
+    try_get_param('terminus:schema',Request,Name),
+    try_get_param('terminus:turtle',Request,TTL),
+
+    try_update_schema(DB_URI,Name,TTL,Witnesses),
+
+    reply_with_witnesses(DB_URI,DBC,Witnesses).
+
+/*
+ * schema_handler(Mode,DB,Branch,Request) is det.
+ *
+ * Get or update a schema.
+ */
+schema_handler(_Method,_DB,_Branch,_Request) :-
+    throw(error('Unimplemented')).
+
+/*
+ * schema_handler(Mode,DB,Branch,Graph,Request) is det.
+ *
+ * Get or update a schema.
+ */
+schema_handler(_Method,_DB,_Branch,_Graph,_Request) :-
+    throw(error('Unimplemented')).
+
+%%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(frame/DB), cors_catch(frame_handler(Method,DB)),
                 [method(Method),
                  methods([options,get])]).
+:- http_handler(root(frame/DB/Branch), cors_catch(frame_handler(Method,DB,Branch)),
+                [method(Method),
+                 methods([options,get])]).
+
+/**
+ * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
+ *
+ * Establishes frame responses
+ */
+frame_handler(options,DB,_Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI, DBC),
+    format('~n'). % send headers
+frame_handler(get, DB, Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* Read Document */
+    authenticate(Request, DBC, Auth),
+
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/class_frame,DB_URI),
+
+    try_db_graph(DB_URI,Database),
+
+    try_get_param('terminus:class',Request,Class_URI),
+
+    try_class_frame(Class_URI,Database,Frame),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json(Frame).
+
+frame_handler(_Method,_DB,_Branch,_Request) :-
+    throw(error('Unimplemented')).
+
+
+%%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(document/DB_ID), cors_catch(document_handler(Method,DB_ID)),
+                [method(Method),
+                 methods([options,post,get,delete])]).
+:- http_handler(root(document/DB_ID/Branch_ID), cors_catch(document_handler(Method,DB_ID,Branch_ID)),
+                [method(Method),
+                 methods([options,post,get,delete])]).
+:- http_handler(root(document/DB_ID/Branch_ID/Doc_Or_Graph_ID), cors_catch(create_document_handler(Method,DB_ID,Branch_ID,Doc_Or_Graph_ID)),
+                [method(Method),
+                 methods([options,post,get,delete])]).
+
+/**
+ * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
+ *
+ */
+document_handler(options,DB,_Doc_ID,_Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    try_db_uri(DB,DB_URI),
+    write_cors_headers(DB_URI, DBC),
+    format('~n').
+document_handler(get, DB, Doc_ID, Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* Read Document */
+    authenticate(Request, DBC, Auth),
+
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/get_document,DB_URI),
+
+    try_db_graph(DB_URI,Database),
+
+    try_doc_uri(DB_URI,Doc_ID,Doc_URI),
+
+    % This feels a bit ugly... but perhaps not
+    (   get_param('terminus:encoding',Request,'terminus:frame')
+    ->  try_get_filled_frame(Doc_URI,Database,JSON),
+        %http_log('Writing Frame JSON-LD:', []),
+        %json_write_dict(Log,JSON),
+        true
+    ;   try_get_document(Doc_URI,Database,JSON)
+    ),
+    write_cors_headers(DB_URI, DBC),
+    reply_json_dict(JSON).
+document_handler(post, DB, Doc_ID, R) :-
+    add_payload_to_request(R,Request),
+
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* Update Document */
+    authenticate(Request, DBC, Auth),
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/create_document,DB_URI),
+
+    try_db_graph(DB_URI, Database),
+
+    try_get_param('terminus:document',Request,Doc),
+
+    % very hacky!
+    interpolate(['doc:',Doc_ID],Doc_URI),
+
+    try_update_document(DBC, Doc_URI,Doc,Database,Witnesses),
+
+    reply_with_witnesses(DB_URI,DBC,Witnesses).
+document_handler(delete, DB, Doc_ID, Request) :-
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    /* Delete Document */
+    authenticate(Request, DBC, Auth),
+    % We should make it so we can pun documents and IDs
+
+    try_db_uri(DB,DB_URI),
+
+    % check access rights
+    verify_access(Auth,DBC,terminus/delete_document,DB_URI),
+
+    try_db_graph(DB_URI,Database),
+
+    % very hacky!
+    interpolate(['doc:',Doc_ID],Doc_URI),
+
+    try_delete_document(Doc_URI,Database,Witnesses),
+
+    reply_with_witnesses(DB_URI,DBC,Witnesses).
+
+
+document_handler(_Method,_DB,_Branch,_Request) :-
+    throw(error('Not implemented')).
+
+document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
+    throw(error('Not implemented')).
+
+
+
+%%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(woql/DB_ID), cors_catch(woql_handler(Method,DB_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(root(woql/DB_ID/Ref_ID), cors_catch(woql_handler(Method,DB_ID,Ref_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/**
+ * woql_handler(+Method:atom, +DB:database, +Request:http_request) is det.
+ */
+woql_handler(options,_DB,_Request) :-
+    config:public_server_url(SURI),
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    write_cors_headers(SURI, DBC),
+    format('~n').
+woql_handler(get,DB,Request) :-
+    % Should test for read-only query here.
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, DBC, Auth),
+    try_db_uri(DB,DB_URI),
+    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+    try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
+    atom_json_dict(Atom_Query, Query, []),
+
+    http_log('~N[Query] ~s~n',[Atom_Query]),
+
+    connect(DB_URI,New_Ctx),
+    run_query(Query,New_Ctx,JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json(JSON).
+woql_handler(post,DB,R) :-
+    add_payload_to_request(R,Request),
+
+    terminus_database_name(Collection),
+    connect(Collection,DBC),
+    % Actually we need to pull the query from the request, process it
+    % and get a list of necessary capabilities to check.
+    authenticate(Request, DBC, Auth),
+
+    try_db_uri(DB,DB_URI),
+
+    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+
+    try_get_param('terminus:query',Request,Atom_Query),
+    atom_json_dict(Atom_Query, Query, []),
+
+    http_log('~N[Query] ~s~n',[Atom_Query]),
+
+    connect(DB_URI,New_Ctx),
+
+    collect_posted_files(Request,Files),
+    Ctx = [files=Files|New_Ctx],
+
+    (   run_query(Query,Ctx,JSON)
+    ->  true
+    ;   JSON = _{bindings : []}),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DBC),
+    reply_json_dict(JSON).
+
+
+woql_handler(_Method,_DB,_Ref,_Request) :-
+    throw(error('Not implemented')).
+
+%%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(clone), cors_catch(clone_handler(Method)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,get])]).
+:- http_handler(root(clone/New_DB_ID), cors_catch(clone_handler(Method,New_DB_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,get])]).
+
+clone_handler(_Method,_Request) :-
+    throw(error('Not implemented')).
+
+clone_handler(_Method,_DB_ID,_Request) :-
+    throw(error('Not implemented')).
+
+%%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(fetch/DB_ID), cors_catch(fetch_handler(Method,DB_ID)),
+                [method(Method),
+                 methods([options,post])]).
+:- http_handler(root(fetch/DB_ID/Repo_ID), cors_catch(fetch_handler(Method,DB_ID,Repo_ID)),
+                [method(Method),
+                 methods([options,post])]).
+
+fetch_handler(_Method,_DB_ID,_Request) :-
+    throw(error('Not implemented')).
+
+fetch_handler(_Method,_DB_ID,_Repo,_Request) :-
+    throw(error('Not implemented')).
+
+
+%%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(rebase/DB_ID/Branch_ID), cors_catch(rebase_handler(Method,DB_ID,Branch_ID)),
+                [method(Method),
+                 methods([options,post])]).
+:- http_handler(root(rebase/DB_ID/Branch_ID/Remote_ID), cors_catch(rebase_handler(Method,DB_ID,Branch_ID,Remote_ID)),
+                [method(Method),
+                 methods([options,post])]).
+
+rebase_handler(_Method,_DB_ID,_Request) :-
+    throw(error('Not implemented')).
+
+rebase_handler(_Method,_DB_ID,_Repo,_Request) :-
+    throw(error('Not implemented')).
+
+%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(push/DB_ID/Branch_ID), cors_catch(push_handler(Method,DB_ID,Branch_ID)),
+                [method(Method),
+                 methods([options,post])]).
+:- http_handler(root(push/DB_ID/Branch_ID/Remote_ID), cors_catch(push_handler(Method,DB_ID,Branch_ID,Remote_ID)),
+                [method(Method),
+                 methods([options,post])]).
+
+push_handler(_Method,_DB_ID,_Branch_ID,_Request) :-
+    throw(error('Not implemented')).
+
+push_handler(_Method,_DB_ID,_Branch_ID,_Remote_ID,_Request) :-
+    throw(error('Not implemented')).
+
+
+%%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(branch/DB_ID/New_Branch_ID), cors_catch(branch_handler(Method,DB_ID,New_Branch_ID)),
+                [method(Method),
+                 methods([options,post])]).
+
+branch_handler(_Method,_DB_ID,_New_Branch_ID,_Request) :-
+    throw(error('Not implemented')).
+
+%%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(branch/DB_ID/Branch_ID/Graph_Type/Graph_ID), cors_catch(graph_handler(Method,DB_ID,Branch_ID,Graph_Type,Graph_ID)),
+                [method(Method),
+                 methods([options,post,delete])]).
+
+graph_handler(_Method,_DB_ID,_Branch_ID,_Graph_Type,_Graph_ID,_Request) :-
+    throw(error('Not implemented')).
+
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
@@ -268,7 +768,6 @@ connection_authorised_user(Request, User, SURI, DB) :-
 /*
  * reply_with_witnesses(+Resource_URI,+Witnesses) is det.
  *
-
  */
 reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     write_cors_headers(Resource_URI, DB),
@@ -281,356 +780,6 @@ reply_with_witnesses(Resource_URI, DB, Witnesses) :-
     ).
 
 
-%%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-
-/**
- * connect_handler(+Method,+Request:http_request) is det.
- */
-connect_handler(options,_Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-    format('~n').
-connect_handler(get,Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    connection_authorised_user(Request,User, SURI, DB),
-    write_cors_headers(SURI, DB),
-    reply_json(User).
-
-/*
- * console_handler(+Method,+Request) is det.
- */
-console_handler(options,_Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-    format('~n').
-console_handler(get,_Request) :-
-    terminus_path(Path),
-    interpolate([Path,'/config/index.html'], Index_Path),
-    read_file_to_string(Index_Path, String, []),
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-    format('~n'),
-    write(String).
-
-/*
- * message_handler(+Method,+Request) is det.
- */
-message_handler(options,_Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-    format('~n').
-message_handler(get,Request) :-
-    try_get_param('terminus:message',Request,Message),
-
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Message, [])
-    ),
-
-    http_log('~N[Message] ~s~n',[Payload]),
-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-message_handler(post,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-    try_get_param('terminus:message',Request,Message),
-
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Message, [])
-    ),
-
-    http_log('~N[Message] ~s~n',[Payload]),
-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-
-/**
- * db_handler(Request:http_request,Method:atom,DB:atom) is det.
- */
-db_handler(options,_DB,_Request) :-
-    % database may not exist - use server for CORS
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI,DB),
-    format('~n').
-db_handler(post,DB,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* POST: Create database */
-    authenticate(Request, DBC, Auth),
-    config:public_server_url(Server),
-    verify_access(Auth,DBC,terminus/create_database,Server),
-    try_get_param('terminus:document',Request,Doc),
-    try_db_uri(DB,DB_URI),
-    try_create_db(DB,DB_URI,Doc),
-    write_cors_headers(Server, DBC),
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-db_handler(delete,DB,Request) :-
-    /* DELETE: Delete database */
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    authenticate(Request, DBC, Auth),
-
-    config:public_server_url(Server),
-
-    verify_access(Auth, DBC, terminus/delete_database,Server),
-
-    try_db_uri(DB,DB_URI),
-    try_delete_db(DB_URI),
-
-    write_cors_headers(Server, DBC),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-
-% ! woql_handler(+Method:atom, +DB:database, +Request:http_request) is
-% det
-%
-%  @TBD  somebody who knows this code please fill this in
-%
-woql_handler(options,_DB,_Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    write_cors_headers(SURI, DBC),
-    format('~n').
-woql_handler(get,DB,Request) :-
-    % Should test for read-only query here.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    % Actually we need to pull the query from the request, process it
-    % and get a list of necessary capabilities to check.
-    authenticate(Request, DBC, Auth),
-    try_db_uri(DB,DB_URI),
-    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
-    try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
-    atom_json_dict(Atom_Query, Query, []),
-
-    http_log('~N[Query] ~s~n',[Atom_Query]),
-
-    connect(DB_URI,New_Ctx),
-    run_query(Query,New_Ctx,JSON),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
-    reply_json(JSON).
-woql_handler(post,DB,R) :-
-    add_payload_to_request(R,Request),
-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    % Actually we need to pull the query from the request, process it
-    % and get a list of necessary capabilities to check.
-    authenticate(Request, DBC, Auth),
-
-    try_db_uri(DB,DB_URI),
-
-    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
-
-    try_get_param('terminus:query',Request,Atom_Query),
-    atom_json_dict(Atom_Query, Query, []),
-
-    http_log('~N[Query] ~s~n',[Atom_Query]),
-
-    connect(DB_URI,New_Ctx),
-
-    collect_posted_files(Request,Files),
-    Ctx = [files=Files|New_Ctx],
-
-    (   run_query(Query,Ctx,JSON)
-    ->  true
-    ;   JSON = _{bindings : []}),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
-    reply_json_dict(JSON).
-
-%!  document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det
-%
-%
-document_handler(options,DB,_Doc_ID,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
-    format('~n').
-document_handler(get, DB, Doc_ID, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Read Document */
-    authenticate(Request, DBC, Auth),
-
-    % We should make it so we can pun documents and IDs
-
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/get_document,DB_URI),
-
-    try_db_graph(DB_URI,Database),
-
-    try_doc_uri(DB_URI,Doc_ID,Doc_URI),
-
-    % This feels a bit ugly... but perhaps not
-    (   get_param('terminus:encoding',Request,'terminus:frame')
-    ->  try_get_filled_frame(Doc_URI,Database,JSON),
-        %http_log('Writing Frame JSON-LD:', []),
-        %json_write_dict(Log,JSON),
-        true
-    ;   try_get_document(Doc_URI,Database,JSON)
-    ),
-    write_cors_headers(DB_URI, DBC),
-    reply_json_dict(JSON).
-document_handler(post, DB, Doc_ID, R) :-
-    add_payload_to_request(R,Request),
-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Update Document */
-    authenticate(Request, DBC, Auth),
-
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/create_document,DB_URI),
-
-    try_db_graph(DB_URI, Database),
-
-    try_get_param('terminus:document',Request,Doc),
-
-    % very hacky!
-    interpolate(['doc:',Doc_ID],Doc_URI),
-
-    try_update_document(DBC, Doc_URI,Doc,Database,Witnesses),
-
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
-document_handler(delete, DB, Doc_ID, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Delete Document */
-    authenticate(Request, DBC, Auth),
-    % We should make it so we can pun documents and IDs
-
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/delete_document,DB_URI),
-
-    try_db_graph(DB_URI,Database),
-
-    % very hacky!
-    interpolate(['doc:',Doc_ID],Doc_URI),
-
-    try_delete_document(Doc_URI,Database,Witnesses),
-
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
-
-/**
- * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
- *
- * Establishes frame responses
- */
-frame_handler(options,DB,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
-    format('~n'). % send headers
-frame_handler(get, DB, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Read Document */
-    authenticate(Request, DBC, Auth),
-
-    % We should make it so we can pun documents and IDs
-
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/class_frame,DB_URI),
-
-    try_db_graph(DB_URI,Database),
-
-    try_get_param('terminus:class',Request,Class_URI),
-
-    try_class_frame(Class_URI,Database,Frame),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
-    reply_json(Frame).
-
-/*
- * schema_handler(Mode,DB,Request) is det.
- *
- * Get or update a schema.
- */
-schema_handler(options,DB,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
-    format('~n'). % send headers
-schema_handler(get,DB,Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Read Document */
-    authenticate(Request, DBC, Auth),
-
-    % We should make it so we can pun documents and IDs
-
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/get_schema,DB_URI),
-
-    % Let's do a default schema if we can't find one.
-    catch(
-        try_get_param('terminus:schema',Request,Name),
-        _,
-        interpolate([DB_URI,'/schema'],Name)
-    ),
-
-    try_dump_schema(DB_URI, DBC, Name, Request).
-schema_handler(post,DB,R) :- % should this be put?
-    add_payload_to_request(R,Request), % this should be automatic.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-
-    /* Read Document */
-    authenticate(Request, DBC, Auth),
-
-    % We should make it so we can pun documents and IDs
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/update_schema,DB_URI),
-
-    try_get_param('terminus:schema',Request,Name),
-    try_get_param('terminus:turtle',Request,TTL),
-
-    try_update_schema(DB_URI,Name,TTL,Witnesses),
-
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
 
 /* */
 metadata_handler(options,DB,_Request) :-
@@ -1041,7 +1190,7 @@ try_dump_schema(DB, Name, Request) :-
             ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
                 % Give a better error code etc. This is silly.
                 throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
-                                                      'terminus:object' : DB_URI,
+                                                      'terminus:object' : DB,
                                                       'terminus:status' : 'terminus:failure'})))
             )
         )

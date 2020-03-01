@@ -46,8 +46,8 @@
  *
  * graph_descriptor --> labelled_graph{ name : atom }
  *                    | id_graph{ layer_id : atom }
- *                    | named_graph{ db_name : atom ,
- *                                   repository_name : atom ,
+ *                    | named_graph{ database_name : atom,
+ *                                   repository_name : atom,
  *                                   branch_name : atom,
  *                                   type : atom,
  *                                   name : atom }
@@ -69,8 +69,8 @@
  *                                           last_commit : uri, % the base of the commit
  *                                           author : string,
  *                                           message : string,
- *                                           schema : list(graph_descriptor)
- *                                           instance : list(graph_descriptor)
+ *                                           schema : list(graph_descriptor),
+ *                                           instance : list(graph_descriptor),
  *                                           inference : list(graph_descriptor)}
  *
  * terminus_descriptor: refers to the core database with user and database management.
@@ -694,7 +694,7 @@ set_heads_for_db(Database_Name - Query_Objects) :-
                           Label_Query_Objects),
 
     (   % If we don't have one database, we're
-        % probably
+        % probably...?
         [_Label_Query_Object] = Label_Query_Objects
     ->  true
     ;   [] = Label_Query_Objects
