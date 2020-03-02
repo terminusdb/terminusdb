@@ -93,13 +93,12 @@ get_user(User_ID, User) :-
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-key_auth(Key, DB, Auth) :-
-    key_user(Key,DB,User_ID),
-
-    terminus_database(Database),
-    terminus_context(Ctx),
+key_auth(Key, Auth) :-
+    key_user(Key,User_ID),
 
     user_auth_id(User_ID, DB, Auth_ID),
+
+    terminus_context(Ctx),
 
     document_jsonld(Auth_ID,Ctx,Database,Auth).
 

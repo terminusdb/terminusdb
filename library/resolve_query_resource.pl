@@ -82,11 +82,11 @@ resolve_query_resource(URI, X) :-
     true.
 
 /*
- * connect(+Resource_Name:uri -Ctx:query_context) is det.
+ * connect(+Collection_Resource_Name:uri -Ctx:query_context) is det.
  *
  * Resolves a query resource uri to a query_context which includes the queryable objects.
  */
-connect(Resource_Name,New_Ctx) :-
+connect(Collection_Resource_Name,New_Ctx) :-
     empty_ctx(Ctx),
 
     get_database_prefix_list(DB_Name, Prefixes),

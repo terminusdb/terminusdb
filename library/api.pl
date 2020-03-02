@@ -104,17 +104,16 @@ http:location(root, '/', []).
  * connect_handler(+Method,+Request:http_request) is det.
  */
 connect_handler(options,_Request) :-
+    % TODO: What should this be?
+    % Do a search for each config:public_server_url
+    % once you know.
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
+    write_cors_headers(SURI),
     format('~n').
 connect_handler(get,Request) :-
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    connection_authorised_user(Request,User, SURI, DB),
-    write_cors_headers(SURI, DB),
+    connection_authorised_user(Request,User,SURI),
+    write_cors_headers(SURI),
     reply_json(User).
 
 
@@ -193,24 +192,10 @@ message_handler(post,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db), cors_catch(db_create_handler(Method)),
+:- http_handler(root(db), cors_catch(db_handler(Method)),
                 [method(Method),
-                 methods([options,post])]).
-:- http_handler(root(db/DB), cors_catch(db_delete_handler(Method,DB)),
-                [method(Method),
-                 methods([options,delete])]).
+                 methods([options,post,delete])]).
 
-/**
- * db_create_handler(Method:atom,Request:http_request) is det.
- */
-db_create_handler(options,_Request) :-
-    config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    write_cors_headers(SURI, DB),
-    format('~n').
-db_create_handler(post,_Request) :-
-    throw(error('Not yet implemented')).
 
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
@@ -224,31 +209,26 @@ db_handler(options,_DB,_Request) :-
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
     /* POST: Create database */
-    authenticate(Request, DBC, Auth),
+    authenticate(Request, Auth),
     config:public_server_url(Server),
-    verify_access(Auth,DBC,terminus/create_database,Server),
-    try_get_param('terminus:document',Request,Doc),
-    try_db_uri(DB,DB_URI),
-    try_create_db(DB,DB_URI,Doc),
-    write_cors_headers(Server, DBC),
+    verify_access(Auth,terminus/create_database,Server),
+    try_get_param('terminus:base_uri',Request,Base_URI),
+    try_create_db(DB,Base_URI),
+    write_cors_headers(Server),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    authenticate(Request, DBC, Auth),
+    authenticate(Request, Auth),
 
     config:public_server_url(Server),
 
-    verify_access(Auth, DBC, terminus/delete_database,Server),
+    verify_access(Auth, terminus/delete_database,Server),
 
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    write_cors_headers(Server, DBC),
+    write_cors_headers(Server),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -453,8 +433,6 @@ document_handler(post, DB, Doc_ID, R) :-
 
     reply_with_witnesses(DB_URI,DBC,Witnesses).
 document_handler(delete, DB, Doc_ID, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
     /* Delete Document */
     authenticate(Request, DBC, Auth),
     % We should make it so we can pun documents and IDs
@@ -734,15 +712,15 @@ fetch_authorization_data(Request, KS) :-
  *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message.
  */
-authenticate(Request, DB, Auth) :-
+authenticate(Request, Auth) :-
     fetch_authorization_data(Request, KS),
-    (   key_auth(KS, DB, Auth)
+    (   key_auth(KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key'})))).
 
-verify_access(Auth, DB, Action, Scope) :-
-    (   auth_action_scope(Auth, DB, Action, Scope)
+verify_access(Auth, Action, Scope) :-
+    (   auth_action_scope(Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
         throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
@@ -1040,38 +1018,20 @@ get_param(Key,Request,Value) :-
  *
  * Try to create a database and associate resources
  */
-try_create_db(DB,Doc) :-
-    % Try to create the database resource first.
-    with_mutex(
-        DB,
-        (       % create the collection if it doesn't exist
-            (   database_exists(DB)
-            ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                      'terminus:message' : 'Database already exists',
-                                                      'terminus:method' : 'terminus:create_database'})))
-            ;   true),
+try_create_db(DB,Base_Uri) :-
+    % create the collection if it doesn't exist
+    (   database_exists(DB)
+    ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                              'terminus:message' : 'Database already exists',
+                                              'terminus:method' : 'terminus:create_database'})))
+    ;   true),
 
-            (   add_database_resource(DB,Doc)
-            ->  true
-            ;   format(atom(MSG), 'You managed to half-create a database we can not delete\n You should look for your local terminus wizard to manually delete it: ~s', [DB]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'})))),
+    (   create_db(DB, Base_Uri)
+    ->  true
+    ;   format(atom(MSG), 'Database ~s could not be created', [DB]),
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure'})))).
 
-            (   terminus_database_name(Collection),
-                connect(Collection,Terminus_DB),
-                create_db(Terminus_DB, DB)
-            ->  true
-            ;   format(atom(MSG), 'Database ~s could not be created', [DB]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'})))),
-
-            (   post_create_db(DB)
-            ->  true
-            ;   format(atom(MSG), 'Unable to perform post-creation updates: ~s', [DB]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'}))))
-
-        )).
 
 /*
  * try_delete_db(DB_URI) is det.
@@ -1079,20 +1039,11 @@ try_create_db(DB,Doc) :-
  * Attempt to delete a database given its URI
  */
 try_delete_db(DB) :-
-    with_mutex(
-        DB,
-        (   (   delete_db(DB)
-            ->  true
-            ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'})))),
-
-            (   delete_database_resource(DB)
-            ->  true
-            ;   format(atom(MSG), 'Database ~s resource records could not be removed', [DB]),
-                throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                             'terminus:status' : 'terminus:failure'}))))
-        )).
+    (   delete_db(DB)
+    ->  true
+    ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
+        throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                     'terminus:status' : 'terminus:failure'})))).
 
 /*
  * try_atom_json(Atom,JSON) is det.
