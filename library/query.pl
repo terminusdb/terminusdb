@@ -75,7 +75,7 @@ ask(Transaction_Object,Pre_Term) :-
     !,
     collection_descriptor_prefixes(Descriptor, Prefixes),
     Query_Context = query_context{
-        query_objects : [Transaction_Object],
+        transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         prefixes : Prefixes,
         bindings : [],

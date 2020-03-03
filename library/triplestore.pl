@@ -205,19 +205,17 @@ xrdf_deleted(DB,G,X,Y,Z) :-
     storage_object(S,Z).
 
 /**
- * xrdf(+Collection_Id,+Database_Ids:list,?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Collection,+Graphs:list(read_write_objs),?Subject,?Predicate,?Object) is nondet.
  *
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
- * Database is either an atom or a list of atoms, referring to the name(s) of the graph(s).
+ * WARNING: Collection is now unused!
  */
-xrdf(Database,Gs,X,Y,Z) :-
+xrdf(_Database,Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
-    memberchk(G,Gs),
-    maybe_open_read_transaction(Database,DBR),
-    get_read_layer(DBR,G,Layer),
-    xrdf_db(Layer,X,Y,Z).
+    member(G,Gs),
+    xrdf_db(G.read,X,Y,Z).
 
 
 pre_convert_node(X,A) :-

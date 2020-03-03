@@ -19,6 +19,7 @@
               foldm/6,
               mapm/5,
               mapm/6,
+              exists/2,
               trim/2,
               split_atom/3,
               pattern_string_split/3,
@@ -424,6 +425,17 @@ mapm(_P,[],[],[],S,S).
 mapm(P,[H|T],[HP|TP],[HM|TM],S0,SN) :-
     call(P,H,HP,HM,S0,S1),
     mapm(P,T,TP,TM,S1,SN).
+
+/*
+ * exists(P:predicate,L:list)
+ *
+ * Succeeds if predicate holds for some member of the list.
+ */
+exists(P,[X|Rest]) :-
+    call(P,X),
+    !.
+exists(P,[_|Rest]) :-
+    exists(P,Rest).
 
 /**
  * count(+A:atom,+L:list,-C:int) is det.

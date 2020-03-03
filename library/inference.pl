@@ -26,6 +26,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(database).
+:- use_module(database_utils).
 :- use_module(validate_schema).
 :- use_module(triplestore).
 :- use_module(expansions).

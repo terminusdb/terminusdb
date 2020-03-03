@@ -118,7 +118,7 @@
  * query_context ---> query_context{ <default_output_graph : graph_descriptor>,
  *                                   <default_collection : collection_descriptor>,
  *                                   <prefixes : context>,
- *                                   query_objects : list(query_object),
+ *                                   transaction_objects : list(query_object),
  *                                   bindings : list(var_binding),
  *                                   selected : list(var_binding)
  *                                }
@@ -191,7 +191,7 @@ empty_ctx(query_context{
  */
 empty_ctx -->
     view(prefixes,Prefixes),
-    view(query_objects,Query_Objects),
+    view(transaction_objects,Transaction_Objects),
     view(files,Files),
 
     { empty_ctx(S0)
@@ -199,7 +199,7 @@ empty_ctx -->
     return(S0),
 
     put(prefixes,Prefixes),
-    put(query_objects,Query_Objects),
+    put(transaction_objects,Transaction_Objects),
     put(files,Files).
 
 empty_ctx(Prefixes) -->
@@ -210,7 +210,7 @@ empty_ctx(Prefixes) -->
 descriptor_ctx(Collection_Descriptor,New_Ctx) :-
     descriptor_query(Collection_Descriptor, Query_Object),
     empty_ctx(Ctx),
-    New_Ctx = Ctx.put(_{query_objects : [Query_Object],
+    New_Ctx = Ctx.put(_{transaction_objects : [Query_Object],
                         current_collection : Collection_Descriptor}).
 
 /******************************
@@ -662,34 +662,34 @@ turtle_term(Path,Vars,Prog,Options) :-
             Vars = [X,P,Y]).
 
 compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
-    view(database,Database).
+    view(default_collection,Database).
 compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
-    view(database,Database),
+    view(default_collection,Database),
     resolve(X,URI).
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
-    view(database,Database),
+    view(default_collection,Database),
     resolve(X,URI).
 compile_wf(delete(WG,X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,DB).
+    view(default_collection,DB).
 compile_wf(insert(WG,X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,DB).
+    view(default_collection,DB).
 compile_wf(delete(X,P,Y),delete(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,DB),
+    view(default_collection,DB),
     view(write_graph,WG).
 compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,DB),
+    view(default_collection,DB),
     view(write_graph,WG).
 compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),
@@ -713,16 +713,19 @@ compile_wf(like(A,B,F), Goal) -->
 compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
     resolve(A,AE),
     resolve(B,BE),
-    view(database,G).
+    view(default_collection,G).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,DB),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
     {
-        Search=inference:inferredEdge(XE,PE,YE,DB),
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
+        Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
         Goal_List = [not_literal(XE),not_literal(PE),Search],
         list_conjunction(Goal_List,Goal)
     }.
@@ -730,14 +733,11 @@ compile_wf(t(X,P,Y,G),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(database,Database),
+    view(transaction_objects,Transaction_Objects),
     {
-        % TODO: This is not correct
-        (   database_instance(Database,L),
-            member(G,L)
-        ->  Search=inference:inferredEdge(XE,PE,YE,Database)
-        ;   Search=xrdf(Database,[G],XE,PE,YE)),
-
+        resolve_graph_resource(G,G_Descriptor),
+        instance_graph_descriptor_transaction_object(G_Descriptor, Transaction_Objects, Transaction_Object),
+        Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
         Goal_List = [not_literal(XE),not_literal(PE),Search],
         list_conjunction(Goal_List,Goal)
     }.
@@ -755,19 +755,19 @@ compile_wf((A,B),(ProgA,ProgB)) -->
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
 compile_wf((A => B),Goal) -->
-    view(database,Database),
+    view(default_collection,Default_Collection),
     compile_wf(A,ProgA),
-    update(database,Database,UpdateDB),
+    update(transaction_objects,Transaction_Objects,New_Transaction_Objects),
     % This second one should be simpler, to reflect that only writes are allowed on the right.
     compile_wf(B,ProgB),
     % This definitely needs to be a collection of all actual graphs written to...
     % should be easy to extract from B
-    view(write_graph,Write_Graph),
+    view(default_output_graph,Default_Output_Graph),
     {
         % TODO: Active writes, active reads need to be separated.
-        debug(terminus(woql_compile(compile_wf)), 'Database: ~q', [Database]),
+        debug(terminus(woql_compile(compile_wf)), 'Default_Collection: ~q', [Default_Collection]),
         active_graphs(B,Active_Graphs),
-        get_dict(schema,Database,Schemata),
+        get_dict(schema,Default_Collection,Schemata),
         debug(terminus(woql_compile(compile_wf)), 'Schemata: ~q', [Schemata]),
         get_dict(read,Active_Graphs,All_Read_Graphs),
         debug(terminus(woql_compile(compile_wf)), 'All_Read_Graphs: ~q', [All_Read_Graphs]),
@@ -781,7 +781,7 @@ compile_wf((A => B),Goal) -->
         (   Changed_Schemata = []
         ->  Goal = (
                 validate:instance_transaction(
-                             Database,
+                             Default_Collection,
                              UpdateDB,
                              Write_Graphs,
                              woql_compile:(
@@ -797,7 +797,7 @@ compile_wf((A => B),Goal) -->
             )
         ;   Goal = (
                 validate:instance_schema_transaction(
-                             Database,
+                             Default_Collection,
                              UpdateDB,
                              Write_Graphs,
                              woql_compile:(
@@ -813,17 +813,17 @@ compile_wf((A => B),Goal) -->
             )
         )
     },
-    update(database,_,Database).
+    update(default_collection,_,Default_Collection).
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
-compile_wf(from(G,P),Goal) -->
-    resolve(G,GName),
-    { make_database_from_database_name(GName,Database) },
-    update(database,Old_Database,Database),
+compile_wf(from(Collection_URI,P),Goal) -->
+    { resolve_query_resource(Collection_URI, Default_Collection) },
+    update(default_collection,Old_Default_Collection,Default_Collection),
     compile_wf(P, Goal),
-    update(database,_,Old_Database).
+    update(default_collection,_,Old_Default_Collection).
 compile_wf(prefixes(NS,S), Prog) -->
+    % Need to convert the datatype of prefixes here.
     debug_wf('DO YOU HEAR ME ~q', [NS]),
     update(prefixes,NS_Old,NS_New),
     { append(NS, NS_Old, NS_New) },
@@ -831,14 +831,14 @@ compile_wf(prefixes(NS,S), Prog) -->
     update(prefixes,_,NS_Old).
 compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
-    update(database,Old_Database,Database),
-    view(files=Files),
+    update(default_collection,Old_Default_Collection,Default_Collection),
+    view(files,Files),
     % TODO: Extend with options for various file types.
     { file_spec_path_options(GS, Files, Path, _{}, Options),
-      extend_database_with_temp_graph(GName,Path,Options,Program,Old_Database,Database)
+      extend_database_with_temp_graph(GName,Path,Options,Program,Old_Default_Collection,Default_Collection)
     },
     compile_wf(Q,Sub_Query),
-    update(database,_,Old_Database).
+    update(default_collection,_,Old_Default_Collection).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
         Default = _{

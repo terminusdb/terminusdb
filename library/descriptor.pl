@@ -1,7 +1,9 @@
 :- module(descriptor,[
               open_descriptor/2,
               open_descriptor/3,
-              open_descriptor/5
+              open_descriptor/5,
+              collection_descriptor_transaction_object/3,
+              instance_graph_descriptor_transaction_object/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -294,3 +296,27 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
+
+/*
+ *
+ * Find the Transaction Object associated with a graph descriptor
+ *
+ * (so that inference has a chance of working)
+ */
+
+instance_graph_descriptor_transaction_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
+    RW_Objects = Transaction_Object.instance_objects,
+    exists({G_Descriptor}/[
+               read_write_obj{ descriptor : G_Descriptor,
+                               read : _,
+                               write : _ }]>>true,
+           RW_Objects),
+    !.
+instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-
+    instance_graph_descriptor_transaction_object(Graph_Descriptor, Transaction_Objects, Transaction_Object).
+
+collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
+    Transaction_Object.descriptor = Collection_Descriptor,
+    !.
+collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
+    collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
