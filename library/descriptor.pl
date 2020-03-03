@@ -14,9 +14,13 @@
  *
  * graph_descriptor --> labelled_graph{ name : atom }
  *                    | id_graph{ layer_id : atom } % for debugging
- *                    | repo_graph { database_name : atom }
+ *                    | repo_graph { database_name : atom,
+ *                                   type : atom,
+ *                                   name : atom }
  *                    | commit_graph{ database_name : atom,
- *                                    repository_name : atom }
+ *                                    repository_name : atom,
+ *                                    type : atom,
+ *                                    name : atom }
  *                    | branch_graph{ database_name : atom,
  *                                    repository_name : atom,
  *                                    branch_name : atom,

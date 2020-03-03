@@ -768,17 +768,6 @@ compile_wf((A => B),Goal) -->
     {
         % TODO: Active writes, active reads need to be separated.
         debug(terminus(woql_compile(compile_wf)), 'Default_Collection: ~q', [Default_Collection]),
-        active_graphs(B,Active_Graphs),
-        get_dict(schema,Default_Collection,Schemata),
-        debug(terminus(woql_compile(compile_wf)), 'Schemata: ~q', [Schemata]),
-        get_dict(read,Active_Graphs,All_Read_Graphs),
-        debug(terminus(woql_compile(compile_wf)), 'All_Read_Graphs: ~q', [All_Read_Graphs]),
-        get_dict(write,Active_Graphs,All_Write_Graphs),
-        debug(terminus(woql_compile(compile_wf)), 'All_Write_Graphs: ~q', [All_Write_Graphs]),
-        union([Write_Graph],All_Write_Graphs,Write_Graphs),
-        debug(terminus(woql_compile(compile_wf)), 'Write Graphs: ~q', [Write_Graphs]),
-        intersection(Write_Graphs,Schemata,Changed_Schemata),
-        debug(terminus(woql_compile(compile_wf)), 'Write Schemata: ~q', [Changed_Schemata]),
         % We want to choose schema free transactions whenever possible.
         (   Changed_Schemata = []
         ->  Goal = (

@@ -431,6 +431,7 @@ mapm(P,[H|T],[HP|TP],[HM|TM],S0,SN) :-
  *
  * Succeeds if predicate holds for some member of the list.
  */
+:- meta_predicate exists(1,?).
 exists(P,[X|_Rest]) :-
     call(P,X),
     !.
