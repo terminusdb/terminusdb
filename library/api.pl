@@ -551,15 +551,9 @@ clone_handler(_Method,_DB_ID,_Request) :-
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/DB_ID), cors_catch(fetch_handler(Method,DB_ID)),
-                [method(Method),
-                 methods([options,post])]).
 :- http_handler(root(fetch/DB_ID/Repo_ID), cors_catch(fetch_handler(Method,DB_ID,Repo_ID)),
                 [method(Method),
                  methods([options,post])]).
-
-fetch_handler(_Method,_DB_ID,_Request) :-
-    throw(error('Not implemented')).
 
 fetch_handler(_Method,_DB_ID,_Repo,_Request) :-
     throw(error('Not implemented')).
