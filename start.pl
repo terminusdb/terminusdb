@@ -130,14 +130,11 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(library(api)).
 :- use_module(library(server)).
-:- use_module(library(upgrade_db)).
-% We only need this if we are interactive...
-:- use_module(library(sdk)).
 :- use_module(test(tests)).
 :- use_module(library(http/http_log)).
 % Plugins
 %:- use_module(plugins(registry)).
-:- use_module(library(json_woql),[initialise_woql_contexts]).
+:- use_module(library(json_woql),[initialise_woql_contexts/0]).
 
 :- on_signal(hup, _, hup).
 

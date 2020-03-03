@@ -1,5 +1,7 @@
 :- module(database,[
-              with_transaction/8
+              with_transaction/8,
+              op(2, xfx, ^^),
+              op(2, xfx, @)
           ]).
 
 /** <module> Implementation of database graph management
@@ -31,14 +33,17 @@
 :- use_module(types).
 :- use_module(file_utils).
 :- use_module(triplestore).
+:- use_module(global_prefixes, [global_prefix_expand/2]).
+:- use_module(literals, [object_storage/2]).
+:- use_module(casting, [idgen/3]).
+:- use_module(library(terminus_store)).
 
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(terminus_bootstrap)).
 
-:- op(2, xfx, ^^).
-:- op(2, xfx, @).
+:- use_module(descriptor).
 
 /*
  * terminus_repository_schema(Schema) is det.
@@ -253,7 +258,7 @@ set_ref_head(Ref_Query_Object, New_Ref_Query_Object) :-
 
     atomic_list_concat([Ref_Name,'/document/'],Ref_Base),
     random_uri(Ref_Base,'Commit',Commit_URI),
-    write_ref_commit(Ref_Layer_Builder, Last_Commit, Commit_URI),
+    write_ref_commit(Ref_Layer_Builder, Last_Commit, Commit_URI), % TODO defined for 5
 
     maplist({Commit_URI,Ref_Base,Ref_Layer_Builder}/[Layer]>>
             write_layer_to_commit(instance,Ref_Layer_Builder,Ref_Base,Layer,Commit_URI),
@@ -367,11 +372,11 @@ update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer) :-
     idgen(Layer_Base, [Layer_Id], Layer_URI),
     idgen(Layer_Base, [Parent_Id], Parent_URI),
 
-    nb_remove_shadow_layer(Repo_Layer_Builder, Parent_URI),
-    nb_add_shadow_layer(Repo_Layer_Builder, Layer_Id),
+    nb_remove_shadow_layer(Repo_Layer_Builder, Repo_Name, Parent_URI),
+    nb_add_shadow_layer(Repo_Layer_Builder, Repo_Name, Layer_Id),
 
-    nb_remove_triple(URI, Repository_Head_Property, node(Parent_URI)),
-    nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).
+    nb_remove_triple(URI, Repository_Head_Property, node(Parent_URI)),   % TODO arity
+    nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).  % TODO arity
 
 
 set_repo_head(Layer_Builder, Repo_Query_Object - Ref_Query_Objects) :-
@@ -386,8 +391,8 @@ query_object_parents(Query_Objects, Query_Object_Candidates, Child_Parent_Pairs)
     findall(Query_Object - Associated_Parents,
             (   member(Query_Object,Query_Objects),
                 convlist({Query_Object}/[Query_Object_Candidate]>>
-                         descriptor_compare((=),Query_Object.parent.descriptor,
-                                                Query_Object_Candidate.descriptor),
+                         descriptor_compare('=',Query_Object.parent.descriptor,
+                                                Query_Object_Candidate.descriptor),  % TODO need another argument
                          Query_Object_Candidates,
                          Associated_Parents)),
             Child_Parent_Pairs).
@@ -458,3 +463,21 @@ set_heads(Query_Objects) :-
     % Resulting structure of group_pairs DatabaseName-[list of query objects]
     group_pairs_by_key(Database_Name_Query_Objects, Database_Query_Objects),
     maplist(set_heads_for_db, Database_Query_Objects).
+
+
+		 /*******************************
+		 *         Missing Predicates   *
+		 *******************************/
+update_read_objects(_Instance_Read_Objects, _Committed_Instance_Objects, _New_Instance_Read_Objects) :-
+    true.
+
+
+% note there's a descriptor_query/2 in woql_compile
+descriptor_query(_Descriptor,
+                 _Read_Descriptors,
+                 _Write_Descriptors,
+                 _Map,
+                 _Middle_Map) :-
+    true.
+
+
