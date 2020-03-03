@@ -1,4 +1,5 @@
 :- module(woql_compile,[
+              lookup/3,
               compile_query/3,
               compile_query/4,
               run_query/2,
@@ -135,8 +136,7 @@ get(Key,Value,Set) :-
 /* Monadic selection */
 update(Key,C0,C1,S0,S1) :-
     C0 = S0.Key,
-    C1 = S1.Key,
-    S1 = S0.put(Key, C0).
+    S1 = S0.put(Key, C1).
 
 view(Key,C0,S0,S0) :-
     C0 = S0.Key.
@@ -205,6 +205,7 @@ empty_ctx -->
 empty_ctx(Prefixes) -->
     empty_ctx,
     put(prefixes, Prefixes).
+
 
 descriptor_ctx(Collection_Descriptor,New_Ctx) :-
     descriptor_query(Collection_Descriptor, Query_Object),

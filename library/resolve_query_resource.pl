@@ -119,8 +119,9 @@ resolve_query_resource(URI, Resource) :-
     true.
 
 /*
- *
  * If we know the resource is a graph, we can use defaults to obtain a graph.
+ *
+ * server / dbname / repo / my_branch / 
  */
 resolve_graph_resource(URI,Resource) :-
     true.
