@@ -136,8 +136,16 @@ graph_descriptor_to_layer(Descriptor,
     store_id_layer(Store, Layer_Id, Layer).
 
 open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: Layer_Builder }, Map, New_Map) :-
-    graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map),
-    freeze(Layer_Builder, open_write(Layer, Layer_Builder)).
+    graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
+
+read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
+    var(Read_Write_Obj.write),
+    !,
+    open_write(Read_Write_Obj.read, Read_Write_Obj.write),
+    Layer_Builder = Read_Write_Obj.write.
+
+read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
+    Layer_Builder = Read_Write_Obj.write.
 
 /**
  * open_descriptor(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map) is det.
