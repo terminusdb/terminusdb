@@ -20,9 +20,6 @@
               shadow_layer_class_uri/1,
               layer_id_prop_uri/1,
 
-              local_repository_class_uri/1,
-              repository_head_prop_uri/1,
-
               branch_class_uri/1,
               ref_commit_prop_uri/1,
               ref_no_commit_uri/1,
@@ -83,10 +80,6 @@ deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
 %% URIs from layer schema
 shadow_layer_class_uri('http://terminusdb.com/schema/layer#ShadowLayer').
 layer_id_prop_uri('http://terminusdb.com/schema/layer#layer_id').
-
-%%% URIs from repository schema
-local_repository_class_uri('http://terminusdb.com/schema/repository#Local').
-repository_head_prop_uri('http://terminusdb.com/schema/repository#repository_head').
 
 %%% URIs from ref schema
 branch_class_uri('http://terminusdb.com/schema/ref#Branch').
