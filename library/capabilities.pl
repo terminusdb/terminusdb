@@ -45,7 +45,7 @@
 :- use_module(jsonld).
 :- use_module(database).
 :- use_module(database_utils).
-:- use_module(sdk).
+:- use_module(query).
 
 :- op(2, xfx, ^^).
 :- op(1050, xfx, =>).

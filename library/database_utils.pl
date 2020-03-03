@@ -100,3 +100,11 @@ create_schema(DB_URI,Schema,DB) :-
     insert(DB, Schema, DB_URI, Rdf_type, OWL_ontology),
     insert(DB, Schema, DB_URI, Rdfs_label, Label@en),
     insert(DB, Schema, DB_URI, Rdfs_comment, Comment@en).
+
+query_default_write_descriptor(Query_Object, Write_Descriptor) :-
+    convlist([Obj,Graph_Desc]>>(
+                 write_obj{ descriptor : Graph_Desc }:< Obj.descriptor,
+                 Graph_Desc.name = "main"
+             ),
+             Query_Object.instance_write_objs,
+             [Write_Descriptor]).

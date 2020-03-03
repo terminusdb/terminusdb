@@ -5,7 +5,8 @@
               run_query/3,
               empty_ctx/1,
               empty_ctx/2,
-              active_graphs/2
+              active_graphs/2,
+              descriptor_ctx/2
           ]).
 
 /** <module> WOQL Compile
@@ -113,8 +114,8 @@
  *                               var_name : atom }
  * var_bindings = list(var_binding)
  *
- * query_context ---> query_context{ <current_output_graph : graph_descriptor>,
- *                                   <current_collection : collection_descriptor>,
+ * query_context ---> query_context{ <default_output_graph : graph_descriptor>,
+ *                                   <default_collection : collection_descriptor>,
  *                                   <prefixes : context>,
  *                                   query_objects : list(query_object),
  *                                   bindings : list(var_binding),
@@ -204,6 +205,12 @@ empty_ctx -->
 empty_ctx(Prefixes) -->
     empty_ctx,
     put(prefixes, Prefixes).
+
+descriptor_ctx(Collection_Descriptor,New_Ctx) :-
+    descriptor_query(Collection_Descriptor, Query_Object),
+    empty_ctx(Ctx),
+    New_Ctx = Ctx.put(_{query_objects : [Query_Object],
+                        current_collection : Collection_Descriptor}).
 
 /******************************
  * Binding management utilities
@@ -344,7 +351,6 @@ run_query(JSON_In, JSON_Out) :-
     run_query(JSON_In,CCTX,JSON_Out).
 
 
-
 /*
  * run_query(JSON_In, CCTX, JSON_Out) is det.
  *
@@ -354,11 +360,8 @@ run_query(JSON_In, JSON_Out) :-
  */
 run_query(JSON_In,CCTX,JSON_Out) :-
     woql_context(Ctx),
-    Query_Object = CCTX.query_object,
-    /* TODO: This needs to be done earlier. */
-    database_name(Database, Name),
-    get_collection_jsonld_context(Name,Ctx_Database),
-    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
+    CCTX.prefixs = Prefixes_Database,
+    merge_dictionaries(Ctx,Prefixes_Database,Ctx_Total),
     http_log('Ctx: ~q~n',[Ctx]),
     json_woql(JSON_In, Ctx_Total, Query),
     * http_log('Query: ~q~n',[Query]),
@@ -371,7 +374,6 @@ run_term(Query,JSON) :-
 run_term(Query,Ctx_In,JSON) :-
     debug(terminus(woql_compile(run_term)), 'Query: ~q',[Query]),
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    Database = Ctx_Out.database,
 
     % TODO: This should probably be a forall with a write to the output stream
     findall(B,

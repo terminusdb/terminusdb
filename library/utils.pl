@@ -576,17 +576,11 @@ re(Pattern, String, Matches) :-
     maplist({Matches}/[Key-Value]>>nth0(Key,Matches,Value),Pairs).
 
 %!  whole_arg(+N:integer, -Var:term) is det
-
 %
-
 %   @arg N 1 based nth argument
-
 %   @arg Var the entirety of the Nth argument of this clause
-
 %
-
 %   @throws domain_error if N is invalid
-
 %
 
 whole_arg(N, Var) :-

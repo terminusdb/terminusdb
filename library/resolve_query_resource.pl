@@ -63,45 +63,64 @@
  * TODO: Make this exist
  */
 resolve_query_resource('terminus:///terminus/',terminus_descriptor).
-resolve_query_resource(URI, X) :-
-    % The generic full path for a resource is:
-    %
-    %
-    % Queryable resource:
-    % protocol://server/database => protocol://server/database/local/master
-    %
-    % Graph resource:
-    % protocol://server/database => protocol://server/database/local/master/instance/main
-    % protocol://server/database/repository/ref/{instance,schema,inference}/graph_name
-    % protocol://server/database/ is short for protocol://server/database/master/instance
-    %
-    % Repo metadata?:
-    %
-    % protocol://server/repository/ref
-    %
+% Branches
+%
+% 'http://[Server]/[User]/[Database_Name]'
+% 'http://[Server]/[User]/[Database_Name]/<Repo_Name>'
+% 'http://[Server]/[User]/[Database_Name]/<Repo_Name>/<Ref_Name>'
+%
+resolve_query_resource(URI, Resource) :-
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<ref>[^/]*)$', URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict)
+    ->  Resource_Dict = Dict.put(_{repo : local})
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict),
+        Resource_Dict = Dict.put(_{repo : local, ref : master})),
+
+    user_database_name(User,Database,Label_Name),
+    % convenience predicate?
+    Database_Descriptor = database_descriptor{
+                              database_name : Resource_Dict.database,
+                              instance : [labelled_graph{ name : Label_Name }]},
+
+    ask(Database_Descriptor,
+        (
+            t(Resource_Dict.repo,repository:repository_head, Shadow_Layer),
+            t(Resource_Dict.repo,repository:repository_head, Shadow_Layer)
+        )
+       ),
+
+    Repository_Descriptor = repository_descriptor{
+                                database_descriptor : Database_Descriptor,
+                                repository_name : Resource_Dict.repo
+                                instance : [id_graph { layer_id : Layer_ID }]
+                            },
+    format(atom(Ref_Name), '%s://%s/%s/%s/%s/%s', [Resource_Dict.protocol,
+                                                   Resource_Dict.server,
+                                                   Resource_Dict.user,
+                                                   Resource_Dict.database,
+                                                   Resource_Dict.repo,
+                                                   Resource_Dict.ref]),
+    % We will need to query for
+    % schema and instance here.
+    Resource = ref_descriptor{ repository_descriptor : Repository_Descriptor,
+                               ref_name : Ref_Name,
+                               last_commit URI, % How do we get this?
+                               author: '???',
+                               message: 'MMMM',
+                               schema: ['???'],
+                               instance: ['???']
+                             }.
+resolve_query_resource(URI, Resource) :-
+
+    true.
+resolve_query_resource(URI, Resource) :-
+
     true.
 
 /*
- * connect(+Collection_Resource_Name:uri -Ctx:query_context) is det.
  *
- * Resolves a query resource uri to a query_context which includes the queryable objects.
+ * If we know the resource is a graph, we can use defaults to obtain a graph.
  */
-connect(Collection_Resource_Name,New_Ctx) :-
-    empty_ctx(Ctx),
-
-    get_database_prefix_list(DB_Name, Prefixes),
-
-    Ctx1 = Ctx.put(prefixes, Prefixes),
-    % TODO: This needs to actually work
-    resolve_query_resource(URI,Desriptor),
-    descriptor_query(Descriptor,Query_Object),
-
-    % What do we open generically - probably needs to be refactored
-    maybe_open_read_transaction(DB_Obj,DBR),
-
-    database_default_write_instance(DB_Obj,Instance),
-
-    Ctx2 = Ctx1.put(current_collection,DBR),
-    Ctx3 = Ctx2.put(write_graph,Instance),
-    New_Ctx = Ctx3.put(query_objects,[Query_Object]).
-
+resolve_graph_resource(URI,Resource) :-
+    true.
