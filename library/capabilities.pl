@@ -93,7 +93,7 @@ get_user(User_ID, User) :-
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-key_auth(Key, Auth) :-
+key_auth(Key, _, Auth) :-
     key_user(Key,User_ID),
 
     user_auth_id(User_ID, DB, Auth_ID),

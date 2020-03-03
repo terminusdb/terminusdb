@@ -74,6 +74,8 @@
 
 :- use_module(speculative_parse, [guess_date/2]).
 
+:- use_module(descriptor).
+
 % This should really not be used... it is too low level - Gavin
 %:- use_module(journaling, [write_triple/5]).
 
@@ -235,7 +237,7 @@ lookup_or_extend(Var_Name, Prolog_Var) -->
                 |B0])
     }.
 
-resolve_prefix(Pre:Suf,URL) -->
+resolve_prefix(Pre,Suf,URL) -->
     view(prefixes,Prefixes),
     {
         (   Full_Prefix = Prefixes.get(Pre)

@@ -1,10 +1,12 @@
-
 :- module(literals, [
               fixup_schema_literal/2,
               normalise_triple/2,
               object_storage/2,
               storage_object/2,
-              date_string/2
+              date_string/2,
+              uri_to_prefixed/3,
+              op(2, xfx, @),
+              op(2, xfx, ^^)
           ]).
 
 /** <module> Literals
@@ -178,3 +180,39 @@ storage_object(node(S),O) :-
         ->  atom_string(O,S)
         ;   O = S)
     ;   atom_string(O,S)).
+
+
+
+try_prefix_uri(URI,[],URI).
+try_prefix_uri(URI,[Prefix-URI_Base|_], Prefixed) :-
+    atomic_list_concat(['^(?P<base>',URI_Base,')(?P<rest>.*)$'], Pattern),
+    re_matchsub(Pattern, URI, Match, []),
+    atom_string(Suffix,Match.rest),
+    Prefixed = Prefix : Suffix,
+    !.
+try_prefix_uri(URI,[_|Rest], Prefixed) :-
+    try_prefix_uri(URI,Rest, Prefixed).
+
+length_comp((<),A-_,B-_) :-
+    string_length(A,N),
+    string_length(B,M),
+    N < M,
+    !.
+length_comp((>),A-_,B-_) :-
+    string_length(A,N),
+    string_length(B,M),
+    N > M,
+    !.
+% choose lexical if length is identical
+length_comp((<),A-_,B-_) :-
+    A @< B,
+    !.
+length_comp((>),A-_,B-_) :-
+    A @> B,
+    !.
+length_comp((=),_,_).
+
+uri_to_prefixed(URI, Ctx, Prefixed) :-
+    dict_pairs(Ctx,_,Pairs),
+    predsort(length_comp, Pairs, Sorted_Pairs),
+    try_prefix_uri(URI,Sorted_Pairs,Prefixed).
