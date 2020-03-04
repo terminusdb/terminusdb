@@ -138,3 +138,18 @@ database_inference(Transaction_Object, Inferences) :-
  */
 database_schema(Transaction_Object, Schemas) :-
     Schemas = Transaction_Object.schema_objects.
+
+error_on_pipe(Name) :-
+    (   re_match('\\|', Name)
+    ->  throw(error(syntax_error('This name has a pipe!',
+                                 Name)))
+    ;   true).
+
+/**
+ * user_database_name(User,DB,Name) is det.
+ *
+ */
+user_database_name(User,DB,Name) :-
+    freeze(User,error_on_pipe(User)),
+    freeze(DB,error_on_pipe(DB)),
+    merge_separator_split(Name,'|',[User,DB]).

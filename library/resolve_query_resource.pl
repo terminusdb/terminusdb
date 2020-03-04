@@ -204,6 +204,7 @@ resolve_graph_resource(URI,Descriptor) :-
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
 
+    % TODO: This doesn't yet exist in this form!
     Descriptor = repo_graph{
                      database_name : Database_Name,
                      repository_name : Resource_Dict.repo,

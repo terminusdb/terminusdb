@@ -307,11 +307,11 @@ resolve(X,X) -->
         atom(X)
     },
     !.
+% Questionable! How can this be a number!
 resolve(X,X) -->
     {
-        number(X)
-    },
-    !.
+        throw(error('How did we get here?'))
+    }.
 
 
 /*
@@ -510,6 +510,7 @@ woql_equal(AE,BE) :-
     nonvar(AE),
     nonvar(BE),
     % Probably strictly should check subsumption
+    % TODO: Lang!!! Foo@Bar
     AE = Y^^_T1,
     BE = Y^^_T2,
     !.
@@ -728,8 +729,7 @@ compile_wf(t(X,P,Y),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
-        Goal_List = [not_literal(XE),not_literal(PE),Search],
-        list_conjunction(Goal_List,Goal)
+        Goal = (not_literal(XE),not_literal(PE),Search)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
     resolve(X,XE),
@@ -756,7 +756,7 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     {
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
-compile_wf((A => B),Goal) -->
+compile_wf(when(A,B),Goal) -->
     view(default_collection,Default_Collection),
     compile_wf(A,ProgA),
     update(transaction_objects,Transaction_Objects,New_Transaction_Objects),
@@ -926,6 +926,7 @@ compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
     mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
 compile_wf(into(G,S),Goal) -->
+    % TODO: Resolve G to descriptor
     % swap in new graph
     update(write_graph,OG,G),
     compile_wf(S,Goal),
@@ -1001,6 +1002,7 @@ compile_wf(lower(S,A),(literally(SE,SL),string_lower(SL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
+    % TODO: You can execute an arbitrary goal!!!!
     resolve(X,XE),
     mapm(resolve,L,LE).
 compile_wf(X is Arith, (Pre_Term,

@@ -67,8 +67,8 @@ key_user(Key, DB, User_ID) :-
     ask(DB,
         select([User_ID],
 		       (
-			       t( User_ID , rdf/type , terminus/'User' ),
-			       t( User_ID , terminus/user_key_hash, Hash^^_ )
+			       t( User_ID , rdf:type , terminus:'User' ),
+			       t( User_ID , terminus:user_key_hash, Hash^^_ )
 		       )
 	          )
        ),
@@ -112,8 +112,8 @@ user_auth_id(User_ID, DB, Auth_ID) :-
     ask(DB,
         select([Auth_ID],
 		       (
-			       t( User_ID , rdf/type , terminus/'User' ),
-			       t( User_ID , terminus/authority, Auth_ID )
+			       t( User_ID , rdf:type , terminus:'User' ),
+			       t( User_ID , terminus:authority, Auth_ID )
 		       )
 	          )
        ).
@@ -127,9 +127,9 @@ user_action(User,Action) :-
     ask(DB,
         select([Action],
 		       (
-			       t( User , rdf/type , terminus/'User' ),
-			       t( User , terminus/authority, Auth ),
-			       t( Auth , terminus/action, Action)
+			       t( User , rdf:type , terminus:'User' ),
+			       t( User , terminus:authority, Auth ),
+			       t( Auth , terminus:action, Action)
 		       )
 	          )
        ).
@@ -143,12 +143,10 @@ user_action(User,Action) :-
  */
 auth_action_scope(Auth, DB, Action, Resource_ID) :-
     ask(DB,
-	    where(
-            (
-                t(Auth, terminus/action, Action),
-                t(Auth, terminus/authority_scope, Scope),
-                t(Scope, terminus/id, Resource_ID ^^ (xsd/anyURI))
-            )
+	    (
+            t(Auth, terminus:action, Action),
+            t(Auth, terminus:authority_scope, Scope),
+            t(Scope, terminus:id, Resource_ID ^^ (xsd:anyURI))
         )
 	   ).
 
@@ -191,12 +189,12 @@ add_database_resource(DB_Name,URI,Doc) :-
     terminus_database_name(Collection),
     connect(Collection, DB),
     ask(DB,
-	    (
-            true
-        =>
-            insert(doc/server, terminus/resource_includes, doc/DB_Name),
-            insert(doc/DB_Name, terminus/id, URI^^(xsd/anyURI)),
-            update_object(doc/DB_Name,Ext)
+	    when(
+            true,
+            (   insert(doc:server, terminus:resource_includes, doc:DB_Name),
+                insert(doc:DB_Name, terminus:id, URI^^(xsd:anyURI)),
+                update_object(doc:DB_Name,Ext)
+            )
         )
        ).
 
@@ -216,16 +214,13 @@ delete_database_resource(URI) :-
     connect(Collection, DB),
     % delete the object
     ask(DB,
-        (   t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
+        when(
             (
-                where(
-                    (
-                        t(DB_URI, terminus/id, URI^^(xsd/anyURI)),
-                        t(DB_URI, rdf/type, terminus/'Database')
-                    ))
-            =>
-                delete_object(DB_URI))
-        )).
+                t(DB_URI, terminus:id, URI^^(xsd:anyURI)),
+                t(DB_URI, rdf:type, terminus:'Database')
+            ),
+            delete_object(DB_URI))
+        ).
 
 /*
  * write_cors_headers(Resource_URI) is det.
@@ -236,10 +231,8 @@ write_cors_headers(Resource_URI, DB) :-
     % delete the object
     findall(Origin,
             ask(DB,
-                where(
-                    (   t(Internal_Resource_URI, terminus/id, Resource_URI^^(xsd/anyURI)),
-                        t(Internal_Resource_URI, terminus/allow_origin, Origin^^(xsd/string))
-                    )
+                (   t(Internal_Resource_URI, terminus:id, Resource_URI^^(xsd:anyURI)),
+                    t(Internal_Resource_URI, terminus:allow_origin, Origin^^(xsd:string))
                 )),
             Origins),
     current_output(Out),

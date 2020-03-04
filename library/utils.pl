@@ -374,6 +374,12 @@ pattern_string_split(Pattern,String,List) :-
     once(intersperse(_,List,L)).
 
 /*
+ * escape_pcre(String,Escaped) is det.
+ */
+escape_pcre(String, Escaped) :-
+    re_replace('[-[\\]{}()*+?.,\\\\^$|#\\s]'/g, '\\\\0', String, Escaped).
+
+/*
  * merge_separator_split(+Merge, +Separator,-Split) is det.
  * merge_separator_split(-Merge, +Separator,+Split) is det.
  *
@@ -390,7 +396,8 @@ merge_separator_split(Merge, Separator, Split) :-
     atomic_list_concat(Merge_List, Merge).
 merge_separator_split(Merge, Separator, Split) :-
     ground(Merge),
-    pattern_string_split(Separator, Merge, Split_Strings),
+    escape_pcre(Separator, Escaped),
+    pattern_string_split(Escaped, Merge, Split_Strings),
     maplist(atom_string, Split, Split_Strings).
 
 /*
