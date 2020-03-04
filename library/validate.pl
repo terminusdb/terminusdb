@@ -48,6 +48,7 @@
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
  *
  * validation_obj { descriptor: collection_descriptor,
+ *                  <parent>: transaction_obj % we still keep it a transaction obj and transform it later
  *                  instance_objects: list(graph_validation_obj)
  *                  schema_objects: list(graph_validation_obj)
  *                  inference_objects: list(graph_validation_obj)
@@ -56,12 +57,10 @@
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, Map) :-
     memberchk(Read_Write_Obj=Graph_Validation_Obj, Map),
     !.
-
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, [Read_Write_Obj=Graph_Validation_Obj|Map]) :-
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
                                      write: Layer_Builder },
-
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: New_Layer,
                                                  changed: Changed },
@@ -76,38 +75,104 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
                        instance_objects: Instance_Objects,
                        schema_objects: Schema_Objects,
                        inference_objects: Inference_Objects} :< Transaction_Object,
-
-    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
-         Instance_Objects,
-         Validation_Instance_Objects,
-         Map,
-         Map_1),
-    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
-         Schema_Objects,
-         Validation_Schema_Objects,
-         Map_1,
-         Map_2),
-    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
-         Inference_Objects,
-         Validation_Inference_Objects,
-         Map_2,
-         New_Map),
-    !, % TODO: mapm is leaving choice points. should it?
-
     Intermediate_Validation_Object = validation_object{
                                          descriptor: Descriptor,
                                          instance_objects: Validation_Instance_Objects,
                                          schema_objects: Validation_Schema_Objects,
                                          inference_objects: Validation_Inference_Objects
                                      },
-
+    (   Parent = Transaction_Object.get(parent),
+    ->  transaction_object_to_validation_object(Parent, Parent_Validation_Object, Map, Map_1),
+        Intermediate_Validation_Object_1 = Intermediate_Validation_Object.put(parent, Parent)
+    ;   Intermediate_Validation_Object_1 = Intermediate_Validation_Object
+    ),
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Instance_Objects,
+         Validation_Instance_Objects,
+         Map_1,
+         Map_2),
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Schema_Objects,
+         Validation_Schema_Objects,
+         Map_2,
+         Map_3),
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Inference_Objects,
+         Validation_Inference_Objects,
+         Map_3,
+         New_Map),
     (   Commit_Info = Transaction_Object.get(commit_info)
-    ->  Validation_Object = Intermediate_Validation_Object.put(commit_info, Commit_Info)
-    ;   Validation_Object = Intermediate_Validation_Object).
+    ->  Validation_Object = Intermediate_Validation_Object_1.put(commit_info, Commit_Info)
+    ;   Validation_Object = Intermediate_Validation_Object_1).
+
 
 commit_validation_object(Validation_Object) :-
     validation_object{
+        descriptor: Descriptor,
+        instance_objects: [Instance_Object]
+    } :< Validation_Object,
+    terminus_descriptor{
+    } = Descriptor,
+    !,
+    terminus_instance_name(Label),
+    % This is okay for now, since we don't want the
+    % schema to be changed in WOQL queries
+    (   Instance_Object.changed = true
+    ->  storage(Store),
+        safe_open_named_graph(Store, Label, Graph),
+        nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object) :-
+    validation_object{
         descriptor: Descriptor
+        instance_objects: [Instance_Object]
+    } :< Validation_Object,
+   database_descriptor{
+        database_name: Database_Name
+    } = Descriptor,
+    !,
+    % super simple case, we just need to set head
+    % That is, we don't need to check the schema
+    (   Instance_Object.changed = true
+    ->  storage(Store),
+        % The label is the same as the same as the database_name
+        % therefore we can just open it
+        safe_open_named_graph(Store, Database_Name, Graph),
+        nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object) :-
+    validation_object{
+        descriptor: Descriptor,
+        instance_objects: [Instance_Object],
+        parent: Parent_Transaction
+    } :< Validation_Object,
+    repository_descriptor{
+        database_descriptor: Descriptor,
+        repository_name: Repo_Name
+    } = Descriptor,
+    layer_to_id(Instance_Object.read, Layer_ID),
+    once(ask(Parent_Transaction,
+        (   t(URI, repository:repository_name, Repo_Name^^xsd:string),
+            t(URI, repository:repository_head, ExistingRepositoryHead),
+            t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
+            delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
+            delete(URI, repository:repository_head, ExistingRepositoryHead),
+            idgen(layer:'ShadowLayer', [Layer_ID], NewShadowLayerID),
+            insert(NewShadowLayerID, rdf:type, layer:'ShadowLayer'),
+            insert(NewShadowLayerID, layer:shadow_layer, Layer_ID^^xsd:string)
+        )
+       )
+     ),
+    
+    (   Instance_Object.changed = true
+    ->  storage(Store),
+        safe_open_named_graph(Store, Label, Graph),
+        nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+    !.
+commit_validation_object(Validation_Object) :-
+    validation_object{
+        descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
     label_descriptor{
@@ -118,9 +183,11 @@ commit_validation_object(Validation_Object) :-
     % That is, assuming anything changed
     (   Instance_Object.changed = true
     ->  storage(Store),
-        open_named_graph(Store, Label, Graph),
+        safe_open_named_graph(Store, Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
+
+
 
 % Required for consistency
 pre_test_schema(class_cycle_SC).
