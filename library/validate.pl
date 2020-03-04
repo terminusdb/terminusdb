@@ -44,6 +44,84 @@
 % For debugging
 :- use_module(library(http/http_log)).
 
+/*
+ * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
+ *
+ * validation_obj { descriptor: collection_descriptor,
+ *                  instance_objects: list(graph_validation_obj)
+ *                  schema_objects: list(graph_validation_obj)
+ *                  inference_objects: list(graph_validation_obj)
+ */
+
+read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, Map) :-
+    memberchk(Read_Write_Obj=Graph_Validation_Obj, Map),
+    !.
+
+read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, [Read_Write_Obj=Graph_Validation_Obj|Map]) :-
+    Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
+                                     read: Layer,
+                                     write: Layer_Builder },
+
+    Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
+                                                 read: New_Layer,
+                                                 changed: Changed },
+    (   var(Layer_Builder)
+    ->  New_Layer = Layer,
+        Changed = false
+    ;   nb_commit(Layer_Builder, New_Layer),
+        Changed = true).
+
+transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
+    transaction_object{descriptor: Descriptor,
+                       instance_objects: Instance_Objects,
+                       schema_objects: Schema_Objects,
+                       inference_objects: Inference_Objects} :< Transaction_Object,
+
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Instance_Objects,
+         Validation_Instance_Objects,
+         Map,
+         Map_1),
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Schema_Objects,
+         Validation_Schema_Objects,
+         Map_1,
+         Map_2),
+    mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
+         Inference_Objects,
+         Validation_Inference_Objects,
+         Map_2,
+         New_Map),
+    !, % TODO: mapm is leaving choice points. should it?
+
+    Intermediate_Validation_Object = validation_object{
+                                         descriptor: Descriptor,
+                                         instance_objects: Validation_Instance_Objects,
+                                         schema_objects: Validation_Schema_Objects,
+                                         inference_objects: Validation_Inference_Objects
+                                     },
+
+    (   Commit_Info = Transaction_Object.get(commit_info)
+    ->  Validation_Object = Intermediate_Validation_Object.put(commit_info, Commit_Info)
+    ;   Validation_Object = Intermediate_Validation_Object).
+
+commit_validation_object(Validation_Object) :-
+    validation_object{
+        descriptor: Descriptor
+        instance_objects: [Instance_Object]
+    } :< Validation_Object,
+    label_descriptor{
+        label: Label
+    } = Descriptor,
+    !,
+    % super simple case, we just need to set head
+    % That is, assuming anything changed
+    (   Instance_Object.changed = true
+    ->  storage(Store),
+        open_named_graph(Store, Label, Graph),
+        nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+
 % Required for consistency
 pre_test_schema(class_cycle_SC).
 pre_test_schema(property_cycle_SC).

@@ -34,6 +34,7 @@
  * A ref_graph is a layer id that can be resolved to a graph.
  *
  * collection_descriptor --> terminus_descriptor{}
+ *                         | label_descriptor{ label: string }
  *                         | database_descriptor{ database_name : uri }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
  *                                                  repository_name : uri }
@@ -62,7 +63,7 @@
  * all of these cases. However, *write* transactions have to be done differently on each of
  * these by case, though triple writes can be done identically.
  *
- * read_write_obj ---> read_obj{ descriptor : graph_descriptor, read : Layer, write: Var_Or_Layer_Builder}
+ * read_write_obj ---> read_write_obj{ descriptor : graph_descriptor, read : Layer, write: Var_Or_Layer_Builder}
  *
  * transaction_object ---> transaction_object{ descriptor : collection_descriptor,
  *                                 <parent : transaction_object>, % except for database/terminus descriptors
@@ -102,7 +103,7 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     !,
     storage(Store),
     safe_open_named_graph(Store, Name, Graph),
-    head(Graph, Layer).
+    ignore(head(Graph, Layer)).
 graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     Descriptor = id_graph{ layer_id: Layer_Id },
     !,
@@ -124,6 +125,7 @@ graph_descriptor_to_layer(Descriptor,
     Repo_Descriptor = repo_graph{ database_name: Database_Name},
     graph_descriptor_to_layer(Repo_Descriptor, Repository_Layer, Map, New_Map),
     repo_layer_name_to_ref_layer_id(Repository_Layer, Repository_Name, Commit_Layer_Id),
+    storage(Store),
     store_id_layer(Store, Commit_Layer_Id, Layer).
 graph_descriptor_to_layer(Descriptor,
                           Layer,
@@ -145,8 +147,20 @@ open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: La
     graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
 
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
-    var(Read_Write_Obj.write),
+    ground(Read_Write_Obj.write),
     !,
+    Layer_Builder = Read_Write_Obj.write.
+
+
+read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
+    var(Read_Write_Obj.read),
+    !,
+
+    storage(Store),
+    open_write(Store, Read_Write_Obj.write),
+    Layer_Builder = Read_Write_Obj.write.
+
+read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     open_write(Read_Write_Obj.read, Read_Write_Obj.write),
     Layer_Builder = Read_Write_Obj.write.
 
@@ -197,6 +211,23 @@ open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
                              schema_objects : [Schema_Object],
                              inference_objects : [Inference_Object]
                          }.
+open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+                 [Descriptor=Transaction_Object|Map_1]) :-
+    label_descriptor{
+        label: Label
+    } = Descriptor,
+    !,
+
+    Graph_Descriptor = labelled_graph{ name: Label },
+    open_read_write_obj(Graph_Descriptor, Read_Write_Obj, Map, Map_1),
+
+    Transaction_Object = transaction_object{
+                             descriptor: Descriptor,
+                             instance_objects: [Read_Write_Obj],
+                             schema_objects: [],
+                             inference_objects: []
+                         }.
+
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_3]) :-
     database_descriptor{
