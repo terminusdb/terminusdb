@@ -756,55 +756,9 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     {
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
-compile_wf(when(A,B),Goal) -->
-    view(default_collection,Default_Collection),
+compile_wf(when(A,B),forall(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
-    update(transaction_objects,Transaction_Objects,New_Transaction_Objects),
-    % This second one should be simpler, to reflect that only writes are allowed on the right.
-    compile_wf(B,ProgB),
-    % This definitely needs to be a collection of all actual graphs written to...
-    % should be easy to extract from B
-    view(default_output_graph,Default_Output_Graph),
-    {
-        % TODO: Active writes, active reads need to be separated.
-        debug(terminus(woql_compile(compile_wf)), 'Default_Collection: ~q', [Default_Collection]),
-        % We want to choose schema free transactions whenever possible.
-        (   Changed_Schemata = []
-        ->  Goal = (
-                validate:instance_transaction(
-                             Default_Collection,
-                             UpdateDB,
-                             Write_Graphs,
-                             woql_compile:(
-                                 forall(ProgA,
-                                        ProgB)
-                             ),
-                             Witnesses),
-                (   Witnesses = []
-                ->  true
-                ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                          'terminus:witnesses' : Witnesses})))
-                )
-            )
-        ;   Goal = (
-                validate:instance_schema_transaction(
-                             Default_Collection,
-                             UpdateDB,
-                             Write_Graphs,
-                             woql_compile:(
-                                 forall(ProgA,
-                                        ProgB)
-                             ),
-                             Witnesses),
-                (   Witnesses = []
-                ->  true
-                ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                          'terminus:witnesses' : Witnesses})))
-                )
-            )
-        )
-    },
-    update(default_collection,_,Default_Collection).
+    compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).

@@ -373,13 +373,13 @@ pattern_string_split(Pattern,String,List) :-
     re_split(Pattern,String,L),
     once(intersperse(_,List,L)).
 
-/*
+/**
  * escape_pcre(String,Escaped) is det.
  */
 escape_pcre(String, Escaped) :-
     re_replace('[-[\\]{}()*+?.,\\\\^$|#\\s]'/g, '\\\\0', String, Escaped).
 
-/*
+/**
  * merge_separator_split(+Merge, +Separator,-Split) is det.
  * merge_separator_split(-Merge, +Separator,+Split) is det.
  *
@@ -400,7 +400,7 @@ merge_separator_split(Merge, Separator, Split) :-
     pattern_string_split(Escaped, Merge, Split_Strings),
     maplist(atom_string, Split, Split_Strings).
 
-/*
+/**
  * foldm(P:predicate,L:list,Zero:any,S0:any,SN:any) is det.
  *
  * Monadic fold over state
