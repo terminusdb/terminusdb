@@ -412,23 +412,25 @@ foldm(P,[H|T],Base,Result,S0,SN) :-
     call(P,H,LastResult,Result,S1,SN).
 
 /*
- * mapm(P:predicate,L:list,O:list,S0:any,SN:any) is det.
+ * mapm(P:predicate,L:list,O:list,S0:any,SN:any) is nondet.
  *
  * Monadic map over state
  */
 :- meta_predicate mapm(4,?,?,?,?).
-mapm(_P,[],[],S,S).
+mapm(_P,[],[],S,S) :-
+    !.
 mapm(P,[H|T],[HP|TP],S0,SN) :-
     call(P,H,HP,S0,S1),
     mapm(P,T,TP,S1,SN).
 
 /*
- * mapm(P:predicate,L:list,O:list,M:list,S0:any,SN:any) is det.
+ * mapm(P:predicate,L:list,O:list,M:list,S0:any,SN:any) is nondet.
  *
  * Monadic map over state
  */
 :- meta_predicate mapm(5,?,?,?,?,?).
-mapm(_P,[],[],[],S,S).
+mapm(_P,[],[],[],S,S) :-
+    !.
 mapm(P,[H|T],[HP|TP],[HM|TM],S0,SN) :-
     call(P,H,HP,HM,S0,S1),
     mapm(P,T,TP,TM,S1,SN).
