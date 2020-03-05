@@ -100,9 +100,9 @@ create_schema(DB_URI,Schema,DB) :-
     global_prefix_expand(rdfs:label, Rdfs_label),
     global_prefix_expand(rdfs:comment, Rdfs_comment),
     global_prefix_expand(owl:'Ontology', OWL_ontology),
-    insert(DB, Schema, DB_URI, Rdf_type, OWL_ontology),
-    insert(DB, Schema, DB_URI, Rdfs_label, Label@en),
-    insert(DB, Schema, DB_URI, Rdfs_comment, Comment@en).
+    insert(Schema, DB_URI, Rdf_type, OWL_ontology),
+    insert(Schema, DB_URI, Rdfs_label, Label@en),
+    insert(Schema, DB_URI, Rdfs_comment, Comment@en).
 
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(

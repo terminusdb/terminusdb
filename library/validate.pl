@@ -312,12 +312,12 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
             forall(
                 (   xrdf([Schema], A_Old, B_Old, C_Old),
                     \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
-                delete(Update_DB,Schema,A_Old,B_Old,C_Old)
+                delete(Schema,A_Old,B_Old,C_Old)
             ),
             forall(
                 (   xrdf_db(Layer,A_New,B_New,C_New),
                     \+ xrdf([Schema], A_New, B_New, C_New)),
-                insert(Update_DB,Schema,A_New,B_New,C_New)
+                insert(Schema,A_New,B_New,C_New)
             )
         ),
         % Post conditions

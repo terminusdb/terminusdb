@@ -672,23 +672,25 @@ compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
 compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
-compile_wf(delete(WG,X,P,Y),delete(DB,WG,XE,PE,YE)) -->
+% TODO: Need to translate the reference WG to a read-write object.
+compile_wf(delete(WG,X,P,Y),delete(WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB).
-compile_wf(insert(WG,X,P,Y),insert(DB,WG,XE,PE,YE)) -->
+% TODO: Need to translate the reference WG to a read-write object.
+compile_wf(insert(WG,X,P,Y),insert(WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB).
-compile_wf(delete(X,P,Y),delete(DB,WG,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y),delete(WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
     view(write_graph,WG).
-compile_wf(insert(X,P,Y),insert(DB,WG,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y),insert(WG,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
