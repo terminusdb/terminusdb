@@ -81,10 +81,10 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
  */
 instance_class(X, Y, Database) :-
     database_instance(Database,Instance),
-    xrdf(Database,Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 instance_class(X, Y, Database) :-
     database_schema(Database,Schema), % instances can also exist in the schema
-    xrdf(Database,Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+    xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 
 % X has cardinality N at property OP
 card(X,OP,Y,Database,N) :-
@@ -246,7 +246,7 @@ refute_deletion(Database,
                 Reason) :-
     !,
     database_instance(Database,Instance),
-    \+ xrdf(Database,Instance,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',_SomeClass),
+    \+ xrdf(Instance,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',_SomeClass),
     interpolate(['The subject ',X,' has no defined class.'],Message),
     Reason = _{
                  '@type' : 'vio:UntypedInstance',
@@ -272,7 +272,7 @@ refute_deletion(Database,X,P,Y,Reason) :-
  */
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:someValuesFrom,C),
+    xrdf(Schema,CR,owl:someValuesFrom,C),
     forall(inferredEdge(X,P,Y,Database),
            (   \+ refute_node_at_range(Database,Y,C,_Reason)
            )),
@@ -286,7 +286,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:allValuesFrom,C),
+    xrdf(Schema,CR,owl:allValuesFrom,C),
     inferredEdge(X,P,Y,Database),
     refute_node_at_range(Database,Y,C,Reason),
     interpolate(['Some values not from restriction class: ',CR],Msg),
@@ -300,7 +300,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     M < N, atom_number(A,M),
@@ -315,7 +315,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N < M, atom_number(A,M),
@@ -330,7 +330,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N \= M, atom_number(A,M),
@@ -345,8 +345,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
     M < N, atom_number(A,M),
@@ -362,8 +362,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
     N < M, atom_number(A,M),
@@ -379,8 +379,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,N),
     N \= M, atom_number(A,M),
@@ -396,7 +396,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:hasValue,V),
+    xrdf(Schema,CR,owl:hasValue,V),
     inferredEdge(X,P,Y,Database),
     Y \= V,
     interpolate(['Wrong value on restriction: ',CR],Msg),
@@ -417,7 +417,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_functional_property(X,P,Y,Database,Reason) :-
     functional_property(P,Database),
     database_instance(Database,Instance),
-    xrdf(Database,Instance,X,P,_),
+    xrdf(Instance,X,P,_),
     card(X,P,_,Database,N),
     N \= 1,
     interpolate(['Functional Property ',P,' is not functional.'],Message),
@@ -437,7 +437,7 @@ refute_functional_property(X,P,Y,Database,Reason) :-
 refute_inverse_functional_property(X,P,Y,Database,Reason) :-
     database_instance(Database,Instance),
     inverse_functional_property(P,Database),
-    xrdf(Database,Instance,_,P,Y),
+    xrdf(Instance,_,P,Y),
     card(_,P,Y,Database,N),
     N \= 1,
     interpolate(['Inverse Functional Property ',P,' is not inverse functional.'],Message),

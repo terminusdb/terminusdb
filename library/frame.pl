@@ -95,13 +95,13 @@ get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Document,LabelProp,Label@_),
+    xrdf(Instance,Document,LabelProp,Label@_),
     !.
 get_label(Document,Database,Label) :-
     database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
-    xrdf(Collection,Instance,Document,LabelProp,Label@_),
+    xrdf(Instance,Document,LabelProp,Label@_),
     !.
 
 get_some_label(E,Database,L) :-
@@ -118,7 +118,7 @@ get_some_label(E,Database,L) :-
 all_document_instances(Database,AE) :-
     database_instance(Database,Instance),
     unique_solutions(E=[type=C,label=L],
-                     (   xrdf(Database,Instance,
+                     (   xrdf(Instance,
                               E,rdf:type,C),
                          schema_util:document(C,Database),
                          get_some_label(E,Database,L)),
@@ -127,7 +127,7 @@ all_document_instances(Database,AE) :-
 all_document_iris(Database, IRIs) :-
     database_instance(Database, Instance),
     findall(IRI,
-            (   xrdf(Database,Instance,
+            (   xrdf(Instance,
                      IRI,rdf:type,C),
                 schema_util:document(C, Database)
             ),
@@ -162,7 +162,7 @@ class_properties(Class, Database, PropertiesPrime) :-
         append(MSProperties,DocumentProperties,PropertiesWithAbstract),
         database_schema(Database,Schema),
         exclude({Schema,Database}/[X]>>(
-                    xrdf(Database,
+                    xrdf(
                          Schema,
                          X,tcs:tag,tcs:abstract)),
                 PropertiesWithAbstract,
@@ -185,49 +185,49 @@ has_formula(Class,Database) :-
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:someValuesFrom,C).
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:someValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:allValuesFrom,C).
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:allValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:minCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:minCardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:maxCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:maxCardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:cardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:cardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:minQualifiedCardinality,CardStr^^_),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:minQualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:qualifiedCardinality,CardStr^^_),
-    xrdf(Database,Schema,CR,owl:onClass,C),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:qualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Database,Schema,CR,owl:onProperty,OP),
-    xrdf(Database,Schema,CR,owl:hasValue,V).
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:hasValue,V).
 
 % ignore modeline
 % is_class_formula(+Formula:any) is semidet.
@@ -364,7 +364,7 @@ classes_below(Class,Database,BelowList) :-
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
-                xrdf(Database, Schema,
+                xrdf(Schema,
                      X,tcs:tag,tcs:abstract)),
             ClassesNoBottom,
             BelowList).
@@ -816,7 +816,7 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Ty
     database_instance(Database,G),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(Database,G,Elt,RDFType,Type),
+    xrdf(G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
@@ -838,7 +838,7 @@ realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,
     database_instance(Database,G),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(Database,G,Elt,RDFType,Type),
+    xrdf(G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     (   setof((C,G,Elt,Prop,V),
@@ -978,7 +978,7 @@ object_instance_graph(URI,Database,I) :-
     database_instance(Database,Instance),
     member(I,Instance),
     % Defo exists here.
-    (   xrdf(Database,[I],URI,rdf:type,_)
+    (   xrdf([I],URI,rdf:type,_)
     ->  true).
 object_instance_graph(JSON,Database,I) :-
     is_dict(JSON),

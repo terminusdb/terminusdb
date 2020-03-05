@@ -29,17 +29,17 @@
 :- dynamic user:goal_expansion/2.
 
 % xrdf/5
-user:goal_expansion(xrdf(DB,G,A,Y,Z),xrdf(DB,G,X,Y,Z)) :-
+user:goal_expansion(xrdf(G,A,Y,Z),xrdf(G,X,Y,Z)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(xrdf(DB,G,X,B,Z),xrdf(DB,G,X,Y,Z)) :-
+user:goal_expansion(xrdf(G,X,B,Z),xrdf(G,X,Y,Z)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(xrdf(DB,G,X,Y,C),xrdf(DB,G,X,Y,Z)) :-
+user:goal_expansion(xrdf(G,X,Y,C),xrdf(G,X,Y,Z)) :-
     nonvar(C),
     C \= literal(_),
     global_prefix_expand(C,Z).
-user:goal_expansion(xrdf(DB,G,X,Y,literal(L)),xrdf(DB,G,X,Y,Object)) :-
+user:goal_expansion(xrdf(G,X,Y,literal(L)),xrdf(G,X,Y,Object)) :-
     nonvar(L),
     literal_expand(literal(L),Object).
 

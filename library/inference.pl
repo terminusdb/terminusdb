@@ -41,7 +41,7 @@ runChain(X,[P],Y,Database) :-
     inferredEdge(X,P,Y,Database).
 runChain(X,[P|PropList],Z,Database) :-
     database_instance(Database,I),
-    xrdf(Database,I,X,P,Y),
+    xrdf(I,X,P,Y),
     runChain(Y,PropList,Z,Database).
 
 /**
@@ -52,7 +52,7 @@ runChain(X,[P|PropList],Z,Database) :-
  */
 inferredTransitiveEdge(X,OP,Z,Database) :-
     database_inference(Database,Inference),
-    xrdf(Database, Inference,
+    xrdf(Inference,
          SOP,rdfs:subPropertyOf,OP),
     inferredEdge(X,SOP,Y,Database),
     inferredEdge(Y,OP,Z,Database).
@@ -66,25 +66,25 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  */
 inferredEdge(X,OP,Y,Database) :-
     database_instance(Database,Instance),
-    xrdf(Database,Instance,X,OP,Y).
+    xrdf(Instance,X,OP,Y).
 inferredEdge(_,_,_,Database) :-
     database_inference(Database,[]),
     !,
     fail.
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
-    xrdf(Database,Inference,OP,rdf:type,owl:'TransitiveProperty'),
+    xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),
     inferredTransitiveEdge(X,OP,Y,Database).
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
-    xrdf(Database,Inference,OP,owl:'inverseOf',P),
+    xrdf(Inference,OP,owl:'inverseOf',P),
     inferredEdge(Y,P,X,Database).
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
-    xrdf(Database,Inference,OP,owl:propertyChainAxiom,ListObj),
+    xrdf(Inference,OP,owl:propertyChainAxiom,ListObj),
     collect(Database,Inference,ListObj,PropList),
     runChain(X,PropList,Y,Database).
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
-    xrdf(Database,Inference,SOP,rdfs:subPropertyOf,OP),
+    xrdf(Inference,SOP,rdfs:subPropertyOf,OP),
     inferredEdge(X,SOP,Y,Database).

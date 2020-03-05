@@ -201,14 +201,14 @@ xrdf_deleted(G,X,Y,Z) :-
     storage_object(S,Z).
 
 /**
- * xrdf(+Graphs:list(read_write_objs),?Subject,?Predicate,?Object) is nondet.
+ * xrdf(?Subject,?Predicate,?Object) is nondet.
  *
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
  * WARNING: Collection is now unused!
  */
-xrdf(Gs,X,Y,Z) :-
+xrdf(X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
     xrdf_db(G.read,X,Y,Z).

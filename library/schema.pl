@@ -51,7 +51,7 @@ compile_schema_type_to_module(Database, Schema, Namespace, Type, Module) :-
     capitalize(Type, Capitalized_Type),
     global_prefix_expand(Namespace:Capitalized_Type, Prefixed_Type),
     global_prefix_expand(rdf:type, RDF_TYPE),
-    forall(xrdf(Database, Schema, Thing, RDF_TYPE, Prefixed_Type),
+    forall(xrdf(Schema, Thing, RDF_TYPE, Prefixed_Type),
            (   X =.. [Type, Thing],
                asserta(Module:X))).
 
@@ -71,7 +71,7 @@ compile_schema_types_to_module(Database, Schema, Module) :-
 compile_schema_basic_property_to_module(Database, Schema, Property_Namespace, Property_Name, Module) :-
     Module:dynamic(Property_Name/2),
     forall((   global_prefix_expand(Property_Namespace:Property_Name,Prop),
-               xrdf(Database, Schema, Subject, Prop, Object)),
+               xrdf(Schema, Subject, Prop, Object)),
            (   X =.. [Property_Name, Subject, Object],
                asserta(Module:X))).
 
@@ -92,16 +92,16 @@ rdf_prolog_list(Database, Database_Id, Object, [Head|Tail]) :-
     global_prefix_expand(rdf:first,RDF_First),
     global_prefix_expand(rdf:rest,RDF_Rest),
     global_prefix_expand(rdf:nil,RDF_Nil),
-    once(xrdf(Database, Database_Id, Object, RDF_First, Head)),
-    (   once(xrdf(Database, Database_Id, Object, RDF_Rest, RDF_Nil))
+    once(xrdf(Database_Id, Object, RDF_First, Head)),
+    (   once(xrdf(Database_Id, Object, RDF_Rest, RDF_Nil))
     ->  Tail=[]
-    ;   once(xrdf(Database, Database_Id, Object, RDF_Rest, Rest)),
+    ;   once(xrdf(Database_Id, Object, RDF_Rest, Rest)),
         rdf_prolog_list(Database, Database_Id, Rest, Tail)).
 
 compile_schema_list_property_to_module(Database, Schema, Namespace, Property, Module) :-
     Module:dynamic(Property/2),
     global_prefix_expand(Namespace:Property,Prop),
-    forall(xrdf(Database, Schema, Subject, Prop, Object),
+    forall(xrdf(Schema, Subject, Prop, Object),
            (   rdf_prolog_list(Database, Schema, Object, Options),
                X =.. [Property, Subject, Options],
                asserta(Module:X))).
