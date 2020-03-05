@@ -141,24 +141,22 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
                   'terminus:message' : "import_graph/3 is unimplemented"})).
 
 /**
- * insert(+DB:atom,+G:graph_identifier,+Builder,+X,+Y,+Z) is det.
+ * insert(+G:read_write_obj,+X,+Y,+Z) is det.
  *
  * Insert triple into transaction layer
  */
-insert(DB,G,X,Y,Z) :-
+insert(G,X,Y,Z) :-
     object_storage(Z,S),
-    get_write_builder(DB,G,Builder),
-    ignore(nb_add_triple(Builder, X, Y, S)).
+    ignore(nb_add_triple(G.write, X, Y, S)).
 
 /**
- * delete(+DB,+G,+Builder,+X,+Y,+Z) is det.
+ * delete(+G,+Builder,+X,+Y,+Z) is det.
  *
  * Delete quad from transaction predicates.
  */
-delete(DB,G,X,Y,Z) :-
+delete(G,X,Y,Z) :-
     object_storage(Z,S),
-    get_write_builder(DB,G,Builder),
-    ignore(nb_remove_triple(Builder,X,Y,S)).
+    ignore(nb_remove_triple(G.write, X, Y, S)).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
@@ -169,50 +167,48 @@ new_triple(X,Y,_,object(Z2),X,Y,Z2).
  *
  * Update transaction graphs
  */
-update(DB,G,X,Y,Z,Action) :-
-    delete(DB,G,X,Y,Z),
+update(G,X,Y,Z,Action) :-
+    delete(G,X,Y,Z),
     new_triple(X,Y,Z,Action,X1,Y1,Z1),
-    insert(DB,G,X1,Y1,Z1).
+    insert(G,X1,Y1,Z1).
 
 /*
- * xrdf_added(+DB:database,+G:graph_identifier,+X,+Y,+Z) is nondet.
+ * xrdf_added(+G:read_write_obj,+X,+Y,+Z) is nondet.
  *
  * Query exactly the current layer (and no deeper) for added triples.
  */
-xrdf_added(DB,G,X,Y,Z) :-
-    get_read_layer(DB,G,L),
+xrdf_added(G,X,Y,Z) :-
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_addition(L,A,B,S),
+    triple_addition(G.read,A,B,S),
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
 
 /*
- * xrdf_deleted(+DB:database,+G:graph_identifier,+X,+Y,+Z) is nondet.
+ * xrdf_deleted(+G:read_write_obj,+X,+Y,+Z) is nondet.
  *
  * Query exactly the current layer (and no deeper) for deleted triples.
  */
-xrdf_deleted(DB,G,X,Y,Z) :-
-    get_read_layer(DB,G,L),
+xrdf_deleted(G,X,Y,Z) :-
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_removal(L,A,B,S),
+    triple_removal(G.read,A,B,S),
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
 
 /**
- * xrdf(+Collection,+Graphs:list(read_write_objs),?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Graphs:list(read_write_objs),?Subject,?Predicate,?Object) is nondet.
  *
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
  * WARNING: Collection is now unused!
  */
-xrdf(_Database,Gs,X,Y,Z) :-
+xrdf(Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
     xrdf_db(G.read,X,Y,Z).
