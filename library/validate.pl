@@ -151,25 +151,45 @@ commit_validation_object(Validation_Object) :-
         repository_name: Repo_Name
     } = Descriptor,
     layer_to_id(Instance_Object.read, Layer_ID),
-    once(ask(Parent_Transaction,
-        (   t(URI, repository:repository_name, Repo_Name^^xsd:string),
-            t(URI, repository:repository_head, ExistingRepositoryHead),
-            t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
-            delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
-            delete(URI, repository:repository_head, ExistingRepositoryHead),
-            idgen(layer:'ShadowLayer', [Layer_ID], NewShadowLayerID),
-            insert(NewShadowLayerID, rdf:type, layer:'ShadowLayer'),
-            insert(NewShadowLayerID, layer:shadow_layer, Layer_ID^^xsd:string)
-        )
-       )
-     ),
-    
     (   Instance_Object.changed = true
-    ->  storage(Store),
-        safe_open_named_graph(Store, Label, Graph),
-        nb_set_head(Graph, Instance_Object.read)
+    ->  once(ask(Parent_Transaction,
+                 (   t(URI, repository:repository_name, Repo_Name^^xsd:string),
+                     t(URI, repository:repository_head, ExistingRepositoryHead),
+                     t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
+                     delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
+                     delete(URI, repository:repository_head, ExistingRepositoryHead),
+                     idgen(layer:'ShadowLayer', [Layer_ID], NewShadowLayerID),
+                     insert(NewShadowLayerID, rdf:type, layer:'ShadowLayer'),
+                     insert(NewShadowLayerID, layer:shadow_layer, Layer_ID^^xsd:string)
+                 )
+                ))
     ;   true).
-    !.
+commit_validation_object(Validation_Object) :-
+    validation_object{
+        parent : Parent_Transaction,
+        descriptor: Descriptor,
+        instance_objects: Instance_Objects,
+        schema_objects: Schema_Objects,
+        inference_objects: Inference_Objects
+    } :< Validation_Object,
+
+    branch_descriptor{ repository_descriptor: Repository_Descriptor,
+                       branch_name : Branch},
+    !,
+    append([Instance_Objects,Schema_Objects,Inference_Objects],
+           Union_Objects),
+
+    atomic_list_concat(['http://terminushub.com/document/'],Branch_Base),
+    % TODO: This is where it all went wrong.
+    random_uri(ref:Branch_Name,'Commit',Commit_URI),
+    (   exists([Obj]>>(Obj.changed = true), Union_Objects)
+    ->  once(ask(Parent_Transaction,
+                 (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
+                     idgen(ref:'Commit',[],
+                 )
+                ))
+    ;   true
+    ).
 commit_validation_object(Validation_Object) :-
     validation_object{
         descriptor: Descriptor,

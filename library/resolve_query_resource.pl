@@ -98,6 +98,7 @@ resolve_query_resource(URI, Branch_Descriptor) :-
 %
 % 'http://[Server]/[User]/[Database_Name]/commits/'
 % 'http://[Server]/[User]/[Database_Name]/commits/<Repo_Name>'
+%
 resolve_query_resource(URI, Repository_Descriptor) :-
     (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<repo>)$', URI, Resource_Dict)
     ->  true
@@ -194,6 +195,7 @@ resolve_graph_resource(URI,Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/repositories/[instance]/main'
 % 'http://[Server]/[User]/[Database_Name]/repositories/<schema>'
 % 'http://[Server]/[User]/[Database_Name]/repositories/[schema]/main'
+%
 resolve_graph_resource(URI,Descriptor) :-
     (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
     ->  true
@@ -211,6 +213,9 @@ resolve_graph_resource(URI,Descriptor) :-
                      type : Resource_Dict.type,
                      name : Resource_Dict.name
                  }.
+% Terminus Graph
+%
+% 
 resolve_graph_resource(URI,Descriptor) :-
     (   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
     ->  true

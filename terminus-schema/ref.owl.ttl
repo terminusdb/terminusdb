@@ -80,7 +80,7 @@ ref:graph_layer
 
 ref:Commit
   a owl:Class ;
-  rdf:subClassOf ref:UrCommit, terminus:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
+  rdf:subClassOf terminus:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
@@ -101,7 +101,7 @@ ref:RefRestriction
   a owl:Restriction ;
   rdfs:comment "Exactly one commit"@en ;
   rdfs:label "Ref Commit restriction"@en ;
-  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
   owl:onProperty ref:ref_commit .
 
 ref:Tag
@@ -152,29 +152,12 @@ ref:commit_parent
   rdfs:label "parent"@en ;
   rdfs:range ref:Commit .
 
-ref:UrCommit
-  a owl:Class ;
-  rdf:subClassOf terminus:Document ;
-  rdfs:comment "This is a an object that can be a commit or nothing"@en ;
-  rdfs:label "Tag"@en .
-
-ref:NoCommit
-  a owl:Class ;
-  rdf:subClassOf ref:UrCommit ;
-  rdfs:comment "This is a an object that can be a commit or nothing"@en ;
-  rdfs:label "Tag"@en .
-
-ref:no_commit
-  a ref:NoCommit ;
-  rdfs:comment "This object is used for newly created refs which have no associated commit"@en ;
-  rdfs:label "No Commit"@en .
-
 ref:ref_commit
   a owl:ObjectProperty ;
   rdfs:comment "The commit associated with a ref"@en ;
   rdfs:domain ref:Ref ;
   rdfs:label "commit"@en ;
-  rdfs:range ref:UrCommit .
+  rdfs:range ref:Commit .
 
 ref:ref_identifier
   a owl:DatatypeProperty ;
