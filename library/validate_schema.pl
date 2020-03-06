@@ -41,7 +41,7 @@
               basetype_subsumption_of/2,
               custom_datatype/2,
               datatype/2,
-              strict_subsumption_properties_of/3,
+              strict_subsumption_property_of/3,
               orphan_property/4,
               rdf_meta_property/1,
               rdfs_property/1,
@@ -261,7 +261,7 @@ restriction_on_property(CR,P,Database) :-
 	xrdf(Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
 	restriction(CR,Database).
 restriction_on_property(CR,P,Database) :-
-	strict_subsumption_properties_of(P,Q,Database),
+	strict_subsumption_property_of(P,Q,Database),
 	restriction_on_property(CR,Q,Database).
 
 %% class_or_restriction(?X:uri_or_id, +Database:database is nondet
@@ -787,7 +787,7 @@ not_unique_property_SC(Database,Reason) :-
 %:- rdf_meta sub_property_of(r,r,o).
 sub_property_of(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X,'http://www.w3.org/2000/01/rdf-schema#sub_propertyOf',Y).
+    xrdf(Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
 
 /**
  * subsumption_properties_of(?PChild,?PParent,+Database:database is nondet.
@@ -805,20 +805,20 @@ subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Dat
     datatype_property(PC,Database).
 
 /**
- * strict_subsumption_properties_of(?PChild,?PParent,-Database:database is nondet.
+ * strict_subsumption_property_of(?PChild,?PParent,-Database:database is nondet.
  *
  * Non-reflexive subsumption relation for properties in Database.
  */
-%:- rdf_meta strict_subsumption_properties_of(r,r,o).
-strict_subsumption_properties_of(PC,PP,Database) :-
+%:- rdf_meta strict_subsumption_property_of(r,r,o).
+strict_subsumption_property_of(PC,PP,Database) :-
     sub_property_of(PC, PP, Database).
-strict_subsumption_properties_of(PC,PP,Database) :-
+strict_subsumption_property_of(PC,PP,Database) :-
     sub_property_of(PC, PZ, Database),
     subsumption_properties_of(PZ,PP,Database).
-strict_subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
+strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
     PC \= 'http://www.w3.org/2002/07/owl#top_objectProperty',
     object_property(PC,Database).
-strict_subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
+strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
     PC \= 'http://www.w3.org/2002/07/owl#top_dataProperty',
     datatype_property(PC,Database).
 
@@ -918,7 +918,7 @@ any_range('http://www.w3.org/2000/01/rdf-schema#comment','http://www.w3.org/2001
 any_range(P,R,Database) :-
     range(P,R,Database).
 any_range(P,R,Database) :-
-    strict_subsumption_properties_of(P,P2,Database),
+    strict_subsumption_property_of(P,P2,Database),
     any_range(P2,R,Database).
 any_range(OP,R,Database) :-
     database_inference(Database,Inference),
@@ -958,7 +958,7 @@ any_domain(OP,R,Database) :-
     xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     any_range(P,R,Database).
 any_domain(P,R,Database) :-
-    strict_subsumption_properties_of(P,P2,Database),
+    strict_subsumption_property_of(P,P2,Database),
     any_domain(P2,R,Database).
 
 % TODO inverse isn't enough! need to do more inference
@@ -1095,7 +1095,7 @@ invalid_range_SC(Database,Reason) :-
  */
 domain_not_subsumed_SC(Database,Reason) :-
     property(P,Database),
-    strict_subsumption_properties_of(P,P2,Database),
+    strict_subsumption_property_of(P,P2,Database),
     domain(P,D,Database), domain(P2,D2,Database), % DDD too many solutions
     %http_log_stream(Log),
     %current_output(Log),
@@ -1122,7 +1122,7 @@ domain_not_subsumed_SC(Database,Reason) :-
  */
 range_not_subsumed_SC(Database,Reason) :-
     property(P,Database),
-    strict_subsumption_properties_of(P,P2,Database),
+    strict_subsumption_property_of(P,P2,Database),
     range(P,R,Database), range(P2,R2,Database), % DDD too many solutions
     \+ subsumption_of(R, R2, Database),
     interpolate(['Invalid range on property ', P,

@@ -37,53 +37,61 @@ user:goal_expansion(xrdf(G,X,B,Z),xrdf(G,X,Y,Z)) :-
     global_prefix_expand(B,Y).
 user:goal_expansion(xrdf(G,X,Y,C),xrdf(G,X,Y,Z)) :-
     nonvar(C),
-    C \= literal(_),
+    C \= _@_,
+    C \= _^^_
     global_prefix_expand(C,Z).
-user:goal_expansion(xrdf(G,X,Y,literal(L)),xrdf(G,X,Y,Object)) :-
+user:goal_expansion(xrdf(G,X,Y,L),xrdf(G,X,Y,Object)) :-
     nonvar(L),
-    literal_expand(literal(L),Object).
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).
 
 % delete/5
-user:goal_expansion(delete(DB,G,A,Y,Z),delete(DB,G,X,Y,Z)) :-
+user:goal_expansion(delete(G,A,Y,Z),delete(G,X,Y,Z)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(delete(DB,G,X,B,Z),delete(DB,G,X,Y,Z)) :-
+user:goal_expansion(delete(G,X,B,Z),delete(G,X,Y,Z)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(delete(DB,G,X,Y,C),delete(DB,G,X,Y,Z)) :-
+user:goal_expansion(delete(G,X,Y,C),delete(G,X,Y,Z)) :-
     nonvar(C),
-    C \= literal(_),
+    C \= _@_,
+    C \= _^^_,
     global_prefix_expand(C,Z).
-user:goal_expansion(delete(DB,G,X,Y,literal(L)),delete(DB,G,X,Y,Object)) :-
+user:goal_expansion(delete(G,X,Y,L),delete(G,X,Y,Object)) :-
     nonvar(L),
-    literal_expand(literal(L),Object).
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).
 
 % insert/5
-user:goal_expansion(insert(DB,G,A,Y,Z),insert(DB,G,X,Y,Z)) :-
+user:goal_expansion(insert(G,A,Y,Z),insert(G,X,Y,Z)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(insert(DB,G,X,B,Z),insert(DB,G,X,Y,Z)) :-
+user:goal_expansion(insert(G,X,B,Z),insert(G,X,Y,Z)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(insert(DB,G,X,Y,C),insert(DB,G,X,Y,Z)) :-
+user:goal_expansion(insert(G,X,Y,C),insert(G,X,Y,Z)) :-
     nonvar(C),
-    C \= literal(_),
+    C \= _@_,
+    C \= _^^_,
     global_prefix_expand(C,Z).
-user:goal_expansion(insert(DB,G,X,Y,literal(L)),insert(DB,G,X,Y,Object)) :-
+user:goal_expansion(insert(G,X,Y,L),insert(G,X,Y,Object)) :-
     nonvar(L),
-    literal_expand(literal(L),Object).
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).
 
 % update/6
-user:goal_expansion(update(DB,G,A,Y,Z,Act),update(DB,G,X,Y,Z,Act)) :-
+user:goal_expansion(update(G,A,Y,Z,Act),update(G,X,Y,Z,Act)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(update(DB,G,X,B,Z,Act),update(DB,G,X,Y,Z,Act)) :-
+user:goal_expansion(update(G,X,B,Z,Act),update(G,X,Y,Z,Act)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(update(DB,G,X,Y,C,Act),update(DB,G,X,Y,Z,Act)) :-
+user:goal_expansion(update(G,X,Y,C,Act),update(G,X,Y,Z,Act)) :-
     nonvar(C),
-    C \= literal(_),
+    C \= _@_,
+    C \= _^^_,
     global_prefix_expand(C,Z).
-user:goal_expansion(update(DB,G,X,Y,literal(L),Act),update(DB,G,X,Y,Object,Act)) :-
+user:goal_expansion(update(G,X,Y,L,Act),update(G,X,Y,Object,Act)) :-
     nonvar(L),
-    literal_expand(literal(L),Object).
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).

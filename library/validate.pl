@@ -39,6 +39,8 @@
 :- use_module(jsonld).
 :- use_module(library(semweb/turtle)).
 
+:- use_module(expansion).
+
 :- use_module(literals).
 
 % For debugging
@@ -209,6 +211,11 @@ commit_validation_object(Validation_Object) :-
 
 
 
+/**
+ * pre_test_schema(-Pred:atom) is nondet.
+ *
+ * List of cycle checks which must occur prior to normal scheme validation
+ */
 % Required for consistency
 pre_test_schema(class_cycle_SC).
 pre_test_schema(property_cycle_SC).
@@ -222,10 +229,6 @@ pre_test_schema(property_cycle_SC).
 test_schema(no_immediate_class_SC).
 test_schema(no_immediate_domain_SC).
 test_schema(no_immediate_range_SC).
-%test_schema(notUniqueClassLabelSC).
-%test_schema(notUniqueClassSC).
-%test_schema(notUniquePropertySC). % still useful with annotationOverloadSC?
-%test_schema(schemaBlankNodeSC). % should never be used.
 test_schema(annotation_overload_SC).
 % OWL DL constraints
 test_schema(orphan_class_SC).
@@ -236,41 +239,6 @@ test_schema(domain_not_subsumed_SC).
 test_schema(range_not_subsumed_SC).
 test_schema(property_type_overload_SC).
 test_schema(invalid_RDFS_property_SC).
-
-/*
- *  schema_transaction ...
- *
- * We need a schema transaction now - that allows for both schema and instance updates
- * in a single transaction
- *
- */
-
-/*
- * schema_validation_skippable(+Update_DB, +Schema, +Layer)
- *
- * Checks whether the DB should be fully checked after a schema change.
- * Should be validated if triples are deleted in the schema or when a
- * constraint has been added.
- */
-schema_validation_skippable(Update_DB, Schema, Layer) :-
-    forall((xrdf([Schema], A_Old, B_Old, C_Old),
-            \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
-           schema_triple_deletion_no_check(A_Old, B_Old, C_Old)
-    ),
-    forall((xrdf_db(Layer,A_New,B_New,C_New),
-             \+ xrdf([Schema], A_New, B_New, C_New)),
-           schema_triple_addition_no_check(A_New, B_New, C_New)
-    ).
-
-schema_triple_addition_no_check(_, _, 'http://www.w3.org/2002/07/owl#Restriction'):-
-    !,
-    false.
-schema_triple_addition_no_check(_, _, _):-
-    !,
-    true.
-
-schema_triple_deletion_no_check(_, _, _):-
-    false.
 
 /*
  * needs_schema_validation(Validation_Object) is det.
@@ -331,6 +299,182 @@ refute_schema(Validation_Object,Witness) :-
     call(Check,Validation_Object,Witness).
 
 /*
+ * calculate_invalidating_class(Validation_Object, Classes) is det.
+ *
+ * 1) If we are a deleted class, we need to be checked
+ * 2) Anyone subsumption below us needs to be checked.
+ * 3) If we are an added class, everyone subsumption below us needs to be checked
+ *    for all restrictions *above* us.
+ * 4) If we are an added restriction, everyone subsumption below us needs to be checked
+ * 5) If we have changed the subsumption hierarchy, everyone below the change
+ *    needs to be checked for everyone above.
+ */
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_deleted(Schema, Super, rdf:type, owl:'Class'),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, Super, rdf:type, owl:'Class'),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, _Sub, rdf:subClassOf, Super),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, _Sub, rdf:unionOf, Super),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, Super, rdf:instersectionOf, _Sub),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, Super, rdf:oneOf, _OneOf),
+    subsumption_of(Class, Super, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_deleted(Schema, Sub, rdf:subClassOf, Super),
+    subsumption_of(Class, Sub, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_deleted(Schema, Sub, rdf:unionOf, _Super),
+    subsumption_of(Class, Sub, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_deleted(Schema, _Super, rdf:instersectionOf, Sub),
+    subsumption_of(Class, Sub, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_deleted(Schema, _Super, rdf:oneOf, Sub),
+    subsumption_of(Class, Sub, Validation_Object).
+calculate_invalidating_class(Validation_Object, Class) :-
+    Schema = Validation_Object.schema_objects,
+    xrdf_added(Schema, Super, rdf:type, owl:'Restriction'),
+    subsumption_of(Class, Super, Validation_Object).
+
+calculate_invalidating_classes(Validation_Object, Classes) :-
+    findall(Class,
+            calculate_invalidating_class(Validation_Object, Class),
+            Unsorted),
+    sort(Unsorted, Classes).
+
+/*
+ * calculate_invalidating_property(Validation_Object,Property) is det.
+ *
+ * 1) If we are an added property, everyone subsumption below us in the property
+ *    hierarchy needs to be checked if we have any applicable restrictions
+ * 2) If we are a deleted property, everyone subsumption below us in the property
+ *    hierarchy needs to be checked.
+ */
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, Super, rdf:type, owl:'DatatypeProperty'),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, Super, rdf:type, owl:'DatatypeProperty'),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, Super, rdf:type, owl:'ObjectProperty'),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, Super, rdf:type, owl:'ObjectProperty'),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, _Sub, rdfs:subPropertyOf, Super),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, _Sub, rdfs:subPropertyOf, Super),
+    subsumption_properties_of(Prop, Super, Validation_Object).
+
+calculate_invalidating_properties(Validation_Object, Properties) :-
+    findall(Property,
+            calculate_invalidating_properties(Validation_Object, Property),
+            Unsorted),
+    sort(Unsorted, Property).
+
+
+/*
+ * safe_added_classes(Schema) is semidet.
+ *
+ * True if only new classes are also below us.
+ */
+safe_added_classes(Schema) :-
+    forall(
+        xrdf_added(Schema, Class, rdf:type, owl:'Class'),
+        (   strict_subsumption_of(Sub, Class, Validation_Object)
+        *-> xrdf_added(Schema, Sub, rdf:type, owl:'Class')
+        ;   fail
+        )
+    ).
+
+/*
+ * safe_added_properties(Schema) is semidet.
+ *
+ * True if only new properties are also below us
+ */
+safe_added_properties(Schema) :-
+    forall(
+        (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
+        ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property'))
+        (   strict_subsumption_property_of(SubProperty, Property, Validation_Object)
+        *-> (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
+            ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property'))
+        ;   fail
+        )
+    ).
+
+
+/*
+ * safe_added_restrictions(Schema) is semidet.
+ *
+ * True if only new classes and restrictions are also below us
+ */
+safe_added_restrictions(Schema) :-
+    forall(
+        xrdf_added(Schema, Restriction, rdf:type, owl:'Restriction')
+        (   strict_subsumption_of(SubClass, Restriction, Validation_Object)
+        *-> (   xrdf_added(Schema, SubClass, rdf:type, owl:'Restriction')
+            ;   xrdf_added(Schema, Property, rdf:type, owl:'Class'))
+        ;   fail
+        )
+    ).
+
+no_deleted_classes(Schema) :-
+    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'Class').
+
+no_deleted_properties(Schema) :-
+    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'DatatypeProperty'),
+    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'ObjectProperty').
+
+no_deleted_restrictions(Schema) :-
+    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'Restriction').
+
+/*
+ * empty_blast_radius(Validation_Object) is semidet.
+ *
+ * If the blast radius is empty, let's punt
+ *
+ * This is a conservative estimate. It can be made tighter.
+ */
+empty_blast_radius(Validation_Object) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+    } :< Validation_Object,
+    safe_added_classes(Schema_Objects),
+    safe_added_properties(Schema_Objects),
+    safe_added_restrictions(Post_Database),
+    no_deleted_classes(Schema_Objects),
+    no_deleted_properties(Schema_Objects),
+    no_deleted_restrictions(Schema_Objects).
+
+/*
  * refute_instance_schema(Validation_Object,Witness) is nondet.
  *
  * Get a witness for each refutation of the instance graph
@@ -343,23 +487,28 @@ refute_instance_schema(Validation_Object,Witness) :-
         schema_objects: Schema_Objects,
         instance_objects: Instance_Objects,
     } :< Validation_Object,
-    % Blast radius calculation:
-    %
-    % Find potentially disrupting classes (including restrictions).
-    %
-    % calculate_invalidating_classes(Schema_Objects, Classes),
-    %
-    % Find potentially disrupting properties.
-    %
-    % calculate_invalidating_properties(Schema_Objects, Properties),
-    %
-    % calculate_blast_radius(Instance_Objects, Changed_Classes, Changed_Properties,
-    %                        X, P, Y),
-    %
-    % Instead we are global for now. :(
-    %
+    empty_blast_radius(Validation_Object),
+    !,
+    fail.
+refute_instance_schema(Validation_Object,Witness) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+    calculate_invalidating_classes(Validation_Object, Classes),
+    member(Class, Classes),
+    xrdf(Instance_Objects, X, rdf:type, Class),
     xrdf(Instance_Objects, X, P, Y),
-    refute_insertion(Instance_Objects, X, P, Y).
+    refute_insertion(Instance_Objects, X, P, Y, Witness).
+refute_instance_schema(Validation_Object,Witness) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+    calculate_invalidating_properties(Validation_Object, Properties),
+    member(Property, Properties),
+    xrdf(Instance_Objects, X, Property, Y),
+    refute_insertion(Instance_Objects, X, Property, Y, Witness).
 
 /*
  * refute_instance(Validation_Object,Witness) is nondet.
@@ -413,9 +562,7 @@ refute_validation_object(Validation_Object, Witness) :-
 refute_validation_object(Validation_Object, Witness) :-
     % Pre Schema
     needs_schema_instance_validation(Validation_Object),
-    refute_instance_schema(Validation_Object, Witness),
-    % Do not proceed if we have done both instance and schema validation
-    !.
+    refute_instance_schema(Validation_Object, Witness).
 refute_validation_object(Validation_Object, Witness) :-
     needs_instance_validation(Validation_Object),
     refute_instance(Validation_Object,Witness).
