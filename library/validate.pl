@@ -81,7 +81,7 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
                                          schema_objects: Validation_Schema_Objects,
                                          inference_objects: Validation_Inference_Objects
                                      },
-    (   Parent = Transaction_Object.get(parent),
+    (   Parent = Transaction_Object.get(parent)
     ->  transaction_object_to_validation_object(Parent, Parent_Validation_Object, Map, Map_1),
         Intermediate_Validation_Object_1 = Intermediate_Validation_Object.put(parent, Parent)
     ;   Intermediate_Validation_Object_1 = Intermediate_Validation_Object
@@ -124,7 +124,7 @@ commit_validation_object(Validation_Object) :-
     ;   true).
 commit_validation_object(Validation_Object) :-
     validation_object{
-        descriptor: Descriptor
+        descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
    database_descriptor{
@@ -185,7 +185,7 @@ commit_validation_object(Validation_Object) :-
     (   exists([Obj]>>(Obj.changed = true), Union_Objects)
     ->  once(ask(Parent_Transaction,
                  (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
-                     idgen(ref:'Commit',[],
+                     * idgen(ref:'Commit',[],X)
                  )
                 ))
     ;   true

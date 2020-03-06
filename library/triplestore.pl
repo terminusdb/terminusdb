@@ -3,11 +3,11 @@
               sync_backing_store/0,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
-              xrdf/5,
+              xrdf/4,
               xrdf_db/4,
-              insert/5,
-              delete/5,
-              update/6,
+              insert/4,
+              delete/4,
+              update/5,
               storage/1
           ]).
 
@@ -208,7 +208,7 @@ xrdf_deleted(G,X,Y,Z) :-
  *
  * WARNING: Collection is now unused!
  */
-xrdf(X,Y,Z) :-
+xrdf(Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
     xrdf_db(G.read,X,Y,Z).

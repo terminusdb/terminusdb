@@ -82,8 +82,6 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
-% Time travel
-:- use_module(time_travel).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

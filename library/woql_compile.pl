@@ -42,10 +42,6 @@
                   delete/5
               ]).
 %:- use_module(schema).
-:- use_module(relationships, [
-                  relationship_source_property/3,
-                  relationship_target_property/3
-              ]).
 :- use_module(inference).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
