@@ -365,7 +365,11 @@ calculate_invalidating_classes(Validation_Object, Classes) :-
  *
  * 1) If we are an added property, everyone subsumption below us in the property
  *    hierarchy needs to be checked if we have any applicable restrictions
- * 2) If we are a deleted property, everyone subsumption below us in the property
+ * 2) If we are an added property, everyone subsumption above us in the property
+ *    hierarchy needs to be checked if we have any applicable restrictions
+ * 3) If we are a deleted property, everyone subsumption below us in the property
+ *    hierarchy needs to be checked.
+ * 4) If we are a deleted property, everyone subsumption above us in the property
  *    hierarchy needs to be checked.
  */
 calculate_invalidating_property(Validation_Object, Prop) :-
@@ -374,16 +378,32 @@ calculate_invalidating_property(Validation_Object, Prop) :-
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
     Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, Sub, rdf:type, owl:'DatatypeProperty'),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
     xrdf_added(Schema, Super, rdf:type, owl:'DatatypeProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, Sub, rdf:type, owl:'DatatypeProperty'),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
     Schema = Validation_Objects.schema_objects,
     xrdf_deleted(Schema, Super, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
     Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, Sub, rdf:type, owl:'ObjectProperty'),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
     xrdf_added(Schema, Super, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, Sub, rdf:type, owl:'ObjectProperty'),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
     Schema = Validation_Objects.schema_objects,
     xrdf_deleted(Schema, _Sub, rdfs:subPropertyOf, Super),
@@ -392,6 +412,14 @@ calculate_invalidating_property(Validation_Object, Prop) :-
     Schema = Validation_Objects.schema_objects,
     xrdf_added(Schema, _Sub, rdfs:subPropertyOf, Super),
     subsumption_properties_of(Prop, Super, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_deleted(Schema, Sub, rdfs:subPropertyOf, _Super),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
+calculate_invalidating_property(Validation_Object, Prop) :-
+    Schema = Validation_Objects.schema_objects,
+    xrdf_added(Schema, Sub, rdfs:subPropertyOf, _Super),
+    subsumption_properties_of(Sub, Prop, Validation_Object).
 
 calculate_invalidating_properties(Validation_Object, Properties) :-
     findall(Property,
