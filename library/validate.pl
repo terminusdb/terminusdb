@@ -580,6 +580,9 @@ refute_validation_objects(Validation_Objects, Witness) :-
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
  *
  * Updates a schema using a turtle formatted stream.
+ *
+ * TODO: This predicate is now really quite bogus, however we have to do something similar because we need
+ * calculate an intermediate graph for insertion.
  */
 turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
 
@@ -656,128 +659,5 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
             % if we got here, I think this might be safe.
             database_module(Database, Module),
             compile_schema_to_module(Post_DB, Module)
-        )
-    ).
-
-/*
- * instance_schema_transaction(+Database,-Update_DB,+Write_Graphs,+Goal,-Witnesses) is det.
- *
- * Instance and schema simultaneous transaction updates.
- */
-instance_schema_transaction(Database, Update_DB, Write_Graphs, Goal, Witnesses) :-
-    with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             write_graphs: Write_Graphs,
-             update_database: Update_DB,
-             post_database: Post_DB},
-         witnesses(Witnesses)],
-        % Update
-        Goal,
-        % Post conditions
-        validate:(
-            findall(Pre_Witness,
-                    (   pre_test_schema(Pre_Check),
-                        call(Pre_Check,Post_DB,Pre_Witness)),
-                    Pre_Witnesses),
-            (   \+ Pre_Witnesses = []
-            % We have witnesses of failure and must bail
-            ->  Witnesses = Pre_Witnesses
-            % We survived the pre_tests, better check schema constriants
-            ;   findall(Schema_Witness,
-                        (   test_schema(Check),
-                            call(Check,Post_DB,Schema_Witness)),
-                        Schema_Witnesses),
-                (   \+ Schema_Witnesses = []
-                ->  Witnesses = Schema_Witnesses
-                    % Winning!
-                ;   % TODO: We do not need to perform a global check of instances
-                    % Better would be a local check derived from schema delta.
-                    findall(Witness,
-                            (   database_instance(Post_DB, Instance),
-                                xrdf(Instance,E,F,G),
-                                refute_insertion(Post_DB,E,F,G,Witness)),
-                            Witnesses)
-
-                )
-            ),
-            % if we got here, I think this might be safe.
-            database_module(Database, Module),
-            compile_schema_to_module(Post_DB, Module)
-        )
-    ).
-
-/*
- * document_transaction(Database:database, Transaction_Database:database, Graph:graph_identifier,
- *                      Document:json_ld, Witnesses:json_ld) is det.
- *
- * Update the database with a document, or fail with a constraint witness.
- *
- */
-document_transaction(Database, Update_Database, Graph, Goal, Witnesses) :-
-    with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             update_database: Update_Database,
-             post_database: Post_Database,
-             write_graphs: [Graph]},
-         witnesses(Witnesses)],
-        Goal,
-        validate:(   findall(Pos_Witness,
-                             (
-                                 triplestore:xrdf_added(Post_Database, Graph, X, P, Y),
-                                 refute_insertion(Post_Database, X, P, Y, Pos_Witness)
-                             ),
-                             Pos_Witnesses),
-
-                     findall(Neg_Witness,
-                             (
-                                 triplestore:xrdf_deleted(Post_Database, Graph, X, P, Y),
-                                 refute_deletion(Post_Database, X, P, Y, Neg_Witness)
-                             ),
-                             Neg_Witnesses),
-
-                     append(Pos_Witnesses, Neg_Witnesses, Witnesses)
-                 )
-    ).
-
-
-/*
- * instance_transaction(Database:database, Transaction_Database:database, Write_Graphs:list,
- *                      Document:json_ld, Witnesses:json_ld) is det.
- *
- * Update of instance alone
- *
- */
-instance_transaction(Database, Update_Database, Write_Graphs, Goal, Witnesses) :-
-    with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             update_database: Update_Database,
-             post_database: Post_Database,
-             write_graphs: Write_Graphs},
-         witnesses(Witnesses)],
-        Goal,
-        validate:(
-            findall(Graph_Witnesses,
-                    (   member(Graph,Write_Graphs),
-                        findall(Pos_Witness,
-                                (
-                                    triplestore:xrdf_added(Post_Database, Graph, X, P, Y),
-                                    refute_insertion(Post_Database, X, P, Y, Pos_Witness)
-                                ),
-                                Pos_Witnesses),
-
-                        findall(Neg_Witness,
-                                (
-                                    triplestore:xrdf_deleted(Post_Database, Graph, X, P, Y),
-                                    refute_deletion(Post_Database, X, P, Y, Neg_Witness)
-                                ),
-                                Neg_Witnesses),
-
-                        append(Pos_Witnesses, Neg_Witnesses, Graph_Witnesses)
-                    ),
-                    Witnesses_List),
-            append(Witnesses_List,Witnesses)
         )
     ).
