@@ -173,11 +173,12 @@ update(G,X,Y,Z,Action) :-
     insert(G,X1,Y1,Z1).
 
 /*
- * xrdf_added(+G:read_write_obj,+X,+Y,+Z) is nondet.
+ * xrdf_added(+Gs:list(read_write_obj),+X,+Y,+Z) is nondet.
  *
  * Query exactly the current layer (and no deeper) for added triples.
  */
-xrdf_added(G,X,Y,Z) :-
+xrdf_added(Gs,X,Y,Z) :-
+    member(G,Gs),
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),
@@ -187,11 +188,12 @@ xrdf_added(G,X,Y,Z) :-
     storage_object(S,Z).
 
 /*
- * xrdf_deleted(+G:read_write_obj,+X,+Y,+Z) is nondet.
+ * xrdf_deleted(+Gs:list(read_write_obj),+X,+Y,+Z) is nondet.
  *
  * Query exactly the current layer (and no deeper) for deleted triples.
  */
-xrdf_deleted(G,X,Y,Z) :-
+xrdf_deleted(Gs,X,Y,Z) :-
+    member(G,Gs),
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),

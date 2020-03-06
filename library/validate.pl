@@ -47,11 +47,11 @@
 /*
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
  *
- * validation_obj { descriptor: collection_descriptor,
- *                  <parent>: transaction_obj % we still keep it a transaction obj and transform it later
- *                  instance_objects: list(graph_validation_obj)
- *                  schema_objects: list(graph_validation_obj)
- *                  inference_objects: list(graph_validation_obj)
+ * validation_object{ descriptor: collection_descriptor,
+ *                    <parent>: transaction_obj % we still keep it a transaction obj and transform it later
+ *                    instance_objects: list(graph_validation_obj)
+ *                    schema_objects: list(graph_validation_obj)
+ *                    inference_objects: list(graph_validation_obj)
  */
 
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, Map) :-
@@ -272,6 +272,162 @@ schema_triple_addition_no_check(_, _, _):-
 schema_triple_deletion_no_check(_, _, _):-
     false.
 
+/*
+ * needs_schema_validation(Validation_Object) is det.
+ *
+ */
+needs_schema_validation(Validation_Object) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+    } :< Validation_Object,
+    exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
+
+/*
+ * needs_schema_instance_validation(Validation_Object) is det.
+ *
+ * Check to see if we need to do a blast-radius calculation
+ * on the schema and renew instance checking on possibly impacted
+ * triples.
+ *
+ * Currently just assumes we do if the schema changed.
+ *
+ */
+needs_schema_instance_validation(Validation_Object) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+    Instance_Objects /= [],
+    exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
+
+/*
+ * needs_local_instance_validation(Validation_Object) is det.
+ *
+ * Checks to see if we need to do some local instance validation.
+ *
+ */
+needs_local_instance_validation(Validation_Object) :-
+    validation_object{
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+    exists([Instance_Object]>>(Instance_Object.changed = true), Instance_Objects).
+
+/*
+ * refute_pre_schema(Validation_Object,Witness) is nondet.
+ *
+ * Get a witness for each refutation of the pre-schema
+ */
+refute_pre_schema(Validation_Object,Witness) :-
+    pre_test_schema(Pre_Check),
+    call(Pre_Check,Validation_Object,Witness).
+
+/*
+ * refute_schema(Validation_Object,Witness) is nondet.
+ *
+ * Get a witness for each refutation of the schema
+ */
+refute_schema(Validation_Object,Witness) :-
+    test_schema(Check),
+    call(Check,Validation_Object,Witness).
+
+/*
+ * refute_instance_schema(Validation_Object,Witness) is nondet.
+ *
+ * Get a witness for each refutation of the instance graph
+ * which could have been invalidated by changes to the schema.
+ *
+ * This should calculate blast radius.
+ */
+refute_instance_schema(Validation_Object,Witness) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+    % Blast radius calculation:
+    %
+    % Find potentially disrupting classes (including restrictions).
+    %
+    % calculate_invalidating_classes(Schema_Objects, Classes),
+    %
+    % Find potentially disrupting properties.
+    %
+    % calculate_invalidating_properties(Schema_Objects, Properties),
+    %
+    % calculate_blast_radius(Instance_Objects, Changed_Classes, Changed_Properties,
+    %                        X, P, Y),
+    %
+    % Instead we are global for now. :(
+    %
+    xrdf(Instance_Objects, X, P, Y),
+    refute_insertion(Instance_Objects, X, P, Y).
+
+/*
+ * refute_instance(Validation_Object,Witness) is nondet.
+ *
+ * Get a witness for each refutation of the inserted/deleted
+ *
+ * This should calculate blast radius.
+ */
+refute_instance(Validation_Object,Witness) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+
+    xrdf_added(Instance_Objects, X, P, Y),
+    refute_insertion(Validation_Object,X,P,Y,Witness).
+refute_instance(Validation_Object,Witness) :-
+    validation_object{
+        schema_objects: Schema_Objects,
+        instance_objects: Instance_Objects,
+    } :< Validation_Object,
+
+    xrdf_deleted(Instance_Objects, X, P, Y),
+    refute_deletion(Validation_Object,X,P,Y,Witness).
+
+/*
+ * refute_validation_object(+Validation:validation_obj, -Witness) is nondet.
+ *
+ * We are for the moment going to do validation on all objects
+ * regardless of level in the tier of our hierarchy. Since higher level objects
+ * are written only by us, and the schemata are never written we can presumably
+ * get away with dispensing with schema and instance checking. However in
+ * early phases, it's probably best if we leave it in so we can be confident
+ * we are not writing nonsense!
+ *
+ * There is no current way to do inference validation. We are not allowing updates
+ * so hopefully this is ok!
+ */
+refute_validation_object(Validation_Object, Witness) :-
+    % Pre Schema
+    needs_schema_validation(Validation_Objects),
+    refute_pre_schemas(Validation_Object, Witness),
+    % Do not proceed if schema has circularities
+    !.
+refute_validation_object(Validation_Object, Witness) :-
+    % Pre Schema
+    needs_schema_validation(Validation_Object),
+    refute_schema(Validation_Object, Witness),
+    % Do not proceed if we have a broken schema
+    !.
+refute_validation_object(Validation_Object, Witness) :-
+    % Pre Schema
+    needs_schema_instance_validation(Validation_Object),
+    refute_instance_schema(Validation_Object, Witness),
+    % Do not proceed if we have done both instance and schema validation
+    !.
+refute_validation_object(Validation_Object, Witness) :-
+    needs_instance_validation(Validation_Object),
+    refute_instance(Validation_Object,Witness).
+
+/*
+ * refute_validation_objects(Validation_Objects, Witness) is nondet.
+ *
+ * Find all refutations of the given validation object.
+ */
+refute_validation_objects(Validation_Objects, Witness) :-
+    member(Validation_Object, Validation_Objects),
+    refute_validation_object(Validation_Object, Witness).
 
 /*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
