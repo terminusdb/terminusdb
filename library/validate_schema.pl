@@ -816,9 +816,11 @@ strict_subsumption_property_of(PC,PP,Database) :-
     sub_property_of(PC, PZ, Database),
     subsumption_properties_of(PZ,PP,Database).
 strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
+    % What is this?
     PC \= 'http://www.w3.org/2002/07/owl#top_objectProperty',
     object_property(PC,Database).
 strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
+    % What is this?
     PC \= 'http://www.w3.org/2002/07/owl#top_dataProperty',
     datatype_property(PC,Database).
 
