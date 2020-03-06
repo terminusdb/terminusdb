@@ -124,7 +124,7 @@ commit_validation_object(Validation_Object) :-
     ;   true).
 commit_validation_object(Validation_Object) :-
     validation_object{
-        descriptor: Descriptor
+        descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
    database_descriptor{
