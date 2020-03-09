@@ -29,7 +29,7 @@ ref:branch_base_uri
   rdfs:comment "Base URI for the current repository"@en ;
   rdfs:label "Base URI"@en ;
   rdfs:domain ref:Branch ;
-  rdfs:range xsd:anyURI .
+  rdfs:range xsd:anyURI.
 
 ref:Branch
   a owl:Class ;

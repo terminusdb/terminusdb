@@ -1,7 +1,8 @@
 :- module(casting,[
               typecast/4,
               hash/3,
-              idgen/3
+              idgen/3,
+              random_idgen/3
           ]).
 
 /** <module> Casting

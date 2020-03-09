@@ -107,7 +107,7 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor:Descriptor
-    },
+    } :< Validation_Object,
     commit_descriptor{
     } :< Descriptor,
     throw(commit_noncommittable_error("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved.")).
@@ -194,32 +194,51 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
         inference_objects: Inference_Objects
     } :< Validation_Object,
 
-    branch_descriptor{ repository_descriptor: Repository_Descriptor,
-                       branch_name : Branch_Name} :< Descriptor,
+    branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
     append([Instance_Objects,Schema_Objects,Inference_Objects],
            Union_Objects),
 
-    %atomic_list_concat(['http://terminushub.com/document/',Branch_Name],Branch_Base),
-    % TODO: This is where it all went wrong.
-    %random_uri(ref:Branch_Name,'Commit',Commit_URI),
     (   exists([Obj]>>(Obj.changed = true), Union_Objects)
     ->  once(ask(Parent_Transaction,
                  (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                      % create new commit, point at all graphs
                      random_idgen(doc:'Commit',[Branch_Name],Commit_URI),
-                     insert(Commit_URI, 
-                     % find previous commit
-                     (   t(Branch_URI, ref:ref_commit, Previous_Commit_URI),
-                         % point at old commit
-                     ;   true)
-                     % point at old commit (or nothing if this is the first)
-                     % move branch head
-                     * idgen(ref:'Commit',[],X)
-                 )
-                ))
+                     insert(Commit_URI, rdf:type, ref:'Commit'),
+                     insert(Commit_URI, ref:commit_author, Validation_Object.commit_info.author^^xsd:string),
+                     insert(Commit_URI, ref:commit_message, Validation_Object.commit_info.message^^xsd:string),
+                     timestamp_now(Now),
+                     insert(Commit_URI, ref:commit_timestamp, Now)))),
+        maplist(insert_graph(Parent_Transaction, Commit_URI, instance),
+                Instance_Objects),
+        maplist(insert_graph(Parent_Transaction, Commit_URI, schema),
+                Schema_Objects),
+        maplist(insert_graph(Parent_Transaction, Commit_URI, inference),
+                Inference_Objects),
+
+        once(ask(Parent_Transaction,
+                 (   (   t(Branch_URI, ref:ref_commit, Previous_Commit_URI),
+                         delete(Branch_URI, ref:ref_commit, Previous_Commit_URI),
+                         insert(Commit_URI, ref:commit_parent, Previous_Commit_URI)
+                     ;   true),
+                     insert(Branch_URI, ref:ref_commit, Commit_URI))))
     ;   true
     ).
+
+insert_graph(Transaction_Object, Commit_URI, Type, Read_Write_Object) :-
+    layer_to_id(Read_Write_Object.read, Layer_Id),
+    Graph_Name = Read_Write_Object.descriptor.name,
+    once(ask(Transaction_Object,
+             (   idgen(doc:'Layer',[Layer_Id], Layer_URI),
+                 insert(Layer_URI, rdf:type, layer:'Layer'),
+                 insert(Layer_URI, layer:layer_id, Layer_Id^^xsd:string),
+
+                 idgen(doc:'Graph',[Type, Graph_Name, Layer_Id], Graph_URI),
+                 insert(Graph_URI, rdf:type, ref:'Graph'),
+                 insert(Graph_URI, ref:graph_name, Graph_Name^^xsd:string),
+                 insert(Graph_URI, ref:graph_layer, Layer_URI),
+
+                 insert(Commit_URI, ref:Type, Graph_URI)))).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
 
