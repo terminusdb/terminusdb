@@ -375,7 +375,7 @@ calculate_invalidating_class(Validation_Object, Class) :-
     subsumption_of(Class, Super, Validation_Object).
 calculate_invalidating_class(Validation_Object, Class) :-
     Schema = Validation_Object.schema_objects,
-    xrdf_deleted(Schema, Sub, rdf:subClassOf, Super),
+    xrdf_deleted(Schema, Sub, rdf:subClassOf, _Super),
     subsumption_of(Class, Sub, Validation_Object).
 calculate_invalidating_class(Validation_Object, Class) :-
     Schema = Validation_Object.schema_objects,
@@ -413,59 +413,59 @@ calculate_invalidating_classes(Validation_Object, Classes) :-
  *    hierarchy needs to be checked.
  */
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Super, rdf:type, owl:'DatatypeProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Sub, rdf:type, owl:'DatatypeProperty'),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, Super, rdf:type, owl:'DatatypeProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, Sub, rdf:type, owl:'DatatypeProperty'),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Super, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Sub, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, Super, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, Sub, rdf:type, owl:'ObjectProperty'),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, _Sub, rdfs:subPropertyOf, Super),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, _Sub, rdfs:subPropertyOf, Super),
     subsumption_properties_of(Prop, Super, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Sub, rdfs:subPropertyOf, _Super),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 calculate_invalidating_property(Validation_Object, Prop) :-
-    Schema = Validation_Objects.schema_objects,
+    Schema = Validation_Object.schema_objects,
     xrdf_added(Schema, Sub, rdfs:subPropertyOf, _Super),
     subsumption_properties_of(Sub, Prop, Validation_Object).
 
 calculate_invalidating_properties(Validation_Object, Properties) :-
     findall(Property,
-            calculate_invalidating_properties(Validation_Object, Property),
+            calculate_invalidating_property(Validation_Object, Property),
             Unsorted),
-    sort(Unsorted, Property).
+    sort(Unsorted, Properties).
 
 
 /*
@@ -473,7 +473,8 @@ calculate_invalidating_properties(Validation_Object, Properties) :-
  *
  * True if only new classes are also below us.
  */
-safe_added_classes(Schema) :-
+safe_added_classes(Validation_Object) :-
+    Schema = Validation_Object.schema_objects,
     forall(
         xrdf_added(Schema, Class, rdf:type, owl:'Class'),
         (   strict_subsumption_of(Sub, Class, Validation_Object)
@@ -487,13 +488,14 @@ safe_added_classes(Schema) :-
  *
  * True if only new properties are also below us
  */
-safe_added_properties(Schema) :-
+safe_added_properties(Validation_Object) :-
+    Schema = Validation_Object.schema_objects,
     forall(
         (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
         ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property')),
         (   strict_subsumption_property_of(SubProperty, Property, Validation_Object)
-        *-> (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
-            ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property'))
+        *-> (   xrdf_added(Schema, SubProperty, rdf:type, owl:'DatatypeProperty')
+            ;   xrdf_added(Schema, SubProperty, rdf:type, owl:'Object_Property'))
         ;   fail
         )
     ).
@@ -504,25 +506,26 @@ safe_added_properties(Schema) :-
  *
  * True if only new classes and restrictions are also below us
  */
-safe_added_restrictions(Schema) :-
+safe_added_restrictions(Validation_Object) :-
+    Schema = Validation_Object.schema_objects,
     forall(
         xrdf_added(Schema, Restriction, rdf:type, owl:'Restriction'),
         (   strict_subsumption_of(SubClass, Restriction, Validation_Object)
         *-> (   xrdf_added(Schema, SubClass, rdf:type, owl:'Restriction')
-            ;   xrdf_added(Schema, Property, rdf:type, owl:'Class'))
+            ;   xrdf_added(Schema, SubClass, rdf:type, owl:'Class'))
         ;   fail
         )
     ).
 
 no_deleted_classes(Schema) :-
-    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'Class').
+    \+ xrdf_deleted(Schema, _Class, rdf:type, owl:'Class').
 
 no_deleted_properties(Schema) :-
-    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'DatatypeProperty'),
-    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'ObjectProperty').
+    \+ xrdf_deleted(Schema, _Property1, rdf:type, owl:'DatatypeProperty'),
+    \+ xrdf_deleted(Schema, _Property2, rdf:type, owl:'ObjectProperty').
 
 no_deleted_restrictions(Schema) :-
-    \+ xrdf_deleted(Schema, Class, rdf:type, owl:'Restriction').
+    \+ xrdf_deleted(Schema, _Class, rdf:type, owl:'Restriction').
 
 /*
  * empty_blast_radius(Validation_Object) is semidet.
@@ -535,9 +538,9 @@ empty_blast_radius(Validation_Object) :-
     validation_object{
         schema_objects: Schema_Objects
     } :< Validation_Object,
-    safe_added_classes(Schema_Objects),
-    safe_added_properties(Schema_Objects),
-    safe_added_restrictions(Post_Database),
+    safe_added_classes(Validation_Object),
+    safe_added_properties(Validation_Object),
+    safe_added_restrictions(Validation_Object),
     no_deleted_classes(Schema_Objects),
     no_deleted_properties(Schema_Objects),
     no_deleted_restrictions(Schema_Objects).
@@ -550,17 +553,14 @@ empty_blast_radius(Validation_Object) :-
  *
  * This should calculate blast radius.
  */
-refute_instance_schema(Validation_Object,Witness) :-
+refute_instance_schema(Validation_Object,_Witness) :-
     validation_object{
-        schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects
     } :< Validation_Object,
     empty_blast_radius(Validation_Object),
     !,
     fail.
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
-        schema_objects: Schema_Objects,
         instance_objects: Instance_Objects
     } :< Validation_Object,
     calculate_invalidating_classes(Validation_Object, Classes),
@@ -570,7 +570,6 @@ refute_instance_schema(Validation_Object,Witness) :-
     refute_insertion(Instance_Objects, X, P, Y, Witness).
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
-        schema_objects: Schema_Objects,
         instance_objects: Instance_Objects
     } :< Validation_Object,
     calculate_invalidating_properties(Validation_Object, Properties),
@@ -587,7 +586,6 @@ refute_instance_schema(Validation_Object,Witness) :-
  */
 refute_instance(Validation_Object,Witness) :-
     validation_object{
-        schema_objects: Schema_Objects,
         instance_objects: Instance_Objects
     } :< Validation_Object,
 
@@ -595,7 +593,6 @@ refute_instance(Validation_Object,Witness) :-
     refute_insertion(Validation_Object,X,P,Y,Witness).
 refute_instance(Validation_Object,Witness) :-
     validation_object{
-        schema_objects: Schema_Objects,
         instance_objects: Instance_Objects
     } :< Validation_Object,
 
@@ -617,7 +614,7 @@ refute_instance(Validation_Object,Witness) :-
  */
 refute_validation_object(Validation_Object, Witness) :-
     % Pre Schema
-    needs_schema_validation(Validation_Objects),
+    needs_schema_validation(Validation_Object),
     refute_pre_schemas(Validation_Object, Witness),
     % Do not proceed if schema has circularities
     !.
