@@ -39,7 +39,7 @@
 :- use_module(jsonld).
 :- use_module(library(semweb/turtle)).
 
-:- use_module(expansion).
+:- use_module(expansions).
 
 :- use_module(literals).
 
@@ -167,6 +167,7 @@ commit_validation_object(Validation_Object) :-
                 ))
     ;   true).
 commit_validation_object(Validation_Object) :-
+    /*
     validation_object{
         parent : Parent_Transaction,
         descriptor: Descriptor,
@@ -174,7 +175,7 @@ commit_validation_object(Validation_Object) :-
         schema_objects: Schema_Objects,
         inference_objects: Inference_Objects
     } :< Validation_Object,
-
+*/  
     branch_descriptor{ repository_descriptor: Repository_Descriptor,
                        branch_name : Branch},
     !,
@@ -550,7 +551,7 @@ refute_instance(Validation_Object,Witness) :-
         schema_objects: Schema_Objects,
         instance_objects: Instance_Objects,
     } :< Validation_Object,
-
+    % TODO: Check changed!
     xrdf_added(Instance_Objects, X, P, Y),
     refute_insertion(Validation_Object,X,P,Y,Witness).
 refute_instance(Validation_Object,Witness) :-
@@ -558,7 +559,7 @@ refute_instance(Validation_Object,Witness) :-
         schema_objects: Schema_Objects,
         instance_objects: Instance_Objects,
     } :< Validation_Object,
-
+    % TODO: Check changed!
     xrdf_deleted(Instance_Objects, X, P, Y),
     refute_deletion(Validation_Object,X,P,Y,Witness).
 
@@ -603,6 +604,7 @@ refute_validation_object(Validation_Object, Witness) :-
 refute_validation_objects(Validation_Objects, Witness) :-
     member(Validation_Object, Validation_Objects),
     refute_validation_object(Validation_Object, Witness).
+
 
 /*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
