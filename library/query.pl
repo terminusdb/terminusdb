@@ -95,7 +95,7 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Prefixes).
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
-    % We're opening the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
+    % We're querying the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
     branch_descriptor{
         repository_descriptor: Repository_Descriptor,
         branch_name: Branch_Name
@@ -108,6 +108,12 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     database_descriptor{
         database_name: Database_Name
     } :< Database_Descriptor,
+
+    (   once(ask(Repository_Descriptor,
+                 (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
+                     t(Branch_URI, ref:branch_base_uri, Queried_Branch_Base_Uri^^xsd:anyURI))))
+    ->  Branch_Base_Uri = Queried_Branch_Base_Uri
+    ;   atomic_list_concat(Branch_Base_Uri
 
 
 collection_descriptor_prefixes(Descriptor, Prefixes) :-
