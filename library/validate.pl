@@ -106,6 +106,13 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
 
 commit_validation_object(Validation_Object, []) :-
     validation_object{
+        descriptor:Descriptor
+    },
+    commit_descriptor{
+    } :< Descriptor,
+    throw(commit_noncommittable_error("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved.")).
+commit_validation_object(Validation_Object, []) :-
+    validation_object{
         descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
@@ -125,7 +132,23 @@ commit_validation_object(Validation_Object, []) :-
         descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
-   database_descriptor{
+    label_descriptor{
+        label: Label
+    } = Descriptor,
+    !,
+    % super simple case, we just need to set head
+    % That is, assuming anything changed
+    (   Instance_Object.changed = true
+    ->  storage(Store),
+        safe_open_named_graph(Store, Label, Graph),
+        nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object, []) :-
+    validation_object{
+        descriptor: Descriptor,
+        instance_objects: [Instance_Object]
+    } :< Validation_Object,
+    database_descriptor{
         database_name: Database_Name
     } = Descriptor,
     !,
@@ -172,38 +195,32 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     } :< Validation_Object,
 
     branch_descriptor{ repository_descriptor: Repository_Descriptor,
-                       branch_name : Branch} :< Descriptor,
+                       branch_name : Branch_Name} :< Descriptor,
     !,
     append([Instance_Objects,Schema_Objects,Inference_Objects],
            Union_Objects),
 
-    atomic_list_concat(['http://terminushub.com/document/'],Branch_Base),
+    %atomic_list_concat(['http://terminushub.com/document/',Branch_Name],Branch_Base),
     % TODO: This is where it all went wrong.
-    random_uri(ref:Branch_Name,'Commit',Commit_URI),
+    %random_uri(ref:Branch_Name,'Commit',Commit_URI),
     (   exists([Obj]>>(Obj.changed = true), Union_Objects)
     ->  once(ask(Parent_Transaction,
                  (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
+                     % create new commit, point at all graphs
+                     random_idgen(doc:'Commit',
+                                  [Branch_Name],
+                                  Id),
+                     % find previous commit
+                     (   t(Branch_URI, ref:ref_commit, Previous_Commit_URI),
+                         % point at old commit
+                     ;   true)
+                     % point at old commit (or nothing if this is the first)
+                     % move branch head
                      * idgen(ref:'Commit',[],X)
                  )
                 ))
     ;   true
     ).
-commit_validation_object(Validation_Object, []) :-
-    validation_object{
-        descriptor: Descriptor,
-        instance_objects: [Instance_Object]
-    } :< Validation_Object,
-    label_descriptor{
-        label: Label
-    } = Descriptor,
-    !,
-    % super simple case, we just need to set head
-    % That is, assuming anything changed
-    (   Instance_Object.changed = true
-    ->  storage(Store),
-        safe_open_named_graph(Store, Label, Graph),
-        nb_set_head(Graph, Instance_Object.read)
-    ;   true).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
 
