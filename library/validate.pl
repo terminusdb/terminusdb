@@ -1,6 +1,4 @@
 :- module(validate, [
-              turtle_schema_transaction/4,
-              document_transaction/5
           ]).
 
 /** <module> Validation
@@ -39,7 +37,7 @@
 :- use_module(jsonld).
 :- use_module(library(semweb/turtle)).
 
-:- use_module(expansion).
+%:- use_module(expansions).
 
 :- use_module(literals).
 
@@ -84,14 +82,13 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
                                          inference_objects: Validation_Inference_Objects
                                      },
     (   Parent = Transaction_Object.get(parent)
-    ->  transaction_object_to_validation_object(Parent, Parent_Validation_Object, Map, Map_1),
-        Intermediate_Validation_Object_1 = Intermediate_Validation_Object.put(parent, Parent)
+    ->  Intermediate_Validation_Object_1 = Intermediate_Validation_Object.put(parent, Parent)
     ;   Intermediate_Validation_Object_1 = Intermediate_Validation_Object
     ),
     mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
          Instance_Objects,
          Validation_Instance_Objects,
-         Map_1,
+         Map,
          Map_2),
     mapm([Object,Validation_Object]>>read_write_obj_to_graph_validation_obj(Object, Validation_Object),
          Schema_Objects,
@@ -107,8 +104,7 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
     ->  Validation_Object = Intermediate_Validation_Object_1.put(commit_info, Commit_Info)
     ;   Validation_Object = Intermediate_Validation_Object_1).
 
-
-commit_validation_object(Validation_Object) :-
+commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
         instance_objects: [Instance_Object]
@@ -124,7 +120,7 @@ commit_validation_object(Validation_Object) :-
         safe_open_named_graph(Store, Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
-commit_validation_object(Validation_Object) :-
+commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
         instance_objects: [Instance_Object]
@@ -142,7 +138,7 @@ commit_validation_object(Validation_Object) :-
         safe_open_named_graph(Store, Database_Name, Graph),
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
-commit_validation_object(Validation_Object) :-
+commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     validation_object{
         descriptor: Descriptor,
         instance_objects: [Instance_Object],
@@ -166,7 +162,7 @@ commit_validation_object(Validation_Object) :-
                  )
                 ))
     ;   true).
-commit_validation_object(Validation_Object) :-
+commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     validation_object{
         parent : Parent_Transaction,
         descriptor: Descriptor,
@@ -176,7 +172,7 @@ commit_validation_object(Validation_Object) :-
     } :< Validation_Object,
 
     branch_descriptor{ repository_descriptor: Repository_Descriptor,
-                       branch_name : Branch},
+                       branch_name : Branch} :< Descriptor,
     !,
     append([Instance_Objects,Schema_Objects,Inference_Objects],
            Union_Objects),
@@ -192,7 +188,7 @@ commit_validation_object(Validation_Object) :-
                 ))
     ;   true
     ).
-commit_validation_object(Validation_Object) :-
+commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
         instance_objects: [Instance_Object]
@@ -209,7 +205,51 @@ commit_validation_object(Validation_Object) :-
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
 
+descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
 
+descriptor_type_order(Operator, Left, Right) :-
+    descriptor_type_order_List(Order),
+    once(nth0(Left_N, Order, Left)),
+    once(nth0(Right_N, Order, Right)),
+    compare(Operator, Left_N, Right_N).
+
+descriptor_order(Operator, Left, Right) :-
+    Left_Label{} :< Left,
+    Right_Label{} :< Right,
+    descriptor_type_order(Descriptor_Op, Left_Label, Right_Label),
+    (   Descriptor_Op = (=)
+    ->  compare(Operator, Left, Right)
+    ;   Operator = Descriptor_Op).
+
+transaction_validation_order((=), transaction_object, transaction_object).
+transaction_validation_order((<), transaction_object, validation_object).
+transaction_validation_order((>), validation_object, transaction_object).
+transaction_validation_order((=), validation_object, validation_object).
+
+commit_order(Op, Left, Right) :-
+    descriptor_order(Descriptor_Op, Left.descriptor, Right.descriptor),
+    (   Descriptor_Op = (=)
+    ->  Left_Label{} :< Left,
+        Right_Label{} :< Right,
+        transaction_validation_order(Op, Left_Label, Right_Label)
+    ;   Op = Descriptor_Op).
+
+commit_validation_stack_([]) :- !.
+commit_validation_stack_([Object|Objects]) :-
+    transaction_object{} :< Object,
+    !,
+    transaction_object_to_validation_object(Object, Validation_Object),
+    sort([Validation_Object|Objects], Sorted_Objects),
+    commit_validation_stack_(Sorted_Objects).
+commit_validation_stack_([Object|Objects]) :-
+    % we know it is a validation object
+    commit_validation_object(Object, Transaction_Objects),
+    append(Transaction_Objects, Objects, Unsorted_Objects),
+    sort(Unsorted_Objects, Sorted_Objects),
+    commit_validation_stack_(Sorted_Objects).
+commit_validation_stack(Unsorted_Objects) :-
+    sort(Unsorted_Objects, Sorted_Objects),
+    commit_validation_stack_(Sorted_Objects).
 
 /**
  * pre_test_schema(-Pred:atom) is nondet.
@@ -246,7 +286,7 @@ test_schema(invalid_RDFS_property_SC).
  */
 needs_schema_validation(Validation_Object) :-
     validation_object{
-        schema_objects: Schema_Objects,
+        schema_objects: Schema_Objects
     } :< Validation_Object,
     exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
 
@@ -263,9 +303,9 @@ needs_schema_validation(Validation_Object) :-
 needs_schema_instance_validation(Validation_Object) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
-    Instance_Objects /= [],
+    Instance_Objects \= [],
     exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
 
 /*
@@ -276,7 +316,7 @@ needs_schema_instance_validation(Validation_Object) :-
  */
 needs_local_instance_validation(Validation_Object) :-
     validation_object{
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
     exists([Instance_Object]>>(Instance_Object.changed = true), Instance_Objects).
 
@@ -450,7 +490,7 @@ safe_added_classes(Schema) :-
 safe_added_properties(Schema) :-
     forall(
         (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
-        ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property'))
+        ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property')),
         (   strict_subsumption_property_of(SubProperty, Property, Validation_Object)
         *-> (   xrdf_added(Schema, Property, rdf:type, owl:'DatatypeProperty')
             ;   xrdf_added(Schema, Property, rdf:type, owl:'Object_Property'))
@@ -466,7 +506,7 @@ safe_added_properties(Schema) :-
  */
 safe_added_restrictions(Schema) :-
     forall(
-        xrdf_added(Schema, Restriction, rdf:type, owl:'Restriction')
+        xrdf_added(Schema, Restriction, rdf:type, owl:'Restriction'),
         (   strict_subsumption_of(SubClass, Restriction, Validation_Object)
         *-> (   xrdf_added(Schema, SubClass, rdf:type, owl:'Restriction')
             ;   xrdf_added(Schema, Property, rdf:type, owl:'Class'))
@@ -493,7 +533,7 @@ no_deleted_restrictions(Schema) :-
  */
 empty_blast_radius(Validation_Object) :-
     validation_object{
-        schema_objects: Schema_Objects,
+        schema_objects: Schema_Objects
     } :< Validation_Object,
     safe_added_classes(Schema_Objects),
     safe_added_properties(Schema_Objects),
@@ -513,7 +553,7 @@ empty_blast_radius(Validation_Object) :-
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
     empty_blast_radius(Validation_Object),
     !,
@@ -521,7 +561,7 @@ refute_instance_schema(Validation_Object,Witness) :-
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
     calculate_invalidating_classes(Validation_Object, Classes),
     member(Class, Classes),
@@ -531,7 +571,7 @@ refute_instance_schema(Validation_Object,Witness) :-
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
     calculate_invalidating_properties(Validation_Object, Properties),
     member(Property, Properties),
@@ -548,7 +588,7 @@ refute_instance_schema(Validation_Object,Witness) :-
 refute_instance(Validation_Object,Witness) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
 
     xrdf_added(Instance_Objects, X, P, Y),
@@ -556,7 +596,7 @@ refute_instance(Validation_Object,Witness) :-
 refute_instance(Validation_Object,Witness) :-
     validation_object{
         schema_objects: Schema_Objects,
-        instance_objects: Instance_Objects,
+        instance_objects: Instance_Objects
     } :< Validation_Object,
 
     xrdf_deleted(Instance_Objects, X, P, Y),
