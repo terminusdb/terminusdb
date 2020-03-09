@@ -457,68 +457,51 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(woql/DB_ID), cors_catch(woql_handler(Method,DB_ID)),
+:- http_handler(root(woql/Acount_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/DB_ID/Ref_ID), cors_catch(woql_handler(Method,DB_ID,Ref_ID)),
+:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
 
 /**
- * woql_handler(+Method:atom, +DB:database, +Request:http_request) is det.
+ * woql_handler(+Method:atom, +Account_ID:user, +DB:database, +Request:http_request) is det.
  */
-woql_handler(options,_DB,_Request) :-
+woql_handler(options,_Account_ID,_DB,_Request) :-
     config:public_server_url(SURI),
     terminus_database_name(Collection),
     connect(Collection,DBC),
     write_cors_headers(SURI, DBC),
     format('~n').
-woql_handler(get,DB,Request) :-
-    % Should test for read-only query here.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    % Actually we need to pull the query from the request, process it
-    % and get a list of necessary capabilities to check.
-    authenticate(Request, DBC, Auth),
-    try_db_uri(DB,DB_URI),
-    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
-    try_get_param('terminus:query',Request,Atom_Query),  % TODO - we make an atom here?
-    atom_json_dict(Atom_Query, Query, []),
-
-    http_log('~N[Query] ~s~n',[Atom_Query]),
-
-    connect(DB_URI,New_Ctx),
-    run_query(Query,New_Ctx,JSON),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
-    reply_json(JSON).
-woql_handler(post,DB,R) :-
+woql_handler(post,_Account_ID,DB,R) :-
     add_payload_to_request(R,Request),
 
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    % Actually we need to pull the query from the request, process it
-    % and get a list of necessary capabilities to check.
-    authenticate(Request, DBC, Auth),
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+
+    authenticate(Terminus_Transaction_Object, Request, DBC, Auth),
 
     try_db_uri(DB,DB_URI),
 
-    verify_access(Auth,DBC,terminus/woql_select,DB_URI),
+    % redundant?
+    verify_access(Terminus_Transaction_Object, Auth, DBC,terminus/woql_select, DB_URI),
 
     try_get_param('terminus:query',Request,Atom_Query),
-    atom_json_dict(Atom_Query, Query, []),
-
     http_log('~N[Query] ~s~n',[Atom_Query]),
 
-    connect(DB_URI,New_Ctx),
+    atom_json_dict(Atom_Query, Query, []),
+
+    jsonld_to_ast_and_context(Query, AST, Ctx),
+
+    active_graphs(AST, Active),
+
+    check_capabilities(Terminus_Transaction_Object, Active),
 
     collect_posted_files(Request,Files),
-    Ctx = [files=Files|New_Ctx],
+    New_Ctx = Ctx.files = Files,
 
-    (   run_query(Query,Ctx,JSON)
+    (   run_query(Query,New_Ctx,JSON)
     ->  true
     ;   JSON = _{bindings : []}),
 
@@ -709,8 +692,8 @@ authenticate(Request, Auth) :-
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key'})))).
 
-verify_access(Auth, Action, Scope) :-
-    (   auth_action_scope(Auth, Action, Scope)
+verify_access(Trans, Auth, Action, Scope) :-
+    (   auth_action_scope(Trans, Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
         throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',

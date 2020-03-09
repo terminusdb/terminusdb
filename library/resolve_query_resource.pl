@@ -129,7 +129,7 @@ resolve_query_resource(URI, Database_Descriptor) :-
                           }.
 
 /**
- * resolve_graph_resource(URI, Graph_Descriptor) is semidet.
+ * resolve_graph_resource(URI, Graph_Descriptor) is det + error.
  *
  * If we know the resource is a graph, we can use defaults to obtain a graph.
  *
@@ -215,7 +215,6 @@ resolve_graph_resource(URI,Descriptor) :-
                  }.
 % Terminus Graph
 %
-% 
 resolve_graph_resource(URI,Descriptor) :-
     (   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
     ->  true
@@ -230,4 +229,8 @@ resolve_graph_resource(URI,Descriptor) :-
     Descriptor = labelled_graph{
                      name : Database_Name % This is wrong!
                  }.
+% Error
+resolve_graph_resource(URI,Descriptor) :-
+    format(atom(Msg), 'Unknown graph resource ~q', [URI]),
+    throw(error(resolution_error(URI,Msg))).
 

@@ -343,12 +343,21 @@ compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
  * run_query(JSON_In, JSON_Out) is det.
  *
  * Runs a WOQL query in JSON-LD WOQL syntax
- * with pre-specified context.
+ * with default context.
  */
 run_query(JSON_In, JSON_Out) :-
     empty_ctx(CCTX),
     run_query(JSON_In,CCTX,JSON_Out).
 
+/*
+ * jsonld_to_ast_and_context(+JSON_LD, -AST, -Ctx).
+ */
+jsonld_to_ast_and_context(JSON_In, AST, CCTX) :-
+    empty_ctx(CCTX),
+    CCTX.prefixs = Prefixes_Database,
+    woql_context(Ctx),
+    merge_dictionaries(Ctx,Prefixes_Database,Ctx_Total),
+    json_woql(JSON_In, Ctx_Total, Ast).
 
 /*
  * run_query(JSON_In, CCTX, JSON_Out) is det.
@@ -358,13 +367,8 @@ run_query(JSON_In, JSON_Out) :-
  * context CCTX.
  */
 run_query(JSON_In,CCTX,JSON_Out) :-
-    woql_context(Ctx),
-    CCTX.prefixs = Prefixes_Database,
-    merge_dictionaries(Ctx,Prefixes_Database,Ctx_Total),
-    http_log('Ctx: ~q~n',[Ctx]),
-    json_woql(JSON_In, Ctx_Total, Query),
-    * http_log('Query: ~q~n',[Query]),
-    run_term(Query,CCTX,JSON_Out).
+    json_to_ast_and_context(JSON_In,CCTX,AST),
+    run_term(AST,CCTX,JSON_Out).
 
 run_term(Query,JSON) :-
     empty_ctx(Ctx),
@@ -1139,9 +1143,15 @@ list_conjunction(L,Goal) :-
  * capabilities are necessary.
  *
  * Dict has the form:
- * _{read : [Graphs], write : [Graphs]}
+ * _{read : [Graph_Descriptor], write : [Graph_Descriptor]}
  */
 active_graphs(Term, Dict) :-
+    active_graphs_(Term,Pre_Dict),
+    maplist(resolve_graph_resource,Pre_Dict.read, Reads),
+    maplist(resolve_graph_resource,Pre_Dict.write, Writes),
+    Dict = _{read : Reads, write : Writes}.
+
+active_graphs_(Term, Dict) :-
     % lazy
     Term =.. [Functor|Args],
     (   Functor = insert,
@@ -1164,17 +1174,17 @@ active_graphs(Term, Dict) :-
     ->  Dict = _{read:[G],write:[]}
     ;   Functor = from,
         Args = [G,P]
-    ->  active_graphs(P,G_Sub),
+    ->  active_graphs_(P,G_Sub),
         Dict = _{read : [G|G_Sub.get(read) ],
                  write : G_Sub.get(write)}
     ;   Functor = into,
         Args = [G,P]
-    ->  active_graphs(P,G_Sub),
+    ->  active_graphs_(P,G_Sub),
         Dict = _{read : G_Sub.get(read),
                  write : [G|G_Sub.get(write)]}
     ;   Functor = '/'
     ->  Dict = _{read:[],write:[]}
-    ;   maplist(active_graphs,Args,Results),
+    ;   maplist(active_graphs_,Args,Results),
         merge_active_graphs(Results,Dict)
     ).
 

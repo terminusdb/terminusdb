@@ -141,8 +141,8 @@ user_action(User,Action) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(Auth, DB, Action, Resource_ID) :-
-    ask(DB,
+auth_action_scope(Trans, Auth, Action, Resource_ID) :-
+    ask(Trans,
 	    (
             t(Auth, terminus:action, Action),
             t(Auth, terminus:authority_scope, Scope),

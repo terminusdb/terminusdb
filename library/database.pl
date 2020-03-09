@@ -157,6 +157,8 @@ terminus_max_retries(5).
 
 /**
  * with_transaction(+Pre_Descriptors, +Read_Descriptors, +Write_Descriptors, :Query_Update, :Post, -Witnesses) is semidet.
+ *
+ * NOTE: This should be defunct and should probably be removed
  */
 :- meta_predicate with_transaction(+,+,+,+,+,:,:,-).
 with_transaction(Pre_Descriptors,
