@@ -244,11 +244,16 @@ terminus:allow_origin
   rdfs:domain terminus:Resource;
   rdfs:range xsd:string.
 
+terminus:server
+  a terminus:Server
+  rdfs:label "server"@en .
+
 terminus:Server
   rdfs:label "Server"@en ;
   rdfs:comment "A Resource Object Representing the Database Server itself"@en ;
   a owl:Class ;
-  rdfs:subClassOf terminus:Resource .
+  owl:oneOf (terminus:server) ;
+  rdfs:subClassOf terminus:Resource ;
 
 terminus:APIUpdate
   a owl:Class;

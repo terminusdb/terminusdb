@@ -67,8 +67,53 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
         Term =.. [F|New_Args]
     ).
 
-collection_descriptor_prefixes(_, Prefixes) :-
-    default_prefixes(Prefixes).
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    terminus_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{doc: 'terminus:///terminus/document/'}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    label_descriptor{label: Label} :< Descriptor,
+    !,
+    atom_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
+    Prefixes = _{doc: Doc_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    database_descriptor{
+        database_name: Name
+    } :< Descriptor,
+    !,
+    atom_list_concat(['terminus:///',Name,'/document/'], Doc_Prefix),
+    Prefixes = _{doc: Doc_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    repository_descriptor{
+        database_descriptor: Database_Descriptor,
+        repository_name: Repository_Name,
+    } :< Descriptor,
+    !,
+    database_descriptor {
+        database_name: Database_Name
+    } :< Database_Descriptor,
+    atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Prefixes).
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    % Note: possible race condition.
+    % We're opening the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
+    branch_descriptor{
+        repository_descriptor: Repository_Descriptor,
+        branch_name: Branch_Name
+    } :< Descriptor,
+    !,
+    repository_descriptor{
+        database_descriptor: Database_Descriptor,
+        repository_name: Repository_Name,
+    } :< Repository_Descriptor,
+    database_descriptor{
+        database_name: Database_Name
+    } :< Database_Descriptor,
+
+
+collection_descriptor_prefixes(Descriptor, Prefixes) :-
+    default_prefixes(Default_Prefixes),
+    collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
+    merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
