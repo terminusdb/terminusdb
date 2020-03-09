@@ -868,7 +868,13 @@ compile_wf(hash(Base,Args,Id),hash(BaseE,ArgsE,IdE)) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),idgen(BaseE,ArgsL,IdE))) -->
+compile_wf(random_idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),
+                                       random_idgen(BaseE,ArgsL,IdE))) -->
+    resolve(Base, BaseE),
+    mapm(resolve,Args,ArgsE),
+    resolve(Id,IdE).
+compile_wf(idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),
+                                idgen(BaseE,ArgsL,IdE))) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).

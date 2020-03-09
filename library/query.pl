@@ -92,7 +92,8 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     database_descriptor {
         database_name: Database_Name
     } :< Database_Descriptor,
-    atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Prefixes).
+    atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
+    Prefixes = _{doc : Commit_Document_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
     % We're querying the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
@@ -109,12 +110,20 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
         database_name: Database_Name
     } :< Database_Descriptor,
 
-    (   once(ask(Repository_Descriptor,
-                 (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
-                     t(Branch_URI, ref:branch_base_uri, Queried_Branch_Base_Uri^^xsd:anyURI))))
-    ->  Branch_Base_Uri = Queried_Branch_Base_Uri
-    ;   atomic_list_concat(Branch_Base_Uri
+    once(ask(Repository_Descriptor,
+             (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
+                 t(Branch_URI, ref:branch_base_uri, Branch_Base_Uri^^xsd:anyURI)))),
 
+    atom_list_concat([Branch_Base_Uri, '/document/'], Document_Prefix),
+    Prefixes = _{doc : Document_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    % We don't know which documents you are retrieving
+    % because we don't know the branch you are on,
+    % and you can't write so it's up to you to set this
+    % in the query.
+    commit_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{}.
 
 collection_descriptor_prefixes(Descriptor, Prefixes) :-
     default_prefixes(Default_Prefixes),

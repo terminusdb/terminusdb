@@ -37,7 +37,8 @@
               '*'/1,
               op(700,xfy,<>),
               '<>'/2,
-              whole_arg/2
+              whole_arg/2,
+              random_string/1
           ]).
 
 /** <module> Utils
@@ -624,3 +625,10 @@ whole_arg(N, Var) :-
 whole_arg(_, _) :-
     throw(error(system_error, context(utils:whole_arg/2, 'whole arg failed while trying to get its parents arity'))).
 
+/**
+ * random_string(String) is det.
+ */
+random_string(String) :-
+    Size is 2 ** (20 * 8),
+    random(0, Size, Num),
+    format(atom(Random), '~36r', [Num]).

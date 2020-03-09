@@ -59,6 +59,13 @@ idgen(Base,Args,Output) :-
     merge_separator_split(Output,'%5f',[Base|Safe_Parts]),
     maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts).
 
+random_idgen(Base,Args,Output) :-
+    ground(Base),
+    ground(Args),
+    !,
+    random_string(String),
+    append(Args,[String], New_Args),
+    idgen(Base,New_Args,Output).
 
 /*
  * hash(+Base:uri,++Args:list(any),-Output:uri) is det.

@@ -207,9 +207,8 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     ->  once(ask(Parent_Transaction,
                  (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                      % create new commit, point at all graphs
-                     random_idgen(doc:'Commit',
-                                  [Branch_Name],
-                                  Id),
+                     random_idgen(doc:'Commit',[Branch_Name],Commit_URI),
+                     insert(Commit_URI, 
                      % find previous commit
                      (   t(Branch_URI, ref:ref_commit, Previous_Commit_URI),
                          % point at old commit
