@@ -133,7 +133,7 @@ resolve_query_resource(URI, Database_Descriptor) :-
  *
  * If we know the resource is a graph, we can use defaults to obtain a graph.
  *
- * server / dbname / repo / my_branch / graph
+ * user / dbname / repo / my_branch / graph
  */
 % Branch graphs
 %

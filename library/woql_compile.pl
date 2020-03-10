@@ -83,14 +83,8 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-% is this actually needed?
-:- op(2, xfx, :).
-:- op(600, xfx, <:).
-:- op(600, xfx, as).
-:- op(2, xfx, :=).
-:- op(1050, xfx, =>).
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
+% Get op precedence
+:- reexport(syntax).
 
 /*
  * Ctx is a context object which is used in WOQL queries to

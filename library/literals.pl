@@ -114,12 +114,10 @@ nonvar_literal(Val^^Type, value(S)) :-
     ->  date_string(Val,Date_String),
         format(string(S), '~q^^~q', [Date_String,Type])
     ;   format(string(S), '~q^^~q', [Val,Type])).
-nonvar_literal(Val^^Type, Val^^Type) :-
-    var(Val),
+nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),
     !.
-nonvar_literal(Val@Lang, Val@Lang) :-
-    var(Val),
+nonvar_literal(Val@Lang, _) :-
     once(var(Val) ; var(Lang)),
     !.
 nonvar_literal(O, node(S)) :-

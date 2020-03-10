@@ -93,12 +93,12 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, ^^).
-:- op(2, xfx, @).
-
 :- use_module(terminus_bootstrap).
 :- use_module(triplestore).
 :- use_module(literals).
+:- use_module(query).
+:- use_module(utils).
+:- reexport(syntax).
 
 graph_descriptor_to_layer(Descriptor, Layer, Map, Map) :-
     memberchk(Descriptor=Layer, Map),
@@ -145,9 +145,11 @@ graph_descriptor_to_layer(Descriptor,
     Commit_Descriptor = commit_graph{ database_name : Database_Name,
                                       repository_name : Repository_Name },
     graph_descriptor_to_layer(Commit_Descriptor, Commit_Layer, Map, New_Map),
-    commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
-    storage(Store),
-    store_id_layer(Store, Layer_Id, Layer).
+    (   commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
+        storage(Store),
+        store_id_layer(Store, Layer_Id, Layer)
+    ->  true
+    ;   Layer = _).
 
 repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
     repository_name_prop_uri(Repo_Name_Property_Uri),
@@ -340,16 +342,29 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
 
     layer_to_id(Instance_Object.read, Ref_Layer_Id),
     Ref_Id_Descriptor = id_descriptor{ layer_id: Ref_Layer_Id},
-    once(ask(Ref_Id_Descriptor,
-             (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
-                 t(Branch_Uri, ref:ref_commit, Commit_Uri)))),
-    forall(
-                 t(Commit_Uri, ref:instance, Instance
-
-    ref_layer_branch_commit(Instance_Object.read, Branch_Name, Commit),
-    ref_layer_commit_graphs(Instance_Object.read, Commit,
-                            Instance_Names,Schema_Names,Inference_Names),
-
+    (   once(ask(Ref_Id_Descriptor,
+                 (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
+                     t(Branch_Uri, ref:ref_commit, Commit_Uri))))
+    ->  forall(Instance_Graph_Name,
+               (   t(Commit_Uri, ref:instance, Instance_Graph),
+                   t(Instance_Graph, ref:graph_name, Instance_Graph_Name)
+               ),
+               Instance_Names),
+        forall(Schema_Graph_Name,
+               (   t(Commit_Uri, ref:schema, Schema_Graph),
+                   t(Schema_Graph, ref:graph_name, Schema_Graph_Name)
+               ),
+               Schema_Names),
+        forall(Inference_Graph_Name,
+               (   t(Commit_Uri, ref:inference, Inference_Graph),
+                   t(Inference_Graph, ref:graph_name, Inference_Graph_Name)
+               ),
+               Inference_Names)
+    ;   % Note: There has never been a commit! Set up default graphs.
+        Instance_Names = [main],
+        Inference_Names = [main],
+        Schema_Names = [main]
+    ),
     Prototype = branch_graph{
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
@@ -360,7 +375,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                                                    name : Instance_Name})),
             Instance_Names,
             Instance_Descriptors),
-    mapm([Instance_Descriptor,Instance_Object]>>(open_read_write_obj(Instance_Descriptor, Instance_Object)),
+    mapm(open_read_write_obj,
          Instance_Descriptors, Instance_Objects,
          Map_1, Map_2),
 
@@ -369,7 +384,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                                                    name : Schema_Name})),
             Schema_Names,
             Schema_Descriptors),
-    mapm([Schema_Descriptor,Schema_Object]>>(open_read_write_obj(Schema_Descriptor, Schema_Object)),
+    mapm(open_read_write_obj,
          Schema_Descriptors, Schema_Objects,
          Map_2, Map_3),
 
@@ -378,7 +393,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                                                    name : Inference_Name})),
             Inference_Names,
             Inference_Descriptors),
-    mapm([Inference_Descriptor,Inference_Object]>>(open_read_write_obj(Inference_Descriptor, Inference_Object)),
+    mapm(open_read_write_obj,
          Inference_Descriptors, Inference_Objects,
          Map_3, Map_4),
 

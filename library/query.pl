@@ -33,7 +33,7 @@
 :- use_module(types, [is_literal/1]).
 :- use_module(literals, [uri_to_prefixed/3]).
 
-:- reexport(woql_term).
+:- reexport(syntax).
 
 /**
  * pre_term_to_term_and_bindings(Pre_Term, Woql_Term, Bindings_In, Bindings_Out) is det.
@@ -122,6 +122,28 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
     collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
     merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
+collection_descriptor_default_write_graph(terminus_descriptor{}, Graph_Descriptor) :-
+    true.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    branch_descriptor{ branch_name : Branch_Name,
+                       repository_descriptor : Repository_Descriptor
+                     } :< Descriptor,
+    repository_descriptor{
+        database_descriptor : Database_Descriptor,
+        repository_name : Repository_Name
+    } :< Repository_Descriptor,
+    repository_descriptor{
+        database_name : Database_Name
+    } :< Database_Descriptor,
+
+    Graph_Descriptor = branch_graph{
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           branch_name : Branch_Name,
+                           type : instance,
+                           name : main
+                       }.
+
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
  *
@@ -141,10 +163,12 @@ ask(Transaction_Object,Pre_Term) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
     collection_descriptor_prefixes(Descriptor, Prefixes),
+    collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
     Query_Context = query_context{
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         prefixes : Prefixes,
+        write_graph : Graph_Descriptor,
         bindings : [],
         selected : []
     },
