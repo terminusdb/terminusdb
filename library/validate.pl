@@ -198,10 +198,10 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                      t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
                      delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
                      delete(URI, repository:repository_head, ExistingRepositoryHead),
-                     idgen(layer:'ShadowLayer', [Layer_ID], NewShadowLayerID),
-                     insert(NewShadowLayerID, rdf:type, layer:'ShadowLayer'),
-                     insert(NewShadowLayerID, layer:shadow_layer, Layer_ID^^xsd:string)
-                 %  TODO: Are we missing something here for repository head?
+                     idgen(layer:'Layer', [Layer_ID], NewLayerID),
+                     insert(NewLayerID, rdf:type, layer:'Layer'),
+                     insert(NewLayerID, layer:layer_id, Layer_ID^^xsd:string),
+                     insert(URI, repository:repository_head, NewLayerID)
                  )
                 ))
     ;   true).
@@ -290,22 +290,26 @@ commit_order(Op, Left, Right) :-
         transaction_validation_order(Op, Left_Label, Right_Label)
     ;   Op = Descriptor_Op).
 
-commit_validation_stack_([]) :- !.
-commit_validation_stack_([Object|Objects]) :-
+commit_validation_objects_([]) :- !.
+commit_validation_objects_([Object|Objects]) :-
     transaction_object{} :< Object,
     !,
     transaction_object_to_validation_object(Object, Validation_Object),
+    (   refute_validation_object(Validation_Object, Witness)
+    ->  throw(unexpected_schema_validation_error('Internal metadata graph had an unexpected schema error',context(Object.descriptor,Witness)))
+    ;   true),
     predsort(commit_order,[Validation_Object|Objects], Sorted_Objects),
-    commit_validation_stack_(Sorted_Objects).
-commit_validation_stack_([Object|Objects]) :-
+    commit_validation_objects_(Sorted_Objects).
+commit_validation_objects_([Object|Objects]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),
     append(Transaction_Objects, Objects, Unsorted_Objects),
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_stack_(Sorted_Objects).
-commit_validation_stack(Unsorted_Objects) :-
+    commit_validation_objects_(Sorted_Objects).
+
+commit_validation_objects(Unsorted_Objects) :-
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_stack_(Sorted_Objects).
+    commit_validation_objects_(Sorted_Objects).
 
 /**
  * pre_test_schema(-Pred:atom) is nondet.

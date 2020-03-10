@@ -21,22 +21,9 @@ layer:LayerIdRestriction
   owl:onProperty layer:layer_id ;
   owl:cardinality "1"^^xsd:nonNegativeInteger .
 
-layer:LayerParentRestriction
-  a owl:Restriction ;
-  rdfs:label "Layer Restriction"@en ;
-  rdfs:comment "Restricts layers to have at most one parent"@en ;
-  owl:onProperty layer:layer_parent ;
-  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
-
-layer:ShadowLayer
-  a owl:Class ;
-  rdfs:subClassOf layer:Document, layer:LayerIdRestriction ;
-  rdfs:comment "A kind of Layer with no parent information, implicitely associated with a real layer "@en ;
-  rdfs:label "Shadow Layer"@en .
-
 layer:Layer
   a owl:Class ;
-  rdfs:subClassOf layer:ShadowLayer , layer:LayerParentRestriction ;
+  rdfs:subClassOf tcs:Document, layer:LayerIdRestriction ;
   rdfs:comment "A Layer object with its identifying information "@en ;
   rdfs:label "Layer"@en .
 
@@ -44,12 +31,5 @@ layer:layer_id
   a owl:DatatypeProperty ;
   rdfs:comment "A property holding the layer"@en ;
   rdfs:label "Layer ID"@en ;
-  rdfs:domain layer:ShadowLayer ;
-  rdfs:range xsd:string .
-
-layer:layer_parent
-  a owl:ObjectProperty ;
-  rdfs:comment "A property holding the layer parent"@en ;
-  rdfs:label "Layer ID"@en ;
   rdfs:domain layer:Layer ;
-  rdfs:range layer:Layer .
+  rdfs:range xsd:string .

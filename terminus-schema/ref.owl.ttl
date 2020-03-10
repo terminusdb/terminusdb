@@ -67,7 +67,7 @@ ref:inference
 
 ref:Graph
   a owl:Class ;
-  rdf:subClassOf terminus:Document ;
+  rdf:subClassOf tcs:Document ;
   rdfs:comment "This is a named graph for a commit"@en ;
   rdfs:label "Graph"@en .
 
@@ -87,7 +87,7 @@ ref:graph_layer
 
 ref:Commit
   a owl:Class ;
-  rdf:subClassOf terminus:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
+  rdf:subClassOf tcs:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
@@ -100,7 +100,7 @@ ref:CommitParentRestriction
 
 ref:Ref
   a owl:Class ;
-  rdf:subClassOf terminus:Document, ref:RefRestriction ;
+  rdf:subClassOf tcs:Document, ref:RefRestriction ;
   rdfs:comment "This is a ref for a commit"@en ;
   rdfs:label "Ref"@en .
 

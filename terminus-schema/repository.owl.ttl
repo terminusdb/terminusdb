@@ -56,7 +56,6 @@ repository:RepositoryNameRestriction
   owl:cardinality "1"^^xsd:nonNegativeInteger ;
   owl:onProperty repository:repository_name .
 
-
 repository:remote_url
   a owl:DatatypeProperty ;
   rdfs:comment "The URI associated with a remote."@en ;
