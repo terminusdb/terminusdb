@@ -245,7 +245,7 @@ terminus:allow_origin
   rdfs:range xsd:string.
 
 terminus:server
-  a terminus:Server
+  a terminus:Server ;
   rdfs:label "server"@en .
 
 terminus:Server
@@ -253,11 +253,11 @@ terminus:Server
   rdfs:comment "A Resource Object Representing the Database Server itself"@en ;
   a owl:Class ;
   owl:oneOf (terminus:server) ;
-  rdfs:subClassOf terminus:Resource ;
+  rdfs:subClassOf terminus:Resource .
 
 terminus:APIUpdate
-  a owl:Class;
-  rdfs:label "API Update"@en;
+  a owl:Class ;
+  rdfs:label "API Update"@en ;
   rdfs:comment "A document that amounts to an update request, sent to the API"@en .
 
 terminus:id

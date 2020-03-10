@@ -7,13 +7,6 @@
 :- use_module(terminus_bootstrap).
 :- use_module(literals).
 
-local_repository_class_uri('http://terminusdb.com/schema/repository#Local').
-remote_repository_class_uri('http://terminusdb.com/schema/repository#Remote').
-
-repository_head_prop_uri('http://terminusdb.com/schema/repository#repository_head').
-repository_name_prop_uri('http://terminusdb.com/schema/repository#repository_name').
-repository_remote_url_prop_uri('http://terminusdb.com/schema/repository#remote_url').
-
 repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
     repository_name_prop_uri(Repo_Name_Property_Uri),
     repository_head_prop_uri(Repo_Head_Property_Uri),
@@ -37,13 +30,6 @@ repo_type_class_uri(local, Uri) :-
     local_repository_class_uri(Uri).
 repo_type_class_uri(remote, Uri) :-
     remote_repository_class_uri(Uri).
-
-repo_type_document_prefix(local, 'Local_').
-repo_type_document_prefix(remote, 'Remote_').
-
-repo_name_uri(Db_Name, Repo_Name, Repo_Type, Uri) :-
-    repo_type_document_prefix(Repo_Type, Repo_Type_Prefix),
-    atomic_list_concat(['terminus:///', Db_Name, '/document/', Repo_Type_Prefix, Repo_Name], Uri).
 
 repo_layer_insert_repo(Repo_Layer-Repo_Layer_Builder, Db_Name, Repo_Name, Repo_Type, Destination_Url, Repo_Uri) :-
     predicate_id(Repo_Layer, Repo_Name_Property_Uri, Repo_Name_Property_Id),

@@ -101,6 +101,11 @@ create_ref_layer(Name,Base_URI,Ref_Layer) :-
     atomic_list_concat([Base_URI, '/', Name, '/document/master'], Branch_URI),
     write_instance(Layer_Builder,Branch_URI,'master',Branch_Class),
 
+    xsd_string_type_uri(Xsd_String_Type_Uri),
+    object_storage("master"^^Xsd_String_Type_Uri, Branch_Name_Literal),
+    ref_branch_name_prop_uri(Branch_Name_Prop_Uri),
+    nb_add_triple(Layer_Builder,Branch_URI,Branch_Name_Prop_Uri,Branch_Name_Literal),
+
     xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
     object_storage(Base_URI^^Xsd_Any_Uri_Type_Uri, Base_URI_Literal),
 
@@ -128,18 +133,21 @@ finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
     % set local repo layer to ref layer
     layer_to_id(Ref_Layer, Layer_Id),
     local_repo_uri(Name, Local_Uri),
-    shadow_layer_class_uri(Shadow_Layer_Class_Uri),
-    atomic_list_concat(['terminus://', Name, '/document/ShadowLayer', Layer_Id], Shadow_Layer_Uri),
-    atomic_list_concat(['Layer ', Layer_Id], Shadow_Layer_Name),
-    write_instance(Repo_Builder, Shadow_Layer_Uri, Shadow_Layer_Name, Shadow_Layer_Class_Uri),
+    layer_class_uri(Layer_Class_Uri),
+    atomic_list_concat(['terminus://', Name, '/document/ShadowLayer', Layer_Id], Layer_Uri),
+    atomic_list_concat(['Layer ', Layer_Id], Layer_Name),
+    write_instance(Repo_Builder, Layer_Uri, Layer_Name, Layer_Class_Uri),
 
     layer_id_prop_uri(Layer_Id_Prop_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
     object_storage(Layer_Id^^Xsd_String_Type_Uri, Layer_Id_Literal),
-    nb_add_triple(Repo_Builder, Shadow_Layer_Uri, Layer_Id_Prop_Uri, Layer_Id_Literal),
+    nb_add_triple(Repo_Builder, Layer_Uri, Layer_Id_Prop_Uri, Layer_Id_Literal),
 
     repository_head_prop_uri(Repository_Head_Prop_Uri),
-    nb_add_triple(Repo_Builder, Local_Uri, Repository_Head_Prop_Uri, node(Shadow_Layer_Uri)),
+    repository_name_prop_uri(Repository_Name_Prop_Uri),
+    object_storage("local"^^Xsd_String_Type_Uri, Repository_Name_Literal),
+    nb_add_triple(Repo_Builder, Local_Uri, Repository_Head_Prop_Uri, node(Layer_Uri)),
+    nb_add_triple(Repo_Builder, Local_Uri, Repository_Name_Prop_Uri, Repository_Name_Literal),
 
     % and then do the commit and label set
     nb_commit(Repo_Builder, Repo_Layer),

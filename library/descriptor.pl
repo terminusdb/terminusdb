@@ -98,6 +98,7 @@
 
 :- use_module(terminus_bootstrap).
 :- use_module(triplestore).
+:- use_module(literals).
 
 graph_descriptor_to_layer(Descriptor, Layer, Map, Map) :-
     memberchk(Descriptor=Layer, Map),
@@ -147,6 +148,25 @@ graph_descriptor_to_layer(Descriptor,
     commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
     storage(Store),
     store_id_layer(Store, Layer_Id, Layer).
+
+repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
+    repository_name_prop_uri(Repo_Name_Property_Uri),
+    repository_head_prop_uri(Repo_Head_Property_Uri),
+    layer_id_prop_uri(Layer_Id_Property_Uri),
+    xsd_string_type_uri(Xsd_String_Type_Uri),
+
+    predicate_id(Repo_Layer, Repo_Name_Property_Uri, Repo_Name_Property_Id),
+    predicate_id(Repo_Layer, Repo_Head_Property_Uri, Repo_Head_Property_Id),
+    predicate_id(Repo_Layer, Layer_Id_Property_Uri, Layer_Id_Property_Id),
+    object_storage(Repo_Name^^Xsd_String_Type_Uri, Repo_Name_Literal),
+    object_id(Repo_Layer, Repo_Name_Literal, Repo_Name_Id),
+
+    once((id_triple(Repo_Layer, Repo_Uri_Id, Repo_Name_Property_Id, Repo_Name_Id),
+          id_triple(Repo_Layer, Repo_Uri_Id, Repo_Head_Property_Id, Repo_Head_Id),
+          id_triple(Repo_Layer, Repo_Head_Id, Layer_Id_Property_Id, Ref_Layer_Id_Id))),
+
+    object_id(Repo_Layer, Ref_Layer_Id_Literal, Ref_Layer_Id_Id),
+    storage_object(Ref_Layer_Id_Literal, Ref_Layer_Id^^_).
 
 commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
     layer_to_id(Commit_Layer, Layer_ID),
@@ -260,7 +280,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_3]) :-
     database_descriptor{
-        name: Database_Name
+        database_name: Database_Name
     } = Descriptor,
     !,
     layer_ontology(Layer_Ontology_Name),
@@ -316,7 +336,15 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                      Map, Map_1),
 
-    [Instance_Object] = Repository_Transaction_Object.instance_objs,
+    [Instance_Object] = Repository_Transaction_Object.instance_objects,
+
+    layer_to_id(Instance_Object.read, Ref_Layer_Id),
+    Ref_Id_Descriptor = id_descriptor{ layer_id: Ref_Layer_Id},
+    once(ask(Ref_Id_Descriptor,
+             (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
+                 t(Branch_Uri, ref:ref_commit, Commit_Uri)))),
+    forall(
+                 t(Commit_Uri, ref:instance, Instance
 
     ref_layer_branch_commit(Instance_Object.read, Branch_Name, Commit),
     ref_layer_commit_graphs(Instance_Object.read, Commit,

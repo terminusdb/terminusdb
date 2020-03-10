@@ -46,7 +46,7 @@ capitalize(Atom, Capitalized) :-
     upcase_atom(First, First_Upper),
     atom_chars(Capitalized, [First_Upper|Rest]).
 
-compile_schema_type_to_module(Database, Schema, Namespace, Type, Module) :-
+compile_schema_type_to_module(_, Schema, Namespace, Type, Module) :-
     Module:dynamic(Type/1),
     capitalize(Type, Capitalized_Type),
     global_prefix_expand(Namespace:Capitalized_Type, Prefixed_Type),
@@ -68,7 +68,7 @@ compile_schema_types_to_module(Database, Schema, Module) :-
     owl_types(Owl_Types),
     compile_schema_types_to_module(Database, Schema, owl, Owl_Types, Module).
 
-compile_schema_basic_property_to_module(Database, Schema, Property_Namespace, Property_Name, Module) :-
+compile_schema_basic_property_to_module(_, Schema, Property_Namespace, Property_Name, Module) :-
     Module:dynamic(Property_Name/2),
     forall((   global_prefix_expand(Property_Namespace:Property_Name,Prop),
                xrdf(Schema, Subject, Prop, Object)),

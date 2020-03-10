@@ -123,7 +123,7 @@ nonvar_literal(Val@Lang, Val@Lang) :-
     once(var(Val) ; var(Lang)),
     !.
 nonvar_literal(O, node(S)) :-
-    var(O),
+    nonvar(O),
 
     atom_string(O,S).
 

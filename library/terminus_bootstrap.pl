@@ -17,14 +17,26 @@
               finalized_element_uri/1,
               deleting_element_uri/1,
 
-              shadow_layer_class_uri/1,
+              layer_class_uri/1,
               layer_id_prop_uri/1,
 
               branch_class_uri/1,
               ref_commit_prop_uri/1,
-              ref_no_commit_uri/1,
               ref_settings_class_uri/1,
-              ref_settings_base_uri_prop_uri/1
+              ref_settings_base_uri_prop_uri/1,
+              ref_branch_base_uri_prop_uri/1,
+              ref_branch_name_prop_uri/1,
+
+              local_repository_class_uri/1,
+              remote_repository_class_uri/1,
+
+              repository_head_prop_uri/1,
+              repository_name_prop_uri/1,
+              repository_remote_url_prop_uri/1,
+              repo_type_document_prefix/2,
+              repo_type_document_prefix/2,
+
+              repo_name_uri/4
           ]).
 
 /** <module> Terminus Bootstrap
@@ -77,14 +89,28 @@ deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
 
 
 
-%% URIs from layer schema
-shadow_layer_class_uri('http://terminusdb.com/schema/layer#ShadowLayer').
+%%% URIs from layer schema
+layer_class_uri('http://terminusdb.com/schema/layer#Layer').
 layer_id_prop_uri('http://terminusdb.com/schema/layer#layer_id').
+
+%%% URIs from repo schema
+local_repository_class_uri('http://terminusdb.com/schema/repository#Local').
+remote_repository_class_uri('http://terminusdb.com/schema/repository#Remote').
+
+repository_head_prop_uri('http://terminusdb.com/schema/repository#repository_head').
+repository_name_prop_uri('http://terminusdb.com/schema/repository#repository_name').
+repository_remote_url_prop_uri('http://terminusdb.com/schema/repository#remote_url').
+repo_type_document_prefix(local, 'Local_').
+repo_type_document_prefix(remote, 'Remote_').
+
+repo_name_uri(Db_Name, Repo_Name, Repo_Type, Uri) :-
+    repo_type_document_prefix(Repo_Type, Repo_Type_Prefix),
+    atomic_list_concat(['terminus:///', Db_Name, '/document/', Repo_Type_Prefix, Repo_Name], Uri).
 
 %%% URIs from ref schema
 branch_class_uri('http://terminusdb.com/schema/ref#Branch').
 ref_commit_prop_uri('http://terminusdb.com/schema/ref#ref_commit').
-ref_no_commit_uri('http://terminusdb.com/schema/ref#no_commit').
 ref_settings_class_uri('http://terminusdb.com/schema/ref#Settings').
 ref_settings_base_uri_prop_uri('http://terminusdb.com/schema/ref#settings_base_uri').
 ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri').
+ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').

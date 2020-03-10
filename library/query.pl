@@ -74,14 +74,14 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     label_descriptor{label: Label} :< Descriptor,
     !,
-    atom_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     database_descriptor{
         database_name: Name
     } :< Descriptor,
     !,
-    atom_list_concat(['terminus:///',Name,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminus:///',Name,'/document/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     repository_descriptor{
@@ -91,7 +91,7 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     database_descriptor{
         database_name: Database_Name
     } :< Database_Descriptor,
-    atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
+    atomic_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
     Prefixes = _{doc : Commit_Document_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
@@ -106,7 +106,7 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
              (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                  t(Branch_URI, ref:branch_base_uri, Branch_Base_Uri^^xsd:anyURI)))),
 
-    atom_list_concat([Branch_Base_Uri, '/document/'], Document_Prefix),
+    atomic_list_concat([Branch_Base_Uri, '/document/'], Document_Prefix),
     Prefixes = _{doc : Document_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % We don't know which documents you are retrieving
