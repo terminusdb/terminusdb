@@ -106,11 +106,18 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
 
 commit_validation_object(Validation_Object, []) :-
     validation_object{
-        descriptor:Descriptor
+        descriptor:Descriptor,
+        instance_objects : Instance_Objects,
+        schema_objects : Schema_Objects,
+        inference_objects : Inference_Objects
     } :< Validation_Object,
     commit_descriptor{
     } :< Descriptor,
-    throw(commit_noncommittable_error("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved.")).
+
+    append([Instance_Objects,Schema_Objects,Inference_Objects], Objects),
+    (   exists([Object]>>(Object.changed = true), Objects)
+    ->  throw(immutable_graph_update("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved."))
+    ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
@@ -126,6 +133,18 @@ commit_validation_object(Validation_Object, []) :-
     ->  storage(Store),
         safe_open_named_graph(Store, Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object, []) :-
+    validation_object{
+        descriptor: Descriptor,
+        instance_objects: [Instance_Object]
+    } :< Validation_Object,
+    id_descriptor{
+    } = Descriptor,
+    !,
+
+    (   Instance_Object.changed = true
+    ->  throw(immutable_graph_update('Tried to update a query only database which was formed directly from a layer id.'))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
@@ -182,6 +201,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                      idgen(layer:'ShadowLayer', [Layer_ID], NewShadowLayerID),
                      insert(NewShadowLayerID, rdf:type, layer:'ShadowLayer'),
                      insert(NewShadowLayerID, layer:shadow_layer, Layer_ID^^xsd:string)
+                 %  TODO: Are we missing something here for repository head?
                  )
                 ))
     ;   true).
@@ -242,6 +262,7 @@ insert_graph(Transaction_Object, Commit_URI, Type, Read_Write_Object) :-
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
 
+:- table descriptor_type_order/3.
 descriptor_type_order(Operator, Left, Right) :-
     descriptor_type_order_List(Order),
     once(nth0(Left_N, Order, Left)),
@@ -274,16 +295,16 @@ commit_validation_stack_([Object|Objects]) :-
     transaction_object{} :< Object,
     !,
     transaction_object_to_validation_object(Object, Validation_Object),
-    sort([Validation_Object|Objects], Sorted_Objects),
+    predsort(commit_order,[Validation_Object|Objects], Sorted_Objects),
     commit_validation_stack_(Sorted_Objects).
 commit_validation_stack_([Object|Objects]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),
     append(Transaction_Objects, Objects, Unsorted_Objects),
-    sort(Unsorted_Objects, Sorted_Objects),
+    predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_stack_(Sorted_Objects).
 commit_validation_stack(Unsorted_Objects) :-
-    sort(Unsorted_Objects, Sorted_Objects),
+    predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_stack_(Sorted_Objects).
 
 /**
@@ -412,6 +433,7 @@ calculate_invalidating_class(Validation_Object, Class) :-
     Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Sub, rdf:subClassOf, _Super),
     subsumption_of(Class, Sub, Validation_Object).
+% TODO: Missing disjoint union of
 calculate_invalidating_class(Validation_Object, Class) :-
     Schema = Validation_Object.schema_objects,
     xrdf_deleted(Schema, Sub, rdf:unionOf, _Super),
@@ -623,14 +645,14 @@ refute_instance(Validation_Object,Witness) :-
     validation_object{
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    % TODO: Check changed!
-    xrdf_added(Instance_Objects, X, P, Y),
+    include([Object]>>(Object.changed = true), Instance_Objects, Changed_Objects),
+    xrdf_added(Changed_Objects, X, P, Y),
     refute_insertion(Validation_Object,X,P,Y,Witness).
 refute_instance(Validation_Object,Witness) :-
     validation_object{
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    % TODO: Check changed!
+    include([Object]>>(Object.changed = true), Instance_Objects, Changed_Objects),
     xrdf_deleted(Instance_Objects, X, P, Y),
     refute_deletion(Validation_Object,X,P,Y,Witness).
 
@@ -684,6 +706,16 @@ refute_validation_objects(Validation_Objects, Witness) :-
  *
  * TODO: This predicate is now really quite bogus, however we have to do something similar because we need
  * calculate an intermediate graph for insertion.
+ */
+/* turtle_schema_update(TTL file, Schema_Name, Transaction_Object, Witnesses) is det.
+ *
+ * 1) calculate delta
+ * 2) update the transaction object with the delta
+ * 3) make validation object
+ * 4) validate
+ * 5) commit?
+ *
+ * Should this be refute turtle schema update? Retry?
  */
 turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
 

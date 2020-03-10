@@ -85,11 +85,10 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     repository_descriptor{
-        database_descriptor: Database_Descriptor,
-        repository_name: Repository_Name,
+        database_descriptor: Database_Descriptor
     } :< Descriptor,
     !,
-    database_descriptor {
+    database_descriptor{
         database_name: Database_Name
     } :< Database_Descriptor,
     atom_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
@@ -102,13 +101,6 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
         branch_name: Branch_Name
     } :< Descriptor,
     !,
-    repository_descriptor{
-        database_descriptor: Database_Descriptor,
-        repository_name: Repository_Name,
-    } :< Repository_Descriptor,
-    database_descriptor{
-        database_name: Database_Name
-    } :< Database_Descriptor,
 
     once(ask(Repository_Descriptor,
              (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),

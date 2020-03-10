@@ -35,6 +35,7 @@
  *
  * collection_descriptor --> terminus_descriptor{}
  *                         | label_descriptor{ label: string }
+ *                         | id_descriptor{ id : string } % only for querying!
  *                         | database_descriptor{ database_name : uri }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
  *                                                  repository_name : uri }
@@ -92,6 +93,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, ^^).
+:- op(2, xfx, @).
+
 :- use_module(terminus_bootstrap).
 :- use_module(triplestore).
 
@@ -133,17 +137,30 @@ graph_descriptor_to_layer(Descriptor,
                           [Descriptor=Layer|New_Map]) :-
     Descriptor = branch_graph{ database_name: Database_Name,
                                repository_name: Repository_Name,
-                               branch_name: Ref_Uri,
+                               branch_name: Branch_Name,
                                type: Type,
                                name: Graph_Name },
     !,
     Commit_Descriptor = commit_graph{ database_name : Database_Name,
                                       repository_name : Repository_Name },
     graph_descriptor_to_layer(Commit_Descriptor, Commit_Layer, Map, New_Map),
-    commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Type, Graph_Name, Layer_Id), % todo this does not exist yet
+    commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
+    storage(Store),
     store_id_layer(Store, Layer_Id, Layer).
 
-open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: Layer_Builder }, Map, New_Map) :-
+commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
+    layer_to_id(Commit_Layer, Layer_ID),
+    Collection_Descriptor = id_descriptor{ layer_id : Layer_ID },
+    once(ask(Collection_Descriptor,
+             (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
+                 t(Branch_URI, ref:ref_commit, Commit_URI),
+                 t(Commit_URI, ref:Type, Graph_URI),
+                 t(Graph_URI, ref:graph_name, Graph_Name^^xsd:string),
+                 t(Graph_URI, ref:graph_layer, Layer_URI),
+                 t(Layer_URI, layer:layer_id, Layer_ID^^xsd:string)
+             ))).
+
+open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, New_Map) :-
     graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
 
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
@@ -212,6 +229,18 @@ open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
                              inference_objects : [Inference_Object]
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+                [Descriptor=Transaction_Object|New_Map]) :-
+    id_descriptor{ id : ID } :< Descriptor,
+    !,
+    Graph_Descriptor = id_graph{ layer_id : ID },
+    open_read_write_obj(Graph_Descriptor, Instance, Map, New_Map),
+    Transaction_Object = transaction_object{
+                             descriptor : Descriptor,
+                             instance_objects : [Instance],
+                             schema_objects : [],
+                             inference_objects : []
+                         }.
+open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_1]) :-
     label_descriptor{
         label: Label
@@ -251,7 +280,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              inference_objects : []
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
-                 [Descriptor=Transaction_Object|New_Map]) :-
+                 [Descriptor=Transaction_Object|Map_4]) :-
     repository_descriptor{
         database_descriptor : Database_Descriptor,
         repository_name: Repository_Name
@@ -349,8 +378,8 @@ open_descriptor(Descriptor, Transaction_Object) :-
 
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
     RW_Objects = Transaction_Object.instance_objects,
-    exists({G_Descriptor}/[
-               read_write_obj{ descriptor : G_Descriptor,
+    exists({Graph_Descriptor}/[
+               read_write_obj{ descriptor : Graph_Descriptor,
                                read : _,
                                write : _ }]>>true,
            RW_Objects),
@@ -358,7 +387,7 @@ instance_graph_descriptor_transaction_object(Graph_Descriptor, [Transaction_Obje
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-
     instance_graph_descriptor_transaction_object(Graph_Descriptor, Transaction_Objects, Transaction_Object).
 
-collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
+collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
     Transaction_Object.descriptor = Collection_Descriptor,
     !.
 collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-

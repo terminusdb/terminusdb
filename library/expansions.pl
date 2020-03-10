@@ -23,6 +23,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- op(2, xfx, ^^).
+:- op(2, xfx, @).
+
 :- use_module(global_prefixes).
 
 :- multifile user:goal_expansion/2.
@@ -38,7 +41,7 @@ user:goal_expansion(xrdf(G,X,B,Z),xrdf(G,X,Y,Z)) :-
 user:goal_expansion(xrdf(G,X,Y,C),xrdf(G,X,Y,Z)) :-
     nonvar(C),
     C \= _@_,
-    C \= _^^_
+    C \= _^^_,
     global_prefix_expand(C,Z).
 user:goal_expansion(xrdf(G,X,Y,L),xrdf(G,X,Y,Object)) :-
     nonvar(L),

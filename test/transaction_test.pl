@@ -79,3 +79,13 @@ create_db_test :-
 delete_db_test :-
     test_db_name(Name),
     delete_db(Name).
+
+empty_database_test :-
+    create_db_test,
+    test_db_name(Name),
+    Descriptor = database_descriptor{ database_name : Name },
+    findall(t(X,P,Y),
+            ask(Descriptor,
+                (   t(X, P, Y) )),
+            Triples),
+    write(Triples).

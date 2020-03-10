@@ -5,6 +5,8 @@
               safe_open_named_graph/3,
               xrdf/4,
               xrdf_db/4,
+              xrdf_deleted/4,
+              xrdf_added/4,
               insert/4,
               delete/4,
               update/5,

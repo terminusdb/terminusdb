@@ -37,9 +37,9 @@
 :- use_module(woql_term).
 :- use_module(utils).
 :- use_module(triplestore, [
-                  xrdf/5,
-                  insert/5,
-                  delete/5
+                  xrdf/4,
+                  insert/4,
+                  delete/4
               ]).
 %:- use_module(schema).
 :- use_module(inference).
@@ -1003,7 +1003,9 @@ compile_wf(sum(X,Y),(literal_list(XE,XL),
     resolve(Y,YE).
 compile_wf(timestamp_now(X), get_time(Timestamp)) -->
     resolve(X,XE),
-    {   XE = Timestamp^^xsd:decimal }.
+    {
+        XE = Timestamp^^(xsd:decimal)
+    }.
 compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->

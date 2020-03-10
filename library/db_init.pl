@@ -97,20 +97,15 @@ create_ref_layer(Name,Base_URI,Ref_Layer) :-
     storage(Store),
     open_write(Store,Layer_Builder),
     branch_class_uri(Branch_Class),
-    ref_commit_prop_uri(Ref_Commit_Prop),
-    ref_no_commit_uri(No_Commit),
 
-    atomic_list_concat([Base_URI, '/', Name, '/document/Local'], Branch_URI),
-    write_instance(Layer_Builder,Branch_URI,'Local',Branch_Class),
-    nb_add_triple(Layer_Builder,Branch_URI,Ref_Commit_Prop,node(No_Commit)),
+    atomic_list_concat([Base_URI, '/', Name, '/document/master'], Branch_URI),
+    write_instance(Layer_Builder,Branch_URI,'master',Branch_Class),
 
-    ref_settings_class_uri(Settings_Class),
-    ref_settings_base_uri_prop_uri(Settings_Prop),
     xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
     object_storage(Base_URI^^Xsd_Any_Uri_Type_Uri, Base_URI_Literal),
-    atomic_list_concat([Base_URI, '/', Name, '/document/Settings'], Settings_URI),
-    write_instance(Layer_Builder,Settings_URI,'Settings',Settings_Class),
-    nb_add_triple(Layer_Builder,Settings_URI,Settings_Prop,Base_URI_Literal),
+
+    ref_branch_base_uri_prop_uri(Branch_Base_URI),
+    nb_add_triple(Layer_Builder,Branch_URI, Branch_Base_URI, Base_URI_Literal),
 
     nb_commit(Layer_Builder,Ref_Layer).
 
@@ -153,13 +148,12 @@ finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
 create_db(Name,Base_URI) :-
     % insert new db object into the terminus db
     insert_db_object(Name),
-    %.. more to come ..
 
     % create repo graph - it has name as label
     % I think we want to commit this last...
     create_repo_graph(Name,Repo_Graph,Repo_Builder),
 
-    % create ref layer with master branch and fake first commit
+    % create ref layer with master branch
     create_ref_layer(Name,Base_URI,Ref_Layer),
 
     % write layer id as local repo in repo graph

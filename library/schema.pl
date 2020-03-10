@@ -141,7 +141,7 @@ compile_util_predicates(Module) :-
 
 compile_schema_to_module(Database, Module) :-
     % use the transaction mutex to ensure that no transaction is running while a schema module is updated.
-    with_mutex(transaction,
+    with_mutex(transaction, % TODO: Use database name?
                (   database_schema(Database, Schema),
                    cleanup_schema_module(Module),
                    compile_schema_types_to_module(Database, Schema, Module),

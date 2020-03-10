@@ -87,4 +87,4 @@ ref_commit_prop_uri('http://terminusdb.com/schema/ref#ref_commit').
 ref_no_commit_uri('http://terminusdb.com/schema/ref#no_commit').
 ref_settings_class_uri('http://terminusdb.com/schema/ref#Settings').
 ref_settings_base_uri_prop_uri('http://terminusdb.com/schema/ref#settings_base_uri').
-
+ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri').

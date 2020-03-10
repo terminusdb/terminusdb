@@ -499,7 +499,7 @@ woql_handler(post,_Account_ID,DB,R) :-
     check_capabilities(Terminus_Transaction_Object, Active),
 
     collect_posted_files(Request,Files),
-    New_Ctx = Ctx.files = Files,
+    New_Ctx = Ctx.put(files,Files),
 
     (   run_query(Query,New_Ctx,JSON)
     ->  true
