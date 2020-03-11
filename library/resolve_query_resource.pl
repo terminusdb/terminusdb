@@ -230,7 +230,7 @@ resolve_graph_resource(URI,Descriptor) :-
                      name : Database_Name % This is wrong!
                  }.
 % Error
-resolve_graph_resource(URI,Descriptor) :-
+resolve_graph_resource(URI,_Descriptor) :-
     format(atom(Msg), 'Unknown graph resource ~q', [URI]),
     throw(error(resolution_error(URI,Msg))).
 

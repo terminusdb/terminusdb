@@ -123,18 +123,43 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
     merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
 collection_descriptor_default_write_graph(terminus_descriptor{}, Graph_Descriptor) :-
-    true.
+    terminus_instance_name(Instance_Name)
+    Graph_Descriptor = labelled_graph{
+                           name : Instance_Name
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    database_descriptor{ database_name : Name } = Descriptor,
+    !,
+    Graph_Descriptor = repo_graph{
+                           database_name : Name,
+                           type : instance,
+                           name : main
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    repository_descriptor{
+        database_descriptor : Database_Descriptor,
+        repository_name : Repository_Name,
+    } = Descriptor,
+    !,
+    database_descriptor{ database_name : Database_Name } = Descriptor,
+    Graph_Descriptor = commit_graph{
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           type : instance,
+                           name : main
+                       }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     branch_descriptor{ branch_name : Branch_Name,
                        repository_descriptor : Repository_Descriptor
-                     } :< Descriptor,
+                     } = Descriptor,
+    !,
     repository_descriptor{
         database_descriptor : Database_Descriptor,
         repository_name : Repository_Name
-    } :< Repository_Descriptor,
+    } = Repository_Descriptor,
     repository_descriptor{
         database_name : Database_Name
-    } :< Database_Descriptor,
+    } = Database_Descriptor,
 
     Graph_Descriptor = branch_graph{
                            database_name : Database_Name,
@@ -143,6 +168,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            type : instance,
                            name : main
                        }.
+collection_descriptor_default_write_graph(_, empty).
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
