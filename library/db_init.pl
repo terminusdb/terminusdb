@@ -134,7 +134,7 @@ finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
     layer_to_id(Ref_Layer, Layer_Id),
     local_repo_uri(Name, Local_Uri),
     layer_class_uri(Layer_Class_Uri),
-    atomic_list_concat(['terminus://', Name, '/document/ShadowLayer', Layer_Id], Layer_Uri),
+    atomic_list_concat(['terminus://', Name, '/document/Layer', Layer_Id], Layer_Uri),
     atomic_list_concat(['Layer ', Layer_Id], Layer_Name),
     write_instance(Repo_Builder, Layer_Uri, Layer_Name, Layer_Class_Uri),
 

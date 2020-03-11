@@ -334,13 +334,13 @@ random_uri(Base,Type,URI) :-
     format(atom(Random), '~36r', [Num]),
     idgen(Type_Base ,[Random], URI).
 
-nb_remove_shadow_layer(Layer_Builder, Repo_Name, Layer_Id) :-
-    metadata_prefix_expand(terminus:'ShadowLayer', Layer_Type),
+nb_remove_layer(Layer_Builder, Repo_Name, Layer_Id) :-
+    metadata_prefix_expand(terminus:'Layer', Layer_Type),
     metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
     metadata_prefix_expand(rdf:type, RDF_Type),
     metadata_prefix_expand(xsd:string, XSD_String),
 
-    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+    atomic_list_concat([Repo_Name,'/document/Layer'], Layer_Base),
 
     idgen(Layer_Base, [Layer_Id], Layer_URI),
     object_storage(literal(Layer_Id,XSD_String), Layer_Literal),
@@ -348,13 +348,13 @@ nb_remove_shadow_layer(Layer_Builder, Repo_Name, Layer_Id) :-
     ignore(nb_remove_triple(Layer_Builder, Layer_URI, RDF_Type, node(Layer_Type))),
     ignore(nb_remove_triple(Layer_Builder, Layer_URI, Layer_ID_Prop, value(Layer_Literal))).
 
-nb_add_shadow_layer(Layer_Builder, Repo_Name, Layer_Id) :-
-    metadata_prefix_expand(terminus:'ShadowLayer', Layer_Type),
+nb_add_layer(Layer_Builder, Repo_Name, Layer_Id) :-
+    metadata_prefix_expand(terminus:'Layer', Layer_Type),
     metadata_prefix_expand(terminus:layer_id, Layer_ID_Prop),
     metadata_prefix_expand(rdf:type, RDF_Type),
     metadata_prefix_expand(xsd:string, XSD_String),
 
-    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+    atomic_list_concat([Repo_Name,'/document/Layer'], Layer_Base),
 
     idgen(Layer_Base, [Layer_Id], Layer_URI),
     object_storage(literal(Layer_Id,XSD_String), Layer_Literal),
@@ -369,13 +369,13 @@ update_repository_data(Repo_Name, Repo_Layer_Builder, URI, Layer) :-
     layer_to_id(Parent, Parent_Id),
 
     metadata_prefix_expand(terminus:repository_head, Repository_Head_Property),
-    atomic_list_concat([Repo_Name,'/document/ShadowLayer'], Layer_Base),
+    atomic_list_concat([Repo_Name,'/document/Layer'], Layer_Base),
 
     idgen(Layer_Base, [Layer_Id], Layer_URI),
     idgen(Layer_Base, [Parent_Id], Parent_URI),
 
-    nb_remove_shadow_layer(Repo_Layer_Builder, Repo_Name, Parent_URI),
-    nb_add_shadow_layer(Repo_Layer_Builder, Repo_Name, Layer_Id),
+    nb_remove_layer(Repo_Layer_Builder, Repo_Name, Parent_URI),
+    nb_add_layer(Repo_Layer_Builder, Repo_Name, Layer_Id),
 
     nb_remove_triple(URI, Repository_Head_Property, node(Parent_URI)),   % TODO arity
     nb_add_triple(URI, Repository_Head_Property, node(Layer_URI)).  % TODO arity

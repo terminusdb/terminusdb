@@ -158,13 +158,15 @@ graph_descriptor_to_layer(Descriptor,
         store_id_layer(Store, Commit_Layer_Id, Layer)
     ;   Type = schema,
         Name = layer
-    ->  storage(Store),
+    ->  New_Map = Map,
+        storage(Store),
         layer_ontology(Layer_Name),
         safe_open_named_graph(Store, Layer_Name, Graph),
         head(Graph, Layer)
     ;   Type = schema,
         Name = ref
-    ->  ref_ontology(Ref_Name),
+    ->  New_Map = Map,
+        ref_ontology(Ref_Name),
         storage(Store),
         safe_open_named_graph(Store, Ref_Name, Graph),
         head(Graph, Layer)
@@ -362,7 +364,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     Ref_Ontology_Graph = commit_graph{ database_name : Database_Name,
                                        repository_name: Repository_Name,
                                        type: schema,
-                                       name: repository },
+                                       name: ref },
 
     Instance_Graph = commit_graph{ database_name: Database_Name,
                                    repository_name: Repository_Name,
