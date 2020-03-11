@@ -234,3 +234,66 @@ resolve_graph_resource(URI,_Descriptor) :-
     format(atom(Msg), 'Unknown graph resource ~q', [URI]),
     throw(error(resolution_error(URI,Msg))).
 
+
+/*
+ * resolve_relative_graph_resource(+Transaction_Object,+Partial_URI,-Graph_Descriptor) is det.
+ *
+ * Todo: Make this work for non-default
+ */
+resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
+    branch_descriptor{ repository_descriptor : Repository_Descriptor,
+                       branch_name : Branch_Name } = Transaction_Object.descriptor,
+    !,
+    repository_descriptor{ database_descriptor : Database_Descriptor,
+                           repository_name : Repository_Name } = Repository_Descriptor,
+    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
+
+    Prototype = branch_graph{ database_name : Database_Name,
+                              repository_name : Repository_Name,
+                              branch_name : Branch_Name,
+                              type : instance,
+                              name : main },
+
+    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  re_matchsub('^(?P<repository_name>[^/]*)/(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ;   true
+    ->  re_matchsub('^(?P<database_name>[^/]*)/(?P<repository_name>[^/]*)/(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ),
+    Graph_Descriptor = Prototype.put(Resource_Dict).
+resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
+    repository_descriptor{ database_descriptor : Database_Descriptor,
+                           repository_name : Repository_Name } = Repository_Descriptor,
+    !,
+    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
+
+    Prototype = commit_graph{ database_name : Database_Name,
+                              repository_name : Repository_Name,
+                              type : instance,
+                              name : main },
+
+    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ),
+    Graph_Descriptor = Prototype.put(Resource_Dict).
+resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
+    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
+    !,
+
+    Prototype = repo_graph{ database_name : Database_Name,
+                            type : instance,
+                            name : main },
+
+    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
+    ->  true
+    ),
+    Graph_Descriptor = Prototype.put(Resource_Dict).

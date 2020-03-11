@@ -354,7 +354,7 @@ jsonld_to_ast_and_context(JSON_In, AST, CCTX) :-
     CCTX.prefixs = Prefixes_Database,
     woql_context(Ctx),
     merge_dictionaries(Ctx,Prefixes_Database,Ctx_Total),
-    json_woql(JSON_In, Ctx_Total, Ast).
+    json_woql(JSON_In, Ctx_Total, AST).
 
 /*
  * run_query(JSON_In, CCTX, JSON_Out) is det.
@@ -670,35 +670,40 @@ compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(WG,X,P,Y),delete(WG,XE,PE,YE)) -->
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(default_collection,DB).
-% TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(WG,X,P,Y),insert(WG,XE,PE,YE)) -->
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(default_collection,DB).
-compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(Graph_URI,X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
+    view(transaction_objects,Transaction_Objects),
+    {
+        resolve_relative_graph_resource(DB,Graph_URI,Graph_Descriptor),
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+    }.
+% TODO: Need to translate the reference WG to a read-write object.
+compile_wf(insert(Graph_URI,X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(default_collection,DB),
+    view(transaction_objects,Transaction_Objects),
+    {
+        resolve_relative_graph_resource(DB,Graph_URI,Graph_Descriptor),
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+    }.
+compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 compile_wf(insert(X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
-    {
-        nl,writeq(insert(X,P,Y)),nl
-    },
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(default_collection,DB),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
     {

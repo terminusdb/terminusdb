@@ -90,18 +90,6 @@ database_exists(Name) :-
     terminus_graph_layer(_Graph,Layer),
     db_exists_in_layer(Layer,Name).
 
-create_schema(DB_URI,Schema,DB) :-
-    interpolate([DB_URI],Label),
-    interpolate([Schema,' ontology for ',DB_URI],Comment),
-    % goal expansion doesn't work here..
-    global_prefix_expand(rdf:type, Rdf_type),
-    global_prefix_expand(rdfs:label, Rdfs_label),
-    global_prefix_expand(rdfs:comment, Rdfs_comment),
-    global_prefix_expand(owl:'Ontology', OWL_ontology),
-    insert(Schema, DB_URI, Rdf_type, OWL_ontology),
-    insert(Schema, DB_URI, Rdfs_label, Label@en),
-    insert(Schema, DB_URI, Rdfs_comment, Comment@en).
-
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(
                  write_obj{ descriptor : Graph_Desc }:< Obj.descriptor,

@@ -126,8 +126,7 @@ connect_handler(get,Request) :-
  */
 console_handler(options,_Request) :-
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
 console_handler(get,_Request) :-
@@ -135,8 +134,7 @@ console_handler(get,_Request) :-
     interpolate([Path,'/config/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n'),
     write(String).
@@ -152,8 +150,7 @@ console_handler(get,_Request) :-
  */
 message_handler(options,_Request) :-
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
 message_handler(get,Request) :-
@@ -167,8 +164,7 @@ message_handler(get,Request) :-
     http_log('~N[Message] ~s~n',[Payload]),
 
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
@@ -184,8 +180,7 @@ message_handler(post,R) :-
     http_log('~N[Message] ~s~n',[Payload]),
 
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
@@ -202,8 +197,7 @@ message_handler(post,R) :-
 db_handler(options,_DB,_Request) :-
     % database may not exist - use server for CORS
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DB),
+    open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI,DB),
     format('~n').
 db_handler(post,DB,R) :-
@@ -219,12 +213,12 @@ db_handler(post,DB,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
-    authenticate(Terminus_DB, Request, Auth),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, Auth),
 
     config:public_server_url(Server),
 
-    verify_access(Auth, terminus/delete_database,Server),
+    verify_access(Terminus, Auth, terminus/delete_database,Server),
 
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
@@ -253,23 +247,21 @@ db_handler(delete,DB,Request) :-
  * Get or update a schema.
  */
 schema_handler(options,DB,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
+    write_cors_headers(DB_URI, Terminus),
     format('~n'). % send headers
 schema_handler(get,DB,Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus,Request,Auth),
 
     % We should make it so we can pun documents and IDs
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/get_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus/get_schema,DB_URI),
 
     % Let's do a default schema if we can't find one.
     catch(
@@ -278,27 +270,25 @@ schema_handler(get,DB,Request) :-
         interpolate([DB_URI,'/schema'],Name)
     ),
 
-    try_dump_schema(DB_URI, DBC, Name, Request).
+    try_dump_schema(DB_URI, Terminus, Name, Request).
 schema_handler(post,DB,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus,Request,Auth),
 
     % We should make it so we can pun documents and IDs
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/update_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus/update_schema,DB_URI),
 
     try_get_param('terminus:schema',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
 
     try_update_schema(DB_URI,Name,TTL,Witnesses),
 
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
+    reply_with_witnesses(DB_URI,Terminus,Witnesses).
 
 /*
  * schema_handler(Mode,DB,Branch,Request) is det.
@@ -330,23 +320,21 @@ schema_handler(_Method,_DB,_Branch,_Graph,_Request) :-
  * Establishes frame responses
  */
 frame_handler(options,DB,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
+    write_cors_headers(DB_URI, Terminus),
     format('~n'). % send headers
 frame_handler(get, DB, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus, Request, Auth),
 
     % We should make it so we can pun documents and IDs
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/class_frame,DB_URI),
+    verify_access(Terminus,Auth,terminus/class_frame,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -355,7 +343,7 @@ frame_handler(get, DB, Request) :-
     try_class_frame(Class_URI,Database,Frame),
 
     config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(SURI, Terminus),
     reply_json(Frame).
 
 frame_handler(_Method,_DB,_Branch,_Request) :-
@@ -378,23 +366,21 @@ frame_handler(_Method,_DB,_Branch,_Request) :-
  *
  */
 document_handler(options,DB,_Doc_ID,_Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, DBC),
+    write_cors_headers(DB_URI, Terminus),
     format('~n').
 document_handler(get, DB, Doc_ID, Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus, Request, Auth),
 
     % We should make it so we can pun documents and IDs
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/get_document,DB_URI),
+    verify_access(Terminus,Auth,terminus/get_document,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -408,20 +394,19 @@ document_handler(get, DB, Doc_ID, Request) :-
         true
     ;   try_get_document(Doc_URI,Database,JSON)
     ),
-    write_cors_headers(DB_URI, DBC),
+    write_cors_headers(DB_URI, Terminus),
     reply_json_dict(JSON).
 document_handler(post, DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
 
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Update Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus, Request, Auth),
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/create_document,DB_URI),
+    verify_access(Terminus,Auth,terminus/create_document,DB_URI),
 
     try_db_graph(DB_URI, Database),
 
@@ -430,18 +415,19 @@ document_handler(post, DB, Doc_ID, R) :-
     % very hacky!
     interpolate(['doc:',Doc_ID],Doc_URI),
 
-    try_update_document(DBC, Doc_URI,Doc,Database,Witnesses),
+    try_update_document(Terminus, Doc_URI,Doc,Database,Witnesses),
 
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
+    reply_with_witnesses(DB_URI,Terminus,Witnesses).
 document_handler(delete, DB, Doc_ID, Request) :-
+    open_descriptor(terminus_descriptor{}, Terminus),
     /* Delete Document */
-    authenticate(Request, DBC, Auth),
+    authenticate(Terminus, Request, Auth),
     % We should make it so we can pun documents and IDs
 
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Auth,DBC,terminus/delete_document,DB_URI),
+    verify_access(Terminus,Auth,terminus/delete_document,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -450,7 +436,7 @@ document_handler(delete, DB, Doc_ID, Request) :-
 
     try_delete_document(Doc_URI,Database,Witnesses),
 
-    reply_with_witnesses(DB_URI,DBC,Witnesses).
+    reply_with_witnesses(DB_URI,Terminus,Witnesses).
 
 
 document_handler(_Method,_DB,_Branch,_Request) :-
@@ -462,7 +448,7 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(woql/Acount_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
+:- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
@@ -476,21 +462,20 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
  */
 woql_handler(options,_Account_ID,_DB,_Request) :-
     config:public_server_url(SURI),
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    write_cors_headers(SURI, DBC),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
     format('~n').
 woql_handler(post,_Account_ID,DB,R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
 
-    authenticate(Terminus_Transaction_Object, Request, DBC, Auth),
+    authenticate(Terminus_Transaction_Object, Request, Auth),
 
     try_db_uri(DB,DB_URI),
 
     % redundant?
-    verify_access(Terminus_Transaction_Object, Auth, DBC,terminus/woql_select, DB_URI),
+    verify_access(Terminus_Transaction_Object, Auth, terminus/woql_select, DB_URI),
 
     try_get_param('terminus:query',Request,Atom_Query),
     http_log('~N[Query] ~s~n',[Atom_Query]),
@@ -501,6 +486,7 @@ woql_handler(post,_Account_ID,DB,R) :-
 
     active_graphs(AST, Active),
 
+    % TODO: check_capabilities/2 doesn't exist but it should
     check_capabilities(Terminus_Transaction_Object, Active),
 
     collect_posted_files(Request,Files),
@@ -511,7 +497,7 @@ woql_handler(post,_Account_ID,DB,R) :-
     ;   JSON = _{bindings : []}),
 
     config:public_server_url(SURI),
-    write_cors_headers(SURI, DBC),
+    write_cors_headers(SURI, Terminus_Transaction_Object),
     reply_json_dict(JSON).
 
 
@@ -686,7 +672,7 @@ fetch_authorization_data(Request, Username, KS) :-
                                              'terminus:object' : 'fetch_authorization_data'}))).
 
 /*
- * authenticate(+Data,+Auth_Obj) is det.
+ * authenticate(+Database, +Request, -Auth_Obj) is det.
  *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message.
  */
@@ -705,12 +691,12 @@ verify_access(DB, Auth, Action, Scope) :-
                                               'terminus:message' : M,
                                               'terminus:object' : 'verify_access'})))).
 
-connection_authorised_user(Request, Username, SURI, DB) :-
-    fetch_authorization_data(Request, KS),
+connection_authorised_user(Request, Username, SURI) :-
+    open_descriptor(terminus_descriptor{}, DB),
+    fetch_authorization_data(Request, Username, KS),
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  (   authenticate(DB, Request, Auth),
-            verify_access(Auth,DB,terminus/get_document,SURI),
-            get_user(User_ID, User)
+            verify_access(Auth,DB,terminus/get_document,SURI)
         ->  true
         ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                   'terminus:message' : 'Bad user object',
@@ -735,31 +721,6 @@ reply_with_witnesses(Resource_URI, DB, Witnesses) :-
                    [status(406)])
     ).
 
-
-
-/* */
-metadata_handler(options,DB,_Request) :-
-    % database may not exist - use server for CORS
-    try_db_uri(DB,DB_URI),
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    write_cors_headers(DB_URI, DBC),
-    format('~n'). % send headers
-metadata_handler(get,DB,Request) :-
-    terminus_database_name(Collection),
-    connect(Collection,DBC),
-    /* Read Document */
-    authenticate(Request, DBC, Auth),
-
-    % We should make it so we can pun documents and IDs
-    try_db_uri(DB,DB_URI),
-
-    % check access rights
-    verify_access(Auth,DBC,terminus/update_schema,DB_URI),
-
-    try_get_metadata(DB_URI,JSON),
-
-    reply_json(JSON).
 
 /********************************************************
  * Determinising predicates used in handlers            *

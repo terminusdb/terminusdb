@@ -88,13 +88,11 @@ all_classes(Database,ACR) :-
  * get_label(Document,Database,Label) is semidet.
  */
 get_label(Document,Database,Label) :-
-    database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
     xrdf(Instance,Document,LabelProp,Label@_),
     !.
 get_label(Document,Database,Label) :-
-    database_instance(Database,Collection),
     database_instance(Database,Instance),
     global_prefix_expand(rdfs:label,LabelProp),
     xrdf(Instance,Document,LabelProp,Label@_),
@@ -890,7 +888,7 @@ document_jsonld(DB, Document,JSON_LD) :-
     document_object(DB, Document, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
 
-    collection_descriptor_prefixes(DB.Descriptor, Prefixes),
+    collection_descriptor_prefixes(DB.descriptor, Prefixes),
     compress(JSON_Ex,Prefixes,JSON_LD).
 
 /*
@@ -903,7 +901,7 @@ document_jsonld(DB, Document,JSON_LD) :-
 document_jsonld(Database, Document, Depth, JSON_LD) :-
     document_object(Document, Database, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-    collection_descriptor_prefixes(DB.Descriptor, Prefixes),
+    collection_descriptor_prefixes(Database.descriptor, Prefixes),
     compress(JSON_Ex, Prefixes, JSON_LD).
 
 /*

@@ -657,7 +657,7 @@ refute_instance(Validation_Object,Witness) :-
         instance_objects: Instance_Objects
     } :< Validation_Object,
     include([Object]>>(Object.changed = true), Instance_Objects, Changed_Objects),
-    xrdf_deleted(Instance_Objects, X, P, Y),
+    xrdf_deleted(Changed_Objects, X, P, Y),
     refute_deletion(Validation_Object,X,P,Y,Witness).
 
 /*
