@@ -55,8 +55,7 @@ must_be_proper_version :-
     ;
         findall(Version, needs_version(Version), SupportedVersions),
         print_message(error,
-                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup)),
-        halt
+                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup))
    ).
 
 :- initialization must_be_proper_version.
