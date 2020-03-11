@@ -23,10 +23,8 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, ^^).
-:- op(2, xfx, @).
-
 :- use_module(global_prefixes).
+:- reexport(syntax).
 
 :- multifile user:goal_expansion/2.
 :- dynamic user:goal_expansion/2.

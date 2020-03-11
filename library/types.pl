@@ -40,15 +40,12 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 /*************************************************************************
 
 This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
-
+:- reexport(syntax).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 

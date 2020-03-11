@@ -299,7 +299,7 @@ resolve(X,X) -->
 % Questionable! How can this be a number!
 resolve(X,X) -->
     {
-        throw(error('How did we get here?'))
+        throw(error('How did we get here?', X))
     }.
 
 
@@ -308,6 +308,10 @@ resolve(X,X) -->
  *
  * Gives the internal representation of some type T from some string S.
  */
+
+compile_representation(String,Type,String^^Type) :-
+    var(Type),
+    !.
 compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
     !,
     guess_date(String,Date).

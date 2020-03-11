@@ -35,15 +35,13 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 :- use_module(library(pairs)).
 :- use_module(utils).
 :- use_module(library(http/json)).
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
 :- use_module(database).
+:- reexport(syntax).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).

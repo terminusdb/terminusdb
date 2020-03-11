@@ -19,7 +19,8 @@ doc:admin
     rdfs:comment "This is the server super user account"@en ;
     rdfs:label "Server Admin User"@en ;
     terminus:authority doc:access_all_areas ;
-    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+    terminus:agent_name "admin"^^xsd:string ;
+    terminus:agent_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
 doc:terminus
     a terminus:Database ;

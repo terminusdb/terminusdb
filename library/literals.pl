@@ -4,9 +4,7 @@
               object_storage/2,
               storage_object/2,
               date_string/2,
-              uri_to_prefixed/3,
-              op(2, xfx, @),
-              op(2, xfx, ^^)
+              uri_to_prefixed/3
           ]).
 
 /** <module> Literals
@@ -32,8 +30,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
+:- reexport(syntax).
 
 /*
  * date_string(-Date,+String) is det.

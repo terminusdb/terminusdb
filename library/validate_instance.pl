@@ -29,9 +29,6 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 :- use_module(validate_schema).
 :- use_module(database).
 :- use_module(triplestore).
@@ -41,6 +38,7 @@
 :- use_module(inference).
 :- use_module(expansions).
 :- use_module(library(http/json)).
+:- reexport(syntax).
 
 /**
  * most_specific_type(+Document, -Sorted, +Database)

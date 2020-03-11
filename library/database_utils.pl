@@ -34,9 +34,6 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 :- use_module(file_utils).
 :- use_module(triplestore).
 :- use_module(utils).
@@ -45,6 +42,7 @@
 :- use_module(terminus_bootstrap).
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
+:- reexport(syntax).
 
 /*
  * db_name_uri(+Name,-Uri) is det.
@@ -60,7 +58,7 @@ db_exists_in_layer(Layer, Name) :-
     xsd_string_type_uri(Xsd_String_Type_Uri),
     object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
     db_name_uri(Name, Db_Uri),
-
+    % TODO: We can use high level querying as well
     triple(Layer,
            Db_Uri,
            Database_Name_Property_Uri,

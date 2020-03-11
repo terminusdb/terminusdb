@@ -28,8 +28,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
+:- reexport(syntax).
 
 % internal
 global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').

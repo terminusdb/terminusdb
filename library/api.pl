@@ -55,6 +55,9 @@
 % woql libraries
 :- use_module(woql_compile).
 
+:- use_module(descriptor).
+:- use_module(db_init).
+
 % Default utils
 :- use_module(utils).
 
@@ -188,7 +191,7 @@ message_handler(post,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db), cors_catch(db_handler(Method)),
+:- http_handler(root(db/DB_Name), cors_catch(db_handler(Method, DB_Name)),
                 [method(Method),
                  methods([options,post,delete])]).
 
@@ -205,17 +208,19 @@ db_handler(options,_DB,_Request) :-
     format('~n').
 db_handler(post,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
+    open_descriptor(terminus_descriptor{}, Terminus_DB),
     /* POST: Create database */
-    authenticate(Request, Auth),
+    authenticate(Terminus_DB, Request, Auth),
     config:public_server_url(Server),
-    verify_access(Auth,terminus/create_database,Server),
+    verify_access(Terminus_DB, Auth, terminus:create_database,Server),
     try_get_param('terminus:base_uri',Request,Base_URI),
     try_create_db(DB,Base_URI),
     write_cors_headers(Server),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    authenticate(Request, Auth),
+    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    authenticate(Terminus_DB, Request, Auth),
 
     config:public_server_url(Server),
 
@@ -671,9 +676,9 @@ customise_error(E) :-
  *
  *  Fetches the HTTP Basic Authorization data
  */
-fetch_authorization_data(Request, KS) :-
+fetch_authorization_data(Request, Username, KS) :-
     (   memberchk(authorization(Text), Request),
-        http_authorization_data(Text, basic(_User, Key)),
+        http_authorization_data(Text, basic(Username, Key)),
         coerce_literal_string(Key, KS))
     -> true
     ;  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
@@ -685,25 +690,25 @@ fetch_authorization_data(Request, KS) :-
  *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message.
  */
-authenticate(Request, Auth) :-
-    fetch_authorization_data(Request, KS),
-    (   key_auth(KS, Auth)
+authenticate(DB, Request, Auth) :-
+    fetch_authorization_data(Request, Username, KS),
+    (   user_key_auth(DB, Username, KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key'})))).
 
-verify_access(Trans, Auth, Action, Scope) :-
-    (   auth_action_scope(Trans, Auth, Action, Scope)
+verify_access(DB, Auth, Action, Scope) :-
+    (   auth_action_scope(DB, Auth, Action, Scope)
     ->  true
     ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
         throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                               'terminus:message' : M,
                                               'terminus:object' : 'verify_access'})))).
 
-connection_authorised_user(Request, User, SURI, DB) :-
+connection_authorised_user(Request, Username, SURI, DB) :-
     fetch_authorization_data(Request, KS),
-    (   key_user(KS, DB, User_ID)
-    ->  (   authenticate(Request, DB, Auth),
+    (   user_key_user_id(DB, Username, KS, User_ID)
+    ->  (   authenticate(DB, Request, Auth),
             verify_access(Auth,DB,terminus/get_document,SURI),
             get_user(User_ID, User)
         ->  true

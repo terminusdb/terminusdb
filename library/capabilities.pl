@@ -1,7 +1,7 @@
 :- module(capabilities,[
-              key_auth/3,
-              key_user/3,
-              get_user/2,
+              user_key_auth/4,
+              user_key_user_id/4,
+              get_user/3,
               user_action/2,
               auth_action_scope/4,
               add_database_resource/3,
@@ -44,11 +44,9 @@
 :- use_module(frame).
 :- use_module(jsonld).
 :- use_module(database).
+:- reexport(syntax).
 :- use_module(database_utils).
 :- use_module(query).
-
-:- op(2, xfx, ^^).
-:- op(1050, xfx, =>).
 
 /**
  * root_user_id(Root_User_ID : uri) is det.
@@ -58,19 +56,18 @@ root_user_id(Root) :-
     atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /**
- * key_user(+Key,-User) is det.
+ * key_user(+DB, +Username, +Key, -User_ID) is semidet.
  *
  * Key user association - goes only one way
  */
-key_user(Key, DB, User_ID) :-
-    coerce_literal_string(Key,K),
+user_key_user_id(DB, Username, Key, User_ID) :-
+    coerce_literal_string(Key, K),
     ask(DB,
-        select([User_ID],
-		       (
-			       t( User_ID , rdf:type , terminus:'User' ),
-			       t( User_ID , terminus:user_key_hash, Hash^^_ )
-		       )
-	          )
+        (
+            t(User_ID, rdf:type, terminus:'User'),
+            t(User_ID, terminus:agent_name, Username^^xsd:string),
+            t(User_ID, terminus:agent_key_hash, Hash^^xsd:string)
+        )
        ),
     atom_string(Hash_Atom, Hash),
     crypto_password_hash(K, Hash_Atom).
@@ -80,42 +77,34 @@ key_user(Key, DB, User_ID) :-
  *
  * Gets back a full user object which includes all authorities
  */
-get_user(User_ID, User) :-
-    terminus_database(Database),
-    terminus_context(Ctx),
-
-    document_jsonld(User_ID,Ctx,Database,3,User).
+get_user(Database, User_ID, User) :-
+    document_jsonld(Database,User_ID,3,User).
 
 
 /**
- * key_auth(Key,Auth) is det.
+ * user_key_auth(DB, Key,Auth) is det.
  *
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-key_auth(Key, _, Auth) :-
-    key_user(Key,User_ID),
+user_key_auth(DB, Username, Key, Auth) :-
+    user_key_user_id(DB, Username, Key, User_ID),
 
-    user_auth_id(User_ID, DB, Auth_ID),
+    user_auth_id(DB, User_ID, Auth_ID),
 
-    terminus_context(Ctx),
-
-    document_jsonld(Auth_ID,Ctx,Database,Auth).
+    document_jsonld(DB,Auth_ID,Auth).
 
 /*
- * user_auth_id(User,Auth_id) is semidet.
+ * user_auth_id(+DB, +User_ID, -Auth_id) is semidet.
  *
- * Maybe should return the auth object - as soon as we have
- * obj embedded in woql.
+ * Sould return the auth object
  */
-user_auth_id(User_ID, DB, Auth_ID) :-
+user_auth_id(DB, User_ID, Auth_ID) :-
     ask(DB,
-        select([Auth_ID],
-		       (
-			       t( User_ID , rdf:type , terminus:'User' ),
-			       t( User_ID , terminus:authority, Auth_ID )
-		       )
-	          )
+        (
+            t( User_ID , rdf:type , terminus:'User' ),
+            t( User_ID , terminus:authority, Auth_ID )
+        )
        ).
 
 /*
@@ -141,14 +130,14 @@ user_action(User,Action) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(Trans, Auth, Action, Resource_ID) :-
-    ask(Trans,
-	    (
+auth_action_scope(DB, Auth, Action, Resource_ID) :-
+    ask(DB,
+        (
             t(Auth, terminus:action, Action),
-            t(Auth, terminus:authority_scope, Scope),
-            t(Scope, terminus:id, Resource_ID ^^ (xsd:anyURI))
+            t(Scope, terminus:id, Resource_ID ^^ (xsd:anyURI)),
+            t(Auth, terminus:authority_scope, Scope)
         )
-	   ).
+       ).
 
     % make comparison late..
     %atom_string(Resource_ID,Resource_ID_String).

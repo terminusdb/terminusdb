@@ -28,11 +28,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 :- use_module(xsd_parser).
 :- use_module(library(dcg/basics), [whites//0, blanks//0]).
+:- reexport(syntax).
 
 /*
  * guess_date(+Val,-Date) is nondet.

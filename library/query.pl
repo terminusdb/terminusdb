@@ -30,6 +30,7 @@
 :- use_module(woql_compile).
 :- use_module(global_prefixes).
 :- use_module(descriptor).
+:- use_module(terminus_bootstrap).
 :- use_module(types, [is_literal/1]).
 :- use_module(literals, [uri_to_prefixed/3]).
 

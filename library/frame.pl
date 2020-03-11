@@ -16,10 +16,8 @@
               % document_object/4,
               % As JSON-LD
               document_jsonld/3,
-              % As JSON-LD with a context
+              % As JSON-LD with a depth
               document_jsonld/4,
-              % As JSON-LD with a context and depth parameter
-              document_jsonld/5,
               class_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
@@ -54,15 +52,13 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- op(2, xfx, @).
-:- op(2, xfx, ^^).
-
 :- use_module(utils).
 :- use_module(base_type).
 :- use_module(triplestore).
 :- use_module(validate_schema, except([document/2])).
 :- use_module(validate_instance).
 :- use_module(inference).
+:- reexport(syntax).
 :- use_module(database).
 :- use_module(schema, []).
 :- use_module(types).
@@ -884,20 +880,18 @@ document_object(Document,Database,Depth,Realiser) :-
     realiser(Document,Frame,Database,Depth,Realiser).
 
 /*
- * document_jsonld(+Document:uri,+Ctx:any,+Database:database-Realiser) is semidet.
+ * document_jsonld(+DB{},+Ctx:any,+Database:database-Realiser) is semidet.
  *
  * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
+ * TODO: Fix this, since the arguments are totally changed
  */
-document_jsonld(Document,Ctx,Database,JSON_LD) :-
+document_jsonld(DB, Document,JSON_LD) :-
     document_object(Document, Database, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
 
-    database_name(Database, Name),
-    get_collection_jsonld_context(Name,Ctx_Database),
-    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
-
-    compress(JSON_Ex,Ctx_Total,JSON_LD).
+    collection_descriptor_prefixes(DB.Descriptor, Prefixes),
+    compress(JSON_Ex,Prefixes,JSON_LD).
 
 /*
  * document_jsonld(+Document:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
@@ -906,26 +900,11 @@ document_jsonld(Document,Ctx,Database,JSON_LD) :-
  * Document in a JSON-LD format using a supplied context and unfolding
  * up to depth Depth
  */
-document_jsonld(Document,Ctx,Database,Depth,JSON_LD) :-
+document_jsonld(Database, Document, Depth, JSON_LD) :-
     document_object(Document, Database, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-
-    database_name(Database, Name),
-    get_collection_jsonld_context(Name,Ctx_Database),
-    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
-
-    compress(JSON_Ex,Ctx_Total,JSON_LD).
-
-
-/*
- * document_jsonld(+Document:uri,+Database:database-Realiser) is semidet.
- *
- * Gets the realiser for the frame associated with the class of
- * Document in a JSON_LD format.
- */
-document_jsonld(Document,Database,JSON_LD) :-
-    document_jsonld(Document,_{},Database,JSON_LD).
-
+    collection_descriptor_prefixes(DB.Descriptor, Prefixes),
+    compress(JSON_Ex, Prefixes, JSON_LD).
 
 /*
  * class_frame_jsonld(Class,Database,JSON_Frame) is det.

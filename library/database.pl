@@ -1,7 +1,5 @@
 :- module(database,[
-              with_transaction/8,
-              op(2, xfx, ^^),
-              op(2, xfx, @)
+              with_transaction/8
           ]).
 
 /** <module> Implementation of database graph management
@@ -42,6 +40,7 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(terminus_bootstrap)).
+:- reexport(syntax).
 
 :- use_module(descriptor).
 
