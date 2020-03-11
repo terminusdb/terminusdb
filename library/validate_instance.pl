@@ -31,6 +31,7 @@
 
 :- use_module(validate_schema).
 :- use_module(database).
+:- use_module(database_utils).
 :- use_module(triplestore).
 :- use_module(utils).
 :- use_module(types).

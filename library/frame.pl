@@ -874,10 +874,10 @@ realise_triples(_Elt,F,_Database,[]) :-
  * Gets the realiser for the frame associated with the class of
  * Document
  */
-document_object(Document,Database,Depth,Realiser) :-
-    most_specific_type(Document,Class,Database),
-    class_frame(Class,Database,Frame),
-    realiser(Document,Frame,Database,Depth,Realiser).
+document_object(DB, Document, Depth, Realiser) :-
+    most_specific_type(Document,Class,DB),
+    class_frame(Class,DB,Frame),
+    realiser(Document,Frame,DB,Depth,Realiser).
 
 /*
  * document_jsonld(+DB{},+Ctx:any,+Database:database-Realiser) is semidet.
@@ -887,7 +887,7 @@ document_object(Document,Database,Depth,Realiser) :-
  * TODO: Fix this, since the arguments are totally changed
  */
 document_jsonld(DB, Document,JSON_LD) :-
-    document_object(Document, Database, 1, Realiser),
+    document_object(DB, Document, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
 
     collection_descriptor_prefixes(DB.Descriptor, Prefixes),
