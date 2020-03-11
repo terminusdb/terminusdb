@@ -132,13 +132,17 @@ zip([],[],[]).
  * intersperse(+Item,+List,-Output) is det.
  *
  * Puts an element between every element of a list.
- *
- * TODO: Leaves impossible choice-points around...
  */
-intersperse(_,[],[]).
-intersperse(_,[X],[X]).
-intersperse(Item,[X,Y|Rest],[X,Item|New_Rest]) :-
-    intersperse(Item,[Y|Rest],New_Rest).
+intersperse(Item, List, Output) :-
+    (   List == [] ->
+        Output = []
+    ;   List = [X| Xs],
+        intersperse_(Xs, X, Item, Output)
+    ).
+
+intersperse_([], X, _, [X]).
+intersperse_([Y| Xs], X, Item, [X, Item| Tail]) :-
+    intersperse_(Xs, Y, Item, Tail).
 
 /**
  * interpolate(L:list,A:atom) is det.
