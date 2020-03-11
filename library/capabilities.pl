@@ -44,6 +44,7 @@
 :- use_module(frame).
 :- use_module(jsonld).
 :- use_module(database).
+:- use_module(syntax).
 :- reexport(syntax).
 :- use_module(database_utils).
 :- use_module(query).
