@@ -24,6 +24,7 @@
 % feeling very circular :(
 :- use_module(database).
 :- use_module(literals).
+:- use_module(descriptor).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -149,7 +150,8 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  */
 insert(G,X,Y,Z) :-
     object_storage(Z,S),
-    ignore(nb_add_triple(G.write, X, Y, S)).
+    read_write_obj_builder(G, Builder),
+    ignore(nb_add_triple(Builder, X, Y, S)).
 
 /**
  * delete(+G,+Builder,+X,+Y,+Z) is det.
@@ -158,7 +160,8 @@ insert(G,X,Y,Z) :-
  */
 delete(G,X,Y,Z) :-
     object_storage(Z,S),
-    ignore(nb_remove_triple(G.write, X, Y, S)).
+    read_write_obj_builder(G, Builder),
+    ignore(nb_remove_triple(Builder, X, Y, S)).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
@@ -181,10 +184,11 @@ update(G,X,Y,Z,Action) :-
  */
 xrdf_added(Gs,X,Y,Z) :-
     member(G,Gs),
+    read_write_obj_reader(G, Layer),
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_addition(G.read,A,B,S),
+    triple_addition(Layer,A,B,S),
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
@@ -196,10 +200,11 @@ xrdf_added(Gs,X,Y,Z) :-
  */
 xrdf_deleted(Gs,X,Y,Z) :-
     member(G,Gs),
+    read_write_obj_reader(G, Layer),
     pre_convert_node(X,A),
     pre_convert_node(Y,B),
     object_storage(Z,S),
-    triple_removal(G.read,A,B,S),
+    triple_removal(Layer,A,B,S),
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
@@ -215,7 +220,8 @@ xrdf_deleted(Gs,X,Y,Z) :-
 xrdf(Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
     member(G,Gs),
-    xrdf_db(G.read,X,Y,Z).
+    read_write_obj_reader(G, Layer),
+    xrdf_db(Layer,X,Y,Z).
 
 
 pre_convert_node(X,A) :-

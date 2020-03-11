@@ -678,13 +678,17 @@ compile_wf(insert(WG,X,P,Y),insert(WG,XE,PE,YE)) -->
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB).
-compile_wf(delete(X,P,Y),delete(WG,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
-    view(write_graph,WG).
-compile_wf(insert(X,P,Y),insert(WG,XE,PE,YE)) -->
+    view(write_graph,Graph_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    {
+       graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+    }.
+compile_wf(insert(X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
     {
         nl,writeq(insert(X,P,Y)),nl
     },
@@ -692,7 +696,11 @@ compile_wf(insert(X,P,Y),insert(WG,XE,PE,YE)) -->
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
-    view(write_graph,WG).
+    view(write_graph,Graph_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    {
+       graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+    }.
 compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).

@@ -156,7 +156,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
         database_descriptor : Database_Descriptor,
         repository_name : Repository_Name
     } :< Repository_Descriptor,
-    repository_descriptor{
+    database_descriptor{
         database_name : Database_Name
     } :< Database_Descriptor,
 

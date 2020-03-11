@@ -3,7 +3,10 @@
               open_descriptor/3,
               open_descriptor/5,
               collection_descriptor_transaction_object/3,
-              instance_graph_descriptor_transaction_object/3
+              graph_descriptor_transaction_objects_read_write_object/3,
+              instance_graph_descriptor_transaction_object/3,
+              read_write_obj_reader/2,
+              read_write_obj_builder/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -226,12 +229,17 @@ commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, 
 open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, New_Map) :-
     graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
 
+read_write_obj_reader(Read_Write_Obj, _Layer) :-
+    var(Read_Write_Obj.read),
+    !,
+    fail.
+read_write_obj_reader(Read_Write_Obj, Layer) :-
+    Layer = Read_Write_Obj.read.
+
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     ground(Read_Write_Obj.write),
     !,
     Layer_Builder = Read_Write_Obj.write.
-
-
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     var(Read_Write_Obj.read),
     !,
@@ -239,11 +247,9 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     storage(Store),
     open_write(Store, Read_Write_Obj.write),
     Layer_Builder = Read_Write_Obj.write.
-
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     open_write(Read_Write_Obj.read, Read_Write_Obj.write),
     Layer_Builder = Read_Write_Obj.write.
-
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     Layer_Builder = Read_Write_Obj.write.
 
@@ -464,6 +470,33 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
+
+graph_descriptor_find_read_write_object(_, [], _) :-
+        !,
+        fail.
+graph_descriptor_find_read_write_object(Graph_Descriptor, [Read_Write_Obj|_Read_Write_Objs], Read_Write_Obj) :-
+        Read_Write_Obj.descriptor = Graph_Descriptor,
+        !.
+graph_descriptor_find_read_write_object(Graph_Descriptor, [_|Read_Write_Objs], Read_Write_Obj) :-
+        graph_descriptor_find_read_write_object(Graph_Descriptor, Read_Write_Objs, Read_Write_Obj).
+
+graph_descriptor_transaction_objects_read_write_object(_, [], _) :-
+        !,
+        fail.
+graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Read_Write_Object) :-
+        Instances = Transaction_Object.instance_objects,
+        graph_descriptor_find_read_write_object(Graph_Descriptor, Instances, Read_Write_Object),
+        !.
+graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Read_Write_Object) :-
+        Schemas = Transaction_Object.schema_objects,
+        graph_descriptor_find_read_write_object(Graph_Descriptor, Schemas, Read_Write_Object),
+        !.
+graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Read_Write_Object) :-
+        Inferences = Transaction_Object.inference_objects,
+        graph_descriptor_find_read_write_object(Graph_Descriptor, Inferences, Read_Write_Object),
+        !.
+graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [_|Transaction_Objects], Read_Write_Object) :-
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object).
 
 /*
  *
