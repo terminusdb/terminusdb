@@ -34,7 +34,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(database).
-:- use_module(woql_term).
 :- use_module(utils).
 :- use_module(triplestore, [
                   xrdf/4,
