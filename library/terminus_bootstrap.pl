@@ -34,7 +34,6 @@
               repository_name_prop_uri/1,
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
-              repo_type_document_prefix/2,
 
               repo_name_uri/4
           ]).
