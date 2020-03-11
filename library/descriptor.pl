@@ -403,17 +403,17 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     (   once(ask(Ref_Id_Descriptor,
                  (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
                      t(Branch_Uri, ref:ref_commit, Commit_Uri))))
-    ->  forall(Instance_Graph_Name,
+    ->  findall(Instance_Graph_Name,
                (   t(Commit_Uri, ref:instance, Instance_Graph),
                    t(Instance_Graph, ref:graph_name, Instance_Graph_Name)
                ),
                Instance_Names),
-        forall(Schema_Graph_Name,
+        findall(Schema_Graph_Name,
                (   t(Commit_Uri, ref:schema, Schema_Graph),
                    t(Schema_Graph, ref:graph_name, Schema_Graph_Name)
                ),
                Schema_Names),
-        forall(Inference_Graph_Name,
+        findall(Inference_Graph_Name,
                (   t(Commit_Uri, ref:inference, Inference_Graph),
                    t(Inference_Graph, ref:graph_name, Inference_Graph_Name)
                ),
