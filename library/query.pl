@@ -101,7 +101,6 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
         branch_name: Branch_Name
     } :< Descriptor,
     !,
-
     once(ask(Repository_Descriptor,
              (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                  t(Branch_URI, ref:branch_base_uri, Branch_Base_Uri^^xsd:anyURI)))),
@@ -151,15 +150,15 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     branch_descriptor{ branch_name : Branch_Name,
                        repository_descriptor : Repository_Descriptor
-                     } = Descriptor,
+                     } :< Descriptor,
     !,
     repository_descriptor{
         database_descriptor : Database_Descriptor,
         repository_name : Repository_Name
-    } = Repository_Descriptor,
+    } :< Repository_Descriptor,
     repository_descriptor{
         database_name : Database_Name
-    } = Database_Descriptor,
+    } :< Database_Descriptor,
 
     Graph_Descriptor = branch_graph{
                            database_name : Database_Name,

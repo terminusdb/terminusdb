@@ -685,6 +685,9 @@ compile_wf(delete(X,P,Y),delete(WG,XE,PE,YE)) -->
     view(default_collection,DB),
     view(write_graph,WG).
 compile_wf(insert(X,P,Y),insert(WG,XE,PE,YE)) -->
+    {
+        nl,writeq(insert(X,P,Y)),nl
+    },
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),

@@ -390,7 +390,6 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                     Map, Map_1),
 
-    nl, writeq(Repository_Transaction_Object), nl,
     [Instance_Object] = Repository_Transaction_Object.instance_objects,
 
     layer_to_id(Instance_Object.read, Ref_Layer_Id),
