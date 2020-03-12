@@ -103,6 +103,7 @@
 :- use_module(types).
 :- use_module(base_type).
 :- use_module(validate_instance).
+:- use_module(database_utils).
 
 /*
  * Vio JSON util
