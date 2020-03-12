@@ -6,6 +6,7 @@
 :- use_module(terminus_bootstrap).
 :- use_module(library(terminus_store)).
 :- use_module(literals).
+:- use_module(syntax).
 
 triple_val(Layer, Subject, Predicate, Object@Lang) :-
     var(Object),
@@ -20,7 +21,7 @@ triple_val(Layer, Subject, Predicate, Object^^Type) :-
     triple(Layer, Subject, Predicate, Object_Literal),
     storage_object(Object_Literal, Object^^Type).
 triple_val(Layer, Subject, Predicate, Object@Lang) :-
-    !
+    !,
     object_storage(Object@Lang, Object_Literal),
     triple(Layer, Subject, Predicate, Object_Literal).
 triple_val(Layer, Subject, Predicate, Object^^Type) :-
