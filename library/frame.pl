@@ -55,7 +55,7 @@
 :- use_module(utils).
 :- use_module(base_type).
 :- use_module(triplestore).
-:- use_module(validate_schema, except([document/2])).
+:- use_module(validate_schema).
 :- use_module(validate_instance).
 :- use_module(inference).
 :- reexport(syntax).
@@ -66,6 +66,7 @@
 :- use_module(frame_types).
 :- use_module(jsonld).
 :- use_module(expansions).
+:- use_module(query).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -78,7 +79,7 @@ property_record(Database,Property,L) :-
     maybe_meta(Property,Database,L).
 
 all_documents(Database,AER) :-
-    unique_solutions(E,schema:document(E,Database),AE),
+    unique_solutions(E,document(E,Database),AE),
     maplist(class_record(Database),AE,AER).
 
 all_classes(Database,ACR) :-
@@ -115,7 +116,7 @@ all_document_instances(Database,AE) :-
     unique_solutions(E=[type=C,label=L],
                      (   xrdf(Instance,
                               E,rdf:type,C),
-                         schema_util:document(C,Database),
+                         document(C,Database),
                          get_some_label(E,Database,L)),
                      AE).
 
@@ -124,7 +125,7 @@ all_document_iris(Database, IRIs) :-
     findall(IRI,
             (   xrdf(Instance,
                      IRI,rdf:type,C),
-                schema_util:document(C, Database)
+                document(C, Database)
             ),
             IRIs).
 
@@ -144,11 +145,11 @@ most_specific_properties(Database,Properties,SpecificProperties) :-
     foldl(add_most_specific_property(Database),Properties,[],SpecificProperties).
 
 class_properties(Class, Database, PropertiesPrime) :-
-    (   schema:document(Class,Database)
+    (   document(Class,Database)
     ->  DocumentProperties=['http://www.w3.org/2000/01/rdf-schema#label',
                             'http://www.w3.org/2000/01/rdf-schema#comment']
     ;   DocumentProperties=[]),
-    (   setof(Super,schema:subsumption_of(Class,Super,Database),Classes),
+    (   setof(Super,subsumption_of(Class,Super,Database),Classes),
         setof(P,
               S^(member(S,Classes),
                  validate_schema:domain(P,S,Database)),
@@ -355,7 +356,7 @@ property_restriction(P,Database,R) :-
  * excluding owl:Nothing or abstract classes.
  */
 classes_below(Class,Database,BelowList) :-
-    unique_solutions(Below,schema:subsumption_of(Below,Class,Database),Classes),
+    unique_solutions(Below,subsumption_of(Below,Class,Database),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
@@ -526,7 +527,7 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
                    |RecordRemainder]) :-
     most_specific_range(Property,Range,Database),
     class(Range,Database),
-    schema:document(Range,Database),
+    document(Range,Database),
     % We are a document frame.
     !,
     property_record(Database,Property,RecordRemainder),
@@ -739,7 +740,7 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Database),
-                 (   schema:document(V,Database)
+                 (   document(V,Database)
                  ->  (   Depth =< 1
                      ->  New_Realiser=[V]
                      ;   New_Depth is Depth-1,
@@ -817,7 +818,7 @@ realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Ty
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Database),
-                 (   schema:document(V,Database)
+                 (   document(V,Database)
                  ->  New_Realiser=[(C,G,Elt,Prop,V)]
                  ;   realise_triples(V,Frame,Database,Below),
                      New_Realiser=[(C,G,Elt,Prop,V)|Below])),

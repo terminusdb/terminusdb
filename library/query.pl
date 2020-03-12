@@ -1,5 +1,6 @@
 :- module(query,[
-              ask/2
+              ask/2,
+              collection_descriptor_prefixes/2
           ]).
 
 /** <module> Query

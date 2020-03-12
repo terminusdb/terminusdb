@@ -764,7 +764,6 @@ compile_wf(t(X,P,Y,G),Goal) -->
                                                  Transaction_Object),
         resolve_filter(G,Filter),
         filter_transaction_object_goal(Filter, Transaction_Object, t(XE,PE,YE), Search_Clause),
-        writeq(Search_Clause),nl,
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->

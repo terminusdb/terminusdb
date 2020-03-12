@@ -4,7 +4,8 @@
               object_storage/2,
               storage_object/2,
               date_string/2,
-              uri_to_prefixed/3
+              uri_to_prefixed/3,
+              prefixed_to_uri/3
           ]).
 
 /** <module> Literals
@@ -211,3 +212,12 @@ uri_to_prefixed(URI, Ctx, Prefixed) :-
     dict_pairs(Ctx,_,Pairs),
     predsort(length_comp, Pairs, Sorted_Pairs),
     try_prefix_uri(URI,Sorted_Pairs,Prefixed).
+
+prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
+    (    Base = Ctx.get(Prefix)
+    ->   true
+    ;    format(atom(M), "Could not convert prefix to URI: ~w", [Prefix]),
+         throw(prefix_error("Could not convert prefix to URI, ~w"))),
+    !,
+    atomic_list_concat([Base, Suffix], URI).
+prefixed_to_uri(URI, _, URI).

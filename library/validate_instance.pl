@@ -80,7 +80,11 @@ get_ordered_instance_classes(Document, Sorted, Database) :-
  * Determines the class C identified with the instance X.
  */
 instance_class(X, Y, Database) :-
-    ask(Database, t(X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y)).
+    database_instance(Database,Instance),
+    xrdf(Instance, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
+instance_class(X, Y, Database) :-
+    database_schema(Database,Schema), % instances can also exist in the schema
+    xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', Y).
 
 % X has cardinality N at property OP
 card(X,OP,Y,Database,N) :-

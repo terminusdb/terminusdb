@@ -39,6 +39,7 @@
 :- use_module(config(config),[]).
 :- use_module(library(crypto)).
 :- use_module(utils).
+:- use_module(literals).
 :- use_module(file_utils).
 :- use_module(triplestore).
 :- use_module(frame).
@@ -90,10 +91,10 @@ get_user(Database, User_ID, User) :-
  */
 user_key_auth(DB, Username, Key, Auth) :-
     user_key_user_id(DB, Username, Key, User_ID),
-
     user_auth_id(DB, User_ID, Auth_ID),
-
-    document_jsonld(DB,Auth_ID,Auth).
+    collection_descriptor_prefixes(DB.descriptor, Prefixes),
+    prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),
+    document_jsonld(DB,Auth_ID_Expanded,Auth).
 
 /*
  * user_auth_id(+DB, +User_ID, -Auth_id) is semidet.
