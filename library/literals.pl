@@ -217,7 +217,7 @@ prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
     (    Base = Ctx.get(Prefix)
     ->   true
     ;    format(atom(M), "Could not convert prefix to URI: ~w", [Prefix]),
-         throw(prefix_error("Could not convert prefix to URI, ~w"))),
+         throw(prefix_error(M))),
     !,
     atomic_list_concat([Base, Suffix], URI).
 prefixed_to_uri(URI, _, URI).

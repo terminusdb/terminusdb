@@ -686,7 +686,6 @@ compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    view(default_collection,DB),
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
@@ -916,15 +915,19 @@ compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
 compile_wf(into(G,S),Goal) -->
     % TODO: Resolve G to descriptor
     % swap in new graph
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
     {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
         resolve_filter(G,Filter),
         (   Filter = type_name_filter{ type : Type, name : [Name]}
-        ->  true % should do something
+        ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
         ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
             throw(syntax_error(M,context(compile_wf//2, into/2)))
         )
     },
-    update(write_graph,OG,G),
+    update(write_graph,OG,Graph_Descriptor),
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph,_,OG).
@@ -1298,3 +1301,15 @@ filter_transaction_object_goal(type_name_filter{ type : schema , names : Names},
 filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_objects(Transaction_Object.inference_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).
+
+filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name]},Transaction,Graph_Descriptor) :-
+    (   Type = instance
+    ->  Objects = Transaction.instance_objects,
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)
+    ;   Type = schema
+    ->  Objects = Transaction.schema_objects,
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)
+    ;   Type = inference
+    ->  Objects = Transaction.inference_objects,
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)),
+    Graph_Descriptor = Found.get(descriptor).

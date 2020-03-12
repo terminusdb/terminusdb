@@ -20,6 +20,7 @@
               mapm/5,
               mapm/6,
               exists/2,
+              find/3,
               trim/2,
               split_atom/3,
               pattern_string_split/3,
@@ -455,6 +456,21 @@ exists(P,[X|_Rest]) :-
     !.
 exists(P,[_|Rest]) :-
     exists(P,Rest).
+
+/**
+ * find(P:predicate,L:list(ty),Result:ty) is semidet.
+ *
+ * Monadic fold over state
+ */
+:- meta_predicate find(1,?,?).
+find(P,List,Result) :-
+    find_(List, Result, P).
+
+find_([H|_T], H, P) :-
+    call(P,H),
+    !.
+find_([_H|T], Result, P) :-
+    find_(T,Result,P).
 
 /**
  * count(+A:atom,+L:list,-C:int) is det.

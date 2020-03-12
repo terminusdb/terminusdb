@@ -252,7 +252,7 @@ resolve_graph_resource(URI,_Descriptor) :-
 %  'instance/{foo,main}' => search in foo and main
 %
 resolve_filter(Filter_String,Filter) :-
-    (   re_matchsub('^\\*/\\*$', Filter_String, Resource_Dict,[])
+    (   re_matchsub('^\\*/\\*$', Filter_String, _Resource_Dict,[])
     ->  Filter = type_filter{ types : [instance, schema, inference]}
     ;   re_matchsub('^\\{(?P<types>[^}]*)\\}/\\*$', Filter_String, Resource_Dict,[])
     ->  pattern_string_split(',',Resource_Dict.types, Type_Strings),
