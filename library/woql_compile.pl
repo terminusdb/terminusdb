@@ -740,10 +740,14 @@ compile_wf(t(X,P,Y),Goal) -->
     resolve(Y,YE),
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    view(types, Types),
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
+        (  memberchk(instance, Types),
+           Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
+           memberchk(schema, Types),
+        )
         Goal = (not_literal(XE),not_literal(PE),Search)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
@@ -777,11 +781,16 @@ compile_wf(when(A,B),forall(ProgA,ProgB)) -->
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
+% TODO: We want to allow multiple from types
+compile_wf(from_type(Graph_Types,P),Goal) -->
+    update(types, Old_Graph_Types, Graph_Types),
+    compile_wf(P, Goal),
+    update(types, _, Old_Graph_Types).
 compile_wf(from(Collection_URI,P),Goal) -->
     { resolve_query_resource(Collection_URI, Default_Collection) },
     update(default_collection,Old_Default_Collection,Default_Collection),
     compile_wf(P, Goal),
-    update(default_collection,_,Old_Default_Collection).
+    update(default_collection,_,Old_Default_Collectcion).
 compile_wf(prefixes(NS,S), Prog) -->
     % Need to convert the datatype of prefixes here.
     debug_wf('DO YOU HEAR ME ~q', [NS]),
