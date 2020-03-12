@@ -66,7 +66,6 @@
 :- use_module(frame_types).
 :- use_module(jsonld).
 :- use_module(expansions).
-:- use_module(query).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -180,49 +179,50 @@ has_formula(Class,Database) :-
 %
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Database) :-
-    ask(Database,t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:someValuesFrom,C, "schema/*")).
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:someValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:allValuesFrom,C, "schema/*")).
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:allValuesFrom,C).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:minCardinality,CardStr^^_, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:minCardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:maxCardinality,CardStr^^_, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:maxCardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:cardinality,CardStr^^_, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:cardinality,CardStr^^_),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:minQualifiedCardinality,CardStr^^_, "schema/*")),
-    ask(Database, t(CR,owl:onClass,C, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:minQualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:maxQualifiedCardinality,CardStr^^_, "schema/*")),
-    ask(Database, t(CR,owl:onClass,C, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:qualifiedCardinality,CardStr^^_, "schema/*")),
-    ask(Database, t(CR,owl:onClass,C, "schema/*")),
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:qualifiedCardinality,CardStr^^_),
+    xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
     database_schema(Database,Schema),
-    ask(Database, t(CR,owl:onProperty,OP, "schema/*")),
-    ask(Database, t(CR,owl:hasValue,V, "schema/*")).
+    xrdf(Schema,CR,owl:onProperty,OP),
+    xrdf(Schema,CR,owl:hasValue,V).
 
 % ignore modeline
 % is_class_formula(+Formula:any) is semidet.
@@ -358,9 +358,9 @@ classes_below(Class,Database,BelowList) :-
     unique_solutions(Below,schema:subsumption_of(Below,Class,Database),Classes),
     exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
-    exclude({Database}/[X]>>(
-                ask(Database, t(
-                     X,tcs:tag,tcs:abstract, "schema/*"))),
+    exclude({Database, Schema}/[X]>>(
+                xrdf(Schema,
+                     X,tcs:tag,tcs:abstract)),
             ClassesNoBottom,
             BelowList).
 

@@ -267,7 +267,8 @@ refute_deletion(Database,X,P,Y,Reason) :-
  * X is not an element of the restriction CR at P (for Reason)
  */
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database, t(CR,owl:someValuesFrom,C, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:someValuesFrom,C),
     forall(inferredEdge(X,P,Y,Database),
            (   \+ refute_node_at_range(Database,Y,C,_Reason)
            )),
@@ -280,7 +281,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:allValuesFrom,C, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:allValuesFrom,C),
     inferredEdge(X,P,Y,Database),
     refute_node_at_range(Database,Y,C,Reason),
     interpolate(['Some values not from restriction class: ',CR],Msg),
@@ -293,7 +295,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
 			     'vio:restriction' : _{ '@value' : CR, '@type' : 'xsd:anyURI' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     M < N, atom_number(A,M),
@@ -307,7 +310,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N < M, atom_number(A,M),
@@ -321,7 +325,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N \= M, atom_number(A,M),
@@ -335,8 +340,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:cardinality' : _{ '@value' : A, '@type' : 'xsd:string' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger, "schema/*")),
-    ask(Database,t(CR,owl:onClass,C, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
     M < N, atom_number(A,M),
@@ -351,8 +357,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:qualified_class' : _{ '@value' : C, '@type' : 'xsd:anyURI' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger, "schema/*")),
-    ask(Database,t(CR,owl:onClass,C, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,M),
     N < M, atom_number(A,M),
@@ -367,8 +374,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:qualified_class' : _{ '@value' : C, '@type' : 'xsd:anyURI' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger, "schema/*")),
-    ask(Database,t(CR,owl:onClass,C, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
     qualifiedCard(X,P,_,C,Database,N),
     N \= M, atom_number(A,M),
@@ -383,7 +391,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
                  'vio:qualified_class' : _{ '@value' : C, '@type' : 'xsd:anyURI' }
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
-    ask(Database,t(CR,owl:hasValue,V, "schema/*")),
+    database_schema(Database,Schema),
+    xrdf(Schema,CR,owl:hasValue,V),
     inferredEdge(X,P,Y,Database),
     Y \= V,
     interpolate(['Wrong value on restriction: ',CR],Msg),
@@ -403,7 +412,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
  */
 refute_functional_property(X,P,Y,Database,Reason) :-
     functional_property(P,Database),
-    ask(Database,t(X,P,_, "instance/*")),
+    database_instance(Database,Instance),
+    xrdf(Instance,X,P,_),
     card(X,P,_,Database,N),
     N \= 1,
     interpolate(['Functional Property ',P,' is not functional.'],Message),
@@ -421,8 +431,9 @@ refute_functional_property(X,P,Y,Database,Reason) :-
  * Determines of ?P is actually an inverse functional property or not.
  */
 refute_inverse_functional_property(X,P,Y,Database,Reason) :-
+    database_instance(Database,Instance),
     inverse_functional_property(P,Database),
-    ask(Database, t(_,P,Y, "instance/*")),
+    xrdf(Instance,_,P,Y),
     card(_,P,Y,Database,N),
     N \= 1,
     interpolate(['Inverse Functional Property ',P,' is not inverse functional.'],Message),
