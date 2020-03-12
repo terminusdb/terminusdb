@@ -702,6 +702,10 @@ refute_validation_objects(Validation_Objects, Witness) :-
     member(Validation_Object, Validation_Objects),
     refute_validation_object(Validation_Object, Witness).
 
+validate_validation_objects(Validation_Objects, Witnesses) :-
+    findall(Witness,
+            refute_validation_objects(Validation_Objects, Witness),
+            Witnesses).
 
 /*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
