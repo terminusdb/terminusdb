@@ -768,7 +768,7 @@ try_get_filled_frame(ID,Database,Object) :-
  * http error otherwise.
  */
 try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
-    (   collection_descriptor_prefixes(Database.descriptor, Ctx),
+    (   collection_descriptor_prefixes(Database.descriptor, Ctx)
     ->  prefix_expand(Pre_Doc_ID,Ctx,Doc_ID)
     ;   format(atom(MSG), 'Document resource ~s could not be expanded', [Pre_Doc_ID]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
