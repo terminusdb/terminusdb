@@ -99,10 +99,12 @@
 
 :- use_module(database).
 :- use_module(triplestore).
+:- use_module(query).
 :- use_module(utils).
 :- use_module(types).
 :- use_module(base_type).
 :- use_module(validate_instance).
+:- use_module(database_utils).
 
 /*
  * Vio JSON util
@@ -321,8 +323,8 @@ collect(Database,Database_atom,X,[H|T]) :-
 % @param Child Child class URI_OR_ID
 % @param Parent Parent class URI_OR_ID.
 sub_class_of(Child,Parent,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent).
+    % TODO: Query only schema with ask
+    ask(Database, t(Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent)).
 
 %% union_of(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %

@@ -60,6 +60,7 @@
 :- use_module(inference).
 :- reexport(syntax).
 :- use_module(database).
+:- use_module(database_utils).
 :- use_module(schema, []).
 :- use_module(types).
 :- use_module(frame_types).
@@ -883,6 +884,7 @@ document_object(DB, Document, Depth, Realiser) :-
  * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
  * TODO: Fix this, since the arguments are totally changed
+
  */
 document_jsonld(DB, Document,JSON_LD) :-
     document_object(DB, Document, 1, Realiser),
