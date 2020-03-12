@@ -143,11 +143,9 @@ Classes
 */
 % :- rdf_meta immediate_class(r,o).
 immediate_class(X,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Class').
+    ask(Database, t(X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Class', "schema/*")).
 immediate_class(X,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
+    ask(Database, t(X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class', "schema/*")).
 immediate_class('http://www.w3.org/2002/07/owl#Thing',_).
 immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
 % This makes me nevious... [ Gavin ]
@@ -181,7 +179,7 @@ class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
 %% :- rdf_meta restriction(r,o).
 restriction(R,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
+    ask(Database, t(R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction', "schema/*")).
 restriction(R,Database) :-
     sub_class_of(R,R2,Database),
     restriction(R2,Database).
@@ -197,8 +195,7 @@ restriction(R,Database) :-
 % @param Reason A prolog representation of a JSON Linked Data structure
 %               detailing the violation.
 no_immediate_class_SC(Database, Reason) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty', "schema/*")),
     domain(P,X,Database),
     \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a domain for property ',P,' but is not defined'], Message),
@@ -210,7 +207,7 @@ no_immediate_class_SC(Database, Reason) :-
              }.
 no_immediate_class_SC(Database, Reason) :-
     database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty', "schema/*")),
     range(P,X,Database),
     \+ immediate_class(X,Database), \+ restriction(X,Database),
     interpolate([X,' is used as a range for property ',P,' but is not defined'], Message),
@@ -259,9 +256,8 @@ no_immediate_class_SC(Database, Reason) :-
 % @param P A property specified as a URI_OR_ID
 % @param Database the current graph
 restriction_on_property(CR,P,Database) :-
-    database_schema(Database,Schema),
-	xrdf(Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
-	restriction(CR,Database).
+    ask(Database,t(CR,'http://www.w3.org/2002/07/owl#onProperty',P, "schema/*")),
+    restriction(CR,Database).
 restriction_on_property(CR,P,Database) :-
 	strict_subsumption_property_of(P,Q,Database),
 	restriction_on_property(CR,Q,Database).
@@ -323,8 +319,7 @@ collect(Database,Database_atom,X,[H|T]) :-
 % @param Child Child class URI_OR_ID
 % @param Parent Parent class URI_OR_ID.
 sub_class_of(Child,Parent,Database) :-
-    % TODO: Query only schema with ask
-    ask(Database, t(Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent)).
+    ask(Database, t(Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent, "schema/*")).
 
 %% union_of(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
 %
@@ -335,7 +330,7 @@ sub_class_of(Child,Parent,Database) :-
 % @param Database The current graph
 union_of(C,U,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
+    ask(Database,t(C,'http://www.w3.org/2002/07/owl#unionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,L),
     member(U,L).
 
@@ -348,7 +343,7 @@ union_of(C,U,Database) :-
 % @param Database The current graph
 union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
+    ask(Database,t(C,'http://www.w3.org/2002/07/owl#unionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,UList),
     % This looks so dubious, I hope I didn't write it.
     !.
@@ -363,7 +358,7 @@ union_of_list(C,UList,Database) :-
 %% :- rdf_meta disjoint_union_of(r,r,o).
 disjoint_union_of(C,U,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
+    ask(Database,t(C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,L),
     member(U,L).
 
@@ -377,7 +372,7 @@ disjoint_union_of(C,U,Database) :-
 %% :- rdf_meta disjoint_unionOf_list(r,r,o).
 disjoint_union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
+    ask(Database,t(C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,UList),
     % DUBIOUS
     !.
@@ -392,7 +387,7 @@ disjoint_union_of_list(C,UList,Database) :-
 %% :- rdf_meta intersection_of(r,r,o).
 intersection_of(C,I,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
+    ask(Database,t(C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,L),
     member(I,L).
 
@@ -406,7 +401,7 @@ intersection_of(C,I,Database) :-
 %% :- rdf_meta intersection_of_list(r,r,o).
 intersection_of_list(C,IList,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema, C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
+    ask(Database, t( C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,IList),
     !.
 
@@ -420,7 +415,7 @@ intersection_of_list(C,IList,Database) :-
 %% :- rdf_meta one_of(r,r,o).
 one_of(CC,X,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
+    ask(Database, t(CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,OneList),
     member(X,OneList).
 
@@ -434,23 +429,23 @@ one_of(CC,X,Database) :-
 %% :- rdf_meta one_of_list(r,r,o).
 one_of_list(C,OneList,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,C,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
+    ask(Database, t(C,'http://www.w3.org/2002/07/owl#oneOf',ListObj, "schema/*")),
     collect(Database,Schema,ListObj,OneList).
 
 %% :- rdf_meta complement_of(r,r,o).
 complement_of(CC,CN,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#complementOf',CN).
+    ask(Database, t(CC,'http://www.w3.org/2002/07/owl#complementOf',CN, "schema/*")).
 
 %% :- rdf_meta datatype_complementOf(r,r,o).
 datatype_complementOf(CC,CN,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#datatypeComplementOf',CN).
+    ask(Database, t(CC,'http://www.w3.org/2002/07/owl#datatypeComplementOf',CN, "schema/*")).
 
 %% :- rdf_meta equivalent_class(r,r,o).
 equivalent_class(CC,CE,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#equivalentClass',CE).
+    ask(Database, t(CC,'http://www.w3.org/2002/07/owl#equivalentClass',CE, "schema/*")).
 
 /*  Previous code for equivalent class.
     xrdf('http://www.w3.org/2002/07/owl#equivalent_class',ListObj,Schema),
@@ -459,10 +454,9 @@ equivalent_class(CC,CE,Database) :-
 
 %% :- rdf_meta equivalent_class(r,r,o).
 anonymous_equivalentClass(C,CE,Database) :-
-    database_schema(Database,Schema),
     equivalent_class(C,CE,Database),
     % Exactly one reference to this class, or everything will go to hell.
-    bagof(X,xrdf(Schema,X,_,CE), [_]).
+    bagof(X,ask(Database, t(X,_,CE, "schema/*")), [_]).
 
 % transitive strict relation
 sub_class_strict(X,Y,Database) :- sub_class_of(X,Y,Database).
@@ -503,8 +497,7 @@ subsumption_of(CC,CP,Database) :- % datatypes
 
 %% :- rdf_meta custom_datatype(r,o).
 custom_datatype(X,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
+    ask(Database, t(X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype', "schema/*")).
 
 /**
  * datatype(-X:uri_or_id,+Database:database is nondet.
@@ -693,19 +686,16 @@ rdfs_property(P) :- rdfs_object_property(P).
 
 %:- rdf_meta rdf_property(r,o).
 rdf_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#Property').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#Property', "schema/*")).
 
 %:- rdf_meta datatype_property(r,o).
 datatype_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty', "schema/*")).
 datatype_property(P,_) :- rdfs_datatype_property(P).
 
 %:- rdf_meta annotation_property(r,o).
 annotation_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty', "schema/*")).
 % Gavin nuked on Sep 20th 2019
 %annotation_property(P,Database) :-
 %    subsumption_properties_of(P,'http://terminusdb.com/schema/tcs#pseudo_property', Database).
@@ -713,18 +703,15 @@ annotation_property(P,Database) :-
 
 %:- rdf_meta functional_property(r,o).
 functional_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#FunctionalProperty').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#FunctionalProperty', "schema/*")).
 
 %:- rdf_meta inverse_functional_property(r,o).
 inverse_functional_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#InverseFunctionalProperty').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#InverseFunctionalProperty', "schema/*")).
 
 %:- rdf_meta object_property(r,o).
 object_property(P,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
+    ask(Database,t(P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty', "schema/*")).
 object_property(P,_) :- rdfs_object_property(P).
 
 /**
@@ -789,7 +776,7 @@ not_unique_property_SC(Database,Reason) :-
 %:- rdf_meta sub_property_of(r,r,o).
 sub_property_of(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
+    ask(Database,t(X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y, "schema/*")).
 
 /**
  * subsumption_properties_of(?PChild,?PParent,+Database:database is nondet.
@@ -896,8 +883,7 @@ property_cycle_SC(Database,Reason) :- property_cycle(_,_,Database,Reason).
  * Actually specified range for P.
  */
 range(P,R,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/2000/01/rdf-schema#range',R).
+    ask(Database,t(P,'http://www.w3.org/2000/01/rdf-schema#range',R, "schema/*")).
 
 /**
  * document(?Class,+Database) is nondet.
@@ -925,8 +911,7 @@ any_range(P,R,Database) :-
     strict_subsumption_property_of(P,P2,Database),
     any_range(P2,R,Database).
 any_range(OP,R,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
+    ask(Database,t(OP,'http://www.w3.org/2002/07/owl#inverseOf',P, "inference/*")),
     any_domain(P,R,Database).
 
 %:- rdf_meta most_specific_range(r,r,o).
@@ -938,8 +923,7 @@ most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
  * Actually specified domain in the database.
  */
 domain(P,D,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
+    ask(Database,t(P,'http://www.w3.org/2000/01/rdf-schema#domain',D, "schema/*")).
 
 /**
  * any_domain(?P,?R,+Database:database) is nondet.
@@ -958,8 +942,7 @@ any_domain('http://www.w3.org/2000/01/rdf-schema#comment',D,Database) :-
 any_domain(P,R,Database) :-
     domain(P,R,Database).
 any_domain(OP,R,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
+    ask(Database,t(OP,'http://www.w3.org/2002/07/owl#inverseOf',P, "inference/*")),
     any_range(P,R,Database).
 any_domain(P,R,Database) :-
     strict_subsumption_property_of(P,P2,Database),
@@ -1043,9 +1026,8 @@ invalid_domain_SC(Database,Reason) :-
  * Finds all domains that are not valid classes for a given property in Database.
  */
 invalid_RDFS_property_SC(Database,Reason) :-
-    database_schema(Database,Schema),
     rdfs_property(P),
-    xrdf(Schema,_,P,Y),
+    ask(Database,t(_,P,Y, "schema/*")),
     refute_basetype_elt(Y,'http://www.w3.org/2001/XMLSchema#string',Reason).
 
 /**
@@ -1141,18 +1123,15 @@ range_not_subsumed_SC(Database,Reason) :-
              }.
 
 schema_subject_blank_node(X,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,X,_,_),
+    ask(Database,t(X,_,_, "schema/*")),
     is_bnode(X).
 
 schema_predicate_blank_node(Y,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,_,Y,_),
+    ask(Database,t(_,Y,_, "schema/*")),
     is_bnode(Y).
 
 schema_object_blank_node(Z,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,_,_,Z),
+    ask(Database,t(_,_,Z, "schema/*")),
     is_bnode(Z).
 
 /**
@@ -1161,11 +1140,10 @@ schema_object_blank_node(Z,Database) :-
  * Get the rdfs:label for X as Y.
  */
 label(X,Y,Database) :-
-    database_instance(Database,Instance),
-    xrdf(Instance,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
+    ask(Database,t(X, 'http://www.w3.org/2000/01/rdf-schema#label',Y, "instance/*")).
 label(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
+    ask(Database,t(X, 'http://www.w3.org/2000/01/rdf-schema#label',Y, "schema/*")).
 
 /**
  * comment(?X,?Y,+Database:database is det.
@@ -1173,11 +1151,9 @@ label(X,Y,Database) :-
  * Get the rdfs:comment for X as Y.
  */
 comment(X,Y,Database) :-
-    database_instance(Database,Instance),
-    xrdf(Instance,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
+    ask(Database,t(X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y, "instance/*")).
 comment(X,Y,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
+    ask(Database,t(X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y, "schema/*")).
 
 /**
  * tcs_tag(?X:uri_or_id,?Y:any,+Database:database is det.
@@ -1186,8 +1162,7 @@ comment(X,Y,Database) :-
  * Get the tcs:tag for X as Y.
  */
 tcs_tag(X,Y,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://terminusdb.com/schema/tcs#tag', Y).
+    ask(Database, t(X, 'http://terminusdb.com/schema/tcs#tag', Y, "schema/*")).
 
 class_has_label(X,Y,Database) :- class(X,Database), label(X,Y,Database).
 %class_hasNo_label(X,Database) :- class(X,Database), \+ label(X,_,Database).
