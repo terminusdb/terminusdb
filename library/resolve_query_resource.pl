@@ -1,5 +1,6 @@
 :- module(resolve_query_resource,[
-              resolve_query_resource/2
+              resolve_query_resource/2,
+              resolve_filter/2
           ]).
 
 /** <module> Resolve Query Resource
@@ -24,6 +25,9 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+:- use_module(library(pcre)).
+:- use_module(utils).
 
 /*****************************************
  * URI Resource Resolution:
@@ -235,65 +239,40 @@ resolve_graph_resource(URI,_Descriptor) :-
     throw(error(resolution_error(URI,Msg))).
 
 
-/*
- * resolve_relative_graph_resource(+Transaction_Object,+Partial_URI,-Graph_Descriptor) is det.
- *
- * Todo: Make this work for non-default
- */
-resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
-    branch_descriptor{ repository_descriptor : Repository_Descriptor,
-                       branch_name : Branch_Name } = Transaction_Object.descriptor,
-    !,
-    repository_descriptor{ database_descriptor : Database_Descriptor,
-                           repository_name : Repository_Name } = Repository_Descriptor,
-    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
-
-    Prototype = branch_graph{ database_name : Database_Name,
-                              repository_name : Repository_Name,
-                              branch_name : Branch_Name,
-                              type : instance,
-                              name : main },
-
-    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ;   re_matchsub('^(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  re_matchsub('^(?P<repository_name>[^/]*)/(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ;   true
-    ->  re_matchsub('^(?P<database_name>[^/]*)/(?P<repository_name>[^/]*)/(?P<branch_name>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ),
-    Graph_Descriptor = Prototype.put(Resource_Dict).
-resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
-    repository_descriptor{ database_descriptor : Database_Descriptor,
-                           repository_name : Repository_Name } = Repository_Descriptor,
-    !,
-    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
-
-    Prototype = commit_graph{ database_name : Database_Name,
-                              repository_name : Repository_Name,
-                              type : instance,
-                              name : main },
-
-    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ),
-    Graph_Descriptor = Prototype.put(Resource_Dict).
-resolve_relative_graph_resource(Transaction_Object,Partial_URI,Graph_Descriptor) :-
-    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
-    !,
-
-    Prototype = repo_graph{ database_name : Database_Name,
-                            type : instance,
-                            name : main },
-
-    (   re_matchsub('^(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Partial_URI, Resource_Dict)
-    ->  true
-    ),
-    Graph_Descriptor = Prototype.put(Resource_Dict).
+%%
+% resolve_filter(Filter_String,Filter) is det.
+%
+%  Turn a filter string into a a filter - used with 'from'
+%
+%  Syntax:
+%
+%  'schema/*' => search schema graphs
+%  '{instance,schema}/*' => search the union of instance and schema
+%  '*/*' => search everything
+%  'instance/{foo,main}' => search in foo and main
+%
+resolve_filter(Filter_String,Filter) :-
+    (   re_matchsub('^\\*/\\*$', Filter_String, Resource_Dict,[])
+    ->  Filter = type_filter{ types : [instance, schema, inference]}
+    ;   re_matchsub('^\\{(?P<types>[^}]*)\\}/\\*$', Filter_String, Resource_Dict,[])
+    ->  pattern_string_split(',',Resource_Dict.types, Type_Strings),
+        maplist(atom_string, Types, Type_Strings),
+        forall(member(Type, Types),
+               memberchk(Type, [instance,schema,inference])),
+        Filter = type_filter{ types : Types }
+    ;   re_matchsub('^(?P<type>[^/]*)/\\*$', Filter_String, Resource_Dict,[])
+    ->  atom_string(Type, Resource_Dict.type),
+        memberchk(Type, [instance,schema,inference]),
+        Filter = type_filter{ types : [Type] }
+    ;   re_matchsub('^(?P<type>[^/]*)/\\{(?P<names>[^\\}]*)\\}$', Filter_String, Resource_Dict,[])
+    ->  pattern_string_split(',',Resource_Dict.names, Names),
+        atom_string(Type,Resource_Dict.type),
+        memberchk(Type, [instance,schema,inference]),
+        Filter = type_name_filter{ type : Type,
+                                   names: Names }
+    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Filter_String, Resource_Dict,[])
+    ->  atom_string(Type, Resource_Dict.type),
+        memberchk(Type, [instance,schema,inference]),
+        Filter = type_name_filter{ type : Type,
+                                   names : [Resource_Dict.name] }
+    ).

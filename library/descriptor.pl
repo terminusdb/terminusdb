@@ -6,7 +6,8 @@
               graph_descriptor_transaction_objects_read_write_object/3,
               instance_graph_descriptor_transaction_object/3,
               read_write_obj_reader/2,
-              read_write_obj_builder/2
+              read_write_obj_builder/2,
+              filter_read_write_objects/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -32,6 +33,9 @@
  *                                    type : atom, % {instance, schema, inference}
  *                                    name : atom }
  *
+ * graph_filter --> type_filter{ types : list(atom) } % instance, inference, schema
+ *                | type_name_filter{ type : atom, names : list(string) }
+ *
  * A named_graph refers to a file in the store - this has to be made unique so we don't get
  * collisions between different databases. Currently only used for the terminus and database graph
  * - one per repository. This uses the file label mechanism.
@@ -48,6 +52,7 @@
  *                                              branch_name : atom}, % the name of the thing advancing
  *                         | commit_descriptor{ repository_descriptor: repository_descriptor,
  *                                              last_commit : atom} % the base of the commit
+ *
  *
  * terminus_descriptor: refers to the core database with user and database management.
  * This database refers to the various database descriptors which can be opened "by name"
@@ -523,3 +528,9 @@ collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Obj
     !.
 collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
     collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
+
+/*
+ * filter_read_write_objects(+Objects, +Names, Filtered) is det.
+ */
+filter_read_write_objects(Objects, Names, Filtered) :-
+    include({Names}/[Object]>>memberchk(Object.name, Names), Objects, Filtered).

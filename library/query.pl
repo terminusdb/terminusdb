@@ -193,7 +193,7 @@ ask(Transaction_Object,Pre_Term) :-
     Query_Context = query_context{
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
-        types: [instance],
+        filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
         bindings : [],

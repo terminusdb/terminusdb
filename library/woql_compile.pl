@@ -670,26 +670,31 @@ compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(Graph_URI,X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y,G),delete(Read_Write_Objects,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
     view(transaction_objects,Transaction_Objects),
     {
-        resolve_relative_graph_resource(DB,Graph_URI,Graph_Descriptor),
-        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+        resolve_filter(G,Filter),
+        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects)
     }.
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(Graph_URI,X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(default_collection,DB),
     view(transaction_objects,Transaction_Objects),
     {
-        resolve_relative_graph_resource(DB,Graph_URI,Graph_Descriptor),
-        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+        resolve_filter(G,Filter),
+        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects)
+        (   Read_Write_Objects = [Read_Write_Object]
+        ->  true
+        ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
+            throw(syntax_error(M,context(compile_wf//2,insert/4))
+        )
     }.
 compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
@@ -740,27 +745,25 @@ compile_wf(t(X,P,Y),Goal) -->
     resolve(Y,YE),
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
-    view(types, Types),
+    view(filter, Filter),
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        (  memberchk(instance, Types),
-           Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
-           memberchk(schema, Types),
-        )
-        Goal = (not_literal(XE),not_literal(PE),Search)
+        filter_transaction_object_goal(Transaction_Object, Filter, Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
+    view(default_collection, Collection_Descriptor),
     view(transaction_objects,Transaction_Objects),
     {
-        resolve_graph_resource(G,G_Descriptor),
-        instance_graph_descriptor_transaction_object(G_Descriptor, Transaction_Objects, Transaction_Object),
-        Search=inference:inferredEdge(XE,PE,YE,Transaction_Object),
-        Goal_List = [not_literal(XE),not_literal(PE),Search],
-        list_conjunction(Goal_List,Goal)
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
+        resolve_filter(G,Filter),
+        filter_transaction_object_goal(Transaction_Object, Filter, Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
     peek(S0),
@@ -1236,3 +1239,46 @@ merge_active_graphs_aux([D1|Rest],D2,D) :-
 
 merge_active_graphs(Results,Dictionary) :-
     merge_active_graphs_aux(Results,_{read:[],write:[]},Dictionary).
+
+filter_transaction_objects_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
+    (   memberchk(instance,Types)
+    ->  Instance_Objects = Transaction_Object.instance_objects
+    ;   Instance_Objects = []),
+    (   memberchk(schema,Types)
+    ->  Schema_Objects = Transaction_Object.schema_objects
+    ;   Schema_Objects = []),
+    (   memberchk(inference,Types)
+    ->  Inference_Objects = Transaction_Object.inference_objects
+    ;   Inference_Objects = []),
+    append([Instance_Objects,Schema_Objects,Inference_Objects],Read_Write_Objects).
+filter_transaction_objects_read_write_objects(type_name_filter{ type : Type, names : Names}, Transaction_Object, Read_Write_Objects) :-
+    (   Type = instance
+    ->  Objs = Transaction_Objects.instance_objects
+    ;   Type = schema
+    ->  Objs = Transaction_Objects.schema_objects
+    ;   Type = inference
+    ->  Objs = Transaction_Objects.inference_objects),
+    include([Obj]>>(memberchk(Obj.name,Names)), Objs, Read_Write_Objects).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, Goal) :-
+    (   memberchk(instance,Types)
+    ->  Search_1 = [inference:inferredEdge(XE,PE,YE,Transaction_Object)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PE, YE)]
+    ;   Search_2 = []),
+    (   memberchk(inference,Types)
+    ->  Search_3 = [xrdf(Transaction_Object.inference_objects, XE, PE, YE)]
+    ;   Search_3 = []),
+    append([Search_1,Search_2,Search_3], Searches),
+    list_conjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance , names : Names}, Transaction_Object, Goal) :-
+    filter_read_write_objects(Transaction_Object.instance_objects, Names, Objects),
+    Inference_Object = Transaction_Object.put(instance_objects, Objects),
+    Goal = inference:inferredEdge(XE,PE,YE,Inference_Object).
+filter_transaction_object_goal(type_name_filter{ type : schema , names : Names}, Transaction_Object, Goal) :-
+    filter_read_write_object(Transaction_Object.schema_objects, Names, Objects),
+    Goal = xrdf(Objects, XE, PE, YE).
+filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, Goal) :-
+    filter_read_write_object(Transaction_Object.inference_objects, Names, Objects),
+    Goal = xrdf(Objects, XE, PE, YE).
