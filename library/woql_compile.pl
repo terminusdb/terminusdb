@@ -67,6 +67,8 @@
 
 :- use_module(global_prefixes, [default_prefixes/1]).
 
+:- use_module(resolve_query_resource).
+
 :- use_module(speculative_parse, [guess_date/2]).
 
 :- use_module(descriptor).
