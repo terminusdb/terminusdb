@@ -57,6 +57,7 @@
 
 :- use_module(descriptor).
 :- use_module(db_init).
+:- use_module(db_delete).
 
 % Default utils
 :- use_module(utils).
@@ -213,17 +214,17 @@ db_handler(post,DB,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth),
+    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    authenticate(Terminus_DB, Request, Auth),
 
     config:public_server_url(Server),
 
-    verify_access(Terminus, Auth, terminus/delete_database,Server),
+    verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
 
     try_db_uri(DB,DB_URI),
     try_delete_db(DB_URI),
 
-    write_cors_headers(Server),
+    write_cors_headers(Server, Terminus_DB),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
