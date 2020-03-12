@@ -764,6 +764,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
                                                  Transaction_Object),
         resolve_filter(G,Filter),
         filter_transaction_object_goal(Filter, Transaction_Object, t(XE,PE,YE), Search_Clause),
+        writeq(Search_Clause),nl,
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
@@ -1179,6 +1180,13 @@ list_conjunction(L,Goal) :-
     R = [A|Rest],
     foldl([X,Y,(X,Y)]>>true, Rest, A, Goal).
 
+list_disjunction([],true).
+list_disjunction(L,Goal) :-
+    L = [_|_],
+    reverse(L,R),
+    R = [A|Rest],
+    foldl([X,Y,(X;Y)]>>true, Rest, A, Goal).
+
 /*
  * active_graphs(Term,Dict:dict) is det.
  *
@@ -1280,14 +1288,14 @@ filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object,
     ->  Search_3 = [xrdf(Transaction_Object.inference_objects, XE, PE, YE)]
     ;   Search_3 = []),
     append([Search_1,Search_2,Search_3], Searches),
-    list_conjunction(Searches,Goal).
+    list_disjunction(Searches,Goal).
 filter_transaction_object_goal(type_name_filter{ type : instance , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_objects(Transaction_Object.instance_objects, Names, Objects),
     Inference_Object = Transaction_Object.put(instance_objects, Objects),
     Goal = inference:inferredEdge(XE,PE,YE,Inference_Object).
 filter_transaction_object_goal(type_name_filter{ type : schema , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    filter_read_write_object(Transaction_Object.schema_objects, Names, Objects),
+    filter_read_write_objects(Transaction_Object.schema_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).
 filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    filter_read_write_object(Transaction_Object.inference_objects, Names, Objects),
+    filter_read_write_objects(Transaction_Object.inference_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).

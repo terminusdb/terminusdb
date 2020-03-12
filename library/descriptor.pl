@@ -114,6 +114,22 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, Map) :-
     memberchk(Descriptor=Layer, Map),
     !.
 graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
+    Descriptor = terminus_graph{ type: Type, name: Name},
+    !,
+    (   Type = instance,
+        Name = "main"
+    ->  terminus_instance_name(Graph_Name)
+    ;   Type = schema,
+        Name = "main"
+    ->  terminus_schema_name(Graph_Name)
+    ;   Type = inference,
+        Name = "main",
+        terminus_inference_name(Graph_Name)),
+
+    storage(Store),
+    safe_open_named_graph(Store, Graph_Name, Graph),
+    head(Graph, Layer).
+graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     Descriptor = labelled_graph{ name: Name },
     !,
     storage(Store),
@@ -285,14 +301,9 @@ open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
                  [terminus_descriptor{}=Transaction_Object|Map_3]) :-
     !,
 
-    terminus_schema_name(Schema_Name),
-    Schema_Graph = labelled_graph{ name : Schema_Name },
-
-    terminus_instance_name(Instance_Name),
-    Instance_Graph = labelled_graph{ name : Instance_Name },
-
-    terminus_inference_name(Inference_Name),
-    Inference_Graph = labelled_graph{ name : Inference_Name },
+    Instance_Graph = terminus_graph{ type: instance, name: "main"},
+    Schema_Graph = terminus_graph{ type: schema, name: "main"},
+    Inference_Graph = terminus_graph{ type: inference, name: "main"},
 
     open_read_write_obj(Schema_Graph, Schema_Object, Map, Map_1),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
@@ -529,8 +540,12 @@ collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Obj
 collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
     collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
 
+read_write_object_to_name(Object, Name) :-
+    Name = Object.descriptor.name.
+
 /*
  * filter_read_write_objects(+Objects, +Names, Filtered) is det.
  */
 filter_read_write_objects(Objects, Names, Filtered) :-
-    include({Names}/[Object]>>memberchk(Object.name, Names), Objects, Filtered).
+    include({Names}/[Object]>>(read_write_object_to_name(Object, Name),
+                               memberchk(Name, Names)), Objects, Filtered).
