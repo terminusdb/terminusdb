@@ -209,4 +209,3 @@ ask(Collection_Descriptor,Pre_Term) :-
 ask(Pre_Term) :-
     empty_ctx(Ctx),
     ask(Ctx,Pre_Term).
-

@@ -146,18 +146,18 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
                              name : Name},
     !,
     (   Type = instance,
-        Name = main
+        Name = "main"
     ->  storage(Store),
         safe_open_named_graph(Store, Database_Name, Graph),
         head(Graph, Layer)
     ;   Type = schema,
-        Name = layer
+        Name = "layer"
     ->  storage(Store),
         layer_ontology(Layer_Name),
         safe_open_named_graph(Store, Layer_Name, Graph),
         head(Graph, Layer)
     ;   Type = schema,
-        Name = repository
+        Name = "repository"
     ->  repository_ontology(Repository_Name),
         storage(Store),
         safe_open_named_graph(Store, Repository_Name, Graph),
@@ -174,23 +174,23 @@ graph_descriptor_to_layer(Descriptor,
     !,
     Repo_Descriptor = repo_graph{ database_name: Database_Name,
                                   type: instance,
-                                  name: main},
+                                  name: "main"},
 
     (   Type = instance,
-        Name = main
+        Name = "main"
     ->  graph_descriptor_to_layer(Repo_Descriptor, Repository_Layer, Map, New_Map),
         repo_layer_name_to_ref_layer_id(Repository_Layer, Repository_Name, Commit_Layer_Id),
         storage(Store),
         store_id_layer(Store, Commit_Layer_Id, Layer)
     ;   Type = schema,
-        Name = layer
+        Name = "layer"
     ->  New_Map = Map,
         storage(Store),
         layer_ontology(Layer_Name),
         safe_open_named_graph(Store, Layer_Name, Graph),
         head(Graph, Layer)
     ;   Type = schema,
-        Name = ref
+        Name = "ref"
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
         storage(Store),
@@ -210,7 +210,7 @@ graph_descriptor_to_layer(Descriptor,
     Commit_Descriptor = commit_graph{ database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
-                                      name: main },
+                                      name: "main" },
     graph_descriptor_to_layer(Commit_Descriptor, Commit_Layer, Map, New_Map),
     (   commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
         storage(Store),
@@ -353,16 +353,16 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
 
     Layer_Ontology_Graph = repo_graph{ database_name: Database_Name,
                                        type: schema,
-                                       name: layer },
+                                       name: "layer" },
     Repository_Ontology_Graph = repo_graph{ database_name : Database_Name,
                                             type: schema,
-                                            name: repository },
+                                            name: "repository" },
 
     open_read_write_obj(Layer_Ontology_Graph, Layer_Ontology_Object, Map, Map_1),
     open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map_1, Map_2),
     Instance_Graph = repo_graph{ database_name: Database_Name,
                                  type: instance,
-                                 name: main },
+                                 name: "main" },
     open_read_write_obj(Instance_Graph, Instance_Object, Map_2, Map_3),
 
     Transaction_Object = transaction_object{
@@ -384,16 +384,16 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     Layer_Ontology_Graph = commit_graph{ database_name: Database_Name,
                                          repository_name: Repository_Name,
                                          type: schema,
-                                         name: layer },
+                                         name: "layer" },
     Ref_Ontology_Graph = commit_graph{ database_name : Database_Name,
                                        repository_name: Repository_Name,
                                        type: schema,
-                                       name: ref },
+                                       name: "ref" },
 
     Instance_Graph = commit_graph{ database_name: Database_Name,
                                    repository_name: Repository_Name,
                                    type: instance,
-                                   name: main},
+                                   name: "main"},
 
     open_read_write_obj(Layer_Ontology_Graph, Layer_Ontology_Object, Map_1, Map_2),
     open_read_write_obj(Ref_Ontology_Graph, Ref_Ontology_Object, Map_2, Map_3),

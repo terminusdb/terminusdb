@@ -219,7 +219,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     append([Instance_Objects,Schema_Objects,Inference_Objects],
            Union_Objects),
 
-    (   exists([Obj]>>(Obj.changed = true), Union_Objects)
+    (   exists(validation_object_changed, Union_Objects)
     ->  once(ask(Parent_Transaction,
                  (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                      % create new commit, point at all graphs
@@ -244,6 +244,9 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                      insert(Branch_URI, ref:ref_commit, Commit_URI))))
     ;   true
     ).
+
+validation_object_changed(Validation_Object) :-
+    Validation_Object.changed = true.
 
 insert_graph(Transaction_Object, Commit_URI, Type, Read_Write_Object) :-
     layer_to_id(Read_Write_Object.read, Layer_Id),
