@@ -750,7 +750,7 @@ compile_wf(t(X,P,Y),Goal) -->
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        filter_transaction_object_goal(Transaction_Object, Filter, Search_Clause),
+        filter_transaction_object_goal(Filter, Transaction_Object, t(XE, PE, YE), Search_Clause),
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf(t(X,P,Y,G),Goal) -->
@@ -763,7 +763,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         resolve_filter(G,Filter),
-        filter_transaction_object_goal(Transaction_Object, Filter, Search_Clause),
+        filter_transaction_object_goal(Filter, Transaction_Object, t(XE,PE,YE), Search_Clause),
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
@@ -789,7 +789,7 @@ compile_wf(using(Collection_URI,P),Goal) -->
     { resolve_query_resource(Collection_URI, Default_Collection) },
     update(default_collection,Old_Default_Collection,Default_Collection),
     compile_wf(P, Goal),
-    update(default_collection,_,Old_Default_Collectcion).
+    update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
     update(filter,Old_Default_Filter,Filter),
@@ -1262,14 +1262,14 @@ filter_transaction_objects_read_write_objects(type_filter{ types : Types}, Trans
     append([Instance_Objects,Schema_Objects,Inference_Objects],Read_Write_Objects).
 filter_transaction_objects_read_write_objects(type_name_filter{ type : Type, names : Names}, Transaction_Object, Read_Write_Objects) :-
     (   Type = instance
-    ->  Objs = Transaction_Objects.instance_objects
+    ->  Objs = Transaction_Object.instance_objects
     ;   Type = schema
-    ->  Objs = Transaction_Objects.schema_objects
+    ->  Objs = Transaction_Object.schema_objects
     ;   Type = inference
-    ->  Objs = Transaction_Objects.inference_objects),
+    ->  Objs = Transaction_Object.inference_objects),
     include([Obj]>>(memberchk(Obj.name,Names)), Objs, Read_Write_Objects).
 
-filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, Goal) :-
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)
     ->  Search_1 = [inference:inferredEdge(XE,PE,YE,Transaction_Object)]
     ;   Search_1 = []),
@@ -1281,13 +1281,13 @@ filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object,
     ;   Search_3 = []),
     append([Search_1,Search_2,Search_3], Searches),
     list_conjunction(Searches,Goal).
-filter_transaction_object_goal(type_name_filter{ type : instance , names : Names}, Transaction_Object, Goal) :-
+filter_transaction_object_goal(type_name_filter{ type : instance , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_objects(Transaction_Object.instance_objects, Names, Objects),
     Inference_Object = Transaction_Object.put(instance_objects, Objects),
     Goal = inference:inferredEdge(XE,PE,YE,Inference_Object).
-filter_transaction_object_goal(type_name_filter{ type : schema , names : Names}, Transaction_Object, Goal) :-
+filter_transaction_object_goal(type_name_filter{ type : schema , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_object(Transaction_Object.schema_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).
-filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, Goal) :-
+filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_object(Transaction_Object.inference_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).
