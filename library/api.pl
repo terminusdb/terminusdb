@@ -768,8 +768,7 @@ try_get_filled_frame(ID,Database,Object) :-
  * http error otherwise.
  */
 try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
-    (   database_name(Database,Collection),
-        get_collection_jsonld_context(Collection,Ctx)
+    (   collection_descriptor_prefixes(Database.descriptor, Ctx),
     ->  prefix_expand(Pre_Doc_ID,Ctx,Doc_ID)
     ;   format(atom(MSG), 'Document resource ~s could not be expanded', [Pre_Doc_ID]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
@@ -806,8 +805,7 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
     %   This is wrong - we need to have the base path here as well.
     ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
 
-    (   database_name(Database,Collection),
-        get_collection_jsonld_context(Collection,Ctx),
+    (   collection_descriptor_prefixes(Database.descriptor, Ctx),
         get_key_document('@id',Ctx,Doc,Doc_ID_Match)
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),

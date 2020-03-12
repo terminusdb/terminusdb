@@ -17,6 +17,8 @@
  *
  * graph_descriptor --> labelled_graph{ name : atom }
  *                    | id_graph{ layer_id : atom } % for debugging
+ *                    | terminus_graph{ type : atom,
+ *                                      name : atom }
  *                    | repo_graph { database_name : atom,
  *                                   type : atom,
  *                                   name : atom }
