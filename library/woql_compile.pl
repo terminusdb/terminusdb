@@ -784,16 +784,16 @@ compile_wf(when(A,B),forall(ProgA,ProgB)) -->
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
-% TODO: We want to allow multiple from types
-compile_wf(from_type(Graph_Types,P),Goal) -->
-    update(types, Old_Graph_Types, Graph_Types),
-    compile_wf(P, Goal),
-    update(types, _, Old_Graph_Types).
-compile_wf(from(Collection_URI,P),Goal) -->
+compile_wf(using(Collection_URI,P),Goal) -->
     { resolve_query_resource(Collection_URI, Default_Collection) },
     update(default_collection,Old_Default_Collection,Default_Collection),
     compile_wf(P, Goal),
     update(default_collection,_,Old_Default_Collectcion).
+compile_wf(from(Filter_String,P),Goal) -->
+    { resolve_filter(Filter_String,Filter) },
+    update(filter,Old_Default_Filter,Filter),
+    compile_wf(P, Goal),
+    update(filter,_,Old_Default_Filter).
 compile_wf(prefixes(NS,S), Prog) -->
     % Need to convert the datatype of prefixes here.
     debug_wf('DO YOU HEAR ME ~q', [NS]),
@@ -915,6 +915,15 @@ compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
 compile_wf(into(G,S),Goal) -->
     % TODO: Resolve G to descriptor
     % swap in new graph
+    {
+        resolve_filter(G,Filter),
+        (   Filter = type_name_filter{ type : Type, name : [Name]}
+        ->
+        ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
+            throw(syntax_error(M,context(compile_wf//2, into/2)))
+        ),
+        filter_
+    },
     update(write_graph,OG,G),
     compile_wf(S,Goal),
     % swap old graph back in
