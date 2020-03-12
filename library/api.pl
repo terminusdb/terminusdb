@@ -209,7 +209,7 @@ db_handler(post,DB,R) :-
     verify_access(Terminus_DB, Auth, terminus:create_database,Server),
     try_get_param('terminus:base_uri',Request,Base_URI),
     try_create_db(DB,Base_URI),
-    write_cors_headers(Server),
+    write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,DB,Request) :-
     /* DELETE: Delete database */
@@ -905,7 +905,7 @@ try_get_param(Key,Request,Value) :-
         throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : MSG})))),
 
-    (   get_key_document(Key, Document, Value)
+    (   Value = Document.get(Key)
     ->  true
     ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Document]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',

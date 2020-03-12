@@ -529,6 +529,7 @@ json_value_triples(C,G,ID,Pred,V,Ctx,Database,Triples) :-
 /*
  * get_key_document(Key,Document,Value) is det
  *
+ * TODO: This doesn't work anymore since we removed get_global_jsonld_context
  * Looks up the value of a key in a document
  */
 get_key_document(Key,Document,Value) :-
