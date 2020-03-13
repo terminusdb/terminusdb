@@ -1,5 +1,6 @@
 :- module(woql_compile,[
               lookup/3,
+              lookup_backwards/3,
               compile_query/3,
               compile_query/4,
               run_query/2,
@@ -229,6 +230,12 @@ lookup_or_extend(Var_Name, Prolog_Var) -->
                 |B0])
     }.
 
+lookup_backwards(Prolog_Var,Var_Name,[var_binding{woql_var: _Woql_Var, prolog_var: Binding_Var, var_name: Var_Name}|_]) :-
+    Prolog_Var == Binding_Var,
+    !.
+lookup_backwards(Prolog_Var,Var_Name,[_|Records]) :-
+    lookup_backwards(Prolog_Var, Var_Name, Records).
+
 resolve_prefix(Pre,Suf,URL) -->
     view(prefixes,Prefixes),
     {
@@ -323,6 +330,12 @@ compile_representation(String,Type,String^^Type).
 var_same(Var_Name,
          var_binding{
              woql_var : Prolog_Var,
+             var_name : Var_Name},
+         Prolog_Var).
+var_same(Var_Name,
+         var_binding{
+             woql_var : Prolog_Var,
+             prolog_var: _,
              var_name : Var_Name},
          Prolog_Var).
 

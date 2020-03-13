@@ -44,12 +44,12 @@
  */
 pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
     (   var(Pre_Term)
-    ->  (   lookup(V,X,Bindings_In),
-            Pre_Term == X
+    ->  (   lookup_backwards(Pre_Term,V,Bindings_In)
         ->  Bindings_In = Bindings_Out,
             Term = v(V)
         ;   gensym('Var',G),
             Bindings_Out = [var_binding{ var_name : G,
+                                         prolog_var: Pre_Term,
                                          woql_var : Woql_Var}|Bindings_In],
             freeze(Woql_Var,
                    (   Woql_Var = _@_
