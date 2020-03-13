@@ -224,8 +224,7 @@ db_handler(delete,DB,Request) :-
 
     verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
 
-    try_db_uri(DB,DB_URI),
-    try_delete_db(DB_URI),
+    try_delete_db(DB),
 
     write_cors_headers(Server, Terminus_DB),
 
@@ -265,7 +264,7 @@ schema_handler(get,DB,Request) :-
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/get_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus:get_schema,DB_URI),
 
     % Let's do a default schema if we can't find one.
     catch(
@@ -285,7 +284,7 @@ schema_handler(post,DB,R) :- % should this be put?
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/update_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus:update_schema,DB_URI),
 
     try_get_param('terminus:schema',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
@@ -338,7 +337,7 @@ frame_handler(get, DB, Request) :-
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/class_frame,DB_URI),
+    verify_access(Terminus,Auth,terminus:class_frame,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -384,7 +383,7 @@ document_handler(get, DB, Doc_ID, Request) :-
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/get_document,DB_URI),
+    verify_access(Terminus,Auth,terminus:get_document,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -410,7 +409,7 @@ document_handler(post, DB, Doc_ID, R) :-
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/create_document,DB_URI),
+    verify_access(Terminus,Auth,terminus:create_document,DB_URI),
 
     try_db_graph(DB_URI, Database),
 
@@ -431,7 +430,7 @@ document_handler(delete, DB, Doc_ID, Request) :-
     try_db_uri(DB,DB_URI),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus/delete_document,DB_URI),
+    verify_access(Terminus,Auth,terminus:delete_document,DB_URI),
 
     try_db_graph(DB_URI,Database),
 
@@ -479,7 +478,7 @@ woql_handler(post,_Account_ID,DB,R) :-
     try_db_uri(DB,DB_URI),
 
     % redundant?
-    verify_access(Terminus_Transaction_Object, Auth, terminus/woql_select, DB_URI),
+    verify_access(Terminus_Transaction_Object, Auth, terminus:woql_select, DB_URI),
 
     try_get_param('terminus:query',Request,Atom_Query),
     http_log('~N[Query] ~s~n',[Atom_Query]),
