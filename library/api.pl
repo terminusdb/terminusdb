@@ -86,6 +86,7 @@
 % Dumping turtle
 :- use_module(turtle_utils).
 
+:- use_module(query).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -778,8 +779,9 @@ try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
 
     (   object_instance_graph(Doc_ID, Database, Document_Graph)
     ->  true
-    ;   terminus_database(Terminus_DB),
-        default_instance_graph(Terminus_DB, Database, Document_Graph)
+    ;   terminus_databasoe(Terminus_DB),
+        Graph_Filter = type_name_filter{ type : instance, names : ["main"]},
+        filter_transaction_graph_descriptor(Terminus_DB,Graph_Filter, Document_Graph)
     ),
 
     (   document_transaction(Database, Transaction_DB, Document_Graph,
@@ -815,7 +817,8 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
 
     (   object_instance_graph(Doc, Database, Document_Graph)
     ->  true
-    ;   default_instance_graph(Terminus_DB, Database, Document_Graph)
+    ;   Graph_Filter = type_name_filter{ type: instance, names : ["main"]},
+        filter_transaction_graph_descriptor(Graph_Filter, Terminus_DB, Document_Graph)
     ),
 
     (   document_transaction(Database, Transaction_DB, Document_Graph,
@@ -858,8 +861,8 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
  * Die if we can't form a graph
  */
 try_db_graph(DB_URI,Database) :-
-    (   make_database_from_database_name(DB_URI,DBM)
-    ->  open_read_transaction(DBM,Database) % let's at least get reads...
+    (   resolve_query_resource(DB_URI Descriptor)
+    ->  open_descriptor(Descriptor,Database)
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure',

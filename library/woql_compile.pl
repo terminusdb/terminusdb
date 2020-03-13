@@ -7,7 +7,8 @@
               empty_ctx/1,
               empty_ctx/2,
               active_graphs/2,
-              descriptor_ctx/2
+              descriptor_ctx/2,
+              jsonld_to_ast_and_context/3
           ]).
 
 /** <module> WOQL Compile
@@ -921,7 +922,7 @@ compile_wf(into(G,S),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         resolve_filter(G,Filter),
-        (   Filter = type_name_filter{ type : Type, name : [Name]}
+        (   Filter = type_name_filter{ type : _Type, name : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
         ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
             throw(syntax_error(M,context(compile_wf//2, into/2)))
@@ -1305,11 +1306,11 @@ filter_transaction_object_goal(type_name_filter{ type : inference , names : Name
 filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name]},Transaction,Graph_Descriptor) :-
     (   Type = instance
     ->  Objects = Transaction.instance_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)
     ;   Type = schema
     ->  Objects = Transaction.schema_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)
     ;   Type = inference
     ->  Objects = Transaction.inference_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Instance_Objects, Found)),
+        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)),
     Graph_Descriptor = Found.get(descriptor).

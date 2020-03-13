@@ -82,6 +82,11 @@
  *                                 instance_objects : list(read_write_obj),
  *                                 schema_objects : list(read_write_obj),
  *                                 inference_objects : list(read_write_obj) }
+ *
+ * commit_info ---> commit_info{ author : string,
+ *                               message : string }
+ *
+ * Commit Info is required by writing commits
  */
 
 /* * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *

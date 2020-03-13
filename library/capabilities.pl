@@ -6,7 +6,8 @@
               auth_action_scope/4,
               add_database_resource/3,
               delete_database_resource/1,
-              write_cors_headers/2
+              write_cors_headers/2,
+              check_capabilities/2
           ]).
 
 /** <module> Capabilities
@@ -243,3 +244,9 @@ write_domains([Domain| Domains], Out) :-
     ;   write(' '),
         write_domains(Domains, Out)
     ).
+
+
+check_capabilities(_Transaction_Object, _Active) :-
+    % we need to resolve all graphs and graph_filters and
+    % see if they are accessible
+    true.
