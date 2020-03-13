@@ -102,7 +102,7 @@ run_api_tests :-
 
 auth(Auth) :-
     admin_pass(Pass),
-    atomic_list_concat([':',Pass],Auth).
+    atomic_list_concat(['admin', ':',Pass],Auth).
 
 run_connect_test :-
     config:server(Server),
