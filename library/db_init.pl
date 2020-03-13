@@ -33,7 +33,7 @@
 :- use_module(casting).
 :- use_module(terminus_bootstrap).
 :- use_module(database_utils).
-:- use_module(syntax).
+:- reexport(syntax).
 
 
 insert_db_object_triples(Builder, Name) :-

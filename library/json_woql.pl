@@ -38,6 +38,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- reexport(syntax).
 
 :- dynamic woql_context/1.
 initialise_woql_contexts :-

@@ -6,7 +6,7 @@
                    ]).
 :- use_module(terminus_bootstrap).
 :- use_module(literals).
-:- use_module(syntax).
+:- reexport(syntax).
 
 repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
     repository_name_prop_uri(Repo_Name_Property_Uri),

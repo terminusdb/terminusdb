@@ -29,6 +29,7 @@
 :- use_module(terminus_bootstrap).
 :- use_module(file_utils).
 :- use_module(library(terminus_store)).
+:- reexport(syntax).
 
 begin_deleting_db_from_terminus(DB_Name,Graph,Layer,Final) :-
     finalized_element_uri(Finalized),

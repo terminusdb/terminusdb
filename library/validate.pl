@@ -44,6 +44,8 @@
 % For debugging
 :- use_module(library(http/http_log)).
 
+:- reexport(syntax).
+
 /*
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
  *

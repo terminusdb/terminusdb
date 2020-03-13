@@ -88,6 +88,8 @@
 
 :- use_module(query).
 
+:- use_module(syntax).
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
@@ -861,7 +863,7 @@ try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
  * Die if we can't form a graph
  */
 try_db_graph(DB_URI,Database) :-
-    (   resolve_query_resource(DB_URI Descriptor)
+    (   resolve_query_resource(DB_URI, Descriptor)
     ->  open_descriptor(Descriptor,Database)
     ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
