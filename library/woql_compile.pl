@@ -64,7 +64,7 @@
 :- use_module(validate_schema, [datatype_property/2,
                                 object_property/2,
                             basetype_subsumption_of/2]).
-:- use_module(casting, [typecast/4,hash/3,idgen/3]).
+:- use_module(casting, [typecast/4,hash/3,idgen/3, random_idgen/3]).
 
 :- use_module(global_prefixes, [default_prefixes/1]).
 
@@ -682,6 +682,15 @@ compile_wf(delete(X,P,Y,G),delete(Read_Write_Objects,XE,PE,YE)) -->
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects)
     }.
+compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(write_graph,Graph_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    {
+       graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+    }.
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
@@ -696,15 +705,6 @@ compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
         ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
             throw(syntax_error(M,context(compile_wf//2,insert/4)))
         )
-    }.
-compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(write_graph,Graph_Descriptor),
-    view(transaction_objects, Transaction_Objects),
-    {
-       graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 compile_wf(insert(X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),

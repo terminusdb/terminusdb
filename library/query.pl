@@ -134,7 +134,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     Graph_Descriptor = repo_graph{
                            database_name : Name,
                            type : instance,
-                           name : main
+                           name : "main"
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     repository_descriptor{
@@ -147,7 +147,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            type : instance,
-                           name : main
+                           name : "main"
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     branch_descriptor{ branch_name : Branch_Name,
@@ -167,7 +167,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            repository_name : Repository_Name,
                            branch_name : Branch_Name,
                            type : instance,
-                           name : main
+                           name : "main"
                        }.
 collection_descriptor_default_write_graph(_, empty).
 

@@ -41,6 +41,8 @@
 
 :- use_module(literals).
 
+:- use_module(query).
+
 % For debugging
 :- use_module(library(http/http_log)).
 

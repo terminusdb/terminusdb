@@ -179,7 +179,12 @@ storage_object(node(S),O) :-
 
 
 
-try_prefix_uri(URI,[],URI).
+try_prefix_uri(X,_,X) :-
+    nonvar(X),
+    X = _A:_B,
+    !.
+try_prefix_uri(URI,[],URI) :-
+    !.
 try_prefix_uri(URI,[Prefix-URI_Base|_], Prefixed) :-
     atomic_list_concat(['^(?P<base>',URI_Base,')(?P<rest>.*)$'], Pattern),
     re_matchsub(Pattern, URI, Match, []),
