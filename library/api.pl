@@ -221,8 +221,7 @@ db_handler(delete,DB,Request) :-
 
     verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
 
-    try_db_uri(DB,DB_URI),
-    try_delete_db(DB_URI),
+    try_delete_db(DB),
 
     write_cors_headers(Server, Terminus_DB),
 

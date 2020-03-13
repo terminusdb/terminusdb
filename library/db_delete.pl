@@ -66,8 +66,10 @@ delete_db_from_terminus(DB_Name,Graph,Layer) :-
  */
 delete_db(DB_Name) :-
     terminus_graph_layer(Graph,Layer),
-
-    db_exists_in_layer(Layer,DB_Name),
+    (   db_exists_in_layer(Layer,DB_Name)
+    ->  true
+    ;   format(atom(M), 'Database does not exist with the name ~q', [DB_Name]),
+        throw(error(database_exists,M))),
     % Do something here? User may need to know what went wrong
     db_finalized_in_layer(Layer,DB_Name),
 
