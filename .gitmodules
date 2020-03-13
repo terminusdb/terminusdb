@@ -1,0 +1,3 @@
+[submodule "prolog_jwt"]
+	path = prolog_jwt
+	url = https://github.com/wouterbeek/prolog_jwt.git

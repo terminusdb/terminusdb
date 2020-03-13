@@ -74,6 +74,14 @@ add_library_path :-
 
 :- add_library_path.
 
+
+add_jwt_lib_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/prolog_jwt/prolog',Library),
+    asserta(user:file_search_path(library, Library)).
+
+:- add_jwt_lib_path.
+
 add_config_path :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/config',Config),
