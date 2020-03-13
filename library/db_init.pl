@@ -28,11 +28,12 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(terminus_store)).
-:- use_module(library(triplestore)).
-:- use_module(library(literals)).
-:- use_module(library(casting)).
-:- use_module(library(terminus_bootstrap)).
-:- use_module(library(database_utils)).
+:- use_module(triplestore).
+:- use_module(literals).
+:- use_module(casting).
+:- use_module(terminus_bootstrap).
+:- use_module(database_utils).
+:- use_module(syntax).
 
 
 insert_db_object_triples(Builder, Name) :-
