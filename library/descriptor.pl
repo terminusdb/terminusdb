@@ -442,9 +442,9 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                ),
                Inference_Names)
     ;   % Note: There has never been a commit! Set up default graphs.
-        Instance_Names = [main],
-        Inference_Names = [main],
-        Schema_Names = [main]
+        Instance_Names = ["main"],
+        Inference_Names = ["main"],
+        Schema_Names = ["main"]
     ),
 
     Prototype = branch_graph{

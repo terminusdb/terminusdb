@@ -252,6 +252,13 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
 
+insert_graph(_Transaction_Object, _Commit_URI, _Type, Read_Write_Object) :-
+    % It is possible for graph descriptors to not be backed by a graph.
+    % We have the descriptor because we may need it on creation, but if we never end up
+    % inserting anything into it, the graph remains unbuilt.
+    % If this is the case, we should not insert a graph object for it.
+    var(Read_Write_Object.read),
+    !.
 insert_graph(Transaction_Object, Commit_URI, Type, Read_Write_Object) :-
     layer_to_id(Read_Write_Object.read, Layer_Id),
     Graph_Name = Read_Write_Object.descriptor.name,
