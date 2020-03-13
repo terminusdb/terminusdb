@@ -721,6 +721,10 @@ validate_validation_objects(Validation_Objects, Witnesses) :-
             refute_validation_objects(Validation_Objects, Witness),
             Witnesses).
 
+
+transaction_objects_to_validation_objects(Transaction_Objects, Validation_Objects) :-
+    mapm(transaction_object_to_validation_object, Transaction_Objects, Validation_Objects, [], _Map).
+
 /*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
  *
@@ -729,6 +733,7 @@ validate_validation_objects(Validation_Objects, Witnesses) :-
  * TODO: This predicate is now really quite bogus, however we have to do something similar because we need
  * calculate an intermediate graph for insertion.
  */
+
 /* turtle_schema_update(TTL file, Schema_Name, Transaction_Object, Witnesses) is det.
  *
  * 1) calculate delta

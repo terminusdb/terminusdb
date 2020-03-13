@@ -1318,12 +1318,10 @@ filter_transaction_object_goal(type_name_filter{ type : inference , names : Name
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name]},Transaction,Graph_Descriptor) :-
     (   Type = instance
-    ->  Objects = Transaction.instance_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)
+    ->  Objects = Transaction.instance_objects
     ;   Type = schema
-    ->  Objects = Transaction.schema_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)
+    ->  Objects = Transaction.schema_objects
     ;   Type = inference
-    ->  Objects = Transaction.inference_objects,
-        find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found)),
+    ->  Objects = Transaction.inference_objects),
+    find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found),
     Graph_Descriptor = Found.get(descriptor).
