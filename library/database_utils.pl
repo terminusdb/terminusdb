@@ -34,6 +34,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(library(pcre)).
 :- use_module(file_utils).
 :- use_module(triplestore).
 :- use_module(utils).

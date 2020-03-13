@@ -65,6 +65,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(library(pcre)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).

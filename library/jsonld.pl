@@ -35,6 +35,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(library(pcre)).
 :- use_module(library(pairs)).
 :- use_module(utils).
 :- use_module(library(http/json)).
