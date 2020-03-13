@@ -132,7 +132,7 @@ run_db_create_test :-
 
     atomic_list_concat([Server,'/terminus_qa_test'], DB_URI),
     catch(
-        api:try_delete_db(DB_URI),
+        api:try_delete_db('terminus_qa_test'),
         _,
         true),
 
@@ -144,6 +144,7 @@ run_db_create_test :-
                             terminus:"http://terminusdb.com/schema/terminus#"
                         },
             '@type':"terminus:APIUpdate",
+            'terminus:base_uri' : "https://terminushub.com/",
             'terminus:document' : _{'@id': DB_URI, '@type':"terminus:Database",
                                     'rdfs:comment':_{'@language':"en", '@value':"dasd"},
                                     'rdfs:label':_{'@language':"en", '@value':"asdsda"},
@@ -158,7 +159,7 @@ run_db_create_test :-
         json_write_dict(current_output, Doc, [])
     ),
 
-    atomic_list_concat([Server,'/terminus_qa_test'], URI),
+    atomic_list_concat([Server,'/db/terminus_qa_test'], URI),
     Args = ['--user',Auth,'-d',Payload,'-H','Content-Type: application/json','-X','POST',URI],
     report_curl_command(Args),
     curl_json(Args,Term),
@@ -221,7 +222,7 @@ run_doc_get_test :-
 run_db_delete_test :-
     config:server(Server),
     auth(Auth),
-    atomic_list_concat([Server,'/terminus_qa_test'],URI),
+    atomic_list_concat([Server,'/db/terminus_qa_test'],URI),
     Args = ['--user', Auth, '-X','DELETE', URI],
     report_curl_command(Args),
     curl_json(Args,Term),
