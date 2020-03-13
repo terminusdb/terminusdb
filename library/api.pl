@@ -111,12 +111,14 @@ connect_handler(options,_Request) :-
     % Do a search for each config:public_server_url
     % once you know.
     config:public_server_url(SURI),
-    write_cors_headers(SURI),
+    open_descriptor(terminus_descriptor{}, DB),
+    write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
     config:public_server_url(SURI),
     connection_authorised_user(Request,User,SURI),
-    write_cors_headers(SURI),
+    open_descriptor(terminus_descriptor{}, DB),
+    write_cors_headers(SURI, DB),
     reply_json(User).
 
 
@@ -699,7 +701,7 @@ connection_authorised_user(Request, Username, SURI) :-
     fetch_authorization_data(Request, Username, KS),
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  (   authenticate(DB, Request, Auth),
-            verify_access(Auth,DB,terminus/get_document,SURI)
+            verify_access(Auth,DB,terminus:get_document,SURI)
         ->  true
         ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                   'terminus:message' : 'Bad user object',
