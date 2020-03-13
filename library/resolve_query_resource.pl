@@ -76,11 +76,11 @@ resolve_query_resource('terminus:///terminus/',terminus_descriptor).
 % 'http://[Server]/[User]/[Database_Name]/<Repo_Name>/<Ref_Name>'
 %
 resolve_query_resource(URI, Branch_Descriptor) :-
-    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)$', URI, Resource_Dict)
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{branch : "master"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict),
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict, []),
         Resource_Dict = Dict.put(_{repo : "local", branch : "master"})),
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
@@ -104,9 +104,9 @@ resolve_query_resource(URI, Branch_Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/commits/<Repo_Name>'
 %
 resolve_query_resource(URI, Repository_Descriptor) :-
-    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<repo>)$', URI, Resource_Dict)
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<repo>)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{repo : "local"})
     ),
     !,
@@ -124,7 +124,7 @@ resolve_query_resource(URI, Repository_Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/repositories'
 %
 resolve_query_resource(URI, Database_Descriptor) :-
-    re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Resource_Dict),
+    re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Resource_Dict, []),
 
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
 
@@ -148,15 +148,15 @@ resolve_query_resource(URI, Database_Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/[Repo_Name]/[Branch_Name]/[Graph_Type]/<Graph_Name>'
 %
 resolve_graph_resource(URI,Descriptor) :-
-    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)/(?P<type>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)/(?P<type>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main", type : "instance"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main", type : "instance", branch : "master"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main", type : "instance", branch : "master", repo : "local"})),
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
@@ -177,11 +177,11 @@ resolve_graph_resource(URI,Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/commits/[schema]/main'
 %
 resolve_graph_resource(URI,Descriptor) :-
-    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{type : "instance", name : "main"})),
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
@@ -201,11 +201,11 @@ resolve_graph_resource(URI,Descriptor) :-
 % 'http://[Server]/[User]/[Database_Name]/repositories/[schema]/main'
 %
 resolve_graph_resource(URI,Descriptor) :-
-    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories/(?P<type>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories/(?P<type>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main"})
-    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Dict)
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{type : "instance", name : "main"})),
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
@@ -220,11 +220,11 @@ resolve_graph_resource(URI,Descriptor) :-
 % Terminus Graph
 %
 resolve_graph_resource(URI,Descriptor) :-
-    (   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict)
+    (   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)/(?P<name>[^/]*)$', URI, Resource_Dict, [])
     ->  true
-    ;   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)$', URI, Dict)
+    ;   re_matchsub('^terminus:///terminus/(?P<type>[^/]*)$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{name : "main"})
-    ;   re_matchsub('^terminus:///terminus$', URI, Dict)
+    ;   re_matchsub('^terminus:///terminus$', URI, Dict, [])
     ->  Resource_Dict = Dict.put(_{type : "instance", name : "main"})),
     !,
     user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
