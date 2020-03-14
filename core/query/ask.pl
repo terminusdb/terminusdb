@@ -27,12 +27,12 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(woql_compile).
+:- use_module(global_prefixes).
 
 :- use_module(core(util/utils)).
 :- use_module(core(util/types), [is_literal/1]).
 :- reexport(core(util/syntax)).
 
-:- use_module(core(triple/global_prefixes)).
 :- use_module(core(triple/terminus_bootstrap)).
 :- use_module(core(triple/literals), [uri_to_prefixed/3]).
 
