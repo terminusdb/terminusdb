@@ -35,66 +35,6 @@
 :- use_module(library(http/json)).
 
 
-/*
- * run_api_tests is det.
- *
- * Run all structured tests of the API
- */
-run_api_tests :-
-    debug(terminus(testing_progress(run)), 'running api tests', []),
-    try(run_connect_test),
-    try(run_bad_auth_test),
-    %
-    % TERMINUS_QA_TEST (
-    try(run_db_create_test),
-    try(run_schema_update_test),
-    try(run_schema_get_test),
-    try(run_doc_get_test),
-    try(run_doc_update_test),
-    try(run_doc_update_get_test),
-    try(run_doc_update_update_test),
-    try(run_doc_update_update_get_test),
-    try(run_doc_delete_test),
-    try(run_doc_get_missing_test),
-    %     INSTANCE_CHECKING (
-    try(run_bad_comment_update_test),
-    try(run_bad_property_update_test),
-    %     ) INSTANCE CHECKING
-    try(run_db_delete_test),
-    % ) TERMINUS_QA_TEST
-    %
-    % UPDATE_WOQL_CHECKING (
-    try(run_db_create_test),
-    try(run_schema_update_test),
-    try(run_woql_update_test),
-    try(run_woql_verify_update_test),
-    try(run_woql_re_test),
-    try(run_woql_typecast_test),
-    try(run_woql_file_upload),
-    try(run_db_delete_test),
-    try(run_woql_re_test),
-    % ) UPDATE_WOQL_CHECKING
-    %
-    % INSTANCE TERMINUS_QA_TEST (
-    try(run_db_create_test),
-    try(run_schema_datatypes_update_test),
-    try(run_bad_doc_datatype_update_test),
-    try(run_good_doc_datatype_update_test),
-    try(run_db_delete_test),
-    % ) INSTANCE TERMINUS_QA_TEST
-    %
-    try(run_db_delete_nonexistent_test),
-    try(run_doc_get_test),
-    try(run_get_filled_frame_test),
-    try(run_woql_test),
-    try(run_woql_empty_error_test),
-    %try(run_woql_external_file_test),
-    try(run_woql_syntax_error_test),
-    try(run_woql_csv_test),
-    try(run_message_test),
-    try(run_woql_instantiation_test),
-    try(run_console),
-    debug(terminus(testing_progress(run)), 'completed api tests', []).
 
 /****************************************************************
  * Basic API tests
