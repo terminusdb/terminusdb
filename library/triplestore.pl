@@ -1,6 +1,5 @@
 :- module(triplestore, [
               destroy_graph/2,
-              sync_backing_store/0,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
@@ -10,7 +9,13 @@
               insert/4,
               delete/4,
               update/5,
-              storage/1
+              storage/1,
+              triple_store/1,
+              global_triple_store/1,
+              local_triple_store/1,
+              retract_local_triple_store/1,
+              default_triple_store/1,
+              with_triple_store/2
           ]).
 
 :- reexport(library(terminus_store),
@@ -79,38 +84,123 @@ destroy_graph(_DBID,GID) :-
 checkpoint(_DB_ID,_Graph_ID) :-
     throw(error("Unimplemented")).
 
-/*
- * storage(-Storage_Obj) is det.
+/**
+ * default_triple_store(-Triple_Store) is det.
  *
- * Global variable holding the current storage associated with the server.
- * This is set by sync_storage/0.
+ * Opens the default triple store, a directory store with the path retrieved from file_utils:db_path/1.
  */
-:- dynamic storage/1.
+default_triple_store(Triple_Store) :-
+    db_path(Path),
+    open_directory_store(Path,Triple_Store).
 
-/*
- * sync_storage is semidet.
+:- dynamic global_triple_store_var/1.
+
+/**
+ * global_triple_store(?Triple_Store) is semidet.
  *
- * Global variable holding the current storage associated with the server.
- * This is set by sync_storage/0.
+ * set or retrieve the global triple store.
+ * The global triple store is stored in a dynamic predicate, which
+ * global_triple_store/1 maintains in a thread-safe
+ * way. triple_store/1 will return the global triple store, unless a
+ * local triple store has been set (see local_triple_store/1).
  */
-sync_storage :-
+global_triple_store(Triple_Store) :-
+    var(Triple_Store),
+    !,
+    global_triple_store_var(Triple_Store).
+global_triple_store(Triple_Store) :-
+    % Triple_Store is non-var, so this is a set
     with_mutex(
         sync_storage,
         (
-            db_path(Path),
-            open_directory_store(Path,Storage),
-            retractall(storage(_)),
-            assertz(storage(Storage))
+            retractall(global_triple_store_var(_)),
+            assertz(global_triple_store_var(Triple_Store))
         )
     ).
 
+:- thread_local local_triple_store_var/1.
 /**
- * sync_backing_store is det.
+ * local_triple_store(?Triple_Store) is semidet.
  *
+ * set or retrieve the local triple store.
+ * The local triple store is stored in a thread-local predicate. On
+ * set, local_triple_store/1 will add a new first clause to this
+ * predicate, without removing existing clauses. Make sure to use
+ * retract_local_triple_store/1 to undo the set when done.
+ *
+ * See also with_triple_store/2, which runs a goal with the local
+ * triple store temporarily set to the given store.
  */
-sync_backing_store :-
-    /* do something here */
-    sync_storage.
+local_triple_store(Triple_Store) :-
+    var(Triple_Store),
+    !,
+    % use of once here is because the thread-local store may have been asserted multiple times, such as in nested with_triple_store scopes.
+    once(local_triple_store_var(Triple_Store)).
+local_triple_store(Triple_Store) :-
+    % Triple_Store is non-var, so this is a set
+    % Note that we're only asserting here, not retracting.
+    asserta(local_triple_store_var(Triple_Store)).
+
+/**
+ * retract_local_triple_store(+Triple_Store) is det.
+ *
+ * ensures a particular triple store won't be returned (anymore) by local_triple_store/1.
+ */
+retract_local_triple_store(Triple_Store) :-
+    retract(local_triple_store_var(Triple_Store)).
+
+/**
+ * with_triple_store(+Triple_Store, :Goal) is nondet.
+ *
+ * Call Goal with the given triple store set as local triple store.
+ * The local triple store will be retracted when Goal finishes.
+ */
+:- meta_predicate with_triple_store(+, :).
+with_triple_store(Triple_Store, _Goal) :-
+    var(Triple_Store),
+    !,
+    instantiation_error(Triple_Store).
+with_triple_store(Triple_Store, Goal) :-
+    local_triple_store(Triple_Store),
+    catch_with_backtrace(call(Goal),
+          E,
+          true),
+    retract_local_triple_store(Triple_Store),
+    (   var(E)
+    ->  true
+    ;   throw(E)).
+
+/**
+ * triple_store(?Triple_Store) is det.
+ *
+ * Returns the current triple store associated with the server.
+ *
+ * This could be:
+ * - the local triple store, as set with local_triple_store/1 or with_triple_store/2
+ * - the global triple store, as set with global_triple_store/1.
+ *
+ * If neither a local nor a global triple store is set, it is
+ * retrieved using default_triple_store/1 and subsequently set as the
+ * global triple store.
+ */
+triple_store(Triple_Store) :-
+    local_triple_store(Triple_Store),
+    !.
+triple_store(Triple_Store) :-
+    global_triple_store(Triple_Store),
+    !.
+triple_store(Triple_Store) :-
+    default_triple_store(Triple_Store),
+    global_triple_store(Triple_Store).
+
+/**
+ * storage(Triple_Store) is det.
+ *
+ * backwards_compatible alias for triple_store/1.
+ */
+storage(Triple_Store) :-
+    triple_store(Triple_Store).
+
 
 /*
  * safe_create_named_graph(+Store,+Graph_ID,-Graph_Obj) is det.

@@ -55,7 +55,7 @@ server(_Argv) :-
                            time_limit(infinite),
 			   prefix
 			 ]),
-            (   sync_backing_store,
+            (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
                 print_message(banner, welcome('terminus-server', Server))
             ),
 	    http_delete_handler(id(busy_loading))).
