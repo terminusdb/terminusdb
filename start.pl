@@ -18,6 +18,7 @@
  *
  */
 
+:- [load_paths].
 :- initialization(main).
 
 %!  version_string(+Int:integer, -Str:string) is det
@@ -59,41 +60,6 @@ must_be_proper_version :-
    ).
 
 :- initialization must_be_proper_version.
-
-
-:- dynamic user:file_search_path/2.
-:- multifile user:file_search_path/2.
-
-:- prolog_load_context(directory, Dir),
-   asserta(user:file_search_path(terminus_home, Dir)).
-
-add_library_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/library',Library),
-    asserta(user:file_search_path(library, Library)).
-
-:- add_library_path.
-
-add_config_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/config',Config),
-    asserta(user:file_search_path(config, Config)).
-
-:- add_config_path.
-
-add_test_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/test',Config),
-    asserta(user:file_search_path(test, Config)).
-
-:- add_test_path.
-
-add_plugin_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/plugins',Config),
-    asserta(user:file_search_path(plugins, Config)).
-
-:- add_plugin_path.
 
 initialise_server_settings :-
     file_search_path(terminus_home, BasePath),

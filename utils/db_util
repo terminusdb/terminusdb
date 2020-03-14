@@ -6,10 +6,7 @@
 :- use_module(library(filesex)).
 
 % Set up access to the libraries
-:- prolog_load_context(directory, Dir),
-   atomic_list_concat([Dir,'/../library'],One_Up),
-   absolute_file_name(One_Up,Lib),
-   asserta(user:file_search_path(library, Lib)).
+:- ['../load_paths.pl'].
 
 :- use_module(library(crypto)).
 :- use_module(library(process)).
@@ -51,6 +48,7 @@ hostname(Hostname) :-
         ;   Hostname = localhost)
     ;   Hostname = localhost).
 
+
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
  *
@@ -74,7 +72,6 @@ create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
     nb_set_head(Graph_Obj, Layer).
-
 
 /*****************************************************
  * Opts
