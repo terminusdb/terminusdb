@@ -3,7 +3,8 @@
               initialize_registry/0,
               initialize_index/3,
               initialize_database/2,
-              initialize_database_with_path/3
+              initialize_database_with_path/3,
+              initialize_database_with_store/3
           ]).
 
 :- use_module(library(terminus_store)).
@@ -17,8 +18,7 @@
  *
  * Reads in Turtle String and writes initial database.
  */
-create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
-    open_directory_store(Path,Store),
+create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
     safe_create_named_graph(Store,Graph_ID,Graph_Obj),
     open_write(Store, Builder),
 
@@ -142,6 +142,12 @@ initialize_database(Public_URL, Key) :-
     initialize_database_with_path(Public_URL, Key, DB_Path).
 
 initialize_database_with_path(Public_URL, Key, DB_Path) :-
+    make_directory_path(DB_Path),
+    delete_directory_contents(DB_Path),
+    open_directory_store(DB_Path, Store),
+    initialize_database_with_store(Public_URL, Key, Store).
+
+initialize_database_with_store(Public_URL, Key, Store) :-
     template_terminus_instance_ttl(Example_Instance_TTL),
 
     terminus_inference_ttl(Terminus_Inference_TTL),
@@ -151,8 +157,6 @@ initialize_database_with_path(Public_URL, Key, DB_Path) :-
     layer_schema_ttl(Terminus_Layer_TTL),
     repository_schema_ttl(Terminus_Repository_TTL),
 
-    make_directory_path(DB_Path),
-    delete_directory_contents(DB_Path),
 
     instance_path(Instance_TTL_Path),
 
@@ -164,24 +168,22 @@ initialize_database_with_path(Public_URL, Key, DB_Path) :-
     replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
 
     terminus_instance_name(Instance_Name),
-    create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
+    create_graph_from_turtle(Store,Instance_Name,Instance_TTL_Path),
 
     terminus_schema_name(Schema_Name),
-    create_graph_from_turtle(DB_Path,Schema_Name,Terminus_Schema_TTL),
+    create_graph_from_turtle(Store,Schema_Name,Terminus_Schema_TTL),
 
     terminus_inference_name(Inference_Name),
-    create_graph_from_turtle(DB_Path,Inference_Name,Terminus_Inference_TTL),
+    create_graph_from_turtle(Store,Inference_Name,Terminus_Inference_TTL),
 
     layer_ontology(Layer_Name),
-    create_graph_from_turtle(DB_Path,Layer_Name,Terminus_Layer_TTL),
+    create_graph_from_turtle(Store,Layer_Name,Terminus_Layer_TTL),
 
     ref_ontology(Ref_Name),
-    create_graph_from_turtle(DB_Path,Ref_Name,Terminus_Ref_TTL),
+    create_graph_from_turtle(Store,Ref_Name,Terminus_Ref_TTL),
 
     repository_ontology(Repository_Name),
-    create_graph_from_turtle(DB_Path,Repository_Name,Terminus_Repository_TTL),
-
-    format('Successfully initialised database!!!~n').
+    create_graph_from_turtle(Store,Repository_Name,Terminus_Repository_TTL).
 
 
 initialize_index(Url, Key, Opts) :-

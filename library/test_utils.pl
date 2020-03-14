@@ -44,10 +44,12 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
+:- use_module(library(terminus_store)).
+
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
 :- use_module(library(triplestore)).
-:- use_module(library(terminus_store)).
+:- use_module(library(init)).
 
 :- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
@@ -176,6 +178,7 @@ setup_temp_store(State) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
+    initialize_database_with_store('http://localhost:1234', 'root', Store),
     local_triple_store(Store).
 
 teardown_temp_store(State) :-

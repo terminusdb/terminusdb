@@ -175,7 +175,8 @@ main(Args) :-
         initialize_index(PUBLIC_URL, Key, Opts),
 
         (   memberchk(onlyconfig(false), Opts)
-        ->  initialize_database(PUBLIC_URL, Key)
+        ->  initialize_database(PUBLIC_URL, Key),
+            format('Successfully initialised database!!!~n').
         ;   true
         ),
         halt
