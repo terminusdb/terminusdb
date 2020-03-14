@@ -31,6 +31,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(library(pcre)).
 :- reexport(syntax).
 
 /*
