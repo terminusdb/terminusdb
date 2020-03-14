@@ -24,11 +24,14 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(library(test_utils)).
-:- use_module(library(database)).
-:- use_module(library(db_init)).
-:- use_module(library(database_utils)).
-:- use_module(library(db_delete)).
+:- use_module(core(util/test_utils)).
+
+:- use_module(core(triple/database_utils)).
+
+:- use_module(core(transaction/database)).
+
+:- use_module(core(api/db_init)).
+:- use_module(core(api/db_delete)).
 
 :- begin_tests(transaction_test).
 

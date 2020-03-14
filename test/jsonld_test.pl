@@ -28,9 +28,11 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
-:- use_module(library(test_utils)).
-:- use_module(library(utils)).
-:- use_module(library(jsonld)).
+:- use_module(core(util/test_utils)).
+:- use_module(core(util/utils)).
+
+:- use_module(core(api/jsonld)).
+
 :- use_module(library(http/json)).
 
 :- begin_tests(jsonld_test).

@@ -1,8 +1,7 @@
 :- module(tests,[
-              run_tests/0
           ]).
 
-/** <module> Run all tests
+/** <module> Include all integration tests
  *
  * This file contains the testing regime
  *
@@ -25,30 +24,6 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(test(api_test)).
-:- use_module(test(jsonld_test)).
-:- use_module(test(transaction_test)).
-
-%!  run_tests is semidet
-%
-%   This is run by Travis CI, or when we want to manually
-%   invoke the integration tests.
-%
-%   Travis does something like
-%
-%   ----
-%   swipl -g run_tests -g halt
-%   ----
-%
-%   which will exit swipl with 0 if run_tests succeeds, and 1 if it
-%   fails. Travis looks at this error code.
-%
-%   If any of the individual tests fail, run_tests will fail.
-%
-run_tests :-
-    debug(terminus(testing_progress(run)), 'starting tests', []),
-    run_tests(api_test),
-    run_tests(jsonld_test),
-    run_tests(transaction_test),
-    debug(terminus(testing_progress(run)), 'all tests succeeded', []).
-
+:- use_module(api_test).
+:- use_module(jsonld_test).
+:- use_module(transaction_test).

@@ -27,11 +27,14 @@
 
 :- begin_tests(api_test).
 
-:- use_module(library(test_utils)).
-:- use_module(library(utils)).
-:- use_module(library(file_utils)).
-:- use_module(library(database_utils)).
-:- use_module(library(api)).
+:- use_module(core(util/test_utils)).
+:- use_module(core(util/utils)).
+:- use_module(core(util/file_utils)).
+
+:- use_module(core(triple/database_utils)).
+
+:- use_module(server(routes)).
+
 :- use_module(library(http/json)).
 
 
