@@ -176,7 +176,7 @@ main(Args) :-
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(PUBLIC_URL, Key),
-            format('Successfully initialised database!!!~n').
+            format('Successfully initialised database!!!~n')
         ;   true
         ),
         halt
