@@ -250,6 +250,7 @@ repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
     object_id(Repo_Layer, Ref_Layer_Id_Literal, Ref_Layer_Id_Id),
     storage_object(Ref_Layer_Id_Literal, Ref_Layer_Id^^_).
 
+
 commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
     layer_to_id(Commit_Layer, Layer_ID),
     Collection_Descriptor = id_descriptor{ layer_id : Layer_ID },
@@ -585,3 +586,56 @@ read_write_object_to_name(Object, Name) :-
 filter_read_write_objects(Objects, Names, Filtered) :-
     include({Names}/[Object]>>(read_write_object_to_name(Object, Name),
                                memberchk(Name, Names)), Objects, Filtered).
+
+
+
+:- begin_tests(open_descriptor).
+:- use_module(library(test_utils)).
+:- use_module(library(terminus_store)).
+
+test(terminus, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Descriptor = terminus_descriptor{},
+    open_descriptor(Descriptor, Transaction),
+    % check for things we know should exist in the instance, schema and inference
+    once(ask(Transaction, t(terminus_doc:terminus, rdf:type, terminus:'Database', "instance/main"))),
+    once(ask(Transaction, t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', "schema/main"))),
+    once(ask(Transaction, t(terminus:authority_scope, owl:propertyChainAxiom, _, "inference/main"))).
+
+test(label, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Descriptor = label_descriptor{label: "test"},
+
+    triple_store(Store),
+    create_named_graph(Store, test, Graph),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, foo, bar, node(baz)),
+    nb_commit(Builder, Layer),
+    nb_set_head(Graph, Layer),
+
+    open_descriptor(Descriptor, Transaction),
+    once(ask(Transaction, t(foo, bar, baz))).
+
+test(id, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    triple_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, foo, bar, node(baz)),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Id),
+
+    Descriptor = id_descriptor{id: Id},
+
+    open_descriptor(Descriptor, Transaction),
+    once(ask(Transaction, t(foo, bar, baz))).
+
+:- end_tests(open_descriptor).
