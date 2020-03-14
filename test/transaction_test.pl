@@ -1,5 +1,4 @@
 :- module(transaction_testing,[
-              transaction_tests/0
           ]).
 
 /** <module> Transaction testing
@@ -31,12 +30,9 @@
 :- use_module(library(database_utils)).
 :- use_module(library(db_delete)).
 
-transaction_tests :-
-    try(terminus_descriptor_read_query_test),
-    try(create_db_test),
-    try(delete_db_test).
+:- begin_tests(transaction_test).
 
-terminus_descriptor_read_query_test :-
+test(terminus_descriptor_read_query_test) :-
     Descriptor = terminus_descriptor,
     Terminus_Schema = 'terminus:///terminus/schema',
     Terminus_Instance = 'terminus:///terminus/document',
@@ -71,12 +67,12 @@ terminus_descriptor_read_query_test :-
 test_db_name('Terminus_Testing_Database').
 test_base('http://localhost/').
 
-create_db_test :-
+test(create_db_test) :-
     test_base(Base),
     test_db_name(Name),
     create_db(Name,Base).
 
-delete_db_test :-
+test(delete_db_test) :-
     test_db_name(Name),
     delete_db(Name).
 
@@ -89,3 +85,6 @@ empty_database_test :-
                 (   t(X, P, Y) )),
             Triples),
     write(Triples).
+
+
+:- end_tests(transaction_test).

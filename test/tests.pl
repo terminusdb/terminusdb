@@ -48,7 +48,7 @@
 run_tests :-
     debug(terminus(testing_progress(run)), 'starting tests', []),
     run_tests(api_test),
-    run_jsonld_tests,
-    run_transaction_tests,
+    run_tests(jsonld_test),
+    run_tests(transaction_test),
     debug(terminus(testing_progress(run)), 'all tests succeeded', []).
 
