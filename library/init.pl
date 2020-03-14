@@ -65,7 +65,7 @@ default_database_path(Path) :-
     once(expand_file_search_path(terminus_home(storage/db), Path)).
 
 config_path(Path) :-
-    once(expand_file_search_path(config('config.ttl'), Path)).
+    once(expand_file_search_path(config('config.pl'), Path)).
 
 config_template_path(Path) :-
     once(expand_file_search_path(template('config-template.tpl'), Path)).
