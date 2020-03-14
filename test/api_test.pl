@@ -1,5 +1,4 @@
 :- module(api_test,[
-              run_api_tests/0
           ]).
 
 /** <module> API Test
@@ -25,6 +24,8 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
+
+:- begin_tests(api_test).
 
 :- use_module(library(test_utils)).
 :- use_module(library(utils)).
@@ -93,7 +94,6 @@ run_api_tests :-
     try(run_message_test),
     try(run_woql_instantiation_test),
     try(run_console),
-    * try(run_db_metadata_test),
     debug(terminus(testing_progress(run)), 'completed api tests', []).
 
 /****************************************************************
@@ -104,7 +104,7 @@ auth(Auth) :-
     admin_pass(Pass),
     atomic_list_concat(['admin', ':',Pass],Auth).
 
-run_connect_test :-
+test(run_connect_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -115,7 +115,7 @@ run_connect_test :-
 
     _{'@type':"terminus:User"} :< Term.
 
-run_bad_auth_test :-
+test(run_bad_auth_test) :-
     config:server(Server),
 
     Args = ['--user', ':flute','-X','GET', Server],
@@ -125,7 +125,7 @@ run_bad_auth_test :-
 
     _{'terminus:status':"terminus:failure"} :< Term.
 
-run_db_create_test :-
+test(run_db_create_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -167,7 +167,7 @@ run_db_create_test :-
     nl,json_write_dict(current_output,Term,[]),
     Term = _{'terminus:status' : "terminus:success"}.
 
-run_schema_update_test :-
+test(run_schema_update_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -195,7 +195,7 @@ run_schema_update_test :-
 
     Term = _{'terminus:status' : "terminus:success"}.
 
-run_schema_get_test :-
+test(run_schema_get_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus_qa/schema'],Schema),
@@ -206,10 +206,9 @@ run_schema_get_test :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,write(Term),
-    * json_write_dict(current_output,Term,[]),
     string(Term).
 
-run_doc_get_test :-
+test(run_doc_get_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus/document/admin'], URI),
@@ -219,7 +218,7 @@ run_doc_get_test :-
     json_write_dict(current_output,Term,[]),
     _{'@type' : "terminus:User"} :< Term.
 
-run_db_delete_test :-
+test(run_db_delete_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/db/terminus_qa_test'],URI),
@@ -229,7 +228,7 @@ run_db_delete_test :-
     nl,json_write_dict(current_output,Term,[]),
     _{'terminus:status' : "terminus:success"} :< Term.
 
-run_get_filled_frame_test :-
+test(run_get_filled_frame_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus/document/terminus?terminus%3Aencoding=terminus%3Aframe'],
@@ -242,7 +241,7 @@ run_get_filled_frame_test :-
     % This should not return a bare frame...
     is_list(Term).
 
-test_update_document(Doc) :-
+update_document(Doc) :-
     config:server(Server),
 
     format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
@@ -265,7 +264,7 @@ test_update_document(Doc) :-
               'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
              }.
 
-run_doc_update_test :-
+test(run_doc_update_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -287,7 +286,7 @@ run_doc_update_test :-
 
     _{'terminus:status' : "terminus:success"} :< Term.
 
-run_doc_update_get_test :-
+test(run_doc_update_get_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -334,7 +333,7 @@ test_update_update_document(Doc) :-
              }.
 
 
-run_doc_update_update_test :-
+test(run_doc_update_update_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -356,7 +355,7 @@ run_doc_update_update_test :-
 
     Term = _{'terminus:status' : "terminus:success"}.
 
-run_doc_update_update_get_test :-
+test(run_doc_update_update_get_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -376,7 +375,7 @@ run_doc_update_update_get_test :-
         false
     ).
 
-run_db_delete_nonexistent_test :-
+test(run_db_delete_nonexistent_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -391,7 +390,7 @@ run_db_delete_nonexistent_test :-
     % This should not be a bare error
     _{'terminus:status':"terminus:failure"} :< Term.
 
-run_doc_delete_test :-
+test(run_doc_delete_test) :-
 
     config:server(Server),
     auth(Auth),
@@ -407,7 +406,7 @@ run_doc_delete_test :-
 
     _{'terminus:status' : "terminus:success"} :< Term.
 
-run_doc_get_missing_test :-
+test(run_doc_get_missing_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -425,7 +424,7 @@ run_doc_get_missing_test :-
  * Woql Tests
  ***************************************************************/
 
-run_woql_test :-
+test(run_woql_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus/document/'], Document),
@@ -473,7 +472,7 @@ run_woql_test :-
     ;   fail).
 
 
-run_woql_external_file_test :-
+test(run_woql_external_file_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -509,7 +508,7 @@ run_woql_external_file_test :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]).
 
-run_woql_empty_error_test :-
+test(run_woql_empty_error_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -522,7 +521,7 @@ run_woql_empty_error_test :-
 
     _{'terminus:status':"terminus:failure"} :< Term.
 
-run_woql_syntax_error_test :-
+test(run_woql_syntax_error_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus/document/'], Document),
@@ -568,7 +567,7 @@ run_woql_syntax_error_test :-
     _{'@type':"vio:WOQLSyntaxError"} :< Term.
 
 % Requires terminus_qa_test!
-run_woql_update_test :-
+test(run_woql_update_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus_qa_test/document/'], Doc_Base),
@@ -622,7 +621,7 @@ run_woql_update_test :-
     _{'bindings' : [ _{} ]} :< Term.
 
 % Requires terminus_qa_test!
-run_woql_verify_update_test :-
+test(run_woql_verify_update_test) :-
     config:server(Server),
     auth(Auth),
     atomic_list_concat([Server,'/terminus_qa_test/document/'], Document),
@@ -659,7 +658,7 @@ run_woql_verify_update_test :-
                    ]}  :< Term.
 
 
-run_woql_csv_test :-
+test(run_woql_csv_test) :-
     config:server(Server),
     auth(Auth),
     terminus_path(Path),
@@ -714,7 +713,7 @@ run_woql_csv_test :-
           }
       ]} :< Term.
 
-run_woql_instantiation_test :-
+test(run_woql_instantiation_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -739,7 +738,7 @@ run_woql_instantiation_test :-
         'terminus:status' :"terminus:failure"
     } :< Term.
 
-run_woql_re_test :-
+test(run_woql_re_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -769,7 +768,7 @@ run_woql_re_test :-
 	          '@value':"asdfadsf"}}
       ]} :< Term.
 
-run_woql_typecast_test :-
+test(run_woql_typecast_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -800,7 +799,7 @@ run_woql_typecast_test :-
                ]} :< Term.
 
 
-run_woql_file_upload :-
+test(run_woql_file_upload ) :-
     config:server(Server),
     auth(Auth),
 
@@ -846,7 +845,7 @@ run_woql_file_upload :-
 /*
  * To run this we need to create a 'terminus_qa_test' database first...
  */
-run_bad_comment_update_test :-
+test(run_bad_comment_update_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -893,7 +892,7 @@ run_bad_comment_update_test :-
     _{'terminus:status':"terminus:failure",
       'terminus:witnesses': _W} :< Term.
 
-run_bad_property_update_test :-
+test(run_bad_property_update_test) :-
     % create DB
     config:server(Server),
     auth(Auth),
@@ -947,7 +946,7 @@ run_bad_property_update_test :-
  * Need to load a fresh database for this with run_db_create_test/0
  * followed by run_db_delete_test/0
  */
-run_schema_datatypes_update_test :-
+test(run_schema_datatypes_update_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -975,7 +974,7 @@ run_schema_datatypes_update_test :-
 
     Term = _{'terminus:status' : "terminus:success"}.
 
-run_bad_doc_datatype_update_test :-
+test(run_bad_doc_datatype_update_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -1066,7 +1065,7 @@ run_bad_doc_datatype_update_test :-
 
     length(W,18).
 
-run_good_doc_datatype_update_test :-
+test(run_good_doc_datatype_update_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -1155,16 +1154,16 @@ run_good_doc_datatype_update_test :-
     _{'terminus:status':"terminus:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness!
 
-run_console :-
+test(run_console) :-
     config:server(Server),
     atomic_list_concat([Server,'/console'], URI),
     status_200(URI).
 
 % TODO: need an order by test here.
-run_woql_order_by :-
+test(run_woql_order_by) :-
     true.
 
-run_db_metadata_test :-
+test(run_db_metadata_test, [blocked("Blocked for some reason")] ) :-
     config:server(Server),
     auth(Auth),
 
@@ -1177,7 +1176,7 @@ run_db_metadata_test :-
 
     _{ '@type' : "terminus:DatabaseMetadata"} :< Term.
 
-run_message_test :-
+test(run_message_test) :-
     config:server(Server),
     auth(Auth),
 
@@ -1199,3 +1198,5 @@ run_message_test :-
     nl,json_write_dict(current_output,Term,[]),
 
     _{'terminus:status' : "terminus:success"} :< Term.
+
+:- end_tests(api_test).
