@@ -3,20 +3,20 @@
 
 :- initialization(main).
 
-:- use_module(library(filesex)).
-
 % Set up access to the libraries
 :- ['../load_paths.pl'].
 
+:- use_module(core(triple/literals)).
+:- use_module(core(triple/triplestore)).
+:- use_module(core(triple/terminus_bootstrap)).
+:- use_module(core(api/init)).
+
+:- use_module(library(filesex)).
 :- use_module(library(crypto)).
 :- use_module(library(process)).
 :- use_module(library(optparse)).
 :- use_module(library(terminus_store)).
 :- use_module(library(semweb/turtle)).
-:- use_module(library(literals)).
-:- use_module(library(triplestore)).
-:- use_module(library(terminus_bootstrap)).
-:- use_module(library(init)).
 
 
 /*****************************************************

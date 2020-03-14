@@ -9,12 +9,19 @@ add_terminus_home_path :-
 
 :- add_terminus_home_path.
 
-add_library_path :-
+add_core_path :-
     user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/library',Library),
-    asserta(user:file_search_path(library, Library)).
+    atom_concat(Dir,'/core',Core),
+    asserta(user:file_search_path(core, Core)).
 
-:- add_library_path.
+:- add_core_path.
+
+add_server_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/server',Server),
+    asserta(user:file_search_path(server, Server)).
+
+:- add_server_path.
 
 add_jwt_path :-
     user:file_search_path(terminus_home, Dir),

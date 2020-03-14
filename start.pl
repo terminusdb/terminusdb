@@ -94,14 +94,16 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- initialise_server_settings.
 
-:- use_module(library(api)).
-:- use_module(library(server)).
-:- use_module(test(tests)).
-:- use_module(library(http/http_log)).
-:- reexport(library(syntax)).
+:- reexport(core(util/syntax)).
+
+:- use_module(server(routes)).
+:- use_module(server(main)).
+
 % Plugins
 %:- use_module(plugins(registry)).
-:- use_module(library(json_woql),[initialise_woql_contexts/0]).
+:- use_module(core(api/json_woql),[initialise_woql_contexts/0]).
+
+:- use_module(library(http/http_log)).
 
 :- on_signal(hup, _, hup).
 
