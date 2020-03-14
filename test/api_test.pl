@@ -320,7 +320,7 @@ test(run_db_delete_nonexistent_test) :-
     auth(Auth),
 
     % Need to set the user key correctly here or we will get a spurious error...
-    atomic_list_concat([Server,'/dOeS_nOt_ExIsT'], URI),
+    atomic_list_concat([Server,'/db/dOeS_nOt_ExIsT'], URI),
 
     Args = ['--user', Auth, '-X','DELETE',URI],
     report_curl_command(Args),
