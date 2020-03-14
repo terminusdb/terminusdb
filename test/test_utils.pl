@@ -3,7 +3,8 @@
               status_200/1,
               curl_json/2,
               report_curl_command/1,
-              admin_pass/1
+              admin_pass/1,
+              with_temp_store/1
           ]).
 
 /** <module> Test Utilities
@@ -43,6 +44,9 @@
 
 :- use_module(library(utils)).
 :- use_module(library(file_utils)).
+:- use_module(library(triplestore)).
+:- use_module(library(terminus_store)).
+
 :- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
 
@@ -164,3 +168,19 @@ admin_pass(Pass) :-
     (   getenv('TERMINUS_ADMIN_PASSWD', Pass)
     ->  true
     ;   Pass='root').
+
+:- meta_predicate with_temp_store(:).
+with_temp_store(Goal) :-
+    tmp_file(temporary_terminus_store, Dir),
+    make_directory(Dir),
+    open_directory_store(Dir, Store),
+
+    (   catch_with_backtrace(with_triple_store(Store, Goal),
+                             E,
+                             true)
+    ->  Success = true
+    ;   Success = false),
+    delete_directory_and_contents(Dir),
+    (   var(E)
+    ->  Success = true
+    ;   throw(E)).

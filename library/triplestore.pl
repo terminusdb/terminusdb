@@ -162,12 +162,14 @@ with_triple_store(Triple_Store, _Goal) :-
     instantiation_error(Triple_Store).
 with_triple_store(Triple_Store, Goal) :-
     local_triple_store(Triple_Store),
-    catch_with_backtrace(call(Goal),
-          E,
-          true),
+    (   catch_with_backtrace(call(Goal),
+                             E,
+                             true)
+    ->  Success = true
+    ;   Success = false),
     retract_local_triple_store(Triple_Store),
     (   var(E)
-    ->  true
+    ->  Success = true
     ;   throw(E)).
 
 /**
