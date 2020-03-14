@@ -1,6 +1,7 @@
 :- module(capabilities,[
               user_key_auth/4,
               user_key_user_id/4,
+              username_auth/3,
               get_user/3,
               user_action/2,
               auth_action_scope/4,
@@ -58,6 +59,20 @@ root_user_id(Root) :-
     atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /**
+ * user_name_user_id(+DB, +Username, -User_ID) is semidet.
+ *
+ * Username user association - goes only one way
+ */
+username_user_id(DB, Username, User_ID) :-
+    ask(DB,
+        (
+            t(User_ID, rdf:type, terminus:'User'),
+            t(User_ID, terminus:agent_name, Username^^xsd:string)
+        )
+       ).
+
+
+/**
  * key_user(+DB, +Username, +Key, -User_ID) is semidet.
  *
  * Key user association - goes only one way
@@ -91,6 +106,19 @@ get_user(Database, User_ID, User) :-
  */
 user_key_auth(DB, Username, Key, Auth) :-
     user_key_user_id(DB, Username, Key, User_ID),
+    user_auth_id(DB, User_ID, Auth_ID),
+    collection_descriptor_prefixes(DB.descriptor, Prefixes),
+    prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),
+    document_jsonld(DB,Auth_ID_Expanded,Auth).
+
+/**
+ * username_auth(DB, Key,Auth) is det.
+ *
+ * Give a capabilities JSON object corresponding to the capabilities
+ * of the username supplied by searching the core permissions database.
+ */
+username_auth(DB, Username, Auth) :-
+    username_user_id(DB, Username, User_ID),
     user_auth_id(DB, User_ID, Auth_ID),
     collection_descriptor_prefixes(DB.descriptor, Prefixes),
     prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),

@@ -90,6 +90,8 @@
 
 :- use_module(syntax).
 
+:- use_module(library(jwt/jwt_dec)).
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
@@ -668,13 +670,23 @@ customise_error(E) :-
  *  Fetches the HTTP Basic Authorization data
  */
 fetch_authorization_data(Request, Username, KS) :-
-    (   memberchk(authorization(Text), Request),
-        http_authorization_data(Text, basic(Username, Key)),
-        coerce_literal_string(Key, KS))
-    -> true
-    ;  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                             'terminus:message' : "No HTTP BASIC key supplied",
-                                             'terminus:object' : 'fetch_authorization_data'}))).
+    memberchk(authorization(Text), Request),
+    http_authorization_data(Text, basic(Username, Key)),
+    coerce_literal_string(Key, KS).
+
+/*
+ *  fetch_jwt_data(+Request, -Username) is semi-determinate.
+ *
+ *  Fetches the HTTP JWT data
+ */
+fetch_jwt_data(Request, Username) :-
+    memberchk(authorization(Text), Request),
+    pattern_string_split(" ", Text, ["Bearer", Token]),
+    getenv("TERMINUS_JWT_SECRET", JWT_Secret),
+    jwt_dec(Token, json{k: JWT_Secret, kty: "oct"}, Payload),
+    Username = Payload.get('username').
+
+
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -687,6 +699,19 @@ authenticate(DB, Request, Auth) :-
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key'})))).
+authenticate(DB, Request, Auth) :-
+    % Try JWT if no http keys
+    fetch_jwt_data(Request, Username),
+    !,
+    (   username_auth(DB, Username, Auth)
+    ->  true
+    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : 'Not a valid key'})))).
+authenticate(_, _, _) :-
+    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                          'terminus:message' : "No authentication supplied",
+                                          'terminus:object' : 'authenticate'}))).
+
 
 verify_access(DB, Auth, Action, Scope) :-
     (   auth_action_scope(DB, Auth, Action, Scope)
