@@ -1,11 +1,11 @@
-:- module(query,[
+:- module(ask,[
               ask/2,
               collection_descriptor_prefixes/2
           ]).
 
-/** <module> Query
+/** <module> Ask
  *
- * Prolog interface to queries
+ * Prolog interface to ask queries
  *
  * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
  *                                                                       *

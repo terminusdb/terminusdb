@@ -54,7 +54,7 @@
 
 :- use_module(inference).
 :- use_module(expansions).
-:- use_module(query).
+:- use_module(ask).
 :- use_module(frame_types).
 :- use_module(jsonld).
 

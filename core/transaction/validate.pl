@@ -34,7 +34,7 @@
 
 :- use_module(core(query/frame)).
 :- use_module(core(query/expansions)).
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
 :- use_module(core(query/jsonld)). % dubious - it does not seem to be used in this file
 
 :- use_module(core(validation/schema),[

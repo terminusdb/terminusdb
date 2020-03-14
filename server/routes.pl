@@ -43,7 +43,7 @@
 :- use_module(core(query/woql_compile)).
 % Frame and document processing
 :- use_module(core(query/frame)).
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
 % JSON manipulation
 :- use_module(core(query/jsonld)).
 % JSON Queries
