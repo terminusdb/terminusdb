@@ -170,3 +170,5 @@ create_db(Name,Base_URI) :-
 
     % update terminusdb with finalized
     finalise_terminus(Name).
+
+

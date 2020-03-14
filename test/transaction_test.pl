@@ -67,24 +67,35 @@ test(terminus_descriptor_read_query_test) :-
 test_db_name('Terminus_Testing_Database').
 test_base('http://localhost/').
 
-test(create_db_test) :-
-    test_base(Base),
-    test_db_name(Name),
-    create_db(Name,Base).
+test(create_db_test, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db('admin/Database', 'http://terminushub.com/document').
 
-test(delete_db_test) :-
-    test_db_name(Name),
-    delete_db(Name).
 
-empty_database_test :-
-    create_db_test,
-    test_db_name(Name),
+test(delete_db_test, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db('admin/Database', 'http://terminushub.com/document'),
+    delete_db('admin/Database', 'http://terminushub.com/document').
+
+
+test(empty_db_test, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Name = 'admin/Database',
+    create_db(Name, 'http://terminushub.com/document'),
     Descriptor = database_descriptor{ database_name : Name },
     findall(t(X,P,Y),
             ask(Descriptor,
                 (   t(X, P, Y) )),
             Triples),
     write(Triples).
-
 
 :- end_tests(transaction_test).
