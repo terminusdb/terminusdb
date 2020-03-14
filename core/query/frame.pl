@@ -56,6 +56,7 @@
 :- use_module(expansions).
 :- use_module(query).
 :- use_module(frame_types).
+:- use_module(jsonld).
 
 :- use_module(core(util/utils)).
 :- use_module(core(util/types)).
@@ -71,7 +72,6 @@
 
 :- use_module(core(transaction/database)).
 
-:- use_module(core(api/jsonld)). % dubious
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

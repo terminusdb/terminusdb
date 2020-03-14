@@ -35,6 +35,7 @@
 :- use_module(core(query/frame)).
 :- use_module(core(query/expansions)).
 :- use_module(core(query/query)).
+:- use_module(core(query/jsonld)). % dubious - it does not seem to be used in this file
 
 :- use_module(core(validation/schema),[
                   database_module/2,
@@ -43,7 +44,6 @@
 :- use_module(core(validation/validate_schema)).
 :- use_module(core(validation/validate_instance)).
 
-:- use_module(core(api/jsonld)). %dubious
 
 :- use_module(library(semweb/turtle)).
 

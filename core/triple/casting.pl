@@ -32,8 +32,9 @@
 
 :- use_module(core(util/utils)).
 :- use_module(core(util/speculative_parse)).
-:- use_module(core(api/jsonld)). % dubious. we should not be importing api stuff here.
 :- reexport(core(util/syntax)).
+
+:- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
