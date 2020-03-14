@@ -16,6 +16,8 @@
 :- use_module(library(literals)).
 :- use_module(library(triplestore)).
 :- use_module(library(terminus_bootstrap)).
+:- use_module(library(init)).
+
 
 /*****************************************************
  * Utils
@@ -47,31 +49,6 @@ hostname(Hostname) :-
         ->  atom_string(Hostname,Hostname_String)
         ;   Hostname = localhost)
     ;   Hostname = localhost).
-
-
-/**
- * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
- *
- * Reads in Turtle String and writes initial database.
- */
-create_graph_from_turtle(Path, Graph_ID, TTL_Path) :-
-    open_directory_store(Path,Store),
-    safe_create_named_graph(Store,Graph_ID,Graph_Obj),
-    open_write(Store, Builder),
-
-    % write to a temporary builder.
-    rdf_process_turtle(
-        TTL_Path,
-        {Builder}/
-        [Triples,_Resource]>>(
-            forall(member(T, Triples),
-                   (   normalise_triple(T, rdf(X,P,Y)),
-                       object_storage(Y,S),
-                       nb_add_triple(Builder, X, P, S)))),
-        []),
-    % commit this builder to a temporary layer to perform a diff.
-    nb_commit(Builder,Layer),
-    nb_set_head(Graph_Obj, Layer).
 
 /*****************************************************
  * Opts
@@ -155,147 +132,8 @@ Set the administrative key - necessary before superuser can begin to set other p
 ~s', [Name,Help_Text]).
 
 /*****************************************************
- * Paths and Main
+ * Main
  *****************************************************/
-
-example_registry_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/example_registry.pl'], Path).
-
-registry_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/../plugins/registry.pl'], Path).
-
-template_terminus_instance_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/terminus_instance_template.ttl'], Path).
-
-terminus_inference_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../terminus-schema/terminus_inference.owl.ttl'], Path).
-
-terminus_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir,'/../terminus-schema/terminus_schema.owl.ttl'], Path).
-
-repository_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir, '/../terminus-schema/repository.owl.ttl'], Path).
-
-layer_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir, '/../terminus-schema/layer.owl.ttl'], Path).
-
-ref_schema_ttl(Dir,Path) :-
-    atomic_list_concat([Dir, '/../terminus-schema/ref.owl.ttl'], Path).
-
-database_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/../storage/db/'], Pre_Path),
-    absolute_file_name(Pre_Path,Path).
-
-instance_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/../tmp/instance.ttl'], Path).
-
-config_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../config/config.pl'], Path).
-
-config_template_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/config-template.tpl'], Path).
-
-index_url(PublicUrl, PublicUrl, Opts) :-
-    memberchk(autoattach(AutoAttach), Opts),
-    AutoAttach,
-    !.
-index_url(_, "", _).
-
-index_key(Key, Key, Opts) :-
-    memberchk(autologin(AutoLogin), Opts),
-    AutoLogin,
-    !.
-index_key(_, "", _).
-
-index_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../config/index.html'], Path).
-
-index_template_path(Dir,Path) :-
-    atomic_list_concat([Dir, '/../index.tpl'], Path).
-
-inference_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/../tmp/inference.ttl'], Path).
-
-ttl_path(Dir, Path) :-
-    atomic_list_concat([Dir,'1-ckp.ttl'], Path).
-
-schema_path(Dir,Path) :-
-    atomic_list_concat([Dir,'/../tmp/schema.ttl'], Path).
-
-replace_in_file(Path, Pattern, With) :-
-    read_file_to_string(Path, FileString, []),
-    atomic_list_concat(Split, Pattern, FileString),
-    atomic_list_concat(Split, With, NewFileString),
-    open(Path, write, FileStream),
-    write(FileStream, NewFileString),
-    close(FileStream).
-
-write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, Workers) :-
-    open(Config_Tpl_Path, read, Tpl_Stream),
-    read_string(Tpl_Stream, _, Tpl_String),
-    close(Tpl_Stream),
-    open(Config_Path, write, Stream),
-    format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
-    close(Stream).
-
-write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
-    open(Index_Tpl_Path, read, Tpl_Stream),
-    read_string(Tpl_Stream, _, Tpl_String),
-    close(Tpl_Stream),
-    open(Index_Path, write, Stream),
-    format(Stream, Tpl_String, [URL, Password]),
-    close(Stream).
-
-initialize_database(Public_URL, Key, Dir) :-
-    template_terminus_instance_ttl(Dir,Example_Instance_TTL),
-
-    terminus_inference_ttl(Dir,Terminus_Inference_TTL),
-    terminus_schema_ttl(Dir,Terminus_Schema_TTL),
-
-    ref_schema_ttl(Dir,Terminus_Ref_TTL),
-    layer_schema_ttl(Dir,Terminus_Layer_TTL),
-    repository_schema_ttl(Dir,Terminus_Repository_TTL),
-
-    database_path(Dir,DB_Path),
-    make_directory_path(DB_Path),
-    delete_directory_contents(DB_Path),
-
-    instance_path(Dir,Instance_TTL_Path),
-
-    crypto_password_hash(Key,Hash, [cost(15)]),
-
-    % Need to copy this one from a template as we alter it.
-    copy_file(Example_Instance_TTL, Instance_TTL_Path),
-    replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-    replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
-
-    terminus_instance_name(Instance_Name),
-    create_graph_from_turtle(DB_Path,Instance_Name,Instance_TTL_Path),
-
-    terminus_schema_name(Schema_Name),
-    create_graph_from_turtle(DB_Path,Schema_Name,Terminus_Schema_TTL),
-
-    terminus_inference_name(Inference_Name),
-    create_graph_from_turtle(DB_Path,Inference_Name,Terminus_Inference_TTL),
-
-    layer_ontology(Layer_Name),
-    create_graph_from_turtle(DB_Path,Layer_Name,Terminus_Layer_TTL),
-
-    ref_ontology(Ref_Name),
-    create_graph_from_turtle(DB_Path,Ref_Name,Terminus_Ref_TTL),
-
-    repository_ontology(Repository_Name),
-    create_graph_from_turtle(DB_Path,Repository_Name,Terminus_Repository_TTL),
-
-    format('Successfully initialised database!!!~n').
-
-
-initialize_index(Url, Dir, Key, Opts) :-
-    index_key(Key, Password, Opts),
-    index_url(Url, PublicUrl, Opts),
-    index_template_path(Dir, IndexTplPath),
-    index_path(Dir,IndexPath),
-    write_index_file(IndexTplPath, IndexPath, PublicUrl, Password).
 
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
@@ -315,7 +153,6 @@ main(Args) :-
         write(Help_Text),
         halt
     ;   memberchk(key(Key), Opts),
-        file_directory_name(Prog, Dir),
 
         memberchk(server(Server_Arg), Opts),
         (   Server_Arg = ''
@@ -332,22 +169,13 @@ main(Args) :-
         ->  PUBLIC_URL = Public_URL
         ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
         ),
-        config_template_path(Dir, Config_Tpl_Path),
-        config_path(Dir,Config_Path),
-        write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
-                          Port, Workers),
 
-        registry_path(Dir,Registry_Path),
-        (   exists_file(Registry_Path)
-        ->  true
-        ;   example_registry_path(Dir,Example_Registry_Path),
-            copy_file(Example_Registry_Path, Registry_Path)
-        ),
-
-        initialize_index(PUBLIC_URL, Dir, Key, Opts),
+        initialize_config(PUBLIC_URL, Server, Port, Workers),
+        initialize_registry,
+        initialize_index(PUBLIC_URL, Key, Opts),
 
         (   memberchk(onlyconfig(false), Opts)
-        ->  initialize_database(PUBLIC_URL, Key, Dir)
+        ->  initialize_database(PUBLIC_URL, Key)
         ;   true
         ),
         halt
