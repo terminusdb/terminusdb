@@ -247,7 +247,7 @@ test(run_doc_update_get_test) :-
         false
     ).
 
-test_update_update_document(Doc) :-
+test_update_document(Doc) :-
     config:server(Server),
 
     format(string(Doc_Base), "~s~s", [Server,"/terminus_qa_test/document/"]),
