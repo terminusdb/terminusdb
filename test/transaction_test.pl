@@ -25,7 +25,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(test(test_utils)).
+:- use_module(library(test_utils)).
 :- use_module(library(database)).
 :- use_module(library(db_init)).
 :- use_module(library(database_utils)).
