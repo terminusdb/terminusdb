@@ -4,7 +4,7 @@
               curl_json/2,
               report_curl_command/1,
               admin_pass/1,
-              setup_temp_store/2,
+              setup_temp_store/1,
               teardown_temp_store/1,
               with_temp_store/1
           ]).
@@ -171,21 +171,23 @@ admin_pass(Pass) :-
     ->  true
     ;   Pass='root').
 
-setup_temp_store(Store, State) :-
-    State=Dir,
+setup_temp_store(State) :-
+    State=Store-Dir,
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
-    open_directory_store(Dir, Store).
+    open_directory_store(Dir, Store),
+    local_triple_store(Store).
 
 teardown_temp_store(State) :-
-    State=Dir,
+    State=Store-Dir,
+    retract_local_triple_store(Store),
     delete_directory_and_contents(Dir).
 
 :- meta_predicate with_temp_store(:).
 with_temp_store(Goal) :-
-    setup_temp_store(Store, State),
+    setup_temp_store(State),
 
-    (   catch_with_backtrace(with_triple_store(Store, Goal),
+    (   catch_with_backtrace(call(Goal),
                              E,
                              true)
     ->  Success = true
