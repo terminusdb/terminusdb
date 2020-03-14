@@ -190,16 +190,6 @@ teardown_temp_store(State) :-
 
 :- meta_predicate with_temp_store(:).
 with_temp_store(Goal) :-
-    setup_temp_store(State),
-
-    (   catch_with_backtrace(call(Goal),
-                             E,
-                             true)
-    ->  Success = true
-    ;   Success = false),
-
-    teardown_temp_store(State),
-
-    (   var(E)
-    ->  Success = true
-    ;   throw(E)).
+    setup_call_cleanup(setup_temp_store(State),
+                       Goal,
+                       teardown_temp_store(State)).
