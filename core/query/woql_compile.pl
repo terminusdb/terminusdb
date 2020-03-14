@@ -45,6 +45,7 @@
 % We may need to patch this in again...
 %:- use_module(ask), [enrich_graph_fragment/5]).
 :- use_module(global_prefixes, [default_prefixes/1]).
+:- use_module(resolve_query_resource).
 
 :- use_module(core(util/utils)).
 :- use_module(core(util/speculative_parse), [guess_date/2]).
@@ -61,7 +62,6 @@
               ]).
 :- use_module(core(triple/temp_graph)).
 :- use_module(core(triple/casting), [typecast/4,hash/3,idgen/3, random_idgen/3]).
-:- use_module(core(triple/resolve_query_resource)).
 
 :- use_module(core(transaction/database)).
 :- use_module(core(transaction/descriptor)).
