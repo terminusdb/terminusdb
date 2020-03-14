@@ -166,7 +166,7 @@ with_triple_store(Triple_Store, _Goal) :-
 with_triple_store(Triple_Store, Goal) :-
     setup_call_cleanup(local_triple_store(Triple_Store),
                        Goal,
-                       retract_local-triple_store(Triple_Store)).
+                       retract_local_triple_store(Triple_Store)).
 
 /**
  * triple_store(?Triple_Store) is det.
