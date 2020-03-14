@@ -74,6 +74,10 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     !,
     Prefixes = _{doc: 'terminus:///terminus/document/'}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    id_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     label_descriptor{label: Label} :< Descriptor,
     !,
     atomic_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
@@ -176,6 +180,13 @@ collection_descriptor_default_write_graph(_, empty).
  *
  * Ask a woql query
  */
+ask(Layer,Pre_Term) :-
+    % create a descriptor from the layer id
+    % This will re-open the same layer later on so it is a bit hacky.
+    blob(Layer, layer),
+    !,
+    open_descriptor(Layer, Transaction),
+    ask(Transaction,Pre_Term).
 ask(Query_Context,Pre_Term) :-
     query_context{} :< Query_Context,
     !,
@@ -204,7 +215,6 @@ ask(Transaction_Object,Pre_Term) :-
 ask(Collection_Descriptor,Pre_Term) :-
     open_descriptor(Collection_Descriptor, Transaction_Object),
     ask(Transaction_Object, Pre_Term).
-
 
 ask(Pre_Term) :-
     empty_ctx(Ctx),

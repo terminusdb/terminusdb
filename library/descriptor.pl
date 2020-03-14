@@ -16,8 +16,12 @@
  *
  * Types:
  *
- * graph_descriptor --> labelled_graph{ name : atom }
- *                    | id_graph{ layer_id : atom } % for debugging
+ * graph_descriptor --> labelled_graph{ label : atom
+                                        type: atom,
+                                        name: main }
+ *                    | id_graph{ layer_id : atom,
+                                  type: atom,
+                                  name: string } % for debugging
  *                    | terminus_graph{ type : atom,
  *                                      name : atom }
  *                    | repo_graph { database_name : atom,
@@ -135,13 +139,17 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     safe_open_named_graph(Store, Graph_Name, Graph),
     head(Graph, Layer).
 graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
-    Descriptor = labelled_graph{ name: Name },
+    Descriptor = labelled_graph{ label: Name,
+                                 type: instance,
+                                 name: "main"},
     !,
     storage(Store),
     safe_open_named_graph(Store, Name, Graph),
     ignore(head(Graph, Layer)).
 graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
-    Descriptor = id_graph{ layer_id: Layer_Id },
+    Descriptor = id_graph{ layer_id: Layer_Id,
+                           type: instance,
+                           name: "main"},
     !,
     storage(Store),
     store_id_layer(Store, Layer_Id, Layer).
@@ -254,6 +262,14 @@ commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, 
                  t(Layer_URI, layer:layer_id, Layer_ID^^xsd:string)
              ))).
 
+open_read_write_obj(Layer, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, [Descriptor=Layer|Map]) :-
+    blob(Layer, layer),
+    !,
+    layer_to_id(Layer, Id),
+    Descriptor = id_graph{id: Id,
+                          type: instance,
+                          name: "main"}.
+
 open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, New_Map) :-
     graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
 
@@ -302,6 +318,20 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, Map) :-
     memberchk(Descriptor=Transaction_Object, Map),
     !.
+open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
+    blob(Layer, layer),
+    !,
+    layer_to_id(Layer, Id),
+
+    open_read_write_obj(Layer, Instance_Object, [], _),
+
+    Descriptor = id_descriptor{ id: Id},
+    Transaction_Object = transaction_object{
+                             descriptor : Descriptor,
+                             instance_objects : [Instance_Object],
+                             schema_objects : [],
+                             inference_objects : []
+                         }.
 open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
                  [terminus_descriptor{}=Transaction_Object|Map_3]) :-
     !,
@@ -324,7 +354,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                 [Descriptor=Transaction_Object|New_Map]) :-
     id_descriptor{ id : ID } :< Descriptor,
     !,
-    Graph_Descriptor = id_graph{ layer_id : ID },
+    Graph_Descriptor = id_graph{ layer_id : ID, type: instance, name: "main" },
     open_read_write_obj(Graph_Descriptor, Instance, Map, New_Map),
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
@@ -339,7 +369,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     } = Descriptor,
     !,
 
-    Graph_Descriptor = labelled_graph{ name: Label },
+    Graph_Descriptor = labelled_graph{ label: Label, type: instance, name: "main" },
     open_read_write_obj(Graph_Descriptor, Read_Write_Obj, Map, Map_1),
 
     Transaction_Object = transaction_object{
@@ -493,6 +523,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
+
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,
