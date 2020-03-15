@@ -23,9 +23,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- reexport(core(util/syntax)).
+:- use_module(global_prefixes).
 
-:- use_module(core(triple/global_prefixes)).
+:- reexport(core(util/syntax)).
 
 :- multifile user:goal_expansion/2.
 :- dynamic user:goal_expansion/2.

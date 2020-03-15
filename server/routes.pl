@@ -43,7 +43,11 @@
 :- use_module(core(query/woql_compile)).
 % Frame and document processing
 :- use_module(core(query/frame)).
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
+% JSON manipulation
+:- use_module(core(query/jsonld)).
+% JSON Queries
+:- use_module(core(query/json_woql)).
 
 :- use_module(core(transaction/descriptor)).
 % Database construction utils
@@ -53,10 +57,6 @@
 
 :- use_module(core(api/db_init)).
 :- use_module(core(api/db_delete)).
-% JSON manipulation
-:- use_module(core(api/jsonld)).
-% JSON Queries
-:- use_module(core(api/json_woql)).
 
 % Load capabilities library
 :- use_module(core(account/capabilities)).

@@ -46,22 +46,15 @@
 :- use_module(core(triple/database_utils)).
 
 :- use_module(core(query/frame)).
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
+:- use_module(core(query/jsonld)). % dubious - we should be able to do capability checking without json involvement.
 
 :- use_module(core(transaction/database)).
 
-:- use_module(core(api/jsonld)). % dubious
 
 :- use_module(config(config),[]).
 
 :- use_module(library(crypto)).
-
-/**
- * root_user_id(Root_User_ID : uri) is det.
- */
-root_user_id(Root) :-
-    config:public_server_url(Server),
-    atomic_list_concat([Server,'/terminus/document/admin'],Root).
 
 /**
  * user_name_user_id(+DB, +Username, -User_ID) is semidet.

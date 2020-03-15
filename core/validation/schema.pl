@@ -33,8 +33,9 @@
 
 :- use_module(core(util/utils)).
 
-:- use_module(core(triple/global_prefixes), [global_prefix_expand/2]).
 :- use_module(core(triple/triplestore)).
+
+:- use_module(core(query/global_prefixes), [global_prefix_expand/2]).
 
 :- use_module(core(transaction/database)).
 

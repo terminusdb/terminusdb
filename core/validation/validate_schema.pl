@@ -107,7 +107,7 @@
 :- use_module(core(triple/base_type)).
 :- use_module(core(triple/database_utils)).
 
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
 
 :- use_module(core(transaction/database)).
 

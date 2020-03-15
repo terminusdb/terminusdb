@@ -101,7 +101,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 % Plugins
 %:- use_module(plugins(registry)).
-:- use_module(core(api/json_woql),[initialise_woql_contexts/0]).
+
+:- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 
 :- use_module(library(http/http_log)).
 

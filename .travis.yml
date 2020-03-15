@@ -17,12 +17,12 @@ jobs:
     - stage: build
     - script:
         - docker build -t terminusdb/terminus-server:latest .
-        - docker run -it --rm terminusdb/terminus-server:latest bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g '[test/tests]' run_tests -g halt /app/terminusdb/start.pl"
+        - docker run -it --rm terminusdb/terminus-server:latest bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g '[test/tests]' -g run_tests -g halt /app/terminusdb/start.pl"
 
     - stage: deploy
       script:
         - docker build -t terminusdb/terminus-server:latest .
-        - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g run_tests -g '[test/tests]' -g halt /app/terminusdb/start.pl"
+        - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g '[test/tests]' -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminus-server:latest
 
