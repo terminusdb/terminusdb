@@ -70,12 +70,15 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
 inferredEdge(X,OP,Y,Database) :-
+    % No inference
     database_instance(Database,Instance),
-    xrdf(Instance,X,OP,Y).
-inferredEdge(_,_,_,Database) :-
     database_inference(Database,[]),
     !,
-    fail.
+    xrdf(Instance,X,OP,Y).
+inferredEdge(X,OP,Y,Database) :-
+    % Base case for inference
+    database_instance(Database,Instance),
+    xrdf(Instance,X,OP,Y).
 inferredEdge(X,OP,Y,Database) :-
     database_inference(Database,Inference),
     xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),

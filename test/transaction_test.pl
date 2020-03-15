@@ -29,6 +29,9 @@
 :- use_module(core(triple/database_utils)).
 
 :- use_module(core(transaction/database)).
+:- use_module(core(transaction/descriptor)).
+
+:- use_module(core(query/query)).
 
 :- use_module(core(api/db_init)).
 :- use_module(core(api/db_delete)).
@@ -36,39 +39,15 @@
 :- begin_tests(transaction_test).
 
 test(terminus_descriptor_read_query_test) :-
-    Descriptor = terminus_descriptor,
-    Terminus_Schema = 'terminus:///terminus/schema',
-    Terminus_Instance = 'terminus:///terminus/document',
-    Terminus_Inference = 'terminus:///terminus/inference',
-    Read_Graph_Descriptors = [named_graph{ name : Terminus_Schema},
-                              named_graph{ name : Terminus_Instance},
-                              named_graph{ name : Terminus_Inference}],
-    Write_Graph_Descriptors = [],
-    database:descriptor_query(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, [], New_Map),
-    New_Map = [terminus_descriptor=Query_Object],
-    Query_Object.schema_read_objects = [Schema_Read_Obj],
+    Descriptor = terminus_descriptor{},
 
-    Schema_Read_Obj.read = Schema_Layer,
-    terminus_store:triple(Schema_Layer,
-                          'http://terminusdb.com/schema/terminus',
-                          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                          node('http://www.w3.org/2002/07/owl#Ontology')),
-    Query_Object.instance_read_objects = [Instance_Read_Obj],
-    Instance_Read_Obj.read = Instance_Layer,
-    terminus_store:triple(Instance_Layer,
-                          'terminus:///terminus/document/admin',
-                          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                          node('http://terminusdb.com/schema/terminus#User')),
+    open_descriptor(Descriptor, Terminus),
 
-    Query_Object.inference_read_objects = [Inference_Read_Obj],
-    Inference_Read_Obj.read = Inference_Layer,
-    once(terminus_store:triple(Inference_Layer,
-                          'http://terminusdb.com/schema/terminus#authority_scope',
-                          'http://www.w3.org/2002/07/owl#propertyChainAxiom',
-                          _)).
-
-test_db_name('Terminus_Testing_Database').
-test_base('http://localhost/').
+    once(ask(Terminus,
+             (   t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', 'schema/*'),
+                 t(doc:admin, rdf:type, terminus:'User'),
+                 t(terminus:authority_scope, owl:propertyChainAxiom, _, 'inference/*')
+             ))).
 
 test(create_db_test, [
          setup(setup_temp_store(State)),
@@ -84,7 +63,7 @@ test(delete_db_test, [
      ])
 :-
     create_db('admin/Database', 'http://terminushub.com/document'),
-    delete_db('admin/Database', 'http://terminushub.com/document').
+    delete_db('admin/Database').
 
 
 test(empty_db_test, [

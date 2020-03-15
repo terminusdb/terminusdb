@@ -72,7 +72,7 @@ delete_db(DB_Name) :-
     (   db_exists_in_layer(Layer,DB_Name)
     ->  true
     ;   format(atom(M), 'Database does not exist with the name ~q', [DB_Name]),
-        throw(error(database_exists,M))),
+        throw(database_does_not_exist(M))),
     % Do something here? User may need to know what went wrong
     db_finalized_in_layer(Layer,DB_Name),
 
@@ -86,8 +86,8 @@ delete_db(DB_Name) :-
     ->  get_time(Time),
         atomic_list_concat([Path,DB_Name_Safe,'-',Time,'.deleted'],Deleted_File),
         rename_file(File_Path,Deleted_File)
-    ;   format(atom(M), 'Database files do not exist with the name ~q', [DB_Name]),
-        throw(error(database_exists,M))
+    ;   format(atom(M), 'Database files do not exist with the name ~w', [DB_Name]),
+        throw(database_does_not_exist(M))
     ),
 
     delete_db_from_terminus(DB_Name,Graph,Deleting_Layer).

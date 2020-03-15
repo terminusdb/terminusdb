@@ -44,6 +44,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(core(query/expansions)).
+:- use_module(core(query/query)).
 
 :- use_module(core(transaction/database)).
 
@@ -59,15 +60,8 @@ db_name_uri(Name, Uri) :-
     idgen('terminus:///terminus/document/Database', [Name], Uri).
 
 db_exists_in_layer(Layer, Name) :-
-    database_name_property_uri(Database_Name_Property_Uri),
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
-    db_name_uri(Name, Db_Uri),
-    % TODO: We can use high level querying as well
-    triple(Layer,
-           Db_Uri,
-           Database_Name_Property_Uri,
-           Name_Literal).
+    once(ask(Layer,
+             t(_Db_Uri, terminus:database_name, Name^^xsd:string))).
 
 db_finalized_in_layer(Layer,Name) :-
     finalized_element_uri(Finalized),
