@@ -29,7 +29,6 @@
 
 :- use_module(file_utils).
 
-
 /*
  * copy_remote(+Remote, +Name, -File) is det.
  *

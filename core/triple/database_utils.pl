@@ -39,8 +39,6 @@
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
 
-:- use_module(core(util/file_utils)).
-:- use_module(core(util/utils)).
 :- reexport(core(util/syntax)).
 
 :- use_module(core(query/expansions)).

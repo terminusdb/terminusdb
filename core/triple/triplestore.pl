@@ -20,15 +20,13 @@
 
 :- use_module(literals).
 
-:- use_module(core(util/file_utils)).
-:- use_module(core(util/utils)).
-:- use_module(core(validation/schema), [cleanup_schema_module/1]). % dubious
-:- use_module(core(util/types)).
 :- reexport(core(util/syntax)).
+:- use_module(core(util)).
+
+:- use_module(core(validation/schema), [cleanup_schema_module/1]). % dubious
 
 % feeling very circular :(
-:- use_module(core(transaction/database)).
-:- use_module(core(transaction/descriptor)).
+:- use_module(core(transaction)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

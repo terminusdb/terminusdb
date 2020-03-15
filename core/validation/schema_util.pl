@@ -32,10 +32,8 @@
 
 :- use_module(schema_definitions).
 
-:- use_module(core(util/utils), [intersperse/3]).
-:- use_module(core(util/types)).
-
-:- use_module(core(transaction/database)).
+:- use_module(core(util)).
+:- use_module(core(transaction)).
 
 /*
  * database_module(+Database:database, -Module:atom) is det.

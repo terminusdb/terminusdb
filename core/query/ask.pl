@@ -26,18 +26,13 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- reexport(core(util/syntax)).
 :- use_module(woql_compile).
 :- use_module(global_prefixes).
 
-:- use_module(core(util/utils)).
-:- use_module(core(util/types), [is_literal/1]).
-:- reexport(core(util/syntax)).
-
-:- use_module(core(triple/terminus_bootstrap)).
-:- use_module(core(triple/literals), [uri_to_prefixed/3]).
-
-:- use_module(core(transaction/database)).
-:- use_module(core(transaction/descriptor)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
 
 /**
  * pre_term_to_term_and_bindings(Pre_Term, Woql_Term, Bindings_In, Bindings_Out) is det.

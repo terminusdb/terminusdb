@@ -48,7 +48,7 @@
 :- use_module(utils).
 :- use_module(file_utils).
 
-:- use_module(core(triple/triplestore)).
+:- use_module(core(triple)).
 :- use_module(core(api/init)).
 
 :- use_module(library(terminus_store)).

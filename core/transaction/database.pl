@@ -29,17 +29,10 @@
 
 :- use_module(descriptor).
 
-:- use_module(core(util/utils)).
-:- use_module(core(util/types)).
-:- use_module(core(util/file_utils)).
 :- reexport(core(util/syntax)).
-
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/literals), [object_storage/2]).
-:- use_module(core(triple/casting), [idgen/3]).
-:- use_module(core(triple/terminus_bootstrap)).
-
-:- use_module(core(query/global_prefixes), [global_prefix_expand/2]).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
 
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).

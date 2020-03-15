@@ -35,12 +35,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(util/utils)).
+:- use_module(core(util)).
 :- reexport(core(util/syntax)).
 
-:- use_module(core(triple/literals),[date_string/2]).
-
-:- use_module(core(transaction/database)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
 
 :- use_module(library(pcre)).
 :- use_module(library(pairs)).

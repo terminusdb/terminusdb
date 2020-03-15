@@ -26,7 +26,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(util/utils)).
+:- use_module(core(util)).
 
 :- use_module(library(pcre)).
 

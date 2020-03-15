@@ -45,7 +45,7 @@
 This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
-:- reexport(syntax).
+:- reexport(core(util/syntax)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 

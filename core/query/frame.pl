@@ -58,19 +58,10 @@
 :- use_module(frame_types).
 :- use_module(jsonld).
 
-:- use_module(core(util/utils)).
-:- use_module(core(util/types)).
-:- reexport(core(util/syntax)).
-
-:- use_module(core(triple/base_type)).
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/database_utils)).
-
-:- use_module(core(validation/validate_schema)).
-:- use_module(core(validation/validate_instance)).
-:- use_module(core(validation/schema), []).
-
-:- use_module(core(transaction/database)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(validation)).
+:- use_module(core(transaction)).
 
 
 :- use_module(library(apply)).

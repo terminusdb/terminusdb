@@ -26,24 +26,12 @@
 
 :- use_module(database).
 
-:- use_module(core(util/utils)).
 :- reexport(core(util/syntax)).
-
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/literals)).
-
-:- use_module(core(query/frame)).
-:- use_module(core(query/expansions)).
-:- use_module(core(query/ask)).
-:- use_module(core(query/jsonld)). % dubious - it does not seem to be used in this file
-
-:- use_module(core(validation/schema),[
-                  database_module/2,
-                  compile_schema_to_module/2
-              ]).
-:- use_module(core(validation/validate_schema)).
-:- use_module(core(validation/validate_instance)).
-
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(validation)).
+:- use_module(core(validation/schema),[compile_schema_to_module/2]).
 
 :- use_module(library(semweb/turtle)).
 

@@ -31,8 +31,7 @@
 
 :- use_module(jsonld).
 
-:- use_module(core(util/utils)).
-:- use_module(core(util/file_utils)).
+:- use_module(core(util)).
 :- reexport(core(util/syntax)).
 
 :- use_module(library(http/json)).

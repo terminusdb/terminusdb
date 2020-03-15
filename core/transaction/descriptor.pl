@@ -112,14 +112,10 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(util/utils)).
 :- reexport(core(util/syntax)).
-
-:- use_module(core(triple/terminus_bootstrap)).
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/literals)).
-
-:- use_module(core(query/ask)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
 
 :- use_module(library(terminus_store)).
 

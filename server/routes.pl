@@ -28,38 +28,13 @@
 
 %% TODO: this module should really only need things from core/api and maybe core/account.
 
-% Default utils
-:- use_module(core(util/utils)).
-% File processing
-:- use_module(core(util/file_utils), [terminus_path/1]).
 :- reexport(core(util/syntax)).
-
-% Database utils
-:- use_module(core(triple/database_utils)).
-% Dumping turtle
-:- use_module(core(triple/turtle_utils)).
-
-% woql libraries
-:- use_module(core(query/woql_compile)).
-% Frame and document processing
-:- use_module(core(query/frame)).
-:- use_module(core(query/ask)).
-% JSON manipulation
-:- use_module(core(query/jsonld)).
-% JSON Queries
-:- use_module(core(query/json_woql)).
-
-:- use_module(core(transaction/descriptor)).
-% Database construction utils
-:- use_module(core(transaction/database)).
-% Validation
-:- use_module(core(transaction/validate)).
-
-:- use_module(core(api/db_init)).
-:- use_module(core(api/db_delete)).
-
-% Load capabilities library
-:- use_module(core(account/capabilities)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(core(account)).
 
 :- use_module(library(jwt/jwt_dec)).
 
