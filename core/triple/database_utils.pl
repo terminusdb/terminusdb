@@ -39,13 +39,10 @@
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
 
-:- use_module(core(util/file_utils)).
-:- use_module(core(util/utils)).
 :- reexport(core(util/syntax)).
-
-:- use_module(core(query/expansions)).
-
-:- use_module(core(transaction/database)).
+:- use_module(core(util)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
 
 :- use_module(library(pcre)).
 

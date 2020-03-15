@@ -28,7 +28,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 %:- use_module(library(mavis)).
-:- use_module(core(util/utils)).
+:- use_module(core(util)).
 
 %%%% Dacura types prefix
 

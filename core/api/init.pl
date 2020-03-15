@@ -7,9 +7,7 @@
               initialize_database_with_store/3
           ]).
 
-:- use_module(core(triple/literals)).
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/terminus_bootstrap)).
+:- use_module(core(triple)).
 
 :- use_module(library(semweb/turtle)).
 

@@ -28,12 +28,8 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- reexport(core(util/syntax)).
-
-:- use_module(core(triple/triplestore)).
-:- use_module(core(triple/literals)).
-:- use_module(core(triple/casting)).
-:- use_module(core(triple/terminus_bootstrap)).
-:- use_module(core(triple/database_utils)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
 
 :- use_module(library(terminus_store)).
 

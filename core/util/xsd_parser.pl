@@ -61,7 +61,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(triple/iana)).
+:- use_module(core(triple/iana)). % dubious - seems to be the only place where iana is used, so shouldn't iana be part of this module?
 
 /******************
  *  Punctuation   *

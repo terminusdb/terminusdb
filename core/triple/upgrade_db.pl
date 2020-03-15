@@ -42,8 +42,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(util/utils),[interpolate/2]).
-:- use_module(core(util/file_utils)).
+:- use_module(core(util)).
 
 :- use_module(library(pcre)).
 

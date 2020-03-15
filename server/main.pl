@@ -27,7 +27,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(triple/triplestore)).
+:- use_module(core(triple)).
 
 % configuration predicates
 :- use_module(config(config),[]).

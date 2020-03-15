@@ -29,7 +29,7 @@
 :- use_module(triplestore).
 :- use_module(literals).
 
-:- use_module(core(transaction/database)).
+:- use_module(core(transaction)).
 
 :- use_module(library(semweb/turtle)).
 

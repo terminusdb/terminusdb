@@ -31,13 +31,10 @@
 :- use_module(schema_definitions).
 :- reexport(schema_util).
 
-:- use_module(core(util/utils)).
-
-:- use_module(core(triple/triplestore)).
-
-:- use_module(core(query/global_prefixes), [global_prefix_expand/2]).
-
-:- use_module(core(transaction/database)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
 
 cleanup_schema_module(Module) :-
     forall(schema_predicate(Predicate/Arity),

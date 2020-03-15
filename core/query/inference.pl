@@ -29,12 +29,9 @@
 
 :- reexport(core(util/syntax)).
 
-:- use_module(core(triple/database_utils)).
-:- use_module(core(triple/triplestore)).
-
-:- use_module(core(transaction/database)).
-
-:- use_module(core(validation/validate_schema)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(validation)).
 
 /**
  * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database is nondet.
