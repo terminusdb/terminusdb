@@ -34,7 +34,7 @@
 :- use_module(core(validation)).
 
 /**
- * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database is nondet.
+ * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database) is nondet.
  *
  * Run a property axiom chain PropList from X to Y.
  */
@@ -47,7 +47,7 @@ runChain(X,[P|PropList],Z,Database) :-
     runChain(Y,PropList,Z,Database).
 
 /**
- * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:database is nondet.
+ * inferredTransitiveEdge(?X,?OP:property_uri,Z,+Instance:atom,+Database:database) is nondet.
  *
  * We impose an ordering to avoid non-termination (subproperty ordering)
  * Concrete links are already in InferredEdge
