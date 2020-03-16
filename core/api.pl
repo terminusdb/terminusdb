@@ -1,5 +1,6 @@
 :- module(api, []).
 
-:- reexport(api/init).
-:- reexport(api/db_init).
-:- reexport(api/db_delete).
+:- reexport([api/init,
+             api/db_init,
+             api/db_delete
+            ]).

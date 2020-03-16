@@ -1,15 +1,14 @@
 :- module(triple, [
               update/5 % we're explicitely exporting this so it can be excluded elsehwere
           ]).
-
-:- reexport(triple/base_type).
-:- reexport(triple/casting).
-:- reexport(triple/database_utils).
-:- reexport(triple/iana).
-:- reexport(triple/literals).
-:- reexport(triple/temp_graph).
-:- reexport(triple/terminus_bootstrap).
-:- reexport(triple/triplestore).
-
-:- reexport(triple/turtle_utils).
-:- reexport(triple/upgrade_db).
+:- reexport([triple/base_type,
+             triple/casting,
+             triple/database_utils,
+             triple/iana,
+             triple/literals,
+             triple/temp_graph,
+             triple/terminus_bootstrap,
+             triple/triplestore,
+             triple/turtle_utils,
+             triple/upgrade_db
+            ]).
