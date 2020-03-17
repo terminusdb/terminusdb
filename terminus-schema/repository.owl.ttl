@@ -68,7 +68,7 @@ repository:repository_head
   rdfs:comment "The layer associated with the (head) of the repository graph."@en ;
   rdfs:domain repository:Repository ;
   rdfs:label "head"@en ;
-  rdfs:range layer:ShadowLayer .
+  rdfs:range layer:Layer .
 
 repository:repository_name
   a owl:DatatypeProperty ;

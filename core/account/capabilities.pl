@@ -3,7 +3,6 @@
               user_key_user_id/4,
               username_auth/3,
               get_user/3,
-              user_action/2,
               auth_action_scope/4,
               add_database_resource/3,
               delete_database_resource/1,
@@ -126,22 +125,6 @@ user_auth_id(DB, User_ID, Auth_ID) :-
             t( User_ID , rdf:type , terminus:'User' ),
             t( User_ID , terminus:authority, Auth_ID )
         )
-       ).
-
-/*
- * user_action(+User,-Action) is nondet.
- */
-user_action(User,Action) :-
-    terminus_database_name(Collection),
-    connect(Collection,DB),
-    ask(DB,
-        select([Action],
-		       (
-			       t( User , rdf:type , terminus:'User' ),
-			       t( User , terminus:authority, Auth ),
-			       t( Auth , terminus:action, Action)
-		       )
-	          )
        ).
 
 /*

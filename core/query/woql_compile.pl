@@ -1044,10 +1044,11 @@ compile_wf(sum(X,Y),(literal_list(XE,XL),
                      unliterally(YL,YE))) -->
     resolve(X,XE),
     resolve(Y,YE).
-compile_wf(timestamp_now(X), get_time(Timestamp)) -->
+compile_wf(timestamp_now(X), (get_time(Timestamp)))
+-->
     resolve(X,XE),
     {
-        XE = Timestamp^^(xsd:decimal)
+        XE = Timestamp^^'http://www.w3.org/2001/XMLSchema#decimal'
     }.
 compile_wf(true,true) -->
     [].
