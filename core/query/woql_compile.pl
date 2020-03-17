@@ -148,7 +148,7 @@ merge(S0) -->
 
 merge_output_bindings(B0, B1, Bindings) :-
     append(B0, B1, All),
-    predsort(var_same, All, Bindings).
+    predsort(var_compare, All, Bindings).
 
 /*
  * empty_ctx(Ctx) is det.
@@ -197,7 +197,7 @@ descriptor_ctx(Collection_Descriptor,New_Ctx) :-
 
 /* Lookup a variable by name */
 lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
-    var_same(Var_Name,Record,Prolog_Var),
+    var_record_pl_var(Var_Name,Record,Prolog_Var),
     !.
 lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
     lookup(Var_Name,Prolog_Var,B0).
@@ -310,17 +310,21 @@ compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) 
     guess_date(String,Date).
 compile_representation(String,Type,String^^Type).
 
-var_same(Var_Name,
-         var_binding{
-             woql_var : Prolog_Var,
-             var_name : Var_Name},
-         Prolog_Var).
-var_same(Var_Name,
-         var_binding{
-             woql_var : Prolog_Var,
-             prolog_var: _,
-             var_name : Var_Name},
-         Prolog_Var).
+var_record_pl_var(Var_Name,
+                  var_binding{
+                      woql_var : Prolog_Var,
+                      var_name : Var_Name},
+                  Prolog_Var).
+var_record_pl_var(Var_Name,
+                  var_binding{
+                      woql_var : Prolog_Var,
+                      prolog_var: _,
+                      var_name : Var_Name},
+                  Prolog_Var).
+
+var_compare(Op, Left, Right) :-
+    compare(Op, Left.var_name, Right.var_name).
+
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
