@@ -1,5 +1,6 @@
 #!/usr/bin/env swipl
 % -*- mode: prolog;-*-
+:- module(db_util, [run/1]).
 
 :- initialization(main).
 
@@ -291,8 +292,7 @@ initialize_index(Url, Dir, Key, Opts) :-
 program(Prog) :-
     current_prolog_flag(associated_file,Prog).
 
-main(Args) :-
-
+run(Args) :-
     program(Prog),
     opt_spec(Spec),
     opt_parse(Spec,Args,Opts,_),
@@ -343,3 +343,6 @@ main(Args) :-
         ),
         halt
     ).
+
+main(Args) :-
+    run(Args).
