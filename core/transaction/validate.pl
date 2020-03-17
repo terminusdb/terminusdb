@@ -304,7 +304,7 @@ commit_validation_objects_([Object|Objects]) :-
     !,
     transaction_objects_to_validation_objects([Object], Validation_Objects),
     Descriptor = Object.descriptor,
-    exists([Validation_Object]>>(
+    exists({Descriptor}/[Validation_Object]>>(
                refute_validation_object(Validation_Object, Witness),
                throw(unexpected_schema_validation_error('Internal metadata graph had an unexpected schema error',context(Descriptor,Witness)))),
            Validation_Objects),

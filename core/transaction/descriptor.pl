@@ -484,7 +484,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                                                    name : Instance_Name})),
             Instance_Names,
             Instance_Descriptors),
-    writeq(Instance_Descriptors),nl,
+
     mapm(open_read_write_obj,
          Instance_Descriptors, Instance_Objects,
          Map_1, Map_2),

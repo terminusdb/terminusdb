@@ -33,7 +33,7 @@ ref:branch_base_uri
 
 ref:Branch
   a owl:Class ;
-  rdf:subClassOf ref:Ref, ref:BranchBaseUriRestriction;
+  rdfs:subClassOf ref:Ref, ref:BranchBaseUriRestriction;
   rdfs:comment "This is a repo branch"@en ;
   rdfs:label "Branch"@en .
 
@@ -67,7 +67,7 @@ ref:inference
 
 ref:Graph
   a owl:Class ;
-  rdf:subClassOf tcs:Document ;
+  rdfs:subClassOf tcs:Document ;
   rdfs:comment "This is a named graph for a commit"@en ;
   rdfs:label "Graph"@en .
 
@@ -87,7 +87,7 @@ ref:graph_layer
 
 ref:Commit
   a owl:Class ;
-  rdf:subClassOf tcs:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
+  rdfs:subClassOf tcs:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
@@ -100,7 +100,7 @@ ref:CommitParentRestriction
 
 ref:Ref
   a owl:Class ;
-  rdf:subClassOf tcs:Document, ref:RefRestriction ;
+  rdfs:subClassOf tcs:Document, ref:RefRestriction ;
   rdfs:comment "This is a ref for a commit"@en ;
   rdfs:label "Ref"@en .
 
@@ -113,7 +113,7 @@ ref:RefRestriction
 
 ref:Tag
   a owl:Class ;
-  rdf:subClassOf ref:Ref ;
+  rdfs:subClassOf ref:Ref ;
   rdfs:comment "This is a tag for a commit"@en ;
   rdfs:label "Tag"@en .
 
@@ -150,7 +150,7 @@ ref:commit_timestamp
   rdfs:comment "UNIX timestamp of the date and time of the commit"@en ;
   rdfs:domain ref:Commit ;
   rdfs:label "Date and time"@en ;
-  rdfs:range xsd:integer .
+  rdfs:range xsd:decimal .
 
 ref:commit_parent
   a owl:ObjectProperty ;

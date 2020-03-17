@@ -53,12 +53,9 @@ This file deliberately has no dependencies - please do not introduce them.
  * is_literal(+X) is semidet.
  *
  */
-is_literal(Data@Lang) :-
-    atom(Lang),
-    atom(Data).
-is_literal(_Data^^Type) :-
-    % this should probably have the full xsd build out.
-    atom(Type).
+is_literal(_Data@Lang) :-
+    atom(Lang).
+is_literal(_Data^^_Type).
 
 :- multifile error:has_type/2.
 error:has_type(literal,X) :-

@@ -142,7 +142,9 @@ refute_insertion(_Database,
 refute_insertion(Database,X,P,_Y,Reason) :-
     % \+ P = 'rdf:type'
     (   domain(P,Domain,Database)
-    ->  refute_node_at_class(Database,X,Domain,Reason)
+    ->  refute_node_at_class(Database,X,Domain,Sub_Reason),
+        Reason = Sub_Reason.put(_{ 'vio:property' : _{ '@value' : P,
+                                                       '@type' : 'xsd:anyURI' }})
     ;   interpolate(['The property ', P,' has an undefined domain.'],Message),
         Reason = _{
                      '@type' : 'vio:PropertyWithUndefinedDomain',
@@ -153,7 +155,9 @@ refute_insertion(Database,X,P,_Y,Reason) :-
 refute_insertion(Database,_X,P,Y,Reason) :-
     % \+ P = 'rdf:type'
     (   range(P,Range,Database)
-    ->  refute_node_at_range(Database,Y,Range,Reason)
+    ->  refute_node_at_range(Database,Y,Range,Sub_Reason),
+        Reason = Sub_Reason.put(_{ 'vio:property' : _{ '@value' : P,
+                                                       '@type' : 'xsd:anyURI' }})
     ;   format(atom(Message),'The property ~q has an undefined domain.',[P]),
         Reason = _{
                      '@type' : 'vio:PropertyWithUndefinedRange',
