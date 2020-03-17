@@ -23,6 +23,8 @@
 %:- reexport(core(util/syntax)).
 :- use_module(core(util)).
 
+:- use_module(core(transaction)).
+
 % feeling very circular :(
 %:- use_module(core(transaction)).
 
