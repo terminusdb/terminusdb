@@ -252,9 +252,7 @@ repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
 
 
 commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
-    layer_to_id(Commit_Layer, Layer_ID),
-    Collection_Descriptor = id_descriptor{ layer_id : Layer_ID },
-    once(ask(Collection_Descriptor,
+    once(ask(Commit_Layer,
              (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
                  t(Branch_URI, ref:ref_commit, Commit_URI),
                  t(Commit_URI, ref:Type, Graph_URI),
@@ -270,7 +268,6 @@ open_read_write_obj(Layer, read_write_obj{ descriptor: Descriptor, read: Layer, 
     Descriptor = id_graph{id: Id,
                           type: instance,
                           name: "main"}.
-
 open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, New_Map) :-
     graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
 
@@ -450,25 +447,26 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
 
     [Instance_Object] = Repository_Transaction_Object.instance_objects,
 
-    layer_to_id(Instance_Object.read, Ref_Layer_Id),
-    Ref_Id_Descriptor = id_descriptor{ layer_id: Ref_Layer_Id},
-    (   once(ask(Ref_Id_Descriptor,
+    (   once(ask(Instance_Object.read,
                  (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
                      t(Branch_Uri, ref:ref_commit, Commit_Uri))))
     ->  findall(Instance_Graph_Name,
-               (   t(Commit_Uri, ref:instance, Instance_Graph),
-                   t(Instance_Graph, ref:graph_name, Instance_Graph_Name)
-               ),
+                ask(Instance_Object.read,
+                    (   t(Commit_Uri, ref:instance, Instance_Graph),
+                        t(Instance_Graph, ref:graph_name, Instance_Graph_Name^^xsd:string)
+                    )),
                Instance_Names),
         findall(Schema_Graph_Name,
-               (   t(Commit_Uri, ref:schema, Schema_Graph),
-                   t(Schema_Graph, ref:graph_name, Schema_Graph_Name)
-               ),
+                ask(Instance_Object.read,
+                    (   t(Commit_Uri, ref:schema, Schema_Graph),
+                        t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
+                    )),
                Schema_Names),
         findall(Inference_Graph_Name,
-               (   t(Commit_Uri, ref:inference, Inference_Graph),
-                   t(Inference_Graph, ref:graph_name, Inference_Graph_Name)
-               ),
+                ask(Instance_Object.read,
+                    (   t(Commit_Uri, ref:inference, Inference_Graph),
+                        t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
+                    )),
                Inference_Names)
     ;   % Note: There has never been a commit! Set up default graphs.
         Instance_Names = ["main"],
@@ -486,6 +484,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                                                    name : Instance_Name})),
             Instance_Names,
             Instance_Descriptors),
+    writeq(Instance_Descriptors),nl,
     mapm(open_read_write_obj,
          Instance_Descriptors, Instance_Objects,
          Map_1, Map_2),

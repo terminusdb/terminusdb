@@ -673,14 +673,19 @@ compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(X,P,Y,G),delete(Read_Write_Objects,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y,G),delete(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
-        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects)
+        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
+        (   Read_Write_Objects = [Read_Write_Object]
+        ->  true
+        ;   format(atom(M), 'You must resolve to a single graph to delete. Graph Descriptor: ~q', G),
+            throw(syntax_error(M,context(compile_wf//2,delete/4)))
+        )
     }.
 compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
     resolve(X,XE),

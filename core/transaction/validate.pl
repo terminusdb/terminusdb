@@ -196,7 +196,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                      t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
                      delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
                      delete(URI, repo:repository_head, ExistingRepositoryHead),
-                     idgen(layer:'Layer', [Layer_ID], NewLayerID),
+                     idgen(doc:'Layer', [Layer_ID], NewLayerID),
                      insert(NewLayerID, rdf:type, layer:'Layer'),
                      insert(NewLayerID, layer:layer_id, Layer_ID^^xsd:string),
                      insert(URI, repo:repository_head, NewLayerID)

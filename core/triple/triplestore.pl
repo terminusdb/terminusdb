@@ -245,12 +245,10 @@ insert(G,X,Y,Z) :-
  *
  * Delete quad from transaction predicates.
  */
-delete(Gs,X,Y,Z) :-
-    forall(
-        member(G,Gs),
-        (   object_storage(Z,S),
-            read_write_obj_builder(G, Builder),
-            ignore(nb_remove_triple(Builder, X, Y, S)))).
+delete(G,X,Y,Z) :-
+    object_storage(Z,S),
+    read_write_obj_builder(G, Builder),
+    ignore(nb_remove_triple(Builder, X, Y, S)).
 
 new_triple(_,Y,Z,subject(X2),X2,Y,Z).
 new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
