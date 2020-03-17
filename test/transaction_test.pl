@@ -1,4 +1,4 @@
-:- module(transaction_testing,[
+:- module(transaction_test,[
           ]).
 
 /** <module> Transaction testing
@@ -24,17 +24,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(util/test_utils)).
-
-:- use_module(core(triple/database_utils)).
-
-:- use_module(core(transaction/database)).
-:- use_module(core(transaction/descriptor)).
-
-:- use_module(core(query/query)).
-
-:- use_module(core(api/db_init)).
-:- use_module(core(api/db_delete)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(query)).
+:- use_module(core(api)).
 
 :- begin_tests(transaction_test).
 

@@ -1,5 +1,4 @@
 :- module(database,[
-              with_transaction/8
           ]).
 
 /** <module> Implementation of database graph management

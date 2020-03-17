@@ -1,4 +1,5 @@
 :- module(validate, [
+              transaction_objects_to_validation_objects/2
           ]).
 
 /** <module> Validation
