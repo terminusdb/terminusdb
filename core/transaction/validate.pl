@@ -112,7 +112,7 @@ commit_validation_object(Validation_Object, []) :-
     } :< Descriptor,
 
     append([Instance_Objects,Schema_Objects,Inference_Objects], Objects),
-    (   exists([Object]>>(Object.changed = true), Objects)
+    (   exists(validation_object_changed, Objects)
     ->  throw(immutable_graph_update("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved."))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
@@ -126,7 +126,7 @@ commit_validation_object(Validation_Object, []) :-
     terminus_instance_name(Label),
     % This is okay for now, since we don't want the
     % schema to be changed in WOQL queries
-    (   Instance_Object.changed = true
+    (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         safe_open_named_graph(Store, Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
@@ -140,7 +140,7 @@ commit_validation_object(Validation_Object, []) :-
     } = Descriptor,
     !,
 
-    (   Instance_Object.changed = true
+    (   validation_object_changed(Instance_Object)
     ->  throw(immutable_graph_update('Tried to update a query only database which was formed directly from a layer id.'))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
@@ -154,7 +154,7 @@ commit_validation_object(Validation_Object, []) :-
     !,
     % super simple case, we just need to set head
     % That is, assuming anything changed
-    (   Instance_Object.changed = true
+    (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         safe_open_named_graph(Store, Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
@@ -170,7 +170,7 @@ commit_validation_object(Validation_Object, []) :-
     !,
     % super simple case, we just need to set head
     % That is, we don't need to check the schema
-    (   Instance_Object.changed = true
+    (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         % The label is the same as the same as the database_name
         % therefore we can just open it
@@ -189,7 +189,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     } = Descriptor,
     !,
     layer_to_id(Instance_Object.read, Layer_ID),
-    (   Instance_Object.changed = true
+    (   validation_object_changed(Instance_Object)
     ->  once(ask(Parent_Transaction,
                  (   t(URI, repo:repository_name, Repo_Name^^xsd:string),
                      t(URI, repo:repository_head, ExistingRepositoryHead),
@@ -302,11 +302,13 @@ commit_validation_objects_([]) :- !.
 commit_validation_objects_([Object|Objects]) :-
     transaction_object{} :< Object,
     !,
-    transaction_object_to_validation_object(Object, Validation_Object),
-    (   refute_validation_object(Validation_Object, Witness)
+    transaction_objects_to_validation_objects([Object], Validation_Objects),
+    (   exists([Validation_Object]>>refute_validation_object(Validation_Object, _Witness),
+               Validation_Objects)
     ->  throw(unexpected_schema_validation_error('Internal metadata graph had an unexpected schema error',context(Object.descriptor,Witness)))
     ;   true),
-    predsort(commit_order,[Validation_Object|Objects], Sorted_Objects),
+    append(Validation_Objects, Objects, New_Objects),
+    predsort(commit_order, New_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects).
 commit_validation_objects_([Object|Objects]) :-
     % we know it is a validation object
@@ -356,7 +358,7 @@ needs_schema_validation(Validation_Object) :-
     validation_object{
         schema_objects: Schema_Objects
     } :< Validation_Object,
-    exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
+    exists(validation_object_changed, Schema_Objects).
 
 /*
  * needs_schema_instance_validation(Validation_Object) is det.
@@ -374,7 +376,7 @@ needs_schema_instance_validation(Validation_Object) :-
         instance_objects: Instance_Objects
     } :< Validation_Object,
     Instance_Objects \= [],
-    exists([Schema_Object]>>(Schema_Object.changed = true), Schema_Objects).
+    exists(validation_object_changed, Schema_Objects).
 
 /*
  * needs_local_instance_validation(Validation_Object) is det.
@@ -386,7 +388,7 @@ needs_local_instance_validation(Validation_Object) :-
     validation_object{
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    exists([Instance_Object]>>(Instance_Object.changed = true), Instance_Objects).
+    exists(validation_object_changed, Instance_Objects).
 
 /*
  * refute_pre_schema(Validation_Object,Witness) is nondet.
@@ -657,14 +659,14 @@ refute_instance(Validation_Object,Witness) :-
     validation_object{
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    include([Object]>>(Object.changed = true), Instance_Objects, Changed_Objects),
+    include(validation_object_changed, Instance_Objects, Changed_Objects),
     xrdf_added(Changed_Objects, X, P, Y),
     refute_insertion(Validation_Object,X,P,Y,Witness).
 refute_instance(Validation_Object,Witness) :-
     validation_object{
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    include([Object]>>(Object.changed = true), Instance_Objects, Changed_Objects),
+    include(validation_object_changed, Instance_Objects, Changed_Objects),
     xrdf_deleted(Changed_Objects, X, P, Y),
     refute_deletion(Validation_Object,X,P,Y,Witness).
 
@@ -698,7 +700,7 @@ refute_validation_object(Validation_Object, Witness) :-
     needs_schema_instance_validation(Validation_Object),
     refute_instance_schema(Validation_Object, Witness).
 refute_validation_object(Validation_Object, Witness) :-
-    needs_instance_validation(Validation_Object),
+    needs_local_instance_validation(Validation_Object),
     refute_instance(Validation_Object,Witness).
 
 /*
