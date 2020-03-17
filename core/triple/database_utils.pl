@@ -42,7 +42,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(core(query/expansions)).
-:- use_module(core(query/query)).
+:- use_module(core(query/ask)).
 
 :- use_module(core(transaction/database)).
 
