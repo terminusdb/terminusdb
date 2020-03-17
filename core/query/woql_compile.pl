@@ -134,7 +134,7 @@ return(S0,_,S0).
  */
 merge(S0) -->
     {
-        S0.get(bindings, B0)
+        B0 = S0.get(bindings)
     },
 
     view(bindings,B1),
@@ -144,6 +144,11 @@ merge(S0) -->
     },
 
     put(bindings,Bindings).
+
+
+merge_output_bindings(B0, B1, Bindings) :-
+    append(B0, B1, All),
+    predsort(var_same, All, Bindings).
 
 /*
  * empty_ctx(Ctx) is det.
