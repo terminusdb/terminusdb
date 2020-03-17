@@ -36,6 +36,8 @@
 
 :- use_module(library(semweb/turtle)).
 
+:- use_module(library(terminus_store)).
+
 % For debugging
 :- use_module(library(http/http_log)).
 

@@ -295,8 +295,6 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     open_write(Read_Write_Obj.read, Read_Write_Obj.write),
     Layer_Builder = Read_Write_Obj.write.
-read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
-    Layer_Builder = Read_Write_Obj.write.
 
 /**
  * open_descriptor(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map) is det.
