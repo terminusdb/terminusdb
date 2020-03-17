@@ -38,7 +38,7 @@ global_prefixes(vio,'http://terminusdb.com/schema/vio#').
 global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
 global_prefixes(ref,'http://terminusdb.com/schema/ref#').
 global_prefixes(layer,'http://terminusdb.com/schema/layer#').
-global_prefixes(repo,'http://terminusdb.com/schema/repo#').
+global_prefixes(repo,'http://terminusdb.com/schema/repository#').
 global_prefixes(terminus_doc,'terminus:///terminus/document/').
 % common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').

@@ -184,21 +184,22 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
         parent: Parent_Transaction
     } :< Validation_Object,
     repository_descriptor{
-        database_descriptor: Descriptor,
+        database_descriptor: _Repository_Descriptor,
         repository_name: Repo_Name
     } = Descriptor,
+    !,
     layer_to_id(Instance_Object.read, Layer_ID),
     (   Instance_Object.changed = true
     ->  once(ask(Parent_Transaction,
-                 (   t(URI, repository:repository_name, Repo_Name^^xsd:string),
-                     t(URI, repository:repository_head, ExistingRepositoryHead),
+                 (   t(URI, repo:repository_name, Repo_Name^^xsd:string),
+                     t(URI, repo:repository_head, ExistingRepositoryHead),
                      t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
                      delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
-                     delete(URI, repository:repository_head, ExistingRepositoryHead),
+                     delete(URI, repo:repository_head, ExistingRepositoryHead),
                      idgen(layer:'Layer', [Layer_ID], NewLayerID),
                      insert(NewLayerID, rdf:type, layer:'Layer'),
                      insert(NewLayerID, layer:layer_id, Layer_ID^^xsd:string),
-                     insert(URI, repository:repository_head, NewLayerID)
+                     insert(URI, repo:repository_head, NewLayerID)
                  )
                 ))
     ;   true).
