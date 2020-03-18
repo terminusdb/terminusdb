@@ -233,10 +233,8 @@ ask(Askable, Pre_Term) :-
 
 ask_ast(Context, Ast, Bindings) :-
     compile_query(Ast,Prog, Context,Output),
-    writeq(compiled),nl,
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
     woql_compile:Prog,
-    writeq(run),nl,
 
     Bindings = Output.bindings.

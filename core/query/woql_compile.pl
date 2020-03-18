@@ -390,6 +390,7 @@ run_term(Query,Ctx_In,JSON) :-
             ),
             Bindings),
 
+    % todo this is wrong
     maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
 
     JSON = _{bindings : Patched_Bindings}.
