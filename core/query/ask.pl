@@ -1,5 +1,8 @@
 :- module(ask,[
               ask/2,
+              ask_ast/3,
+              create_context/2,
+              create_context/3,
               collection_descriptor_prefixes/2
           ]).
 
@@ -183,34 +186,21 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                                      }.
 collection_descriptor_default_write_graph(_, empty).
 
-/*
- * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
- *
- * Ask a woql query
- */
-ask(Layer,Pre_Term) :-
-    % create a descriptor from the layer id
-    % This will re-open the same layer later on so it is a bit hacky.
+create_context(Layer, Context) :-
     blob(Layer, layer),
     !,
     open_descriptor(Layer, Transaction),
-    ask(Transaction,Pre_Term).
-ask(Query_Context,Pre_Term) :-
-    query_context{} :< Query_Context,
-    !,
-    pre_term_to_term_and_bindings(Query_Context.prefixes,
-                                  Pre_Term,Term,
-                                  [],Bindings_Out),
-    New_Query_Ctx = Query_Context.put(bindings,Bindings_Out),
-    compile_query(Term,Prog,New_Query_Ctx,_),
-    debug(terminus(sdk),'Program: ~q~n', [Prog]),
-    woql_compile:Prog.
-ask(Transaction_Object,Pre_Term) :-
+    create_context(Transaction, Context).
+create_context(Context, Context) :-
+    query_context{} :< Context,
+    !.
+create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
     collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
-    Query_Context = query_context{
+    
+    Context = query_context{
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         filter : type_filter{ types : [instance] },
@@ -218,12 +208,35 @@ ask(Transaction_Object,Pre_Term) :-
         write_graph : Graph_Descriptor,
         bindings : [],
         selected : []
-    },
-    ask(Query_Context,Pre_Term).
-ask(Collection_Descriptor,Pre_Term) :-
-    open_descriptor(Collection_Descriptor, Transaction_Object),
-    ask(Transaction_Object, Pre_Term).
+    }.
+create_context(Descriptor, Context) :-
+    open_descriptor(Descriptor, Transaction_Object),
+    create_context(Transaction_Object, Context).
+create_context(Askable, Commit_Info, Context) :-
+    create_context(Askable, Context_Without_Commit),
+    Context = Context_Without_Commit.put(commit_info, Commit_Info).
 
-ask(Pre_Term) :-
-    empty_ctx(Ctx),
-    ask(Ctx,Pre_Term).
+/*
+ * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
+ *
+ * Ask a woql query
+ */
+ask(Askable, Pre_Term) :-
+    create_context(Askable, Query_Context),
+
+    pre_term_to_term_and_bindings(Query_Context.prefixes,
+                                  Pre_Term,Term,
+                                  [],Bindings_Out),
+    New_Query_Ctx = Query_Context.put(bindings,Bindings_Out),
+
+    ask_ast(New_Query_Ctx, Term, _).
+
+ask_ast(Context, Ast, Bindings) :-
+    compile_query(Ast,Prog, Context,Output),
+    writeq(compiled),nl,
+    debug(terminus(sdk),'Program: ~q~n', [Prog]),
+
+    woql_compile:Prog,
+    writeq(run),nl,
+
+    Bindings = Output.bindings.
