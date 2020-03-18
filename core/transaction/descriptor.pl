@@ -220,6 +220,8 @@ graph_descriptor_to_layer(Descriptor,
                                type: Type,
                                name: Graph_Name },
     !,
+    assertion(member(Type, [instance, schema, inference])),
+
     Commit_Descriptor = commit_graph{ database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
@@ -441,6 +443,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     branch_descriptor{ repository_descriptor : Repository_Descriptor,
                        branch_name: Branch_Name } = Descriptor,
     !,
+    text_to_string(Branch_Name, Branch_Name_String),
 
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                     Map, Map_1),
@@ -448,36 +451,39 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     [Instance_Object] = Repository_Transaction_Object.instance_objects,
 
     (   once(ask(Instance_Object.read,
-                 (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
-                     t(Branch_Uri, ref:ref_commit, Commit_Uri))))
-    ->  findall(Instance_Graph_Name,
-                ask(Instance_Object.read,
+                 t(Branch_Uri, ref:branch_name, Branch_Name_String^^xsd:string)))
+    ->  (   once(ask(Instance_Object.read,
+                 t(Branch_Uri, ref:ref_commit, Commit_Uri)))
+        ->  findall(Instance_Graph_Name,
+                    ask(Instance_Object.read,
                     (   t(Commit_Uri, ref:instance, Instance_Graph),
                         t(Instance_Graph, ref:graph_name, Instance_Graph_Name^^xsd:string)
                     )),
                Instance_Names),
-        findall(Schema_Graph_Name,
-                ask(Instance_Object.read,
-                    (   t(Commit_Uri, ref:schema, Schema_Graph),
-                        t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
-                    )),
-               Schema_Names),
-        findall(Inference_Graph_Name,
-                ask(Instance_Object.read,
-                    (   t(Commit_Uri, ref:inference, Inference_Graph),
-                        t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
-                    )),
-               Inference_Names)
-    ;   % Note: There has never been a commit! Set up default graphs.
-        Instance_Names = ["main"],
-        Inference_Names = ["main"],
-        Schema_Names = ["main"]
+            findall(Schema_Graph_Name,
+                    ask(Instance_Object.read,
+                        (   t(Commit_Uri, ref:schema, Schema_Graph),
+                            t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
+                        )),
+                    Schema_Names),
+            findall(Inference_Graph_Name,
+                    ask(Instance_Object.read,
+                        (   t(Commit_Uri, ref:inference, Inference_Graph),
+                            t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
+                        )),
+                    Inference_Names)
+        ;   % Note: There has never been a commit! Set up default graph.
+            Instance_Names = ["main"],
+            Inference_Names = [],
+            Schema_Names = []
+        )
+    ;   throw(branch_does_not_exist('branch does not exist', context(Descriptor)))
     ),
 
     Prototype = branch_graph{
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
-                    branch_name: Branch_Name
+                    branch_name: Branch_Name_String
                 },
     maplist({Prototype}/[Instance_Name,Graph_Descriptor]>>(
                 Graph_Descriptor = Prototype.put(_{type : instance,
@@ -589,6 +595,7 @@ filter_read_write_objects(Objects, Names, Filtered) :-
 :- begin_tests(open_descriptor).
 :- use_module(core(util/test_utils)).
 :- use_module(library(terminus_store)).
+:- use_module(core(api)).
 
 test(terminus, [
          setup(setup_temp_store(State)),
@@ -634,5 +641,104 @@ test(id, [
 
     open_descriptor(Descriptor, Transaction),
     once(ask(Transaction, t(foo, bar, baz))).
+
+test(open_database_descriptor_as_atom, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Descriptor = database_descriptor{ database_name: testdb },
+    open_descriptor(Descriptor, _Transaction).
+
+test(open_database_descriptor_as_string, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Descriptor = database_descriptor{ database_name: "testdb" },
+    open_descriptor(Descriptor, _Transaction).
+
+test(open_nonexistent_database_descriptor, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Descriptor = database_descriptor{ database_name: "nonexistent" },
+    \+ open_descriptor(Descriptor, _Transaction).
+
+test(open_repository_descriptor_with_atom, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: local },
+
+    open_descriptor(Repo_Descriptor, _Transaction).
+
+test(open_repository_descriptor_with_string, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+
+    open_descriptor(Repo_Descriptor, _Transaction).
+
+test(open_repository_descriptor_with_string, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "nonexistent" },
+
+    \+ open_descriptor(Repo_Descriptor, _Transaction).
+
+test(open_branch_descriptor_with_atom, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: master },
+    
+    open_descriptor(Branch_Descriptor, _Transaction).
+
+test(open_branch_descriptor_with_string, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+    
+    open_descriptor(Branch_Descriptor, _Transaction).
+
+test(open_branch_descriptor_with_nonexistent, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
+    
+    catch(open_descriptor(Branch_Descriptor, _Transaction),
+          E,
+          true),
+    E = branch_does_not_exist(_,_).
 
 :- end_tests(open_descriptor).
