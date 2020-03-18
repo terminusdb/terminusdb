@@ -826,7 +826,7 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
 :- use_module(core(transaction)).
 :- use_module(library(terminus_store)).
 
-test(insert_test, [
+test(insert_on_branch_descriptor, [
          setup(setup_temp_store(State)),
          all( t(X, Y, Z) == [t(doc:asdf,doc:fdsa,doc:baz)]),
          cleanup(teardown_temp_store(State))
@@ -848,6 +848,22 @@ test(insert_test, [
 
     ask(Branch_Descriptor,
         t(X, Y, Z)).
+
+test(insert_on_label_descriptor, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    triple_store(Store),
+    safe_create_named_graph(Store, testdb, _Graph),
+    Descriptor = label_descriptor{ label: "testdb" },
+    open_descriptor(Descriptor, Transaction),
+
+    once(ask(Transaction, insert(foo,bar,baz))),
+    transaction_objects_to_validation_objects([Transaction], Validation),
+    commit_validation_objects(Validation),
+
+    once(ask(Descriptor, t(foo,bar,baz))).
 
 
 :- end_tests(commits).

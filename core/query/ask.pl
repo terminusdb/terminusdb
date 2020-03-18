@@ -173,6 +173,14 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            type : instance,
                            name : "main"
                        }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    label_descriptor{ label: Label} :< Descriptor,
+    !,
+    text_to_string(Label, Label_String),
+    Graph_Descriptor = labelled_graph{label:Label_String,
+                                      type: instance,
+                                      name:"main"
+                                     }.
 collection_descriptor_default_write_graph(_, empty).
 
 /*
