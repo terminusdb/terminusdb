@@ -820,7 +820,7 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
         )
     ).
 
-:- begin_tests(commits).
+:- begin_tests(inserts).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(transaction)).
@@ -866,4 +866,4 @@ test(insert_on_label_descriptor, [
     once(ask(Descriptor, t(foo,bar,baz))).
 
 
-:- end_tests(commits).
+:- end_tests(inserts).
