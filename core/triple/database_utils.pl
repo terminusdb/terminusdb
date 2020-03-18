@@ -46,6 +46,8 @@
 
 :- use_module(core(transaction/database)).
 
+:- use_module(core(util/utils)).
+
 :- use_module(library(pcre)).
 
 /*

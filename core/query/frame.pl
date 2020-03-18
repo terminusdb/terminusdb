@@ -57,6 +57,7 @@
 :- use_module(ask).
 :- use_module(frame_types).
 :- use_module(jsonld).
+:- use_module(global_prefixes).
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
