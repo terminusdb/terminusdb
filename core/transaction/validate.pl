@@ -819,3 +819,35 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
             compile_schema_to_module(Post_DB, Module)
         )
     ).
+
+:- begin_tests(commits).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(transaction)).
+:- use_module(library(terminus_store)).
+
+test(insert_test, [
+         setup(setup_temp_store(State)),
+         all( t(X, Y, Z) == [t(doc:asdf,doc:fdsa,doc:baz)]),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db("Boo", "http://localhost/document"),
+    % Insert
+    DB_Descriptor = database_descriptor{ database_name : "Boo" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,
+                                             repository_name : "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor,
+                                       branch_name: "master" },
+    open_descriptor(Branch_Descriptor, Transaction),
+    Transaction2 = Transaction.put(commit_info, commit_info{ author : "Me", message: "chill"}),
+                               ask(Transaction2,
+                                   insert(doc:asdf,doc:fdsa,doc:baz)),
+    transaction_objects_to_validation_objects([Transaction2], Validation),
+    commit_validation_objects(Validation),
+
+    ask(Branch_Descriptor,
+        t(X, Y, Z)).
+
+
+:- end_tests(commits).
