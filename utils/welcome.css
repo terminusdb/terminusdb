@@ -1,0 +1,88 @@
+.blurred-box{
+  position: relative;
+  width: 450px;
+  height: 250px;
+  top: calc(50% - 190px);
+  left: calc(50% - 215px);
+  background: inherit;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.blurred-box:after{
+ content: '';
+ width: 450px;
+ height: 450px;
+ background: inherit;
+ position: absolute;
+ /*left: -25px;*/
+ left position
+ right: 0;
+ top: -25px;
+ top position
+ bottom: 0;
+ box-shadow: inset 0 0 0 200px rgba(255,255,255,0.05);
+ filter: blur(10px);
+}
+.password-box{
+  position: relative;
+  margin-top: 50px;
+  text-align: center;
+  z-index: 1;
+}
+.password-box > *{
+  display: inline-block;
+  width: 200px;
+}
+.filt{
+    background-color: #fff;
+}
+.user-icon{
+  width: 100px;
+  height: 100px;
+  position: relative;
+  border-radius: 50%;
+  background-size: contain;
+  background-image: url(https://pbs.twimg.com/profile_images/725321660484583424/ArQ4fM3k.jpg);
+}
+.pass-lab{
+  margin-top: 15px;
+  margin-bottom: 15px;
+  color: #fff;
+  font-size: 25px;
+}
+input.pass{
+  width: 120px;
+  height: 18px;
+  /*opacity: 0.4; */
+  border-radius: 2px;
+  padding: 5px 15px;
+  border: 0;
+}
+input.submit {
+    background-color: #00f3b0;
+    transition: background 0.22s ease-out,color 0.22s ease-out,border 0.22s ease-out;
+    height: 50px;
+    padding: 20px;
+    border: 0;
+    display: -webkit-inline-box;
+    display: -webkit-inline-flex;
+    display: -ms-inline-flexbox;
+    display: inline-flex;
+    -webkit-box-pack: center;
+    -webkit-justify-content: center;
+    -ms-flex-pack: center;
+    justify-content: center;
+    -webkit-box-align: center;
+    -webkit-align-items: center;
+    -ms-flex-align: center;
+    align-items: center;
+    min-width: 168px;
+    font-size: 14px;
+    border-radius: 25px;
+    text-transform: capitalize;
+    font-family: "Lexend Deca",Arial,sans-serif;
+    cursor: pointer;
+}
+.mr-top {
+   margin-top: 20px;
+}
