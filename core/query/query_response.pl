@@ -8,18 +8,16 @@
  */
 ask_ast_jsonld_response(Context, AST, JSON) :-
     findall(JSON_Binding,
-            (ask_ast(Context, AST, Binding),
-             (   % Now we have a binding set
-                 json_transform_binding_set(Context, Binding, JSON_Binding),
-             )),
-            JSON
-           ).
+            (   ask_ast(Context, AST, Binding),
+                json_transform_binding_set(Context, Binding, JSON_Binding)),
+            JSON).
 
-json_transform_binding_set(Context, Binding, JSON) :-
+json_transform_binding_set(_Context, Binding, JSON) :-
+    % TODO: We probably want to "compress" the URIs using the context
     maplist([Record,Var_Name=Term]>>(get_dict(Record, var_name, Var_Name),
                                      get_dict(Record, prolog_var, Prolog_Var),
                                      (   var(Prolog_Var)
-                                     ->  JSON = "terminus:unknown"
+                                     ->  Term = "terminus:unknown"
                                      ;   term_jsonld(Prolog_Var, Term))),
             Binding,
             Data),

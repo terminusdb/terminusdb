@@ -8,9 +8,9 @@
               read_write_obj_reader/2,
               read_write_obj_builder/2,
               filter_read_write_objects/3,
+              make_branch_descriptor/5,
               make_branch_descriptor/4,
-              make_branch_descriptor/3,
-              make_branch_descriptor/2
+              make_branch_descriptor/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -594,18 +594,18 @@ filter_read_write_objects(Objects, Names, Filtered) :-
                                memberchk(Name, Names)), Objects, Filtered).
 
 
-make_branch_descriptor(Account, DB, Repo_name, Branch_Name, Branch_Descriptor) :-
-    user_database_name(Acccount, DB, DB_Name),
+make_branch_descriptor(Account, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
+    user_database_name(Account, DB, DB_Name),
     Database_Descriptor = database_descriptor{ database_name : DB_Name },
     Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
                                                    database_descriptor : Database_Descriptor},
     Branch_Descriptor = branch_descriptor{ name : Branch_Name,
                                            repository_descriptor : Repository_Descriptor}.
 
-make_branch_desriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
+make_branch_descriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
     make_branch_descriptor(Account, DB, Repo_Name, "master", Branch_Descriptor).
 
-make_branch_desriptor(Account, DB, Branch_Descriptor) :-
+make_branch_descriptor(Account, DB, Branch_Descriptor) :-
     make_branch_descriptor(Account, DB, "local", "master", Branch_Descriptor).
 
 

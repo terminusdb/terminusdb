@@ -8,9 +8,9 @@
                         read_write_obj_builder/2,
                         filter_read_write_objects/3,
                         transaction_objects_to_validation_objects/2,
+                        make_branch_descriptor/5,
                         make_branch_descriptor/4,
-                        make_branch_descriptor/3,
-                        make_branch_descriptor/2
+                        make_branch_descriptor/3
                        ]).
 
 :- use_module(transaction/database).

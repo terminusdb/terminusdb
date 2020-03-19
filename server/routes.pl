@@ -449,8 +449,8 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 woql_handler(option, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
-woql_handler(post, Request) :-
+    write_cors_headers(SURI, Terminus).
+woql_handler(post, R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
@@ -463,14 +463,14 @@ woql_handler(post, Request) :-
 
     empty_context(Context0),
 
-    (   get_parm('terminus:commit_info', Request, Atom_Commit_info)
-    ->  atom_json_dict(Atom_Prefixes, Commit_Info, []),
+    (   get_parm('terminus:commit_info', Request, Atom_Commit_Info)
+    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, []),
         Context1 = Context0.put(commit_info,Commit_Info)
     ;   Context1 = Context0.put(commit_info,_{})
     ),
 
     (   get_param('terminus:context',Request,Atom_Prefixes)
-    ->  atom_json_dict(Atom_Prefixes, Prefixes, []),
+    ->  atom_json_dict(Atom_Prefixes, Prefixes, [])
     ;   Prefixes = _{}),
 
     context_overriding_prefixes(Context1, Prefixes, Context2),
@@ -505,47 +505,32 @@ woql_handler(post,Account_ID,DB,R) :-
 
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
 
-    user_database_name(Account_ID,DB,DB_Name),
-    % TODO: Setup defaults for database at creation time.
-    % lookup_resource doesn't exist.
-    lookup_resource(Terminus_Transaction_Object, DB_Name, DB_URI),
-
     try_get_param('terminus:query',Request,Atom_Query),
     http_log('~N[Query] ~s~n',[Atom_Query]),
     atom_json_dict(Atom_Query, Query, []),
 
     make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
 
-    (   get_parm('terminus:commit_info', Request, Atom_Commit_info)
-    ->  atom_json_dict(Atom_Prefixes, Commit_Info, []),
-        create_context(Branch_Descriptor, Commit_Info, Context)
-    ;   create_context(Branch_Descriptor, Context)
+    (   get_parm('terminus:commit_info', Request, Atom_Commit_Info)
+    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, []),
+        create_context(Branch_Descriptor, Commit_Info, Context0)
+    ;   create_context(Branch_Descriptor, Context0)
     ),
 
     (   get_param('terminus:context',Request,Atom_Prefixes)
-    ->  atom_json_dict(Atom_Prefixes, Prefixes, []),
+    ->  atom_json_dict(Atom_Prefixes, Prefixes, [])
     ;   Prefixes = _{}),
 
-    context_overriding_prefixes(Context, Prefixes, New_Context),
+    context_overriding_prefixes(Context0, Prefixes, Context1),
 
-
-    Context = query_context{
-                  transaction_objects : [],
-                  default_collection : Descriptor,
-                  filter : type_filter{ types : [instance] },
-                  prefixes : Prefixes,
-                  write_graph : Graph_Descriptor,
-                  bindings : [],
-                  selected : []
-    }
     collect_posted_files(Request,Files),
-    New_Ctx = Ctx.put(files,Files),
+    Context2 = Context1.put(files,Files),
 
     jsonld_woql(Query, Prefixes, AST),
 
-    (   run_query(Query,New_Ctx,JSON)
-    ->  true
-    ;   JSON = _{bindings : []}),
+    Context3 = Context2.put(authorization, Auth_ID),
+
+    ask_ast_jsonld_response(Context3,AST,JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
