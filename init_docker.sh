@@ -6,7 +6,7 @@ SERVER_PORT=${SERVER_PORT:-6363}
 WORKERS=${WORKERS:-8}
 PUBLIC_URL=${PUBLIC_URL:-false}
 AUTOATTACH=${AUTOATTACH:-true}
-TERMINUS_ENABLE_WELCOME_SCREEN=${AUTOATTACH:-false}
+TERMINUS_ENABLE_WELCOME_SCREEN=${TERMINUS_ENABLE_WELCOME_SCREEN:-false}
 
 # Assume that people want autologin by default if they
 # keep the default password
