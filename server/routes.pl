@@ -452,40 +452,16 @@ woql_handler(option, _Request) :-
     write_cors_headers(SURI, Terminus).
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
-
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    % No descriptor to work with until the query sets one up
+    empty_context(Context),
 
-    try_get_param('terminus:query',Request,Atom_Query),
-    http_log('~N[Query] ~s~n',[Atom_Query]),
-    atom_json_dict(Atom_Query, Query, []),
-
-    empty_context(Context0),
-
-    (   get_parm('terminus:commit_info', Request, Atom_Commit_Info)
-    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, []),
-        Context1 = Context0.put(commit_info,Commit_Info)
-    ;   Context1 = Context0.put(commit_info,_{})
-    ),
-
-    (   get_param('terminus:context',Request,Atom_Prefixes)
-    ->  atom_json_dict(Atom_Prefixes, Prefixes, [])
-    ;   Prefixes = _{}),
-
-    context_overriding_prefixes(Context1, Prefixes, Context2),
-    Context3 = Context2.put(authorization,Auth_ID),
-
-    collect_posted_files(Request,Files),
-    Context4 = Context3.put(files,Files),
-
-    jsonld_woql(Query, Prefixes, AST),
-
-    ask_ast_jsonld_response(Context4,AST,JSON),
+    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON).
+    reply_json_dict(JSON),
     format('~n').
 
 /**
@@ -500,45 +476,138 @@ woql_handler(options,_Account_ID,_DB,_Request) :-
     format('~n').
 woql_handler(post,Account_ID,DB,R) :-
     add_payload_to_request(R,Request),
-
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+    create_context(Branch_Descriptor, Context),
+
+    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, Terminus_Transaction_Object),
+    reply_json_dict(JSON).
+
+woql_handler(options,_Account_ID,_DB,_Ref,_Request) :-
+    config:public_server_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+woql_handler(post,DB,Ref,R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    make_branch_descriptor(Account_ID, DB, Ref, Branch_Descriptor),
+    create_context(Branch_Descriptor, Context),
+
+    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, Terminus_Transaction_Object),
+    reply_json_dict(JSON).
+
+woql_handler(options,_Account_ID,_DB,_Ref,_Branch,_Request) :-
+    config:public_server_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+woql_handler(post,DB,Ref,Branch,R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    make_branch_descriptor(Account_ID, DB, Ref, Branch, Branch_Descriptor),
+    create_context(Branch_Descriptor, Context),
+
+    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, Terminus_Transaction_Object),
+    reply_json_dict(JSON).
+
+woql_run_context(Request, Auth_ID, Context,JSON) :-
 
     try_get_param('terminus:query',Request,Atom_Query),
     http_log('~N[Query] ~s~n',[Atom_Query]),
     atom_json_dict(Atom_Query, Query, []),
 
-    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
 
     (   get_parm('terminus:commit_info', Request, Atom_Commit_Info)
-    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, []),
-        create_context(Branch_Descriptor, Commit_Info, Context0)
-    ;   create_context(Branch_Descriptor, Context0)
+    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    ;   Commit_Info = _{}
     ),
 
     (   get_param('terminus:context',Request,Atom_Prefixes)
     ->  atom_json_dict(Atom_Prefixes, Prefixes, [])
     ;   Prefixes = _{}),
 
-    context_overriding_prefixes(Context0, Prefixes, Context1),
+    context_overriding_prefixes(Context,Prefixes,Context0),
 
     collect_posted_files(Request,Files),
-    Context2 = Context1.put(files,Files),
+
+    merge_dictionaries(
+        query_context{
+            commit_info : Commit_Info,
+            files : Files,
+            authorization : Auth_ID
+        }, Context0, Final_Context),
 
     jsonld_woql(Query, Prefixes, AST),
 
-    Context3 = Context2.put(authorization, Auth_ID),
-
-    ask_ast_jsonld_response(Context3,AST,JSON),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON).
+    ask_ast_jsonld_response(Final_Context,AST,JSON).
 
 
-woql_handler(_Method,_DB,_Ref,_Request) :-
-    throw(error('Not implemented')).
+% woql_handler Unit Tests
+
+:- begin_tests(woql_endpoint).
+
+test(select_user_db) :-
+    config:server(Server),
+    auth(Auth),
+    atomic_list_concat([Server,'/terminus/document/'], Document),
+    atomic_list_concat([Server,'/terminus/schema#'], Schema),
+    atomic_list_concat([Server,'/terminus/'], Terminus),
+    atomic_list_concat([Server,'/'], S),
+
+    Query =
+    _{'@context' : _{scm : Schema,
+                     doc : Document,
+                     db : Terminus,
+                     s : S},
+      from: ["s:terminus",
+             _{select: [
+                   "v:Class", "v:Label", "v:Comment", "v:Abstract",
+                   _{and: [
+                         _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
+                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
+                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
+                     ]
+                    }
+               ]
+              }
+            ]
+     },
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    www_form_encode(Payload,Encoded),
+    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
+
+    Args = ['--user', Auth,'-X','GET',URI],
+    report_curl_command(Args),
+    curl_json(Args,Term),
+    nl,json_write_dict(current_output,Term,[]),
+
+    (   _{'bindings' : L} :< Term
+    ->  length(L, N),
+        N >= 8
+    ;   fail).
+
+:- end_tests(woql_endpoint).
+
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(clone), cors_catch(clone_handler(Method)),
