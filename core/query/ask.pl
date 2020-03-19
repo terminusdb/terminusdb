@@ -4,7 +4,8 @@
               create_context/2,
               create_context/3,
               collection_descriptor_prefixes/2,
-              context_overriding_prefixes/3
+              context_overriding_prefixes/3,
+              empty_context/1
           ]).
 
 /** <module> Ask
@@ -223,24 +224,6 @@ create_context(Askable, Commit_Info, Context) :-
     create_context(Askable, Context_Without_Commit),
     Context = Context_Without_Commit.put(commit_info, Commit_Info).
 
-
-
-/**
- * empty_context(Context).
- *
- * Add Commit Info
- */
-empty_context(Context) :-
-    Context = query_context{
-        transaction_objects : [],
-        default_collection : empty,
-        filter : type_filter{ types : [instance] },
-        prefixes : _{},
-        write_graph : empty,
-        bindings : [],
-        selected : [],
-        authorization : empty
-    }.
 
 /*
  * context_overriding_prefixes(Context:query_context, Prefixes:prefixes,

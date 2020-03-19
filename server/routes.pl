@@ -437,6 +437,10 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
+:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
 
 % Should there be endpoints for commit graph and repo graphs here?
 % Mostly we just want to woql query them.
@@ -526,11 +530,11 @@ woql_handler(post,Account_ID,DB,Ref,Branch,R) :-
 woql_run_context(Request, Auth_ID, Context,JSON) :-
 
     try_get_param('terminus:query',Request,Atom_Query),
-    http_log('~N[Query] ~s~n',[Atom_Query]),
     atom_json_dict(Atom_Query, Query, []),
 
+    http_log('~N[Request] ~q~n',[Request]),
 
-    (   get_parm('terminus:commit_info', Request, Atom_Commit_Info)
+    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
     ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
     ;   Commit_Info = _{}
     ),
@@ -558,6 +562,53 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 % woql_handler Unit Tests
 
 :- begin_tests(woql_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(no_db, [
+         setup((setup_temp_store(State),
+                create_db(testdb, "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query =
+    _{using: ["terminus:///terminus",
+              _{select: [
+                    "v:Class", "v:Label", "v:Comment", "v:Abstract",
+                    _{and: [
+                          _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
+                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
+                      ]}
+                ]}
+             ]},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/woql'], URI),
+
+    setup_call_cleanup(
+        http_post(URI,
+                  form_data(['terminus:query'=Payload]),
+                  In,
+                  [authorization(basic(admin,root))]),
+        catch(json_read_dict(In, JSON),
+          _,
+          JSON = _{'terminus:status' : 'terminus:failure'}),
+        close(In)),
+
+    (   _{'bindings' : L} :< JSON
+    ->  length(L, N),
+        N >= 8
+    ;   fail).
 
 
 :- end_tests(woql_endpoint).

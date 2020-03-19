@@ -752,7 +752,7 @@ test(open_branch_descriptor_with_nonexistent, [
     Database_Descriptor = database_descriptor{ database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
-    
+
     catch(open_descriptor(Branch_Descriptor, _Transaction),
           E,
           true),

@@ -10,7 +10,8 @@
                         transaction_objects_to_validation_objects/2,
                         make_branch_descriptor/5,
                         make_branch_descriptor/4,
-                        make_branch_descriptor/3
+                        make_branch_descriptor/3,
+                        run_transaction/1
                        ]).
 
 :- use_module(transaction/database).

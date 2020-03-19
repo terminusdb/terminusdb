@@ -28,14 +28,12 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
-:- use_module(core(util/test_utils)).
-:- use_module(core(util/utils)).
-
-:- use_module(core(api/jsonld)).
-
-:- use_module(library(http/json)).
 
 :- begin_tests(jsonld_test).
+
+:- use_module(core(util)).
+:- use_module(core(api)).
+:- use_module(library(http/json)).
 
 test(run_woql_expand) :-
     Doc = _{'@context' :

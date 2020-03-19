@@ -176,17 +176,15 @@ add_database_resource(DB_Name,URI,Doc) :-
     /* Extend Doc with default databases */
     extend_database_defaults(URI, DocX, Ext),
 
-    terminus_database_name(Collection),
-    connect(Collection, DB),
-    ask(DB,
-	    when(
-            true,
-            (   insert(doc:server, terminus:resource_includes, doc:DB_Name),
-                insert(doc:DB_Name, terminus:id, URI^^(xsd:anyURI)),
-                update_object(doc:DB_Name,Ext)
+    open_descriptor(terminus_descriptor{}, Transaction),
+    once(ask(Transaction,
+	         (   insert(doc:server, terminus:resource_includes, doc:DB_Name),
+                 insert(doc:DB_Name, terminus:id, URI^^(xsd:anyURI)),
+                 update_object(doc:DB_Name,Ext)
+             )
             )
-        )
-       ).
+        ),
+    run_transaction(Transaction).
 
 
 /*

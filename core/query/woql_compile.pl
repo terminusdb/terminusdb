@@ -3,10 +3,10 @@
               lookup_backwards/3,
               compile_query/3,
               compile_query/4,
-              empty_ctx/1,
-              empty_ctx/2,
+              empty_context/1,
+              empty_context/2,
               active_graphs/2,
-              descriptor_ctx/2
+              descriptor_context/2
           ]).
 
 /** <module> WOQL Compile
@@ -147,29 +147,36 @@ merge_output_bindings(B0, B1, Bindings) :-
     append(B0, B1, All),
     predsort(var_compare, All, Bindings).
 
-/*
- * empty_ctx(Ctx) is det.
+
+/**
+ * empty_context(Context).
  *
- * Empty Ctx to start with.
+ * Add Commit Info
  */
-empty_ctx(query_context{
-              bindings: [],
-              selected: [],
-              prefixes: Prefixes
-          }) :-
-    default_prefixes(Prefixes).
+empty_context(Context) :-
+    Context = query_context{
+        transaction_objects : [],
+        default_collection : empty,
+        filter : type_filter{ types : [instance] },
+        prefixes : _{},
+        write_graph : empty,
+        bindings : [],
+        selected : [],
+        files : [],
+        authorization : empty
+    }.
 
 /*
- * prototype_empty_ctx(S0,S1) is det.
+ * prototype_empty_context(S0,S1) is det.
  *
  * updates a context, keeping only global info
  */
-empty_ctx -->
+empty_context -->
     view(prefixes,Prefixes),
     view(transaction_objects,Transaction_Objects),
     view(files,Files),
 
-    { empty_ctx(S0)
+    { empty_context(S0)
     },
     return(S0),
 
@@ -177,14 +184,14 @@ empty_ctx -->
     put(transaction_objects,Transaction_Objects),
     put(files,Files).
 
-empty_ctx(Prefixes) -->
-    empty_ctx,
+empty_context(Prefixes) -->
+    empty_context,
     put(prefixes, Prefixes).
 
 
-descriptor_ctx(Collection_Descriptor,New_Ctx) :-
+descriptor_context(Collection_Descriptor,New_Ctx) :-
     descriptor_query(Collection_Descriptor, Query_Object),
-    empty_ctx(Ctx),
+    empty_context(Ctx),
     New_Ctx = Ctx.put(_{transaction_objects : [Query_Object],
                         current_collection : Collection_Descriptor}).
 
@@ -327,7 +334,7 @@ var_compare(Op, Left, Right) :-
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
 compile_query(Term, Prog, Ctx_Out) :-
-    empty_ctx(Ctx_In),
+    empty_context(Ctx_In),
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-

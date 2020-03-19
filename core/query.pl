@@ -60,10 +60,9 @@
                   lookup_backwards/3,
                   compile_query/3,
                   compile_query/4,
-                  empty_ctx/1,
-                  empty_ctx/2,
-                  active_graphs/2,
-                  descriptor_ctx/2,
+                  empty_context/1,
+                  empty_context/2,
+                  descriptor_context/2,
                   ask_ast_jsonld_response/3
                  ]).
 
