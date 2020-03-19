@@ -425,6 +425,10 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(woql), cors_catch(woql_handler(Method)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
 :- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
                  time_limit(infinite),
@@ -434,40 +438,110 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
                  time_limit(infinite),
                  methods([options,post])]).
 
+% Should there be endpoints for commit graph and repo graphs here?
+% Mostly we just want to woql query them.
+
+/**
+ * woql_handler(+Method:atom, +Request:http_request) is det.
+ *
+ * Open WOQL with no defined database
+ */
+woql_handler(option, _Request) :-
+    config:public_server_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+woql_handler(post, Request) :-
+    add_payload_to_request(R,Request),
+
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+
+    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+
+    try_get_param('terminus:query',Request,Atom_Query),
+    http_log('~N[Query] ~s~n',[Atom_Query]),
+    atom_json_dict(Atom_Query, Query, []),
+
+    empty_context(Context0),
+
+    (   get_parm('terminus:commit_info', Request, Atom_Commit_info)
+    ->  atom_json_dict(Atom_Prefixes, Commit_Info, []),
+        Context1 = Context0.put(commit_info,Commit_Info)
+    ;   Context1 = Context0.put(commit_info,_{})
+    ),
+
+    (   get_param('terminus:context',Request,Atom_Prefixes)
+    ->  atom_json_dict(Atom_Prefixes, Prefixes, []),
+    ;   Prefixes = _{}),
+
+    context_overriding_prefixes(Context1, Prefixes, Context2),
+    Context3 = Context2.put(authorization,Auth_ID),
+
+    collect_posted_files(Request,Files),
+    Context4 = Context3.put(files,Files),
+
+    jsonld_woql(Query, Prefixes, AST),
+
+    ask_ast_jsonld_response(Context4,AST,JSON),
+
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, Terminus_Transaction_Object),
+    reply_json_dict(JSON).
+    format('~n').
+
 /**
  * woql_handler(+Method:atom, +Account_ID:user, +DB:database, +Request:http_request) is det.
+ *
+ * WOQL on default branch
  */
 woql_handler(options,_Account_ID,_DB,_Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-woql_handler(post,_Account_ID,DB,R) :-
+woql_handler(post,Account_ID,DB,R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
 
-    authenticate(Terminus_Transaction_Object, Request, Auth),
+    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
 
-    try_db_uri(DB,DB_URI),
-
-    % redundant?
-    verify_access(Terminus_Transaction_Object, Auth, terminus:woql_select, DB_URI),
+    user_database_name(Account_ID,DB,DB_Name),
+    % TODO: Setup defaults for database at creation time.
+    % lookup_resource doesn't exist.
+    lookup_resource(Terminus_Transaction_Object, DB_Name, DB_URI),
 
     try_get_param('terminus:query',Request,Atom_Query),
     http_log('~N[Query] ~s~n',[Atom_Query]),
-
     atom_json_dict(Atom_Query, Query, []),
 
-    jsonld_to_ast_and_context(Query, AST, Ctx),
+    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
 
-    active_graphs(AST, Active),
+    (   get_parm('terminus:commit_info', Request, Atom_Commit_info)
+    ->  atom_json_dict(Atom_Prefixes, Commit_Info, []),
+        create_context(Branch_Descriptor, Commit_Info, Context)
+    ;   create_context(Branch_Descriptor, Context)
+    ),
 
-    % TODO: check_capabilities/2 doesn't exist but it should
-    check_capabilities(Terminus_Transaction_Object, Active),
+    (   get_param('terminus:context',Request,Atom_Prefixes)
+    ->  atom_json_dict(Atom_Prefixes, Prefixes, []),
+    ;   Prefixes = _{}),
 
+    context_overriding_prefixes(Context, Prefixes, New_Context),
+
+
+    Context = query_context{
+                  transaction_objects : [],
+                  default_collection : Descriptor,
+                  filter : type_filter{ types : [instance] },
+                  prefixes : Prefixes,
+                  write_graph : Graph_Descriptor,
+                  bindings : [],
+                  selected : []
+    }
     collect_posted_files(Request,Files),
     New_Ctx = Ctx.put(files,Files),
+
+    jsonld_woql(Query, Prefixes, AST),
 
     (   run_query(Query,New_Ctx,JSON)
     ->  true
@@ -655,8 +729,6 @@ fetch_jwt_data(Request, Username) :-
     getenv("TERMINUS_JWT_SECRET", JWT_Secret),
     jwt_dec(Token, json{k: JWT_Secret, kty: "oct"}, Payload),
     Username = Payload.get('username').
-
-
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.

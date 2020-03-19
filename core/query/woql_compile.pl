@@ -3,13 +3,10 @@
               lookup_backwards/3,
               compile_query/3,
               compile_query/4,
-              run_query/2,
-              run_query/3,
               empty_ctx/1,
               empty_ctx/2,
               active_graphs/2,
-              descriptor_ctx/2,
-              jsonld_to_ast_and_context/3
+              descriptor_ctx/2
           ]).
 
 /** <module> WOQL Compile
@@ -338,62 +335,6 @@ compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
     ->  true
     ;   format(atom(M), 'Failure to compile term ~q', [Term]),
         throw(compilation_error(M))).
-
-/*
- * run_query(JSON_In, JSON_Out) is det.
- *
- * Runs a WOQL query in JSON-LD WOQL syntax
- * with default context.
- */
-run_query(JSON_In, JSON_Out) :-
-    empty_ctx(CCTX),
-    run_query(JSON_In,CCTX,JSON_Out).
-
-/*
- * jsonld_to_ast_and_context(+JSON_LD, -AST, -Ctx).
- */
-jsonld_to_ast_and_context(JSON_In, AST, CCTX) :-
-    empty_ctx(CCTX),
-    CCTX.prefixs = Prefixes_Database,
-    woql_context(Ctx),
-    merge_dictionaries(Ctx,Prefixes_Database,Ctx_Total),
-    json_woql(JSON_In, Ctx_Total, AST).
-
-/*
- * run_query(JSON_In, CCTX, JSON_Out) is det.
- *
- * Runs a WOQL query in JSON-LD WOQL syntax
- * with pre-specified context, with compile
- * context CCTX.
- */
-run_query(JSON_In,CCTX,JSON_Out) :-
-    json_to_ast_and_context(JSON_In,CCTX,AST),
-    run_term(AST,CCTX,JSON_Out).
-
-run_term(Query,JSON) :-
-    empty_ctx(Ctx),
-    run_term(Query,Ctx,JSON).
-
-run_term(Query,Ctx_In,JSON) :-
-    debug(terminus(woql_compile(run_term)), 'Query: ~q',[Query]),
-    compile_query(Query,Prog,Ctx_In,Ctx_Out),
-
-    % TODO: This should probably be a forall with a write to the output stream
-    findall(B,
-            (   catch(
-                    call(Prog),
-                    error(instantiation_error, C),
-                    % We need to find the offending unbound culprit here
-                    woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
-                ),
-                B = Ctx_Out.bindings
-            ),
-            Bindings),
-
-    % todo this is wrong
-    maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
-
-    JSON = _{bindings : Patched_Bindings}.
 
 get_varname(Var,[X=Y|_Rest],Name) :-
     Y == Var,

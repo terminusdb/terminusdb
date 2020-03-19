@@ -7,7 +7,10 @@
               instance_graph_descriptor_transaction_object/3,
               read_write_obj_reader/2,
               read_write_obj_builder/2,
-              filter_read_write_objects/3
+              filter_read_write_objects/3,
+              make_branch_descriptor/4,
+              make_branch_descriptor/3,
+              make_branch_descriptor/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -591,6 +594,20 @@ filter_read_write_objects(Objects, Names, Filtered) :-
                                memberchk(Name, Names)), Objects, Filtered).
 
 
+make_branch_descriptor(Account, DB, Repo_name, Branch_Name, Branch_Descriptor) :-
+    user_database_name(Acccount, DB, DB_Name),
+    Database_Descriptor = database_descriptor{ database_name : DB_Name },
+    Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
+                                                   database_descriptor : Database_Descriptor},
+    Branch_Descriptor = branch_descriptor{ name : Branch_Name,
+                                           repository_descriptor : Repository_Descriptor}.
+
+make_branch_desriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
+    make_branch_descriptor(Account, DB, Repo_Name, "master", Branch_Descriptor).
+
+make_branch_desriptor(Account, DB, Branch_Descriptor) :-
+    make_branch_descriptor(Account, DB, "local", "master", Branch_Descriptor).
+
 
 :- begin_tests(open_descriptor).
 :- use_module(core(util/test_utils)).
@@ -711,7 +728,7 @@ test(open_branch_descriptor_with_atom, [
     Database_Descriptor = database_descriptor{ database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: master },
-    
+
     open_descriptor(Branch_Descriptor, _Transaction).
 
 test(open_branch_descriptor_with_string, [
@@ -723,7 +740,7 @@ test(open_branch_descriptor_with_string, [
     Database_Descriptor = database_descriptor{ database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
-    
+
     open_descriptor(Branch_Descriptor, _Transaction).
 
 test(open_branch_descriptor_with_nonexistent, [

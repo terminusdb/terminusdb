@@ -60,13 +60,11 @@
                   lookup_backwards/3,
                   compile_query/3,
                   compile_query/4,
-                  run_query/2,
-                  run_query/3,
                   empty_ctx/1,
                   empty_ctx/2,
                   active_graphs/2,
                   descriptor_ctx/2,
-                  jsonld_to_ast_and_context/3
+                  ask_ast_jsonld_response/3
                  ]).
 
 :- use_module(query/expansions).
@@ -79,3 +77,4 @@
 :- use_module(query/woql_compile).
 :- use_module(query/resolve_query_resource).
 :- use_module(query/global_prefixes).
+:- use_module(query/query_response).

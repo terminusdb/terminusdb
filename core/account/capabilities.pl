@@ -89,17 +89,14 @@ get_user(Database, User_ID, User) :-
 
 
 /**
- * user_key_auth(DB, Key,Auth) is det.
+ * user_key_auth(DB, Key, Auth_URI) is det.
  *
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-user_key_auth(DB, Username, Key, Auth) :-
+user_key_auth(DB, Username, Key, Auth_ID) :-
     user_key_user_id(DB, Username, Key, User_ID),
-    user_auth_id(DB, User_ID, Auth_ID),
-    collection_descriptor_prefixes(DB.descriptor, Prefixes),
-    prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),
-    document_jsonld(DB,Auth_ID_Expanded,Auth).
+    user_auth_id(DB, User_ID, Auth_ID).
 
 /**
  * username_auth(DB, Key,Auth) is det.
