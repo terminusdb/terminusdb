@@ -457,7 +457,7 @@ woql_handler(post, R) :-
     % No descriptor to work with until the query sets one up
     empty_context(Context),
 
-    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+    woql_run_context(Request, Auth_ID, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
@@ -481,7 +481,7 @@ woql_handler(post,Account_ID,DB,R) :-
     make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
     create_context(Branch_Descriptor, Context),
 
-    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+    woql_run_context(Request, Auth_ID, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
@@ -492,14 +492,14 @@ woql_handler(options,_Account_ID,_DB,_Ref,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-woql_handler(post,DB,Ref,R) :-
+woql_handler(post,Account_ID,DB,Ref,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
     make_branch_descriptor(Account_ID, DB, Ref, Branch_Descriptor),
     create_context(Branch_Descriptor, Context),
 
-    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+    woql_run_context(Request, Auth_ID, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
@@ -510,14 +510,14 @@ woql_handler(options,_Account_ID,_DB,_Ref,_Branch,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-woql_handler(post,DB,Ref,Branch,R) :-
+woql_handler(post,Account_ID,DB,Ref,Branch,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
     make_branch_descriptor(Account_ID, DB, Ref, Branch, Branch_Descriptor),
     create_context(Branch_Descriptor, Context),
 
-    woql_run_context(Request, Terminus_Transaction_Object, Context, JSON),
+    woql_run_context(Request, Auth_ID, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
@@ -559,52 +559,6 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 
 :- begin_tests(woql_endpoint).
 
-test(select_user_db) :-
-    config:server(Server),
-    auth(Auth),
-    atomic_list_concat([Server,'/terminus/document/'], Document),
-    atomic_list_concat([Server,'/terminus/schema#'], Schema),
-    atomic_list_concat([Server,'/terminus/'], Terminus),
-    atomic_list_concat([Server,'/'], S),
-
-    Query =
-    _{'@context' : _{scm : Schema,
-                     doc : Document,
-                     db : Terminus,
-                     s : S},
-      from: ["s:terminus",
-             _{select: [
-                   "v:Class", "v:Label", "v:Comment", "v:Abstract",
-                   _{and: [
-                         _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
-                         _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
-                         _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
-                     ]
-                    }
-               ]
-              }
-            ]
-     },
-
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Query, [])
-    ),
-
-    www_form_encode(Payload,Encoded),
-    atomic_list_concat([Server,'/terminus/woql?terminus%3Aquery=',Encoded], URI),
-
-    Args = ['--user', Auth,'-X','GET',URI],
-    report_curl_command(Args),
-    curl_json(Args,Term),
-    nl,json_write_dict(current_output,Term,[]),
-
-    (   _{'bindings' : L} :< Term
-    ->  length(L, N),
-        N >= 8
-    ;   fail).
 
 :- end_tests(woql_endpoint).
 
