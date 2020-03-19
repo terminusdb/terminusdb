@@ -9,7 +9,7 @@ stages:
     if: branch = master AND type != pull_request
   - name: deploy_dev
     if: branch = dev AND type != pull_request
-  - name: deploy_dev
+  - name: deploy_hub
     if: branch = hub AND type != pull_request
   - name: deploy_tag
     if: tag =~ ^v AND type != pull_request
