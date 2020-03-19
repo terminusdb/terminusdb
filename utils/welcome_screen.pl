@@ -27,7 +27,7 @@ welcome_screen_submit(Request) :-
     http_parameters(Request, [password(Password, []),
                               port(Port_Arg, []),
                               public_url(Public_URL, [])]),
-    Args = ['db_util', '-s', 'localhost', '--public_url', Public_URL, '--port ', Port_Arg, '-k ', Password],
+    Args = ['db_util', '-s', 'localhost', '--public_url', Public_URL, '--port ', Port_Arg, '-k', Password],
     process_create(path(swipl), Args, [process(PID)]),
     process_release(PID),
     atom_concat(Public_URL, '/console', Redirect_URL),
