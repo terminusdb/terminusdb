@@ -11,9 +11,15 @@
   a owl:Ontology ;
   rdfs:label "Terminus DB Management Schema"@en ;
   rdfs:comment "Schema describing all of the structure of the documents (capabilities, roles, resources, users, databases) in the capability database used by Terminus DB to manage the internal state of the server and the databases it manages"@en ;
-  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
-  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
-  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+terminus:Document
+  a owl:Class ;
+  tcs:tag tcs:abstract ;
+  rdfs:label "Document Class"@en ;
+  rdfs:comment "A class used to designate the primary data objects managed by the system - relationships and entities"@en .
 
 terminus:Agent
   rdfs:label "Agent"@en ;

@@ -83,7 +83,9 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#or' : Qs} :< JSON
     ->  maplist(json_to_woql_ast,Qs,W_Qs),
         xfy_list(';',WOQL,W_Qs)
-    ;   _{'http://terminusdb.com/woql#using' : [ Collection, Query ] } :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/woql#using',    % {'http://terminusdb.com/woql#using' : [Collection, Query]}
+          'http://terminusdb.com/woql#collection' : Collection,
+          'http://terminusdb.com/woql#query' : Query } :< JSON
     ->  json_to_woql_ast(Collection,WC),
         json_to_woql_ast(Query,WQ),
         WOQL = using(WC,WQ)

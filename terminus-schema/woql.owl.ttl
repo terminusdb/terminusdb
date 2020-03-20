@@ -1,0 +1,399 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix woql: <http://terminusdb.com/schema/woql#> .
+
+<http://terminusdb.com/schema/woql>
+  a owl:Ontology ;
+  rdfs:label "Terminus DB WOQL Query Syntax Schema"@en ;
+  rdfs:comment "Schema describing all the structure of the WOQL query language"@en ;
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+woql:Query
+  a owl:Class ;
+  rdfs:comment "A WOQL Query"@en ;
+  rdfs:label "Query"@en ;
+  rdfs:subClassOf terminus:Document .
+
+woql:QueryWithSubQuery
+  a owl:Class ;
+  rdfs:comment "A WOQL Query with a subquery"@en ;
+  rdfs:label "Query With Subquery"@en ;
+  rdfs:subClassOf woql:Query, woql:QueryWithSingleSubQuery .
+
+woql:QueryWithSingleSubQuery
+  a owl:Restriction ;
+  owl:onProperty woql:query ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+woql:QueryWithIndexedSubQuery
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:comment "A Query with an indexed sub-query"@en ;
+  rdfs:label "Query with indexable sub query"@en .
+
+woql:query_list
+  a owl:ObjectProperty ;
+  rdfs:domain woql:QueryWithIndexedSubQuery ;
+  rdfs:range woql:QueryListElement ;
+  rdfs:label "query list"@en ;
+  rdfs:comment "A list of queries"@en .
+
+woql:QueryListElement
+  a owl:Class ;
+  rdfs:subClassOf woql:Indexable, woql:QueryWithSubQuery ;
+  rdfs:label "query list element"@en ;
+  rdfs:comment "An element of a list of queries"@en .
+
+woql:query
+  a owl:ObjectProperty ;
+  rdfs:domain woql:QuerywithSubQuery ;
+  rdfs:range woql:Query .
+
+woql:Using
+  a owl:Class ;
+  rdfs:comment """Introduce a default collection.
+{'@type' : 'Using',
+ 'collection' : collection_descriptor,
+ 'query' : query}
+"""@en ;
+  rdfs:label "Using"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:collection
+  a owl:ObjectProperty ;
+  rdfs:comment "A collection"@en ;
+  rdfs:label "Collection"@en ;
+  rdfs:domain woql:Using ;
+  rdfs:range xsd:string .
+
+woql:Comment
+  a owl:Class ;
+  rdfs:comment """Introduce a default collection.
+{'@type' : 'Comment',
+ 'comment' : collection_descriptor}
+"""@en ;
+  rdfs:label "Using"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:comment
+  a owl:ObjectProperty ;
+  rdfs:comment "A comment"@en ;
+  rdfs:label "comment"@en ;
+  rdfs:domain woql:Comment ;
+  rdfs:range xsd:string .
+
+woql:Select
+  a owl:Class ;
+  rdfs:label "Select"@en ;
+  rdfs:comment "A Selection of variables from subquery"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:variable_list
+  a owl:ObjectProperty ;
+  rdfs:label "Variable Array"@en ;
+  rdfs:comment "An array of variables"@en ;
+  rdfs:domain woql:Select ;
+  rdfs:range woql:VariableListElement .
+
+woql:VariableListElement
+  a owl:Class ;
+  rdfs:label "Variable List Element"@en ;
+  rdfs:comment "An element of a list by position"@en ;
+  rdfs:subClassOf woql:Indexable .
+
+woql:index
+  a owl:DatatypeProperty ;
+  rdfs:label "index"@en ;
+  rdfs:comment "The index of a list"@en ;
+  rdfs:domain woql:Indexable ;
+  rdfs:range xsd:nonNegativeInteger .
+
+woql:variable_name
+  a owl:DatatypeProperty ;
+  rdfs:label "Variable Name"@en ;
+  rdfs:comment "The name of a variable"@en ;
+  rdfs:domain woq:VariableListElement ;
+  rdfs:range xsd:anyURI .
+
+woql:IndexableRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:index ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+woql:Indexable
+  a owl:Class ;
+  rdfs:subClassOf woql:IndexableRestriction ;
+  rdfs:label "Indexable"@en ;
+  rdfs:comment "Something with an index"@en .
+
+woql:And
+  a owl:Class ;
+  rdfs:label "And"@en ;
+  rdfs:comment "A conjunction of clauses"@en ;
+  rdfs:subClassOf woql:QueryWithIndexedSubQuery .
+
+woql:Or
+  a owl:Class ;
+  rdfs:label "Or"@en ;
+  rdfs:comment "A disjunction of clauses"@en ;
+  rdfs:subClassOf woql:QueryWithIndexedSubQuery .
+
+woql:From
+  a owl:Class ;
+  rdfs:label "From"@en ;
+  rdfs:comment "A query with a graph filter for selection"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery, woql:QueryWithGraphFilter .
+
+woql:QueryWithGraphFilter
+  a owl:Class ;
+  rdfs:label "Query with graph filter"@en ;
+  rdfs:comment "A query with a graph filter"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:graph_filter
+  a owl:DatatypeProperty ;
+  rdfs:label "graph filter"@en ;
+  rdfs:comment "the string to form a graph filter descriptor"@en ;
+  rdfs:domain woql:QueryWithGraphFilter ;
+  rdfs:range xsd:string .
+
+woql:QueryWithGraph
+  a owl:Class ;
+  rdfs:label "Query with graph"@en ;
+  rdfs:comment "A query with a specified graph"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:graph
+  a owl:DatatypeProperty ;
+  rdfs:label "graph"@en ;
+  rdfs:comment "the string to form a graph descriptor"@en ;
+  rdfs:domain woql:QueryWithGraph ;
+  rdfs:range xsd:string .
+
+woql:Into
+  a owl:Class ;
+  rdfs:label "From"@en ;
+  rdfs:comment "A query with a graph filter for selection"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery, woql:QueryWithGraph .
+
+woql:Triple
+  a owl:Class ;
+  rdfs:label "Triple"@en ;
+  rfds:comment "A edge in the graph specified by subject, predicate, object"@en .
+
+woql:subject
+  a owl:DatatypeProperty ;
+  rdfs:label "subject"@en ;
+  rfds:comment "The subject of a triple"@en ;
+  rfds:domain woql:Triple ;
+  rdfs:range xsd:anyURI .
+
+woql:predicate
+  a owl:DatatypeProperty ;
+  rdfs:label "predicate"@en ;
+  rfds:comment "The predicate of a triple"@en ;
+  rfds:domain woql:Triple ;
+  rdfs:range xsd:anyURI .
+
+woql:object
+  a owl:ObjectProperty ;
+  rdfs:label "object"@en ;
+  rfds:comment "The object of a triple"@en ;
+  rfds:domain woql:Triple ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:DatatypeOrID
+  a owl:Class
+  rdfs:label "Datatype or ID"@en ;
+  rdfs:comment "Either a datatype or an ID"@en .
+
+woql:node
+  a owl:DatatypeProperty
+  rdfs:label "node"@en ;
+  rdfs:comment "The URI of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range xsd:anyURI .
+
+woql:value
+  a owl:DatatypeProperty
+  rdfs:label "value"@en ;
+  rdfs:comment "The value of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range xsd:anySimpleDatatype .
+
+woql:Quad
+  a owl:Class ;
+  rdfs:label "Quad"@en ;
+  rdfs:comment "A triple with graph filter"@en ;
+  rdfs:subClassOf woql:QueryWithGraphFilter, woql:Triple .
+
+woql:Comparator
+  a owl:Class ;
+  rdfs:label "Comparator"@en ;
+  rdfs:comment "Compares too things"@en .
+
+woql:Subsumption
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ,
+  rdfs:label "Subsumption"@en ;
+  rdfs:comment "Subsumption of one class by another"@en .
+
+woql:child
+  a owl:DatatypeProperty ;
+  rdfs:label "child"@en ;
+  rdfs:comment "The child of a subsumption"@en ;
+  rdfs:domain woql:Subsumption ;
+  rdfs:range woql:anyURI .
+
+woql:parent
+  a owl:DatatypeProperty ;
+  rdfs:label "parent"@en ;
+  rdfs:comment "The parent of a subsumption"@en ;
+  rdfs:domain woql:Subsumption ;
+  rdfs:range woql:anyURI .
+
+woql:Equals
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ,
+  rdfs:label "Equals"@en ;
+  rfds:comment "Defines unification between two things"@en .
+
+woql:left
+  a owl:ObjectProperty ;
+  rdfs:label "left"@en ;
+  rfds:comment "The left side of an equality"@en ;
+  rdfs:domain woql:Equals ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:right
+  a owl:ObjectProperty ;
+  rdfs:label "left"@en ;
+  rfds:comment "The left side of an equality"@en ;
+  rdfs:domain woql:Equals ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Substring
+  a owl:Class ;
+  rdfs:label "Substring"@en ;
+  rdfs:comment "Find substrings of a given string"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:string
+  a owl:ObjectProperty ;
+  rdfs:label "string"@en ;
+  rfds:comment "The string of a substring search"@en ;
+  rdfs:domain woql:Substring ;
+  rfds:range woql:DatatypeOrID .
+
+woql:before
+  a owl:ObjectProperty ;
+  rdfs:label "before"@en ;
+  rfds:comment "The before characters index of a substring search"@en ;
+  rdfs:domain woql:Substring ;
+  rfds:range woql:DatatypeOrID .
+
+woql:length
+  a owl:ObjectProperty ;
+  rdfs:label "length"@en ;
+  rfds:comment "The length characters index of a substring search"@en ;
+  rdfs:domain woql:Substring ;
+  rfds:range woql:DatatypeOrID .
+
+woql:after
+  a owl:ObjectProperty ;
+  rdfs:label "after"@en ;
+  rfds:comment "The after characters index of a substring search"@en ;
+  rdfs:domain woql:Substring ;
+  rfds:range woql:DatatypeOrID .
+
+woql:substring
+  a owl:ObjectProperty ;
+  rdfs:label "substring"@en ;
+  rfds:comment "The substring of a substring search"@en ;
+  rdfs:domain woql:Substring ;
+  rfds:range woql:DatatypeOrID .
+
+woql:DocumentQuery
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Document Query"@en ;
+  rdfs:comment "A query which references a document"@en .
+
+woql:document
+  a owl:ObjectProperty ;
+  rdfs:label "document"@en ;
+  rdfs:comment "Document associated with a query"@en ;
+  rdfs:domain woql:Query ;
+  rdfs:range terminus:Document .
+
+woql:Update
+  a owl:Class ;
+  rdfs:subClassOf woql:DocumentQuery ;
+  rdfs:label "Update"@en ;
+  rfds:comment "Update a document"@en .
+
+woql:Delete
+  a owl:Class ;
+  rdfs:subClassOf woql:DocumentQuery ;
+  rdfs:label "Delete"@en ;
+  rfds:comment "Delete a document"@en .
+
+woql:Get
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Get"@en ;
+  rdfs:comment "Get variable bindings from a resource"@en .
+
+woql:AsVars
+  a owl:Class ;
+  rfds:label "As Vars"@en ;
+  rfds:comment "As Vars Specification"@en .
+
+woql:query_resource
+  a owl:ObjectProperty ;
+  rdfs:label "resource"@en ;
+  rdfs:comment "A resource for woql:Get"@en ;
+  rdfs:domain woql:Get ;
+  rdfs:range woql:QueryResource .
+
+woql:QueryResource
+  a owl:Class ;
+  rdfs:label "Query Resource"@en ;
+  rdfs:comment "A Query Resource"@en .
+
+woql:FileResource
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryResource ;
+  rdfs:label "Query Resource"@en ;
+  rdfs:comment "A Query Resource"@en .
+
+woql:file
+  a owl:DatatypeProperty ;
+  rdfs:label "file"@en ;
+  rdfs:comment "File associated with a query resource"@en .
+
+woql:format
+  a owl:DatatypeProperty ;
+  rdfs:label "format"@en ;
+  rdfs:comment "The format of the resource"@en ;
+  rdfs:domain woql:QueryResource ;
+  rdfs:range woql:Format .
+
+woql:Format
+  a owl:Class ;
+  rdfs:label "Format"@en ;
+  rdfs:comment "The format of a query resource"@en .
+
+woql:format_type
+  a owl:DatatypeProperty ;
+  rdfs:label "Format type"@en ;
+  rdfs:comment "The variety of format"@en ;
+  rdfs:domain woql:Format ;
+  rfds:range xsd:string .
+

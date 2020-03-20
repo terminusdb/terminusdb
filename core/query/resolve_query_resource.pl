@@ -72,6 +72,24 @@
 resolve_query_resource('terminus:///terminus/',terminus_descriptor{}).
 % Branches
 %
+% terminus
+%
+% u/User
+%
+% r/Repo
+%
+% repo/Repo
+%
+% repometa/Repo
+%
+% ref/Branch_Name
+%
+% http://[Server]/woql/user/[User]/database/[Database_Name]/repo/Repo
+% http://[Server]/woql/user/[User]/database/[Database_Name]/repometa/ 
+% http://[Server]/woql/user/[User]/database/[Database_Name]
+%
+%  <= repo/Repo_name/ref/Ref_name =>
+%
 % 'http://[Server]/[User]/[Database_Name]'
 % 'http://[Server]/[User]/[Database_Name]/<Repo_Name>'
 % 'http://[Server]/[User]/[Database_Name]/<Repo_Name>/<Ref_Name>'

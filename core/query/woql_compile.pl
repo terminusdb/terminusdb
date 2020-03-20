@@ -757,6 +757,7 @@ compile_wf(prefixes(NS,S), Prog) -->
     { append(NS, NS_Old, NS_New) },
     compile_wf(S, Prog),
     update(prefixes,_,NS_Old).
+% NOTE: DEPRECATED
 compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     resolve(GN,GName),
     update(default_collection,Old_Default_Collection,Default_Collection),
