@@ -571,8 +571,7 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 :- use_module(library(http/http_open)).
 
 test(no_db, [
-         setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+         setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -581,11 +580,11 @@ test(no_db, [
               _{select: [
                     "v:Class", "v:Label", "v:Comment", "v:Abstract",
                     _{and: [
-                          _{quad: ["v:Class", "rdf:type", "owl:Class", "schema"]},
-                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "schema"]}]}
+                          _{quad: ["v:Class", "rdf:type", "owl:Class", "schema/*"]},
+                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "schema/*"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "schema/*"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "schema/*"]}]},
+                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "schema/*"]}]}
                       ]}
                 ]}
              ]},
