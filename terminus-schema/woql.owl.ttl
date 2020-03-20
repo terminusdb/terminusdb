@@ -258,25 +258,31 @@ woql:parent
   rdfs:domain woql:Subsumption ;
   rdfs:range woql:anyURI .
 
-woql:Equals
-  a owl:Class ;
-  rdfs:subClassOf woql:Query ,
-  rdfs:label "Equals"@en ;
-  rfds:comment "Defines unification between two things"@en .
+woql:BinaryOperator
+  a owl:Class
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Binary Operator"@en ;
+  rfds:comment "A binary operator, with left and right"@en .
 
 woql:left
   a owl:ObjectProperty ;
   rdfs:label "left"@en ;
-  rfds:comment "The left side of an equality"@en ;
-  rdfs:domain woql:Equals ;
+  rdfs:comment "The left of a Binary Operator"@en ;
+  rdfs:domain woql:BinaryOperator ;
   rdfs:range woql:DatatypeOrID .
 
 woql:right
   a owl:ObjectProperty ;
-  rdfs:label "left"@en ;
-  rfds:comment "The left side of an equality"@en ;
-  rdfs:domain woql:Equals ;
+  rdfs:label "right"@en ;
+  rdfs:comment "The right of a Binary Operator"@en ;
+  rdfs:domain woql:BinaryOperator ;
   rdfs:range woql:DatatypeOrID .
+
+woql:Equals
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Equals"@en ;
+  rfds:comment "Defines unification between two things"@en .
 
 woql:Substring
   a owl:Class ;
@@ -344,22 +350,100 @@ woql:Delete
   rdfs:label "Delete"@en ;
   rfds:comment "Delete a document"@en .
 
+woql:GetOrPut
+  a owl:Class ;
+  terminus:tag terminus:abstract ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Get or Put"@en ;
+  rdfs:comment "Abstract class for Get or Put"@en .
+
 woql:Get
   a owl:Class ;
-  rdfs:subClassOf woql:Query ;
+  rdfs:subClassOf woql:GetOrPut ;
   rdfs:label "Get"@en ;
   rdfs:comment "Get variable bindings from a resource"@en .
 
+woql:as_vars
+  a owl:ObjectProperty ;
+  rdfs:label "as vars"@en ;
+  rdfs:comment "The variable captures associated with a get"@en ;
+  rdfs:domain woql:GetOrPut ;
+  rdfs:range woql:AsVars .
+
 woql:AsVars
   a owl:Class ;
-  rfds:label "As Vars"@en ;
-  rfds:comment "As Vars Specification"@en .
+  rdfs:label "As Vars"@en ;
+  rdfs:comment "As Vars Specification"@en .
+
+woql:AsVar
+  a owl:Class ;
+  rdfs:label "As Var"@en ;
+  rdfs:comment "As Var"@en .
+
+woql:IndexedAsVars
+  a owl:Class
+  rdfs:subClassOf woql:AsVars ;
+  rdfs:label "As Vars by index"@en ;
+  rdfs:comment "As Vars by index"@en .
+
+woql:as_var
+  a owl:ObjectProperty ;
+  rdfs:label "as var"@en ;
+  rdfs:comment "as vars"@en ;
+  rdfs:domain woql:AsVars ;
+  rdfs:range woql:AsVar .
+
+woql:indexed_as_var
+  a owl:ObjectProperty ;
+  rdfs:label "indexed as var"@en ;
+  rdfs:comment "Indexed as vars"@en ;
+  rdfs:domain woql:IndexedAsVars ;
+  rdfs:range woql:IndexedAsVar .
+
+woql:IndexedAsVar
+  a owl:Class ;
+  rdfs:subClassOf woql:Indexable, woql:AsVar ;
+  rdfs:label "A var by index"@en ;
+  rdfs:comment "A var by index"@en .
+
+woql:NamedAsVar
+  a owl:Class ;
+  rdfs:subClassOf woql:AsVar ;
+  rdfs:label "A var by index"@en ;
+  rdfs:comment "A var by index"@en .
+
+woql:var
+  a owl:DatatypeProperty ;
+  rdfs:label "var"@en ;
+  rdfs:comment "A variable identifier"@en ;
+  rdfs:domain woql:AsVar ;
+  rdfs:range xsd:anyURI .
+
+woql:var_type
+  a owl:DatatypeProperty ;
+  rdfs:label "var type"@en ;
+  rdfs:comment "An AsVar casting type"@en ;
+  rdfs:domain woql:AsVar ;
+  rdfs:range xsd:anyURI .
+
+woql:NamedAsVars
+  a owl:Class
+  rdfs:subClassOf woql:AsVars ;
+  rdfs:label "As Vars by name"@en ;
+  rdfs:comment "As Vars by name"@en .
+
+woql:identifier
+  a owl:DatatypeProperty ;
+  rdfs:label "identifier"@en ;
+  rdfs:comment "Identifier for a column name"@en ;
+  rdfs:domain woql:NamedAsVar ;
+  rdfs:range xsd:string .
 
 woql:query_resource
   a owl:ObjectProperty ;
   rdfs:label "resource"@en ;
   rdfs:comment "A resource for woql:Get"@en ;
-  rdfs:domain woql:Get ;
+  rdfs:domain woql:GetOrPut ;
   rdfs:range woql:QueryResource .
 
 woql:QueryResource
@@ -370,13 +454,34 @@ woql:QueryResource
 woql:FileResource
   a owl:Class ;
   rdfs:subClassOf woql:QueryResource ;
-  rdfs:label "Query Resource"@en ;
-  rdfs:comment "A Query Resource"@en .
+  rdfs:label "File Query Resource"@en ;
+  rdfs:comment "A File Query Resource"@en .
 
 woql:file
   a owl:DatatypeProperty ;
   rdfs:label "file"@en ;
-  rdfs:comment "File associated with a query resource"@en .
+  rdfs:comment "File associated with a query resource"@en ;
+  rdfs:domain woql:FileResource ;
+  rdfs:range xsd:string .
+
+woql:RemoteResource
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryResource ;
+  rdfs:label "Remote Query Resource"@en ;
+  rdfs:comment "A Query Resource"@en .
+
+woql:remote_uri
+  a owl:DatatypeProperty ;
+  rdfs:label "remote uri"@en ;
+  rdfs:comment "Remote URI associated with a query resource"@en ;
+  rdfs:domain woql:RemoteResource ;
+  rdfs:range xsd:anyURI .
+
+woql:PostResource
+  a owl:Class ;
+  rdfs:subClassOf woql:FileResource ;
+  rdfs:label "Post Query Resource"@en ;
+  rdfs:comment "An HTTP POST Query Resource"@en .
 
 woql:format
   a owl:DatatypeProperty ;
@@ -393,7 +498,349 @@ woql:Format
 woql:format_type
   a owl:DatatypeProperty ;
   rdfs:label "Format type"@en ;
-  rdfs:comment "The variety of format"@en ;
+  rdfs:comment "The variety of format. One of {csv,turtle,panda_json}"@en ;
   rdfs:domain woql:Format ;
   rfds:range xsd:string .
+
+woql:format_header
+  a owl:DatatypeProperty ;
+  rdfs:label "Format Header"@en ;
+  rdfs:comment "Does this format have a header?"@en ;
+  rfds:domain woql:Format ;
+  rdfs:range xsd:boolean .
+
+woql:AddTriple
+  a owl:DatatypeProperty ;
+  rdfs:subClassOf woql:Triple ;
+  rdfs:label "Add triple"@en ;
+  rdfs:comment "Add a triple"@en .
+
+woql:AddQuad
+  a owl:DatatypeProperty ;
+  rdfs:subClassOf woql:Quad ;
+  rdfs:label "Add quad"@en ;
+  rdfs:comment "Add a quad"@en .
+
+woql:DeleteQuad
+  a owl:DatatypeProperty ;
+  rdfs:subClassOf woql:Quad ;
+  rdfs:label "Delete quad"@en ;
+  rdfs:comment "Delete a quad"@en .
+
+woql:DeleteTriple
+  a owl:DatatypeProperty ;
+  rdfs:subClassOf woql:Triple ;
+  rdfs:label "Delete triple"@en ;
+  rdfs:comment "Delete a triple"@en .
+
+woql:When
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryWithSubQuery ;
+  rdfs:label "When"@en ;
+  rdfs:comment "When A, do B"@en .
+
+woql:consequent
+  a owl:ObjectProperty ;
+  rdfs:label "consequent"@en ;
+  rdfs:comment "The consequence of a woql:When"@en ;
+  rdfs:domain woql:When ;
+  rdfs:range woql:Query .
+
+woql:Trim
+  a owl:Class ;
+  rdfs:label "trim"@en ;
+  rdfs:comment "Trims whitespace"@en .
+
+woql:untrimmed
+  a owl:ObjectProperty ;
+  rdfs:label "untrimmed"@en ;
+  rdfs:comment "The untrimmed string"@en ;
+  rdfs:domain woql:Trim ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:trimmed
+  a owl:ObjectProperty ;
+  rdfs:label "trimmed"@en ;
+  rdfs:comment "The trimmed string"@en ;
+  rdfs:domain woql:Trim ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Eval
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Eval"@en ;
+  rdfs:comment "Eval an arithmetic expression"@en .
+
+woql:expression
+  a owl:ObjectProperty ;
+  rdfs:label "expression"@en ;
+  rdfs:comment "The arithmetic expression under evaluation"@en ;
+  rdfs:domain woql:Eval ;
+  rdfs:range woql:ArithmeticExpression .
+
+woql:result
+  a owl:ObjectProperty ;
+  rdfs:label "result"@en ;
+  rdfs:comment ""@en ;
+  rdfs:domain woql:Eval ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:ArithmeticExpression ;
+  a owl:Class ;
+  rdfs:label "Arithmetic Expression"@en ;
+  rdfs:comment "An arithmetic expression"@en .
+
+woql:BinaryArithmeticOperator
+  a owl:Class ;
+  rdfs:subClassOf woql:ArithmeticExpression ;
+  rdfs:label "Binary Arithmetic Operator"@en ;
+  rdfs:comment "Binary Arithmetic Operator"@en .
+
+woql:first
+  a owl:ObjectProperty ;
+  rdfs:label "first"@en ;
+  rdfs:comment "The first argument of a binary operator"@en ;
+  rdfs:domain woql:BinaryArithmeticOperator ;
+  rdfs:range woql:ArithmeticExpression .
+
+woql:second
+  a owl:ObjectProperty ;
+  rdfs:label "second"@en ;
+  rdfs:comment "The second argument of a binary operator"@en ;
+  rdfs:domain woql:BinaryArithmeticOperator ;
+  rdfs:range woql:ArithmeticExpression .
+
+woql:Plus
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Plus"@en ;
+  rdfs:comment "Arithmetic addition"@en .
+
+woql:Minus
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Minus"@en ;
+  rdfs:comment "Arithmetic subtraction"@en .
+
+woql:Times
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Times"@en ;
+  rdfs:comment "Arithmetic multiplication"@en .
+
+woql:Divide
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Divide"@en ;
+  rdfs:comment "Arithmetic division"@en .
+
+woql:Div
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Div"@en ;
+  rdfs:comment "Integer division"@en .
+
+woql:Exp
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryArithmeticOperator ;
+  rdfs:label "Exp"@en ;
+  rdfs:comment "Arithmetic exponentiation"@en .
+
+woql:UnaryArithmeticOperator
+  a owl:Class ;
+  rdfs:subClassOf woql:ArithmeticExpression ;
+  rdfs:label "Binary Arithmetic Operator"@en ;
+  rdfs:comment "Binary Arithmetic Operator"@en .
+
+woql:argument
+  a owl:ObjectProperty ;
+  rdfs:label "argument"@en ;
+  rdfs:comment "The argument of a unary operator"@en ;
+  rdfs:domain woql:UnaryArithmeticOperator ;
+  rdfs:range woql:ArithmeticExpression .
+
+woql:Floor
+  a owl:Class ;
+  rdsf:subClassOf woql:UnaryArithmeticOperator ;
+  rdfs:label "Floor"@en ;
+  rdfs:comment "The floor of a floating point number"@en .
+
+woql:ArithmeticValue
+  a owl:Class ;
+  rdfs:subClassOf woql:ArithmeticExpression ;
+  rdfs:label "Value"@en ;
+  rdsf:comment "An arithmetic value - float, int, bignum, etc."@en .
+
+woql:arithmetic_value
+  a owl:DatatypeProperty ;
+  rdfs:label "arithmetic value"@en ;
+  rdfs:comment "The value part of an expression"@en ;
+  rdfs:domain woql:ArithmeticValue ;
+  rdfs:range xsd:decimal .
+
+woql:IsA
+  a owl:Class ;
+  rdfs:label "Is A"@en ;
+  rdfs:comment "Check that Object 'is a' Type"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:element
+  a owl:DatatypeProperty ;
+  rdfs:label "element"@en ;
+  rdfs:comment "The element of an IsA being type checked"@en ;
+  rdfs:domain woql:IsA ;
+  rdfs:range xsd:anyURI .
+
+woql:of_type
+  a owl:DatatypeProperty ;
+  rdfs:label "of type"@en ;
+  rdfs:comment "Element is 'of type'"@en ;
+  rdfs:domain woql:IsA ;
+  rdfs:range xsd:anyURI .
+
+woql:Like
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Like"@en ;
+  rdfs:comment "An element is like another element"@en .
+
+woql:like_similarity
+  a owl:ObjectProperty ;
+  rdfs:label "similarity"@en ;
+  rdfs:comment "The similarity value (between 0 and 1)"@en ;
+  rdfs:domain woql:Like ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Less ;
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Less"@en ;
+  rdfs:comment "One value less than another"@en .
+
+woql:Greater ;
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Greater"@en ;
+  rdfs:comment "One value greater than another"@en .
+
+woql:Optional ;
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryWithSubQuery ;
+  rdfs:comment "Query which is optional"@en ;
+  rdfs:label "Optional"@en .
+
+woql:Put ;
+  a owl:Class ;
+  rdfs:subClassOf woql:GetOrPut ;
+  rdfs:label "Put"@en ;
+  rdfs:comment "Put some variables bindings in a defined resource"@en .
+
+woql:URIGenerator
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "URI Generator"@en ;
+  rdfs:comment "A Generator for IDs"@en .
+
+woql:base
+  a owl:ObjectProperty ;
+  rdfs:label "base"@en ;
+  rdfs:comment "The document base of a URI"@en ;
+  rdfs:domain woql:URIGenerator ;
+  rdsf:range woql:DatatypeOrID .
+
+woql:key_list
+  a owl:ObjectProperty ;
+  rdfs:label "base"@en ;
+  rdfs:comment "The document base of a URI"@en ;
+  rdfs:domain woql:URIGenerator ;
+  rdsf:range woql:ValueList .
+
+woql:ValueList
+  a owl:Class ;
+  rdfs:label "Value List"@en ;
+  rdfs:comment "A list of values"@en .
+
+woql:ValueListElement
+  a owl:Class ;
+  rdfs:label "Value List Element"@en ;
+  rdfs:comment "A Value List Element"@en ;
+  rdfs:subClassOf woql:Indexable , woql:DatatypeOrID .
+
+woql:uri
+  a owl:ObjectProperty ;
+  rdfs:label "base"@en ;
+  rdfs:comment "The document base of a URI"@en ;
+  rdfs:domain woql:URIGenerator ;
+  rdsf:range woql:DatatypeOrID .
+
+woql:Unique ;
+  a owl:Class ;
+  rdfs:subClassOf woql:URIGenerator ;
+  rdfs:label "Unique"@en ;
+  rdfs:comment "An irreversible unique identifier generated from a Base and a Key"@en .
+
+woql:IDGenerator ;
+  a owl:Class ;
+  rdfs:subClassOf woql:URIGenerator ;
+  rdfs:label "ID Gen"@en ;
+  rdfs:comment "A reversible unique identifier generated from a Base and a Key"@en .
+
+woql:Upper
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Upper"@en ;
+  rdfs:comment "Uppercase string left to string right"@en .
+
+woql:Lower
+  a owl:Class ;
+  rdfs:subClassOf woql:BinaryOperator ;
+  rdfs:label "Lower"@en ;
+  rdfs:comment "Lowercase string left to string right"@en .
+
+woql:Pad
+  a owl:Class ;
+  rdfs:label "Pad"@en ;
+  rdfs:comment "Pad a string with character C, N times, to get a result"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:pad_string
+  a owl:ObjectProperty ;
+  rdfs:label "pad string"@en ;
+  rdfs:comment "String to pad"@en ;
+  rdfs:domain woql:Pad ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:pad_char
+  a owl:ObjectProperty ;
+  rdfs:label "pad char"@en ;
+  rdfs:comment "Character with which to pad to string"@en ;
+  rdfs:domain woql:Pad ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:pad_times
+  a owl:ObjectProperty ;
+  rdfs:label "pad times"@en ;
+  rdfs:comment "Number of times to pad woql:pad_char"@en ;
+  rdfs:domain woql:Pad ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:pad_result
+  a owl:ObjectProperty ;
+  rdfs:label "pad result"@en ;
+  rdfs:comment "Result of padding"@en ;
+  rdfs:domain woql:Pad ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Split
+  a owl:Class ;
+  rdfs:comment "split string on pattern result"@en ;
+  rdfs:label "Split"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:split_string
+  a owl:ObjectProperty ;
+  rdfs:label "split string"@en ;
+  rdfs:comment "String to split"@en ;
+  rdfs:domain woql:Pad ;
+  rdfs:range woql:DatatypeOrID .
 

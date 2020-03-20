@@ -127,7 +127,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = update_object(Doc)
     ;   _{'http://terminusdb.com/woql#delete' : [ Doc ] } :< JSON
     ->  (   _{'@id' : ID} :< Doc
-        ->   WOQL = delete_object(ID)
+        ->  WOQL = delete_object(ID)
         ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                          'terminus:message' :'No ID specified in deleted object',
                                          'vio:query' : JSON})))
