@@ -742,6 +742,7 @@ compile_wf(select(VL,P), Prog) -->
 compile_wf(using(Collection_URI,P),Goal) -->
     { resolve_query_resource(Collection_URI, Default_Collection) },
     update(default_collection,Old_Default_Collection,Default_Collection),
+    update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
@@ -1014,6 +1015,20 @@ debug_wf(Lit) -->
 debug_wf(Fmt, Args) -->
     { debug(terminus(woql_compile(compile_wf)), Fmt, Args) },
     [].
+
+
+update_descriptor_transactions(Descriptor)
+-->
+    update(transaction_objects, Transaction_Objects, New_Transaction_Objects),
+    view(commit_info, Commit_Info),
+    {
+        (   collection_descriptor_transaction_object(Descriptor, Transaction_Objects, _Transaction_Object)
+        ->  New_Transaction_Objects = Transaction_Objects
+        ;   open_descriptor(Descriptor, Transaction_Object),
+            Transaction_Object1 = Transaction_Object.put(commit_info,Commit_Info),
+            New_Transaction_Objects = [Transaction_Object1|Transaction_Objects]
+        )
+    }.
 
 
 /*
