@@ -69,7 +69,7 @@
 %
 % 'terminus:///terminus'
 %
-resolve_query_resource('terminus:///terminus/',terminus_descriptor).
+resolve_query_resource('terminus:///terminus/',terminus_descriptor{}).
 % Branches
 %
 % 'http://[Server]/[User]/[Database_Name]'

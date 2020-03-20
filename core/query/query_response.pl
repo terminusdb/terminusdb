@@ -2,6 +2,9 @@
               ask_ast_jsonld_response/3
           ]).
 
+:- use_module(core(api)).
+:- use_module(core(query/ask)).
+
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD

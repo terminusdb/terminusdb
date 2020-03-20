@@ -427,19 +427,19 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(woql), cors_catch(woql_handler(Method)),
                 [method(Method),
-                 time_limit(infinite),
+                 time_limit(10),
                  methods([options,post])]).
 :- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
-                 time_limit(infinite),
+                 time_limit(10),
                  methods([options,post])]).
 :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
                 [method(Method),
-                 time_limit(infinite),
+                 time_limit(10),
                  methods([options,post])]).
 :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
                 [method(Method),
-                 time_limit(infinite),
+                 time_limit(10),
                  methods([options,post])]).
 
 % Should there be endpoints for commit graph and repo graphs here?
@@ -532,18 +532,20 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
     try_get_param('terminus:query',Request,Atom_Query),
     atom_json_dict(Atom_Query, Query, []),
 
-    http_log('~N[Request] ~q~n',[Request]),
+    * http_log('~N[Request] ~q~n',[Request]),
 
     (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
     ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
     ;   Commit_Info = _{}
     ),
 
-    (   get_param('terminus:context',Request,Atom_Prefixes)
-    ->  atom_json_dict(Atom_Prefixes, Prefixes, [])
-    ;   Prefixes = _{}),
+    woql_context(Prefixes),
+
+    http_log('~N[Here] ~q~n',[Request]),
 
     context_overriding_prefixes(Context,Prefixes,Context0),
+
+    http_log('~N[There] ~q~n',[Request]),
 
     collect_posted_files(Request,Files),
 
@@ -554,7 +556,8 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
             authorization : Auth_ID
         }, Context0, Final_Context),
 
-    jsonld_woql(Query, Prefixes, AST),
+
+    json_woql(Query, Prefixes, AST),
 
     ask_ast_jsonld_response(Final_Context,AST,JSON).
 
@@ -574,15 +577,15 @@ test(no_db, [
      ])
 :-
     Query =
-    _{using: ["terminus:///terminus",
+    _{using: ["terminus:///terminus/",
               _{select: [
                     "v:Class", "v:Label", "v:Comment", "v:Abstract",
                     _{and: [
-                          _{quad: ["v:Class", "rdf:type", "owl:Class", "db:schema"]},
-                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "db:schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "db:schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "db:schema"]}]},
-                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "db:schema"]}]}
+                          _{quad: ["v:Class", "rdf:type", "owl:Class", "schema"]},
+                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "schema"]}]},
+                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "schema"]}]}
                       ]}
                 ]}
              ]},
@@ -1066,21 +1069,41 @@ try_get_param(Key,_Request,_Value) :-
  */
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
-    memberchk(method(Method), Request),
-    memberchk(Method, [get,delete,post]),
-    % The agent is not sending a JSON request type
-    \+ memberchk(content_type('application/json'), Request),
+    memberchk(method(post), Request),
+    memberchk(multipart(Parts), Request),
     !,
+    memberchk(Key=Encoded_Value, Parts),
+    uri_encoded(query_value, Value, Encoded_Value).
+get_param(Key,Request,Value) :-
+    % GET or POST (but not application/json)
+    memberchk(method(Method), Request),
+    (   memberchk(Method, [get,delete])
+    ;   Method = post,
+        \+ memberchk(content_type('application/json'), Request)),
 
     http_parameters(Request, [], [form_data(Data)]),
-    memberchk(Key=Value,Data).
+    memberchk(Key=Value,Data),
+    !.
 get_param(Key,Request,Value) :-
     % POST with JSON package
     memberchk(method(post), Request),
     memberchk(content_type('application/json'), Request),
-
     memberchk(payload(Document), Request),
-    get_dict(Key, Document, Value).
+    Value = Document.get(Key),
+    !.
+get_param(Key,Request,_Value) :-
+    % OTHER with method
+    memberchk(method(Method), Request),
+    !,
+    format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
+    throw(http_reply(not_found(_{'terminus:message' : MSG,
+                                 'terminus:status' : 'terminus:failure',
+                                 'terminus:object' : Key}))).
+get_param(Key,_Request,_Value) :-
+    % Catch all.
+    format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
+    throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+                                 'terminus:message' : MSG}))).
 
 
 /*

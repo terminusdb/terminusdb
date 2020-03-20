@@ -1,4 +1,5 @@
 :- module(query, [ask/2,
+                  ask_ast/3,
                   collection_descriptor_prefixes/2,
                   class_frame/3,
                   % Various class/document queries
@@ -63,7 +64,8 @@
                   empty_context/1,
                   empty_context/2,
                   descriptor_context/2,
-                  ask_ast_jsonld_response/3
+                  ask_ast_jsonld_response/3,
+                  context_overriding_prefixes/3
                  ]).
 
 :- use_module(query/expansions).

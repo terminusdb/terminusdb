@@ -83,6 +83,10 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'http://terminusdb.com/woql#or' : Qs} :< JSON
     ->  maplist(json_to_woql_ast,Qs,W_Qs),
         xfy_list(';',WOQL,W_Qs)
+    ;   _{'http://terminusdb.com/woql#using' : [ Collection, Query ] } :< JSON
+    ->  json_to_woql_ast(Collection,WC),
+        json_to_woql_ast(Query,WQ),
+        WOQL = using(WC,WQ)
     ;   _{'http://terminusdb.com/woql#from' : [ Graph, Query ] } :< JSON
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Query,WQ),
@@ -91,12 +95,12 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(Graph,WG),
         json_to_woql_ast(Query,WQ),
         WOQL = into(WG,WQ)
-    ;   _{'http://terminusdb.com/woql#quad' : [ Graph, Subject, Predicate, Object] } :< JSON
-    ->  json_to_woql_ast(Graph,WG),
-        json_to_woql_ast(Subject,WQA),
+    ;   _{'http://terminusdb.com/woql#quad' : [ Subject, Predicate, Object, Graph ] } :< JSON
+    ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),
         json_to_woql_ast(Object,WQC),
-        WOQL = t(WG,WQA,WQB,WQC)
+        json_to_woql_ast(Graph,WG),
+        WOQL = t(WQA,WQB,WQC,WG)
     ;   _{'http://terminusdb.com/woql#triple' : [ Subject, Predicate, Object] } :< JSON
     ->  json_to_woql_ast(Subject,WQA),
         json_to_woql_ast(Predicate,WQB),

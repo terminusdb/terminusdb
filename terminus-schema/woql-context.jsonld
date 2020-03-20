@@ -9,6 +9,7 @@
   "xsd" : "http://www.w3.org/2001/XMLSchema#",
   "v" : "http://terminusdb.com/woql/variable/",
   "terminus" : "http://terminusdb.com/schema/terminus#",
+  "using" : {"@type" : "@id"},
   "upper" : {"@type" : "@id"},
   "lower" : {"@type" : "@id"},
   "pad" : {"@type" : "@id"},
