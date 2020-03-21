@@ -366,8 +366,10 @@ term_jsonld(date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM)^^'http://www.w3.org/2001/XML
     % Really should put the time zone in properly.
     format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
            [Y,M,D,HH,MM,SS]).
-term_jsonld(D^^T,_{'@type' : T, '@value' : D}).
-term_jsonld(D@L,_{'@language' : L, '@value' : D}).
+term_jsonld(D^^T,_{'@type' : T, '@value' : D}) :-
+    !.
+term_jsonld(D@L,_{'@language' : L, '@value' : D}) :-
+    !.
 term_jsonld(Term,JSON) :-
     is_list(Term),
     maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),

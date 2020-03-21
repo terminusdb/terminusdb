@@ -88,7 +88,8 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  deindex_list('http://terminusdb.com/schema/woql#variable_name',
                      Indexed_Variables,
                      Variables),
-        maplist([V,v(V)]>>true, Variables, WOQL_Args),
+        maplist([V_ID,V]>>json_to_woql_ast(V_ID,V),
+                Variables, WOQL_Args),
         json_to_woql_ast(Sub_Query,Sub_WOQL),
         WOQL = select(WOQL_Args,Sub_WOQL)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#And',
@@ -265,7 +266,7 @@ json_to_woql_ast(JSON,WOQL) :-
     ->  json_to_woql_ast(A,WA),
         json_to_woql_ast(B,WB),
         WOQL = '<'(WA,WB)
-    ;   _{'@type' : 'http://terminusdb.com/woql#Greater',
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Greater',
           'http://terminusdb.com/schema/woql#left' : A,
           'http://terminusdb.com/schema/woql#right' : B
          } :< JSON
@@ -451,12 +452,12 @@ json_to_woql_ast(JSON,WOQL) :-
         json_to_woql_ast(Type,WType),
         json_to_woql_ast(Var,WVar),
         WOQL = typecast(WVal,WType,[],WVar)
-    ;   _{'@type' : 'http://terminusdb.com/woql#Not',
-          'http://terminusdb.com/woql#query' : Q
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Not',
+          'http://terminusdb.com/schema/woql#query' : Q
          } :< JSON
     ->  json_to_woql_ast(Q,WQ),
         WOQL = not(WQ)
-    ;   _{'@type' : 'http://terminusdb.com/woql#True'} :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#True'} :< JSON
     ->  WOQL = true
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
@@ -464,11 +465,11 @@ json_to_woql_ast(JSON,WOQL) :-
     ;   _{'@value' : V, '@language' : L } :< JSON
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
-    ;   _{'http://terminusdb.com/woql#value' : V, '@type' : T } :< JSON
+    ;   _{'http://terminusdb.com/schema/woql#value' : V, '@type' : T } :< JSON
     ->  json_to_woql_ast(V,VE),
         atom_string(TE,T),
         WOQL = '^^'(VE,TE)
-    ;   _{'http://terminusdb.com/woql#value' : V, '@language' : L } :< JSON
+    ;   _{'http://terminusdb.com/schema/woql#value' : V, '@language' : L } :< JSON
     ->  json_to_woql_ast(V,VE),
         atom_string(LE,L),
         WOQL = '@'(VE,LE)
@@ -498,32 +499,51 @@ json_to_woql_ast(JSON,_) :-
                                  'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
-    sub_atom(A, 0, _, _, 'http://terminusdb.com/woql/variable/').
+    sub_atom(A, 0, _, _, 'http://terminusdb.com/schema/woql/variable/').
 
 json_to_woql_arith(JSON,WOQL) :-
     is_dict(JSON),
     !,
-    (   _{'http://terminusdb.com/woql#plus' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('+', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#minus' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('-', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#times' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('*', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#divide' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('/', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#div' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('div', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#exp' : Args } :< JSON
-    ->  maplist(json_to_woql_arith,Args,WOQL_Args),
-        yfx_list('**', WOQL, WOQL_Args)
-    ;   _{'http://terminusdb.com/woql#floor' : [X] } :< JSON
-    ->  json_to_woql_arith(X,WOQL_X),
-        WOQL=floor(WOQL_X)
+    (   _{'@type' : 'http://terminusdb.com/schema/woql#Plus',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = '+'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Minus',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = '-'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Times',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = '*'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Divide',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = '/'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Div',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = 'div'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Exp',
+          'http://terminusdb.com/schema/woql#first' : First,
+          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
+    ->  json_to_woql_arith(First, WOQL_First),
+        json_to_woql_arith(Second, WOQL_Second),
+        WOQL = 'exp'(WOQL_First,WOQL_Second)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Floor',
+          'http://terminusdb.com/schema/woql#argument' : Argument} :< JSON
+    ->  json_to_woql_arith(Argument,WOQL_Argument),
+        WOQL=floor(WOQL_Argument)
     ;   _{'@id': Var } :< JSON
     ->  coerce_atom(Var,A),
         is_json_var(A),

@@ -577,8 +577,7 @@ test(no_db, [
 :-
     Query =
     _{'@type' : 'Using',
-      collection : _{ '@type' : "xsd:string",
-                      '@value' : "terminus:///terminus/"},
+      collection : "terminus:///terminus/",
       query :
       _{'@type' : 'Select',
         variable_list : [
@@ -614,7 +613,7 @@ test(no_db, [
                                            graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 2,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "rdfs:label",
@@ -622,7 +621,7 @@ test(no_db, [
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 3,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "rdfs:comment",
@@ -630,7 +629,7 @@ test(no_db, [
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 4,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "tcs:tag",
@@ -645,19 +644,14 @@ test(no_db, [
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
 
-    setup_call_cleanup(
-        http_post(URI,
-                  form_data(['terminus:query'=Payload]),
-                  In,
-                  [authorization(basic(admin,root))]),
-        catch(json_read_dict(In, JSON),
-          _,
-          JSON = _{'terminus:status' : 'terminus:failure'}),
-        close(In)),
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : L} :< JSON
+    (   _{'bindings' : L} :< In
     ->  length(L, N),
-        N >= 8
+        N >= 10
     ;   fail).
 
 

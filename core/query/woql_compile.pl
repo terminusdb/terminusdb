@@ -1148,7 +1148,10 @@ compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
 restrict(VL) -->
     update(bindings,B0,B1),
     {
-        include({VL}/[Record]>>lookup(Record.var_name,_,VL), B0, B1)
+        include({VL}/[Record]>>(
+                    get_dict(var_name, Record, Name),
+                    member(v(Name),VL)
+                ), B0, B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
