@@ -1064,3 +1064,31 @@ woql:Not
   rdfs:label "Not"@en ;
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:Typecast
+  a owl:Class ;
+  rdfs:label "Typecast"@en ;
+  rdfs:comment "A typecast of a variable to a new type"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:typecast_value
+  a owl:ObjectProperty ;
+  rdfs:label "typecast value"@en ;
+  rdfs:comment "The thing of which we want a typecast"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:typecast_type
+  a owl:ObjectProperty ;
+  rdfs:label "typecast type"@en ;
+  rdfs:comment "The type we want to typecast to"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:typecast_result
+  a owl:ObjectProperty ;
+  rdfs:label "typecast result"@en ;
+  rdfs:comment "The casted value"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+

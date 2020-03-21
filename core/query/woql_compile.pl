@@ -689,7 +689,7 @@ compile_wf(like(A,B,F), Goal) -->
                                   isub(AS, BS, true, F)))))
     }.
 compile_wf(isa(X,C),(instance_class(XE,D),
-                     subsumption_of(D,CE,Collection)) -->
+                     subsumption_of(D,CE,Collection))) -->
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection).
