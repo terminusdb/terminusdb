@@ -6,15 +6,8 @@ SERVER_PORT=${SERVER_PORT:-6363}
 WORKERS=${WORKERS:-8}
 PUBLIC_URL=${PUBLIC_URL:-false}
 AUTOATTACH=${AUTOATTACH:-true}
+AUTOLOGIN=${AUTOLOGIN:-false}
 TERMINUS_ENABLE_WELCOME_SCREEN=${TERMINUS_ENABLE_WELCOME_SCREEN:-false}
-
-# Assume that people want autologin by default if they
-# keep the default password
-if [ $ADMIN_PASS = "root" ]; then
-    AUTOLOGIN=true
-else
-    AUTOLOGIN=false
-fi
 
 if [ ! -f /app/terminusdb/storage/prefix.db ] && [ "$TERMINUS_ENABLE_WELCOME_SCREEN" = false ]; then
     /app/terminusdb/utils/db_util -s "$SERVER_NAME" -k "$ADMIN_PASS" --port "$SERVER_PORT" --workers "$WORKERS" --public_url "$PUBLIC_URL" --autologin="$AUTOLOGIN" --autoattach="$AUTOATTACH"
