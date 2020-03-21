@@ -190,27 +190,27 @@ woql:Into
 woql:Triple
   a owl:Class ;
   rdfs:label "Triple"@en ;
-  rfds:comment "A edge in the graph specified by subject, predicate, object"@en .
+  rdfs:comment "A edge in the graph specified by subject, predicate, object"@en .
 
 woql:subject
   a owl:DatatypeProperty ;
   rdfs:label "subject"@en ;
-  rfds:comment "The subject of a triple"@en ;
-  rfds:domain woql:Triple ;
+  rdfs:comment "The subject of a triple"@en ;
+  rdfs:domain woql:Triple ;
   rdfs:range xsd:anyURI .
 
 woql:predicate
   a owl:DatatypeProperty ;
   rdfs:label "predicate"@en ;
-  rfds:comment "The predicate of a triple"@en ;
-  rfds:domain woql:Triple ;
+  rdfs:comment "The predicate of a triple"@en ;
+  rdfs:domain woql:Triple ;
   rdfs:range xsd:anyURI .
 
 woql:object
   a owl:ObjectProperty ;
   rdfs:label "object"@en ;
-  rfds:comment "The object of a triple"@en ;
-  rfds:domain woql:Triple ;
+  rdfs:comment "The object of a triple"@en ;
+  rdfs:domain woql:Triple ;
   rdfs:range woql:DatatypeOrID .
 
 woql:DatatypeOrID
@@ -267,7 +267,7 @@ woql:BinaryOperator
   a owl:Class
   rdfs:subClassOf woql:Query ;
   rdfs:label "Binary Operator"@en ;
-  rfds:comment "A binary operator, with left and right"@en .
+  rdfs:comment "A binary operator, with left and right"@en .
 
 woql:left
   a owl:ObjectProperty ;
@@ -287,7 +287,7 @@ woql:Equals
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;
   rdfs:label "Equals"@en ;
-  rfds:comment "Defines unification between two things"@en .
+  rdfs:comment "Defines unification between two things"@en .
 
 woql:HasLength
   a owl:Class ;
@@ -297,9 +297,9 @@ woql:HasLength
 woql:length
   a owl:ObjectProperty ;
   rdfs:label "length"@en ;
-  rfds:comment "The length of something"@en ;
+  rdfs:comment "The length of something"@en ;
   rdfs:domain woql:HasLength ;
-  rfds:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:Substring
   a owl:Class ;
@@ -310,30 +310,30 @@ woql:Substring
 woql:string
   a owl:ObjectProperty ;
   rdfs:label "string"@en ;
-  rfds:comment "The string of a substring search"@en ;
+  rdfs:comment "The string of a substring search"@en ;
   rdfs:domain woql:Substring ;
-  rfds:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:before
   a owl:ObjectProperty ;
   rdfs:label "before"@en ;
-  rfds:comment "The before characters index of a substring search"@en ;
+  rdfs:comment "The before characters index of a substring search"@en ;
   rdfs:domain woql:Substring ;
-  rfds:range woql:DatatypeOrID .
-  
+  rdfs:range woql:DatatypeOrID .
+
 woql:after
   a owl:ObjectProperty ;
   rdfs:label "after"@en ;
-  rfds:comment "The after characters index of a substring search"@en ;
+  rdfs:comment "The after characters index of a substring search"@en ;
   rdfs:domain woql:Substring ;
-  rfds:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:substring
   a owl:ObjectProperty ;
   rdfs:label "substring"@en ;
-  rfds:comment "The substring of a substring search"@en ;
+  rdfs:comment "The substring of a substring search"@en ;
   rdfs:domain woql:Substring ;
-  rfds:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:DocumentQuery
   a owl:Class ;
@@ -352,13 +352,13 @@ woql:Update
   a owl:Class ;
   rdfs:subClassOf woql:DocumentQuery ;
   rdfs:label "Update"@en ;
-  rfds:comment "Update a document"@en .
+  rdfs:comment "Update a document"@en .
 
 woql:Delete
   a owl:Class ;
   rdfs:subClassOf woql:DocumentQuery ;
   rdfs:label "Delete"@en ;
-  rfds:comment "Delete a document"@en .
+  rdfs:comment "Delete a document"@en .
 
 woql:GetOrPut
   a owl:Class ;
@@ -510,13 +510,13 @@ woql:format_type
   rdfs:label "Format type"@en ;
   rdfs:comment "The variety of format. One of {csv,turtle,panda_json}"@en ;
   rdfs:domain woql:Format ;
-  rfds:range xsd:string .
+  rdfs:range xsd:string .
 
 woql:format_header
   a owl:DatatypeProperty ;
   rdfs:label "Format Header"@en ;
   rdfs:comment "Does this format have a header?"@en ;
-  rfds:domain woql:Format ;
+  rdfs:domain woql:Format ;
   rdfs:range xsd:boolean .
 
 woql:AddTriple
@@ -671,7 +671,7 @@ woql:argument
 
 woql:Floor
   a owl:Class ;
-  rdsf:subClassOf woql:UnaryArithmeticOperator ;
+  rdfs:subClassOf woql:UnaryArithmeticOperator ;
   rdfs:label "Floor"@en ;
   rdfs:comment "The floor of a floating point number"@en .
 
@@ -679,7 +679,7 @@ woql:ArithmeticValue
   a owl:Class ;
   rdfs:subClassOf woql:ArithmeticExpression ;
   rdfs:label "Value"@en ;
-  rdsf:comment "An arithmetic value - float, int, bignum, etc."@en .
+  rdfs:comment "An arithmetic value - float, int, bignum, etc."@en .
 
 woql:arithmetic_value
   a owl:DatatypeProperty ;
@@ -756,14 +756,14 @@ woql:base
   rdfs:label "base"@en ;
   rdfs:comment "The document base of a URI"@en ;
   rdfs:domain woql:URIGenerator ;
-  rdsf:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:key_list
   a owl:ObjectProperty ;
   rdfs:label "base"@en ;
   rdfs:comment "The document base of a URI"@en ;
   rdfs:domain woql:URIGenerator ;
-  rdsf:range woql:ValueList .
+  rdfs:range woql:ValueList .
 
 woql:ValueList
   a owl:Class ;
@@ -781,7 +781,7 @@ woql:uri
   rdfs:label "base"@en ;
   rdfs:comment "The document base of a URI"@en ;
   rdfs:domain woql:URIGenerator ;
-  rdsf:range woql:DatatypeOrID .
+  rdfs:range woql:DatatypeOrID .
 
 woql:Unique ;
   a owl:Class ;
