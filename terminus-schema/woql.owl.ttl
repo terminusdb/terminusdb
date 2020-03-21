@@ -88,17 +88,16 @@ woql:comment
   rdfs:domain woql:Comment ;
   rdfs:range xsd:string .
 
-woql:Select
+woql:HasVariableList
   a owl:Class ;
-  rdfs:label "Select"@en ;
-  rdfs:comment "A Selection of variables from subquery"@en ;
-  rdfs:subClassOf woql:QueryWithSubQuery .
+  rdfs:label "Has Variable List"@en ;
+  rdfs:comment "A Query which also requires a variable list"@en .
 
 woql:variable_list
   a owl:ObjectProperty ;
   rdfs:label "Variable Array"@en ;
   rdfs:comment "An array of variables"@en ;
-  rdfs:domain woql:Select ;
+  rdfs:domain woql:HasVariableList ;
   rdfs:range woql:VariableListElement .
 
 woql:VariableListElement
@@ -131,6 +130,12 @@ woql:Indexable
   rdfs:subClassOf woql:IndexableRestriction ;
   rdfs:label "Indexable"@en ;
   rdfs:comment "Something with an index"@en .
+
+woql:Select
+  a owl:Class ;
+  rdfs:label "Select"@en ;
+  rdfs:comment "A Selection of variables from subquery"@en ;
+  rdfs:subClassOf woql:HasVariableList, woql:QueryWithSubQuery .
 
 woql:And
   a owl:Class ;
@@ -284,11 +289,23 @@ woql:Equals
   rdfs:label "Equals"@en ;
   rfds:comment "Defines unification between two things"@en .
 
+woql:HasLength
+  a owl:Class ;
+  rdfs:label "HasLength"@en ;
+  rdfs:comment "Something with a length"@en .
+
+woql:length
+  a owl:ObjectProperty ;
+  rdfs:label "length"@en ;
+  rfds:comment "The length of something"@en ;
+  rdfs:domain woql:HasLength ;
+  rfds:range woql:DatatypeOrID .
+
 woql:Substring
   a owl:Class ;
   rdfs:label "Substring"@en ;
   rdfs:comment "Find substrings of a given string"@en ;
-  rdfs:subClassOf woql:Query .
+  rdfs:subClassOf woql:Query, woql:HasLength .
 
 woql:string
   a owl:ObjectProperty ;
@@ -303,14 +320,7 @@ woql:before
   rfds:comment "The before characters index of a substring search"@en ;
   rdfs:domain woql:Substring ;
   rfds:range woql:DatatypeOrID .
-
-woql:length
-  a owl:ObjectProperty ;
-  rdfs:label "length"@en ;
-  rfds:comment "The length characters index of a substring search"@en ;
-  rdfs:domain woql:Substring ;
-  rfds:range woql:DatatypeOrID .
-
+  
 woql:after
   a owl:ObjectProperty ;
   rdfs:label "after"@en ;
@@ -841,6 +851,189 @@ woql:split_string
   a owl:ObjectProperty ;
   rdfs:label "split string"@en ;
   rdfs:comment "String to split"@en ;
-  rdfs:domain woql:Pad ;
+  rdfs:domain woql:Split ;
   rdfs:range woql:DatatypeOrID .
 
+woql:split_pattern
+  a owl:ObjectProperty ;
+  rdfs:label "split pattern"@en ;
+  rdfs:comment "Pattern on which to split a string"@en ;
+  rdfs:domain woql:Split ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:split_list
+  a owl:ObjectProperty ;
+  rdfs:label "split list"@en ;
+  rdfs:comment "List of splits from string"@en ;
+  rdfs:domain woql:Split ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Member
+  a owl:Class ;
+  rdfs:label "Member"@en ;
+  rdfs:comment "Find an element of a list"@en ;
+
+woql:member
+  a owl:ObjectProperty ;
+  rdfs:label "member"@en ;
+  rdfs:comment "Member of the list."@en ;
+  rdfs:domain woql:Member ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:member_list
+  a owl:ObjectProperty ;
+  rdfs:label "member list"@en ;
+  rdfs:comment "Membership list."@en ;
+  rdfs:domain woql:Member ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Concatenate
+  a owl:Class ;
+  rdfs:label "Concatenate"@en ;
+  rdfs:comment "Concatenate a list of strings"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:concat_list
+  a owl:ObjectProperty ;
+  rdfs:label "list"@en ;
+  rdfs:comment "The list of elements to concatenate"@en ;
+  rdfs:domain woql:Concat ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:concatenated
+  a owl:ObjectProperty ;
+  rdfs:label "concatcatenated"@en ;
+  rdfs:comment "The string which has been concatenated"@en ;
+  rdfs:domain woql:Concat ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Sum
+  a owl:Class ;
+  rdfs:label "Sum"@en ;
+  rdfs:comment "Sum of a list of numbers"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:sum_list
+  a owl:ObjectProperty ;
+  rdfs:label "sum list"@en ;
+  rdfs:comment "The list of things to be summed"@en ;
+  rdfs:domain woql:Sum ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:sum
+  a owl:ObjectProperty ;
+  rdfs:label "sum"@en ;
+  rdfs:comment "The sum of the list"@en ;
+  rdfs:domain woql:Sum ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Start
+  a owl:Class ;
+  rdfs:label "start"@en ;
+  rdfs:comment "The starting point in result set"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:start
+  a owl:ObjectProperty ;
+  rdfs:label "start"@en ;
+  rdfs:comment "The number from which to start"@en ;
+  rdfs:domain woql:Sum ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Limit
+  a owl:Class ;
+  rdfs:label "limit"@en ;
+  rdfs:comment "A query limited by number of results"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:limit
+  a owl:ObjectProperty ;
+  rdfs:label "limit"@en ;
+  rdfs:comment "The limit of results to obtain"@en ;
+  rdfs:domain woql:Limit ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Regexp
+  a owl:Class ;
+  rdfs:label "regexp"@en ;
+  rdfs:comment "A regular expression and its results"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:pattern
+  a owl:ObjectProperty ;
+  rdfs:label "pattern"@en ;
+  rdfs:comment "The pattern to match"@en ;
+  rdfs:domain woql:Regexp ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:regexp_string
+  a owl:ObjectProperty ;
+  rdfs:label "string"@en ;
+  rdfs:comment "The string to match against pattern"@en ;
+  rdfs:domain woql:Regexp ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:regexp_list
+  a owl:ObjectProperty ;
+  rdfs:label "list"@en ;
+  rdfs:comment "The list of results matched in the pattern"@en ;
+  rdfs:domain woql:Regexp ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:True
+  a owl:Class ;
+  rdfs:label "True"@en ;
+  rdfs:comment "Always true"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:OrderBy
+  a owl:Class ;
+  rdfs:label "Order By"@en ;
+  rdfs:comment "Order a queries results by the given list"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery , woql:hasVariableList .
+
+woql:ascending
+  a owl:DatatypeProperty ;
+  rdfs:label "ascending"@en ;
+  rdfs:comment "Should the ordering be ascending"@en ;
+  rdfs:domain woql:OrderBy ;
+  rdfs:range xsd:boolean .
+
+woql:GroupBy
+  a owl:Class ;
+  rdfs:label "Group By"@en ;
+  rdfs:comment "Group a query by a spec"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery, woql:HasVariableList .
+
+woql:group_var
+  a owl:ObjectProperty ;
+  rdfs:label "group var"@en ;
+  rdfs:comment "Variable which to group"@en ;
+  rdfs:domain woql:OrderBy ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:grouped
+  a owl:ObjectProperty ;
+  rdfs:label "grouped"@en ;
+  rdfs:comment "Variable in which to place the grouping"@en ;
+  rdfs:domain woql:OrderBy ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Length
+  a owl:Class ;
+  rdfs:label "Length"@en ;
+  rdfs:comment "Find the length of a collection"@en ;
+  rdfs:subClassOf woql:Query, woql:HasLength .
+
+woql:length_list
+  a owl:ObjectProperty ;
+  rdfs:label "list"@en ;
+  rdfs:comment "The thing of which we want a length"@en ;
+  rdfs:domain woql:Length ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:Not
+  a owl:ObjectProperty ;
+  rdfs:label "Not"@en ;
+  rdfs:comment "Not the query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
