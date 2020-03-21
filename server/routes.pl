@@ -576,18 +576,66 @@ test(no_db, [
      ])
 :-
     Query =
-    _{using: ["terminus:///terminus/",
-              _{select: [
-                    "v:Class", "v:Label", "v:Comment", "v:Abstract",
-                    _{and: [
-                          _{quad: ["v:Class", "rdf:type", "owl:Class", "schema/*"]},
-                          _{not: [_{quad: ["v:Class", "tcs:tag", "tcs:abstract", "schema/*"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:label", "v:Label", "schema/*"]}]},
-                          _{opt: [_{quad: ["v:Class", "rdfs:comment", "v:Comment", "schema/*"]}]},
-                          _{opt: [_{quad: ["v:Class", "tcs:tag", "v:Abstract", "schema/*"]}]}
-                      ]}
-                ]}
-             ]},
+    _{'@type' : 'Using',
+      collection : _{ '@type' : "xsd:string",
+                      '@value' : "terminus:///terminus/"},
+      query :
+      _{'@type' : 'Select',
+        variable_list : [
+            _{'@type' : 'VariableListElement',
+              index : 0,
+              variable_name : "v:Class"},
+            _{'@type' : 'VariableListElement',
+              index : 1,
+              variable_name : "v:Label"},
+            _{'@type' : 'VariableListElement',
+              index : 2,
+              variable_name : "v:Comment"},
+            _{'@type' : 'VariableListElement',
+              index : 3,
+              variable_name : "v:Abstract"}
+        ],
+        query : _{'@type' : 'And',
+                  query_list : [
+                      _{'@type' : 'QueryListElement',
+                        index : 0,
+                        query : _{'@type' : 'Quad',
+                                  subject : "v:Class",
+                                  predicate : "rdf:type",
+                                  object : "owl:Class",
+                                  graph_filter : "schema/*"}},
+                      _{'@type' : 'QueryListElement',
+                        index : 1,
+                        query :_{'@type' : 'Not',
+                                 query : _{'@type' : 'Quad',
+                                           subject : "v:Class",
+                                           predicate : "tcs:tag",
+                                           object : "tcs:abstract",
+                                           graph_filter : "schema/*"}}},
+                      _{'@type' : 'QueryListElement',
+                        index : 2,
+                        query : _{'@type' : 'Opt',
+                                  query : _{'@type' : 'Quad',
+                                            subject : "v:Class",
+                                            predicate : "rdfs:label",
+                                            object : "v:Label",
+                                            graph_filter : "schema/*"}}},
+                      _{'@type' : 'QueryListElement',
+                        index : 3,
+                        query : _{'@type' : 'Opt',
+                                  query : _{'@type' : 'Quad',
+                                            subject : "v:Class",
+                                            predicate : "rdfs:comment",
+                                            object : "v:Comment",
+                                            graph_filter : "schema/*"}}},
+                      _{'@type' : 'QueryListElement',
+                        index : 4,
+                        query : _{'@type' : 'Opt',
+                                  query : _{'@type' : 'Quad',
+                                            subject : "v:Class",
+                                            predicate : "tcs:tag",
+                                            object : "v:Abstract",
+                                            graph_filter : "schema/*"}}}]}}},
 
     with_output_to(
         string(Payload),

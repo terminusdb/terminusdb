@@ -150,7 +150,7 @@ immediate_class(X,Database) :-
     xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
 immediate_class('http://www.w3.org/2002/07/owl#Thing',_).
 immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
-% This makes me nevious... [ Gavin ]
+% This makes me nervous... [ Gavin ]
 immediate_class('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
 immediate_class('http://terminusdb.com/schema/tcs#Entity', _).

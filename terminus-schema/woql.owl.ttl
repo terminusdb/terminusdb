@@ -907,6 +907,33 @@ woql:concatenated
   rdfs:domain woql:Concat ;
   rdfs:range woql:DatatypeOrID .
 
+woql:Join
+  a owl:Class ;
+  rdfs:label "Join"@en ;
+  rdfs:comment "Join a list of strings"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:join_list
+  a owl:ObjectProperty ;
+  rdfs:label "join list"@en ;
+  rdfs:comment "The list of things to be joinmed"@en ;
+  rdfs:domain woql:Join ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:join_separator
+  a owl:ObjectProperty ;
+  rdfs:label "join separator"@en ;
+  rdfs:comment "The separator in a join list"@en ;
+  rdfs:domain woql:Join ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:join
+  a owl:ObjectProperty ;
+  rdfs:label "join"@en ;
+  rdfs:comment "The join of the list"@en ;
+  rdfs:domain woql:Join ;
+  rdfs:range woql:DatatypeOrID .
+
 woql:Sum
   a owl:Class ;
   rdfs:label "Sum"@en ;

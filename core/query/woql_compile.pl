@@ -688,10 +688,15 @@ compile_wf(like(A,B,F), Goal) -->
                                   literal_string(BE,BS),
                                   isub(AS, BS, true, F)))))
     }.
-compile_wf(A << B,schema:subsumption_of(AE,BE,G)) -->
+compile_wf(isa(X,C),(instance_class(XE,D),
+                     subsumption_of(D,CE,Collection)) -->
+    resolve(X,XE),
+    resolve(C,CE),
+    view(default_collection,Collection).
+compile_wf(A << B,subsumption_of(AE,BE,C)) -->
     resolve(A,AE),
     resolve(B,BE),
-    view(default_collection,G).
+    view(default_collection,C).
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
