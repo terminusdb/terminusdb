@@ -48,52 +48,36 @@ user:goal_expansion(xrdf(G,X,Y,L),xrdf(G,X,Y,Object)) :-
     literal_expand(L,Object).
 
 % delete/5
-user:goal_expansion(delete(G,A,Y,Z),delete(G,X,Y,Z)) :-
+user:goal_expansion(delete(G,A,Y,Z,N),delete(G,X,Y,Z,N)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(delete(G,X,B,Z),delete(G,X,Y,Z)) :-
+user:goal_expansion(delete(G,X,B,Z,N),delete(G,X,Y,Z,N)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(delete(G,X,Y,C),delete(G,X,Y,Z)) :-
+user:goal_expansion(delete(G,X,Y,C,N),delete(G,X,Y,Z,N)) :-
     nonvar(C),
     C \= _@_,
     C \= _^^_,
     global_prefix_expand(C,Z).
-user:goal_expansion(delete(G,X,Y,L),delete(G,X,Y,Object)) :-
+user:goal_expansion(delete(G,X,Y,L,N),delete(G,X,Y,Object,N)) :-
     nonvar(L),
     once(L = _@_ ; L = _^^_),
     literal_expand(L,Object).
 
 % insert/5
-user:goal_expansion(insert(G,A,Y,Z),insert(G,X,Y,Z)) :-
+user:goal_expansion(insert(G,A,Y,Z,N),insert(G,X,Y,Z,N)) :-
     nonvar(A),
     global_prefix_expand(A,X).
-user:goal_expansion(insert(G,X,B,Z),insert(G,X,Y,Z)) :-
+user:goal_expansion(insert(G,X,B,Z,N),insert(G,X,Y,Z,N)) :-
     nonvar(B),
     global_prefix_expand(B,Y).
-user:goal_expansion(insert(G,X,Y,C),insert(G,X,Y,Z)) :-
+user:goal_expansion(insert(G,X,Y,C,N),insert(G,X,Y,Z,N)) :-
     nonvar(C),
     C \= _@_,
     C \= _^^_,
     global_prefix_expand(C,Z).
-user:goal_expansion(insert(G,X,Y,L),insert(G,X,Y,Object)) :-
+user:goal_expansion(insert(G,X,Y,L,N),insert(G,X,Y,Object,N)) :-
     nonvar(L),
     once(L = _@_ ; L = _^^_),
     literal_expand(L,Object).
 
-% update/6
-user:goal_expansion(update(G,A,Y,Z,Act),update(G,X,Y,Z,Act)) :-
-    nonvar(A),
-    global_prefix_expand(A,X).
-user:goal_expansion(update(G,X,B,Z,Act),update(G,X,Y,Z,Act)) :-
-    nonvar(B),
-    global_prefix_expand(B,Y).
-user:goal_expansion(update(G,X,Y,C,Act),update(G,X,Y,Z,Act)) :-
-    nonvar(C),
-    C \= _@_,
-    C \= _^^_,
-    global_prefix_expand(C,Z).
-user:goal_expansion(update(G,X,Y,L,Act),update(G,X,Y,Object,Act)) :-
-    nonvar(L),
-    once(L = _@_ ; L = _^^_),
-    literal_expand(L,Object).

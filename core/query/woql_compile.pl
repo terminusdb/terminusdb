@@ -48,7 +48,7 @@
 % Get op precedence
 :- reexport(core(util/syntax)).
 
-:- use_module(core(triple),except([update/5])).
+:- use_module(core(triple)).
 :- use_module(core(transaction)).
 
 %:- use_module(core(validation/schema)).
@@ -163,6 +163,8 @@ empty_context(Context) :-
         bindings : [],
         selected : [],
         files : [],
+        inserts : 0,
+        deletes : 0,
         authorization : empty
     }.
 
@@ -175,11 +177,15 @@ empty_context -->
     view(prefixes,Prefixes),
     view(transaction_objects,Transaction_Objects),
     view(files,Files),
+    view(inserts, Inserts),
+    view(deletes, Deletes),
 
     { empty_context(S0)
     },
     return(S0),
 
+    put(inserts, Inserts),
+    put(deletes, Deletes),
     put(prefixes,Prefixes),
     put(transaction_objects,Transaction_Objects),
     put(files,Files).
@@ -622,11 +628,14 @@ compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(X,P,Y,G),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,N),
+                            Deletes1 is Deletes + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
+    update(deletes, Deletes, Deletes1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -636,21 +645,27 @@ compile_wf(delete(X,P,Y,G),delete(Read_Write_Object,XE,PE,YE)) -->
             throw(syntax_error(M,context(compile_wf//2,delete/4)))
         )
     }.
-compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,N),
+                          Deletes1 is Deletes + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    update(deletes, Deletes, Deletes1),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,N),
+                            Inserts1 is Inserts + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
+    update(inserts, Inserts, Inserts1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -660,12 +675,15 @@ compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
             throw(syntax_error(M,context(compile_wf//2,insert/4)))
         )
     }.
-compile_wf(insert(X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,N),
+                          Inserts1 is Inserts + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    update(inserts, Inserts, Inserts1),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
