@@ -25,6 +25,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(util)).
+:- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
@@ -52,6 +53,7 @@ test(create_db_test, [
 
 
 test(delete_db_test, [
+         blocked('TODO: Need to have actual storage?'),
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ])
@@ -71,7 +73,6 @@ test(empty_db_test, [
     findall(t(X,P,Y),
             ask(Descriptor,
                 (   t(X, P, Y) )),
-            Triples),
-    write(Triples).
+            _Triples).
 
 :- end_tests(transaction_test).
