@@ -583,27 +583,28 @@ test(no_db, [
         variable_list : [
             _{'@type' : "VariableListElement",
               index : 0,
-              variable : {'@type' : "Variable",
-                          'variable_name' : "Class"}},
+              variable : _{'@type' : "Variable",
+                          variable_name : "Class"}},
             _{'@type' : "VariableListElement",
               index : 1,
-              variable : {'@type' : "Variable",
-                          'variable_name' : "Label"}},
+              variable : _{'@type' : "Variable",
+                          variable_name : "Label"}},
             _{'@type' : "VariableListElement",
               index : 2,
-              variable : {'@type' : "Variable",
-                          'variable_name' : "Comment"}},
+              variable : _{'@type' : "Variable",
+                          variable_name : "Comment"}},
             _{'@type' : 'VariableListElement',
               index : 3,
-              variable : {'@type' : "Variable",
-                          'variable_name' : "Abstract"}}
+              variable : _{'@type' : "Variable",
+                          variable_name : "Abstract"}}
         ],
         query : _{'@type' : 'And',
                   query_list : [
                       _{'@type' : 'QueryListElement',
                         index : 0,
                         query : _{'@type' : 'Quad',
-                                  subject : "v:Class",
+                                  subject : _{'@type' : "Variable",
+                                             variable_name : "Class"},
                                   predicate : "rdf:type",
                                   object : "owl:Class",
                                   graph_filter : "schema/*"}},
@@ -611,7 +612,8 @@ test(no_db, [
                         index : 1,
                         query :_{'@type' : 'Not',
                                  query : _{'@type' : 'Quad',
-                                           subject : "v:Class",
+                                           subject : _{'@type' : "Variable",
+                                                      variable_name : "Class"},
                                            predicate : "tcs:tag",
                                            object : "tcs:abstract",
                                            graph_filter : "schema/*"}}},
@@ -619,25 +621,31 @@ test(no_db, [
                         index : 2,
                         query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
-                                            subject : "v:Class",
+                                            subject : _{'@type' : "Variable",
+                                                       variable_name : "Class"},
                                             predicate : "rdfs:label",
-                                            object : "v:Label",
+                                            object : _{'@type' : "Variable",
+                                                       variable_name : "Label"},
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 3,
                         query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
-                                            subject : "v:Class",
+                                            subject : _{'@type' : "Variable",
+                                                       variable_name : "Class"},
                                             predicate : "rdfs:comment",
-                                            object : "v:Comment",
+                                            object : _{'@type' : "Variable",
+                                                       variable_name : "Comment"},
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 4,
                         query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
-                                            subject : "v:Class",
+                                            subject : _{'@type' : "Variable",
+                                                       variable_name : "Class"},
                                             predicate : "tcs:tag",
-                                            object : "v:Abstract",
+                                            object : _{'@type' : "Variable",
+                                                       variable_name : "Abstract"},
                                             graph_filter : "schema/*"}}}]}}},
 
     with_output_to(
@@ -653,6 +661,9 @@ test(no_db, [
               In,
               [json_object(dict),authorization(basic(admin,root))]),
 
+    % extra debugging...
+    % current_output(Out),
+    % json_write(Out,In,[]),
     (   _{'bindings' : L} :< In
     ->  length(L, N),
         N >= 10
@@ -671,10 +682,12 @@ test(indexed_get, [
         indexed_as_var : [
             _{'@type' : 'IndexedAsVar',
               index : 0,
-              var : "v:First"},
+              var : _{'@type' : "Variable",
+                     variable_name : "First"}},
             _{'@type' : 'IndexedAsVar',
               index : 1,
-              var : "v:Second"}]},
+              var : _{'@type' : "Variable",
+                     variable_name : "Second"}}]},
       query_resource :
       _{'@type' : 'RemoteResource',
         remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
@@ -692,8 +705,8 @@ test(indexed_get, [
               In,
               [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : L} :< In
-    ->  writeq(L)
+    (   _{'bindings' : _} :< In
+    ->  true
     ;   fail).
 
 test(named_get, [
@@ -705,15 +718,17 @@ test(named_get, [
     Query =
     _{'@type' : 'Get',
       as_vars :
-      _{'@type' : 'AsVars',
-        as_var : [
+      _{'@type' : 'NamedAsVars',
+        named_as_var : [
             _{'@type' : 'NamedAsVar',
               var_type : "xsd:integer",
               identifier : "Duration",
-              var : "v:Duration"},
+              var : _{'@type' : "Variable",
+                      variable_name : "Duration"}},
             _{'@type' : 'NamedAsVar',
               identifier : "Bike number",
-              var : "v:Bike_Number"}]},
+              var : _{'@type' : "Variable",
+                      variable_name : "Bike_Number"}}]},
       query_resource :
       _{'@type' : 'RemoteResource',
         remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
@@ -731,8 +746,8 @@ test(named_get, [
               In,
               [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : L} :< In
-    ->  writeq(L)
+    (   _{'bindings' : _} :< In
+    ->  true
     ;   fail).
 
 

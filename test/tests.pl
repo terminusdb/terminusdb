@@ -24,6 +24,5 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(api_test).
 :- use_module(jsonld_test).
 :- use_module(transaction_test).

@@ -32,7 +32,9 @@
 :- begin_tests(jsonld_test).
 
 :- use_module(core(util)).
+:- use_module(core(util/test_utils)).
 :- use_module(core(api)).
+:- use_module(core(query)).
 :- use_module(library(http/json)).
 
 test(run_woql_expand) :-
@@ -61,7 +63,7 @@ test(run_woql_expand) :-
     expand(Doc,Expanded),
     % remove the context for simplicity (and because it may be expanded)
     select_dict(_{'@context' : _Ctx}, Expanded, Query),
-    json_write_dict(current_output,Query),
+
     Query = _{'http://terminusdb.com/woql#select':
               [_{'@id':'http://terminusdb.com/woql/variable/c'},
                _{'@id':'http://terminusdb.com/woql/variable/f'},
