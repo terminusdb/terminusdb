@@ -1059,7 +1059,7 @@ woql:OrderBy
   a owl:Class ;
   rdfs:label "Order By"@en ;
   rdfs:comment "Order a queries results by the given list"@en ;
-  rdfs:subClassOf woql:QueryWithSubQuery , woql:hasVariableList .
+  rdfs:subClassOf woql:QueryWithSubQuery .
 
 woql:variable_ordering
   a owl:ObjectProperty ;
