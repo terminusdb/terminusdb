@@ -440,7 +440,7 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
 
-indexing_position_list([],_,_,[]).
+indexing_position_list([],_,_,_,[]).
 indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     lookup(V,Xe,Bindings),
     Term = (   nth0(N,Values,Xe)

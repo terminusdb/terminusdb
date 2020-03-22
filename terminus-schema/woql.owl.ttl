@@ -430,12 +430,12 @@ woql:IndexedAsVars
   rdfs:label "As Vars by index"@en ;
   rdfs:comment "As Vars by index"@en .
 
-woql:as_var
+woql:named_as_var
   a owl:ObjectProperty ;
   rdfs:label "as var"@en ;
   rdfs:comment "as vars"@en ;
-  rdfs:domain woql:AsVars ;
-  rdfs:range woql:AsVar .
+  rdfs:domain woql:NamedAsVars ;
+  rdfs:range woql:NamedAsVar .
 
 woql:indexed_as_var
   a owl:ObjectProperty ;

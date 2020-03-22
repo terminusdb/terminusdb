@@ -12,7 +12,6 @@
   "query_list" : {"@type" : "@id"},
   "query" : {"@type" : "@id"},
   "variable_list" : {"@type" : "@id"},
-  "variable_name" : {"@type" : "@id"},
   "subject" : {"@type" : "@id"},
   "predicate" : {"@type" : "@id"},
   "object" : {"@type" : "@id"},
