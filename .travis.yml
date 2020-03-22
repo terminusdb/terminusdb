@@ -19,7 +19,7 @@ jobs:
     - stage: build
     - script:
         - docker build -t terminusdb/terminus-server:latest .
-        - docker run -it terminusdb/terminus-server:latest bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g \"['./test/tests.pl']\" -g run_tests -g halt"
+        - docker run -it terminusdb/terminus-server:latest bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g '[test/tests]' -g run_tests -g halt"
 
     - stage: deploy
       script:
