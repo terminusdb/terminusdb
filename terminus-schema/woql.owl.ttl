@@ -419,8 +419,8 @@ woql:IndexedAsVar
 woql:NamedAsVar
   a owl:Class ;
   rdfs:subClassOf woql:AsVar ;
-  rdfs:label "A var by index"@en ;
-  rdfs:comment "A var by index"@en .
+  rdfs:label "A var by column or header name"@en ;
+  rdfs:comment "A var by column or header name"@en .
 
 woql:var
   a owl:DatatypeProperty ;

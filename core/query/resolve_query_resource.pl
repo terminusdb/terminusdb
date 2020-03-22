@@ -27,6 +27,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(util)).
+:- use_module(core(triple/database_utils), [user_database_name/3]).
 
 :- use_module(library(pcre)).
 

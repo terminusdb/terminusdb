@@ -66,6 +66,11 @@ json_woql(JSON,Ctx,WOQL) :-
  * deindex_list(Key,List,List) is det.
  *
  * Remove the indexing from a list so that it is by order.
+ *
+ * TODO:
+ * Currently we are assuming the list is in order and that the indexes
+ * are for ordering during database retrieval. This is not great, it should
+ * instead order according to the key using predsort/3 first.
  */
 deindex_list(Key,List,Flatten) :-
     maplist({Key}/[Elt,Sub_Elt]>>(
@@ -282,17 +287,45 @@ json_to_woql_ast(JSON,WOQL) :-
           'http://terminusdb.com/schema/woql#as_vars' : Header,
           'http://terminusdb.com/schema/woql#query_resource' : Resource
          } :< JSON
-    ->  deindex_list(Header, Deindexed_Header),
-        maplist(json_to_woql_ast,Deindexed_Header,WHeader),
+    ->  (   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVars',
+              'http://terminusdb.com/schema/woql#indexed_as_var' : Indexed
+             } :< Header
+        ->  deindex_list('http://terminusdb.com/schema/woql#var',
+                         Indexed,
+                         Deindexed_Header)
+        ;   Deindexed_Header = Header
+        ),
+        maplist(json_to_woql_ast, Deindexed_Header, WHeader),
         json_to_woql_ast(Resource,WResource),
         WOQL = get(WHeader,WResource)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVar',
+          'http://terminusdb.com/schema/woql#var' : Var,
+          'http://terminusdb.com/schema/woql#identifier' : Identifier
+         } :< JSON
+    ->  (   get_dict('http://terminusdb.com/schema/woql#var_type',
+                     JSON,
+                     Type)
+        ->  WOQL = as(Identifier, v(Var), Type)
+        ;   WOQL = as(Identifier, v(Var)))
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVar',
+          'http://terminusdb.com/schema/woql#var' : Var,
+          'http://terminusdb.com/schema/woql#identifier' : Identifier
+         } :< JSON
+    ->  (   get_dict('http://terminusdb.com/schema/woql#var_type',
+                     JSON,
+                     Type)
+        ->  WOQL = as(Identifier, v(Var), Type)
+        ;   WOQL = as(Identifier, v(Var)))
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVar',
+          'http://terminusdb.com/schema/woql#var' : Var
+         } :< JSON
+    ->  WOQL = v(Var)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Put',
           'http://terminusdb.com/schema/woql#as_vars' : Header,
           'http://terminusdb.com/schema/woql#query' : Query,
           'http://terminusdb.com/schema/woql#resource' : Resource
          } :< JSON
-    ->  deindex_list(Header, Deindexed_Header),
-        maplist(json_to_woql_ast,Deindexed_Header,WHeader),
+    ->  maplist(json_to_woql_ast,Header,WHeader),
         json_to_woql_ast(Query,WQuery),
         json_to_woql_ast(Resource,WResource),
         WOQL = put(WHeader,WQuery,WResource)

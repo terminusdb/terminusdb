@@ -4,8 +4,6 @@
               username_auth/3,
               get_user/3,
               auth_action_scope/4,
-              add_database_resource/3,
-              delete_database_resource/1,
               write_cors_headers/2,
               check_capabilities/2
           ]).
@@ -142,73 +140,6 @@ auth_action_scope(DB, Auth, Action, Resource_ID) :-
 
     % make comparison late..
     %atom_string(Resource_ID,Resource_ID_String).
-
-/*
- * add_database_resource(DB,URI,Doc) is det.
- *
- * Adds a database resource object to the capability instance database for the purpose of
- * authority reference.
- *
- * DB is the name of the database, URI is its identifier and Doc is a document which
- * describes all of its metadata properties.
- */
-add_database_resource(DB_Name,URI,Doc) :-
-    expand(Doc,DocX),
-    /* Don't create database resources if they already exist */
-    (   database_exists(URI)
-    ->  throw(http_reply(method_not_allowed(
-                             _{'@type' : 'vio:DatabaseCreateError',
-                               'vio:database_name' : _{'@value' : URI,
-                                                       '@type' : 'xdd:url'},
-                               'vio:message' : 'Database exists'})))
-    ;   true),
-
-    /* This check is required to cary out appropriate auth restriction */
-    (   get_key_document('@type', DocX, 'terminus:Database')
-    ->  true
-    ;   format(atom(MSG),'Unable to create database metadata due to capabilities authorised.',[]),
-        throw(http_reply(method_not_allowed(
-                             _{'@type' : 'vio:DatabaseCreateError',
-                               'vio:database_name' : _{'@value' : URI,
-                                                       '@type' : 'xdd:url'},
-                               'vio:message' : MSG})))),
-
-    /* Extend Doc with default databases */
-    extend_database_defaults(URI, DocX, Ext),
-
-    open_descriptor(terminus_descriptor{}, Transaction),
-    once(ask(Transaction,
-	         (   insert(doc:server, terminus:resource_includes, doc:DB_Name),
-                 insert(doc:DB_Name, terminus:id, URI^^(xsd:anyURI)),
-                 update_object(doc:DB_Name,Ext)
-             )
-            )
-        ),
-    run_transaction(Transaction).
-
-
-/*
- * delete_database_resource(URI) is det.
- *
- * Deletes a database resource object to the capability instance database for the purpose of
- * removing the authority reference.
- */
-delete_database_resource(URI) :-
-    % hmmm... this is going to be tricky... We need to delete all references to the object.
-    % but are those references then going to be "naked" having no other reference?
-    %
-    % Supposing we have only one scope for an auth, do we delete the auth?
-    terminus_database_name(Collection),
-    connect(Collection, DB),
-    % delete the object
-    ask(DB,
-        when(
-            (
-                t(DB_URI, terminus:id, URI^^(xsd:anyURI)),
-                t(DB_URI, rdf:type, terminus:'Database')
-            ),
-            delete_object(DB_URI))
-        ).
 
 /*
  * write_cors_headers(Resource_URI) is det.

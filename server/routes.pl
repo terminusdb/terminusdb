@@ -655,6 +655,82 @@ test(no_db, [
     ;   fail).
 
 
+test(indexed_get, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query =
+    _{'@type' : 'Get',
+      as_vars :
+      _{'@type' : 'IndexedAsVars',
+        indexed_as_var : [
+            _{'@type' : 'IndexedAsVar',
+              index : 0,
+              var : "v:First"},
+            _{'@type' : 'IndexedAsVar',
+              index : 1,
+              var : "v:Second"}]},
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/woql'], URI),
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    (   _{'bindings' : L} :< In
+    ->  writeq(L)
+    ;   fail).
+
+test(named_get, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query =
+    _{'@type' : 'Get',
+      as_vars :
+      _{'@type' : 'AsVars',
+        as_var : [
+            _{'@type' : 'NamedAsVar',
+              var_type : "xsd:integer",
+              identifier : "Duration",
+              var : "v:Duration"},
+            _{'@type' : 'NamedAsVar',
+              identifier : "Bike number",
+              var : "v:Bike_Number"}]},
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/woql'], URI),
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    (   _{'bindings' : L} :< In
+    ->  writeq(L)
+    ;   fail).
+
+
 :- end_tests(woql_endpoint).
 
 

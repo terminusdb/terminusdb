@@ -6,7 +6,8 @@
               terminus_graph_layer/2,
               database_instance/2,
               database_inference/2,
-              database_schema/2
+              database_schema/2,
+              user_database_name/3
           ]).
 
 /** <module> Database Utilities
@@ -38,6 +39,8 @@
 :- use_module(terminus_bootstrap).
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
+
+:- use_module(core(util), [merge_separator_split/3]).
 
 :- reexport(core(util/syntax)).
 
