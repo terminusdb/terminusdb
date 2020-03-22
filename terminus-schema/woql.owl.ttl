@@ -254,14 +254,14 @@ woql:child
   rdfs:label "child"@en ;
   rdfs:comment "The child of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range woql:anyURI .
+  rdfs:range xsd:anyURI .
 
 woql:parent
   a owl:DatatypeProperty ;
   rdfs:label "parent"@en ;
   rdfs:comment "The parent of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range woql:anyURI .
+  rdfs:range xsd:anyURI .
 
 woql:BinaryOperator
   a owl:Class
@@ -684,7 +684,7 @@ woql:ArithmeticValue
 woql:arithmetic_value
   a owl:DatatypeProperty ;
   rdfs:label "arithmetic value"@en ;
-  rdfs:comment "The value part of an expression"@en ;
+  rdfs:comment "The value part of an expression (what if this is a variable?)"@en ;
   rdfs:domain woql:ArithmeticValue ;
   rdfs:range xsd:decimal .
 
@@ -769,6 +769,14 @@ woql:ValueList
   a owl:Class ;
   rdfs:label "Value List"@en ;
   rdfs:comment "A list of values"@en .
+
+woql:value_list_element
+  a owl:ObjectProperty;
+  rdfs:label "Value List Element"@en ;
+  rdfs:domain woql:ValueList;
+  rdfs:range woql:ValueListElement;
+  rdfs:comment "An element in a value list"@en .
+
 
 woql:ValueListElement
   a owl:Class ;
@@ -916,7 +924,7 @@ woql:Join
 woql:join_list
   a owl:ObjectProperty ;
   rdfs:label "join list"@en ;
-  rdfs:comment "The list of things to be joinmed"@en ;
+  rdfs:comment "The list of things to be joined"@en ;
   rdfs:domain woql:Join ;
   rdfs:range woql:DatatypeOrID .
 
