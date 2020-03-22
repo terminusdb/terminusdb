@@ -576,23 +576,27 @@ test(no_db, [
      ])
 :-
     Query =
-    _{'@type' : 'Using',
+    _{'@type' : "Using",
       collection : "terminus:///terminus/",
       query :
-      _{'@type' : 'Select',
+      _{'@type' : "Select",
         variable_list : [
-            _{'@type' : 'VariableListElement',
+            _{'@type' : "VariableListElement",
               index : 0,
-              variable_name : "v:Class"},
-            _{'@type' : 'VariableListElement',
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Class"}},
+            _{'@type' : "VariableListElement",
               index : 1,
-              variable_name : "v:Label"},
-            _{'@type' : 'VariableListElement',
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Label"}},
+            _{'@type' : "VariableListElement",
               index : 2,
-              variable_name : "v:Comment"},
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Comment"}},
             _{'@type' : 'VariableListElement',
               index : 3,
-              variable_name : "v:Abstract"}
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Abstract"}}
         ],
         query : _{'@type' : 'And',
                   query_list : [

@@ -14,9 +14,10 @@
   terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
   terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
-woql:ArrayOrID
-  a owl:Class
-  rdfs:subClassOf woql:Array
+woql:Variable
+  a owl:Class ;
+  rdfs:comment "A WOQL logic variable"@en ;
+  rdfs:label "variable"@en .
 
 woql:Array
   a owl:Class ;
@@ -176,12 +177,12 @@ woql:VariableListElement
   rdfs:comment "An element of a list by position"@en ;
   rdfs:subClassOf woql:Indexable .
 
-woql:variable_name
-  a owl:DatatypeProperty ;
+woql:variable
+  a owl:ObjectProperty ;
   rdfs:label "Variable Name"@en ;
   rdfs:comment "The name of a variable"@en ;
-  rdfs:domain woq:VariableListElement ;
-  rdfs:range xsd:anyURI .
+  rdfs:domain woql:VariableListElement ;
+  rdfs:range woql:Variable .
 
 woql:Select
   a owl:Class ;
@@ -235,8 +236,8 @@ woql:graph
 
 woql:Into
   a owl:Class ;
-  rdfs:label "From"@en ;
-  rdfs:comment "A query with a graph filter for selection"@en ;
+  rdfs:label "Into"@en ;
+  rdfs:comment "A query with a graph for selection"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery, woql:QueryWithGraph .
 
 woql:Triple
