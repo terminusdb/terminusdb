@@ -697,6 +697,7 @@ test(named_get, [
          cleanup(teardown_temp_store(State))
      ])
 :-
+
     Query =
     _{'@type' : 'Get',
       as_vars :

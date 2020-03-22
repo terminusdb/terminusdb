@@ -682,11 +682,11 @@ woql:ArithmeticValue
   rdfs:comment "An arithmetic value - float, int, bignum, etc."@en .
 
 woql:arithmetic_value
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "arithmetic value"@en ;
   rdfs:comment "The value part of an expression"@en ;
   rdfs:domain woql:ArithmeticValue ;
-  rdfs:range xsd:decimal .
+  rdfs:range woql:DatatypeOrID .
 
 woql:IsA
   a owl:Class ;
@@ -760,8 +760,8 @@ woql:base
 
 woql:key_list
   a owl:ObjectProperty ;
-  rdfs:label "base"@en ;
-  rdfs:comment "The document base of a URI"@en ;
+  rdfs:label "key list"@en ;
+  rdfs:comment "The key list of a URI"@en ;
   rdfs:domain woql:URIGenerator ;
   rdfs:range woql:ValueList .
 
@@ -769,6 +769,11 @@ woql:ValueList
   a owl:Class ;
   rdfs:label "Value List"@en ;
   rdfs:comment "A list of values"@en .
+
+woql:value_list_element
+  a owl:ObjectProperty ;
+  rdfs:label "Value List Element"@en ;
+  rdfs:comment "An element of the list of value elements"@en .
 
 woql:ValueListElement
   a owl:Class ;
