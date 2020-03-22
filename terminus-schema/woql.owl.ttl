@@ -288,14 +288,14 @@ woql:child
   rdfs:label "child"@en ;
   rdfs:comment "The child of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range woql:anyURI .
+  rdfs:range xsd:anyURI .
 
 woql:parent
   a owl:DatatypeProperty ;
   rdfs:label "parent"@en ;
   rdfs:comment "The parent of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range woql:anyURI .
+  rdfs:range xsd:anyURI .
 
 woql:BinaryOperator
   a owl:Class
@@ -718,7 +718,7 @@ woql:ArithmeticValue
 woql:arithmetic_value
   a owl:ObjectProperty ;
   rdfs:label "arithmetic value"@en ;
-  rdfs:comment "The value part of an expression"@en ;
+  rdfs:comment "The value part of an expression (what if this is a variable?)"@en ;
   rdfs:domain woql:ArithmeticValue ;
   rdfs:range woql:DatatypeOrID .
 
@@ -805,9 +805,12 @@ woql:ValueList
   rdfs:comment "A list of values"@en .
 
 woql:value_list_element
-  a owl:ObjectProperty ;
+  a owl:ObjectProperty;
   rdfs:label "Value List Element"@en ;
-  rdfs:comment "An element of the list of value elements"@en .
+  rdfs:domain woql:ValueList;
+  rdfs:range woql:ValueListElement;
+  rdfs:comment "An element in a value list"@en .
+
 
 woql:ValueListElement
   a owl:Class ;
@@ -955,7 +958,7 @@ woql:Join
 woql:join_list
   a owl:ObjectProperty ;
   rdfs:label "join list"@en ;
-  rdfs:comment "The list of things to be joinmed"@en ;
+  rdfs:comment "The list of things to be joined"@en ;
   rdfs:domain woql:Join ;
   rdfs:range woql:DatatypeOrID .
 
@@ -1056,13 +1059,26 @@ woql:OrderBy
   a owl:Class ;
   rdfs:label "Order By"@en ;
   rdfs:comment "Order a queries results by the given list"@en ;
-  rdfs:subClassOf woql:QueryWithSubQuery , woql:hasVariableList .
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:variable_ordering
+  a owl:ObjectProperty ;
+  rdfs:label "Variable Array"@en ;
+  rdfs:comment "An array of variables"@en ;
+  rdfs:domain woql:OrderBy ;
+  rdfs:range woql:VariableOrdering .
+
+woql:VariableOrdering
+  a owl:Class ;
+  rdfs:label "Variable Ordering"@en ;
+  rdfs:comment "A specific variable to de used in ordering"@en ;
+  rdfs:subClassOf woql:VariableListElement .
 
 woql:ascending
   a owl:DatatypeProperty ;
-  rdfs:label "ascending"@en ;
+  rdfs:label "Ascending"@en ;
   rdfs:comment "Should the ordering be ascending"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:VariableOrdering ;
   rdfs:range xsd:boolean .
 
 woql:GroupBy
