@@ -6,9 +6,8 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
-              insert/4,
-              delete/4,
-              update/5,
+              insert/5,
+              delete/5,
               storage/1,
               triple_store/1,
               global_triple_store/1,
@@ -231,38 +230,28 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
                   'terminus:message' : "import_graph/3 is unimplemented"})).
 
 /**
- * insert(+G:read_write_obj,+X,+Y,+Z) is det.
+ * insert(+G:read_write_obj,+X,+Y,+Z,-Changed) is det.
  *
- * Insert triple into transaction layer
+ * Insert triple into transaction layer, record changed as 1 or 0
  */
-insert(G,X,Y,Z) :-
+insert(G,X,Y,Z,Changed) :-
     object_storage(Z,S),
     read_write_obj_builder(G, Builder),
-    ignore(nb_add_triple(Builder, X, Y, S)).
+    (   nb_add_triple(Builder, X, Y, S)
+    ->  Changed = 1
+    ;   Changed = 0).
 
 /**
- * delete(+G,+Builder,+X,+Y,+Z) is det.
+ * delete(+G,+Builder,+X,+Y,+Z,-Changed) is det.
  *
- * Delete quad from transaction predicates.
+ * Delete quad from transaction predicates, record changed as 1 or 0
  */
-delete(G,X,Y,Z) :-
+delete(G,X,Y,Z,Changed) :-
     object_storage(Z,S),
     read_write_obj_builder(G, Builder),
-    ignore(nb_remove_triple(Builder, X, Y, S)).
-
-new_triple(_,Y,Z,subject(X2),X2,Y,Z).
-new_triple(X,_,Z,predicate(Y2),X,Y2,Z).
-new_triple(X,Y,_,object(Z2),X,Y,Z2).
-
-/**
- * update(+DB,+G,+X,+Y,+Z,+G,+Action) is det.
- *
- * Update transaction graphs
- */
-update(G,X,Y,Z,Action) :-
-    delete([G],X,Y,Z),
-    new_triple(X,Y,Z,Action,X1,Y1,Z1),
-    insert(G,X1,Y1,Z1).
+    (   nb_remove_triple(Builder, X, Y, S)
+    ->  Changed = 1
+    ;   Changed = 0).
 
 /*
  * xrdf_added(+Gs:list(read_write_obj),+X,+Y,+Z) is nondet.

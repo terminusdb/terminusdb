@@ -793,6 +793,13 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
 
 
 /*
+ * TODO: Frames are completely broken and need new attention
+ *
+ * Specifically we need to pass in a query object for realisation,
+ * not a "database". - Gavin March 21st
+ */
+
+/*
  * realise_triples(Elt,Frame,Database,Realiser) is det.
  *
  * The triple realiser must be kept in complete lock step with the definition above.
@@ -971,8 +978,7 @@ delete_object(URI,Database) :-
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
-    database_name(Database,DB_Name),
-    maplist({DB_Name,Database}/[(DB_Name,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Edges).
+    maplist([([G],X,Y,Z)]>>delete(G,X,Y,Z,_N), Edges).
 
 /*
  * update_object(Obj:dict,Database) is det.
@@ -1010,9 +1016,9 @@ update_object(ID, Obj, Database) :-
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
-    maplist({Database}/[(C,[G],X,Y,Z)]>>insert(Database,G,X,Y,Z), Inserts),
+    maplist([([G],X,Y,Z)]>>insert(G,X,Y,Z,N), Inserts),
 
-    maplist({Database}/[(C,[G],X,Y,Z)]>>delete(Database,G,X,Y,Z), Deletes).
+    maplist([([G],X,Y,Z)]>>delete(G,X,Y,Z,N), Deletes).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)

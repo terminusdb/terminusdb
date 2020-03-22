@@ -29,6 +29,7 @@
 
 :- reexport(core(util/syntax)).
 :- use_module(core(transaction/descriptor)).
+:- use_module(core(transaction/validate)).
 
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).

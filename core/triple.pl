@@ -18,6 +18,7 @@
               database_instance/2,
               database_inference/2,
               database_schema/2,
+              user_database_name/3,
 
               % iana.pl
               iana/3,
@@ -33,7 +34,7 @@
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,
-              
+
               % terminus_bootstrap.pl
               terminus_instance_name/1,
               terminus_schema_name/1,
@@ -81,9 +82,8 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
-              insert/4,
-              delete/4,
-              update/5,
+              insert/5,
+              delete/5,
               storage/1,
               triple_store/1,
               global_triple_store/1,

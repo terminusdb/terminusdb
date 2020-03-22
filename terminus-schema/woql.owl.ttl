@@ -14,6 +14,77 @@
   terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
   terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
+woql:Variable
+  a owl:Class ;
+  rdfs:comment "A WOQL logic variable"@en ;
+  rdfs:label "variable"@en .
+
+woql:Array
+  a owl:Class ;
+  rdfs:comment "An array of elements"@en ;
+  rdsf:label "Array"@en .
+
+woql:IndexableRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:index ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+woql:Indexable
+  a owl:Class ;
+  rdfs:subClassOf woql:IndexableRestriction ;
+  rdfs:label "Indexable"@en ;
+  rdfs:comment "Something with an index"@en .
+
+woql:index
+  a owl:DatatypeProperty ;
+  rdfs:label "index"@en ;
+  rdfs:comment "The index of a list"@en ;
+  rdfs:domain woql:Indexable ;
+  rdfs:range xsd:nonNegativeInteger .
+
+woql:NodeRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:node ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+woql:ValueRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:value ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+woql:DatatypeOrID
+  a owl:Class
+  rdfs:subClassOf woql:NodeRestriction , woql:ValueRestriction
+  rdfs:label "Datatype or ID"@en ;
+  rdfs:comment "Either a datatype or an ID"@en .
+
+woql:node
+  a owl:ObjectProperty
+  rdfs:label "node"@en ;
+  rdfs:comment "The URI of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range owl:Thing .
+
+woql:value
+  a owl:DatatypeProperty
+  rdfs:label "value"@en ;
+  rdfs:comment "The value of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range xsd:anySimpleDatatype .
+
+woql:ArrayElement
+  a owl:Class ;
+  rdfs:label "Array Element"@en ;
+  rdfs:comment "Box for an element of an array"@en ;
+  rdfs:subClassOf woql:Indexable, woql:DatatypeOrID .
+
+woql:array_element
+  a owl:ObjectProperty ;
+  rdsf:label "array element"@en ;
+  rdfs:comment "Points to an element of an array"@en ;
+  rdfs:domain woql:Array ;
+  rdfs:range woql:ArrayElement .
+
 woql:Query
   a owl:Class ;
   rdfs:comment "A WOQL Query"@en ;
@@ -106,30 +177,12 @@ woql:VariableListElement
   rdfs:comment "An element of a list by position"@en ;
   rdfs:subClassOf woql:Indexable .
 
-woql:index
-  a owl:DatatypeProperty ;
-  rdfs:label "index"@en ;
-  rdfs:comment "The index of a list"@en ;
-  rdfs:domain woql:Indexable ;
-  rdfs:range xsd:nonNegativeInteger .
-
-woql:variable_name
-  a owl:DatatypeProperty ;
+woql:variable
+  a owl:ObjectProperty ;
   rdfs:label "Variable Name"@en ;
   rdfs:comment "The name of a variable"@en ;
-  rdfs:domain woq:VariableListElement ;
-  rdfs:range xsd:anyURI .
-
-woql:IndexableRestriction
-  a owl:Restriction ;
-  owl:onProperty woql:index ;
-  owl:cardinality "1"^^xsd:nonNegativeInteger .
-
-woql:Indexable
-  a owl:Class ;
-  rdfs:subClassOf woql:IndexableRestriction ;
-  rdfs:label "Indexable"@en ;
-  rdfs:comment "Something with an index"@en .
+  rdfs:domain woql:VariableListElement ;
+  rdfs:range woql:Variable .
 
 woql:Select
   a owl:Class ;
@@ -183,8 +236,8 @@ woql:graph
 
 woql:Into
   a owl:Class ;
-  rdfs:label "From"@en ;
-  rdfs:comment "A query with a graph filter for selection"@en ;
+  rdfs:label "Into"@en ;
+  rdfs:comment "A query with a graph for selection"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery, woql:QueryWithGraph .
 
 woql:Triple
@@ -212,25 +265,6 @@ woql:object
   rdfs:comment "The object of a triple"@en ;
   rdfs:domain woql:Triple ;
   rdfs:range woql:DatatypeOrID .
-
-woql:DatatypeOrID
-  a owl:Class
-  rdfs:label "Datatype or ID"@en ;
-  rdfs:comment "Either a datatype or an ID"@en .
-
-woql:node
-  a owl:DatatypeProperty
-  rdfs:label "node"@en ;
-  rdfs:comment "The URI of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
-  rdfs:range xsd:anyURI .
-
-woql:value
-  a owl:DatatypeProperty
-  rdfs:label "value"@en ;
-  rdfs:comment "The value of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
-  rdfs:range xsd:anySimpleDatatype .
 
 woql:Quad
   a owl:Class ;
@@ -419,8 +453,8 @@ woql:IndexedAsVar
 woql:NamedAsVar
   a owl:Class ;
   rdfs:subClassOf woql:AsVar ;
-  rdfs:label "A var by index"@en ;
-  rdfs:comment "A var by index"@en .
+  rdfs:label "A var by column or header name"@en ;
+  rdfs:comment "A var by column or header name"@en .
 
 woql:var
   a owl:DatatypeProperty ;
@@ -682,11 +716,11 @@ woql:ArithmeticValue
   rdfs:comment "An arithmetic value - float, int, bignum, etc."@en .
 
 woql:arithmetic_value
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "arithmetic value"@en ;
   rdfs:comment "The value part of an expression (what if this is a variable?)"@en ;
   rdfs:domain woql:ArithmeticValue ;
-  rdfs:range xsd:decimal .
+  rdfs:range woql:DatatypeOrID .
 
 woql:IsA
   a owl:Class ;
@@ -760,8 +794,8 @@ woql:base
 
 woql:key_list
   a owl:ObjectProperty ;
-  rdfs:label "base"@en ;
-  rdfs:comment "The document base of a URI"@en ;
+  rdfs:label "key list"@en ;
+  rdfs:comment "The key list of a URI"@en ;
   rdfs:domain woql:URIGenerator ;
   rdfs:range woql:ValueList .
 
@@ -1027,11 +1061,24 @@ woql:OrderBy
   rdfs:comment "Order a queries results by the given list"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery , woql:hasVariableList .
 
+woql:variable_ordering
+  a owl:ObjectProperty ;
+  rdfs:label "Variable Array"@en ;
+  rdfs:comment "An array of variables"@en ;
+  rdfs:domain woql:OrderBy ;
+  rdfs:range woql:VariableOrdering .
+
+woql:VariableOrdering
+  a owl:Class ;
+  rdfs:label "Variable Ordering"@en ;
+  rdfs:comment "A specific variable to de used in ordering"@en ;
+  rdfs:subClassOf woql:VariableListElement .
+
 woql:ascending
   a owl:DatatypeProperty ;
-  rdfs:label "ascending"@en ;
+  rdfs:label "Ascending"@en ;
   rdfs:comment "Should the ordering be ascending"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:VariableOrdering ;
   rdfs:range xsd:boolean .
 
 woql:GroupBy
@@ -1072,3 +1119,31 @@ woql:Not
   rdfs:label "Not"@en ;
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:Typecast
+  a owl:Class ;
+  rdfs:label "Typecast"@en ;
+  rdfs:comment "A typecast of a variable to a new type"@en ;
+  rdfs:subClassOf woql:Query .
+
+woql:typecast_value
+  a owl:ObjectProperty ;
+  rdfs:label "typecast value"@en ;
+  rdfs:comment "The thing of which we want a typecast"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:typecast_type
+  a owl:ObjectProperty ;
+  rdfs:label "typecast type"@en ;
+  rdfs:comment "The type we want to typecast to"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+
+woql:typecast_result
+  a owl:ObjectProperty ;
+  rdfs:label "typecast result"@en ;
+  rdfs:comment "The casted value"@en ;
+  rdfs:domain woql:Typecast ;
+  rdfs:range woql:DatatypeOrID .
+

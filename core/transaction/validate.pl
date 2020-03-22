@@ -1,5 +1,6 @@
 :- module(validate, [
-              transaction_objects_to_validation_objects/2
+              transaction_objects_to_validation_objects/2,
+              commit_validation_objects/1
           ]).
 
 /** <module> Validation
@@ -272,7 +273,7 @@ descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_des
 
 :- table descriptor_type_order/3.
 descriptor_type_order(Operator, Left, Right) :-
-    descriptor_type_order_List(Order),
+    descriptor_type_order_list(Order),
     once(nth0(Left_N, Order, Left)),
     once(nth0(Right_N, Order, Right)),
     compare(Operator, Left_N, Right_N).
@@ -688,7 +689,7 @@ refute_instance(Validation_Object,Witness) :-
 refute_validation_object(Validation_Object, Witness) :-
     % Pre Schema
     needs_schema_validation(Validation_Object),
-    refute_pre_schemas(Validation_Object, Witness),
+    refute_pre_schema(Validation_Object, Witness),
     % Do not proceed if schema has circularities
     !.
 refute_validation_object(Validation_Object, Witness) :-

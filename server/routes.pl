@@ -576,24 +576,27 @@ test(no_db, [
      ])
 :-
     Query =
-    _{'@type' : 'Using',
-      collection : _{ '@type' : "xsd:string",
-                      '@value' : "terminus:///terminus/"},
+    _{'@type' : "Using",
+      collection : "terminus:///terminus/",
       query :
-      _{'@type' : 'Select',
+      _{'@type' : "Select",
         variable_list : [
-            _{'@type' : 'VariableListElement',
+            _{'@type' : "VariableListElement",
               index : 0,
-              variable_name : "v:Class"},
-            _{'@type' : 'VariableListElement',
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Class"}},
+            _{'@type' : "VariableListElement",
               index : 1,
-              variable_name : "v:Label"},
-            _{'@type' : 'VariableListElement',
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Label"}},
+            _{'@type' : "VariableListElement",
               index : 2,
-              variable_name : "v:Comment"},
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Comment"}},
             _{'@type' : 'VariableListElement',
               index : 3,
-              variable_name : "v:Abstract"}
+              variable : {'@type' : "Variable",
+                          'variable_name' : "Abstract"}}
         ],
         query : _{'@type' : 'And',
                   query_list : [
@@ -614,7 +617,7 @@ test(no_db, [
                                            graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 2,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "rdfs:label",
@@ -622,7 +625,7 @@ test(no_db, [
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 3,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "rdfs:comment",
@@ -630,7 +633,7 @@ test(no_db, [
                                             graph_filter : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 4,
-                        query : _{'@type' : 'Opt',
+                        query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : "v:Class",
                                             predicate : "tcs:tag",
@@ -645,19 +648,91 @@ test(no_db, [
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
 
-    setup_call_cleanup(
-        http_post(URI,
-                  form_data(['terminus:query'=Payload]),
-                  In,
-                  [authorization(basic(admin,root))]),
-        catch(json_read_dict(In, JSON),
-          _,
-          JSON = _{'terminus:status' : 'terminus:failure'}),
-        close(In)),
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : L} :< JSON
+    (   _{'bindings' : L} :< In
     ->  length(L, N),
-        N >= 8
+        N >= 10
+    ;   fail).
+
+
+test(indexed_get, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query =
+    _{'@type' : 'Get',
+      as_vars :
+      _{'@type' : 'IndexedAsVars',
+        indexed_as_var : [
+            _{'@type' : 'IndexedAsVar',
+              index : 0,
+              var : "v:First"},
+            _{'@type' : 'IndexedAsVar',
+              index : 1,
+              var : "v:Second"}]},
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/woql'], URI),
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    (   _{'bindings' : L} :< In
+    ->  writeq(L)
+    ;   fail).
+
+test(named_get, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+
+    Query =
+    _{'@type' : 'Get',
+      as_vars :
+      _{'@type' : 'AsVars',
+        as_var : [
+            _{'@type' : 'NamedAsVar',
+              var_type : "xsd:integer",
+              identifier : "Duration",
+              var : "v:Duration"},
+            _{'@type' : 'NamedAsVar',
+              identifier : "Bike number",
+              var : "v:Bike_Number"}]},
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Query, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/woql'], URI),
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload]),
+              In,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    (   _{'bindings' : L} :< In
+    ->  writeq(L)
     ;   fail).
 
 

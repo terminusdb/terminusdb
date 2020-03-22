@@ -5,7 +5,6 @@
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              active_graphs/2,
               descriptor_context/2
           ]).
 
@@ -48,7 +47,7 @@
 % Get op precedence
 :- reexport(core(util/syntax)).
 
-:- use_module(core(triple),except([update/5])).
+:- use_module(core(triple)).
 :- use_module(core(transaction)).
 
 %:- use_module(core(validation/schema)).
@@ -163,6 +162,8 @@ empty_context(Context) :-
         bindings : [],
         selected : [],
         files : [],
+        inserts : 0,
+        deletes : 0,
         authorization : empty
     }.
 
@@ -175,11 +176,15 @@ empty_context -->
     view(prefixes,Prefixes),
     view(transaction_objects,Transaction_Objects),
     view(files,Files),
+    view(inserts, Inserts),
+    view(deletes, Deletes),
 
     { empty_context(S0)
     },
     return(S0),
 
+    put(inserts, Inserts),
+    put(deletes, Deletes),
     put(prefixes,Prefixes),
     put(transaction_objects,Transaction_Objects),
     put(files,Files).
@@ -190,7 +195,7 @@ empty_context(Prefixes) -->
 
 
 descriptor_context(Collection_Descriptor,New_Ctx) :-
-    descriptor_query(Collection_Descriptor, Query_Object),
+    open_descriptor(Collection_Descriptor, Query_Object),
     empty_context(Ctx),
     New_Ctx = Ctx.put(_{transaction_objects : [Query_Object],
                         current_collection : Collection_Descriptor}).
@@ -622,11 +627,14 @@ compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
     view(default_collection,Database),
     resolve(X,URI).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(X,P,Y,G),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,N),
+                            Deletes1 is Deletes + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
+    update(deletes, Deletes, Deletes1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -636,21 +644,27 @@ compile_wf(delete(X,P,Y,G),delete(Read_Write_Object,XE,PE,YE)) -->
             throw(syntax_error(M,context(compile_wf//2,delete/4)))
         )
     }.
-compile_wf(delete(X,P,Y),delete(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,N),
+                          Deletes1 is Deletes + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    update(deletes, Deletes, Deletes1),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,N),
+                            Inserts1 is Inserts + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
+    update(inserts, Inserts, Inserts1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -660,12 +674,15 @@ compile_wf(insert(X,P,Y,G),insert(Read_Write_Object,XE,PE,YE)) -->
             throw(syntax_error(M,context(compile_wf//2,insert/4)))
         )
     }.
-compile_wf(insert(X,P,Y),insert(Read_Write_Object,XE,PE,YE)) -->
+compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,N),
+                          Inserts1 is Inserts + N))
+-->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    update(inserts, Inserts, Inserts1),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
@@ -689,7 +706,7 @@ compile_wf(like(A,B,F), Goal) -->
                                   isub(AS, BS, true, F)))))
     }.
 compile_wf(isa(X,C),(instance_class(XE,D),
-                     subsumption_of(D,CE,Collection)) -->
+                     subsumption_of(D,CE,Collection))) -->
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection).
@@ -1148,7 +1165,10 @@ compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
 restrict(VL) -->
     update(bindings,B0,B1),
     {
-        include({VL}/[Record]>>lookup(Record.var_name,_,VL), B0, B1)
+        include({VL}/[Record]>>(
+                    get_dict(var_name, Record, Name),
+                    member(v(Name),VL)
+                ), B0, B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
@@ -1165,76 +1185,6 @@ list_disjunction(L,Goal) :-
     reverse(L,R),
     R = [A|Rest],
     foldl([X,Y,(X;Y)]>>true, Rest, A, Goal).
-
-/*
- * active_graphs(Term,Dict:dict) is det.
- *
- * What graphs are currently active in a given query.
- *
- * NOTE: This can be used by capabilities assessment to determine what
- * capabilities are necessary.
- *
- * Dict has the form:
- * _{read : [Graph_Descriptor], write : [Graph_Descriptor]}
- */
-active_graphs(Term, Dict) :-
-    active_graphs_(Term,Pre_Dict),
-    maplist(resolve_graph_resource,Pre_Dict.read, Reads),
-    maplist(resolve_graph_resource,Pre_Dict.write, Writes),
-    Dict = _{read : Reads, write : Writes}.
-
-active_graphs_(Term, Dict) :-
-    % lazy
-    Term =.. [Functor|Args],
-    (   Functor = insert,
-        Args = [G,_,_,_]
-    ->  Dict = _{read:[],write:[G]}
-    ;   Functor = delete,
-        Args = [G,_,_,_]
-    ->  Dict = _{read:[],write:[G]}
-    ;   Functor = update_object,
-        Args = [_,_]
-    ->  Dict = _{read:[],write:[]}
-    ;   Functor = update_object,
-        Args = [_]
-    ->  Dict = _{read:[],write:[]}
-    ;   Functor = t,
-        Args = [_,_,_,G]
-    ->  Dict = _{read:[G],write:[]}
-    ;   Functor = r,
-        Args = [_,_,_,G]
-    ->  Dict = _{read:[G],write:[]}
-    ;   Functor = from,
-        Args = [G,P]
-    ->  active_graphs_(P,G_Sub),
-        Dict = _{read : [G|G_Sub.get(read) ],
-                 write : G_Sub.get(write)}
-    ;   Functor = into,
-        Args = [G,P]
-    ->  active_graphs_(P,G_Sub),
-        Dict = _{read : G_Sub.get(read),
-                 write : [G|G_Sub.get(write)]}
-    ;   Functor = '/'
-    ->  Dict = _{read:[],write:[]}
-    ;   maplist(active_graphs_,Args,Results),
-        merge_active_graphs(Results,Dict)
-    ).
-
-merge_active_graphs_aux([],D,D).
-merge_active_graphs_aux([D1|Rest],D2,D) :-
-    R1 = D1.get(read),
-    W1 = D1.get(write),
-    R2 = D2.get(read),
-    W2 = D2.get(write),
-    append(R1,R2,RI),
-    sort(RI,R3),
-    append(W1,W2,WI),
-    sort(WI,W3),
-    D3 = _{read:R3,write:W3},
-    merge_active_graphs_aux(Rest,D3,D).
-
-merge_active_graphs(Results,Dictionary) :-
-    merge_active_graphs_aux(Results,_{read:[],write:[]},Dictionary).
 
 filter_transaction_objects_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
     (   memberchk(instance,Types)
