@@ -14,6 +14,76 @@
   terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
   terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
+woql:ArrayOrID
+  a owl:Class
+  rdfs:subClassOf woql:Array
+
+woql:Array
+  a owl:Class ;
+  rdfs:comment "An array of elements"@en ;
+  rdsf:label "Array"@en .
+
+woql:IndexableRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:index ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+woql:Indexable
+  a owl:Class ;
+  rdfs:subClassOf woql:IndexableRestriction ;
+  rdfs:label "Indexable"@en ;
+  rdfs:comment "Something with an index"@en .
+
+woql:index
+  a owl:DatatypeProperty ;
+  rdfs:label "index"@en ;
+  rdfs:comment "The index of a list"@en ;
+  rdfs:domain woql:Indexable ;
+  rdfs:range xsd:nonNegativeInteger .
+
+woql:NodeRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:node ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+woql:ValueRestriction
+  a owl:Restriction ;
+  owl:onProperty woql:value ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+woql:DatatypeOrID
+  a owl:Class
+  rdfs:subClassOf woql:NodeRestriction , woql:ValueRestriction
+  rdfs:label "Datatype or ID"@en ;
+  rdfs:comment "Either a datatype or an ID"@en .
+
+woql:node
+  a owl:ObjectProperty
+  rdfs:label "node"@en ;
+  rdfs:comment "The URI of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range owl:Thing .
+
+woql:value
+  a owl:DatatypeProperty
+  rdfs:label "value"@en ;
+  rdfs:comment "The value of an object of an edge"@en ;
+  rdfs:domain woql:DatatypeOrID ;
+  rdfs:range xsd:anySimpleDatatype .
+
+woql:ArrayElement
+  a owl:Class ;
+  rdfs:label "Array Element"@en ;
+  rdfs:comment "Box for an element of an array"@en ;
+  rdfs:subClassOf woql:Indexable, woql:DatatypeOrID .
+
+woql:array_element
+  a owl:ObjectProperty ;
+  rdsf:label "array element"@en ;
+  rdfs:comment "Points to an element of an array"@en ;
+  rdfs:domain woql:Array ;
+  rdfs:range woql:ArrayElement .
+
 woql:Query
   a owl:Class ;
   rdfs:comment "A WOQL Query"@en ;
@@ -106,30 +176,12 @@ woql:VariableListElement
   rdfs:comment "An element of a list by position"@en ;
   rdfs:subClassOf woql:Indexable .
 
-woql:index
-  a owl:DatatypeProperty ;
-  rdfs:label "index"@en ;
-  rdfs:comment "The index of a list"@en ;
-  rdfs:domain woql:Indexable ;
-  rdfs:range xsd:nonNegativeInteger .
-
 woql:variable_name
   a owl:DatatypeProperty ;
   rdfs:label "Variable Name"@en ;
   rdfs:comment "The name of a variable"@en ;
   rdfs:domain woq:VariableListElement ;
   rdfs:range xsd:anyURI .
-
-woql:IndexableRestriction
-  a owl:Restriction ;
-  owl:onProperty woql:index ;
-  owl:cardinality "1"^^xsd:nonNegativeInteger .
-
-woql:Indexable
-  a owl:Class ;
-  rdfs:subClassOf woql:IndexableRestriction ;
-  rdfs:label "Indexable"@en ;
-  rdfs:comment "Something with an index"@en .
 
 woql:Select
   a owl:Class ;
@@ -212,25 +264,6 @@ woql:object
   rdfs:comment "The object of a triple"@en ;
   rdfs:domain woql:Triple ;
   rdfs:range woql:DatatypeOrID .
-
-woql:DatatypeOrID
-  a owl:Class
-  rdfs:label "Datatype or ID"@en ;
-  rdfs:comment "Either a datatype or an ID"@en .
-
-woql:node
-  a owl:DatatypeProperty
-  rdfs:label "node"@en ;
-  rdfs:comment "The URI of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
-  rdfs:range xsd:anyURI .
-
-woql:value
-  a owl:DatatypeProperty
-  rdfs:label "value"@en ;
-  rdfs:comment "The value of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
-  rdfs:range xsd:anySimpleDatatype .
 
 woql:Quad
   a owl:Class ;
