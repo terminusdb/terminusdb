@@ -1091,14 +1091,14 @@ woql:group_var
   a owl:ObjectProperty ;
   rdfs:label "group var"@en ;
   rdfs:comment "Variable which to group"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:GroupBy ;
   rdfs:range woql:DatatypeOrID .
 
 woql:grouped
   a owl:ObjectProperty ;
   rdfs:label "grouped"@en ;
   rdfs:comment "Variable in which to place the grouping"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:GroupBy ;
   rdfs:range woql:DatatypeOrID .
 
 woql:Length
