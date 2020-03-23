@@ -218,6 +218,48 @@ db_handler(delete,DB,Request) :-
                  time_limit(infinite),
                  methods([options,get,post])]).
 
+% DB Endpoint tests
+
+:- begin_tests(db_endpoint).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(db_create, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Base_URI_Dict = _{'terminus:base_uri': "https://terminushub.com/"},
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Base_URI_Dict, [])
+    ),
+    config:server(Server),
+    atomic_list_concat([Server, '/db/TERMINUS_QA_TEST_DB'], URI),
+    http_post(URI, Payload, In, [authorization(basic(admin, root))]),
+    _{'terminus:status' : 'terminus:success'} = In.
+
+
+test(db_delete, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Base_URI_Dict = _{'terminus:base_uri': "https://terminushub.com/"},
+    with_output_to(
+        string(Payload),
+        json_write(current_output, Base_URI_Dict, [])
+    ),
+    config:server(Server),
+    atomic_list_concat([Server, '/db/TERMINUS_QA_TEST_DB'], URI),
+    http_post(URI, Payload, Create_In, [authorization(basic(admin, root))]),
+     _{'terminus:status' : 'terminus:success'} = Create_In,
+    http_delete(URI, Delete_In, [authorization(basic(admin, root))]),
+    _{'terminus:status' : 'terminus:success'} = Delete_In.
+
+:- end_tests(db_endpoint).
+
 /*
  * schema_handler(Mode,DB,Request) is det.
  *
