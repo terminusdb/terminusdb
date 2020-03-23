@@ -218,6 +218,7 @@ db_handler(delete,DB,Request) :-
                  time_limit(infinite),
                  methods([options,get,post])]).
 
+% DB Endpoint tests
 
 :- begin_tests(db_endpoint).
 
@@ -230,7 +231,7 @@ test(db_create, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Base_URI_Dict = _{"terminus:base_uri": "https://terminushub.com/"},
+    Base_URI_Dict = _{'terminus:base_uri': "https://terminushub.com/"},
     with_output_to(
         string(Payload),
         json_write(current_output, Base_URI_Dict, [])
@@ -245,7 +246,7 @@ test(db_delete, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Base_URI_Dict = _{"terminus:base_uri": "https://terminushub.com/"},
+    Base_URI_Dict = _{'terminus:base_uri': "https://terminushub.com/"},
     with_output_to(
         string(Payload),
         json_write(current_output, Base_URI_Dict, [])
