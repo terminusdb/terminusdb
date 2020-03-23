@@ -1,6 +1,7 @@
 :- module(transaction, [
               % database.pl
               run_transaction/1,
+              run_transactions/1,
 
               % descriptor.pl
               open_descriptor/2,
@@ -16,7 +17,7 @@
               make_branch_descriptor/4,
               make_branch_descriptor/3,
               read_write_object_to_name/2,
-              
+
               % validate.pl
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1

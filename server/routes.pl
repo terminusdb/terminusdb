@@ -164,7 +164,7 @@ message_handler(post,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db/DB_Name), cors_catch(db_handler(Method, DB_Name)),
+:- http_handler(root(db/Account/DB), cors_catch(db_handler(Method, Account, DB)),
                 [method(Method),
                  methods([options,post,delete])]).
 
@@ -172,13 +172,13 @@ message_handler(post,R) :-
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
-db_handler(options,_DB,_Request) :-
+db_handler(options,_Account,_DB,_Request) :-
     % database may not exist - use server for CORS
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI,DB),
     format('~n').
-db_handler(post,DB,R) :-
+db_handler(post,Account,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     /* POST: Create database */
@@ -186,10 +186,12 @@ db_handler(post,DB,R) :-
     config:public_server_url(Server),
     verify_access(Terminus_DB, Auth, terminus:create_database,Server),
     try_get_param('terminus:base_uri',Request,Base_URI),
-    try_create_db(DB,Base_URI),
+
+    user_database_name(Account, DB, DB_Name),
+    try_create_db(DB_Name, Base_URI),
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
-db_handler(delete,DB,Request) :-
+db_handler(delete,Account,DB,Request) :-
     /* DELETE: Delete database */
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
@@ -197,8 +199,9 @@ db_handler(delete,DB,Request) :-
     config:public_server_url(Server),
 
     verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
+    user_database_name(Account, DB, DB_Name),
 
-    try_delete_db(DB),
+    try_delete_db(DB_Name),
 
     write_cors_headers(Server, Terminus_DB),
 
@@ -425,22 +428,23 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(woql), cors_catch(woql_handler(Method)),
-                [method(Method),
-                 time_limit(10),
-                 methods([options,post])]).
+% Does this go longest first?
 :- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
                  time_limit(10),
                  methods([options,post])]).
-:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
+:- http_handler(root(woql), cors_catch(woql_handler(Method)),
                 [method(Method),
                  time_limit(10),
                  methods([options,post])]).
-:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
-                [method(Method),
-                 time_limit(10),
-                 methods([options,post])]).
+% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
+%                 [method(Method),
+%                  time_limit(10),
+%                  methods([options,post])]).
+% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
+%                 [method(Method),
+%                  time_limit(10),
+%                  methods([options,post])]).
 
 % Should there be endpoints for commit graph and repo graphs here?
 % Mostly we just want to woql query them.
@@ -570,16 +574,14 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(no_db, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ])
+test(no_db, [])
 :-
+
     Query =
     _{'@type' : "Using",
       collection : "terminus:///terminus/",
       query :
-      _{'@type' : "Select",
+      _{'@type' : "Select",    %   { "select" : [ v1, v2, v3, Query ] }
         variable_list : [
             _{'@type' : "VariableListElement",
               index : 0,
@@ -658,22 +660,18 @@ test(no_db, [
 
     http_post(URI,
               form_data(['terminus:query'=Payload]),
-              In,
+              JSON,
               [json_object(dict),authorization(basic(admin,root))]),
 
     % extra debugging...
     % current_output(Out),
     % json_write(Out,In,[]),
-    (   _{'bindings' : L} :< In
+    (   _{'bindings' : L} :< JSON
     ->  length(L, N),
         N >= 10
     ;   fail).
 
-
-test(indexed_get, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ])
+test(indexed_get, [])
 :-
     Query =
     _{'@type' : 'Get',
@@ -702,17 +700,14 @@ test(indexed_get, [
 
     http_post(URI,
               form_data(['terminus:query'=Payload]),
-              In,
+              JSON,
               [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : _} :< In
+    (   _{'bindings' : _} :< JSON
     ->  true
     ;   fail).
 
-test(named_get, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ])
+test(named_get, [])
 :-
 
     Query =
@@ -743,12 +738,87 @@ test(named_get, [
 
     http_post(URI,
               form_data(['terminus:query'=Payload]),
-              In,
+              JSON,
               [json_object(dict),authorization(basic(admin,root))]),
 
-    (   _{'bindings' : _} :< In
+    (   _{'bindings' : _} :< JSON
     ->  true
     ;   fail).
+
+
+
+test(branch_db, [])
+:-
+    setup_call_catcher_cleanup(
+        (   % Create Database
+            config:server(Server),
+            user_database_name(admin,test, Name),
+            create_db(Name, 'http://terminushub.com/document')
+        ),
+        (
+            atomic_list_concat([Server, '/woql/admin/test'], URI),
+
+            % TODO: We need branches to pull in the correct 'doc:' prefix.
+            Query0 =
+            _{'@type' : "AddTriple",
+              subject : "test_subject",
+              predicate : "test_predicate",
+              object : "test_object"
+             },
+
+            with_output_to(
+                string(Payload0),
+                json_write(current_output, Query0, [])
+            ),
+
+            Commit = commit_info{ author : 'The Gavinator',
+                                  message : 'Peace and goodwill' },
+
+            with_output_to(
+                string(Commit_Payload),
+                json_write(current_output, Commit, [])
+            ),
+
+
+            http_post(URI,
+                      form_data(['terminus:query'=Payload0,
+                                 'terminus:commit_info'=Commit_Payload]),
+                      JSON0,
+                      [json_object(dict),authorization(basic(admin,root))]),
+
+            writeq(JSON0),
+
+            % Now query the insert...
+            Query1 =
+            _{'@type' : "Triple",
+              subject : _{'@type' : "Variable",
+                          variable_name : "Subject"},
+              predicate : _{'@type' : "Variable",
+                            variable_name : "Predicate"},
+              object : _{'@type' : "Variable",
+                         variable_name : "Object"}},
+
+            with_output_to(
+                string(Payload1),
+                json_write(current_output, Query1, [])
+            ),
+
+            http_post(URI,
+                      form_data(['terminus:query'=Payload1]),
+                      JSON1,
+                      [json_object(dict),authorization(basic(admin,root))]),
+
+            % extra debugging...
+            % current_output(Out),
+            % json_write(Out,In,[]),
+            (   _{'bindings' : L} :< JSON1
+            ->  length(L, N),
+                N >= 10
+            ;   fail)
+        ),
+        _Catcher,
+        delete_db(Name)
+    ).
 
 
 :- end_tests(woql_endpoint).

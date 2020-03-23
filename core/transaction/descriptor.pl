@@ -600,7 +600,7 @@ make_branch_descriptor(Account, DB, Repo_Name, Branch_Name, Branch_Descriptor) :
     Database_Descriptor = database_descriptor{ database_name : DB_Name },
     Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
                                                    database_descriptor : Database_Descriptor},
-    Branch_Descriptor = branch_descriptor{ name : Branch_Name,
+    Branch_Descriptor = branch_descriptor{ branch_name : Branch_Name,
                                            repository_descriptor : Repository_Descriptor}.
 
 make_branch_descriptor(Account, DB, Repo_Name, Branch_Descriptor) :-

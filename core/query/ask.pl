@@ -242,7 +242,10 @@ context_overriding_prefixes(Context, Prefixes, New_Context) :-
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
  *
- * Ask a woql query
+ * Ask a woql query.
+ *
+ * Presumably this should commit the context since
+ * it can't give anything back?
  */
 ask(Askable, Pre_Term) :-
     create_context(Askable, Query_Context),
@@ -254,10 +257,13 @@ ask(Askable, Pre_Term) :-
 
     ask_ast(New_Query_Ctx, Term, _).
 
-ask_ast(Context, Ast, Bindings) :-
-    compile_query(Ast,Prog, Context,Output),
+/*
+ * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
+ *
+ * Ask a woql query and get back the resulting context.
+ */
+ask_ast(Context, Ast, Output_Context) :-
+    compile_query(Ast,Prog, Context, Output_Context),
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
-    woql_compile:Prog,
-
-    Bindings = Output.bindings.
+    woql_compile:Prog.

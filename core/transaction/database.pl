@@ -1,5 +1,6 @@
 :- module(database,[
-              run_transaction/1
+              run_transaction/1,
+              run_transactions/1
           ]).
 
 /** <module> Implementation of database graph management
@@ -41,9 +42,19 @@
 /*
  * run_transaction(Transaction) is det.
  *
- *
+ * Run transaction and throw errors with witnesses.
  *
  */
 run_transaction(Transaction) :-
-    transaction_objects_to_validation_objects([Transaction], Validation),
-    commit_validation_objects(Validation).
+    transaction_objects_to_validation_objects([Transaction], Validations),
+    commit_validation_objects(Validations).
+
+/*
+ * run_transactions(Transaction) is det.
+ *
+ * Run all transactions and throw errors with witnesses.
+ *
+ */
+run_transactions(Transactions) :-
+    transaction_objects_to_validation_objects(Transactions, Validations),
+    commit_validation_objects(Validations).

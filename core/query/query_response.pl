@@ -5,16 +5,30 @@
 :- use_module(core(api)).
 :- use_module(core(query/ask)).
 :- use_module(core(query/jsonld)).
+:- use_module(core(util)).
+:- use_module(core(transaction)).
 
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD
  */
 ask_ast_jsonld_response(Context, AST, JSON) :-
-    findall(JSON_Binding,
-            (   ask_ast(Context, AST, Binding),
-                json_transform_binding_set(Context, Binding, JSON_Binding)),
-            Binding_Set),
+    findall(JSON_Binding-Output_Context,
+            (   ask_ast(Context, AST, Output_Context),
+                get_dict(bindings, Output_Context, Bindings),
+                json_transform_binding_set(Context, Bindings, JSON_Binding)),
+            Binding_Set_And_Context),
+
+    (   Binding_Set_And_Context = []
+    ->  Final_Context = Context,
+        Binding_Set = []
+    ;   zip(Binding_Set, Contexts, Binding_Set_And_Context),
+        last(Contexts, Final_Context)),
+
+    (   Final_Context.transaction_objects \= []
+    ->  run_transactions(Final_Context.transaction_objects)
+    ;   true),
+
     (   Inserts = Context.get(inserts)
     ->  true
     ;   Inserts = 0),
