@@ -49,7 +49,7 @@ Section "TerminusDB" TerminusDB
 	File "..\libterminus_store.dll"
 	File /r "..\*"
     SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
-    File /r "$APPDATA\SWI-Prolog\pack\terminus_store_prolog\*"
+    File /r "%APPDATA%\SWI-Prolog\pack\terminus_store_prolog\*"
 SectionEnd
 
 ;-------------------------------------------------------------------------------
