@@ -12,6 +12,7 @@ os: Visual Studio 2015
 # For simple configurations, instead of using the build matrix, you can simply set the
 # default-toolchain and default-host manually here.
 install:
+  - git submodule update --init --recursive
   - choco install swi-prolog
   - mkdir %APPDATA%\SWI-Prolog\pack
   - cd %APPDATA%\SWI-Prolog\pack
