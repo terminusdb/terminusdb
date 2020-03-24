@@ -17,7 +17,7 @@ install:
   - cd %APPDATA%\SWI-Prolog\pack
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd %APPVEYOR_BUILD_FOLDER%
-  - set PATH=%PATH%;C:\Program Files\swipl\bin
+  - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/libterminus_store.dll
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/terminus_store_prolog.dll
 
@@ -25,7 +25,7 @@ install:
 
 build_script:
   - cd windows
-  - C:\Program Files (x86)\NSIS\makensis.exe terminusdb_windows_installer.exe
+  - makensis.exe terminusdb_windows_installer.exe
   - cd ..\
 
 test_script:
