@@ -1,0 +1,38 @@
+os: Visual Studio 2015
+
+# If you only care about stable channel build failures, uncomment the following line:
+    #- channel: beta
+
+## Install Script ##
+
+# This is the most important part of the Appveyor configuration. This installs the version of Rust
+# specified by the 'channel' and 'target' environment variables from the build matrix. This uses
+# rustup to install Rust.
+#
+# For simple configurations, instead of using the build matrix, you can simply set the
+# default-toolchain and default-host manually here.
+install:
+  - choco install swi-prolog
+  - mkdir %APPDATA%\SWI-Prolog\pack
+  - cd %APPDATA%\SWI-Prolog\pack
+  - git clone https://github.com/terminusdb/terminus_store_prolog.git
+  - cd terminus_store_prolog
+  - git checkout windows_test
+  - cd %APPVEYOR_BUILD_FOLDER%
+  - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/libterminus_store.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/terminus_store_prolog.dll
+
+## Build Script ##
+
+build_script:
+  - cd windows
+  - git clone https://github.com/terminusdb/terminus_store_prolog.git
+  - cd terminus_store_prolog
+  - git checkout windows_test
+  - cd ..\
+  - makensis.exe terminusdb_windows_installer.nsi
+  - cd ..\
+
+artifacts:
+  - path: windows\terminusdb_setup.exe
