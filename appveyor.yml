@@ -40,4 +40,4 @@ test_script:
   - swipl -g run_tests -g halt start.pl
 
 artifacts:
-  - path: windows\terminusdb_windows_installer.exe
+  - path: windows\terminusdb_setup.exe
