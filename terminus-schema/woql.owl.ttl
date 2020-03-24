@@ -19,6 +19,13 @@ woql:Variable
   rdfs:comment "A WOQL logic variable"@en ;
   rdfs:label "variable"@en .
 
+woql:variable_name
+  a owl:DatatypeProperty;
+  rdfs:domain woql:Variable;
+  rdfs:range xsd:string;
+  rdfs:comment "A name for the variable"@en ;
+  rdfs:label "Variable Name"@en .
+
 woql:Array
   a owl:Class ;
   rdfs:comment "An array of elements"@en ;
@@ -26,6 +33,7 @@ woql:Array
 
 woql:Indexable
   a owl:Class ;
+  rdfs:subClassOf woql:IndexableRestriction;
   rdfs:label "Indexable"@en ;
   rdfs:comment "Something with an index"@en .
 
@@ -51,25 +59,39 @@ woql:ValueRestriction
   owl:onProperty woql:value ;
   owl:maxCardinality "1"^^xsd:nonNegativeInteger .
 
-woql:DatatypeOrID
+woql:OptionWithDatatype 
   a owl:Class;
-  rdfs:subClassOf woql:NodeRestriction , woql:ValueRestriction;
-  rdfs:label "Datatype or ID"@en ;
-  rdfs:comment "Either a datatype or an ID"@en .
-
-woql:node
-  a owl:ObjectProperty;
-  rdfs:label "node"@en ;
-  rdfs:comment "The URI of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
-  rdfs:range owl:Thing .
+  rdfs:label "Option with Datatype"@en;
+  rdfs:comment "An class representing an option, one of which is a datatype"@en;
+  rdfs:subClassOf woql:ValueRestriction;
+  terminus:tag terminus:abstract.
 
 woql:value
   a owl:DatatypeProperty;
   rdfs:label "value"@en ;
   rdfs:comment "The value of an object of an edge"@en ;
-  rdfs:domain woql:DatatypeOrID ;
+  rdfs:domain woql:OptionWithDatatype ;
   rdfs:range xsd:anySimpleType .
+
+woql:OptionWithID 
+  a owl:Class;
+  rdfs:label "Option with ID"@en;
+  rdfs:comment "An class representing an option, one of which is a node id"@en;
+  rdfs:subClassOf woql:NodeRestriction;
+  terminus:tag terminus:abstract.
+
+woql:DatatypeOrID 
+  a owl:Class;
+  rdfs:label "A Datatype or an ID"@en;
+  rdfs:comment "A class representing an option, one of which is a node id, one of which is a datatype"@en;
+  rdfs:subClassOf woql:OptionWithID, woql:OptionWithDatatype.
+
+woql:node
+  a owl:ObjectProperty;
+  rdfs:label "node"@en ;
+  rdfs:comment "The URI of an object of an edge"@en ;
+  rdfs:domain woql:OptionWithID ;
+  rdfs:range owl:Thing .
 
 woql:ArrayElement
   a owl:Class ;
@@ -170,17 +192,23 @@ woql:variable_list
   rdfs:domain woql:HasVariableList ;
   rdfs:range woql:VariableListElement .
 
+woql:ObjectWithVariable
+  a owl:Class ;
+  rdfs:label "Object With Variable"@en ;
+  rdfs:comment "An abstraction of the type of objects that contain a pointer to a variable"@en ;
+  terminus:tag terminus:abstract.
+
 woql:VariableListElement
   a owl:Class ;
   rdfs:label "Variable List Element"@en ;
   rdfs:comment "An element of a list by position"@en ;
-  rdfs:subClassOf woql:Indexable .
+  rdfs:subClassOf woql:Indexable, woql:ObjectWithVariable.
 
 woql:variable
   a owl:ObjectProperty ;
   rdfs:label "Variable Name"@en ;
   rdfs:comment "The name of a variable"@en ;
-  rdfs:domain woql:VariableListElement ;
+  rdfs:domain woql:ObjectWithVariable ;
   rdfs:range woql:Variable .
 
 woql:Select
@@ -245,18 +273,18 @@ woql:Triple
   rdfs:comment "A edge in the graph specified by subject, predicate, object"@en .
 
 woql:subject
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "subject"@en ;
   rdfs:comment "The subject of a triple"@en ;
   rdfs:domain woql:Triple ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:predicate
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "predicate"@en ;
   rdfs:comment "The predicate of a triple"@en ;
   rdfs:domain woql:Triple ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:object
   a owl:ObjectProperty ;
@@ -283,18 +311,18 @@ woql:Subsumption
   rdfs:comment "Subsumption of one class by another"@en .
 
 woql:child
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "child"@en ;
   rdfs:comment "The child of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:parent
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "parent"@en ;
   rdfs:comment "The parent of a subsumption"@en ;
   rdfs:domain woql:Subsumption ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:BinaryOperator
   a owl:Class;
@@ -420,6 +448,7 @@ woql:AsVars
 
 woql:AsVar
   a owl:Class ;
+  rdfs:subClassOf woql:ObjectWithVariable;
   rdfs:label "As Var"@en ;
   rdfs:comment "As Var"@en .
 
@@ -454,13 +483,6 @@ woql:NamedAsVar
   rdfs:subClassOf woql:AsVar ;
   rdfs:label "A var by column or header name"@en ;
   rdfs:comment "A var by column or header name"@en .
-
-woql:var
-  a owl:DatatypeProperty ;
-  rdfs:label "var"@en ;
-  rdfs:comment "A variable identifier"@en ;
-  rdfs:domain woql:AsVar ;
-  rdfs:range xsd:anyURI .
 
 woql:var_type
   a owl:DatatypeProperty ;
@@ -717,7 +739,7 @@ woql:ArithmeticValue
 woql:arithmetic_value
   a owl:ObjectProperty ;
   rdfs:label "arithmetic value"@en ;
-  rdfs:comment "The value part of an expression (what if this is a variable?)"@en ;
+  rdfs:comment "The value part of an expression (could also be a variable)"@en ;
   rdfs:domain woql:ArithmeticValue ;
   rdfs:range woql:DatatypeOrID .
 
@@ -728,18 +750,18 @@ woql:IsA
   rdfs:subClassOf woql:Query .
 
 woql:element
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "element"@en ;
   rdfs:comment "The element of an IsA being type checked"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:of_type
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "of type"@en ;
   rdfs:comment "Element is 'of type'"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range xsd:anyURI .
+  rdfs:range owl:Thing .
 
 woql:Like
   a owl:Class ;
@@ -809,7 +831,6 @@ woql:value_list_element
   rdfs:domain woql:ValueList;
   rdfs:range woql:ValueListElement;
   rdfs:comment "An element in a value list"@en .
-
 
 woql:ValueListElement
   a owl:Class ;
@@ -1091,14 +1112,14 @@ woql:group_var
   rdfs:label "group var"@en ;
   rdfs:comment "Variable which to group"@en ;
   rdfs:domain woql:GroupBy ;
-  rdfs:range woql:DatatypeOrID .
+  rdfs:range woql:Variable .
 
 woql:grouped
   a owl:ObjectProperty ;
   rdfs:label "grouped"@en ;
   rdfs:comment "Variable in which to place the grouping"@en ;
   rdfs:domain woql:GroupBy ;
-  rdfs:range woql:DatatypeOrID .
+  rdfs:range woql:Variable .
 
 woql:Length
   a owl:Class ;
