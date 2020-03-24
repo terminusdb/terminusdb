@@ -27,7 +27,6 @@ install:
 
 build_script:
   - cd windows
-  - cd ..\
   - makensis.exe terminusdb_windows_installer.nsi
   - cd ..\
 
