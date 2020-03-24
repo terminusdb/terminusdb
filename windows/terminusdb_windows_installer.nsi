@@ -59,7 +59,7 @@ SectionEnd
 ;-------------------------------------------------------------------------------
 ; Uninstaller Sections
 Section "Uninstall"
-  RMDir "$INSTDIR"
-  RMDir "$SMPROGRAMS\${COMPANY_NAME}"
+  RMDir /r "$INSTDIR"
+  RMDir /r "$SMPROGRAMS\${COMPANY_NAME}"
   DeleteRegKey /ifempty HKCU "Software\DataChemist\terminus_server"
 SectionEnd
