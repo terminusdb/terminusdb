@@ -42,7 +42,8 @@
               whole_arg/2,
               random_string/1,
               uri_has_protocol/1,
-              uri_has_prefix/1
+              uri_has_prefix/1,
+              choice_points/1
           ]).
 
 /** <module> Utils
@@ -674,3 +675,21 @@ uri_has_prefix(K) :-
     \+ uri_has_protocol(K),
     re_match('^[^:]*:[^:]*',K).
 
+
+/*
+ * choice_points(N) is det.
+ *
+ * Gets the current number of choice points, for debugging making
+ * it easier to see who is the culprit.
+ */
+choice_points(N) :-
+    prolog_current_choice(F),
+    choice_points_(F,N).
+
+choice_points_(F, 0) :-
+    \+ prolog_choice_attribute(F, parent, _),
+    !.
+choice_points_(F, M) :-
+    prolog_choice_attribute(F, parent, G),
+    choice_points_(G, N),
+    M is N + 1.

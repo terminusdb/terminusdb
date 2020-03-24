@@ -79,6 +79,7 @@
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
+              xquad/5,
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,

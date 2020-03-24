@@ -3,6 +3,7 @@
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
+              xquad/5,
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
@@ -286,12 +287,11 @@ xrdf_deleted(Gs,X,Y,Z) :-
     storage_object(S,Z).
 
 /**
- * xrdf(?Subject,?Predicate,?Object) is nondet.
+ * xrdf(+Gs,?Subject,?Predicate,?Object) is nondet.
  *
  * The basic predicate implementing the the RDF database.
  * This layer has the transaction updates included.
  *
- * WARNING: Collection is now unused!
  */
 xrdf(Gs,X,Y,Z) :-
     assertion(is_list(Gs)), % take out for production? This gets called a *lot*
@@ -299,6 +299,17 @@ xrdf(Gs,X,Y,Z) :-
     read_write_obj_reader(G, Layer),
     xrdf_db(Layer,X,Y,Z).
 
+/**
+ * xquad(Gs:list(graph),?G:graph,?Subject,?Predicate,?Object) is nondet.
+ *
+ * The transactional quad predicate allows us to remember which graph
+ * we found a result in.
+ */
+xquad(Gs,G,X,Y,Z) :-
+    assertion(is_list(Gs)),
+    member(G,Gs),
+    read_write_obj_reader(G, Layer),
+    xrdf_db(Layer,X,Y,Z).
 
 pre_convert_node(X,A) :-
     (   nonvar(X)

@@ -5,7 +5,9 @@
               create_context/3,
               collection_descriptor_prefixes/2,
               context_overriding_prefixes/3,
-              empty_context/1
+              empty_context/1,
+              query_default_collect/2,
+              query_default_write_graph/2
           ]).
 
 /** <module> Ask
@@ -267,3 +269,22 @@ ask_ast(Context, Ast, Output_Context) :-
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
     woql_compile:Prog.
+
+/*
+ * query_default_collection(Query_Context, Collection) is semidet.
+ *
+ * Finds the transaction object for the default collection if it exists.
+ */
+query_default_collection(Query_Context, Collection) :-
+    collection_descriptor_transaction_object(Query_Context_In.default_collection,
+                                             Query_Context_In.transaction_objects,
+                                             Collection).
+
+/*
+ * query_default_write_graph(Query_Context, Graph) is semidet.
+ *
+ * Finds the transaction object for the default collection if it exists.
+ */
+query_default_write_graph(Query_Context, Write_Graph) :-
+    Graph_Descriptor = Query_Context.write_graph
+    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Write_Graph).

@@ -15,7 +15,7 @@
               refute_insertion/5,
               refute_deletion/5,
               refute_basetype_elt/3,
-              
+
               % validate_schema.pl
               class/2,
               immediate_class/2,

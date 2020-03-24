@@ -1,5 +1,6 @@
 :- module(inference,[
-              inferredEdge/4
+              inferredEdge/4,
+              inferredQuad/5
           ]).
 
 /** <module> Inference
@@ -60,6 +61,44 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
     inferredEdge(Y,OP,Z,Database).
 
 /**
+ * inferredQuad(?G,?X,?Op,?Y,+Database:database) is nondet
+ *
+ * This predicate finds an edge together with the graph in which
+ * it appears *OR* with a special 'inferred' atom.
+ *
+ * NOTE: for deletes it might be useful to know *how* it was inferred,
+ * i.e. what were the base facts that allowed us to make the derivation
+ * we will punt on that for now.
+ */
+inferredQuad(G,X,Op,Y,Database) :-
+    % No inference
+    database_instance(Database,Instance),
+    database_inference(Database,[]),
+    !,
+    xquad(Instance,G,X,OP,Y).
+inferredQuad(G,X,OP,Y,Database) :-
+    % Base case for inference
+    database_instance(Database,Instance),
+    xquad(Instance,G,X,OP,Y).
+inferredQuad(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),
+    inferredTransitiveEdge(X,OP,Y,Database).
+inferredQuad(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,OP,owl:'inverseOf',P),
+    inferredEdge(Y,P,X,Database).
+inferredQuad(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,OP,owl:propertyChainAxiom,ListObj),
+    collect(Database,Inference,ListObj,PropList),
+    runChain(X,PropList,Y,Database).
+inferredQuad(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,SOP,rdfs:subPropertyOf,OP),
+    inferredEdge(X,SOP,Y,Database).
+
+/**
  * inferredEdge(?X,?OP,?Y,+Database:database) is nondet.
  *
  * Calculates all available triples under inference
@@ -67,29 +106,4 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
 inferredEdge(X,OP,Y,Database) :-
-    % No inference
-    database_instance(Database,Instance),
-    database_inference(Database,[]),
-    !,
-    xrdf(Instance,X,OP,Y).
-inferredEdge(X,OP,Y,Database) :-
-    % Base case for inference
-    database_instance(Database,Instance),
-    xrdf(Instance,X,OP,Y).
-inferredEdge(X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),
-    inferredTransitiveEdge(X,OP,Y,Database).
-inferredEdge(X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,owl:'inverseOf',P),
-    inferredEdge(Y,P,X,Database).
-inferredEdge(X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,owl:propertyChainAxiom,ListObj),
-    collect(Database,Inference,ListObj,PropList),
-    runChain(X,PropList,Y,Database).
-inferredEdge(X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,SOP,rdfs:subPropertyOf,OP),
-    inferredEdge(X,SOP,Y,Database).
+    inferredQuad(_,X,Op,Y,Database).

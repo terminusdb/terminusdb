@@ -800,72 +800,71 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
  */
 
 /*
- * realise_triples(Elt,Frame,Database,Realiser) is det.
+ * realise_quads(Elt,Frame,Database,Realiser) is det.
  *
  * The triple realiser must be kept in complete lock step with the definition above.
  * This makes me wonder if we shouldn't keep the method fused or derived!
  *
  * It may be desirable to have a depth parameter here as well?
  */
-realise_triples(_,[],_,[]) :-
+realise_quads(_,[],_,[]) :-
     !.
-realise_triples(Elt,[[type=objectProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are an object property
-    database_name(Database,C),
-    database_instance(Database,G),
+    database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(G,Elt,RDFType,Type),
+    xrdf(Gs,Elt,RDFType,Type),
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
-              V^(inferredEdge(Elt, Prop, V, Database),
+              V^(inferredQuad(G, Elt, Prop, V, Database),
                  (   document(V,Database)
-                 ->  New_Realiser=[(C,G,Elt,Prop,V)]
-                 ;   realise_triples(V,Frame,Database,Below),
-                     New_Realiser=[(C,G,Elt,Prop,V)|Below])),
+                 ->  New_Realiser=[(G,Elt,Prop,V)]
+                 ;   realise_quads(V,Frame,Database,Below),
+                     New_Realiser=[(G,Elt,Prop,V)|Below])),
               RealiserLists)
     ->  append(RealiserLists,Realisers_on_P),
-        realise_triples(Elt,Rest,Database,Realiser_Tail),
+        realise_quads(Elt,Rest,Database,Realiser_Tail),
         append(Realisers_on_P, Realiser_Tail, Realiser)
-    ;   realise_triples(Elt,Rest,Database,Realiser)
+    ;   realise_quads(Elt,Rest,Database,Realiser)
     ).
-realise_triples(Elt,[[type=datatypeProperty|P]|Rest],Database,[(C,G,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
     database_name(Database,C),
-    database_instance(Database,G),
+    database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(G,Elt,RDFType,Type),
+    xrdf(Gs,Elt,RDFType,Type),
 
     member(property=Prop, P),
-    (   setof((C,G,Elt,Prop,V),
-              inferredEdge(Elt, Prop, V, Database),
+    (   setof((G,Elt,Prop,V),
+              inferredQuad(G, Elt, Prop, V, Database),
               Realisers_on_P)
-    ->  realise_triples(Elt,Rest,Database,Realiser_Tail),
+    ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
         append(Realisers_on_P,Realiser_Tail,Realiser)
-    ;   realise_triples(Elt,Rest,Database,Realiser)
+    ;   realise_quads(Elt,Rest,Database,Realiser)
     ).
-realise_triples(Elt,[[type=restriction|_R]|Rest],Database,Realiser) :-
+realise_quads(Elt,[[type=restriction|_R]|Rest],Database,Realiser) :-
     % We are a bare restriction, not applied to any property
     !,
-    realise_triples(Elt,Rest,Database,Realiser).
-realise_triples(Elt,[[type=class_choice,operands=_]|Rest],Database,Realiser) :-
+    realise_quads(Elt,Rest,Database,Realiser).
+realise_quads(Elt,[[type=class_choice,operands=_]|Rest],Database,Realiser) :-
     % We are a bare class choice, not applied to any property
     !,
     object_edges(Elt,Database,Edges),
-    realise_triples(Elt,Rest,Database,Realiser_Tail),
+    realise_quads(Elt,Rest,Database,Realiser_Tail),
     append(Edges,Realiser_Tail,Realiser).
-realise_triples(Elt,Frame,Database,Realisers) :-
+realise_quads(Elt,Frame,Database,Realisers) :-
     % We should be able to assume correctness of operator here...
     % member(type=Type, Frame),
     member(operands=Fs, Frame),
     !, % We're an operator, so stick with it
     maplist({Elt,Database}/[TheFrame,New_Realiser]
-            >>(realise_triples(Elt,TheFrame,Database,New_Realiser)),Fs,Realiser_List),
+            >>(realise_quads(Elt,TheFrame,Database,New_Realiser)),Fs,Realiser_List),
     append(Realiser_List,Realisers).
-realise_triples(_Elt,F,_Database,[]) :-
+realise_quads(_Elt,F,_Database,[]) :-
     member(type=Type, F),
     member(Type,[oneOf,document]),
     % is a one-of or document (don't backtrack over member)
@@ -880,7 +879,11 @@ realise_triples(_Elt,F,_Database,[]) :-
 document_object(DB, Document, Depth, Realiser) :-
     most_specific_type(Document,Class,DB),
     class_frame(Class,DB,Frame),
-    realiser(Document,Frame,DB,Depth,Realiser).
+
+    % TODO: There really should not be epic loads of
+    % choice points placed by realiser, but apparently
+    % there are...
+    once(realiser(Document,Frame,DB,Depth,Realiser)).
 
 /*
  * document_jsonld(+DB{},+Ctx:any,+Database:database-Realiser) is semidet.
@@ -893,7 +896,6 @@ document_object(DB, Document, Depth, Realiser) :-
 document_jsonld(DB, Document,JSON_LD) :-
     document_object(DB, Document, 1, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-
     collection_descriptor_prefixes(DB.descriptor, Prefixes),
     compress(JSON_Ex,Prefixes,JSON_LD).
 
@@ -905,7 +907,7 @@ document_jsonld(DB, Document,JSON_LD) :-
  * up to depth Depth
  */
 document_jsonld(Database, Document, Depth, JSON_LD) :-
-    document_object(Document, Database, Depth, Realiser),
+    document_object(Database, Document, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
     collection_descriptor_prefixes(Database.descriptor, Prefixes),
     compress(JSON_Ex, Prefixes, JSON_LD).
@@ -918,10 +920,9 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
     class_frame(Class,Database,Frame),
     term_jsonld(Frame,JSON_LD),
 
-    database_name(Database, Name),
-    get_collection_jsonld_context(Name,Ctx),
+    collection_descriptor_prefixes(Database.descriptor, Prefixes),
 
-    compress(JSON_LD,Ctx,JSON_Frame).
+    compress(JSON_LD, Prefixes, JSON_Frame).
 
 /*
  * object_edges(URI,Database,Edges) is det.
@@ -932,7 +933,7 @@ class_frame_jsonld(Class,Database,JSON_Frame) :-
 object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
-        realise_triples(URI,Frame,Database,Unsorted),
+        realise_quads(URI,Frame,Database,Unsorted),
         sort(Unsorted,Edges)
     ->  true
     % There is no type in the database, so it doesn't exist...
@@ -969,16 +970,23 @@ object_instance_graph(JSON,Database,I) :-
     object_instance_graph(URI,Database,I).
 
 /*
- * delete_object(URI,Database) is det.
+ * delete_object(URI,Context_In,Context_Out) is det.
  *
  */
-delete_object(URI,Database) :-
-    get_collection_jsonld_context(Database,Ctx),
+delete_object(URI,Context_In,Context_Out) :-
+    Ctx = Context_In.prefixes,
+
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
-    maplist([([G],X,Y,Z)]>>delete(G,X,Y,Z,_N), Edges).
+    maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N),Edges,Delete_Counts),
+    sumlist(Delete_Counts, Delete_Count),
+
+    Total_Delete_Count is Query_Context_In.deletes + Delete_Count,
+
+    Query_Context_Out = Query_Context_In.put(_{deletes : Delete_Count}).
+
 
 /*
  * update_object(Obj:dict,Database) is det.
@@ -989,24 +997,24 @@ delete_object(URI,Database) :-
  * Inserts := triples(New) / triples(Old)
  * Deletes := triples(New) / triples(New)
  */
-update_object(Obj, Database) :-
+update_object(Obj, QUery_Context_In, Query_Context_Out) :-
     jsonld_id(Obj,ID),
-    update_object(ID,Obj,Database).
+    update_object(ID,Obj,Query_Context_In, Query_Context_Out).
 
 
 /*
- * update_object(ID:url,Obj:dict,Database) is det.
+ * update_object(ID:url,Obj:dict,Query_Context_In,Query_Context_Out) is det.
  *
  * Does the actual updating using ID.
  */
-update_object(ID, Obj, Database) :-
-    database_name(Database,Database_Name),
-    get_collection_jsonld_context(Database_Name,Ctx),
-    prefix_expand(ID,Ctx,ID_Ex),
+update_object(ID, Obj, Database, Query_Context_In, Query_Context_Out) :-
+    prefix_expand(ID,Query_Context_In.prefixes,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
 
-    jsonld_triples(New_Obj,Ctx,Database,New),
+    query_default_collection(Query_Context_In, DB),
+
+    jsonld_triples(New_Obj,Ctx,DB,New),
     object_edges(ID,Database,Old),
 
     debug(terminus(frame(fill)),'~nNew: ~q~n', [New]),
@@ -1016,9 +1024,17 @@ update_object(ID, Obj, Database) :-
     subtract(New,Old,Inserts),
     subtract(Old,New,Deletes),
 
-    maplist([([G],X,Y,Z)]>>insert(G,X,Y,Z,N), Inserts),
+    maplist([(G,X,Y,Z),N]>>insert(G,X,Y,Z,N), Inserts, Insert_Counts),
+    maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N), Deletes, Delete_Counts),
 
-    maplist([([G],X,Y,Z)]>>delete(G,X,Y,Z,N), Deletes).
+    sumlist(Insert_Counts, Insert_Count),
+    sumlist(Delete_Counts, Delete_Count),
+
+    Total_Insert_Count is Query_Context_In.inserts + Insert_Count,
+    Total_Delete_Count is Query_Context_In.deletes + Delete_Count,
+    Query_Context_Out = Query_Context_In.put(_{inserts : Total_Insert_Count,
+                                               deletes : Total_Delete_Count
+                                              }).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)
@@ -1031,8 +1047,59 @@ document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
     document_filled_frame(Document, Database, FCF),
     term_jsonld(FCF, JSON_Ex),
 
-    database_name(Database, Name),
-    get_collection_jsonld_context(Name,Ctx_Database),
-    merge_dictionaries(Ctx,Ctx_Database,Ctx_Total),
+    merge_dictionaries(Ctx,Database.prefixes,Ctx_Total),
 
     compress(JSON_Ex,Ctx_Total,JSON_LD).
+
+:- begin_tests(documents).
+:- use_module(core(util/test_utils)).
+:- use_module(library(http/json)).
+:- use_module(core(query)).
+
+test(update_object, [])
+:-
+
+    Descriptor = terminus_descriptor{},
+    open_descriptor(Descriptor, Transaction),
+    create_context(Transaction, Query),
+
+    Document = _{'@context': Query.prefixes,
+                 '@id' : "doc:new_user",
+                 '@type' : "terminus:User",
+                 'rdfs:comment': _{'@language': "en",
+                                   '@value': "This is a test user."},
+                 'rdfs:label': _{'@language':"en",
+                                 '@value':"Test User"},
+                 'terminus:agent_key_hash':
+                 _{'@type':"xsd:string",
+                   % key = 'test'
+                   '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
+                 },
+                 'terminus:agent_name': _{'@type':"xsd:string",
+                                          '@value':"test"
+                                         },
+                 'terminus:authority': _{'@id':"doc:access_all_areas",
+                                         '@type':"terminus:ServerCapability"}
+                },
+
+
+    update_object(Document, Transaction),
+    run_transaction(Transaction),
+
+    open_descriptor(Descriptor, Transaction2),
+    document_jsonld(Transaction2, "doc:new_user", 1, JSON_LD),
+
+    json_write_dict(current_output, JSON_LD, []).
+
+test(document_jsonld_depth, [])
+:-
+    Descriptor = terminus_descriptor{},
+    User_ID = 'terminus:///terminus/document/admin',
+
+    open_descriptor(Descriptor, Transaction),
+
+    document_jsonld(Transaction, User_ID, 1, JSON_LD),
+    % TODO: Why are these atoms? Inconsistent!
+    _{'@id':'doc:admin','@type':'terminus:User'} :< JSON_LD.
+
+:- end_tests(documents).

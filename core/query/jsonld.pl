@@ -423,33 +423,30 @@ jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
 jsonld_predicate_value(_P,Val,_Ctx,Val).
 
 /*
- * jsonld_triples(+Dict,+Database,-Triples) is det.
+ * jsonld_triples(+Dict,+Ctx,-Triples) is det.
  *
  * Return the triples associated with a JSON-LD structure.
  */
-jsonld_triples(JSON, Database, Triples) :-
-    jsonld_triples(JSON, _{}, Database, Triples).
-
-jsonld_triples(JSON, Ctx, Database, Triples) :-
+jsonld_triples(JSON, Ctx, Triples) :-
     get_dict_default('@context', JSON, Internal,_{}),
     merge_dictionaries(Ctx, Internal, New_Ctx),
     expand_context(New_Ctx,New_Expanded),
     expand(JSON,New_Expanded,JSON_Ex),
-    jsonld_triples_aux(JSON_Ex, New_Ctx, Database, Triples_Unsorted),
+    jsonld_triples_aux(JSON_Ex, New_Ctx, Triples_Unsorted),
     sort(Triples_Unsorted,Triples).
 
 /*
- * jsonld_triples_aux(Dict, Ctx, Database, Tuples) is det.
+ * jsonld_triples_aux(Dict, Ctx, Tuples) is det.
  *
- * Create the n-triple format of the given json triples
- * suitable for use with delete/5 or insert/5
+ * Create a list of triples which provide a representation for the objects
+ * in the graph.
  */
-jsonld_triples_aux(Dict, Ctx, Database, Triples) :-
+jsonld_triples_aux(Dict, Ctx, Triples) :-
     is_dict(Dict),
     !,
 
     (   get_dict('@id', Dict, ID)
-    ->  jsonld_id_triples(ID,Dict,Ctx,Database,Triples)
+    ->  jsonld_id_triples(ID,Dict,Ctx,Triples)
     ;   dict_pairs(Dict, _, JSON_Pairs),
         maplist({Database,Ctx}/[ID-PV,Triples]>>(
                     (   memberchk(ID,['@context','@id'])
