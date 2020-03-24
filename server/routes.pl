@@ -185,6 +185,7 @@ db_handler(post,Account,DB,R) :-
     authenticate(Terminus_DB, Request, Auth),
     config:public_server_url(Server),
     verify_access(Terminus_DB, Auth, terminus:create_database,Server),
+    http_log('[Request] ~q', [Request]),
     try_get_param('terminus:base_uri',Request,Base_URI),
 
     user_database_name(Account, DB, DB_Name),
@@ -207,6 +208,45 @@ db_handler(delete,Account,DB,Request) :-
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
+
+:- begin_tests(db_endpoint).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(db_create, [
+         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                (   database_exists(DB)
+                ->  delete_db(DB)
+                ;   true))),
+         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                  delete_db(DB)))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    http_post(URI, form_data(['terminus:base_uri'="https://terminushub.com/document"]),
+              In, [json_object(dict),
+                   authorization(basic(admin, root))]),
+
+    _{'terminus:status' : "terminus:success"} = In.
+
+
+test(db_delete, [
+         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                create_db(DB,"https://terminushub.com/")))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    http_delete(URI, Delete_In, [json_object(dict),
+                                 authorization(basic(admin, root))]),
+
+    _{'terminus:status' : "terminus:success"} = Delete_In.
+
+:- end_tests(db_endpoint).
+
+
 %%%%%%%%%%%%%%%%%%%% Schema Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(schema/DB), cors_catch(schema_handler(Method,DB)),
                 [method(Method),
@@ -220,6 +260,8 @@ db_handler(delete,Account,DB,Request) :-
                 [method(Method),
                  time_limit(infinite),
                  methods([options,get,post])]).
+
+% DB Endpoint tests
 
 /*
  * schema_handler(Mode,DB,Request) is det.
@@ -753,6 +795,9 @@ test(branch_db, [])
         (   % Create Database
             config:server(Server),
             user_database_name(admin,test, Name),
+            (   database_exists(Name)
+            ->  delete_db(Name)
+            ;   true),
             create_db(Name, 'http://terminushub.com/document')
         ),
         (
@@ -783,10 +828,8 @@ test(branch_db, [])
             http_post(URI,
                       form_data(['terminus:query'=Payload0,
                                  'terminus:commit_info'=Commit_Payload]),
-                      JSON0,
+                      _JSON0,
                       [json_object(dict),authorization(basic(admin,root))]),
-
-            writeq(JSON0),
 
             % Now query the insert...
             Query1 =
@@ -808,13 +851,14 @@ test(branch_db, [])
                       JSON1,
                       [json_object(dict),authorization(basic(admin,root))]),
 
+            % json_write_dict(current_output,JSON1,[]),
             % extra debugging...
             % current_output(Out),
             % json_write(Out,In,[]),
             (   _{'bindings' : L} :< JSON1
-            ->  length(L, N),
-                N >= 10
-            ;   fail)
+            ->  L = [_{'Object':"http://terminusdb.com/schema/woql#test_object",
+                       'Predicate':"http://terminusdb.com/schema/woql#test_predicate",
+                       'Subject':"http://terminusdb.com/schema/woql#test_subject"}])
         ),
         _Catcher,
         delete_db(Name)

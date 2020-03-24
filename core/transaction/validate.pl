@@ -104,7 +104,7 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
 
 commit_validation_object(Validation_Object, []) :-
     validation_object{
-        descriptor:Descriptor,
+        descriptor : Descriptor,
         instance_objects : Instance_Objects,
         schema_objects : Schema_Objects,
         inference_objects : Inference_Objects

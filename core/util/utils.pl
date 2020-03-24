@@ -23,6 +23,7 @@
               find/3,
               trim/2,
               split_atom/3,
+              escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
               count/3,
@@ -39,7 +40,9 @@
               op(700,xfy,<>),
               '<>'/2,
               whole_arg/2,
-              random_string/1
+              random_string/1,
+              uri_has_protocol/1,
+              uri_has_prefix/1
           ]).
 
 /** <module> Utils
@@ -653,3 +656,21 @@ random_string(String) :-
     Size is 2 ** (20 * 8),
     random(0, Size, Num),
     format(atom(String), '~36r', [Num]).
+
+/*
+ * uri_has_protocol(K) is semidet.
+ *
+ * Tests to see if a URI has a protocol.
+ */
+uri_has_protocol(K) :-
+    re_match('^[^:/]+://.*',K).
+
+/*
+ * uri_has_prefix(K) is semidet.
+ *
+ * Tests to see if a URI has a prefix.
+ */
+uri_has_prefix(K) :-
+    \+ uri_has_protocol(K),
+    re_match('^[^:]*:[^:]*',K).
+

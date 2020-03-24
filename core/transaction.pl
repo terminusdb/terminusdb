@@ -1,5 +1,6 @@
 :- module(transaction, [
               % database.pl
+              query_context_transaction_objects/2,
               run_transaction/1,
               run_transactions/1,
 

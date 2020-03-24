@@ -22,18 +22,17 @@ woql:Variable
 woql:Array
   a owl:Class ;
   rdfs:comment "An array of elements"@en ;
-  rdsf:label "Array"@en .
+  rdfs:label "Array"@en .
+
+woql:Indexable
+  a owl:Class ;
+  rdfs:label "Indexable"@en ;
+  rdfs:comment "Something with an index"@en .
 
 woql:IndexableRestriction
   a owl:Restriction ;
   owl:onProperty woql:index ;
   owl:cardinality "1"^^xsd:nonNegativeInteger .
-
-woql:Indexable
-  a owl:Class ;
-  rdfs:subClassOf woql:IndexableRestriction ;
-  rdfs:label "Indexable"@en ;
-  rdfs:comment "Something with an index"@en .
 
 woql:index
   a owl:DatatypeProperty ;
@@ -53,24 +52,24 @@ woql:ValueRestriction
   owl:maxCardinality "1"^^xsd:nonNegativeInteger .
 
 woql:DatatypeOrID
-  a owl:Class
-  rdfs:subClassOf woql:NodeRestriction , woql:ValueRestriction
+  a owl:Class;
+  rdfs:subClassOf woql:NodeRestriction , woql:ValueRestriction;
   rdfs:label "Datatype or ID"@en ;
   rdfs:comment "Either a datatype or an ID"@en .
 
 woql:node
-  a owl:ObjectProperty
+  a owl:ObjectProperty;
   rdfs:label "node"@en ;
   rdfs:comment "The URI of an object of an edge"@en ;
   rdfs:domain woql:DatatypeOrID ;
   rdfs:range owl:Thing .
 
 woql:value
-  a owl:DatatypeProperty
+  a owl:DatatypeProperty;
   rdfs:label "value"@en ;
   rdfs:comment "The value of an object of an edge"@en ;
   rdfs:domain woql:DatatypeOrID ;
-  rdfs:range xsd:anySimpleDatatype .
+  rdfs:range xsd:anySimpleType .
 
 woql:ArrayElement
   a owl:Class ;
@@ -123,7 +122,7 @@ woql:QueryListElement
 
 woql:query
   a owl:ObjectProperty ;
-  rdfs:domain woql:QuerywithSubQuery ;
+  rdfs:domain woql:QueryWithSubQuery ;
   rdfs:range woql:Query .
 
 woql:Using
@@ -137,7 +136,7 @@ woql:Using
   rdfs:subClassOf woql:QueryWithSubQuery .
 
 woql:collection
-  a owl:ObjectProperty ;
+  a owl:DatatypeProperty ;
   rdfs:comment "A collection"@en ;
   rdfs:label "Collection"@en ;
   rdfs:domain woql:Using ;
@@ -153,7 +152,7 @@ woql:Comment
   rdfs:subClassOf woql:QueryWithSubQuery .
 
 woql:comment
-  a owl:ObjectProperty ;
+  a owl:DatatypeProperty ;
   rdfs:comment "A comment"@en ;
   rdfs:label "comment"@en ;
   rdfs:domain woql:Comment ;
@@ -279,7 +278,7 @@ woql:Comparator
 
 woql:Subsumption
   a owl:Class ;
-  rdfs:subClassOf woql:Query ,
+  rdfs:subClassOf woql:Query ;
   rdfs:label "Subsumption"@en ;
   rdfs:comment "Subsumption of one class by another"@en .
 
@@ -298,7 +297,7 @@ woql:parent
   rdfs:range xsd:anyURI .
 
 woql:BinaryOperator
-  a owl:Class
+  a owl:Class;
   rdfs:subClassOf woql:Query ;
   rdfs:label "Binary Operator"@en ;
   rdfs:comment "A binary operator, with left and right"@en .
@@ -528,7 +527,7 @@ woql:PostResource
   rdfs:comment "An HTTP POST Query Resource"@en .
 
 woql:format
-  a owl:DatatypeProperty ;
+  a owl:ObjectProperty ;
   rdfs:label "format"@en ;
   rdfs:comment "The format of the resource"@en ;
   rdfs:domain woql:QueryResource ;
@@ -554,25 +553,25 @@ woql:format_header
   rdfs:range xsd:boolean .
 
 woql:AddTriple
-  a owl:DatatypeProperty ;
+  a owl:Class ;
   rdfs:subClassOf woql:Triple ;
   rdfs:label "Add triple"@en ;
   rdfs:comment "Add a triple"@en .
 
 woql:AddQuad
-  a owl:DatatypeProperty ;
+  a owl:Class ;
   rdfs:subClassOf woql:Quad ;
   rdfs:label "Add quad"@en ;
   rdfs:comment "Add a quad"@en .
 
 woql:DeleteQuad
-  a owl:DatatypeProperty ;
+  a owl:Class ;
   rdfs:subClassOf woql:Quad ;
   rdfs:label "Delete quad"@en ;
   rdfs:comment "Delete a quad"@en .
 
 woql:DeleteTriple
-  a owl:DatatypeProperty ;
+  a owl:Class ;
   rdfs:subClassOf woql:Triple ;
   rdfs:label "Delete triple"@en ;
   rdfs:comment "Delete a triple"@en .
@@ -629,7 +628,7 @@ woql:result
   rdfs:domain woql:Eval ;
   rdfs:range woql:DatatypeOrID .
 
-woql:ArithmeticExpression ;
+woql:ArithmeticExpression 
   a owl:Class ;
   rdfs:label "Arithmetic Expression"@en ;
   rdfs:comment "An arithmetic expression"@en .
@@ -755,25 +754,25 @@ woql:like_similarity
   rdfs:domain woql:Like ;
   rdfs:range woql:DatatypeOrID .
 
-woql:Less ;
+woql:Less 
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;
   rdfs:label "Less"@en ;
   rdfs:comment "One value less than another"@en .
 
-woql:Greater ;
+woql:Greater 
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;
   rdfs:label "Greater"@en ;
   rdfs:comment "One value greater than another"@en .
 
-woql:Optional ;
+woql:Optional 
   a owl:Class ;
   rdfs:subClassOf woql:QueryWithSubQuery ;
   rdfs:comment "Query which is optional"@en ;
   rdfs:label "Optional"@en .
 
-woql:Put ;
+woql:Put 
   a owl:Class ;
   rdfs:subClassOf woql:GetOrPut ;
   rdfs:label "Put"@en ;
@@ -825,13 +824,13 @@ woql:uri
   rdfs:domain woql:URIGenerator ;
   rdfs:range woql:DatatypeOrID .
 
-woql:Unique ;
+woql:Unique 
   a owl:Class ;
   rdfs:subClassOf woql:URIGenerator ;
   rdfs:label "Unique"@en ;
   rdfs:comment "An irreversible unique identifier generated from a Base and a Key"@en .
 
-woql:IDGenerator ;
+woql:IDGenerator 
   a owl:Class ;
   rdfs:subClassOf woql:URIGenerator ;
   rdfs:label "ID Gen"@en ;
@@ -913,7 +912,7 @@ woql:split_list
 woql:Member
   a owl:Class ;
   rdfs:label "Member"@en ;
-  rdfs:comment "Find an element of a list"@en ;
+  rdfs:comment "Find an element of a list"@en .
 
 woql:member
   a owl:ObjectProperty ;
@@ -939,14 +938,14 @@ woql:concat_list
   a owl:ObjectProperty ;
   rdfs:label "list"@en ;
   rdfs:comment "The list of elements to concatenate"@en ;
-  rdfs:domain woql:Concat ;
+  rdfs:domain woql:Concatenate ;
   rdfs:range woql:DatatypeOrID .
 
 woql:concatenated
   a owl:ObjectProperty ;
   rdfs:label "concatcatenated"@en ;
   rdfs:comment "The string which has been concatenated"@en ;
-  rdfs:domain woql:Concat ;
+  rdfs:domain woql:Concatenate ;
   rdfs:range woql:DatatypeOrID .
 
 woql:Join
@@ -1091,14 +1090,14 @@ woql:group_var
   a owl:ObjectProperty ;
   rdfs:label "group var"@en ;
   rdfs:comment "Variable which to group"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:GroupBy ;
   rdfs:range woql:DatatypeOrID .
 
 woql:grouped
   a owl:ObjectProperty ;
   rdfs:label "grouped"@en ;
   rdfs:comment "Variable in which to place the grouping"@en ;
-  rdfs:domain woql:OrderBy ;
+  rdfs:domain woql:GroupBy ;
   rdfs:range woql:DatatypeOrID .
 
 woql:Length
@@ -1115,7 +1114,7 @@ woql:length_list
   rdfs:range woql:DatatypeOrID .
 
 woql:Not
-  a owl:ObjectProperty ;
+  a owl:Class ;
   rdfs:label "Not"@en ;
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
@@ -1147,3 +1146,7 @@ woql:typecast_result
   rdfs:domain woql:Typecast ;
   rdfs:range woql:DatatypeOrID .
 
+terminus:Document 
+  a owl:Class;
+  rdfs:label "Document Class"@en;
+  rdfs:comment "Terminus Document Class included as it is a dependancy"@en.

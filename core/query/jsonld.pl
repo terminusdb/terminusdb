@@ -166,22 +166,15 @@ expand_value(V,Key_Ctx,_Ctx,_Value) :-
     format(atom(M),'Unknown key context ~q for value ~q', [Key_Ctx,V]),
     throw(error(M)).
 
-has_protocol(K) :-
-    re_match('^[^:/]+://.*',K).
-
-has_prefix(K) :-
-    \+ has_protocol(K),
-    re_match('^[^:]*:[^:]*',K).
-
 has_at(K) :-
     re_match('^@.*',K).
 
 context_prefix_expand(K,Context,Key) :-
     %   Already qualified
-    (   has_protocol(K)
+    (   uri_has_protocol(K)
     ->  K = Key
     %   Prefixed URI
-    ;   has_prefix(K)
+    ;   uri_has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
@@ -206,10 +199,10 @@ context_prefix_expand(K,Context,Key) :-
 
 prefix_expand(K,Context,Key) :-
     %   Is already qualified
-    (   has_protocol(K)
+    (   uri_has_protocol(K)
     ->  K = Key
     %   Is prefixed
-    ;   has_prefix(K)
+    ;   uri_has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)

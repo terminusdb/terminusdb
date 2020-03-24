@@ -34,6 +34,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(library(pcre)).
+:- use_module(core(util)).
 
 /*
  * date_string(-Date,+String) is det.
@@ -188,7 +189,8 @@ try_prefix_uri(X,_,X) :-
 try_prefix_uri(URI,[],URI) :-
     !.
 try_prefix_uri(URI,[Prefix-URI_Base|_], Prefixed) :-
-    atomic_list_concat(['^(?P<base>',URI_Base,')(?P<rest>.*)$'], Pattern),
+    escape_pcre(URI_Base,URI_Escaped),
+    atomic_list_concat(['^(?P<base>',URI_Escaped,')(?P<rest>.*)$'], Pattern),
     re_matchsub(Pattern, URI, Match, []),
     atom_string(Suffix,Match.rest),
     Prefixed = Prefix : Suffix,

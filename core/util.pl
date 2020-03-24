@@ -38,7 +38,7 @@
               copy_remote/4,
 
               % utils.pl
-              
+              escape_pcre/2,
               get_key/4,
               get_key/3,
               get_dict_default/4,
@@ -80,6 +80,8 @@
               '<>'/2,
               whole_arg/2,
               random_string/1,
+              uri_has_prefix/1,
+              uri_has_protocol/1,
 
               % speculative_parse.pl
               guess_date/2,

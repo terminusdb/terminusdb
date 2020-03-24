@@ -25,14 +25,13 @@ ask_ast_jsonld_response(Context, AST, JSON) :-
     ;   zip(Binding_Set, Contexts, Binding_Set_And_Context),
         last(Contexts, Final_Context)),
 
-    (   Final_Context.transaction_objects \= []
-    ->  run_transactions(Final_Context.transaction_objects)
-    ;   true),
+    query_context_transaction_objects(Final_Context,Transactions),
+    run_transactions(Transactions),
 
-    (   Inserts = Context.get(inserts)
+    (   Inserts = Final_Context.get(inserts)
     ->  true
     ;   Inserts = 0),
-    (   Deletes = Context.get(inserts)
+    (   Deletes = Final_Context.get(deletes)
     ->  true
     ;   Deletes = 0),
 

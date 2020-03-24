@@ -1,4 +1,5 @@
 :- module(database,[
+              query_context_transaction_objects/2,
               run_transaction/1,
               run_transactions/1
           ]).
@@ -58,3 +59,19 @@ run_transaction(Transaction) :-
 run_transactions(Transactions) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     commit_validation_objects(Validations).
+
+
+/*
+ * query_context_transaction_objects(+Query_Object,Transaction_Objects) is det.
+ *
+ * Marshall commit info into the transaction object and run it.
+ */
+query_context_transaction_objects(Query_Context,Transaction_Objects) :-
+    maplist({Query_Context}/[Transaction_Object,New_Transaction_Object]>>(
+                get_dict(commit_info,Query_Context,Commit_Info),
+                put_dict(_{commit_info : Commit_Info},
+                         Transaction_Object,
+                         New_Transaction_Object)
+            ),
+            Query_Context.transaction_objects,
+            Transaction_Objects).
