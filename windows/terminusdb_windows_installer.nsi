@@ -47,9 +47,9 @@ Section "TerminusDB" TerminusDB
   File "..\terminus_store_prolog.dll"
   writeUninstaller "$INSTDIR\uninstall.exe"
   File "..\libterminus_store.dll"
-  File /r "..\*"
+  File /r "..\*" /x windows
   SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
-  File /r "%APPDATA%\SWI-Prolog\pack\terminus_store_prolog\*"
+  File /r "terminus_store_prolog\*"
 SectionEnd
 
 ;-------------------------------------------------------------------------------
