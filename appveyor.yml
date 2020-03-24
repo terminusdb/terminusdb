@@ -25,7 +25,7 @@ install:
 
 build_script:
   - cd windows
-  - "C:\Program Files (x86)\NSIS\makensis.exe" terminusdb_windows_installer.exe
+  - C:\Program Files (x86)\NSIS\makensis.exe terminusdb_windows_installer.exe
   - cd ..\
 
 test_script:
