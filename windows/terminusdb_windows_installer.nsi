@@ -8,6 +8,7 @@
 ;-------------------------------------------------------------------------------
 ; Constants
 !define PRODUCT_NAME "TerminusDB"
+!define COMPANY_NAME "DataChemist"
 !define PRODUCT_DESCRIPTION "The best database"
 !define COPYRIGHT "Copyright © 2020 DataChemist LTD"
 !define PRODUCT_VERSION "1.0.0.0"
@@ -48,6 +49,9 @@ Section "TerminusDB" TerminusDB
   writeUninstaller "$INSTDIR\uninstall.exe"
   File "..\libterminus_store.dll"
   File /r /x "windows" ..\*
+  ; Start menu creation
+  createDirectory "$SMPROGRAMS\${COMPANY_NAME}"
+  createShortCut "$SMPROGRAMS\${COMPANY_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\start_windows.bat" "" ""
   SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
   File /r "terminus_store_prolog\*"
 SectionEnd
@@ -56,5 +60,6 @@ SectionEnd
 ; Uninstaller Sections
 Section "Uninstall"
   RMDir "$INSTDIR"
+  RMDir "$SMPROGRAMS\${COMPANY_NAME}"
   DeleteRegKey /ifempty HKCU "Software\DataChemist\terminus_server"
 SectionEnd
