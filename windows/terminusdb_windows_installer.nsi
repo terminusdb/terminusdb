@@ -41,20 +41,20 @@ RequestExecutionLevel admin ; user|highest|admin
 ;-------------------------------------------------------------------------------
 ; Installer Sections
 Section "TerminusDB" TerminusDB
-	SetOutPath $INSTDIR
-	;File "My Program.exe"
-	;File "Readme.txt"
-	File "..\terminus_store_prolog.dll"
-        writeUninstaller "$INSTDIR\uninstall.exe"
-	File "..\libterminus_store.dll"
-	File /r "..\*"
-    SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
-    File /r "%APPDATA%\SWI-Prolog\pack\terminus_store_prolog\*"
+  SetOutPath $INSTDIR
+  ;File "My Program.exe"
+  ;File "Readme.txt"
+  File "..\terminus_store_prolog.dll"
+  writeUninstaller "$INSTDIR\uninstall.exe"
+  File "..\libterminus_store.dll"
+  File /r "..\*"
+  SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
+  File /r "%APPDATA%\SWI-Prolog\pack\terminus_store_prolog\*"
 SectionEnd
 
 ;-------------------------------------------------------------------------------
 ; Uninstaller Sections
 Section "Uninstall"
-	RMDir "$INSTDIR"
-	DeleteRegKey /ifempty HKCU "Software\DataChemist\terminus_server"
+  RMDir "$INSTDIR"
+  DeleteRegKey /ifempty HKCU "Software\DataChemist\terminus_server"
 SectionEnd
