@@ -1073,6 +1073,7 @@ test(update_object, [])
 :-
 
     Descriptor = terminus_descriptor{},
+
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query_In),
 
@@ -1095,8 +1096,8 @@ test(update_object, [])
                                          '@type':"terminus:ServerCapability"}
                 },
 
-
     update_object(Document, Query_In, Query_Out),
+    %retry_transaction(Query_Out),
     run_transactions(Query_Out.transaction_objects),
 
     open_descriptor(Descriptor, Transaction2),

@@ -407,19 +407,56 @@ woql:document
   rdfs:label "document"@en ;
   rdfs:comment "Document associated with a query"@en ;
   rdfs:domain woql:Query ;
-  rdfs:range terminus:Document .
+  rdfs:range owl:Thing .
 
-woql:Update
+woql:encoding
+  rdfs:label "Encoding"@en ;
+  rdfs:comment "The encoding that is used for a woql document"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain woql:ReadObject ;
+  rdfs:range woql:DocumentEncoding.
+
+woql:DocumentEncoding
+  rdfs:label "Document Endcoding"@en ;
+  a owl:Class ;
+  owl:oneOf (
+    woql:frame
+    woql:jsonld
+    woql:owl
+    ) .
+
+woql:frame
+  rdfs:label "Frame"@en ;
+  rdfs:comment "A document encoded as a JSON frame (complete with all available meta-data about its type)"@en ;
+  a woql:DocumentEncoding.
+
+woql:jsonld
+  rdfs:label "JSON LD"@en ;
+  rdfs:comment "Basic JSON-LD document encoding"@en ;
+  a woql:DocumentEncoding.
+
+woql:owl
+  rdfs:label "OWL"@en ;
+  rdfs:comment "Schema encoding - Web Ontology Langauge"@en ;
+  a woql:DocumentEncoding.
+
+woql:ReadObject
   a owl:Class ;
   rdfs:subClassOf woql:DocumentQuery ;
-  rdfs:label "Update"@en ;
-  rdfs:comment "Update a document"@en .
+  rdfs:label "Read Object"@en ;
+  rdfs:comment "Read an object as JSON"@en .
 
-woql:Delete
+woql:UpdateObject
   a owl:Class ;
   rdfs:subClassOf woql:DocumentQuery ;
-  rdfs:label "Delete"@en ;
-  rdfs:comment "Delete a document"@en .
+  rdfs:label "Update Object"@en ;
+  rdfs:comment "Update an object as JSON"@en .
+
+woql:DeleteObject
+  a owl:Class ;
+  rdfs:subClassOf woql:DocumentQuery ;
+  rdfs:label "Delete Object"@en ;
+  rdfs:comment "Delete an object as JSON"@en .
 
 woql:GetOrPut
   a owl:Class ;

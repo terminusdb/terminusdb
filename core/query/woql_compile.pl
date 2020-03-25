@@ -618,6 +618,9 @@ turtle_term(Path,Vars,Prog,Options) :-
             literals:normalise_triple(Triple, rdf(X,P,Y)),
             Vars = [X,P,Y]).
 
+% TODO: This should exist.
+%compile_wf(read_object(Doc_ID,Doc), _) -->
+%    .
 compile_wf(update_object(Doc),frame:update_object(Doc,S0,S1)) -->
     peek(S0),
     return(S1).

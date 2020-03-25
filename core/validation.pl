@@ -92,9 +92,5 @@
           ]).
 
 :- use_module(validation/schema_definitions).
-%% unclear if this is even used now but load anyway
-:- use_module(validation/schema, []).
-:- use_module(validation/schema_util, []).
-
 :- use_module(validation/validate_instance).
 :- use_module(validation/validate_schema).

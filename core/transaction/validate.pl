@@ -33,7 +33,6 @@
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(validation)).
-:- use_module(core(validation/schema),[compile_schema_to_module/2]).
 
 :- use_module(library(semweb/turtle)).
 
@@ -742,6 +741,8 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
  * 5) commit?
  *
  * Should this be refute turtle schema update? Retry?
+ *
+ * TODO: Rewrite this so it makes sense
  */
 turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
 
@@ -814,10 +815,7 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                     )
 
                 )
-            ),
-            % if we got here, I think this might be safe.
-            database_module(Database, Module),
-            compile_schema_to_module(Post_DB, Module)
+            )
         )
     ).
 

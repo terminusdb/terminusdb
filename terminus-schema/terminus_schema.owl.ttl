@@ -336,37 +336,6 @@ terminus:agent_key_hash
   rdfs:domain terminus:Agent;
   rdfs:range xsd:string.
 
-terminus:encoding
-  rdfs:label "Encoding"@en ;
-  rdfs:comment "The encoding that is used for a terminus document"@en ;
-  a owl:ObjectProperty ;
-  rdfs:domain terminus:APIUpdate ;
-  rdfs:range terminus:DocumentEncoding.
-
-terminus:DocumentEncoding
-  rdfs:label "Document Endcoding"@en ;
-  a owl:Class ;
-  owl:oneOf (
-   terminus:frame
-   terminus:jsonld
-   terminus:owl
- ) .
-
-terminus:frame
-  rdfs:label "Frame"@en ;
-  rdfs:comment "A document encoded as a JSON frame (complete with all available meta-data about its type)"@en ;
-  a terminus:DocumentEncoding.
-
-terminus:jsonld
-  rdfs:label "JSON LD"@en ;
-  rdfs:comment "Basic JSON-LD document encoding"@en ;
-  a terminus:DocumentEncoding.
-
-terminus:owl
-  rdfs:label "OWL"@en ;
-  rdfs:comment "Schema encoding - Web Ontology Langauge"@en ;
-  a terminus:DocumentEncoding.
-
 terminus:user_key_hash
   a owl:DatatypeProperty;
   rdfs:label "User Key"@en;
