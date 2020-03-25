@@ -1081,7 +1081,7 @@ connection_authorised_user(Request, Username, SURI) :-
     fetch_authorization_data(Request, Username, KS),
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  (   authenticate(DB, Request, Auth),
-            verify_access(Auth,DB,terminus:get_document,SURI)
+            verify_access(DB, Auth, terminus:get_document, SURI)
         ->  true
         ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                                   'terminus:message' : 'Bad user object',
