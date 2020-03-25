@@ -6,7 +6,6 @@
               compress/3,
               term_jsonld/2,
               jsonld_triples/3,
-              jsonld_triples/4,
               jsonld_id/2,
               get_key_document/3,
               get_key_document/4
@@ -384,14 +383,6 @@ jsonld_id(Obj,ID) :-
     !,
     get_dict('@id',Obj,ID).
 
-/*
-This should be more explicit and separate....
-
-jsonld_id(_Obj,Database,ID) :-
-    database_name(Database,Collection),
-    interpolate([Collection,'/document'],Base),
-    gensym(Base,ID).
-  */
 
 /* Debug
  * This should not exist.... We should already be expanded.
@@ -448,77 +439,74 @@ jsonld_triples_aux(Dict, Ctx, Triples) :-
     (   get_dict('@id', Dict, ID)
     ->  jsonld_id_triples(ID,Dict,Ctx,Triples)
     ;   dict_pairs(Dict, _, JSON_Pairs),
-        maplist({Database,Ctx}/[ID-PV,Triples]>>(
+        maplist({Ctx}/[ID-PV,Triples]>>(
                     (   memberchk(ID,['@context','@id'])
                     ->  Triples = []
-                    ;   jsonld_id_triples(ID,PV,Ctx,Database,Triples))
+                    ;   jsonld_id_triples(ID,PV,Ctx,Triples))
                 ),
                 JSON_Pairs, Triples_List),
         append(Triples_List,Triples)).
 % what could this be? A list?
-jsonld_triples_aux(List, Ctx, Database, Triples) :-
+jsonld_triples_aux(List, Ctx, Triples) :-
     is_list(List),
     !,
 
-    maplist({Ctx,Database}/[Obj,Ts]>>
-                jsonld_triples_aux(Obj,Ctx,Database,Ts),
+    maplist({Ctx}/[Obj,Ts]>>
+                jsonld_triples_aux(Obj,Ctx,Ts),
             List,
             Ts_List),
     append(Ts_List, Triples).
 
 /*
- * jsonld_id_triples(ID,PV,Ctx,Database,Triples) is det.
+ * jsonld_id_triples(ID,PV,Ctx,Triples) is det.
  *
  * We have the id and are looking for the edge and values.
  */
-jsonld_id_triples(ID,PV,Ctx,Database,Triples) :-
+jsonld_id_triples(ID,PV,Ctx,Triples) :-
     is_dict(PV),
     !,
 
     dict_pairs(PV, _, JSON_Pairs),
-    maplist({ID,Ctx,Database}/[P-V,Triples]>>(
-                database_instance(Database,G),
-
-                * format('Incoming P-V: ~q~n',[P-V]),
+    maplist({ID,Ctx}/[P-V,Triples]>>(
                 (   memberchk(P,['@context','@id'])
                 ->  Triples = []
                 ;   P = '@type'
                 ->  Pred = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                    Triples = [(G,ID,Pred,V)]
+                    Triples = [(ID,Pred,V)]
                 ;   P = Pred,
                     %jsonld_predicate_value(P,V,Ctx,EV),
-                    json_value_triples(G,ID,Pred,V,Ctx,Database,Triples)
+                    json_value_triples(ID,Pred,V,Ctx,Triples)
                 )
             ),
             JSON_Pairs, Triples_List),
 
     append(Triples_List, Triples).
 
-json_value_triples(G,ID,Pred,V,Ctx,Database,Triples) :-
+json_value_triples(ID,Pred,V,Ctx,Triples) :-
     (   is_dict(V)
     ->  (   V = _{'@type' : Type,
                   '@value' : Data
                  }
         ->  atom_string(Atom_Type,Type),
-            Triples = [(G,ID,Pred,Data^^Atom_Type)]
+            Triples = [(ID,Pred,Data^^Atom_Type)]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
         ->  atom_string(Atom_Lang,Lang),
-            Triples = [(G,ID,Pred,Data@Atom_Lang)]
+            Triples = [(ID,Pred,Data@Atom_Lang)]
         ;   jsonld_id(V,Val),
-            jsonld_triples_aux(V,Ctx,Database,Rest),
-            Triples = [(G,ID,Pred,Val)|Rest])
+            jsonld_triples_aux(V,Ctx,Rest),
+            Triples = [(ID,Pred,Val)|Rest])
     ;   is_list(V)
-    ->  maplist({G,ID,Pred,Ctx,Database}/[V,Triples]>>(
-                    json_value_triples(G,ID,Pred,V,Ctx,Database,Triples)
+    ->  maplist({ID,Pred,Ctx}/[V,Triples]>>(
+                    json_value_triples(ID,Pred,V,Ctx,Triples)
                 ), V, Triples_List),
         append(Triples_List, Triples)
     ;   string(V)
     ->  atom_string(A,V),
-        Triples = [(G,ID,Pred,A^^'http://www.w3.org/2001/XMLSchema#string')]
+        Triples = [(ID,Pred,A^^'http://www.w3.org/2001/XMLSchema#string')]
     ;   atom(V)
-    ->  Triples = [(G,ID,Pred,V^^'http://www.w3.org/2001/XMLSchema#string')]
-    ;   Triples = [(G,ID,Pred,V)]).
+    ->  Triples = [(ID,Pred,V^^'http://www.w3.org/2001/XMLSchema#string')]
+    ;   Triples = [(ID,Pred,V)]).
 
 
 /*

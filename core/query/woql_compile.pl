@@ -33,8 +33,8 @@
 
 :- use_module(inference).
 :- use_module(frame, [
-                  update_object/3,
-                  delete_object/2
+                  update_object/4,
+                  delete_object/3
               ]).
 :- use_module(jsonld).
 :- use_module(json_woql).
@@ -618,14 +618,17 @@ turtle_term(Path,Vars,Prog,Options) :-
             literals:normalise_triple(Triple, rdf(X,P,Y)),
             Vars = [X,P,Y]).
 
-compile_wf(update_object(Doc),frame:update_object(Doc,Database)) -->
-    view(default_collection,Database).
-compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,Database)) -->
-    view(default_collection,Database),
-    resolve(X,URI).
-compile_wf(delete_object(X),frame:delete_object(URI,Database)) -->
-    view(default_collection,Database),
-    resolve(X,URI).
+compile_wf(update_object(Doc),frame:update_object(Doc,S0,S1)) -->
+    peek(S0),
+    return(S1).
+compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,S0,S1)) -->
+    resolve(X,URI),
+    peak(S0),
+    return(S1).
+compile_wf(delete_object(X),frame:delete_object(URI,S0,S1)) -->
+    resolve(X,URI),
+    peak(S0),
+    return(S1).
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,N),
                             Deletes1 is Deletes + N))
@@ -684,7 +687,7 @@ compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,N),
     view(transaction_objects, Transaction_Objects),
     update(inserts, Inserts, Inserts1),
     {
-       graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 compile_wf(A=B,woql_equal(AE,BE)) -->
     resolve(A,AE),

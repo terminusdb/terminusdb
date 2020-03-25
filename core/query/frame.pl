@@ -20,9 +20,9 @@
               document_jsonld/4,
               class_frame_jsonld/3,
               object_edges/3,
-              delete_object/2,
-              update_object/2,
+              delete_object/3,
               update_object/3,
+              update_object/4,
               document_filled_class_frame_jsonld/4,
               object_instance_graph/3
           ]).
@@ -832,7 +832,6 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|
     ).
 realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
-    database_name(Database,C),
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -871,12 +870,13 @@ realise_quads(_Elt,F,_Database,[]) :-
     !.
 
 /*
- * document_object(+Document:uri,+Database:database+Depth,-Realiser) is semidet.
+ * document_object(+DB:database,+Document:uri,+Depth,-Realiser) is semidet.
  *
  * Gets the realiser for the frame associated with the class of
  * Document
  */
 document_object(DB, Document, Depth, Realiser) :-
+
     most_specific_type(Document,Class,DB),
     class_frame(Class,DB,Frame),
 
@@ -886,43 +886,40 @@ document_object(DB, Document, Depth, Realiser) :-
     once(realiser(Document,Frame,DB,Depth,Realiser)).
 
 /*
- * document_jsonld(+DB{},+Ctx:any,+Database:database-Realiser) is semidet.
+ * document_jsonld(+Query_Context,+Document,-Realiser) is semidet.
  *
  * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
  * TODO: Fix this, since the arguments are totally changed
 
  */
-document_jsonld(DB, Document,JSON_LD) :-
-    document_object(DB, Document, 1, Realiser),
-    term_jsonld(Realiser, JSON_Ex),
-    collection_descriptor_prefixes(DB.descriptor, Prefixes),
-    compress(JSON_Ex,Prefixes,JSON_LD).
+document_jsonld(Query_Context, Document, JSON_LD) :-
+    document_jsonld(Query_Context, Document, 1, JSON_LD).
 
 /*
- * document_jsonld(+Document:uri,+Ctx:any,+Database:database+Depth,-Realiser) is semidet.
+ * document_jsonld(+Query_Context,+Document:uri,+Depth,-Realiser) is semidet.
  *
  * Gets the realiser for the frame associated with the class of
  * Document in a JSON-LD format using a supplied context and unfolding
  * up to depth Depth
  */
-document_jsonld(Database, Document, Depth, JSON_LD) :-
-    document_object(Database, Document, Depth, Realiser),
+document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
+    Prefixes = Query_Context.prefixes,
+    query_default_collection(Query_Context, Collection),
+    prefix_expand(Document,Prefixes,Document_Ex),
+    document_object(Collection, Document_Ex, Depth, Realiser),
     term_jsonld(Realiser, JSON_Ex),
-    collection_descriptor_prefixes(Database.descriptor, Prefixes),
-    compress(JSON_Ex, Prefixes, JSON_LD).
+    compress(JSON_Ex,Prefixes,JSON_LD).
 
 /*
- * class_frame_jsonld(Class,Database,JSON_Frame) is det.
+ * class_frame_jsonld(Query_Context,Class,JSON_Frame) is det.
  *
  */
-class_frame_jsonld(Class,Database,JSON_Frame) :-
-    class_frame(Class,Database,Frame),
+class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
+    query_default_collection(Query_Context, Collection),
+    class_frame(Class,Collection,Frame),
     term_jsonld(Frame,JSON_LD),
-
-    collection_descriptor_prefixes(Database.descriptor, Prefixes),
-
-    compress(JSON_LD, Prefixes, JSON_Frame).
+    compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
  * object_edges(URI,Database,Edges) is det.
@@ -983,9 +980,9 @@ delete_object(URI,Context_In,Context_Out) :-
     maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N),Edges,Delete_Counts),
     sumlist(Delete_Counts, Delete_Count),
 
-    Total_Delete_Count is Query_Context_In.deletes + Delete_Count,
+    Total_Delete_Count is Context_In.deletes + Delete_Count,
 
-    Query_Context_Out = Query_Context_In.put(_{deletes : Delete_Count}).
+    Context_Out = Context_In.put(_{deletes : Total_Delete_Count}).
 
 
 /*
@@ -997,7 +994,7 @@ delete_object(URI,Context_In,Context_Out) :-
  * Inserts := triples(New) / triples(Old)
  * Deletes := triples(New) / triples(New)
  */
-update_object(Obj, QUery_Context_In, Query_Context_Out) :-
+update_object(Obj, Query_Context_In, Query_Context_Out) :-
     jsonld_id(Obj,ID),
     update_object(ID,Obj,Query_Context_In, Query_Context_Out).
 
@@ -1007,25 +1004,43 @@ update_object(Obj, QUery_Context_In, Query_Context_Out) :-
  *
  * Does the actual updating using ID.
  */
-update_object(ID, Obj, Database, Query_Context_In, Query_Context_Out) :-
-    prefix_expand(ID,Query_Context_In.prefixes,ID_Ex),
+update_object(ID, Obj, Query_Context_In, Query_Context_Out) :-
+    Prefixes = Query_Context_In.prefixes,
+    prefix_expand(ID,Prefixes,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
 
-    query_default_collection(Query_Context_In, DB),
+    jsonld_triples(New_Obj,Prefixes,New_Triples),
 
-    jsonld_triples(New_Obj,Ctx,DB,New),
-    object_edges(ID,Database,Old),
+    query_default_collection(Query_Context_In, Database),
+    object_edges(ID,Database,Old_Quads),
 
-    debug(terminus(frame(fill)),'~nNew: ~q~n', [New]),
-    debug(terminus(frame(fill)),'~nOld: ~q~n', [Old]),
+    debug(terminus(frame(fill)),'~nNew: ~q~n', [New_Triples]),
+    debug(terminus(frame(fill)),'~nOld: ~q~n', [Old_Quads]),
+
     % Don't back out now.  both above should be det so we don't have to do this.
     !,
-    subtract(New,Old,Inserts),
-    subtract(Old,New,Deletes),
+    query_default_write_graph(Query_Context_In, Write_Graph),
+
+    % don't insert any edge which already exists in any instance graph
+    convlist({Write_Graph,Old_Quads}/[(X,Y,Z),(Write_Graph,X,Y,Z)]>>(
+                 \+ member((_G,X,Y,Z),Old_Quads)
+             ),
+             New_Triples,
+             Inserts),
+    % don't delete any edge which is not in *some* graph,
+    % but if it is there delete it in the graph in which it exists.
+    convlist({New_Triples}/[(G,X,Y,Z),(G,X,Y,Z)]>>(
+                 \+ member((X,Y,Z),New_Triples)
+             ),
+             Old_Quads,
+             Deletes),
 
     maplist([(G,X,Y,Z),N]>>insert(G,X,Y,Z,N), Inserts, Insert_Counts),
     maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N), Deletes, Delete_Counts),
+
+    debug(terminus(frame(fill)),'~nInserts: ~q~n', [Inserts]),
+    debug(terminus(frame(fill)),'~nDeletes: ~q~n', [Deletes]),
 
     sumlist(Insert_Counts, Insert_Count),
     sumlist(Delete_Counts, Delete_Count),
@@ -1061,9 +1076,9 @@ test(update_object, [])
 
     Descriptor = terminus_descriptor{},
     open_descriptor(Descriptor, Transaction),
-    create_context(Transaction, Query),
+    create_context(Transaction, Query_In),
 
-    Document = _{'@context': Query.prefixes,
+    Document = _{'@context': Query_In.prefixes,
                  '@id' : "doc:new_user",
                  '@type' : "terminus:User",
                  'rdfs:comment': _{'@language': "en",
@@ -1083,13 +1098,14 @@ test(update_object, [])
                 },
 
 
-    update_object(Document, Transaction),
-    run_transaction(Transaction),
+    update_object(Document, Query_In, Query_Out),
+    run_transactions(Query_Out.transaction_objects),
 
     open_descriptor(Descriptor, Transaction2),
-    document_jsonld(Transaction2, "doc:new_user", 1, JSON_LD),
+    create_context(Transaction2, Query2),
+    document_jsonld(Query2, "doc:new_user", 1, JSON_LD),
 
-    json_write_dict(current_output, JSON_LD, []).
+    _{'@id':'doc:new_user'} :< JSON_LD.
 
 test(document_jsonld_depth, [])
 :-
@@ -1097,8 +1113,8 @@ test(document_jsonld_depth, [])
     User_ID = 'terminus:///terminus/document/admin',
 
     open_descriptor(Descriptor, Transaction),
-
-    document_jsonld(Transaction, User_ID, 1, JSON_LD),
+    create_context(Transaction, Query),
+    document_jsonld(Query, User_ID, 1, JSON_LD),
     % TODO: Why are these atoms? Inconsistent!
     _{'@id':'doc:admin','@type':'terminus:User'} :< JSON_LD.
 

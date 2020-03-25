@@ -70,7 +70,7 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  * i.e. what were the base facts that allowed us to make the derivation
  * we will punt on that for now.
  */
-inferredQuad(G,X,Op,Y,Database) :-
+inferredQuad(G,X,OP,Y,Database) :-
     % No inference
     database_instance(Database,Instance),
     database_inference(Database,[]),
@@ -106,4 +106,4 @@ inferredQuad(inferred,X,OP,Y,Database) :-
  * [ owl:EquivalentProperty owl:ReflexiveProperty and others not yet implemented ]
  */
 inferredEdge(X,OP,Y,Database) :-
-    inferredQuad(_,X,Op,Y,Database).
+    inferredQuad(_,X,OP,Y,Database).

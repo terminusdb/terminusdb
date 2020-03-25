@@ -6,7 +6,7 @@
               collection_descriptor_prefixes/2,
               context_overriding_prefixes/3,
               empty_context/1,
-              query_default_collect/2,
+              query_default_collection/2,
               query_default_write_graph/2
           ]).
 
@@ -133,9 +133,7 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
 
 collection_descriptor_default_write_graph(terminus_descriptor{}, Graph_Descriptor) :-
     !,
-    terminus_instance_name(Instance_Name),
-    Graph_Descriptor = labelled_graph{
-                           label : Instance_Name,
+    Graph_Descriptor = terminus_graph{
                            type : instance,
                            name : "main"
                        }.
@@ -276,8 +274,8 @@ ask_ast(Context, Ast, Output_Context) :-
  * Finds the transaction object for the default collection if it exists.
  */
 query_default_collection(Query_Context, Collection) :-
-    collection_descriptor_transaction_object(Query_Context_In.default_collection,
-                                             Query_Context_In.transaction_objects,
+    collection_descriptor_transaction_object(Query_Context.default_collection,
+                                             Query_Context.transaction_objects,
                                              Collection).
 
 /*
@@ -286,5 +284,8 @@ query_default_collection(Query_Context, Collection) :-
  * Finds the transaction object for the default collection if it exists.
  */
 query_default_write_graph(Query_Context, Write_Graph) :-
-    Graph_Descriptor = Query_Context.write_graph
-    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Write_Graph).
+    Graph_Descriptor = Query_Context.write_graph,
+    Transaction_Objects = Query_Context.transaction_objects,
+    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
+                                                           Transaction_Objects,
+                                                           Write_Graph).
