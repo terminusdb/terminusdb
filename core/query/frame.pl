@@ -57,6 +57,7 @@
 :- use_module(ask).
 :- use_module(frame_types).
 :- use_module(jsonld).
+:- use_module(global_prefixes).
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
@@ -943,11 +944,8 @@ object_edges(URI,Database,Edges) :-
  * Get the set of references to a given object.
  */
 object_references(URI,Database,Edges) :-
-    database_name(Database,C),
-    database_instance(Database,G),
-    % TBD: much more efficient to represent edges as e.g. e(C,G,Elt,Prop,URI)
-    findall((C,G,Elt,Prop,URI),
-            inferredEdge(Elt, Prop, URI, Database),
+    findall((G,Elt,Prop,URI),
+            inferredQuad(G,Elt, Prop, URI, Database),
             Edges).
 
 /*

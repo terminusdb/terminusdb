@@ -59,7 +59,6 @@
               term_jsonld/2,
               jsonld_triples/3,
               jsonld_id/2,
-              get_key_document/3,
               get_key_document/4,
 
               % json_woql.pl

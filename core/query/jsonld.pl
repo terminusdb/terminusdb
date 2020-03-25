@@ -7,7 +7,6 @@
               term_jsonld/2,
               jsonld_triples/3,
               jsonld_id/2,
-              get_key_document/3,
               get_key_document/4
           ]).
 
@@ -507,17 +506,6 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
     ;   atom(V)
     ->  Triples = [(ID,Pred,V^^'http://www.w3.org/2001/XMLSchema#string')]
     ;   Triples = [(ID,Pred,V)]).
-
-
-/*
- * get_key_document(Key,Document,Value) is det
- *
- * TODO: This doesn't work anymore since we removed get_global_jsonld_context
- * Looks up the value of a key in a document
- */
-get_key_document(Key,Document,Value) :-
-    get_global_jsonld_context(Ctx),
-    get_key_document(Key,Ctx,Document,Value).
 
 /*
  * get_key_document(Key,Ctx,Document,Value)

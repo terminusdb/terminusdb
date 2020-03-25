@@ -373,13 +373,13 @@ frame_handler(_Method,_DB,_Branch,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(document/DB_ID), cors_catch(document_handler(Method,DB_ID)),
+:- http_handler(root(document/Account/DB_ID), cors_catch(document_handler(Method,Account,DB_ID)),
                 [method(Method),
                  methods([options,post,get,delete])]).
-:- http_handler(root(document/DB_ID/Branch_ID), cors_catch(document_handler(Method,DB_ID,Branch_ID)),
+:- http_handler(root(document/Account/DB_ID/Branch_ID), cors_catch(document_handler(Method,Account,DB_ID,Branch_ID)),
                 [method(Method),
                  methods([options,post,get,delete])]).
-:- http_handler(root(document/DB_ID/Branch_ID/Doc_Or_Graph_ID), cors_catch(create_document_handler(Method,DB_ID,Branch_ID,Doc_Or_Graph_ID)),
+:- http_handler(root(document/Account/DB_ID/Branch_ID/Doc_Or_Graph_ID), cors_catch(create_document_handler(Method,Account,DB_ID,Branch_ID,Doc_Or_Graph_ID)),
                 [method(Method),
                  methods([options,post,get,delete])]).
 
@@ -387,12 +387,13 @@ frame_handler(_Method,_DB,_Branch,_Request) :-
  * document_handler(+Mode, +DB, +Doc_ID, +Request:http_request) is det.
  *
  */
-document_handler(options,DB,_Doc_ID,_Request) :-
+document_handler(options,Account,DB,_Doc_ID,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
-    try_db_uri(DB,DB_URI),
+    user_database_name(Account,DB,DB_Name),
+    try_db_uri(DB_Name,DB_URI),
     write_cors_headers(DB_URI, Terminus),
     format('~n').
-document_handler(get, DB, Doc_ID, Request) :-
+document_handler(get,Account,DB, Doc_ID, Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus, Request, Auth),
@@ -418,7 +419,7 @@ document_handler(get, DB, Doc_ID, Request) :-
     ),
     write_cors_headers(DB_URI, Terminus),
     reply_json_dict(JSON).
-document_handler(post, DB, Doc_ID, R) :-
+document_handler(post,Account,DB, Doc_ID, R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus),
@@ -440,7 +441,7 @@ document_handler(post, DB, Doc_ID, R) :-
     try_update_document(Terminus, Doc_URI,Doc,Database,Witnesses),
 
     reply_with_witnesses(DB_URI,Terminus,Witnesses).
-document_handler(delete, DB, Doc_ID, Request) :-
+document_handler(delete, Account, DB, Doc_ID, Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Delete Document */
     authenticate(Terminus, Request, Auth),
@@ -461,10 +462,10 @@ document_handler(delete, DB, Doc_ID, Request) :-
     reply_with_witnesses(DB_URI,Terminus,Witnesses).
 
 
-document_handler(_Method,_DB,_Branch,_Request) :-
+document_handler(_Method,_Account,_DB,_Branch,_Request) :-
     throw(error('Not implemented')).
 
-document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
+document_handler(_Method,_Account,_DB,_Branch,_Doc_or_Graph,_Request) :-
     throw(error('Not implemented')).
 
 
@@ -473,20 +474,20 @@ document_handler(_Method,_DB,_Branch,_Doc_or_Graph,_Request) :-
 % Does this go longest first?
 :- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
-                 time_limit(10),
+                 time_limit(infinite),
                  methods([options,post])]).
 :- http_handler(root(woql), cors_catch(woql_handler(Method)),
                 [method(Method),
-                 time_limit(10),
+                 time_limit(infinite),
                  methods([options,post])]).
-% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
-%                 [method(Method),
-%                  time_limit(10),
-%                  methods([options,post])]).
-% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
-%                 [method(Method),
-%                  time_limit(10),
-%                  methods([options,post])]).
+:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
 
 % Should there be endpoints for commit graph and repo graphs here?
 % Mostly we just want to woql query them.
@@ -786,8 +787,6 @@ test(named_get, [])
     (   _{'bindings' : _} :< JSON
     ->  true
     ;   fail).
-
-
 
 test(branch_db, [])
 :-
@@ -1204,7 +1203,8 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
         filter_transaction_graph_descriptor(Graph_Filter, Terminus_DB, Document_Graph)
     ),
 
-    (   document_transaction(Database, Transaction_DB, Document_Graph,
+    (   
+        document_transaction(Database, Transaction_DB, Document_Graph,
                              frame:update_object(Doc,Transaction_DB), Witnesses)
     ->  true
     ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
