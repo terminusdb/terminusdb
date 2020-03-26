@@ -607,8 +607,8 @@ test(no_db, [])
               [json_object(dict),authorization(basic(admin,root))]),
 
     % extra debugging...
-    % current_output(Out),
-    % json_write(Out,In,[]),
+    nl,
+    json_write_dict(current_output,JSON,[]),
     (   _{'bindings' : L} :< JSON
     ->  length(L, N),
         N >= 10
