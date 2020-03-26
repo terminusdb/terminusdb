@@ -373,26 +373,16 @@ frame_handler(_Method,_DB,_Branch,_Request) :-
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-% Does this go longest first?
+%
 :- http_handler(root(woql), cors_catch(woql_handler(Method)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
+:- http_handler(root(woql/Path), cors_catch(woql_handler(Method,Path)),
                 [method(Method),
+                 prefix,
                  time_limit(infinite),
                  methods([options,post])]).
-% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
-%                 [method(Method),
-%                  time_limit(infinite),
-%                  methods([options,post])]).
-% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
-%                 [method(Method),
-%                  time_limit(infinite),
-%                  methods([options,post])]).
-
-% Should there be endpoints for commit graph and repo graphs here?
-% Mostly we just want to woql query them.
 
 /**
  * woql_handler(+Method:atom, +Request:http_request) is det.
@@ -417,64 +407,31 @@ woql_handler(post, R) :-
     reply_json_dict(JSON),
     format('~n').
 
-/**
- * woql_handler(+Method:atom, +Account_ID:user, +DB:database, +Request:http_request) is det.
- *
- * WOQL on default branch
- */
-woql_handler(options,_Account_ID,_DB,_Request) :-
+woql_handler(option, _Path, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
-    format('~n').
-woql_handler(post,Account_ID,DB,R) :-
+    write_cors_headers(SURI, Terminus).
+woql_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
-    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+    % No descriptor to work with until the query sets one up
+    merge_separator_split(Path, '/', Split),
+    (   Split = [Account_ID, DB]
+    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo, Ref]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
+    ),
     create_context(Branch_Descriptor, Context),
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON).
-
-woql_handler(options,_Account_ID,_DB,_Ref,_Request) :-
-    config:public_server_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+    reply_json_dict(JSON),
     format('~n').
-woql_handler(post,Account_ID,DB,Ref,R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
-    make_branch_descriptor(Account_ID, DB, Ref, Branch_Descriptor),
-    create_context(Branch_Descriptor, Context),
-
-    woql_run_context(Request, Auth_ID, Context, JSON),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON).
-
-woql_handler(options,_Account_ID,_DB,_Ref,_Branch,_Request) :-
-    config:public_server_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
-    format('~n').
-woql_handler(post,Account_ID,DB,Ref,Branch,R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
-    make_branch_descriptor(Account_ID, DB, Ref, Branch, Branch_Descriptor),
-    create_context(Branch_Descriptor, Context),
-
-    woql_run_context(Request, Auth_ID, Context, JSON),
-
-    config:public_server_url(SURI),
-    write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON).
 
 woql_run_context(Request, Auth_ID, Context,JSON) :-
 
@@ -609,7 +566,7 @@ test(no_db, [])
     % extra debugging...
     % nl,
     % json_write_dict(current_output,JSON,[]),
-    _{'bindings' : L} :< JSON.
+    _{'bindings' : _L} :< JSON.
 
 test(indexed_get, [])
 :-
