@@ -607,12 +607,9 @@ test(no_db, [])
               [json_object(dict),authorization(basic(admin,root))]),
 
     % extra debugging...
-    nl,
-    json_write_dict(current_output,JSON,[]),
-    (   _{'bindings' : L} :< JSON
-    ->  length(L, N),
-        N >= 10
-    ;   fail).
+    % nl,
+    % json_write_dict(current_output,JSON,[]),
+    _{'bindings' : L} :< JSON.
 
 test(indexed_get, [])
 :-
