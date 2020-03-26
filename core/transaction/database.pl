@@ -218,6 +218,8 @@ run_transactions(Transactions, Meta_Data) :-
 graph_inserts_deletes(Graph, I, D) :-
     graph_validation_obj{ changed: true } :< Graph,
     !,
+    %layer_addition_count(Graph.read, I),
+    %layer_removal_count(Graph.read, D).
     findall(1,
             xrdf_deleted([Graph], _, _, _),
             Delete_List),

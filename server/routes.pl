@@ -730,7 +730,9 @@ test(branch_db, [])
                       JSON0,
                       [json_object(dict),authorization(basic(admin,root))]),
 
-            json_write_dict(current_output,JSON0,[]),
+            * json_write_dict(current_output,JSON0,[]),
+
+            _{'bindings' : [_{}], inserts: 1, deletes : 0} :< JSON0,
 
             % Now query the insert...
             Query1 =
@@ -752,7 +754,7 @@ test(branch_db, [])
                       JSON1,
                       [json_object(dict),authorization(basic(admin,root))]),
 
-            json_write_dict(current_output,JSON1,[]),
+            * json_write_dict(current_output,JSON1,[]),
 
             (   _{'bindings' : L} :< JSON1
             ->  L = [_{'Object':"http://terminusdb.com/schema/woql#test_object",
