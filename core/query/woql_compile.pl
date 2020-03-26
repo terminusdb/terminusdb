@@ -33,8 +33,8 @@
 
 :- use_module(inference).
 :- use_module(frame, [
-                  update_object/4,
-                  delete_object/3
+                  update_object/3,
+                  delete_object/2
               ]).
 :- use_module(jsonld).
 :- use_module(json_woql).
@@ -162,8 +162,6 @@ empty_context(Context) :-
         bindings : [],
         selected : [],
         files : [],
-        inserts : 0,
-        deletes : 0,
         authorization : empty
     }.
 
@@ -176,15 +174,11 @@ empty_context -->
     view(prefixes,Prefixes),
     view(transaction_objects,Transaction_Objects),
     view(files,Files),
-    view(inserts, Inserts),
-    view(deletes, Deletes),
 
     { empty_context(S0)
     },
     return(S0),
 
-    put(inserts, Inserts),
-    put(deletes, Deletes),
     put(prefixes,Prefixes),
     put(transaction_objects,Transaction_Objects),
     put(files,Files).
@@ -621,26 +615,21 @@ turtle_term(Path,Vars,Prog,Options) :-
 % TODO: This should exist.
 %compile_wf(read_object(Doc_ID,Doc), _) -->
 %    .
-compile_wf(update_object(Doc),frame:update_object(Doc,S0,S1)) -->
-    peek(S0),
-    return(S1).
-compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,S0,S1)) -->
+compile_wf(update_object(Doc),frame:update_object(Doc,S0)) -->
+    peek(S0).
+compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,S0)) -->
     resolve(X,URI),
-    peak(S0),
-    return(S1).
-compile_wf(delete_object(X),frame:delete_object(URI,S0,S1)) -->
+    peak(S0).
+compile_wf(delete_object(X),frame:delete_object(URI,S0)) -->
     resolve(X,URI),
-    peak(S0),
-    return(S1).
+    peak(S0).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,N),
-                            Deletes1 is Deletes + N))
+compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
 -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
-    update(deletes, Deletes, Deletes1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -650,27 +639,23 @@ compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,N),
             throw(syntax_error(M,context(compile_wf//2,delete/4)))
         )
     }.
-compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,N),
-                          Deletes1 is Deletes + N))
+compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
 -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
-    update(deletes, Deletes, Deletes1),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,N),
-                            Inserts1 is Inserts + N))
+compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,_)))
 -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(transaction_objects,Transaction_Objects),
-    update(inserts, Inserts, Inserts1),
     {
         resolve_filter(G,Filter),
         filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
@@ -680,15 +665,13 @@ compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,N),
             throw(syntax_error(M,context(compile_wf//2,insert/4)))
         )
     }.
-compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,N),
-                          Inserts1 is Inserts + N))
+compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,_)))
 -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
-    update(inserts, Inserts, Inserts1),
     {
         graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.

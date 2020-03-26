@@ -20,9 +20,9 @@
               document_jsonld/4,
               class_frame_jsonld/3,
               object_edges/3,
-              delete_object/3,
+              delete_object/2,
+              update_object/2,
               update_object/3,
-              update_object/4,
               document_filled_class_frame_jsonld/4,
               object_instance_graph/3
           ]).
@@ -965,26 +965,21 @@ object_instance_graph(JSON,Database,I) :-
     object_instance_graph(URI,Database,I).
 
 /*
- * delete_object(URI,Context_In,Context_Out) is det.
+ * delete_object(URI,Context) is det.
  *
  */
-delete_object(URI,Context_In,Context_Out) :-
-    Ctx = Context_In.prefixes,
+delete_object(URI,Context) :-
+    Ctx = Context.prefixes,
 
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
     append(Object_Edges,References,Edges),
-    maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N),Edges,Delete_Counts),
-    sumlist(Delete_Counts, Delete_Count),
-
-    Total_Delete_Count is Context_In.deletes + Delete_Count,
-
-    Context_Out = Context_In.put(_{deletes : Total_Delete_Count}).
+    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Edges).
 
 
 /*
- * update_object(Obj:dict,Database) is det.
+ * update_object(Obj:dict,Query_Context) is det.
  *
  * This should extract the object from the database
  * and set up inserts / deletes as:
@@ -992,25 +987,25 @@ delete_object(URI,Context_In,Context_Out) :-
  * Inserts := triples(New) / triples(Old)
  * Deletes := triples(New) / triples(New)
  */
-update_object(Obj, Query_Context_In, Query_Context_Out) :-
+update_object(Obj, Query_Context) :-
     jsonld_id(Obj,ID),
-    update_object(ID,Obj,Query_Context_In, Query_Context_Out).
+    update_object(ID,Obj,Query_Context).
 
 
 /*
- * update_object(ID:url,Obj:dict,Query_Context_In,Query_Context_Out) is det.
+ * update_object(ID:url,Obj:dict,Query_Context) is det.
  *
  * Does the actual updating using ID.
  */
-update_object(ID, Obj, Query_Context_In, Query_Context_Out) :-
-    Prefixes = Query_Context_In.prefixes,
+update_object(ID, Obj, Query_Context) :-
+    Prefixes = Query_Context.prefixes,
     prefix_expand(ID,Prefixes,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
 
     jsonld_triples(New_Obj,Prefixes,New_Triples),
 
-    query_default_collection(Query_Context_In, Database),
+    query_default_collection(Query_Context, Database),
     object_edges(ID,Database,Old_Quads),
 
     debug(terminus(frame(fill)),'~nNew: ~q~n', [New_Triples]),
@@ -1018,7 +1013,7 @@ update_object(ID, Obj, Query_Context_In, Query_Context_Out) :-
 
     % Don't back out now.  both above should be det so we don't have to do this.
     !,
-    query_default_write_graph(Query_Context_In, Write_Graph),
+    query_default_write_graph(Query_Context, Write_Graph),
 
     % don't insert any edge which already exists in any instance graph
     convlist({Write_Graph,Old_Quads}/[(X,Y,Z),(Write_Graph,X,Y,Z)]>>(
@@ -1034,20 +1029,8 @@ update_object(ID, Obj, Query_Context_In, Query_Context_Out) :-
              Old_Quads,
              Deletes),
 
-    maplist([(G,X,Y,Z),N]>>insert(G,X,Y,Z,N), Inserts, Insert_Counts),
-    maplist([(G,X,Y,Z),N]>>delete(G,X,Y,Z,N), Deletes, Delete_Counts),
-
-    debug(terminus(frame(fill)),'~nInserts: ~q~n', [Inserts]),
-    debug(terminus(frame(fill)),'~nDeletes: ~q~n', [Deletes]),
-
-    sumlist(Insert_Counts, Insert_Count),
-    sumlist(Delete_Counts, Delete_Count),
-
-    Total_Insert_Count is Query_Context_In.inserts + Insert_Count,
-    Total_Delete_Count is Query_Context_In.deletes + Delete_Count,
-    Query_Context_Out = Query_Context_In.put(_{inserts : Total_Insert_Count,
-                                               deletes : Total_Delete_Count
-                                              }).
+    maplist([(G,X,Y,Z)]>>insert(G,X,Y,Z,_N), Inserts),
+    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N), Deletes).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)
@@ -1075,9 +1058,9 @@ test(update_object, [])
     Descriptor = terminus_descriptor{},
 
     open_descriptor(Descriptor, Transaction),
-    create_context(Transaction, Query_In),
+    create_context(Transaction, Query),
 
-    Document = _{'@context': Query_In.prefixes,
+    Document = _{'@context': Query.prefixes,
                  '@id' : "doc:new_user",
                  '@type' : "terminus:User",
                  'rdfs:comment': _{'@language': "en",
@@ -1096,9 +1079,9 @@ test(update_object, [])
                                          '@type':"terminus:ServerCapability"}
                 },
 
-    update_object(Document, Query_In, Query_Out),
+    update_object(Document, Query),
     %retry_transaction(Query_Out),
-    run_transactions(Query_Out.transaction_objects),
+    run_transactions(Query.transaction_objects, _Meta_Data),
 
     open_descriptor(Descriptor, Transaction2),
     create_context(Transaction2, Query2),

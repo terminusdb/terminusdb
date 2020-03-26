@@ -1,9 +1,9 @@
 :- module(transaction, [
               % database.pl
               query_context_transaction_objects/2,
-              run_transaction/1,
-              run_transactions/1,
-              with_transaction/2,
+              run_transaction/2,
+              run_transactions/2,
+              with_transaction/3,
 
               % descriptor.pl
               open_descriptor/2,
@@ -22,7 +22,8 @@
 
               % validate.pl
               transaction_objects_to_validation_objects/2,
-              commit_validation_objects/1
+              commit_validation_objects/1,
+              validate_validation_objects/2
           ]).
 
 :- use_module(transaction/database).

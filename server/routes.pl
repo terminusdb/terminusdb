@@ -490,11 +490,9 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 
     woql_context(Prefixes),
 
-    http_log('~N[Here] ~q~n',[Request]),
+    http_log('~N[Commit Info] ~q~n',[Commit_Info]),
 
     context_overriding_prefixes(Context,Prefixes,Context0),
-
-    http_log('~N[There] ~q~n',[Request]),
 
     collect_posted_files(Request,Files),
 
@@ -729,8 +727,10 @@ test(branch_db, [])
             http_post(URI,
                       form_data(['terminus:query'=Payload0,
                                  'terminus:commit_info'=Commit_Payload]),
-                      _JSON0,
+                      JSON0,
                       [json_object(dict),authorization(basic(admin,root))]),
+
+            json_write_dict(current_output,JSON0,[]),
 
             % Now query the insert...
             Query1 =
@@ -753,7 +753,7 @@ test(branch_db, [])
                       [json_object(dict),authorization(basic(admin,root))]),
 
             json_write_dict(current_output,JSON1,[]),
-            
+
             (   _{'bindings' : L} :< JSON1
             ->  L = [_{'Object':"http://terminusdb.com/schema/woql#test_object",
                        'Predicate':"http://terminusdb.com/schema/woql#test_predicate",
@@ -905,6 +905,9 @@ customise_error(time_limit_exceeded) :-
                  'terminus:message' : 'Connection timed out'
                },
                [status(408)]).
+customise_error(error(schema_check_failure(Witnesses))) :-
+    reply_json(Witnesses,
+               [status(405)]).
 customise_error(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
     reply_json(_{'terminus:status' : 'terminus:failure',

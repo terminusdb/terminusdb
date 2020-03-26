@@ -284,6 +284,14 @@ read_write_obj_reader(Read_Write_Obj, _Layer) :-
 read_write_obj_reader(Read_Write_Obj, Layer) :-
     Layer = Read_Write_Obj.read.
 
+/**
+ * read_write_obj_builder(Read_Write_Obj, Layer_Builder) is semidet.
+ *
+ * Open a write object if it doesn't already exist. Set it nb destructively
+ * so we can re-use it on back-tracking.
+ *
+ * WARNING this is non-back-tracking and side-effecting.
+ */
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     ground(Read_Write_Obj.write),
     !,
@@ -293,11 +301,11 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     !,
 
     storage(Store),
-    open_write(Store, Read_Write_Obj.write),
-    Layer_Builder = Read_Write_Obj.write.
+    open_write(Store, Layer_Builder),
+    nb_set_dict(write,Read_Write_Obj,Layer_Builder).
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
-    open_write(Read_Write_Obj.read, Read_Write_Obj.write),
-    Layer_Builder = Read_Write_Obj.write.
+    open_write(Read_Write_Obj.read, Layer_Builder),
+    nb_set_dict(write,Read_Write_Obj,Layer_Builder).
 
 /**
  * open_descriptor(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map) is det.

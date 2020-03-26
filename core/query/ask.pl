@@ -208,8 +208,6 @@ create_context(Transaction_Object, Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
-        inserts : 0,
-        deletes : 0,
         bindings : [],
         selected : []
     }.

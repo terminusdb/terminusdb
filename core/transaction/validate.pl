@@ -1,6 +1,7 @@
 :- module(validate, [
               transaction_objects_to_validation_objects/2,
-              commit_validation_objects/1
+              commit_validation_objects/1,
+              validate_validation_objects/2
           ]).
 
 /** <module> Validation
@@ -307,7 +308,7 @@ commit_validation_objects_([Object|Objects]) :-
     validate_validation_objects(Validation_Objects, Witnesses),
     (   Witnesses \= []
     ->  Descriptor = Object.descriptor,
-        throw(unexpected_schema_validation_error('Internal metadata graph had an unexpected schema error',context(Descriptor,Witnesses)))
+        throw(error(schema_validation_error('Internal metadata graph had an unexpected schema error',context(Descriptor,Witnesses))))
     ;   true),
     append(Validation_Objects, Objects, New_Objects),
     predsort(commit_order, New_Objects, Sorted_Objects),
@@ -388,8 +389,10 @@ needs_schema_instance_validation(Validation_Object) :-
  */
 needs_local_instance_validation(Validation_Object) :-
     validation_object{
-        instance_objects: Instance_Objects
+        schema_objects : Schema_Objects,
+        instance_objects : Instance_Objects
     } :< Validation_Object,
+    Schema_Objects \= [],
     exists(validation_object_changed, Instance_Objects).
 
 /*
@@ -837,12 +840,15 @@ test(insert_on_branch_descriptor, [
     Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,
                                              repository_name : "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor,
-                                       branch_name: "master" },
+                                           branch_name: "master" },
     open_descriptor(Branch_Descriptor, Transaction),
     Transaction2 = Transaction.put(commit_info, commit_info{ author : "Me", message: "chill"}),
-                               ask(Transaction2,
-                                   insert(doc:asdf,doc:fdsa,doc:baz)),
+    ask(Transaction2,
+        insert(doc:asdf,doc:fdsa,doc:baz)),
+
     transaction_objects_to_validation_objects([Transaction2], Validation),
+    validate_validation_objects(Validation,Witnesses),
+    Witnesses = [],
     commit_validation_objects(Validation),
 
     ask(Branch_Descriptor,

@@ -16,35 +16,21 @@
  */
 run_context_ast_jsonld_response(Context, AST, JSON) :-
     compile_query(AST,Prog,Context,Output_Context),
-
+    http_log('~N[Output_Context] ~q~n', [Output_Context]),
     with_transaction(
         Output_Context,
-        (
+        query_response:(
             findall(JSON_Binding,
                     (   woql_compile:Prog,
                         get_dict(bindings, Output_Context, Bindings),
                         json_transform_binding_set(Output_Context, Bindings, JSON_Binding)),
                     Binding_Set),
-
-            query_context_transaction_objects(Output_Context,Transactions),
-            run_transactions(Transactions),
-
-            (   Inserts = Output_Context.get(inserts)
-            ->  (   var(Inserts) % debugging - this should never happen.
-                ->  Inserts = 0
-                ;   true)
-            ;   Inserts = 0),
-            (   Deletes = Output_Context.get(deletes)
-            ->  (   var(Deletes) % debugging - this should never happen.
-                ->  Inserts = 0
-                ;   true)
-            ;   Deletes = 0),
-
-            JSON = _{'bindings' : Binding_Set,
-                     'inserts' : Inserts,
-                     'deletes' : Deletes}
-        )
-    ).
+            http_log('~N[Binding Set] ~q~n', [Binding_Set])
+        ),
+        Meta_Data
+    ),
+    Binding_JSON = _{'bindings' : Binding_Set},
+    put_dict(Meta_Data, Binding_JSON, JSON).
 
 json_transform_binding_set(_Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context

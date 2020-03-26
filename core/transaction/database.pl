@@ -1,9 +1,9 @@
 :- module(database,[
               query_context_transaction_objects/2,
-              run_transaction/1,
-              run_transactions/1,
+              run_transaction/2,
+              run_transactions/2,
               retry_transaction/1,
-              with_transaction/2
+              with_transaction/3
           ]).
 
 /** <module> Implementation of database graph management
@@ -34,11 +34,11 @@
 :- use_module(core(transaction/descriptor)).
 :- use_module(core(transaction/validate)).
 :- use_module(core(util)).
+:- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 
 :- use_module(library(prolog_stack)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
-
 :- use_module(library(terminus_store)).
 
 
@@ -139,6 +139,18 @@ compute_backoff(Count, Time) :-
     slot_time(Slot_Time),
     Time is This_Slot * Slot_Time.
 
+
+/**
+ * reopen(Query_Context) is semidet.
+ *
+ * Attempts to re-open a query context.
+ */
+reopen(Query_Context) :-
+    get_dict(descriptor, Query_Context, Descriptor),
+    open_descriptor(Descriptor, Transaction_Objects),
+    nb_set_dict(transaction_objects, Query_Context, Transaction_Objects).
+
+
 /**
  * retry_transaction(Query_Context) is nondet.
  *
@@ -146,8 +158,10 @@ compute_backoff(Count, Time) :-
  * retrying a transaction together with a back-off strategy.
  *
  * If it is impossible to back out of a transaction (partial commits
- * in the case of multi-database transactions), we instead through an error and 
+ * in the case of multi-database transactions), we instead through an error and
  * complain.
+ *
+ * WARNING: This is a side-effecting operation
  */
 retry_transaction(Query_Context) :-
     config:max_transaction_retries(Max_Transaction_Retries),
@@ -160,7 +174,8 @@ retry_transaction(Query_Context) :-
                  ;   partial_commits(Query_Context)))
         ->  throw(error(multi_transaction_error("We are in a multi transaction which has partially commited"),context(retry_transaction/1,Query_Context)))
         ;   true),
-
+        % This is side-effecting!!!
+        reopen(Query_Context),
         compute_backoff(Transaction_Retry_Count,BackOff),
         sleep(BackOff)
     ;   true).
@@ -168,13 +183,14 @@ retry_transaction(Query_Context) :-
 /*
  * with_transaction(Query_Context) is det.
  */
-:- meta_predicate with_transaction(?,0).
+:- meta_predicate with_transaction(?,0,?).
 with_transaction(Query_Context,
-                 Body) :-
+                 Body,
+                 Meta_Data) :-
     retry_transaction(Query_Context),
     call(Body),
     query_context_transaction_objects(Query_Context, Transactions),
-    run_transactions(Transactions).
+    run_transactions(Transactions,Meta_Data).
 
 /*
  * run_transaction(Transaction) is det.
@@ -182,19 +198,89 @@ with_transaction(Query_Context,
  * Run transaction and throw errors with witnesses.
  *
  */
-run_transaction(Transaction) :-
-    transaction_objects_to_validation_objects([Transaction], Validations),
-    commit_validation_objects(Validations).
+run_transaction(Transaction, Meta_Data) :-
+    run_transactions([Transaction], Meta_Data).
 
 /*
- * run_transactions(Transaction) is det.
+ * run_transactions(Transaction, Meta_Data) is det.
  *
  * Run all transactions and throw errors with witnesses.
- *
  */
-run_transactions(Transactions) :-
+run_transactions(Transactions, Meta_Data) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    commit_validation_objects(Validations).
+    validate_validation_objects(Validations,Witnesses),
+    (   Witnesses = []
+    ->  true
+    ;   throw(error(schema_check_failure(Witnesses)))),
+    commit_validation_objects(Validations),
+    collect_validations_metadata(Validations, Meta_Data).
+
+graph_inserts_deletes(Graph, I, D) :-
+    graph_validation_obj{ changed: true } :< Graph,
+    !,
+    findall(1,
+            xrdf_deleted([Graph], _, _, _),
+            Delete_List),
+    sumlist(Delete_List, D),
+    findall(1,
+            xrdf_added([Graph], _, _, _),
+            Insert_List),
+    sumlist(Insert_List, I).
+graph_inserts_deletes(_Graph, 0, 0).
+
+validation_inserts_deletes(Validation, Inserts, Deletes) :-
+    % only count if we are in a branch or terminus commit
+    validation_object{
+        descriptor : Descriptor,
+        instance_objects : Instance_Objects,
+        schema_objects : Schema_Objects,
+        inference_objects : Inference_Objects
+    } :< Validation,
+    (   Descriptor = branch_descriptor{ branch_name : _,
+                                        repository_descriptor : _}
+    ->  true
+    ;   Descriptor = terminus_descriptor{}),
+    !,
+    foldl([Graph,(I0,D0),(I1,D1)]>>(
+              graph_inserts_deletes(Graph, I, D),
+              I1 is I0 + I,
+              D1 is D0 + D
+          ),
+          Instance_Objects, (0,0), (Insert_0, Delete_0)),
+    foldl([Graph,(I0,D0),(I1,D1)]>>(
+              graph_inserts_deletes(Graph, I, D),
+              I1 is I0 + I,
+              D1 is D0 + D
+          ),
+          Inference_Objects, (Insert_0,Delete_0), (Insert_1, Delete_1)),
+    foldl([Graph,(I0,D0),(I1,D1)]>>(
+              graph_inserts_deletes(Graph, I, D),
+              I1 is I0 + I,
+              D1 is D0 + D
+          ),
+          Schema_Objects, (Insert_1,Delete_1), (Inserts, Deletes)).
+validation_inserts_deletes(_Validation, 0, 0).
+
+/*
+ * collect_validations_metadata(Validations, Meta_Data) is det.
+ */
+collect_validations_metadata(Validations, Meta_Data) :-
+    foldl([Validation,R0,R1]>>(
+              validation_inserts_deletes(Validation, Inserts, Deletes),
+              get_dict(inserts,R0,Current_Inserts),
+              New_Inserts is Current_Inserts + Inserts,
+              get_dict(deletes,R0,Current_Deletes),
+              New_Deletes is Current_Deletes + Deletes,
+              put_dict(meta_data{inserts : New_Inserts,
+                                 deletes : New_Deletes
+                                }, R0, R1)
+          ),
+          Validations,
+          meta_data{
+              inserts : 0,
+              deletes : 0
+          },
+          Meta_Data).
 
 
 /*
@@ -271,7 +357,7 @@ test(partial_transaction_commit, [
         insert(doc:a, doc:b, doc:c)),
 
     query_context_transaction_objects(Context,Transaction_Objects),
-    run_transactions(Transaction_Objects),
+    run_transactions(Transaction_Objects, _),
 
     partial_commits(Context).
 
