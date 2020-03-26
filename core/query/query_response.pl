@@ -1,10 +1,12 @@
 :- module(query_response,[
-              ask_ast_jsonld_response/3
+              run_context_ast_jsonld_response/3
           ]).
 
+:- use_module(woql_compile).
+:- use_module(ask).
+:- use_module(jsonld).
+
 :- use_module(core(api)).
-:- use_module(core(query/ask)).
-:- use_module(core(query/jsonld)).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 
@@ -12,32 +14,37 @@
  *
  * Code to generate bindings for query response in JSON-LD
  */
-ask_ast_jsonld_response(Context, AST, JSON) :-
-    findall(JSON_Binding-Output_Context,
-            (   ask_ast(Context, AST, Output_Context),
-                get_dict(bindings, Output_Context, Bindings),
-                json_transform_binding_set(Context, Bindings, JSON_Binding)),
-            Binding_Set_And_Context),
+run_context_ast_jsonld_response(Context, AST, JSON) :-
+    compile_query(AST,Prog,Context,Output_Context),
 
-    (   Binding_Set_And_Context = []
-    ->  Final_Context = Context,
-        Binding_Set = []
-    ;   zip(Binding_Set, Contexts, Binding_Set_And_Context),
-        last(Contexts, Final_Context)),
+    with_transaction(
+        Output_Context,
+        (
+            findall(JSON_Binding,
+                    (   woql_compile:Prog,
+                        get_dict(bindings, Output_Context, Bindings),
+                        json_transform_binding_set(Output_Context, Bindings, JSON_Binding)),
+                    Binding_Set),
 
-    query_context_transaction_objects(Final_Context,Transactions),
-    run_transactions(Transactions),
+            query_context_transaction_objects(Output_Context,Transactions),
+            run_transactions(Transactions),
 
-    (   Inserts = Final_Context.get(inserts)
-    ->  true
-    ;   Inserts = 0),
-    (   Deletes = Final_Context.get(deletes)
-    ->  true
-    ;   Deletes = 0),
+            (   Inserts = Output_Context.get(inserts)
+            ->  (   var(Inserts) % debugging - this should never happen.
+                ->  Inserts = 0
+                ;   true)
+            ;   Inserts = 0),
+            (   Deletes = Output_Context.get(deletes)
+            ->  (   var(Deletes) % debugging - this should never happen.
+                ->  Inserts = 0
+                ;   true)
+            ;   Deletes = 0),
 
-    JSON = _{'bindings' : Binding_Set,
-             'inserts' : Inserts,
-             'deletes' : Deletes}.
+            JSON = _{'bindings' : Binding_Set,
+                     'inserts' : Inserts,
+                     'deletes' : Deletes}
+        )
+    ).
 
 json_transform_binding_set(_Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context

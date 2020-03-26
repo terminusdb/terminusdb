@@ -37,7 +37,7 @@
               join/3,
               op(920,fy, *),
               '*'/1,
-              op(700,xfy,<>),
+              op(1100,xfy,<>),
               '<>'/2,
               whole_arg/2,
               random_string/1,

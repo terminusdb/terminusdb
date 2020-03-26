@@ -6,7 +6,7 @@
               server_workers/1,
               server_worker_options/1,
               http_options/1,
-              max_journal_queue_length/1
+              max_transaction_retries/1
           ]).
 
 server_name('http://~s').
@@ -23,8 +23,8 @@ server_worker_options([]).
 
 http_options([]).
 
-% this number can never be less than 4 or bad things will happen.
-max_journal_queue_length(30).
+% Transaction retries
+max_transaction_retries(3).
 
 :- set_prolog_flag(stack_limit, 2_147_483_648).
 

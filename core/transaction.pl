@@ -3,6 +3,7 @@
               query_context_transaction_objects/2,
               run_transaction/1,
               run_transactions/1,
+              with_transaction/2,
 
               % descriptor.pl
               open_descriptor/2,

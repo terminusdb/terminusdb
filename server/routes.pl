@@ -374,22 +374,22 @@ frame_handler(_Method,_DB,_Branch,_Request) :-
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 % Does this go longest first?
-:- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
-                [method(Method),
-                 time_limit(infinite),
-                 methods([options,post])]).
 :- http_handler(root(woql), cors_catch(woql_handler(Method)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
+:- http_handler(root(woql/Account_ID/DB_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID)),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
-                [method(Method),
-                 time_limit(infinite),
-                 methods([options,post])]).
+% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID)),
+%                 [method(Method),
+%                  time_limit(infinite),
+%                  methods([options,post])]).
+% :- http_handler(root(woql/Account_ID/DB_ID/Ref_ID/Branch_ID), cors_catch(woql_handler(Method,Account_ID,DB_ID,Ref_ID, Branch_ID)),
+%                 [method(Method),
+%                  time_limit(infinite),
+%                  methods([options,post])]).
 
 % Should there be endpoints for commit graph and repo graphs here?
 % Mostly we just want to woql query them.
@@ -508,7 +508,7 @@ woql_run_context(Request, Auth_ID, Context,JSON) :-
 
     json_woql(Query, Prefixes, AST),
 
-    ask_ast_jsonld_response(Final_Context,AST,JSON).
+    run_context_ast_jsonld_response(Final_Context,AST,JSON).
 
 
 % woql_handler Unit Tests
@@ -752,10 +752,8 @@ test(branch_db, [])
                       JSON1,
                       [json_object(dict),authorization(basic(admin,root))]),
 
-            % json_write_dict(current_output,JSON1,[]),
-            % extra debugging...
-            % current_output(Out),
-            % json_write(Out,In,[]),
+            json_write_dict(current_output,JSON1,[]),
+            
             (   _{'bindings' : L} :< JSON1
             ->  L = [_{'Object':"http://terminusdb.com/schema/woql#test_object",
                        'Predicate':"http://terminusdb.com/schema/woql#test_predicate",

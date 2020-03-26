@@ -68,7 +68,7 @@
               json_woql/3,
 
               % query_response.pl
-              ask_ast_jsonld_response/3,
+              run_context_ast_jsonld_response/3,
 
               % resolve_query_resource.pl
               resolve_query_resource/2,
