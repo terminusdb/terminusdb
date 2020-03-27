@@ -369,7 +369,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         maplist({Path}/[Q,W]>>(% probably need an index...
                     json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#var',
                                           'http://terminusdb.com/schema/woql#named_as_var'
-                                          |Path]),
+                                          |Path])
                 ), Deindexed_Header, WHeader),
         json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
                                               |Path]),
@@ -626,32 +626,36 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
     ;   _{'http://terminusdb.com/schema/woql#value' : V, '@type' : T } :< JSON
-    ->  json_to_woql_ast(V,VE),
+    ->  json_to_woql_ast(V,VE,['http://terminusdb.com/schema/woql#value'
+                               |Path]),
         atom_string(TE,T),
         WOQL = '^^'(VE,TE)
     ;   _{'http://terminusdb.com/schema/woql#value' : V, '@language' : L } :< JSON
-    ->  json_to_woql_ast(V,VE),
+    ->  json_to_woql_ast(V,VE,['http://terminusdb.com/schema/woql#value'
+                               |Path]),
         atom_string(LE,L),
         WOQL = '@'(VE,LE)
     ;   _{'@id' : ID } :< JSON
-    ->  json_to_woql_ast(ID,WOQL)
+    ->  json_to_woql_ast(ID,WOQL,['@id'
+                                  |Path])
     ;   true = JSON
     ->  WOQL = true
     ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                      'terminus:message' :'Un-parsable Query',
                                      'vio:query' : JSON})))
     ).
-json_to_woql_ast(JSON,WOQL) :-
+json_to_woql_ast(JSON,WOQL,_Path) :-
     number(JSON),
     !,
     WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#decimal').
-json_to_woql_ast(JSON,WOQL) :-
+json_to_woql_ast(JSON,WOQL,_Path) :-
     coerce_atom(JSON,WOQL),
     !.
-json_to_woql_ast(JSON,_) :-
+json_to_woql_ast(JSON,_,Path) :-
     format(atom(Msg), 'Un-parsable Query: ~q', [JSON]),
     throw(http_reply(not_found(_{'terminus:message' : Msg,
                                  'vio:query' : JSON,
+                                 'vio:path' : Path,
                                  'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
