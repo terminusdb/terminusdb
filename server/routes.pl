@@ -78,6 +78,7 @@ http:location(root, '/', []).
 /**
  * connect_handler(+Method,+Request:http_request) is det.
  */
+/* NOTE: Need to return list of databases and access rights */
 connect_handler(options,_Request) :-
     % TODO: What should this be?
     % Do a search for each config:public_server_url
@@ -421,8 +422,11 @@ frame_handler(get, Path, Request) :-
  * woql_handler(+Method:atom, +Request:http_request) is det.
  *
  * Open WOQL with no defined database
+ *
+ * NOTE: This is not obtaining appropriate cors response data
+ * from terminus database on spartacus.
  */
-woql_handler(option, _Request) :-
+woql_handler(options, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus).
@@ -440,7 +444,7 @@ woql_handler(post, R) :-
     reply_json_dict(JSON),
     format('~n').
 
-woql_handler(option, _Path, _Request) :-
+woql_handler(options, _Path, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus).
@@ -819,11 +823,11 @@ branch_handler(_Method,_DB_ID,_New_Branch_ID,_Request) :-
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/DB_ID/Branch_ID/Graph_Type/Graph_ID), cors_catch(graph_handler(Method,DB_ID,Branch_ID,Graph_Type,Graph_ID)),
+:- http_handler(root(branch/Path), cors_catch(graph_handler(Method,Path)),
                 [method(Method),
                  methods([options,post,delete])]).
 
-graph_handler(_Method,_DB_ID,_Branch_ID,_Graph_Type,_Graph_ID,_Request) :-
+graph_handler(options,_Path,_Request) :-
     throw(error('Not implemented')).
 
 
