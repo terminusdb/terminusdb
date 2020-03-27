@@ -2,7 +2,7 @@
               query_context_transaction_objects/2,
               run_transaction/2,
               run_transactions/2,
-              retry_transaction/1,
+              retry_transaction/2,
               with_transaction/3
           ]).
 
@@ -140,8 +140,8 @@ compute_backoff(Count, Time) :-
     Time is This_Slot * Slot_Time.
 
 reset_read_write_obj(Read_Write_Obj) :-
-    nb_set_dict(read, _),
-    nb_set_dict(write, _).
+    nb_set_dict(read, Read_Write_Obj, _),
+    nb_set_dict(write, Read_Write_Obj, _).
 
 reset_transaction_object_graph_descriptors(Transaction_Object) :-
     transaction_object{
@@ -170,7 +170,7 @@ reset_query_context(Query_Context) :-
     ).
 
 /**
- * retry_transaction(Query_Context) is nondet.
+ * retry_transaction(Query_Context, Recount_Number) is nondet.
  *
  * Retry transaction sets up some number of choice points for
  * retrying a transaction together with a back-off strategy.

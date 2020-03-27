@@ -690,17 +690,18 @@ test(branch_db, [])
             (   database_exists(Name)
             ->  delete_db(Name)
             ;   true),
-            create_db(Name, 'http://terminushub.com/document')
+            create_db(Name, 'http://terminushub.com/admin/test/document')
         ),
         (
             atomic_list_concat([Server, '/woql/admin/test'], URI),
 
             % TODO: We need branches to pull in the correct 'doc:' prefix.
             Query0 =
-            _{'@type' : "AddTriple",
-              subject : "test_subject",
-              predicate : "test_predicate",
-              object : "test_object"
+            _{'@context' : _{ doc: "http://terminushub.com/admin/test/document/"},
+              '@type' : "AddTriple",
+              subject : "doc:test_subject",
+              predicate : "doc:test_predicate",
+              object : "doc:test_object"
              },
 
             with_output_to(
@@ -750,9 +751,9 @@ test(branch_db, [])
             * json_write_dict(current_output,JSON1,[]),
 
             (   _{'bindings' : L} :< JSON1
-            ->  L = [_{'Object':"http://terminusdb.com/schema/woql#test_object",
-                       'Predicate':"http://terminusdb.com/schema/woql#test_predicate",
-                       'Subject':"http://terminusdb.com/schema/woql#test_subject"}])
+            ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
+                       'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
+                       'Subject':"http://terminushub.com/admin/test/document/test_subject"}])
         ),
         _Catcher,
         delete_db(Name)
