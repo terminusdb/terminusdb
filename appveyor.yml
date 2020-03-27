@@ -21,8 +21,8 @@ install:
   - git checkout windows_test
   - cd %APPVEYOR_BUILD_FOLDER%
   - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/libterminus_store.dll
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/windows_test/terminus_store_prolog.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.8/libterminus_store.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.8/terminus_store_prolog.dll
 
 ## Build Script ##
 
