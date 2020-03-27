@@ -248,16 +248,9 @@ test(db_delete, [
 
 
 %%%%%%%%%%%%%%%%%%%% Schema Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(schema/DB), cors_catch(schema_handler(Method,DB)),
+:- http_handler(root(schema/Path), cors_catch(schema_handler(Method,Path)),
                 [method(Method),
-                 time_limit(infinite),
-                 methods([options,get,post])]).
-:- http_handler(root(schema/DB/Branch), cors_catch(schema_handler(Method,DB,Branch)),
-                [method(Method),
-                 time_limit(infinite),
-                 methods([options,get,post])]).
-:- http_handler(root(schema/DB/Branch/Graph), cors_catch(schema_handler(Method,DB,Branch,Graph)),
-                [method(Method),
+                 prefix,
                  time_limit(infinite),
                  methods([options,get,post])]).
 
@@ -268,72 +261,107 @@ test(db_delete, [
  *
  * Get or update a schema.
  */
-schema_handler(options,DB,_Request) :-
+schema_handler(options,Path,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
+    merge_separator_split(Path, '/', Split),
+    Split = [Account_ID, DB_Name|_],
+    user_database_name(Account_ID, DB_Name, DB),
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI, Terminus),
     format('~n'). % send headers
-schema_handler(get,DB,Request) :-
+schema_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
 
-    % We should make it so we can pun documents and IDs
+    merge_separator_split(Path, '/', Split),
+    (   Split = [Account_ID, DB]
+    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo, Ref]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
+    ),
+    open_descriptor(Branch_Descriptor, Transaction),
+    collection_descriptor_prefixes(Branch_Descriptor, Prefixes),
 
-    try_db_uri(DB,DB_URI),
+    try_get_param('terminus:schema',Request,Name),
+    Filter = type_name_filter{ type : schema, names : [Name]},
+    filter_transaction_objects_read_write_objects(Filter, Transaction, [Schema_Graph]),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus:get_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus:get_schema,Name),
 
-    % Let's do a default schema if we can't find one.
-    catch(
-        try_get_param('terminus:schema',Request,Name),
-        _,
-        interpolate([DB_URI,'/schema'],Name)
-    ),
+    try_dump_schema(Prefixes, Schema_Graph, Request, String),
 
-    try_dump_schema(DB_URI, Terminus, Name, Request).
-schema_handler(post,DB,R) :- % should this be put?
+    config:public_server_url(SURI),
+    write_cors_headers(SURI, DB),
+    reply_json(String).
+schema_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
 
+    merge_separator_split(Path, '/', Split),
+    (   Split = [Account_ID, DB]
+    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo, Ref]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
+    ),
+    open_descriptor(Branch_Descriptor, Transaction),
+
     % We should make it so we can pun documents and IDs
-    try_db_uri(DB,DB_URI),
+    user_database_name(Account_ID, DB, DB_Name),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus:update_schema,DB_URI),
+    verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
 
     try_get_param('terminus:schema',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
 
-    try_update_schema(DB_URI,Name,TTL,Witnesses),
+    Filter = type_name_filter{ type : schema, names : [Name]},
+    filter_transaction_objects_read_write_objects(Filter, Transaction, [Schema_Graph]),
 
-    reply_with_witnesses(DB_URI,Terminus,Witnesses).
+    update_schema(Transaction,Schema_Graph,TTL,Witnesses),
+    reply_with_witnesses(Witnesses).
 
-/*
- * schema_handler(Mode,DB,Branch,Request) is det.
- *
- * Get or update a schema.
- */
-schema_handler(_Method,_DB,_Branch,_Request) :-
-    throw(error('Unimplemented')).
 
-/*
- * schema_handler(Mode,DB,Branch,Graph,Request) is det.
- *
- * Get or update a schema.
- */
-schema_handler(_Method,_DB,_Branch,_Graph,_Request) :-
-    throw(error('Unimplemented')).
+:- begin_tests(schema_endpoint).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(schema_create, [
+         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                (   database_exists(DB)
+                ->  delete_db(DB)
+                ;   create_db(DB)))),
+         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                  delete_db(DB)))
+
+     ])
+:-
+
+    config:server(Server),
+    atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB'], URI),
+    http_post(URI, form_data(['terminus:schema'="main"]),
+              In, [json_object(dict),
+                   authorization(basic(admin, root))]),
+
+    
+
+
+:- end_tests(schema_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(frame/DB), cors_catch(frame_handler(Method,DB)),
+:- http_handler(root(frame/Path), cors_catch(frame_handler(Method,Path)),
                 [method(Method),
-                 methods([options,get])]).
-:- http_handler(root(frame/DB/Branch), cors_catch(frame_handler(Method,DB,Branch)),
-                [method(Method),
+                 prefix,
                  methods([options,get])]).
 
 /**
@@ -341,24 +369,31 @@ schema_handler(_Method,_DB,_Branch,_Graph,_Request) :-
  *
  * Establishes frame responses
  */
-frame_handler(options,DB,_Request) :-
+frame_handler(options,Path,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
+    merge_separator_split(Path, '/', Split),
+    Split = [Account_ID, DB_Name|_],
+    user_database_name(Account_ID, DB_Name, DB),
     try_db_uri(DB,DB_URI),
     write_cors_headers(DB_URI, Terminus),
     format('~n'). % send headers
-frame_handler(get, DB, Request) :-
+frame_handler(get, Path, Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus, Request, Auth),
-
-    % We should make it so we can pun documents and IDs
-
-    try_db_uri(DB,DB_URI),
+    merge_separator_split(Path, '/', Split),
+    (   Split = [Account_ID, DB]
+    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
+    ;   Split = [Account_ID, DB, Repo, Ref]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
+    ),
+    open_descriptor(Branch_Descriptor, Database),
+    user_database_name(Account_ID, DB, DB_Name),
 
     % check access rights
-    verify_access(Terminus,Auth,terminus:class_frame,DB_URI),
-
-    try_db_graph(DB_URI,Database),
+    verify_access(Terminus,Auth,terminus:class_frame,DB_Name),
 
     try_get_param('terminus:class',Request,Class_URI),
 
@@ -367,9 +402,6 @@ frame_handler(get, DB, Request) :-
     config:public_server_url(SURI),
     write_cors_headers(SURI, Terminus),
     reply_json(Frame).
-
-frame_handler(_Method,_DB,_Branch,_Request) :-
-    throw(error('Unimplemented')).
 
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1321,47 +1353,35 @@ try_class_frame(Class,Database,Frame) :-
                                       'terminus:class' : Class})))).
 
 /*
- * try_dump_schema(DB, Request) is det.
+ * schema_to_string(DB, Request) is det.
  *
  * Write schema to current stream
  */
-try_dump_schema(DB, Name, Request) :-
-    with_mutex(
-        DB,
-        (
-            try_get_param('terminus:encoding', Request, Encoding),
-            (   coerce_literal_string(Encoding, ES),
-                atom_string('terminus:turtle',ES)
-            ->  with_output_to(
-                    string(String),
-                    (   current_output(Stream),
-                        graph_to_turtle(DB, Name, Stream)
-                    )
-                ),
-                config:public_server_url(SURI),
-                write_cors_headers(SURI, DB),
-                reply_json(String)
-            ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
-                % Give a better error code etc. This is silly.
-                throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
-                                                      'terminus:object' : DB,
-                                                      'terminus:status' : 'terminus:failure'})))
+schema_to_string(Prefixes, Graph, Request, String) :-
+    try_get_param('terminus:encoding', Request, Encoding),
+    (   coerce_literal_string(Encoding, ES),
+        atom_string('terminus:turtle',ES)
+    ->  with_output_to(
+            string(String),
+            (   current_output(Stream),
+                graph_to_turtle(Prefixes, Graph, Stream)
             )
         )
+    ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
+        % Give a better error code etc. This is silly.
+        throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
+                                              'terminus:status' : 'terminus:failure'})))
     ).
 
 /*
- * try_update_schema(+DB,+Schema_Name,+TTL,-Witnesses) is det.
+ * update_schema(+DB,+Schema,+TTL,-Witnesses) is det.
  *
  */
-try_update_schema(DB,Schema_Name,TTL,Witnesses) :-
-    coerce_literal_string(Schema_Name, Schema_String),
-    atom_string(Schema_Atom, Schema_String),
+update_schema(Database,Schema,TTL,Witnesses) :-
     coerce_literal_string(TTL, TTLS),
-    make_database_from_database_name(DB, Database),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        turtle_schema_transaction(Database, Schema_Atom, TTLStream, Witnesses),
+        turtle_schema_transaction(Database, Schema, TTLStream, Witnesses),
         close(TTLStream)
     ).
 

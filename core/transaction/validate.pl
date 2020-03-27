@@ -747,35 +747,29 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
  *
  * TODO: Rewrite this so it makes sense
  */
-turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
-
-    % make a fresh empty graph against which to diff
-    open_memory_store(Store),
-    open_write(Store, Builder),
-
-    % write to a temporary builder.
-    rdf_process_turtle(
-        New_Schema_Stream,
-        {Builder}/
-        [Triples,_Resource]>>(
-            forall(member(T, Triples),
-                   (   normalise_triple(T, rdf(X,P,Y)),
-                       object_storage(Y,S),
-                       nb_add_triple(Builder, X, P, S)
-                   ))),
-        [encoding(utf8)]),
-    % commit this builder to a temporary layer to perform a diff.
-    nb_commit(Builder,Layer),
+turtle_schema_transaction(Database, Schema, New_Schema_Stream) :-
 
     with_transaction(
-        [transaction_record{
-             pre_database: Database,
-             write_graphs: [Schema],
-             update_database: Update_DB,
-             post_database: Post_DB},
-         witnesses(Witnesses)],
-        % Update
-        validate:(
+        Database,
+        (   % make a fresh empty graph against which to diff
+            open_memory_store(Store),
+            open_write(Store, Builder),
+
+            % write to a temporary builder.
+            rdf_process_turtle(
+                New_Schema_Stream,
+                {Builder}/
+                [Triples,_Resource]>>(
+                    forall(member(T, Triples),
+                           (   normalise_triple(T, rdf(X,P,Y)),
+                               object_storage(Y,S),
+                               nb_add_triple(Builder, X, P, S)
+                           ))),
+                [encoding(utf8)]),
+
+            % commit this builder to a temporary layer to perform a diff.
+            nb_commit(Builder,Layer),
+
             % first write everything into the layer-builder that is in the new
             % file, but not in the db.
             forall(
@@ -787,37 +781,6 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Witnesses) :-
                 (   xrdf_db(Layer,A_New,B_New,C_New),
                     \+ xrdf([Schema], A_New, B_New, C_New)),
                 insert(Schema,A_New,B_New,C_New)
-            )
-        ),
-        % Post conditions
-        validate:(
-            findall(Pre_Witness,
-                    (   pre_test_schema(Pre_Check),
-                        call(Pre_Check,Post_DB,Pre_Witness)),
-                    Pre_Witnesses),
-            (   \+ Pre_Witnesses = []
-            % We have witnesses of failure and must bail
-            ->  Witnesses = Pre_Witnesses
-            % We survived the pre_tests, better check schema constriants
-            ;   findall(Schema_Witness,
-                        (   test_schema(Check),
-                            call(Check,Post_DB,Schema_Witness)),
-                        Schema_Witnesses),
-                (   \+ Schema_Witnesses = []
-                ->  Witnesses = Schema_Witnesses
-                    % Winning!
-                ;   % TODO: We do not need to perform a global check of instances
-                    % Better would be a local check derived from schema delta.
-                    (    schema_validation_skippable(Update_DB, Schema, Layer)
-                    ->   true
-                    ;    findall(Witness,
-                              (   database_instance(Post_DB, Instance),
-                                  xrdf(Instance,E,F,G),
-                                  refute_insertion(Post_DB,E,F,G,Witness)),
-                              Witnesses)
-                    )
-
-                )
             )
         )
     ).

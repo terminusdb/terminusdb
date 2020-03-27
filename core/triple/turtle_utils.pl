@@ -30,17 +30,13 @@
 :- use_module(library(semweb/turtle)).
 
 /**
- * graph_to_turtle(+N,+G,+Output_Stream) is det.
+ * graph_to_turtle(+Prefixes,+G,+Output_Stream) is det.
  *
  * Create a ttl representation of the graph G in the
  * database named N.
  */
-graph_to_turtle(N,G,Out_Stream) :-
-    get_collection_prefix_pairs(N,Prefixes),
-    storage(Store),
-    safe_open_named_graph(Store,G,Obj),
-    head(Obj, L),
-    layer_to_turtle(L,Prefixes,Out_Stream).
+graph_to_turtle(Prefixes,G,Out_Stream) :-
+    layer_to_turtle(G.read,Prefixes,Out_Stream).
 
 /**
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
