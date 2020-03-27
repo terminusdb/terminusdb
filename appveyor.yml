@@ -18,7 +18,7 @@ install:
   - cd %APPDATA%\SWI-Prolog\pack
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout windows_test
+  - git checkout v0.9.8
   - cd %APPVEYOR_BUILD_FOLDER%
   - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.8/libterminus_store.dll
