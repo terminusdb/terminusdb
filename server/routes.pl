@@ -1238,21 +1238,22 @@ get_param(Key,Request,Value) :-
     memberchk(method(post), Request),
     memberchk(content_type('application/json'), Request),
     memberchk(payload(Document), Request),
-    Value = Document.get(Key),
-    !.
-get_param(Key,Request,_Value) :-
-    % OTHER with method
-    memberchk(method(Method), Request),
-    !,
-    format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
-    throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                 'terminus:status' : 'terminus:failure',
-                                 'terminus:object' : Key}))).
-get_param(Key,_Request,_Value) :-
-    % Catch all.
-    format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
-    throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                 'terminus:message' : MSG}))).
+    Value = Document.get(Key).
+%%% cut goes to method(post) above
+%     !.
+% get_param(Key,Request,_Value) :-
+%     % OTHER with method
+%     memberchk(method(Method), Request),
+%     !,
+%     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Method,Key]),
+%     throw(http_reply(not_found(_{'terminus:message' : MSG,
+%                                  'terminus:status' : 'terminus:failure',
+%                                  'terminus:object' : Key}))).
+% get_param(Key,_Request,_Value) :-
+%     % Catch all.
+%     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
+%     throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
+%                                  'terminus:message' : MSG}))).
 
 
 /*
