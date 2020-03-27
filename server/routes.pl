@@ -429,7 +429,8 @@ frame_handler(get, Path, Request) :-
 woql_handler(options, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus).
+    write_cors_headers(SURI, Terminus),
+    format('~n').
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
@@ -447,7 +448,8 @@ woql_handler(post, R) :-
 woql_handler(options, _Path, _Request) :-
     config:public_server_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus).
+    write_cors_headers(SURI, Terminus),
+    format('~n').
 woql_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
