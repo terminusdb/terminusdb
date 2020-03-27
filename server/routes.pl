@@ -337,6 +337,7 @@ schema_handler(post,Path,R) :- % should this be put?
 :- use_module(library(http/http_open)).
 
 test(schema_create, [
+         blocked('Need to have graph creation first'),
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
@@ -346,14 +347,14 @@ test(schema_create, [
 
      ])
 :-
-
+    % We actually have to create the graph before we can post to it!
     config:server(Server),
     atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB'], URI),
     http_post(URI, form_data(['terminus:schema'="main"]),
-              In, [json_object(dict),
+              _In, [json_object(dict),
                    authorization(basic(admin, root))]),
 
-    
+    true.
 
 
 :- end_tests(schema_endpoint).
