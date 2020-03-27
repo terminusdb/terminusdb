@@ -4,6 +4,7 @@
               resolve_relative_descriptor/3,
               resolve_absolute_string_descriptor/2,
               resolve_relative_string_descriptor/3,
+              resolve_query_resource/2,
               resolve_filter/2
           ]).
 
@@ -607,6 +608,128 @@ resolve_relative_string_descriptor(Context, String, Descriptor) :-
     exclude('='(""), Path_Unfiltered, Path),
 
     resolve_relative_descriptor(Context, Path, Descriptor).
+
+/*****************************************
+ * URI Resource Resolution:
+ *
+ * We need to resolve URIs to the appropriate object - i.e. a desriptor which
+ * can be interpreted by the prolog term output by WOQL. This involves two specific
+ * scenarios: read and write.
+ *
+ * WOQL should *compile* to the resolving descriptor, which can then be used in the transaction to
+ * find the right query_object, allowing the transaction logic to be simplified, and eventually
+ * supporting nested transactions.
+ *
+ ** Read: Querying a specific object.
+ *
+ * Here we need to be able to read the union of the instance graphs of the appropriate query_object,
+ * against the union of schema graphs (where relevant - i.e. with subsumption).
+ *
+ * As long as the resolution leaves us with a query_object, we can treat it irrespective of the
+ * "layer of the union".
+ *
+ ** Write: Writing to a specific graph
+ *
+ * Here we need to be more directed. If we are unable to resolve to a specific graph we need to
+ * throw an error, describing the graph set which might be intended, with their specific URIs.
+ *
+ * We can default the write graph to Server://DB_Name/local/document/main
+ * Server can be defaulted to terminusHub
+ */
+
+/**
+ * resolve_query_resource(Uri, Descriptor) is semidet.
+ *
+ * We need to be able to resolve arbitrary resource URI's
+ * to the appropriate portion of the query_object.
+ *
+ */
+% Terminus
+%
+% 'terminus:///terminus'
+%
+resolve_query_resource('terminus:///terminus/',terminus_descriptor{}).
+% Branches
+%
+% terminus
+%
+% u/User
+%
+% r/Repo
+%
+% repo/Repo
+%
+% repometa/Repo
+%
+% ref/Branch_Name
+%
+% http://[Server]/woql/user/[User]/database/[Database_Name]/repo/Repo
+% http://[Server]/woql/user/[User]/database/[Database_Name]/repometa/ 
+% http://[Server]/woql/user/[User]/database/[Database_Name]
+%
+%  <= repo/Repo_name/ref/Ref_name =>
+%
+% 'http://[Server]/[User]/[Database_Name]'
+% 'http://[Server]/[User]/[Database_Name]/<Repo_Name>'
+% 'http://[Server]/[User]/[Database_Name]/<Repo_Name>/<Ref_Name>'
+%
+resolve_query_resource(URI, Branch_Descriptor) :-
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)/(?P<branch>[^/]*)$', URI, Resource_Dict, [])
+    ->  true
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/(?P<repo>[^/]*)$', URI, Dict, [])
+    ->  Resource_Dict = Dict.put(_{branch : "master"})
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict, []),
+        Resource_Dict = Dict.put(_{repo : "local", branch : "master"})),
+    !,
+    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+    % convenience predicate?
+    Database_Descriptor = database_descriptor{
+                              database_name : Database_Name
+                          },
+
+    Repository_Descriptor = repository_descriptor{
+                                database_descriptor : Database_Descriptor,
+                                repository_name : Resource_Dict.repo
+                            },
+
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor : Repository_Descriptor,
+                            branch_name : Resource_Dict.branch
+                        }.
+% Repository descriptor (the Commit Graph)
+%
+% 'http://[Server]/[User]/[Database_Name]/commits/'
+% 'http://[Server]/[User]/[Database_Name]/commits/<Repo_Name>'
+%
+resolve_query_resource(URI, Repository_Descriptor) :-
+    (   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits/(?P<repo>)$', URI, Resource_Dict, [])
+    ->  true
+    ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/commits$', URI, Dict, [])
+    ->  Resource_Dict = Dict.put(_{repo : "local"})
+    ),
+    !,
+    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+
+    Database_Descriptor = database_descriptor{
+                              database_name : Database_Name
+                          },
+    Repository_Descriptor = repository_descriptor{
+                                database_descriptor : Database_Descriptor,
+                                repository_name : Resource_Dict.repo
+                            }.
+% Database descriptor
+%
+% 'http://[Server]/[User]/[Database_Name]/repositories'
+%
+resolve_query_resource(URI, Database_Descriptor) :-
+    re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Resource_Dict, []),
+
+    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+
+    Database_Descriptor = database_descriptor{
+                              database_name : Database_Name
+                          }.
+
 
 %%
 % resolve_filter(Filter_String,Filter) is det.
