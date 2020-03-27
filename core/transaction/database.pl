@@ -139,17 +139,35 @@ compute_backoff(Count, Time) :-
     slot_time(Slot_Time),
     Time is This_Slot * Slot_Time.
 
+reset_read_write_obj(Read_Write_Obj) :-
+    nb_set_dict(read, _),
+    nb_set_dict(write, _).
+
+reset_transaction_object_graph_descriptors(Transaction_Object) :-
+    transaction_object{
+        instance_objects : Instance_Objects,
+        schema_objects : Schema_Objects,
+        inference_objects : Inference_Objects
+    } :< Transaction_Object,
+    maplist(reset_read_write_obj, Instance_Objects),
+    maplist(reset_read_write_obj, Schema_Objects),
+    maplist(reset_read_write_obj, Inference_Objects).
 
 /**
- * reopen(Query_Context) is semidet.
+ *
+ */
+reset_transaction_objects_graph_descriptors(Transaction_Objects) :-
+    maplist(reset_transaction_object_graph_descriptors, Transaction_Objects).
+
+/**
+ * reset_query_context(Query_Context) is semidet.
  *
  * Attempts to re-open a query context.
  */
-reopen(Query_Context) :-
-    get_dict(descriptor, Query_Context, Descriptor),
-    open_descriptor(Descriptor, Transaction_Objects),
-    nb_set_dict(transaction_objects, Query_Context, Transaction_Objects).
-
+reset_query_context(Query_Context) :-
+    reset_transaction_objects_graph_descriptors(
+        Query_Context.transaction_objects
+    ).
 
 /**
  * retry_transaction(Query_Context) is nondet.
@@ -163,19 +181,19 @@ reopen(Query_Context) :-
  *
  * WARNING: This is a side-effecting operation
  */
-retry_transaction(Query_Context) :-
+retry_transaction(Query_Context, Transaction_Retry_Count) :-
     config:max_transaction_retries(Max_Transaction_Retries),
 
     between(0, Max_Transaction_Retries, Transaction_Retry_Count),
 
     % If we are > 0, we have actually failed at least once.
     (   Transaction_Retry_Count > 0
-    ->  (   once((   multi_transaction(Query_Context)
-                 ;   partial_commits(Query_Context)))
+    ->  (   multi_transaction(Query_Context),
+            partial_commits(Query_Context)
         ->  throw(error(multi_transaction_error("We are in a multi transaction which has partially commited"),context(retry_transaction/1,Query_Context)))
         ;   true),
         % This is side-effecting!!!
-        reopen(Query_Context),
+        reset_query_context(Query_Context),
         compute_backoff(Transaction_Retry_Count,BackOff),
         sleep(BackOff)
     ;   true).
@@ -187,10 +205,11 @@ retry_transaction(Query_Context) :-
 with_transaction(Query_Context,
                  Body,
                  Meta_Data) :-
-    retry_transaction(Query_Context),
+    retry_transaction(Query_Context, Transaction_Retry_Count),
     call(Body),
     query_context_transaction_objects(Query_Context, Transactions),
-    run_transactions(Transactions,Meta_Data).
+    run_transactions(Transactions,Meta_Data0),
+    Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}).
 
 /*
  * run_transaction(Transaction) is det.
@@ -218,7 +237,7 @@ run_transactions(Transactions, Meta_Data) :-
 graph_inserts_deletes(Graph, I, D) :-
     graph_validation_obj{ changed: true } :< Graph,
     !,
-    %layer_addition_count(Graph.read, I),
+    % layer_addition_count(Graph.read, I),
     %layer_removal_count(Graph.read, D).
     findall(1,
             xrdf_deleted([Graph], _, _, _),
