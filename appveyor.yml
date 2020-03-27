@@ -30,7 +30,7 @@ build_script:
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout windows_test
+  - git checkout v0.9.8
   - cd ..\
   - makensis.exe terminusdb_windows_installer.nsi
   - cd ..\
