@@ -162,7 +162,6 @@ run(Args) :-
             )
         ;   Server = Server_Arg),
         memberchk(port(Port), Opts),
-        memberchk(workers(Workers), Opts),
         memberchk(protocol(Protocol), Opts),
         memberchk(public_url(Public_URL), Opts),
         (   Public_URL \= false
@@ -170,7 +169,6 @@ run(Args) :-
         ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
         ),
 
-        initialize_config(PUBLIC_URL, Server, Port, Workers),
         initialize_registry,
         initialize_index(PUBLIC_URL, Key, Opts),
 

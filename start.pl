@@ -64,7 +64,7 @@ must_be_proper_version :-
 initialise_server_settings :-
     file_search_path(terminus_home, BasePath),
     !,
-    atom_concat(BasePath, '/config/config.pl', Settings_Path),
+    atom_concat(BasePath, '/config/terminus_config.pl', Settings_Path),
     (   exists_file(Settings_Path)
     ->  true
     ;   print_message(error, server_missing_config(BasePath)),
@@ -111,6 +111,7 @@ hup(_Signal) :-
 
 main(Argv) :-
     get_time(Now),
+    config:default_envs,
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminus-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),

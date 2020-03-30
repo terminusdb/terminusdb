@@ -39,9 +39,10 @@
 
 server(_Argv) :-
     config:server(Server),
-    config:server_port(Port),
-    config:server_workers(Workers),
-    config:server_worker_options(_Settings),
+    getenv("TERMINUS_SERVER_PORT", Port_Atom),
+    atom_number(Port_Atom, Port),
+    getenv("TERMINUS_SERVER_WORKERS", Workers_Atom),
+    atom_number(Workers_Atom, Workers),
     config:http_options(HTTPOptions),
     http_server(http_dispatch,
 		        [ port(Port),
