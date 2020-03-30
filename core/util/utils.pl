@@ -24,7 +24,6 @@
               trim/2,
               split_atom/3,
               getenv_number/2,
-              setenv_conditional/2,
               escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
@@ -685,16 +684,6 @@ uri_has_prefix(K) :-
 getenv_number(Name, Value) :-
     getenv(Name, Value_Atom),
     atom_number(Value_Atom, Value).
-
-/*
- * setenv_conditional(+Name, +Value) is semidet.
- *
- * Set the env variable if it hasn't been set already
-*/
-setenv_conditional(Name, Value) :-
-    (   getenv(Name, _)
-    ->  true
-    ;   setenv(Name, Value)).
 
 
 /*

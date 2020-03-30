@@ -40,8 +40,8 @@
 
 server(_Argv) :-
     config:server(Server),
-    getenv_number("TERMINUS_SERVER_PORT", Port),
-    getenv_number("TERMINUS_SERVER_WORKERS", Workers),
+    config:server_port(Port),
+    config:worker_amount(Workers),
     config:http_options(HTTPOptions),
     http_server(http_dispatch,
 		        [ port(Port),

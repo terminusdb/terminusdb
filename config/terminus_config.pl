@@ -1,6 +1,10 @@
 :- module(config,[
-              default_envs/0,
               server/1,
+              server_name/1,
+              server_port/1,
+              public_url/1,
+              worker_amount/1,
+              max_transaction_retries/1,
               server_worker_options/1,
               http_options/1,
               max_journal_queue_length/1
@@ -9,17 +13,35 @@
 :- use_module(core(util/utils)).
 
 
-default_envs :-
-    setenv_conditional("TERMINUS_SERVER_NAME", 'http://localhost'),
-    setenv_conditional("TERMINUS_SERVER_PORT", 6363),
-    setenv_conditional("TERMINUS_SERVER_PUBLIC_URL", 'http://localhost:6363'),
-    setenv_conditional("TERMINUS_SERVER_MAX_TRANSACTION_RETRIES", 3),
-    setenv_conditional("TERMINUS_SERVER_WORKERS", 8).
+server_name(Value) :-
+    (   getenv('TERMINUS_SERVER_NAME', Value)
+    ->  true
+    ;   Value = 'http://localhost').
+
+server_port(Value) :-
+    (   getenv_number('TERMINUS_SERVER_PORT', Value)
+    ->  true
+    ;   Value = 6363).
+
+public_url(Value) :-
+    (   getenv('TERMINUS_SERVER_PUBLIC_URL', Value)
+    ->  true
+    ;   Value = 'http://localhost:6363').
+
+worker_amount(Value) :-
+    (   getenv_number('TERMINUS_SERVER_WORKERS', Value)
+    ->  true
+    ;   Value = 8).
+
+max_transaction_retries(Value) :-
+    (   getenv_number('TERMINUS_SERVER_MAX_TRANSACTION_RETRIES', Value)
+    ->  true
+    ;   Value = 3).
 
 
 server(Server) :-
-    getenv("TERMINUS_SERVER_NAME", Name),
-    getenv("TERMINUS_SERVER_PORT", Port),
+    server_name(Name),
+    server_port(Port),
     atomic_list_concat([Name,':',Port],Server).
 
 server_worker_options([]).

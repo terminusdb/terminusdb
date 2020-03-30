@@ -111,7 +111,6 @@ hup(_Signal) :-
 
 main(Argv) :-
     get_time(Now),
-    config:default_envs,
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminus-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
