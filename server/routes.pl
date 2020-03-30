@@ -83,12 +83,12 @@ connect_handler(options,_Request) :-
     % TODO: What should this be?
     % Do a search for each config:public_server_url
     % once you know.
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     connection_authorised_user(Request,User,SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
@@ -104,7 +104,7 @@ connect_handler(get,Request) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(options,_Request) :-
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
@@ -112,7 +112,7 @@ console_handler(get,_Request) :-
     terminus_path(Path),
     interpolate([Path,'/config/index.html'], Index_Path),
     read_file_to_string(Index_Path, String, []),
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n'),
@@ -128,7 +128,7 @@ console_handler(get,_Request) :-
  * message_handler(+Method,+Request) is det.
  */
 message_handler(options,_Request) :-
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
@@ -142,7 +142,7 @@ message_handler(get,Request) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
@@ -158,7 +158,7 @@ message_handler(post,R) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
@@ -175,7 +175,7 @@ message_handler(post,R) :-
  */
 db_handler(options,_Account,_DB,_Request) :-
     % database may not exist - use server for CORS
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI,DB),
     format('~n').
@@ -184,7 +184,7 @@ db_handler(post,Account,DB,R) :-
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
-    config:public_server_url(Server),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", Server),
     verify_access(Terminus_DB, Auth, terminus:create_database,Server),
     http_log('[Request] ~q', [Request]),
     try_get_param('terminus:base_uri',Request,Base_URI),
@@ -198,7 +198,7 @@ db_handler(delete,Account,DB,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
-    config:public_server_url(Server),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", Server),
 
     verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
     user_database_name(Account, DB, DB_Name),
@@ -295,7 +295,7 @@ schema_handler(get,Path,Request) :-
 
     try_dump_schema(Prefixes, Schema_Graph, Request, String),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     write_cors_headers(SURI, DB),
     reply_json(String).
 schema_handler(post,Path,R) :- % should this be put?
@@ -401,7 +401,7 @@ frame_handler(get, Path, Request) :-
 
     try_class_frame(Class_URI,Database,Frame),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     write_cors_headers(SURI, Terminus),
     reply_json(Frame).
 
@@ -427,7 +427,7 @@ frame_handler(get, Path, Request) :-
  * from terminus database on spartacus.
  */
 woql_handler(options, _Request) :-
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -440,13 +440,13 @@ woql_handler(post, R) :-
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
     reply_json_dict(JSON),
     format('~n').
 
 woql_handler(options, _Path, _Request) :-
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -467,7 +467,7 @@ woql_handler(post, Path, R) :-
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
-    config:public_server_url(SURI),
+    getenv("TERMINUS_SERVER_PUBLIC_URL", SURI),
     write_cors_headers(SURI, Terminus_Transaction_Object),
     reply_json_dict(JSON),
     format('~n').
@@ -1180,7 +1180,7 @@ try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
  * Die if we can't form a document uri.
  */
 try_db_uri(DB,DB_URI) :-
-    (   config:public_server_url(Server_Name),
+    (   getenv("TERMINUS_SERVER_PUBLIC_URL", Server_Name),
         interpolate([Server_Name,'/',DB],DB_URI)
     ->  true
     ;   throw(http_reply(not_found(_{'terminus:message' : 'Database resource can not be found',

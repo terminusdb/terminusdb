@@ -13,6 +13,7 @@ default_envs :-
     setenv_conditional("TERMINUS_SERVER_NAME", 'http://localhost'),
     setenv_conditional("TERMINUS_SERVER_PORT", 6363),
     setenv_conditional("TERMINUS_SERVER_PUBLIC_URL", 'http://localhost:6363'),
+    setenv_conditional("TERMINUS_SERVER_MAX_TRANSACTION_RETRIES", 3),
     setenv_conditional("TERMINUS_SERVER_WORKERS", 8).
 
 

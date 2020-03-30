@@ -23,6 +23,7 @@
               find/3,
               trim/2,
               split_atom/3,
+              getenv_number/2,
               setenv_conditional/2,
               escape_pcre/2,
               pattern_string_split/3,
@@ -675,6 +676,15 @@ uri_has_protocol(K) :-
 uri_has_prefix(K) :-
     \+ uri_has_protocol(K),
     re_match('^[^:]*:[^:]*',K).
+
+/*
+ * getenv_number(+Name, +Value) is semidet.
+ *
+ * Get the env variable and convert it to a number
+*/
+getenv_number(Name, Value) :-
+    getenv(Name, Value_Atom),
+    atom_number(Value_Atom, Value).
 
 /*
  * setenv_conditional(+Name, +Value) is semidet.
