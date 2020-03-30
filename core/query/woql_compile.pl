@@ -5,7 +5,8 @@
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              descriptor_context/2
+              descriptor_context/2,
+              filter_transaction_objects_read_write_objects/3
           ]).
 
 /** <module> WOQL Compile
@@ -1197,7 +1198,10 @@ filter_transaction_objects_read_write_objects(type_name_filter{ type : Type, nam
     ->  Objs = Transaction_Object.schema_objects
     ;   Type = inference
     ->  Objs = Transaction_Object.inference_objects),
-    include([Obj]>>(memberchk(Obj.name,Names)), Objs, Read_Write_Objects).
+    include([Obj]>>(
+                get_dict(name, Obj, Name),
+                memberchk(Name,Names)
+            ), Objs, Read_Write_Objects).
 
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)

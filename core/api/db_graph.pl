@@ -41,7 +41,7 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
     (   create_context(Repo_Descriptor, Commit_Info, Context)
     ->  true
     ;   throw(error(cannot_open_context(Repo_Descriptor)))),
-    
+
     with_transaction(Context,
                      (   % does this branch exist? if not, error
                          (   ask(Context,
@@ -57,12 +57,12 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                                      Graphs)
                           % it doesn't! assume a single instance main graph
                          ;   Graphs = ["instance"-"main"-_]),
-                             
+
                          % does the graph exist already? if so, error
                          (   memberchk(Graph_Type-Graph_Name-_, Graphs)
                          ->  throw(error(graph_already_exists(Branch_Descriptor, Graph_Name)))
                          ;   true),
-                         
+
                          % now that we know we're in a good position, create a new commit
                          insert_commit_object(Context, Commit_Id, Commit_Uri),
                          forall(member(Graph_Type-Graph_Name-Graph_Layer_Uri, Graphs),

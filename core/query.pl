@@ -81,7 +81,8 @@
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              descriptor_context/2
+              descriptor_context/2,
+              filter_transaction_objects_read_write_objects/3
           ]).
 
 :- use_module(query/expansions).
