@@ -210,11 +210,25 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         json_to_woql_ast(Substring, WSubstring,['http://terminusdb.com/schema/woql#substring'
                                                 |Path]),
         WOQL = sub_string(WString,WBefore,WLength,WAfter,WSubstring)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Update',
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ReadObject',
+          'http://terminusdb.com/schema/woql#document_uri' : Doc_ID,
           'http://terminusdb.com/schema/woql#document' : Doc
          } :< JSON
-    ->  WOQL = update_object(Doc)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Delete',
+    ->  json_to_woql_ast(Doc_ID, WID, ['http://terminusdb.com/schema/woql#document_id'
+                                           |Path]),
+        json_to_woql_ast(Doc, WDoc, ['http://terminusdb.com/schema/woql#document'
+                                         |Path]),
+        WOQL = read_object(WID,WDoc)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#UpdateObject',
+          'http://terminusdb.com/schema/woql#document' : Doc
+         } :< JSON
+    ->  (   _{'@id' : _ID} :< Doc
+        ->  WOQL = update_object(Doc)
+        ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'No ID specified in updated object',
+                                         'vio:query' : JSON})))
+        )
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteObject',
           'http://terminusdb.com/schema/woql#document' : Doc
          } :< JSON
     ->  (   _{'@id' : ID} :< Doc

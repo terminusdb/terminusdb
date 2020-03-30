@@ -891,8 +891,6 @@ document_object(DB, Document, Depth, Realiser) :-
  *
  * Gets the realiser for the frame associated with the class of
  * Document in a JSON_LD format using a supplied context.
- * TODO: Fix this, since the arguments are totally changed
-
  */
 document_jsonld(Query_Context, Document, JSON_LD) :-
     document_jsonld(Query_Context, Document, 1, JSON_LD).

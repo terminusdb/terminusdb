@@ -446,6 +446,13 @@ woql:ReadObject
   rdfs:label "Read Object"@en ;
   rdfs:comment "Read an object as JSON"@en .
 
+woql:document_uri
+  a owl:ObjectProperty ;
+  rdfs:label "Document uri"@en ;
+  rdfs:comment "The Document uri of the document to be retrieved"@en ;
+  rdfs:domain woql:Document ;
+  rfds:range owl:Thing .
+
 woql:UpdateObject
   a owl:Class ;
   rdfs:subClassOf woql:DocumentQuery ;

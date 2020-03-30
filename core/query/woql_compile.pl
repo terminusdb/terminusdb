@@ -613,12 +613,16 @@ turtle_term(Path,Vars,Prog,Options) :-
             Vars = [X,P,Y]).
 
 % TODO: This should exist.
-%compile_wf(read_object(Doc_ID,Doc), _) -->
-%    .
-compile_wf(update_object(Doc),frame:update_object(Doc,S0)) -->
+compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
+    resolve(Doc_ID,URI),
+    resolve(Doc,JSON),
+    peak(S0).
+compile_wf(update_object(Doc),frame:update_object(DocE,S0)) -->
+    resolve(Doc,DocE),
     peek(S0).
-compile_wf(update_object(X,Doc),frame:update_object(URI,Doc,S0)) -->
+compile_wf(update_object(X,Doc),frame:update_object(URI,DocE,S0)) -->
     resolve(X,URI),
+    resolve(Doc,DocE),
     peak(S0).
 compile_wf(delete_object(X),frame:delete_object(URI,S0)) -->
     resolve(X,URI),

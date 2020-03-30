@@ -4,7 +4,7 @@
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
-    
+
     asserta(user:file_search_path(terminus_home, Dir)).
 
 :- add_terminus_home_path.
@@ -31,6 +31,12 @@ add_jwt_path :-
 :- add_jwt_path.
 
 add_config_path :-
+    % Global directory
+    % asserta(user:file_search_path(config, '/etc')),
+    % home or app directory
+    user:file_search_path(app_preferences, App_Config),
+    asserta(user:file_search_path(config, App_Config)),
+    % relative path
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/config',Config),
     asserta(user:file_search_path(config, Config)).

@@ -681,84 +681,148 @@ test(named_get, [])
     ->  true
     ;   fail).
 
-test(branch_db, [])
+test(branch_db, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
 :-
-    setup_call_catcher_cleanup(
-        (   % Create Database
-            config:server(Server),
-            user_database_name(admin,test, Name),
-            (   database_exists(Name)
-            ->  delete_db(Name)
-            ;   true),
-            create_db(Name, 'http://terminushub.com/admin/test/document')
-        ),
-        (
-            atomic_list_concat([Server, '/woql/admin/test'], URI),
+    atomic_list_concat([Server, '/woql/admin/test'], URI),
 
-            % TODO: We need branches to pull in the correct 'doc:' prefix.
-            Query0 =
-            _{'@context' : _{ doc: "http://terminushub.com/admin/test/document/"},
-              '@type' : "AddTriple",
-              subject : "doc:test_subject",
-              predicate : "doc:test_predicate",
-              object : "doc:test_object"
-             },
+    % TODO: We need branches to pull in the correct 'doc:' prefix.
+    Query0 =
+    _{'@context' : _{ doc: "http://terminushub.com/admin/test/document/"},
+      '@type' : "AddTriple",
+      subject : "doc:test_subject",
+      predicate : "doc:test_predicate",
+      object : "doc:test_object"
+     },
 
-            with_output_to(
-                string(Payload0),
-                json_write(current_output, Query0, [])
-            ),
+    with_output_to(
+        string(Payload0),
+        json_write(current_output, Query0, [])
+    ),
 
-            Commit = commit_info{ author : 'The Gavinator',
-                                  message : 'Peace and goodwill' },
+    Commit = commit_info{ author : 'The Gavinator',
+                          message : 'Peace and goodwill' },
 
-            with_output_to(
-                string(Commit_Payload),
-                json_write(current_output, Commit, [])
-            ),
+    with_output_to(
+        string(Commit_Payload),
+        json_write(current_output, Commit, [])
+    ),
 
 
-            http_post(URI,
-                      form_data(['terminus:query'=Payload0,
-                                 'terminus:commit_info'=Commit_Payload]),
-                      JSON0,
-                      [json_object(dict),authorization(basic(admin,root))]),
+    http_post(URI,
+              form_data(['terminus:query'=Payload0,
+                         'terminus:commit_info'=Commit_Payload]),
+              JSON0,
+              [json_object(dict),authorization(basic(admin,root))]),
 
-            * json_write_dict(current_output,JSON0,[]),
+    * json_write_dict(current_output,JSON0,[]),
 
-            _{'bindings' : [_{}], inserts: 1, deletes : 0} :< JSON0,
+    _{'bindings' : [_{}], inserts: 1, deletes : 0} :< JSON0,
 
-            % Now query the insert...
-            Query1 =
-            _{'@type' : "Triple",
-              subject : _{'@type' : "Variable",
-                          variable_name : "Subject"},
-              predicate : _{'@type' : "Variable",
-                            variable_name : "Predicate"},
-              object : _{'@type' : "Variable",
-                         variable_name : "Object"}},
+    % Now query the insert...
+    Query1 =
+    _{'@type' : "Triple",
+      subject : _{'@type' : "Variable",
+                  variable_name : "Subject"},
+      predicate : _{'@type' : "Variable",
+                    variable_name : "Predicate"},
+      object : _{'@type' : "Variable",
+                 variable_name : "Object"}},
 
-            with_output_to(
-                string(Payload1),
-                json_write(current_output, Query1, [])
-            ),
+    with_output_to(
+        string(Payload1),
+        json_write(current_output, Query1, [])
+    ),
 
-            http_post(URI,
-                      form_data(['terminus:query'=Payload1]),
-                      JSON1,
-                      [json_object(dict),authorization(basic(admin,root))]),
+    http_post(URI,
+              form_data(['terminus:query'=Payload1]),
+              JSON1,
+              [json_object(dict),authorization(basic(admin,root))]),
 
-            * json_write_dict(current_output,JSON1,[]),
+    * json_write_dict(current_output,JSON1,[]),
 
-            (   _{'bindings' : L} :< JSON1
-            ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
-                       'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
-                       'Subject':"http://terminushub.com/admin/test/document/test_subject"}])
-        ),
-        _Catcher,
-        delete_db(Name)
+    (   _{'bindings' : L} :< JSON1
+    ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
+               'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
+               'Subject':"http://terminushub.com/admin/test/document/test_subject"}]
     ).
 
+/* This can't be done until we can create a schema...
+
+test(update_object, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    atomic_list_concat([Server, '/woql/admin/test'], URI),
+
+    % TODO: We need branches to pull in the correct 'doc:' prefix.
+    Query0 =
+    _{'@context' : _{ doc: "http://terminushub.com/admin/test/document/",
+                      scm: "http://terminushub.com/admin/test/schema#"},
+      '@type' : "UpdateObject",
+      document : _{ '@type' : "scm:myThingy",
+                    '@id' : 'doc:me',
+                    'scm:edge' : _{'@type' : "xsd:string", '@value' : "value"}}
+     },
+
+    with_output_to(
+        string(Payload0),
+        json_write(current_output, Query0, [])
+    ),
+
+    Commit = commit_info{ author : 'The Gavinator',
+                          message : 'Peace and goodwill' },
+
+    with_output_to(
+        string(Commit_Payload),
+        json_write(current_output, Commit, [])
+    ),
+
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload0,
+                         'terminus:commit_info'=Commit_Payload]),
+              JSON0,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    json_write_dict(current_output,JSON0,[]),
+
+    Query1 =
+    _{'@type' : "Triple",
+      subject : _{'@type' : "Variable",
+                  variable_name : "Subject"},
+      predicate : _{'@type' : "Variable",
+                    variable_name : "Predicate"},
+      object : _{'@type' : "Variable",
+                 variable_name : "Object"}},
+
+    with_output_to(
+        string(Payload1),
+        json_write(current_output, Query1, [])
+    ),
+
+    http_post(URI,
+              form_data(['terminus:query'=Payload1]),
+              JSON1,
+              [json_object(dict),authorization(basic(admin,root))]),
+
+    json_write_dict(current_output,JSON1,[]).
+*/
 
 :- end_tests(woql_endpoint).
 

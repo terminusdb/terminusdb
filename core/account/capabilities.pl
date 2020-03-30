@@ -42,7 +42,7 @@
 :- use_module(core(transaction)).
 
 
-:- use_module(config(config),[]).
+:- use_module(config(terminus_config),[]).
 
 :- use_module(library(crypto)).
 

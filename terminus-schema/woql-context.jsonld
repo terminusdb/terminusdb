@@ -26,6 +26,7 @@
   "after" : {"@type" : "@id"},
   "substring" : {"@type" : "@id"},
   "document" : {"@type" : "@id"},
+  "document_uri" : {"@type" : "@id"},
   "as_vars" : {"@type" : "@id"},
   "as_var" : {"@type" : "@id"},
   "indexed_as_var" : {"@type" : "@id"},

@@ -30,7 +30,7 @@
 :- use_module(core(triple)).
 
 % configuration predicates
-:- use_module(config(config),[]).
+:- use_module(config(terminus_config),[]).
 
 % http server
 :- use_module(library(http/thread_httpd)).

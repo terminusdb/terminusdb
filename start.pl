@@ -92,8 +92,6 @@ prolog:message(server_missing_config(BasePath)) -->
     ].
 
 
-:- initialise_server_settings.
-
 :- reexport(core(util/syntax)).
 
 :- use_module(server(routes)).
