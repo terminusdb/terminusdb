@@ -41,8 +41,10 @@ welcome_screen_submit(Request) :-
                     ]).
 
 main([]) :-
-   http_server([port(6363)]).
+   http_server([port(6363)]),
+   thread_get_message(stop).
 main([Port_Arg]) :-
    atom_number(Port_Arg, Port),
    assertz(port(Port)),
-   http_server([port(Port)]).
+   http_server([port(Port)]),
+   thread_get_message(stop).
