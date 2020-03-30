@@ -9,10 +9,10 @@
               initialize_index/3,
               initialize_database/2,
               initialize_database_with_path/3,
-              initialize_database_with_store/3
+              initialize_database_with_store/3,
 
               % db_graph.pl
-              
+              create_graph/5
           ]).
 
 :- use_module(api/init).

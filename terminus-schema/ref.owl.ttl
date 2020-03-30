@@ -138,7 +138,7 @@ ref:commit_message
   rdfs:label "Message"@en ;
   rdfs:range xsd:string .
 
-ref:commit_identifier
+ref:commit_id
   a owl:DatatypeProperty ;
   rdfs:comment "Identifier string for a commit"@en ;
   rdfs:domain ref:Commit ;
@@ -157,7 +157,7 @@ ref:CommitIdentifierRestriction
   rdfs:comment "Each commit requires one identifier"@en ;
   rdfs:label "Commit identifier restriction"@en ;
   owl:cardinality "1"^^xsd:nonNegativeInteger ;
-  owl:onProperty ref:commit_identifier .
+  owl:onProperty ref:commit_id .
 
 ref:commit_timestamp
   a owl:DatatypeProperty ;

@@ -183,7 +183,9 @@ reset_query_context(Query_Context) :-
  * WARNING: This is a side-effecting operation
  */
 retry_transaction(Query_Context, Transaction_Retry_Count) :-
-    getenv_number("TERMINUS_SERVER_MAX_TRANSACTION_RETRIES", Max_Transaction_Retries),
+    (   getenv_number("TERMINUS_SERVER_MAX_TRANSACTION_RETRIES", Max_Transaction_Retries)
+    ->  true
+    ;   Max_Transaction_Retries = 5),
 
     between(0, Max_Transaction_Retries, Transaction_Retry_Count),
 

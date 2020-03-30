@@ -1,4 +1,4 @@
-:- module(db_graph, []).
+:- module(db_graph, [create_graph/5]).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
@@ -38,8 +38,10 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
     memberchk(Graph_Type, [instance, schema, inference]),
     branch_descriptor{repository_descriptor:Repo_Descriptor, branch_name: Branch_Name} :< Branch_Descriptor,
 
-    create_context(Repo_Descriptor, Commit_Info, Context),
-
+    (   create_context(Repo_Descriptor, Commit_Info, Context)
+    ->  true
+    ;   throw(error(cannot_open_context(Repo_Descriptor)))),
+    
     with_transaction(Context,
                      (   % does this branch exist? if not, error
                          (   ask(Context,
@@ -47,7 +49,8 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                          ->  true
                          ;   throw(error(branch_does_not_exist(Branch_Descriptor)))),
                          % does this branch already have a commit?
-                         (   t(Branch_Uri, ref:ref_commit, Commit_Uri)
+                         (   ask(Context,
+                                 t(Branch_Uri, ref:ref_commit, Commit_Uri))
                           % it does! collect graph objects we'll need to re-insert on a new commit
                          ->  findall(Graph_Type-Graph_Name-Graph_Layer_Uri,
                                      graph_for_commit(Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri),
@@ -62,7 +65,7 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                          
                          % now that we know we're in a good position, create a new commit
                          insert_commit_object(Context, Commit_Uri),
-                         forall(member(Graph_Type-Graph_Name-Graph_Layer_Uri),
+                         forall(member(Graph_Type-Graph_Name-Graph_Layer_Uri, Graphs),
                                 insert_graph_object(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri, _Graph_Uri))
                      ),
                      Transaction_Metadata).
