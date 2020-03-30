@@ -34,15 +34,14 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+:- reexport(core(util/syntax)).
 
 :- use_module(triplestore).
 :- use_module(terminus_bootstrap).
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
 
-:- use_module(core(util), [merge_separator_split/3]).
-
-:- reexport(core(util/syntax)).
+:- use_module(core(util)).
 
 :- use_module(core(query/expansions)).
 :- use_module(core(query/ask)).
