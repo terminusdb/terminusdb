@@ -10,7 +10,7 @@ graph_for_commit(Askable, Commit_Uri, Type, Name, Layer_Uri) :-
             (   t(Graph_Uri, ref:graph_layer, Layer_Uri)
             ;   true))).
 
-insert_commit_object(Context, Commit_Uri) :-
+insert_commit_object(Context, Commit_Id, Commit_Uri) :-
     random_string(Commit_Id),
     once(ask(Context,
              (   idgen(doc:'Commit',[Commit_Id], Commit_Uri),
@@ -21,7 +21,7 @@ insert_commit_object(Context, Commit_Uri) :-
                  timestamp_now(Now),
                  insert(Commit_Uri, ref:commit_timestamp, Now)))).
 
-insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
+insert_graph_object(Context, Commit_Id, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
     once(ask(Context,
              (   idgen(doc:'Graph', [Commit_Id, Graph_Type, Graph_Name], Graph_Uri),
                  insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
@@ -53,7 +53,7 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                                  t(Branch_Uri, ref:ref_commit, Commit_Uri))
                           % it does! collect graph objects we'll need to re-insert on a new commit
                          ->  findall(Graph_Type-Graph_Name-Graph_Layer_Uri,
-                                     graph_for_commit(Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri),
+                                     graph_for_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri),
                                      Graphs)
                           % it doesn't! assume a single instance main graph
                          ;   Graphs = ["instance"-"main"-_]),
@@ -64,8 +64,8 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                          ;   true),
                          
                          % now that we know we're in a good position, create a new commit
-                         insert_commit_object(Context, Commit_Uri),
+                         insert_commit_object(Context, Commit_Id, Commit_Uri),
                          forall(member(Graph_Type-Graph_Name-Graph_Layer_Uri, Graphs),
-                                insert_graph_object(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri, _Graph_Uri))
+                                insert_graph_object(Context, Commit_Id, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri, _Graph_Uri))
                      ),
                      Transaction_Metadata).
