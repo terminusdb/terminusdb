@@ -24,7 +24,8 @@ elif [ "$ENABLE_WELCOME" = false ]; then
 fi
 
 if [ "$ENABLE_WELCOME" = true ]; then
-    cd /app/terminusdb/utils && swipl welcome_screen.pl $SERVER_PORT
+  echo "WELCOME SCREEN"  
+  cd /app/terminusdb/utils && swipl welcome_screen.pl $SERVER_PORT
 elif
   /app/terminusdb/start.pl "$SERVER_MODE"
 fi
