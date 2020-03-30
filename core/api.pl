@@ -10,8 +10,12 @@
               initialize_database/2,
               initialize_database_with_path/3,
               initialize_database_with_store/3
+
+              % db_graph.pl
+              
           ]).
 
 :- use_module(api/init).
 :- use_module(api/db_init).
 :- use_module(api/db_delete).
+:- use_module(api/db_graph).
