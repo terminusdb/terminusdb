@@ -362,6 +362,9 @@ test(schema_update, [
     writeq(Transaction_Metadata),
     nl,
     json_write_dict(current_output,Transaction_Metadata, []),
+    nl,
+    open_descriptor(Branch_Descriptor, Transaction),
+    writeq(Transaction),
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
