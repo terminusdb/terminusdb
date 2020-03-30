@@ -23,6 +23,7 @@
               find/3,
               trim/2,
               split_atom/3,
+              setenv_conditional/2,
               escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
@@ -674,6 +675,16 @@ uri_has_protocol(K) :-
 uri_has_prefix(K) :-
     \+ uri_has_protocol(K),
     re_match('^[^:]*:[^:]*',K).
+
+/*
+ * setenv_conditional(+Name, +Value) is semidet.
+ *
+ * Set the env variable if it hasn't been set already
+*/
+setenv_conditional(Name, Value) :-
+    (   getenv(Name, _)
+    ->  true
+    ;   setenv(Name, Value)).
 
 
 /*
