@@ -28,6 +28,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(triple)).
+:- use_module(core(util/utils)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[]).
@@ -39,10 +40,8 @@
 
 server(_Argv) :-
     config:server(Server),
-    getenv("TERMINUS_SERVER_PORT", Port_Atom),
-    atom_number(Port_Atom, Port),
-    getenv("TERMINUS_SERVER_WORKERS", Workers_Atom),
-    atom_number(Workers_Atom, Workers),
+    getenv_number("TERMINUS_SERVER_PORT", Port),
+    getenv_number("TERMINUS_SERVER_WORKERS", Workers),
     config:http_options(HTTPOptions),
     http_server(http_dispatch,
 		        [ port(Port),
