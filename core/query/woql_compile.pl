@@ -223,15 +223,21 @@ lookup_backwards(Prolog_Var,Var_Name,[var_binding{woql_var: _Woql_Var, prolog_va
 lookup_backwards(Prolog_Var,Var_Name,[_|Records]) :-
     lookup_backwards(Prolog_Var, Var_Name, Records).
 
-resolve_prefix(Pre,Suf,URL) -->
+resolve_prefix(Pre,Suf,URI) -->
     view(prefixes,Prefixes),
     {
         (   Full_Prefix = Prefixes.get(Pre)
         ->  true
         ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
-            throw(error(syntax_error,M))),
-        atomic_list_concat([Full_Prefix,Suf],URL)
-    }.
+            throw(error(syntax_error,M)))
+    },
+    (   {v(Var_Name) = Suf}
+    ->  view(bindings, Bindings),
+        { lookup(Var_Name, Var, Bindings),
+          freeze(URI, uri_to_prefixed(URI, Prefixes, Pre:Var))
+        }
+    ;   {atomic_list_concat([Full_Prefix,Suf],URI)}
+    ).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.

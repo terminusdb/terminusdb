@@ -6,7 +6,8 @@
               admin_pass/1,
               setup_temp_store/1,
               teardown_temp_store/1,
-              with_temp_store/1
+              with_temp_store/1,
+              ensure_label/1
           ]).
 
 /** <module> Test Utilities
@@ -193,3 +194,7 @@ with_temp_store(Goal) :-
     setup_call_cleanup(setup_temp_store(State),
                        Goal,
                        teardown_temp_store(State)).
+
+ensure_label(Label) :-
+    triple_store(Store),
+    ignore(create_named_graph(Store, Label, _Graph)).

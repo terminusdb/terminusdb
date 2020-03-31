@@ -23,9 +23,33 @@
               % validate.pl
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1,
-              validate_validation_objects/2
+              validate_validation_objects/2,
+
+              % ref_entity.pl
+              has_branch/2,
+              branch_name_uri/3,
+              branch_base_uri/3,
+              branch_head_commit/3,
+              commit_id_uri/3,
+              layer_id_uri/3,
+              commit_to_metadata/5,
+              commit_to_parent/3,
+              graph_for_commit/5,
+              insert_branch_object/4,
+              insert_base_commit_object/3,
+              insert_base_commit_object/4,
+              insert_base_commit_object/5,
+              insert_child_commit_object/4,
+              insert_child_commit_object/5,
+              insert_child_commit_object/6,
+              insert_commit_object_on_branch/4,
+              insert_commit_object_on_branch/5,
+              insert_commit_object_on_branch/6,
+              insert_graph_object/7,
+              insert_layer_object/3
           ]).
 
 :- use_module(transaction/database).
 :- use_module(transaction/descriptor).
 :- use_module(transaction/validate).
+:- use_module(transaction/ref_entity).
