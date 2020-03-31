@@ -667,61 +667,90 @@ json_to_woql_ast(JSON,WOQL,_Path) :-
     !.
 json_to_woql_ast(JSON,_,Path) :-
     format(atom(Msg), 'Un-parsable Query: ~q', [JSON]),
+    reverse(Path, Director),
     throw(http_reply(not_found(_{'terminus:message' : Msg,
                                  'vio:query' : JSON,
-                                 'vio:path' : Path,
+                                 'vio:path' : Director,
                                  'terminus:status' : 'terminus:failure'}))).
 
 is_json_var(A) :-
     sub_atom(A, 0, _, _, 'http://terminusdb.com/schema/woql/variable/').
 
-json_to_woql_arith(JSON,WOQL) :-
+json_to_woql_arith(JSON,WOQL,Path) :-
     is_dict(JSON),
     !,
     (   _{'@type' : 'http://terminusdb.com/schema/woql#Plus',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                           |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                           |Path]),
         WOQL = '+'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Minus',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                            |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                            |Path]),
         WOQL = '-'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Times',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                            |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                            |Path]),
         WOQL = '*'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Divide',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                            |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                            |Path]),
         WOQL = '/'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Div',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                            |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                            |Path]),
         WOQL = 'div'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Exp',
           'http://terminusdb.com/schema/woql#first' : First,
           'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First),
-        json_to_woql_arith(Second, WOQL_Second),
+    ->  json_to_woql_arith(First, WOQL_First,
+                           ['http://terminusdb.com/schema/woql#first'
+                            |Path]),
+        json_to_woql_arith(Second, WOQL_Second,
+                           ['http://terminusdb.com/schema/woql#second'
+                            |Path]),
         WOQL = 'exp'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Floor',
           'http://terminusdb.com/schema/woql#argument' : Argument} :< JSON
-    ->  json_to_woql_arith(Argument,WOQL_Argument),
+    ->  json_to_woql_arith(Argument,WOQL_Argument,
+                           ['http://terminusdb.com/schema/woql#argument'
+                            |Path]),
         WOQL=floor(WOQL_Argument)
     ;   number(JSON)
     ->  WOQL = JSON
-    ;   throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
+    ;   reverse(Path, Director),
+        throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
                                      'vio:query' : JSON,
+                                     'vio:path' : Director,
                                      'terminus:status' : 'terminus:failure'})))
     ).
 json_to_woql_arith(JSON,JSON) :-

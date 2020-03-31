@@ -409,8 +409,6 @@ test(insert_graph_object_with_layer,
                 layer_id_uri(Descriptor, Layer_Id, Layer_Uri)),
             Graphs),
 
-    writeq(Graphs),nl,
-
     Expected = [schema-"foo"-"f3dfc8d0d103b0be9428938174326e6256ad1beb",
                 instance-"foo"-"461ccac7287ac5712cf98445b385ee44bf64e474",
                 schema-"bar"-"a3a29522ec767aa1a1cf321122f833726c102749"
@@ -418,5 +416,5 @@ test(insert_graph_object_with_layer,
     union(Graphs, Expected, Union),
     intersection(Graphs, Expected, Intersection),
     subtract(Union, Intersection, []).
-    
+
 :- end_tests(graph_objects).

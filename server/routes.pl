@@ -284,16 +284,16 @@ schema_handler(get,Path,Request) :-
     ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
     ),
     open_descriptor(Branch_Descriptor, Transaction),
-    collection_descriptor_prefixes(Branch_Descriptor, Prefixes),
 
     try_get_param('terminus:schema',Request,Name),
-    Filter = type_name_filter{ type : schema, names : [Name]},
-    filter_transaction_objects_read_write_objects(Filter, [Transaction], [Schema_Graph]),
+    (   get_param('terminus:encoding',Request,Encoding_Atom)
+    ->  atom_string(Encoding_Atom,Encoding)
+    ;   Encoding = "terminus:turtle"),
 
     % check access rights
     verify_access(Terminus,Auth,terminus:get_schema,Name),
 
-    try_dump_schema(Prefixes, Schema_Graph, Request, String),
+    dump_schema(Transaction, Encoding, Name, String),
 
     config:public_url(SURI),
     write_cors_headers(SURI, DB),
@@ -312,22 +312,30 @@ schema_handler(post,Path,R) :- % should this be put?
     ;   Split = [Account_ID, DB, Repo, Ref]
     ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
     ),
-    open_descriptor(Branch_Descriptor, Transaction),
 
-    % We should make it so we can pun documents and IDs
-    %user_database_name(Account_ID, DB, DB_Name),
+    (   get_param('terminus:commit_info',Request,Commit_Info)
+    ->  true
+    ;   Commit_Info = commit_info{ author : "TerminusDB API",
+                                   message : "Unqualified TerminusDB API schema update"}),
+
+    descriptor_context(Branch_Descriptor, Pre_Context),
+    Context = Pre_Context.put(commit_info, Commit_Info),
 
     % check access rights
     % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
 
     try_get_param('terminus:schema',Request,Name),
     try_get_param('terminus:turtle',Request,TTL),
+    atom_string(Name, Name_String),
 
-    Filter = type_name_filter{ type : schema, names : [Name]},
-    filter_transaction_objects_read_write_objects(Filter, Transaction, [Schema_Graph]),
+    [Transaction] = Context.transaction_objects,
 
-    update_schema(Transaction,Schema_Graph,TTL,Witnesses),
-    reply_with_witnesses(Witnesses).
+    Filter = type_name_filter{ type : schema, names : [Name_String]},
+    filter_transaction_object_read_write_objects(Filter, Transaction, [Schema_Graph]),
+
+    update_schema(Context,Schema_Graph,TTL),
+
+    reply_json(_{'terminus:status' : "terminus:success"}).
 
 
 :- begin_tests(schema_endpoint).
@@ -359,12 +367,7 @@ test(schema_update, [
                  schema,
                  "main",
                  Transaction_Metadata),
-    writeq(Transaction_Metadata),
-    nl,
-    json_write_dict(current_output,Transaction_Metadata, []),
-    nl,
-    open_descriptor(Branch_Descriptor, Transaction),
-    writeq(Transaction),
+    * json_write_dict(current_output,Transaction_Metadata, []),
 
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
@@ -376,10 +379,12 @@ test(schema_update, [
                               'terminus:turtle'=TTL]),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-
-    nl,
-    json_write_dict(current_output,In, []),
-    true.
+    * writeq(In),
+    findall(A-B-C,
+            ask(Branch_Descriptor,
+                t(A, B, C, "schema/*")),
+            Triples),
+    memberchk('http://terminusdb.com/schema/terminus'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
 :- end_tests(schema_endpoint).
@@ -1131,14 +1136,14 @@ try_get_filled_frame(ID,Database,Object) :-
                                      'terminus:object' : ID})))).
 
 /*
- * try_delete_document(+ID, +Database, -Witnesses) is det.
+ * try_delete_document(+ID, +Database, -Meta_Data) is det.
  *
  * Actually has determinism: det + error
  *
  * Deletes the object associated with ID, and throws an
  * http error otherwise.
  */
-try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
+try_delete_document(Pre_Doc_ID, Database, Meta_Data) :-
     (   collection_descriptor_prefixes(Database.descriptor, Ctx)
     ->  prefix_expand(Pre_Doc_ID,Ctx,Doc_ID)
     ;   format(atom(MSG), 'Document resource ~s could not be expanded', [Pre_Doc_ID]),
@@ -1146,16 +1151,10 @@ try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
                                      'terminus:message' : MSG,
                                      'terminus:object' : Pre_Doc_ID})))),
 
-    (   object_instance_graph(Doc_ID, Database, Document_Graph)
-    ->  true
-    ;   terminus_databasoe(Terminus_DB),
-        Graph_Filter = type_name_filter{ type : instance, names : ["main"]},
-        filter_transaction_graph_descriptor(Terminus_DB,Graph_Filter, Document_Graph)
-    ),
-
-    (   document_transaction(Database, Transaction_DB, Document_Graph,
-                             frame:delete_object(Doc_ID,Transaction_DB),
-                             Witnesses)
+    (   with_transaction(Database,
+                         ask(Database,
+                             delete_object(Doc_ID)),
+                         Meta_Data)
     ->  true
     ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
@@ -1163,36 +1162,30 @@ try_delete_document(Pre_Doc_ID, Database, Witnesses) :-
                                      'terminus:object' : Doc_ID})))).
 
 /*
- * try_update_document(ID, Doc, Database) is det.
+ * try_update_document(ID, Doc, Database, Meta_Data) is det.
  *
  * Actually has determinism: det + error
  *
  * Updates the object associated with ID, and throws an
  * http error otherwise.
  */
-try_update_document(Terminus_DB,Doc_ID, Doc_In, Database, Witnesses) :-
+try_update_document(Doc_ID, Doc_In, Database, Meta_Data) :-
     % if there is no id, we'll use the requested one.
     (   jsonld_id(Doc_In,Doc_ID_Match)
     ->  Doc_In = Doc
     %   This is wrong - we need to have the base path here as well.
     ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
 
-    (   collection_descriptor_prefixes(Database.descriptor, Ctx),
-        get_key_document('@id',Ctx,Doc,Doc_ID_Match)
+    (   get_key_document('@id',Database.prefixes,Doc,Doc_ID_Match)
     ->  true
     ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
                                      'terminus:status' : 'terminus:failure'})))),
 
-    (   object_instance_graph(Doc, Database, Document_Graph)
-    ->  true
-    ;   Graph_Filter = type_name_filter{ type: instance, names : ["main"]},
-        filter_transaction_graph_descriptor(Graph_Filter, Terminus_DB, Document_Graph)
-    ),
-
-    (   
-        document_transaction(Database, Transaction_DB, Document_Graph,
-                             frame:update_object(Doc,Transaction_DB), Witnesses)
+    (   with_transaction(Database,
+                         ask(Database,
+                             update_object(Doc)),
+                         Meta_Data)
     ->  true
     ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -1450,18 +1443,31 @@ try_class_frame(Class,Database,Frame) :-
                                       'terminus:class' : Class})))).
 
 /*
- * schema_to_string(DB, Request) is det.
+ * update_schema(+DB,+Schema,+TTL) is det.
  *
- * Write schema to current stream
  */
-schema_to_string(Prefixes, Graph, Request, String) :-
-    try_get_param('terminus:encoding', Request, Encoding),
-    (   coerce_literal_string(Encoding, ES),
-        atom_string('terminus:turtle',ES)
+update_schema(Database,Schema,TTL) :-
+    coerce_literal_string(TTL, TTLS),
+    setup_call_cleanup(
+        open_string(TTLS, TTLStream),
+        turtle_schema_transaction(Database, Schema, TTLStream,_),
+        close(TTLStream)
+    ).
+
+
+/*
+ * dump_schema(+DB,+Encoding,+Schema,-String) is semidet.
+ *
+ */
+dump_schema(Database,Encoding,Schema,String) :-
+    atom_string(Schema,Schema_Name),
+    Graph_Filter = type_name_filter{ type: schema, names : [Schema_Name]},
+    filter_transaction_object_read_write_objects(Graph_Filter, Database, [Schema_Graph]),
+    (   Encoding = "terminus:turtle"
     ->  with_output_to(
             string(String),
             (   current_output(Stream),
-                graph_to_turtle(Prefixes, Graph, Stream)
+                graph_to_turtle(Database.prefixes, Schema_Graph, Stream)
             )
         )
     ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
@@ -1469,16 +1475,3 @@ schema_to_string(Prefixes, Graph, Request, String) :-
         throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
                                               'terminus:status' : 'terminus:failure'})))
     ).
-
-/*
- * update_schema(+DB,+Schema,+TTL,-Witnesses) is det.
- *
- */
-update_schema(Database,Schema,TTL,Witnesses) :-
-    coerce_literal_string(TTL, TTLS),
-    setup_call_cleanup(
-        open_string(TTLS, TTLStream),
-        turtle_schema_transaction(Database, Schema, TTLStream, Witnesses),
-        close(TTLStream)
-    ).
-

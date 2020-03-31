@@ -30,7 +30,7 @@
 :- multifile user:goal_expansion/2.
 :- dynamic user:goal_expansion/2.
 
-% xrdf/5
+% xrdf/4
 user:goal_expansion(xrdf(G,A,Y,Z),xrdf(G,X,Y,Z)) :-
     nonvar(A),
     global_prefix_expand(A,X).
@@ -81,3 +81,36 @@ user:goal_expansion(insert(G,X,Y,L,N),insert(G,X,Y,Object,N)) :-
     once(L = _@_ ; L = _^^_),
     literal_expand(L,Object).
 
+% xrdf_added/4
+user:goal_expansion(xrdf_added(G,A,Y,Z),xrdf_added(G,X,Y,Z)) :-
+    nonvar(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(xrdf_added(G,X,B,Z),xrdf_added(G,X,Y,Z)) :-
+    nonvar(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(xrdf_added(G,X,Y,C),xrdf_added(G,X,Y,Z)) :-
+    nonvar(C),
+    C \= _@_,
+    C \= _^^_,
+    global_prefix_expand(C,Z).
+user:goal_expansion(xrdf_added(G,X,Y,L),xrdf_added(G,X,Y,Object)) :-
+    nonvar(L),
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).
+
+% xrdf_deleted/4
+user:goal_expansion(xrdf_deleted(G,A,Y,Z),xrdf_deleted(G,X,Y,Z)) :-
+    nonvar(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(xrdf_deleted(G,X,B,Z),xrdf_deleted(G,X,Y,Z)) :-
+    nonvar(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(xrdf_deleted(G,X,Y,C),xrdf_deleted(G,X,Y,Z)) :-
+    nonvar(C),
+    C \= _@_,
+    C \= _^^_,
+    global_prefix_expand(C,Z).
+user:goal_expansion(xrdf_deleted(G,X,Y,L),xrdf_deleted(G,X,Y,Object)) :-
+    nonvar(L),
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).

@@ -1,7 +1,8 @@
 :- module(validate, [
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1,
-              validate_validation_objects/2
+              validate_validation_objects/2,
+              turtle_schema_transaction/4
           ]).
 
 /** <module> Validation
@@ -719,7 +720,7 @@ refute_validation_objects(Validation_Objects, Witness) :-
 
 validate_validation_objects(Validation_Objects, Witnesses) :-
     findall(Witness,
-            refute_validation_objects(Validation_Objects, Witness),
+             refute_validation_objects(Validation_Objects, Witness),
             Witnesses).
 
 
@@ -735,7 +736,8 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
  * calculate an intermediate graph for insertion.
  */
 
-/* turtle_schema_update(TTL file, Schema_Name, Transaction_Object, Witnesses) is det.
+/**
+ * turtle_schema_update(Database, Schema, Stream) is semidet.
  *
  * 1) calculate delta
  * 2) update the transaction object with the delta
@@ -745,10 +747,8 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
  *
  * Should this be refute turtle schema update? Retry?
  *
- * TODO: Rewrite this so it makes sense
  */
-turtle_schema_transaction(Database, Schema, New_Schema_Stream) :-
-
+turtle_schema_transaction(Database, Schema, New_Schema_Stream, Meta_Data) :-
     with_transaction(
         Database,
         (   % make a fresh empty graph against which to diff
@@ -775,14 +775,15 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream) :-
             forall(
                 (   xrdf([Schema], A_Old, B_Old, C_Old),
                     \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
-                delete(Schema,A_Old,B_Old,C_Old)
+                delete(Schema,A_Old,B_Old,C_Old,_)
             ),
             forall(
                 (   xrdf_db(Layer,A_New,B_New,C_New),
                     \+ xrdf([Schema], A_New, B_New, C_New)),
-                insert(Schema,A_New,B_New,C_New)
+                insert(Schema,A_New,B_New,C_New,_)
             )
-        )
+        ),
+        Meta_Data
     ).
 
 :- begin_tests(inserts).

@@ -207,11 +207,13 @@ with_transaction(Query_Context,
                  Body,
                  Meta_Data) :-
     retry_transaction(Query_Context, Transaction_Retry_Count),
-    call(Body),
-    query_context_transaction_objects(Query_Context, Transactions),
-    run_transactions(Transactions,Meta_Data0),
-    !, % No going back now!
-    Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}).
+    (   call(Body)
+    ->  query_context_transaction_objects(Query_Context, Transactions),
+        run_transactions(Transactions,Meta_Data0),
+        !, % No going back now!
+        Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count})
+    ;   !,
+        fail).
 
 /*
  * run_transaction(Transaction) is det.

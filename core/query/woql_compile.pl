@@ -6,7 +6,7 @@
               empty_context/1,
               empty_context/2,
               descriptor_context/2,
-              filter_transaction_objects_read_write_objects/3
+              filter_transaction_object_read_write_objects/3
           ]).
 
 /** <module> WOQL Compile
@@ -623,17 +623,17 @@ turtle_term(Path,Vars,Prog,Options) :-
 compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
-    peak(S0).
+    peek(S0).
 compile_wf(update_object(Doc),frame:update_object(DocE,S0)) -->
     resolve(Doc,DocE),
     peek(S0).
 compile_wf(update_object(X,Doc),frame:update_object(URI,DocE,S0)) -->
     resolve(X,URI),
     resolve(Doc,DocE),
-    peak(S0).
+    peek(S0).
 compile_wf(delete_object(X),frame:delete_object(URI,S0)) -->
     resolve(X,URI),
-    peak(S0).
+    peek(S0).
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
 -->
@@ -643,7 +643,7 @@ compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
-        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
+        filter_transaction_object_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to delete. Graph Descriptor: ~q', G),
@@ -669,7 +669,7 @@ compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,_)))
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
-        filter_transaction_objects_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
+        filter_transaction_object_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
@@ -1186,7 +1186,8 @@ list_disjunction(L,Goal) :-
     R = [A|Rest],
     foldl([X,Y,(X;Y)]>>true, Rest, A, Goal).
 
-filter_transaction_objects_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
+/* Should this go in resolve_query_resource.pl? */
+filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
     (   memberchk(instance,Types)
     ->  Instance_Objects = Transaction_Object.instance_objects
     ;   Instance_Objects = []),
@@ -1197,15 +1198,16 @@ filter_transaction_objects_read_write_objects(type_filter{ types : Types}, Trans
     ->  Inference_Objects = Transaction_Object.inference_objects
     ;   Inference_Objects = []),
     append([Instance_Objects,Schema_Objects,Inference_Objects],Read_Write_Objects).
-filter_transaction_objects_read_write_objects(type_name_filter{ type : Type, names : Names}, Transaction_Object, Read_Write_Objects) :-
+filter_transaction_object_read_write_objects(type_name_filter{ type : Type, names : Names}, Transaction_Object, Read_Write_Objects) :-
     (   Type = instance
     ->  Objs = Transaction_Object.instance_objects
     ;   Type = schema
     ->  Objs = Transaction_Object.schema_objects
     ;   Type = inference
     ->  Objs = Transaction_Object.inference_objects),
-    include([Obj]>>(
-                get_dict(name, Obj, Name),
+    include({Names}/[Obj]>>(
+                get_dict(descriptor, Obj, Desc),
+                get_dict(name, Desc, Name),
                 memberchk(Name,Names)
             ), Objs, Read_Write_Objects).
 
