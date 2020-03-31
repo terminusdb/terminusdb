@@ -24,6 +24,8 @@
               trim/2,
               split_atom/3,
               getenv_number/2,
+              getenv_default/3,
+              getenv_default_number/3,
               escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
@@ -684,6 +686,27 @@ uri_has_prefix(K) :-
 getenv_number(Name, Value) :-
     getenv(Name, Value_Atom),
     atom_number(Value_Atom, Value).
+
+/*
+ * getenv_default(+Env_Key, +Default, -Value)
+ *
+ * Get the env variable or the default value if it isn't set
+ */
+getenv_default(Env_Key, Default, Value) :-
+    (   getenv(Env_Key, Value)
+    ->  true
+    ;   Value = Default).
+
+/*
+ * getenv_default_number(+Env_Key, +Default, -Value)
+ *
+ * Get the env variable or the default value if it isn't set as number
+ */
+getenv_default_number(Env_Key, Default, Value) :-
+    (   getenv(Env_Key, Atom_Value)
+    ->  atom_number(Atom_Value, Value)
+    ;   Value = Default).
+
 
 
 /*

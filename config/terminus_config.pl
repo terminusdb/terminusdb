@@ -14,29 +14,19 @@
 
 
 server_name(Value) :-
-    (   getenv('TERMINUS_SERVER_NAME', Value)
-    ->  true
-    ;   Value = 'http://localhost').
+    getenv_default('TERMINUS_SERVER_NAME', 'http://localhost', Value).
 
 server_port(Value) :-
-    (   getenv_number('TERMINUS_SERVER_PORT', Value)
-    ->  true
-    ;   Value = 6363).
+    getenv_default_number('TERMINUS_SERVER_PORT', 6363, Value).
 
 public_url(Value) :-
-    (   getenv('TERMINUS_SERVER_PUBLIC_URL', Value)
-    ->  true
-    ;   Value = 'http://localhost:6363').
+    getenv_default('TERMINUS_SERVER_PUBLIC_URL', 'http://localhost:6363', Value).
 
 worker_amount(Value) :-
-    (   getenv_number('TERMINUS_SERVER_WORKERS', Value)
-    ->  true
-    ;   Value = 8).
+    getenv_default_number('TERMINUS_SERVER_WORKERS', 8, Value).
 
 max_transaction_retries(Value) :-
-    (   getenv_number('TERMINUS_SERVER_MAX_TRANSACTION_RETRIES', Value)
-    ->  true
-    ;   Value = 3).
+    getenv_default_number('TERMINUS_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
 
 
 server(Server) :-
