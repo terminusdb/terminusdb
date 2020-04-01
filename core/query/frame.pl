@@ -810,17 +810,17 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
  */
 realise_quads(_,[],_,[]) :-
     !.
-realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are an object property
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xquad(Gs,G,Elt,RDFType,Type),
+    xquad(Gs,G_Type,Elt,RDFType,Type),
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
-              V^(inferredQuad(G, Elt, Prop, V, Database),
+              G^V^(inferredQuad(G, Elt, Prop, V, Database),
                  (   document(V,Database)
                  ->  New_Realiser=[(G,Elt,Prop,V)]
                  ;   realise_quads(V,Frame,Database,Below),
@@ -831,16 +831,16 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|
         append(Realisers_on_P, Realiser_Tail, Realiser)
     ;   realise_quads(Elt,Rest,Database,Realiser)
     ).
-realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xquad(Gs,G,Elt,RDFType,Type),
+    xquad(Gs,G_Type,Elt,RDFType,Type),
 
     member(property=Prop, P),
     (   setof((G,Elt,Prop,V),
-              inferredQuad(G, Elt, Prop, V, Database),
+              G^V^inferredQuad(G, Elt, Prop, V, Database),
               Realisers_on_P)
     ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
         append(Realisers_on_P,Realiser_Tail,Realiser)

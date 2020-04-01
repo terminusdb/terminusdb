@@ -883,7 +883,7 @@ test(update_object, [
 
 
 test(delete_object, [
-         blocked('Delete drops write graph builder'),
+         %blocked('Delete drops write graph builder'),
          setup((config:server(Server),
                 user_database_name(admin,test, Name),
                 (   database_exists(Name)
