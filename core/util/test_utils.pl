@@ -7,7 +7,9 @@
               setup_temp_store/1,
               teardown_temp_store/1,
               with_temp_store/1,
-              ensure_label/1
+              ensure_label/1,
+              ref_schema_context_from_label_descriptor/2,
+              ref_schema_context_from_label_descriptor/3
           ]).
 
 /** <module> Test Utilities
@@ -50,6 +52,8 @@
 :- use_module(file_utils).
 
 :- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(query)).
 :- use_module(core(api/init)).
 
 :- use_module(library(terminus_store)).
@@ -198,3 +202,21 @@ with_temp_store(Goal) :-
 ensure_label(Label) :-
     triple_store(Store),
     ignore(create_named_graph(Store, Label, _Graph)).
+
+ref_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
+    Commit_Info = commit_info{author:"test",message:"test"},
+    ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
+ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
+    layer_ontology(Layer_Label),
+    ref_ontology(Ref_Label),
+    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
+    Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema,name:"ref"},
+    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+    open_read_write_obj(Ref_Descriptor, Ref_Read_Write_Object),
+
+    open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
+    Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
+                                                           [Layer_Read_Write_Object,
+                                                            Ref_Read_Write_Object]),
+
+    create_context(Transaction_Object, Commit_Info, Context).

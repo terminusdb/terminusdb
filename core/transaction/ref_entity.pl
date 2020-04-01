@@ -155,7 +155,7 @@ test(branch_insert,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      (   insert_branch_object(Context, "foo", "terminus://base1", _),

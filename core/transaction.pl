@@ -6,6 +6,8 @@
               with_transaction/3,
 
               % descriptor.pl
+              open_read_write_obj/2,
+              open_read_write_obj/4,
               open_descriptor/2,
               open_descriptor/3,
               open_descriptor/5,
