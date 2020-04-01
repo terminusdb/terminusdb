@@ -989,6 +989,50 @@ graph_handler(delete, Path, R) :-
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 
+:- begin_tests(graph_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(create_graph, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    Commit = commit_info{ author : 'The Graphinator',
+                          message : 'Edges here there and everywhere' },
+
+    with_output_to(
+        string(Commit_Payload),
+        json_write(current_output, Commit, [])
+    ),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/graph/admin/test/instance/naim'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              form_data(['terminus:commit_info'=Commit_Payload]),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    * json_write_dict(current_output, JSON, []),
+
+    make_branch_descriptor("admin","test",Branch_Descriptor),
+    open_descriptor(Branch_Descriptor, Transaction),
+    Instance_Objects = Transaction.instance_objects,
+    exists([Obj]>>(
+               get_dict(descriptor, Obj, Desc),
+               get_dict(name, Desc, "naim")
+           ), Instance_Objects).
+
+:- end_tests(graph_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
 % We want to use cors whenever we're throwing an error.
