@@ -221,41 +221,19 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                (   ignore((ground(Graph_Object.read),
                            layer_to_id(Graph_Object.read, Layer_Id),
                            insert_layer_object(Parent_Transaction, Layer_Id, Graph_Layer_Uri))),
-                     insert_graph_object(Parent_Transaction,
-                                         Commit_Uri,
-                                         Commit_Id,
-                                         Graph_Object.descriptor.type,
-                                         Graph_Object.descriptor.name,
-                                         Graph_Layer_Uri,
-                                         _Graph_Uri)))
+                   insert_graph_object(Parent_Transaction,
+                                       Commit_Uri,
+                                       Commit_Id,
+                                       Graph_Object.descriptor.type,
+                                       Graph_Object.descriptor.name,
+                                       Graph_Layer_Uri,
+                                       _Graph_Uri)))
 
     ;   true
     ).
 
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
-
-insert_graph(_Transaction_Object, _Commit_URI, _Type, Read_Write_Object) :-
-    % It is possible for graph descriptors to not be backed by a graph.
-    % We have the descriptor because we may need it on creation, but if we never end up
-    % inserting anything into it, the graph remains unbuilt.
-    % If this is the case, we should not insert a graph object for it.
-    var(Read_Write_Object.read),
-    !.
-insert_graph(Transaction_Object, Commit_URI, Type, Read_Write_Object) :-
-    layer_to_id(Read_Write_Object.read, Layer_Id),
-    Graph_Name = Read_Write_Object.descriptor.name,
-    once(ask(Transaction_Object,
-             (   idgen(doc:'Layer',[Layer_Id], Layer_URI),
-                 insert(Layer_URI, rdf:type, layer:'Layer'),
-                 insert(Layer_URI, layer:layer_id, Layer_Id^^xsd:string),
-
-                 idgen(doc:'Graph',[Type, Graph_Name, Layer_Id], Graph_URI),
-                 insert(Graph_URI, rdf:type, ref:'Graph'),
-                 insert(Graph_URI, ref:graph_name, Graph_Name^^xsd:string),
-                 insert(Graph_URI, ref:graph_layer, Layer_URI),
-
-                 insert(Commit_URI, ref:Type, Graph_URI)))).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
 
