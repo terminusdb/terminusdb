@@ -815,7 +815,7 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G,Elt,RDFType,Type)|
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(Gs,Elt,RDFType,Type),
+    xquad(Gs,G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
@@ -836,7 +836,7 @@ realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G,Elt,RDFType,Type
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    xrdf(Gs,Elt,RDFType,Type),
+    xquad(Gs,G,Elt,RDFType,Type),
 
     member(property=Prop, P),
     (   setof((G,Elt,Prop,V),
@@ -963,16 +963,16 @@ object_instance_graph(JSON,Database,I) :-
     object_instance_graph(URI,Database,I).
 
 /*
- * delete_object(URI,Context) is det.
+ * delete_object(URI,Query_Context) is det.
  *
  */
-delete_object(URI,Context) :-
-    Ctx = Context.prefixes,
-
+delete_object(URI,Query_Context) :-
+    Ctx = Query_Context.prefixes,
+    query_default_collection(Query_Context, Database),
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
-    append(Object_Edges,References,Edges),
+    union(Object_Edges,References,Edges),
     maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Edges).
 
 
@@ -1097,5 +1097,46 @@ test(document_jsonld_depth, [])
     document_jsonld(Query, User_ID, 1, JSON_LD),
     % TODO: Why are these atoms? Inconsistent!
     _{'@id':'doc:admin','@type':'terminus:User'} :< JSON_LD.
+
+
+test(delete_object, [])
+:-
+
+    Descriptor = terminus_descriptor{},
+
+    open_descriptor(Descriptor, Transaction),
+    create_context(Transaction, Query),
+
+    Document = _{'@context': Query.prefixes,
+                 '@id' : "doc:new_user",
+                 '@type' : "terminus:User",
+                 'rdfs:comment': _{'@language': "en",
+                                   '@value': "This is a test user."},
+                 'rdfs:label': _{'@language':"en",
+                                 '@value':"Test User"},
+                 'terminus:agent_key_hash':
+                 _{'@type':"xsd:string",
+                   % key = 'test'
+                   '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
+                 },
+                 'terminus:agent_name': _{'@type':"xsd:string",
+                                          '@value':"test"
+                                         },
+                 'terminus:authority': _{'@id':"doc:access_all_areas",
+                                         '@type':"terminus:ServerCapability"}
+                },
+
+    update_object(Document, Query),
+    %retry_transaction(Query_Out),
+    run_transactions(Query.transaction_objects, _Meta_Data1),
+
+    create_context(Descriptor, Query_Context),
+
+    delete_object("doc:new_user",Query_Context),
+    run_transactions(Query_Context.transaction_objects, _Meta_Data2),
+
+    create_context(Descriptor, Query_Context2),
+
+    \+ document_jsonld(Query_Context2, "doc:new_user", 1, _JSON).
 
 :- end_tests(documents).
