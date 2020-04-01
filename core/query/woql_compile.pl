@@ -5,7 +5,6 @@
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              descriptor_context/2,
               filter_transaction_object_read_write_objects/3
           ]).
 
@@ -188,13 +187,6 @@ empty_context(Prefixes) -->
     empty_context,
     put(prefixes, Prefixes).
 
-
-descriptor_context(Collection_Descriptor,New_Ctx) :-
-    open_descriptor(Collection_Descriptor, Query_Object),
-    empty_context(Ctx),
-    New_Ctx = Ctx.put(_{transaction_objects : [Query_Object],
-                        current_collection : Collection_Descriptor}).
-
 /******************************
  * Binding management utilities
  ******************************/
@@ -253,14 +245,13 @@ resolve(ID:Suf,U) -->
 resolve(v(Var_Name),Var) -->
     !,
     lookup_or_extend(Var_Name,Var).
-resolve(X,Xe) -->
+resolve(X,XEx) -->
+    view(prefixes,Prefixes),
     {
         is_dict(X),
         !,
-        expand(X,XEx), % also need to use the prefixes here.
-        jsonld_id(XEx,XI)
-    },
-    resolve(XI,Xe).
+        expand(X,Prefixes,XEx)
+    }.
 resolve(X@L,XS@LE) -->
     resolve(X,XE),
     {
