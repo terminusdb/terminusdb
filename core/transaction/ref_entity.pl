@@ -4,7 +4,6 @@
               branch_base_uri/3,
               branch_head_commit/3,
               commit_id_uri/3,
-              layer_id_uri/3,
               commit_to_metadata/5,
               commit_to_parent/3,
               graph_for_commit/5,
@@ -18,11 +17,12 @@
               insert_commit_object_on_branch/4,
               insert_commit_object_on_branch/5,
               insert_commit_object_on_branch/6,
-              insert_graph_object/7,
-              insert_layer_object/3
+              insert_graph_object/7
           ]).
 :- use_module(core(util)).
 :- use_module(core(query)).
+
+:- use_module(layer_entity).
 
 has_branch(Askable, Branch_Name) :-
     ask(Askable,
@@ -45,10 +45,6 @@ branch_head_commit(Askable, Branch_Name, Commit_Uri) :-
 commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string))).
-
-layer_id_uri(Askable, Layer_Id, Layer_Uri) :-
-    once(ask(Askable,
-             t(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string))).
 
 commit_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
@@ -138,12 +134,6 @@ insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Grap
     ->  once(ask(Context,
                  insert(Graph_Uri, ref:graph_layer, Graph_Layer_Uri)))
     ;   true).
-
-insert_layer_object(Context, Layer_Id, Layer_Uri) :-
-    once(ask(Context,
-             (   idgen(doc:'Layer', [Layer_Id], Layer_Uri),
-                 insert(Layer_Uri, rdf:type, layer:'Layer'),
-                 insert(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string)))).
 
 :- begin_tests(branch_objects).
 :- use_module(core(util/test_utils)).
@@ -283,24 +273,6 @@ test(commit_on_branch_insert,
     commit_to_parent(Descriptor, Commit2_Id, _).
 
 :- end_tests(commit_objects).
-
-:- begin_tests(layer_objects).
-:- use_module(core(util/test_utils)).
-:- use_module(database).
-test(insert_layer_object,
-     [setup((setup_temp_store(State),
-             ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
-
-    Layer_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
-    with_transaction(Context,
-                     (   insert_layer_object(Context, Layer_Id, Layer_Uri)),
-                     _),
-
-    layer_id_uri(Descriptor, Layer_Id, Layer_Uri).
-:- end_tests(layer_objects).
 
 :- begin_tests(graph_objects).
 :- use_module(core(util/test_utils)).
