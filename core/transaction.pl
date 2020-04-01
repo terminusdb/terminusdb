@@ -28,13 +28,17 @@
               validate_validation_objects/2,
               turtle_schema_transaction/4,
 
+              % layer_entity.pl
+              has_layer/2,
+              layer_id_uri/3,
+              insert_layer_object/3,
+
               % ref_entity.pl
               has_branch/2,
               branch_name_uri/3,
               branch_base_uri/3,
               branch_head_commit/3,
               commit_id_uri/3,
-              layer_id_uri/3,
               commit_to_metadata/5,
               commit_to_parent/3,
               graph_for_commit/5,
@@ -49,10 +53,28 @@
               insert_commit_object_on_branch/5,
               insert_commit_object_on_branch/6,
               insert_graph_object/7,
-              insert_layer_object/3
+
+              % repo_entity.pl
+              has_repository/2,
+              has_local_repository/2,
+              has_remote_repository/2,
+              repository_name_uri/3,
+              repository_type/3,
+              repository_head/3,
+              repository_remote_url/3,
+
+              insert_local_repository/3,
+              insert_local_repository/4,
+              insert_remote_repository/4,
+              insert_remote_repository/5,
+
+              update_repository_head/3,
+              update_repository_remote_url/3
           ]).
 
 :- use_module(transaction/database).
 :- use_module(transaction/descriptor).
 :- use_module(transaction/validate).
+:- use_module(transaction/layer_entity).
 :- use_module(transaction/ref_entity).
+:- use_module(transaction/repo_entity).

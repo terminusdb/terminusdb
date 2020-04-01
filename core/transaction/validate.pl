@@ -29,6 +29,9 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(database).
+:- use_module(layer_entity).
+:- use_module(repo_entity).
+:- use_module(ref_entity).
 
 :- reexport(core(util/syntax)).
 :- use_module(core(util)).
@@ -192,18 +195,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     !,
     layer_to_id(Instance_Object.read, Layer_ID),
     (   validation_object_changed(Instance_Object)
-    ->  once(ask(Parent_Transaction,
-                 (   t(URI, repo:repository_name, Repo_Name^^xsd:string),
-                     t(URI, repo:repository_head, ExistingRepositoryHead),
-                     t(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
-                     delete(ExistingRepositoryHead, layer:layer_id, LayerIdOfHeadToRemove^^xsd:string),
-                     delete(URI, repo:repository_head, ExistingRepositoryHead),
-                     idgen(doc:'Layer', [Layer_ID], NewLayerID),
-                     insert(NewLayerID, rdf:type, layer:'Layer'),
-                     insert(NewLayerID, layer:layer_id, Layer_ID^^xsd:string),
-                     insert(URI, repo:repository_head, NewLayerID)
-                 )
-                ))
+    ->  update_repository_head(Parent_Transaction, Repo_Name, Layer_ID)
     ;   true).
 commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     validation_object{
@@ -220,28 +212,23 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
            Union_Objects),
 
     (   exists(validation_object_changed, Union_Objects)
-    ->  once(ask(Parent_Transaction,
-                 (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
-                     % create new commit, point at all graphs
-                     random_idgen(doc:'Commit',[Branch_Name],Commit_URI),
-                     insert(Commit_URI, rdf:type, ref:'Commit'),
-                     insert(Commit_URI, ref:commit_author, Validation_Object.commit_info.author^^xsd:string),
-                     insert(Commit_URI, ref:commit_message, Validation_Object.commit_info.message^^xsd:string),
-                     timestamp_now(Now),
-                     insert(Commit_URI, ref:commit_timestamp, Now)))),
-        maplist(insert_graph(Parent_Transaction, Commit_URI, instance),
-                Instance_Objects),
-        maplist(insert_graph(Parent_Transaction, Commit_URI, schema),
-                Schema_Objects),
-        maplist(insert_graph(Parent_Transaction, Commit_URI, inference),
-                Inference_Objects),
+    ->  insert_commit_object_on_branch(Parent_Transaction,
+                                       Validation_Object.commit_info,
+                                       Branch_Name,
+                                       Commit_Id,
+                                       Commit_Uri),
+        forall(member(Graph_Object, Union_Objects),
+               (   ignore((ground(Graph_Object.read),
+                           layer_to_id(Graph_Object.read, Layer_Id),
+                           insert_layer_object(Parent_Transaction, Layer_Id, Graph_Layer_Uri))),
+                     insert_graph_object(Parent_Transaction,
+                                         Commit_Uri,
+                                         Commit_Id,
+                                         Graph_Object.descriptor.type,
+                                         Graph_Object.descriptor.name,
+                                         Graph_Layer_Uri,
+                                         _Graph_Uri)))
 
-        once(ask(Parent_Transaction,
-                 (   (   t(Branch_URI, ref:ref_commit, Previous_Commit_URI),
-                         delete(Branch_URI, ref:ref_commit, Previous_Commit_URI),
-                         insert(Commit_URI, ref:commit_parent, Previous_Commit_URI)
-                     ;   true),
-                     insert(Branch_URI, ref:ref_commit, Commit_URI))))
     ;   true
     ).
 
@@ -781,6 +768,7 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Meta_Data) :-
                 (   xrdf_db(Layer,A_New,B_New,C_New),
                     \+ xrdf([Schema], A_New, B_New, C_New)),
                 insert(Schema,A_New,B_New,C_New,_)
+
             )
         ),
         Meta_Data

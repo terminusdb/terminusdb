@@ -8,8 +8,12 @@
               teardown_temp_store/1,
               with_temp_store/1,
               ensure_label/1,
+              layer_schema_context_from_label_descriptor/2,
+              layer_schema_context_from_label_descriptor/3,
               ref_schema_context_from_label_descriptor/2,
-              ref_schema_context_from_label_descriptor/3
+              ref_schema_context_from_label_descriptor/3,
+              repo_schema_context_from_label_descriptor/2,
+              repo_schema_context_from_label_descriptor/3
           ]).
 
 /** <module> Test Utilities
@@ -203,6 +207,20 @@ ensure_label(Label) :-
     triple_store(Store),
     ignore(create_named_graph(Store, Label, _Graph)).
 
+layer_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
+    Commit_Info = commit_info{author:"test",message:"test"},
+    ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
+layer_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
+    layer_ontology(Layer_Label),
+    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
+    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+
+    open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
+    Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
+                                                           [Layer_Read_Write_Object]),
+
+    create_context(Transaction_Object, Commit_Info, Context).
+
 ref_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
@@ -218,5 +236,23 @@ ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context)
     Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
                                                            [Layer_Read_Write_Object,
                                                             Ref_Read_Write_Object]),
+
+    create_context(Transaction_Object, Commit_Info, Context).
+
+repo_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
+    Commit_Info = commit_info{author:"test",message:"test"},
+    repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
+repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
+    layer_ontology(Layer_Label),
+    repository_ontology(Repo_Label),
+    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
+    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema,name:"ref"},
+    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+    open_read_write_obj(Repo_Descriptor, Repo_Read_Write_Object),
+
+    open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
+    Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
+                                                           [Layer_Read_Write_Object,
+                                                            Repo_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
