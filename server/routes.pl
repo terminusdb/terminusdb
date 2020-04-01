@@ -844,7 +844,7 @@ test(update_object, [
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    json_write_dict(current_output,JSON0,[]),
+    * json_write_dict(current_output,JSON0,[]),
 
     Query1 =
     _{'@type' : "Triple",
@@ -865,81 +865,128 @@ test(update_object, [
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    json_write_dict(current_output,JSON1,[]).
-
+    Expected = [
+        _{'Object':_{'@type':"http://www.w3.org/2001/XMLSchema#string",
+                     '@value':"Steve"},
+          'Predicate':"http://terminusdb.com/schema/terminus#database_name",
+          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+        _{'Object':"http://terminusdb.com/schema/terminus#finalized",
+          'Predicate':"http://terminusdb.com/schema/terminus#database_state",
+          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+        _{'Object':"http://terminusdb.com/schema/terminus#Database",
+          'Predicate':"http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          'Subject':"http://terminusdb.com/admin/test/document/my_database"}],
+    Bindings = JSON1.bindings,
+    union(Expected, Bindings, Union),
+    intersection(Expected, Bindings, Intersection),
+    subtract(Union, Intersection, []).
 
 :- end_tests(woql_endpoint).
-
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(clone), cors_catch(clone_handler(Method)),
                 [method(Method),
-                 time_limit(infinite),
-                 methods([options,get])]).
-:- http_handler(root(clone/New_DB_ID), cors_catch(clone_handler(Method,New_DB_ID)),
-                [method(Method),
-                 time_limit(infinite),
+                 prefix,
                  methods([options,get])]).
 
 clone_handler(_Method,_Request) :-
     throw(error('Not implemented')).
 
-clone_handler(_Method,_DB_ID,_Request) :-
-    throw(error('Not implemented')).
-
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/DB_ID/Repo_ID), cors_catch(fetch_handler(Method,DB_ID,Repo_ID)),
+:- http_handler(root(fetch/Path), cors_catch(fetch_handler(Method,Path)),
                 [method(Method),
+                 prefix,
                  methods([options,post])]).
 
-fetch_handler(_Method,_DB_ID,_Repo,_Request) :-
+fetch_handler(_Method,_Path,_Request) :-
     throw(error('Not implemented')).
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(rebase/DB_ID/Branch_ID), cors_catch(rebase_handler(Method,DB_ID,Branch_ID)),
+:- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
                 [method(Method),
-                 methods([options,post])]).
-:- http_handler(root(rebase/DB_ID/Branch_ID/Remote_ID), cors_catch(rebase_handler(Method,DB_ID,Branch_ID,Remote_ID)),
-                [method(Method),
+                 prefix,
                  methods([options,post])]).
 
-rebase_handler(_Method,_DB_ID,_Request) :-
-    throw(error('Not implemented')).
-
-rebase_handler(_Method,_DB_ID,_Repo,_Request) :-
+rebase_handler(_Method,_Path,_Request) :-
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/DB_ID/Branch_ID), cors_catch(push_handler(Method,DB_ID,Branch_ID)),
-                [method(Method),
-                 methods([options,post])]).
-:- http_handler(root(push/DB_ID/Branch_ID/Remote_ID), cors_catch(push_handler(Method,DB_ID,Branch_ID,Remote_ID)),
+:- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
                 [method(Method),
                  methods([options,post])]).
 
-push_handler(_Method,_DB_ID,_Branch_ID,_Request) :-
-    throw(error('Not implemented')).
-
-push_handler(_Method,_DB_ID,_Branch_ID,_Remote_ID,_Request) :-
+push_handler(_Method,_Path,_Request) :-
     throw(error('Not implemented')).
 
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/DB_ID/New_Branch_ID), cors_catch(branch_handler(Method,DB_ID,New_Branch_ID)),
+:- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
                 [method(Method),
+                 prefix,
                  methods([options,post])]).
 
-branch_handler(_Method,_DB_ID,_New_Branch_ID,_Request) :-
+branch_handler(_Method,_Path,_Request) :-
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/Path), cors_catch(graph_handler(Method,Path)),
+:- http_handler(root(graph/Path), cors_catch(graph_handler(Method,Path)),
                 [method(Method),
+                 prefix,
                  methods([options,post,delete])]).
 
-graph_handler(options,_Path,_Request) :-
-    throw(error('Not implemented')).
+graph_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+graph_handler(post, Path, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+    authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
+    % No descriptor to work with until the query sets one up
+    merge_separator_split(Path, '/', Split),
+    Split = [Account_ID, DB, Type, Name],
+
+    % Must be local.
+    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+
+    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
+    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    ;   Commit_Info = _{} % Probably need to error here...
+    ),
+
+    create_graph(Branch_Descriptor,
+                 Commit_Info,
+                 Type,
+                 Name,
+                 _Transaction_Metadata2),
+
+    reply_json(_{'terminus:status' : "terminus:success"}).
+graph_handler(delete, Path, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
+    authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
+    % No descriptor to work with until the query sets one up
+    merge_separator_split(Path, '/', Split),
+    Split = [Account_ID, DB, Type, Name],
+
+    % Must be local.
+    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+
+    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
+    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    ;   Commit_Info = _{} % Probably need to error here...
+    ),
+
+    % Doesn't exist yet!
+    * delete_graph(Branch_Descriptor,
+                   Commit_Info,
+                   Type,
+                   Name,
+                   _Transaction_Metadata2),
+
+    reply_json(_{'terminus:status' : "terminus:success"}).
 
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
