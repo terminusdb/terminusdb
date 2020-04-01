@@ -199,8 +199,12 @@ retry_transaction(Query_Context, Transaction_Retry_Count) :-
         sleep(BackOff)
     ;   true).
 
-/*
- * with_transaction(Query_Context) is det.
+/**
+ * with_transaction(+Query_Context, +Body, -Meta_Data) is semidet.
+ *
+ * Performs a transaction after Body is run.
+ *
+ * The body is assumed semidet.
  */
 :- meta_predicate with_transaction(?,0,?).
 with_transaction(Query_Context,
