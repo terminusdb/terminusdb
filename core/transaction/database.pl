@@ -319,10 +319,12 @@ collect_validations_metadata(Validations, Meta_Data) :-
  */
 query_context_transaction_objects(Query_Context,Transaction_Objects) :-
     maplist({Query_Context}/[Transaction_Object,New_Transaction_Object]>>(
-                get_dict(commit_info,Query_Context,Commit_Info),
-                put_dict(_{commit_info : Commit_Info},
-                         Transaction_Object,
-                         New_Transaction_Object)
+                (   branch_descriptor{} :< Transaction_Object.descriptor
+                ->  get_dict(commit_info,Query_Context,Commit_Info),
+                    put_dict(_{commit_info : Commit_Info},
+                             Transaction_Object,
+                             New_Transaction_Object)
+                ;   New_Transaction_Object = Transaction_Object)
             ),
             Query_Context.transaction_objects,
             Transaction_Objects).

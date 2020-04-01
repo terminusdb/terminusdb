@@ -30,6 +30,8 @@
 :- reexport(core(util/syntax)).
 :- use_module(core(util)).
 :- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
 
 :- use_module(library(terminus_store)).
 
@@ -74,15 +76,14 @@ local_repo_uri(Name, Uri) :-
 /**
  * create_repo_graph(+Name,-Repo_Write_Builder)
  */
-create_repo_graph(Name,Graph,Builder) :-
+create_repo_graph(Name) :-
     storage(Store),
-    safe_create_named_graph(Store,Name,Graph),
-    open_write(Store, Builder),
-    local_repository_class_uri(Local_Class_Uri),
-    local_repo_uri(Name, Local_Uri),
-
-    % TODO: is this really all there is to do?
-    write_instance(Builder,Local_Uri,'Local',Local_Class_Uri).
+    safe_create_named_graph(Store,Name,_Graph),
+    Descriptor = database_descriptor{database_name:Name},
+    create_context(Descriptor, Context),
+    with_transaction(Context,
+                     insert_local_repository(Context, "local", _),
+                     _).
 
 write_instance(Builder,URI,Label,Class) :-
     rdf_type_uri(Rdf_Type_Uri),
@@ -91,26 +92,17 @@ write_instance(Builder,URI,Label,Class) :-
     nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
     nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
-create_ref_layer(Name,Base_URI,Ref_Layer) :-
-    storage(Store),
-    open_write(Store,Layer_Builder),
-    branch_class_uri(Branch_Class),
-
-    atomic_list_concat([Base_URI, '/', Name, '/document/master'], Branch_URI),
-    write_instance(Layer_Builder,Branch_URI,'master',Branch_Class),
-
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage("master"^^Xsd_String_Type_Uri, Branch_Name_Literal),
-    ref_branch_name_prop_uri(Branch_Name_Prop_Uri),
-    nb_add_triple(Layer_Builder,Branch_URI,Branch_Name_Prop_Uri,Branch_Name_Literal),
-
-    xsd_any_uri_type_uri(Xsd_Any_Uri_Type_Uri),
-    object_storage(Base_URI^^Xsd_Any_Uri_Type_Uri, Base_URI_Literal),
-
-    ref_branch_base_uri_prop_uri(Branch_Base_URI),
-    nb_add_triple(Layer_Builder,Branch_URI, Branch_Base_URI, Base_URI_Literal),
-
-    nb_commit(Layer_Builder,Ref_Layer).
+create_ref_layer(Name,Base_URI) :-
+    Descriptor = repository_descriptor{
+                     database_descriptor: database_descriptor{
+                                              database_name: Name
+                                          },
+                     repository_name: "local"
+                 },
+    create_context(Descriptor, Context),
+    with_transaction(Context,
+                     insert_branch_object(Context, "master", Base_URI, _),
+                     _).
 
 finalise_terminus(Name) :-
     storage(Store),
@@ -127,43 +119,16 @@ finalise_terminus(Name) :-
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer) :-
-    % set local repo layer to ref layer
-    layer_to_id(Ref_Layer, Layer_Id),
-    local_repo_uri(Name, Local_Uri),
-    layer_class_uri(Layer_Class_Uri),
-    atomic_list_concat(['terminus://', Name, '/document/Layer', Layer_Id], Layer_Uri),
-    atomic_list_concat(['Layer ', Layer_Id], Layer_Name),
-    write_instance(Repo_Builder, Layer_Uri, Layer_Name, Layer_Class_Uri),
-
-    layer_id_prop_uri(Layer_Id_Prop_Uri),
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(Layer_Id^^Xsd_String_Type_Uri, Layer_Id_Literal),
-    nb_add_triple(Repo_Builder, Layer_Uri, Layer_Id_Prop_Uri, Layer_Id_Literal),
-
-    repository_head_prop_uri(Repository_Head_Prop_Uri),
-    repository_name_prop_uri(Repository_Name_Prop_Uri),
-    object_storage("local"^^Xsd_String_Type_Uri, Repository_Name_Literal),
-    nb_add_triple(Repo_Builder, Local_Uri, Repository_Head_Prop_Uri, node(Layer_Uri)),
-    nb_add_triple(Repo_Builder, Local_Uri, Repository_Name_Prop_Uri, Repository_Name_Literal),
-
-    % and then do the commit and label set
-    nb_commit(Repo_Builder, Repo_Layer),
-    nb_set_head(Repo_Graph, Repo_Layer).
-
 create_db(Name,Base_URI) :-
+    text_to_string(Name, Name_String),
     % insert new db object into the terminus db
     insert_db_object(Name),
 
     % create repo graph - it has name as label
-    % I think we want to commit this last...
-    create_repo_graph(Name,Repo_Graph,Repo_Builder),
+    create_repo_graph(Name_String),
 
     % create ref layer with master branch
-    create_ref_layer(Name,Base_URI,Ref_Layer),
-
-    % write layer id as local repo in repo graph
-    finalise_repo_graph(Repo_Graph, Repo_Builder, Name, Ref_Layer),
+    create_ref_layer(Name_String,Base_URI),
 
     % update terminusdb with finalized
     finalise_terminus(Name).

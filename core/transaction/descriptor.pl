@@ -119,6 +119,9 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- reexport(core(util/syntax)).
+
+:- use_module(repo_entity).
+
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
@@ -169,7 +172,7 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
         Name = "main"
     ->  storage(Store),
         safe_open_named_graph(Store, Database_Name, Graph),
-        head(Graph, Layer)
+        ignore(head(Graph, Layer))
     ;   Type = schema,
         Name = "layer"
     ->  storage(Store),
@@ -199,9 +202,10 @@ graph_descriptor_to_layer(Descriptor,
     (   Type = instance,
         Name = "main"
     ->  graph_descriptor_to_layer(Repo_Descriptor, Repository_Layer, Map, New_Map),
-        repo_layer_name_to_ref_layer_id(Repository_Layer, Repository_Name, Commit_Layer_Id),
-        storage(Store),
-        store_id_layer(Store, Commit_Layer_Id, Layer)
+        once(has_repository(Repository_Layer, Repository_Name)),
+        ignore((   repository_head(Repository_Layer, Repository_Name, Commit_Layer_Id),
+                   storage(Store),
+                   store_id_layer(Store, Commit_Layer_Id, Layer)))
     ;   Type = schema,
         Name = "layer"
     ->  New_Map = Map,
@@ -239,26 +243,6 @@ graph_descriptor_to_layer(Descriptor,
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
     ;   Layer = _).
-
-repo_layer_name_to_ref_layer_id(Repo_Layer, Repo_Name, Ref_Layer_Id) :-
-    repository_name_prop_uri(Repo_Name_Property_Uri),
-    repository_head_prop_uri(Repo_Head_Property_Uri),
-    layer_id_prop_uri(Layer_Id_Property_Uri),
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-
-    predicate_id(Repo_Layer, Repo_Name_Property_Uri, Repo_Name_Property_Id),
-    predicate_id(Repo_Layer, Repo_Head_Property_Uri, Repo_Head_Property_Id),
-    predicate_id(Repo_Layer, Layer_Id_Property_Uri, Layer_Id_Property_Id),
-    object_storage(Repo_Name^^Xsd_String_Type_Uri, Repo_Name_Literal),
-    object_id(Repo_Layer, Repo_Name_Literal, Repo_Name_Id),
-
-    once((id_triple(Repo_Layer, Repo_Uri_Id, Repo_Name_Property_Id, Repo_Name_Id),
-          id_triple(Repo_Layer, Repo_Uri_Id, Repo_Head_Property_Id, Repo_Head_Id),
-          id_triple(Repo_Layer, Repo_Head_Id, Layer_Id_Property_Id, Ref_Layer_Id_Id))),
-
-    object_id(Repo_Layer, Ref_Layer_Id_Literal, Ref_Layer_Id_Id),
-    storage_object(Ref_Layer_Id_Literal, Ref_Layer_Id^^_).
-
 
 commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
     once(ask(Commit_Layer,
