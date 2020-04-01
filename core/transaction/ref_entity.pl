@@ -155,7 +155,7 @@ test(branch_insert,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      (   insert_branch_object(Context, "foo", "terminus://base1", _),
@@ -184,7 +184,7 @@ test(base_commit_insert,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      insert_base_commit_object(Context,
@@ -208,7 +208,7 @@ test(child_commit_insert,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      (   insert_base_commit_object(Context,
@@ -242,13 +242,13 @@ test(commit_on_branch_insert,
     Descriptor = label_descriptor{label:"testlabel"},
 
     % first set up the branch
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context1),
+    ref_schema_context_from_label_descriptor(Descriptor, Context1),
     with_transaction(Context1,
                      insert_branch_object(Context1, "foo", "terminus://base1", _),
                      _),
 
     % then add a commit
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context2),
+    ref_schema_context_from_label_descriptor(Descriptor, Context2),
     with_transaction(Context2,
                      insert_commit_object_on_branch(Context2,
                                                     "foo",
@@ -266,7 +266,7 @@ test(commit_on_branch_insert,
     ;   true),
 
     % now make a second commit
-    create_context(Descriptor, commit_info{author:"test2", message:"test2"}, Context3),
+    ref_schema_context_from_label_descriptor(Descriptor, Context3),
 
     with_transaction(Context3,
                      insert_commit_object_on_branch(Context3,
@@ -292,7 +292,7 @@ test(insert_layer_object,
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
 
     Layer_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     with_transaction(Context,
@@ -311,7 +311,7 @@ test(insert_graph_object_without_layer,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      (   insert_base_commit_object(Context,
@@ -361,7 +361,7 @@ test(insert_graph_object_with_layer,
       cleanup(teardown_temp_store(State))]
     ) :-
     Descriptor = label_descriptor{label:"testlabel"},
-    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
                      (   insert_base_commit_object(Context,

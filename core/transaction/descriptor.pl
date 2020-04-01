@@ -1,4 +1,6 @@
 :- module(descriptor,[
+              open_read_write_obj/2,
+              open_read_write_obj/4,
               open_descriptor/2,
               open_descriptor/3,
               open_descriptor/5,
@@ -144,9 +146,10 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     head(Graph, Layer).
 graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     Descriptor = labelled_graph{ label: Name,
-                                 type: instance,
-                                 name: "main"},
+                                 type: Type,
+                                 name: _Name},
     !,
+    memberchk(Type, [instance, schema, inferrence]),
     storage(Store),
     safe_open_named_graph(Store, Name, Graph),
     ignore(head(Graph, Layer)).
@@ -267,6 +270,8 @@ commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, 
                  t(Layer_URI, layer:layer_id, Layer_ID^^xsd:string)
              ))).
 
+open_read_write_obj(Openable, Read_Write_Obj) :-
+    open_read_write_obj(Openable, Read_Write_Obj, [], _).
 open_read_write_obj(Layer, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, [Descriptor=Layer|Map]) :-
     blob(Layer, layer),
     !,
