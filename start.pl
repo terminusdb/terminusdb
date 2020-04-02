@@ -61,15 +61,6 @@ must_be_proper_version :-
 
 :- initialization must_be_proper_version.
 
-initialise_server_settings :-
-    file_search_path(terminus_home, BasePath),
-    !,
-    atom_concat(BasePath, '/config/terminus_config.pl', Settings_Path),
-    (   exists_file(Settings_Path)
-    ->  true
-    ;   print_message(error, server_missing_config(BasePath)),
-        halt(10)
-    ).
 
 initialise_log_settings :-
     file_search_path(terminus_home, BasePath),
