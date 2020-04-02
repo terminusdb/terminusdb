@@ -21,7 +21,8 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
                          (   branch_head_commit(Context, Branch_Name, Commit_Uri)
                          % it does! collect graph objects we'll need to re-insert on a new commit
                          ->  findall(Graph_Type-Graph_Name-Graph_Layer_Uri,
-                                     graph_for_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Layer_Uri),
+                                     (   graph_for_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri),
+                                         ignore(layer_uri_for_graph(Context, Graph_Uri, Graph_Layer_Uri))),
                                      Graphs)
                           % it doesn't! assume a single instance main graph
                          ;   Graphs = ["instance"-"main"-_]),

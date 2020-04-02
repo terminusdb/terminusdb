@@ -121,6 +121,9 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(repo_entity).
+:- use_module(ref_entity).
+:- use_module(layer_entity).
+
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
@@ -128,10 +131,29 @@
 
 :- use_module(library(terminus_store)).
 
-graph_descriptor_to_layer(Descriptor, Layer, Map, Map) :-
-    memberchk(Descriptor=Layer, Map),
+graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
+                                                                descriptor: Descriptor,
+                                                                read: Layer,
+                                                                write: _Layer_Builder
+                                                            }).
+
+open_read_write_obj(Openable, Read_Write_Obj) :-
+    open_read_write_obj(Openable, Read_Write_Obj, [], _).
+open_read_write_obj(Layer, Read_Write_Obj, Map, New_Map) :-
+    blob(Layer, layer),
+    !,
+    layer_to_id(Layer, Id),
+    Descriptor = id_graph{id: Id,
+                          type: instance,
+                          name: "main"},
+    (   memberchk(Descriptor=Read_Write_Obj, Map)
+    ->  New_Map = Map
+    ;   graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj),
+        New_Map = [Descriptor=Read_Write_Obj|Map]).
+open_read_write_obj(Descriptor, Read_Write_Obj, Map, Map) :-
+    memberchk(Descriptor=Read_Write_Obj, Map),
     !.
-graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
+open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = terminus_graph{ type: Type, name: Name},
     !,
     (   Type = instance,
@@ -146,8 +168,9 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
 
     storage(Store),
     safe_open_named_graph(Store, Graph_Name, Graph),
-    head(Graph, Layer).
-graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
+    head(Graph, Layer),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = labelled_graph{ label: Name,
                                  type: Type,
                                  name: _Name},
@@ -155,15 +178,17 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
     memberchk(Type, [instance, schema, inferrence]),
     storage(Store),
     safe_open_named_graph(Store, Name, Graph),
-    ignore(head(Graph, Layer)).
-graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
+    ignore(head(Graph, Layer)),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = id_graph{ layer_id: Layer_Id,
                            type: instance,
                            name: "main"},
     !,
     storage(Store),
-    store_id_layer(Store, Layer_Id, Layer).
-graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
+    store_id_layer(Store, Layer_Id, Layer),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = repo_graph{ database_name: Database_Name,
                              type : Type,
                              name : Name},
@@ -185,11 +210,12 @@ graph_descriptor_to_layer(Descriptor, Layer, Map, [Descriptor=Layer|Map]) :-
         storage(Store),
         safe_open_named_graph(Store, Repository_Name, Graph),
         head(Graph, Layer)
-    ).
-graph_descriptor_to_layer(Descriptor,
-                          Layer,
-                          Map,
-                          [Descriptor=Layer|New_Map]) :-
+    ),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor,
+                    Read_Write_Obj,
+                    Map,
+                    [Descriptor=Read_Write_Obj|New_Map]) :-
     Descriptor = commit_graph{ database_name: Database_Name,
                                repository_name: Repository_Name,
                                type: Type,
@@ -201,9 +227,9 @@ graph_descriptor_to_layer(Descriptor,
 
     (   Type = instance,
         Name = "main"
-    ->  graph_descriptor_to_layer(Repo_Descriptor, Repository_Layer, Map, New_Map),
-        once(has_repository(Repository_Layer, Repository_Name)),
-        ignore((   repository_head(Repository_Layer, Repository_Name, Commit_Layer_Id),
+    ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
+        once(has_repository(Repository_Read_Write_Obj.read, Repository_Name)),
+        ignore((   repository_head(Repository_Read_Write_Obj.read, Repository_Name, Commit_Layer_Id),
                    storage(Store),
                    store_id_layer(Store, Commit_Layer_Id, Layer)))
     ;   Type = schema,
@@ -220,11 +246,12 @@ graph_descriptor_to_layer(Descriptor,
         storage(Store),
         safe_open_named_graph(Store, Ref_Name, Graph),
         head(Graph, Layer)
-    ).
-graph_descriptor_to_layer(Descriptor,
-                          Layer,
-                          Map,
-                          [Descriptor=Layer|New_Map]) :-
+    ),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor,
+                    Read_Write_Obj,
+                    Map,
+                    [Descriptor=Read_Write_Obj|New_Map]) :-
     Descriptor = branch_graph{ database_name: Database_Name,
                                repository_name: Repository_Name,
                                branch_name: Branch_Name,
@@ -237,34 +264,16 @@ graph_descriptor_to_layer(Descriptor,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
-    graph_descriptor_to_layer(Commit_Descriptor, Commit_Layer, Map, New_Map),
-    (   commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_Id),
+    open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
+    (   branch_head_commit(Commit_Read_Write_Obj.read, Branch_Name, Commit_Uri),
+        graph_for_commit(Commit_Read_Write_Obj.read, Commit_Uri, Type, Graph_Name, Graph_Uri),
+        layer_uri_for_graph(Commit_Read_Write_Obj.read, Graph_Uri, Layer_Uri),
+        layer_id_uri(Commit_Read_Write_Obj.read, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
-    ;   Layer = _).
-
-commit_layer_branch_type_name_to_data_layer_id(Commit_Layer, Branch_Name, Type, Graph_Name, Layer_ID) :-
-    once(ask(Commit_Layer,
-             (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
-                 t(Branch_URI, ref:ref_commit, Commit_URI),
-                 t(Commit_URI, ref:Type, Graph_URI),
-                 t(Graph_URI, ref:graph_name, Graph_Name^^xsd:string),
-                 t(Graph_URI, ref:graph_layer, Layer_URI),
-                 t(Layer_URI, layer:layer_id, Layer_ID^^xsd:string)
-             ))).
-
-open_read_write_obj(Openable, Read_Write_Obj) :-
-    open_read_write_obj(Openable, Read_Write_Obj, [], _).
-open_read_write_obj(Layer, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, [Descriptor=Layer|Map]) :-
-    blob(Layer, layer),
-    !,
-    layer_to_id(Layer, Id),
-    Descriptor = id_graph{id: Id,
-                          type: instance,
-                          name: "main"}.
-open_read_write_obj(Descriptor, read_write_obj{ descriptor: Descriptor, read: Layer, write: _Layer_Builder }, Map, New_Map) :-
-    graph_descriptor_to_layer(Descriptor, Layer, Map, New_Map).
+    ;   Layer = _),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 
 read_write_obj_reader(Read_Write_Obj, _Layer) :-
     var(Read_Write_Obj.read),

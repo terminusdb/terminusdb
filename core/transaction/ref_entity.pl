@@ -7,6 +7,7 @@
               commit_to_metadata/5,
               commit_to_parent/3,
               graph_for_commit/5,
+              layer_uri_for_graph/3,
               insert_branch_object/4,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
@@ -59,11 +60,14 @@ commit_to_parent(Askable, Commit_Id, Parent_Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, ref:commit_parent, Parent_Commit_Uri))).
 
-graph_for_commit(Askable, Commit_Uri, Type, Name, Layer_Uri) :-
+graph_for_commit(Askable, Commit_Uri, Type, Name, Graph_Uri) :-
     ask(Askable,
         (   t(Commit_Uri, ref:Type, Graph_Uri),
-            t(Graph_Uri, ref:graph_name, Name^^xsd:string),
-            opt(t(Graph_Uri, ref:graph_layer, Layer_Uri)))).
+            t(Graph_Uri, ref:graph_name, Name^^xsd:string))).
+
+layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri) :-
+    once(ask(Askable,
+             (   t(Graph_Uri, ref:graph_layer, Layer_Uri)))).
 
 insert_branch_object(Context, Branch_Name, Base_Uri, Branch_Uri) :-
     once(ask(Context,
@@ -315,14 +319,14 @@ test(insert_graph_object_without_layer,
                                              _)),
                      _),
 
-    findall(Type-Name-Layer_Uri,
-            graph_for_commit(Descriptor, Commit_Uri, Type, Name, Layer_Uri),
+    findall(Type-Name,
+            graph_for_commit(Descriptor, Commit_Uri, Type, Name, _Graph_Uri),
             Graphs),
 
 
-    Expected = [schema-"foo"-_,
-                instance-"foo"-_,
-                schema-"bar"-_],
+    Expected = [schema-"foo",
+                instance-"foo",
+                schema-"bar"],
     union(Graphs, Expected, Union),
     intersection(Graphs, Expected, Intersection),
     subtract(Union, Intersection, []).
@@ -377,7 +381,8 @@ test(insert_graph_object_with_layer,
                      _),
 
     findall(Type-Name-Layer_Id,
-            (   graph_for_commit(Descriptor, Commit_Uri, Type, Name, Layer_Uri),
+            (   graph_for_commit(Descriptor, Commit_Uri, Type, Name, Graph_Uri),
+                layer_uri_for_graph(Descriptor, Graph_Uri, Layer_Uri),
                 layer_id_uri(Descriptor, Layer_Id, Layer_Uri)),
             Graphs),
 
