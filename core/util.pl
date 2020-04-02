@@ -57,6 +57,7 @@
               truncate_list/4,
               sfoldr/4,
               foldm/6,
+              mapm/4,
               mapm/5,
               mapm/6,
               exists/2,

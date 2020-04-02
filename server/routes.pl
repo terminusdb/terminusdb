@@ -530,12 +530,12 @@ woql_run_context(Request, Auth_ID, Context, JSON) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(no_db, [blocked('Need to make using work properly')])
+test(no_db, [])
 :-
 
     Query =
     _{'@type' : "Using",
-      collection : "terminus:///terminus/",
+      collection : "terminus",
       query :
       _{'@type' : "Select",    %   { "select" : [ v1, v2, v3, Query ] }
         variable_list : [

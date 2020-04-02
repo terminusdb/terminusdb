@@ -17,6 +17,7 @@
               truncate_list/4,
               sfoldr/4,
               foldm/6,
+              mapm/4,
               mapm/5,
               mapm/6,
               exists/2,
@@ -424,6 +425,20 @@ foldm(_P,[],Base,Base,S,S).
 foldm(P,[H|T],Base,Result,S0,SN) :-
     foldm(P,T,Base,LastResult,S0,S1),
     call(P,H,LastResult,Result,S1,SN).
+
+/*
+ * mapm(P:predicate,L:list,S0:any,SN:any) is nondet.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(3,?,?,?).
+mapm(P,L1,S0,SN) :-
+    mapm_(L1,S0,SN,P).
+
+mapm_([],S,S,_P).
+mapm_([H|T],S0,SN,P) :-
+    call(P,H,S0,S1),
+    mapm_(T,S1,SN,P).
 
 /*
  * mapm(P:predicate,L:list,O:list,S0:any,SN:any) is nondet.

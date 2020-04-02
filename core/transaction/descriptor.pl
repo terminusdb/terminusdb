@@ -13,7 +13,8 @@
               filter_read_write_objects/3,
               make_branch_descriptor/5,
               make_branch_descriptor/4,
-              make_branch_descriptor/3
+              make_branch_descriptor/3,
+              transactions_to_map/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -615,11 +616,74 @@ make_branch_descriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
 make_branch_descriptor(Account, DB, Branch_Descriptor) :-
     make_branch_descriptor(Account, DB, "local", "master", Branch_Descriptor).
 
+/**
+ * transactions_to_map(Context, Map) is det.
+ *
+ * Constructs a map of descriptor=... for each object necessary to be
+ * re-used by open_descriptor/5
+ */
+transactions_to_map(Transactions, Map) :-
+    mapm(transaction_to_map, Transactions, [], Map).
+
+transaction_to_map(Transaction, Map_In, Map_Out) :-
+    (   get_dict(parent,Transaction, Parent)
+    ->  transaction_to_map(Parent,Map_In,Map1)
+    ;   Map1 = Map_In),
+
+    Instance_Objects = Transaction.instance_objects,
+    Schema_Objects = Transaction.schema_objects,
+    Inference_Objects = Transaction.inference_objects,
+    append([Instance_Objects, Schema_Objects, Inference_Objects], Objects),
+    convlist({Map1}/[Obj,Desc=Obj]>>(
+                 get_dict(descriptor,Obj,Desc),
+                 \+ memberchk(Desc=_,Map1)
+             ), Objects, Graph_Map),
+    union(Graph_Map, Map1, Map2),
+    Descriptor = Transaction.descriptor,
+    (   memberchk(Descriptor=_,Map2)
+    ->  Map_Out = Map2
+    ;   Map_Out = [Descriptor=Transaction|Map2]).
 
 :- begin_tests(open_descriptor).
 :- use_module(core(util/test_utils)).
 :- use_module(library(terminus_store)).
 :- use_module(core(api)).
+:- use_module(database).
+:- use_module(core(util)).
+:- use_module(library(ordsets)).
+
+test(transactions_to_map,[
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor("admin", "test", Descriptor),
+    create_context(Descriptor, commit_info{author: "Me", message: "Soldier on"}, Context1),
+    with_transaction(
+        Context1,
+        ask(Context1, insert(some,stuff,here)),
+        _Meta_Data
+    ),
+
+    create_context(Descriptor, Context2),
+    transactions_to_map(Context2.transaction_objects, Map),
+
+    maplist([Desc=_,Desc]>>true, Map, Descriptors),
+    list_to_ord_set(Descriptors, Desc_Set),
+    list_to_ord_set(
+        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"}},
+         branch_graph{branch_name:"master",database_name:'admin|test',name:"main",repository_name:"local",type:instance},
+         repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"},
+         commit_graph{database_name:'admin|test',name:"main",repository_name:"local",type:instance},
+         commit_graph{database_name:'admin|test',name:"layer",repository_name:"local",type:schema},
+         commit_graph{database_name:'admin|test',name:"ref",repository_name:"local",type:schema},
+         database_descriptor{database_name:'admin|test'},
+         repo_graph{database_name:'admin|test',name:"main",type:instance},
+         repo_graph{database_name:'admin|test',name:"layer",type:schema},
+         repo_graph{database_name:'admin|test',name:"repository",type:schema}], Expected_Set),
+
+    ord_seteq(Desc_Set, Expected_Set).
 
 test(terminus, [
          setup(setup_temp_store(State)),

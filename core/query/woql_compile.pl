@@ -754,9 +754,12 @@ compile_wf(select(VL,P), Prog) -->
     restrict(VL).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
-    {   resolve_relative_string_descriptor(Old_Default_Collection,
+    {
+        (   resolve_absolute_string_descriptor(Collection_String, Default_Collection)
+        ->  true
+        ;   resolve_relative_string_descriptor(Old_Default_Collection,
                                            Collection_String,
-                                           Default_Collection)
+                                           Default_Collection))
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
@@ -1033,19 +1036,19 @@ debug_wf(Fmt, Args) -->
     { debug(terminus(woql_compile(compile_wf)), Fmt, Args) },
     [].
 
-
-% Note: Fix this DEBUG
+%%
+% update_descriptor_transaction(Descriptor, Context1, Context2) is det.
+%
+% Open a new descriptor and put it on the transaction pile
+% making sure not to screw up the uniqueness of each object.
 update_descriptor_transactions(Descriptor)
 -->
     update(transaction_objects, Transaction_Objects, New_Transaction_Objects),
     view(commit_info, Commit_Info),
     {
-        (   collection_descriptor_transaction_object(Descriptor, Transaction_Objects, _Transaction_Object)
-        ->  New_Transaction_Objects = Transaction_Objects
-        ;   open_descriptor(Descriptor, Transaction_Object),
-            Transaction_Object1 = Transaction_Object.put(commit_info,Commit_Info),
-            New_Transaction_Objects = [Transaction_Object1|Transaction_Objects]
-        )
+        transactions_to_map(Transaction_Objects, Map),
+        open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
+        union([Transaction_Object], Transaction_Objects, New_Transaction_Objects)
     }.
 
 
