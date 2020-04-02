@@ -1233,7 +1233,7 @@ fetch_jwt_data(Request, Username) :-
     pattern_string_split(" ", Text, ["Bearer", Token]),
     getenv("TERMINUS_JWT_SECRET", JWT_Secret),
     jwt_dec(Token, json{k: JWT_Secret, kty: "oct"}, Payload),
-    Username = Payload.get('username').
+    Username = Payload.get('https://terminusdb.com/nickname').
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
