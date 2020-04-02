@@ -473,20 +473,14 @@ woql_handler(options, _Path, _Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
+
 woql_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
-    merge_separator_split(Path, '/', Split),
-    (   Split = [Account_ID, DB]
-    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo, Ref]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
-    ),
-    create_context(Branch_Descriptor, Context),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    create_context(Descriptor, Context),
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
@@ -536,7 +530,7 @@ woql_run_context(Request, Auth_ID, Context, JSON) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(no_db, [])
+test(no_db, [blocked('Need to make using work properly')])
 :-
 
     Query =

@@ -752,9 +752,12 @@ compile_wf(when(A,B),forall(ProgA,ProgB)) -->
 compile_wf(select(VL,P), Prog) -->
     compile_wf(P, Prog),
     restrict(VL).
-compile_wf(using(Collection_URI,P),Goal) -->
-    { resolve_query_resource(Collection_URI, Default_Collection) },
+compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
+    {   resolve_relative_string_descriptor(Old_Default_Collection,
+                                           Collection_String,
+                                           Default_Collection)
+    },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
     update(default_collection,_,Old_Default_Collection).
@@ -1031,6 +1034,7 @@ debug_wf(Fmt, Args) -->
     [].
 
 
+% Note: Fix this DEBUG
 update_descriptor_transactions(Descriptor)
 -->
     update(transaction_objects, Transaction_Objects, New_Transaction_Objects),
