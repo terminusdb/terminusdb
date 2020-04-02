@@ -215,9 +215,9 @@ json_to_woql_ast(JSON,WOQL,Path) :-
           'http://terminusdb.com/schema/woql#document' : Doc
          } :< JSON
     ->  json_to_woql_ast(Doc_ID, WID, ['http://terminusdb.com/schema/woql#document_id'
-                                           |Path]),
+                                       |Path]),
         json_to_woql_ast(Doc, WDoc, ['http://terminusdb.com/schema/woql#document'
-                                         |Path]),
+                                     |Path]),
         WOQL = read_object(WID,WDoc)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#UpdateObject',
           'http://terminusdb.com/schema/woql#document' : Doc

@@ -516,8 +516,9 @@ woql_run_context(Request, Auth_ID, Context, JSON) :-
             authorization : Auth_ID
         }, Context0, Final_Context),
 
+    http_log('~N[Prefixes] ~q~n', [Context0.prefixes]),
 
-    json_woql(Query, Prefixes, AST),
+    json_woql(Query, Context0.prefixes, AST),
 
     run_context_ast_jsonld_response(Final_Context,AST,JSON).
 
@@ -783,6 +784,7 @@ test(update_object, [
                   delete_db(Name)))
      ])
 :-
+    config:server(Server),
     atomic_list_concat([Server, '/woql/admin/test'], URI),
 
     % First make a schema against which we can have an object
@@ -967,6 +969,35 @@ test(delete_object, [
     \+ ask(Branch_Descriptor,
            t('http://terminusdb.com/admin/test/document/my_database', _, _)).
 
+
+test(get_object, [])
+:-
+    Query0 =
+    _{'@type' : "ReadObject",
+      document_uri : 'doc:admin',
+      document : _{'@type' : "Variable",
+                   variable_name : "Document"}},
+
+    with_output_to(
+        string(Payload0),
+        json_write(current_output, Query0, [])
+    ),
+
+    config:server(Server),
+    admin_pass(Key),
+    atomic_list_concat([Server, '/woql/terminus'], URI),
+    http_post(URI,
+              form_data(['terminus:query'=Payload0]),
+              JSON0,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    [Result] = JSON0.bindings,
+
+    _{'@id':"doc:admin",
+      '@type':"terminus:User",
+      'terminus:agent_key_hash':_,
+      'terminus:agent_name': _,
+      'terminus:authority': _}
+    :< Result.'Document'.
 
 
 :- end_tests(woql_endpoint).

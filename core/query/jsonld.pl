@@ -75,7 +75,7 @@ expand(JSON_LD, Context, JSON) :-
     select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
     expand_context(New_Context,Context_Expanded),
-    merge_dictionaries(Context,Context_Expanded,Local_Context),
+    merge_dictionaries(Context_Expanded,Context,Local_Context),
     expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
     put_dict('@context',JSON_Ex,Local_Context,JSON).
 expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
@@ -244,6 +244,20 @@ expand_key(K,Context,Key,Value) :-
     ;   Key = Key_Candidate,
         Value = _{}).
 
+:- begin_tests(jsonld_expand).
+:- use_module(core(util/test_utils)).
+
+test(expand_inner, [])
+:-
+    Context = _{doc : 'http://outer_document/'},
+    Document = _{'@context' : _{ doc : 'http://inner_document/'},
+                 'test' : _{'@id' : 'doc:test'}},
+    expand(Document, Context, JSON_LD),
+
+    _{ test:_{'@id':'http://inner_document/test'}} :< JSON_LD.
+
+:- end_tests(jsonld_expand).
+
 /*
  * compress_uri(URI, Key, Prefix, Compressed) is det.
  *
@@ -263,6 +277,9 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
     ->  true
     ;   URI = Folded_URI).
 
+is_at(Key) :-
+    sub_string(Key,0,1,_,"@").
+
 /*
  * compress(JSON,Context,JSON_LD) is det.
  *
@@ -270,7 +287,11 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
  */
 compress(JSON,Context,JSON_LD) :-
     dict_pairs(Context, _, Pairs),
-    include([_A-B]>>atom(B), Pairs, Valid_Pairs),
+    include([A-B]>>(\+ is_at(A), % exclude @type, @vocab, etc. from expansions
+                    (   atom(B)
+                    ->  true
+                    ;   string(B))),
+            Pairs, Valid_Pairs),
     compress_aux(JSON,Valid_Pairs,JSON_Pre),
 
     extend_with_context(JSON_Pre,Context,JSON_LD).
@@ -286,14 +307,19 @@ extend_with_context(JSON_Pre,Context,JSON_LD) :-
             JSON_Pre,
             JSON_LD).
 
-
 compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON, _, JSON_Pairs),
     maplist({Ctx_Pairs}/[Key-Value,Folded_Key-Folded_Value]>>(
-                compress_pairs_uri(Key, Ctx_Pairs, Folded_Key),
-                compress_aux(Value, Ctx_Pairs, Folded_Value)
+                (   Key = '@type'
+                ->  Folded_Key = Key,
+                    compress_pairs_uri(Value, Ctx_Pairs, Folded_Value)
+                ;   Key = '@id'
+                ->  Folded_Key = Key,
+                    compress_pairs_uri(Value, Ctx_Pairs, Folded_Value)
+                ;   compress_pairs_uri(Key, Ctx_Pairs, Folded_Key),
+                    compress_aux(Value, Ctx_Pairs, Folded_Value))
             ),
             JSON_Pairs,
             Folded_JSON_Pairs),
@@ -303,14 +329,13 @@ compress_aux(JSON,Ctx_Pairs,JSON_LD) :-
     !,
     maplist({Ctx_Pairs}/[Obj,Transformed]>>compress_aux(Obj,Ctx_Pairs,Transformed), JSON, JSON_LD).
 compress_aux(JSON,_Ctx_Pairs,JSON) :-
-    string(JSON),
+    (   string(JSON)
+    ->  true
+    ;   atom(JSON)),
     !.
 compress_aux(JSON,_Ctx_Pairs,JSON) :-
     number(JSON),
     !.
-compress_aux(URI,Ctx_Pairs,Folded_URI) :-
-    atom(URI),
-    compress_pairs_uri(URI,Ctx_Pairs,Folded_URI).
 compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
 compress_aux(date(Y, M, D),_Ctx_Pairs, Atom) :-
@@ -325,6 +350,25 @@ compress_aux(month_day(M,D),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~2+-~|~`0t~d~2+', [M,D]).
 compress_aux(year_month(Y,M),_Ctx_Pairs, Atom) :-
     format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+', [Y,M]).
+
+:- begin_tests(jsonld_compress).
+:- use_module(core(util/test_utils)).
+
+
+% Note: This needs to treat "base", "vocab", as well.
+test(compress_prefix, [])
+:-
+    Context = _{ ex : "http://example.com/document/",
+                 scm : "http://example.com/schema#"},
+    Document = _{ '@type' : "http://example.com/schema#Fact",
+                  'http://example.com/schema#your_face' :
+                  _{ '@id' : "http://example.com/document/is_ugly" }},
+    compress(Document, Context, Compressed),
+
+    _{'@type':'scm:Fact','scm:your_face':_{'@id':'ex:is_ugly'}} :< Compressed.
+
+:- end_tests(jsonld_compress).
+
 
 /*
 
