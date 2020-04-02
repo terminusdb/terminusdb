@@ -70,10 +70,3 @@ add_template_path :-
     asserta(user:file_search_path(template, Template)).
 
 :- add_template_path.
-
-add_tmp_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/tmp',Tmp),
-    asserta(user:file_search_path(terminus_tmp, Tmp)).
-
-:- add_tmp_path.

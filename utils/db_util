@@ -2,11 +2,16 @@
 % -*- mode: prolog;-*-
 :- module(db_util, [run/1]).
 
-:- initialization(main).
 
 % Set up access to the libraries
 :- ['../load_paths.pl'].
 
+:- initialization(main).
+
+% I have no clue why the config module is not accessible
+% in another way :(
+
+:- use_module(config(terminus_config)).
 :- use_module(core(triple/literals)).
 :- use_module(core(triple/triplestore)).
 :- use_module(core(triple/terminus_bootstrap)).

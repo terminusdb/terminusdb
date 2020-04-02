@@ -109,8 +109,7 @@ console_handler(options,_Request) :-
     write_cors_headers(SURI, DB),
     format('~n').
 console_handler(get,_Request) :-
-    terminus_path(Path),
-    interpolate([Path,'/config/index.html'], Index_Path),
+    config:index_path(Index_Path),
     read_file_to_string(Index_Path, String, []),
     config:public_url(SURI),
     open_descriptor(terminus_descriptor{}, DB),

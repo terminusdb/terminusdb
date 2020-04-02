@@ -61,9 +61,6 @@ layer_schema_ttl(Path) :-
 ref_schema_ttl(Path) :-
     once(expand_file_search_path(ontology('ref.owl.ttl'), Path)).
 
-default_database_path(Path) :-
-    once(expand_file_search_path(terminus_home(storage/db), Path)).
-
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
 
@@ -82,21 +79,21 @@ index_key(Key, Key, Opts) :-
     !.
 index_key(_, "", _).
 
-index_path(Path) :-
-    once(expand_file_search_path(config('index.html'), Path)).
-
 index_template_path(Path) :-
     once(expand_file_search_path(terminus_home('index.tpl'), Path)).
 
 %% I find it highly dubious that these 3 files should be in a directory called tmp
 instance_path(Path) :-
-    once(expand_file_search_path(terminus_tmp('instance.ttl'), Path)).
+    config:tmp_path(Tmp),
+    atomic_list_concat([Tmp, '/instance.ttl'], Path).
 
 inference_path(Path) :-
-    once(expand_file_search_path(terminus_tmp('inference.ttl'), Path)).
+    config:tmp_path(Tmp),
+    atomic_list_concat([Tmp, '/inference.ttl'], Path).
 
 schema_path(Path) :-
-    once(expand_file_search_path(terminus_tmp('schema.ttl'), Path)).
+    config:tmp_path(Tmp),
+    atomic_list_concat([Tmp, '/schema.ttl'], Path).
 
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
@@ -138,7 +135,7 @@ initialize_registry :-
     ).
 
 initialize_database(Public_URL, Key) :-
-    default_database_path(DB_Path),
+    config:default_database_path(DB_Path),
     initialize_database_with_path(Public_URL, Key, DB_Path).
 
 initialize_database_with_path(Public_URL, Key, DB_Path) :-
@@ -190,5 +187,5 @@ initialize_index(Url, Key, Opts) :-
     index_key(Key, Password, Opts),
     index_url(Url, PublicUrl, Opts),
     index_template_path(IndexTplPath),
-    index_path(IndexPath),
+    config:index_path(IndexPath),
     write_index_file(IndexTplPath, IndexPath, PublicUrl, Password).

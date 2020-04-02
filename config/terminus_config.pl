@@ -5,6 +5,9 @@
               public_url/1,
               worker_amount/1,
               max_transaction_retries/1,
+              index_path/1,
+              default_database_path/1,
+              tmp_path/1,
               server_worker_options/1,
               http_options/1,
               max_journal_queue_length/1
@@ -27,6 +30,19 @@ worker_amount(Value) :-
 
 max_transaction_retries(Value) :-
     getenv_default_number('TERMINUS_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
+
+index_path(Value) :-
+    once(expand_file_search_path(config('index.html'), Path)),
+    getenv_default('TERMINUS_SERVER_INDEX_PATH', Path, Value).
+
+default_database_path(Value) :-
+    once(expand_file_search_path(terminus_home(storage/db), Path)),
+    getenv_default('TERMINUS_SERVER_DB_PATH', Path, Value).
+
+tmp_path(Value) :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/tmp',TmpPathRelative),
+    getenv_default('TERMINUS_SERVER_TMP_PATH', TmpPathRelative, Value).
 
 
 server(Server) :-
