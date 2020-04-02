@@ -810,37 +810,42 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
  */
 realise_quads(_,[],_,[]) :-
     !.
-realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are an object property
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
     xquad(Gs,G_Type,Elt,RDFType,Type),
+    G_Type_Desc = G_Type.descriptor,
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
-              G^V^(inferredQuad(G, Elt, Prop, V, Database),
+              V^(inferredQuad(G, Elt, Prop, V, Database),
+                 get_dict(descriptor,G,G_Desc),
                  (   document(V,Database)
-                 ->  New_Realiser=[(G,Elt,Prop,V)]
+                 ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
                  ;   realise_quads(V,Frame,Database,Below),
-                     New_Realiser=[(G,Elt,Prop,V)|Below])),
+                     New_Realiser=[(G_Desc,Elt,Prop,V)|Below])),
               RealiserLists)
     ->  append(RealiserLists,Realisers_on_P),
         realise_quads(Elt,Rest,Database,Realiser_Tail),
         append(Realisers_on_P, Realiser_Tail, Realiser)
     ;   realise_quads(Elt,Rest,Database,Realiser)
     ).
-realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type,Elt,RDFType,Type)|Realiser]) :-
+realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
     database_instance(Database,Gs),
 
     RDFType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
     xquad(Gs,G_Type,Elt,RDFType,Type),
+    G_Type_Desc = G_Type.descriptor,
 
     member(property=Prop, P),
-    (   setof((G,Elt,Prop,V),
-              G^V^inferredQuad(G, Elt, Prop, V, Database),
+    (   setof((G_Desc,Elt,Prop,V),
+              V^(   inferredQuad(G, Elt, Prop, V, Database),
+                    get_dict(descriptor,G,G_Desc)
+                ),
               Realisers_on_P)
     ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
         append(Realisers_on_P,Realiser_Tail,Realiser)
@@ -930,7 +935,10 @@ object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
         realise_quads(URI,Frame,Database,Unsorted),
-        sort(Unsorted,Edges)
+        sort(Unsorted,Pre_Edges),
+        maplist({Database}/[(Graph_Descriptor,A,B,C),(G,A,B,C)]>>(
+                    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,[Database],G)
+                ), Pre_Edges, Edges)
     ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).

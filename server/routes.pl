@@ -890,7 +890,7 @@ test(delete_object, [
                 ;   true),
                 create_db(Name, 'http://terminushub.com/admin/test/document'))),
          cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                  * delete_db(Name)))
      ])
 :-
 
