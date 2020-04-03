@@ -36,7 +36,7 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 
-:- use_module(library(jwt/jwt_dec)).
+:- use_module(library(jwt_io)).
 
 % http libraries
 :- use_module(library(http/http_log)).
@@ -60,6 +60,10 @@
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
 :- use_module(library(http/http_authenticate)).
+
+% Conditional loading of the JWT IO library...
+% TODO: There must be a cleaner way to do this
+:- (  config:jwt_public_key_path(JWTPubKeyPath), JWTPubKeyPath = '' -> true ; use_module(library(jwt_io))).
 
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1255,8 +1259,8 @@ fetch_authorization_data(Request, Username, KS) :-
 fetch_jwt_data(Request, Username) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
-    getenv("TERMINUS_JWT_SECRET", JWT_Secret),
-    jwt_dec(Token, json{k: JWT_Secret, kty: "oct"}, Payload),
+    atom_string(Token, TokenAtom),
+    jwt_decode(TokenAtom, Payload, []),
     Username = Payload.get('https://terminusdb.com/nickname').
 
 /*

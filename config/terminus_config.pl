@@ -7,6 +7,8 @@
               max_transaction_retries/1,
               index_path/1,
               default_database_path/1,
+              jwt_public_key_path/1,
+              jwt_public_key_id/1,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -38,6 +40,12 @@ index_path(Value) :-
 default_database_path(Value) :-
     once(expand_file_search_path(terminus_home(storage/db), Path)),
     getenv_default('TERMINUS_SERVER_DB_PATH', Path, Value).
+
+jwt_public_key_path(Value) :-
+    getenv_default('TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).
+
+jwt_public_key_id(Value) :-
+    getenv_default('TERMINUS_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 tmp_path(Value) :-
     user:file_search_path(terminus_home, Dir),
