@@ -44,18 +44,6 @@ command(Cmd) :-
         error(existence_error(source_sink,path(Cmd)),_),
         fail).
 
-hostname(Hostname) :-
-    (   command(hostname)
-    ->  process_create(path(hostname), ['-f'], [ stderr(null),
-                                                 stdout(pipe(Out)),
-                                                 process(PID)
-                                               ]),
-        process_wait(PID,_Status),
-        (   read_string(Out, '\n', '\r', _, Hostname_String)
-        ->  atom_string(Hostname,Hostname_String)
-        ;   Hostname = localhost)
-    ;   Hostname = localhost).
-
 /*****************************************************
  * Opts
  *****************************************************/
@@ -89,7 +77,7 @@ opt_spec([[opt(help),
            type(atom),
            shortflags([s]),
            longflags([server]),
-           default(''),
+           default('localhost'),
            help('set the server name')],
 
           [opt(public_url),
@@ -159,13 +147,7 @@ run(Args) :-
         halt
     ;   memberchk(key(Key), Opts),
 
-        memberchk(server(Server_Arg), Opts),
-        (   Server_Arg = ''
-        ->  (   hostname(Server)
-            ->  true
-            ;   Server = localhost
-            )
-        ;   Server = Server_Arg),
+        memberchk(server(Server), Opts),
         memberchk(port(Port), Opts),
         memberchk(protocol(Protocol), Opts),
         memberchk(public_url(Public_URL), Opts),
