@@ -12,7 +12,8 @@
               initialize_database_with_store/3,
 
               % db_graph.pl
-              create_graph/5
+              create_graph/5,
+              delete_graph/5
           ]).
 
 :- use_module(api/init).

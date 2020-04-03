@@ -1099,11 +1099,11 @@ graph_handler(delete, Path, R) :-
     ),
 
     % Doesn't exist yet!
-    * delete_graph(Branch_Descriptor,
-                   Commit_Info,
-                   Type,
-                   Name,
-                   _Transaction_Metadata2),
+    delete_graph(Branch_Descriptor,
+                 Commit_Info,
+                 Type,
+                 Name,
+                 _Transaction_Metadata2),
 
     reply_json(_{'terminus:status' : "terminus:success"}).
 
