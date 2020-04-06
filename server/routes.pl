@@ -1259,9 +1259,10 @@ fetch_authorization_data(Request, Username, KS) :-
 fetch_jwt_data(Request, Username) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
-    atom_string(Token, TokenAtom),
+    atom_string(TokenAtom, Token),
     jwt_decode(TokenAtom, Payload, []),
-    Username = Payload.get('https://terminusdb.com/nickname').
+    atom_json_dict(Payload, PayloadDict, []),
+    Username = PayloadDict.get('https://terminusdb.com/nickname').
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -1299,6 +1300,7 @@ verify_access(DB, Auth, Action, Scope) :-
 connection_authorised_user(Request, Username, SURI) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_authorization_data(Request, Username, KS),
+    !,
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  (   authenticate(DB, Request, Auth),
             verify_access(DB, Auth, terminus:get_document, SURI)
@@ -1309,6 +1311,20 @@ connection_authorised_user(Request, Username, SURI) :-
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
+connection_authorised_user(Request, Username, SURI) :-
+    open_descriptor(terminus_descriptor{}, DB),
+    fetch_jwt_data(Request, Username),
+    !,
+    (   username_user_id(DB, Username, User_ID)
+    ->  (   authenticate(DB, Request, Auth),
+            verify_access(DB, Auth, terminus:get_document, SURI)
+        ->  true
+        ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                                  'terminus:message' : 'Bad user object',
+                                                  'terminus:object' : User_ID}))))
+    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
+                                     'terminus:message' : 'Not a valid username',
+                                     'terminus:object' : Username})))).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
