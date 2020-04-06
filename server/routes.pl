@@ -1262,7 +1262,8 @@ fetch_jwt_data(Request, Username) :-
     atom_string(TokenAtom, Token),
     jwt_decode(TokenAtom, Payload, []),
     atom_json_dict(Payload, PayloadDict, []),
-    Username = PayloadDict.get('https://terminusdb.com/nickname').
+    UsernameString = PayloadDict.get('https://terminusdb.com/nickname'),
+    atom_string(Username, UsernameString).
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -1315,16 +1316,12 @@ connection_authorised_user(Request, Username, SURI) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_jwt_data(Request, Username),
     !,
-    (   username_user_id(DB, Username, User_ID)
-    ->  (   authenticate(DB, Request, Auth),
-            verify_access(DB, Auth, terminus:get_document, SURI)
-        ->  true
-        ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                  'terminus:message' : 'Bad user object',
-                                                  'terminus:object' : User_ID}))))
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid username',
-                                     'terminus:object' : Username})))).
+    authenticate(DB, Request, Auth),
+    verify_access(DB, Auth, terminus:get_document, SURI)
+    ->  true
+    ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                              'terminus:message' : 'Bad user object',
+                                              'terminus:object' : Username}))).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
