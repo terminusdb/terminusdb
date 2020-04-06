@@ -1,5 +1,6 @@
 :- module(capabilities,[
               user_key_auth/4,
+              username_user_id/3,
               user_key_user_id/4,
               user_id_auth_id/3,
               username_auth/3,
@@ -106,10 +107,7 @@ user_key_auth(DB, Username, Key, Auth_ID) :-
  */
 username_auth(DB, Username, Auth) :-
     username_user_id(DB, Username, User_ID),
-    user_id_auth_id(DB, User_ID, Auth_ID),
-    collection_descriptor_prefixes(DB.descriptor, Prefixes),
-    prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),
-    document_jsonld(DB,Auth_ID_Expanded,Auth).
+    user_auth_id(DB, User_ID, Auth).
 
 /*
  * user_id_auth_id(+DB, +User_ID, -Auth_id) is semidet.

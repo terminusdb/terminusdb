@@ -38,6 +38,20 @@
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/html_write)).
 
+
+load_jwt_conditionally :-
+    config:jwt_public_key_path(JWTPubKeyPath),
+    (   JWTPubKeyPath = ''
+    ->  true
+    ;   use_module(library(jwt_io)),
+        config:jwt_public_key_id(Public_Key_Id),
+        set_setting(jwt_io:keys, [_{kid: Public_Key_Id,
+                                    type: 'RSA',
+                                    algorithm: 'RS256',
+                                    public_key: JWTPubKeyPath}])).
+
+:- load_jwt_conditionally.
+
 server(_Argv) :-
     config:server(Server),
     config:server_port(Port),

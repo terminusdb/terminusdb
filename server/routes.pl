@@ -36,7 +36,7 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 
-:- use_module(library(jwt/jwt_dec)).
+:- use_module(library(jwt_io)).
 
 % http libraries
 :- use_module(library(http/http_log)).
@@ -60,6 +60,10 @@
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
 :- use_module(library(http/http_authenticate)).
+
+% Conditional loading of the JWT IO library...
+% TODO: There must be a cleaner way to do this
+:- (  config:jwt_public_key_path(JWTPubKeyPath), JWTPubKeyPath = '' -> true ; use_module(library(jwt_io))).
 
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -97,6 +101,26 @@ connect_handler(get,Request) :-
     reply_json(Databases).
 
 
+
+
+:- begin_tests(connect_handler).
+
+test(connection_authorised_user_http_basic, [
+     ]) :-
+    config:server(Server),
+    http_get(Server, _, [authorization(basic(admin, root))]).
+
+/*
+ * Test assumes that  setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub") setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
+ */
+test(connection_authorised_user_jwt, [
+         condition(get_env("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", _))
+     ]) :-
+    config:server(Server),
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJraWQiOiJ0ZXN0a2V5IiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwic3ViIjoiMTIzNDU2Nzg5MCIsIm5hbWUiOiJKb2huIERvZSIsImFkbWluIjp0cnVlLCJpYXQiOjE1MTYyMzkwMjJ9.miqwKnZKTxeKZa7UZgTpydjprHGRrReD-Rzu54H_qCH3XYuI2zwVN79N1zQOrcz8rOfeOAmbZYqyfepaWtykzaOOb8k-77-V3j4_5ZceqjCcJap9hhgmQDmmWxrPXH3537z5izACP4Nnvy6RjtDwJQIAjepCks3asEcg6_IdVUoto9Oi_t7FcdF_m2Cav-WbAw27V0uFYS1XDnpEvSEQWG4HVLoQEgoOFqz9r65-hkcWZesXaCU8mrNNPCLd5uf1aedGkTyPkE7uJoLAGrbqyrXl2nGecR36L1NY4ShwShRvrk8yfN6QlD1g2ri7jqoWNeLdiFX9CB5dr4etOdxCeQ',
+    http_get(Server, _, [authorization(bearer(Bearer))]).
+
+:- end_tests(connect_handler).
 
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1180,9 +1204,11 @@ fetch_authorization_data(Request, Username, KS) :-
 fetch_jwt_data(Request, Username) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
-    getenv("TERMINUS_JWT_SECRET", JWT_Secret),
-    jwt_dec(Token, json{k: JWT_Secret, kty: "oct"}, Payload),
-    Username = Payload.get('https://terminusdb.com/nickname').
+    atom_string(TokenAtom, Token),
+    jwt_decode(TokenAtom, Payload, []),
+    atom_json_dict(Payload, PayloadDict, []),
+    UsernameString = PayloadDict.get('https://terminusdb.com/nickname'),
+    atom_string(Username, UsernameString).
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -1220,6 +1246,7 @@ verify_access(DB, Auth, Action, Scope) :-
 connection_authorised_user(Request, User_ID, SURI) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_authorization_data(Request, Username, KS),
+    !,
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  (   authenticate(DB, Request, Auth),
             verify_access(DB, Auth, terminus:get_document, SURI)
@@ -1230,6 +1257,16 @@ connection_authorised_user(Request, User_ID, SURI) :-
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
+connection_authorised_user(Request, Username, SURI) :-
+    open_descriptor(terminus_descriptor{}, DB),
+    fetch_jwt_data(Request, Username),
+    !,
+    authenticate(DB, Request, Auth),
+    verify_access(DB, Auth, terminus:get_document, SURI)
+    ->  true
+    ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
+                                              'terminus:message' : 'Bad user object',
+                                              'terminus:object' : Username}))).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
