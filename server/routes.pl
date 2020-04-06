@@ -99,6 +99,17 @@ connect_handler(get,Request) :-
     reply_json(User).
 
 
+:- begin_tests(connect_handler).
+
+test(connection_authorised_user_http_basic, [
+     ]) :-
+    config:server(Server),
+    http_get(Server, In, [authorization(basic(admin, root))]),
+    In = "Admin".
+
+:- end_tests(connect_handler).
+
+
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(console), cors_catch(console_handler(Method)),
                 [method(Method),
