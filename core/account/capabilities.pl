@@ -1,11 +1,13 @@
 :- module(capabilities,[
               user_key_auth/4,
               user_key_user_id/4,
+              user_id_auth_id/3,
               username_auth/3,
               get_user/3,
               auth_action_scope/4,
               write_cors_headers/2,
-              check_capabilities/2
+              check_capabilities/2,
+              auth_accessible_databases/3
           ]).
 
 /** <module> Capabilities
@@ -94,7 +96,7 @@ get_user(Database, User_ID, User) :-
  */
 user_key_auth(DB, Username, Key, Auth_ID) :-
     user_key_user_id(DB, Username, Key, User_ID),
-    user_auth_id(DB, User_ID, Auth_ID).
+    user_id_auth_id(DB, User_ID, Auth_ID).
 
 /**
  * username_auth(DB, Key,Auth) is det.
@@ -104,17 +106,17 @@ user_key_auth(DB, Username, Key, Auth_ID) :-
  */
 username_auth(DB, Username, Auth) :-
     username_user_id(DB, Username, User_ID),
-    user_auth_id(DB, User_ID, Auth_ID),
+    user_id_auth_id(DB, User_ID, Auth_ID),
     collection_descriptor_prefixes(DB.descriptor, Prefixes),
     prefixed_to_uri(Auth_ID, Prefixes, Auth_ID_Expanded),
     document_jsonld(DB,Auth_ID_Expanded,Auth).
 
 /*
- * user_auth_id(+DB, +User_ID, -Auth_id) is semidet.
+ * user_id_auth_id(+DB, +User_ID, -Auth_id) is semidet.
  *
  * Sould return the auth object
  */
-user_auth_id(DB, User_ID, Auth_ID) :-
+user_id_auth_id(DB, User_ID, Auth_ID) :-
     ask(DB,
         (
             t( User_ID , rdf:type , terminus:'User' ),
@@ -138,19 +140,33 @@ auth_action_scope(DB, Auth, Action, Resource_ID) :-
         )
        ).
 
-    % make comparison late..
-    %atom_string(Resource_ID,Resource_ID_String).
+/**
+ * auth_accessible_databases(DB,Auth,Databases) is det.
+ *
+ * Finds all database objects accessible to a user.
+ */
+auth_accessible_databases(DB, Auth, Databases) :-
+    findall(Database,
+            ask(DB,
+                (  t(Auth, terminus:action, terminus:read_access),
+                   t(Auth, terminus:authority_scope, Resource_ID),
+                   read_object(Resource_ID, Database)
+                )
+               ),
+            Databases
+           ).
+
 
 /*
- * write_cors_headers(Resource_URI) is det.
+ * write_cors_headers(Resource_Name) is det.
  *
  * Writes cors headers associated with Resource_URI
  */
-write_cors_headers(Resource_URI, DB) :-
+write_cors_headers(Resource_Name, DB) :-
     % delete the object
     findall(Origin,
             ask(DB,
-                (   t(Internal_Resource_URI, terminus:id, Resource_URI^^(xsd:anyURI)),
+                (   t(Internal_Resource_URI, terminus:database_name, Resource_Name^^(xsd:string)),
                     t(Internal_Resource_URI, terminus:allow_origin, Origin^^(xsd:string))
                 )),
             Origins),

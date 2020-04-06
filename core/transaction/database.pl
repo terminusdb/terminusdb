@@ -339,9 +339,9 @@ query_context_transaction_objects(Query_Context,Transaction_Objects) :-
 test(test_transaction_partition, [
          setup((setup_temp_store(State),
                 user_database_name(admin,testdb1,Name1),
-                create_db(Name1, "http://localhost/testdb1"),
+                create_db(Name1, 'test','a test', "http://localhost/testdb1"),
                 user_database_name(admin,testdb2,Name2),
-                create_db(Name2, "http://localhost/testdb2"))),
+                create_db(Name2, 'test','a test', "http://localhost/testdb2"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -357,9 +357,9 @@ test(test_transaction_partition, [
 test(partial_transaction_commit, [
          setup((setup_temp_store(State),
                 user_database_name(admin,testdb1,Name1),
-                create_db(Name1, "http://localhost/testdb1"),
+                create_db(Name1, 'test','a test', "http://localhost/testdb1"),
                 user_database_name(admin,testdb2,Name2),
-                create_db(Name2, "http://localhost/testdb2"))),
+                create_db(Name2, 'test','a test', "http://localhost/testdb2"))),
          cleanup(teardown_temp_store(State))
      ])
 :-

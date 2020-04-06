@@ -302,26 +302,6 @@ terminus:Server
   owl:oneOf (terminus:server) ;
   rdfs:subClassOf terminus:Resource .
 
-terminus:APIUpdate
-  a owl:Class ;
-  rdfs:label "API Update"@en ;
-  rdfs:comment "A document that amounts to an update request, sent to the API"@en .
-
-terminus:id
-  a owl:DatatypeProperty ;
-  rdfs:label "id"@en ;
-  rdfs:comment "The universal identifier of the underlying asset of a given resource."@en ;
-  rdfs:domain terminus:Resource ;
-  rdfs:range xsd:anyURI .
-
-terminus:document
-  a owl:ObjectProperty;
-  rdfs:label "Document"@en;
-  rdfs:comment "The document being updated"@en;
-  rdfs:domain terminus:APIUpdate;
-  rdfs:range tcs:Entity.
-
-
 terminus:agent_name
   a owl:DatatypeProperty;
   rdfs:label "Agent name"@en;

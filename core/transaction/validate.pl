@@ -764,7 +764,7 @@ test(insert_on_branch_descriptor, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db("Boo", "http://localhost/document"),
+    create_db("Boo", 'test','a test', "http://localhost/document"),
     % Insert
     DB_Descriptor = database_descriptor{ database_name : "Boo" },
     Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,

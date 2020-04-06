@@ -10,7 +10,8 @@
               xsd_string_type_uri/1,
               xsd_any_uri_type_uri/1,
               label_prop_uri/1,
-
+              comment_prop_uri/1,
+              
               database_class_uri/1,
               database_name_property_uri/1,
               database_state_prop_uri/1,
@@ -78,6 +79,7 @@ rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
 xsd_string_type_uri('http://www.w3.org/2001/XMLSchema#string').
 xsd_any_uri_type_uri('http://www.w3.org/2001/XMLSchema#anyURI').
 label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
+comment_prop_uri('http://www.w3.org/2000/01/rdf-schema#comment').
 
 %%% URIs from terminus schema
 database_class_uri('http://terminusdb.com/schema/terminus#Database').

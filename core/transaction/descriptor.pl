@@ -654,7 +654,7 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
 
 test(transactions_to_map,[
          setup((setup_temp_store(State),
-                create_db('admin|test', 'http://somewhere.com/'))),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -732,7 +732,7 @@ test(id, [
 
 test(open_database_descriptor_as_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -741,7 +741,7 @@ test(open_database_descriptor_as_atom, [
 
 test(open_database_descriptor_as_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -750,7 +750,7 @@ test(open_database_descriptor_as_string, [
 
 test(open_nonexistent_database_descriptor, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -759,7 +759,7 @@ test(open_nonexistent_database_descriptor, [
 
 test(open_repository_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -770,7 +770,7 @@ test(open_repository_descriptor_with_atom, [
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -781,7 +781,7 @@ test(open_repository_descriptor_with_string, [
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -792,7 +792,7 @@ test(open_repository_descriptor_with_string, [
 
 test(open_branch_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -804,7 +804,7 @@ test(open_branch_descriptor_with_atom, [
 
 test(open_branch_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -816,7 +816,7 @@ test(open_branch_descriptor_with_string, [
 
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db(testdb, "http://localhost/testdb"))),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-

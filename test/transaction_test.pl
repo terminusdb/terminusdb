@@ -49,7 +49,7 @@ test(create_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db('admin/Database', 'http://terminushub.com/document').
+    create_db('admin/Database', 'test','a test','http://terminushub.com/document').
 
 
 test(delete_db_test, [
@@ -58,7 +58,7 @@ test(delete_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db('admin/Database', 'http://terminushub.com/document'),
+    create_db('admin/Database', 'test','a test','http://terminushub.com/document'),
     delete_db('admin/Database').
 
 
@@ -68,7 +68,7 @@ test(empty_db_test, [
      ])
 :-
     Name = 'admin/Database',
-    create_db(Name, 'http://terminushub.com/document'),
+    create_db(Name, 'test','a test','http://terminushub.com/document'),
     Descriptor = database_descriptor{ database_name : Name },
     findall(t(X,P,Y),
             ask(Descriptor,

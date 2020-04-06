@@ -1,8 +1,10 @@
 :- module(api, [
               % db_delete.pl
               delete_db/1,
+
               % db_init.pl
-              create_db/2,
+              create_db/4,
+
               % init.pl
               initialize_config/4,
               initialize_registry/0,

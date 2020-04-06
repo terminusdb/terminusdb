@@ -47,6 +47,7 @@
               xsd_string_type_uri/1,
               xsd_any_uri_type_uri/1,
               label_prop_uri/1,
+              comment_prop_uri/1,
 
               database_class_uri/1,
               database_name_property_uri/1,

@@ -88,11 +88,15 @@ connect_handler(options,_Request) :-
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    config:public_url(SURI),
-    connection_authorised_user(Request,User,SURI),
+    config:public_url(Server_URI),
+    connection_authorised_user(Request, User_ID, Server_URI),
     open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
-    reply_json(User).
+    user_id_auth_id(DB, User_ID, Auth_ID),
+    auth_accessible_databases(DB, Auth_ID, Databases),
+    write_cors_headers(Server_URI, DB),
+    reply_json(Databases).
+
+
 
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -168,7 +172,6 @@ message_handler(post,R) :-
                 [method(Method),
                  methods([options,post,delete])]).
 
-
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
@@ -184,12 +187,19 @@ db_handler(post,Account,DB,R) :-
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
     config:public_url(Server),
-    verify_access(Terminus_DB, Auth, terminus:create_database,Server),
-    http_log('[Request] ~q', [Request]),
-    try_get_param('terminus:base_uri',Request,Base_URI),
+    verify_access(Terminus_DB, Auth, terminus:create_database, Server),
+
+    get_payload(Database_Document,Request),
+    (   _{ comment : Comment,
+           label : Label,
+           base_uri : Base_Uri } :< Database_Document
+    ->  true
+    ;   throw(error(bad_api_document('Bad API document')))),
 
     user_database_name(Account, DB, DB_Name),
-    try_create_db(DB_Name, Base_URI),
+
+    try_create_db(DB_Name, Label, Comment, Base_Uri),
+
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
@@ -226,7 +236,11 @@ test(db_create, [
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
-    http_post(URI, form_data(['terminus:base_uri'="https://terminushub.com/document"]),
+    Doc = _{ base_uri : "https://terminushub.com/document",
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, root))]),
 
@@ -235,7 +249,7 @@ test(db_create, [
 
 test(db_delete, [
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                create_db(DB,"https://terminushub.com/")))
+                create_db(DB,'test','a test',"https://terminushub.com/")))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
@@ -273,60 +287,40 @@ schema_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
-
-    merge_separator_split(Path, '/', Split),
-    (   Split = [Account_ID, DB]
-    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo, Ref]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
-    ),
+    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
     open_descriptor(Branch_Descriptor, Transaction),
 
-    try_get_param('terminus:schema',Request,Name),
-    (   get_param('terminus:encoding',Request,Encoding_Atom)
-    ->  atom_string(Encoding_Atom,Encoding)
-    ;   Encoding = "terminus:turtle"),
+    get_payload(Schema_Document,Request),
+    (   _{ schema : Name } :< Schema_Document
+    ->  true
+    ;   throw(error(bad_api_document('Bad API document')))),
 
     % check access rights
     verify_access(Terminus,Auth,terminus:get_schema,Name),
 
-    dump_schema(Transaction, Encoding, Name, String),
-
+    dump_schema(Transaction, turtle, Name, String),
+    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
     config:public_url(SURI),
-    write_cors_headers(SURI, DB),
+    write_cors_headers(SURI, DB_Name),
     reply_json(String).
 schema_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,_Auth),
-
-    merge_separator_split(Path, '/', Split),
-    (   Split = [Account_ID, DB]
-    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo, Ref]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
-    ),
-
-    (   get_param('terminus:commit_info',Request,Commit_Info)
+    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
+    get_payload(Schema_Document,Request),
+    (   _{ schema : Schema_Name,
+           turtle : TTL,
+           commit_info : Commit_Info } :< Schema_Document
     ->  true
-    ;   Commit_Info = commit_info{ author : "TerminusDB API",
-                                   message : "Unqualified TerminusDB API schema update"}),
+    ;   throw(error(bad_api_document('Bad API document')))),
 
     create_context(Branch_Descriptor, Pre_Context),
     Context = Pre_Context.put(commit_info, Commit_Info),
 
     % check access rights
     % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
-
-    try_get_param('terminus:schema',Request,Name),
-    try_get_param('terminus:turtle',Request,TTL),
-    atom_string(Name, Schema_Name),
-
     update_schema(Context,Schema_Name,TTL),
 
     reply_json(_{'terminus:status' : "terminus:success"}).
@@ -345,14 +339,13 @@ test(schema_update, [
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true),
-                create_db(DB, 'http://hub.terminusdb.com/TERMINUS_QA/TEST_DB/document'))),
+                create_db(DB,'test','a test','http://hub.terminusdb.com/TERMINUS_QA/TEST_DB/document'))),
          cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                   delete_db(DB)))
 
      ])
 :-
     % We actually have to create the graph before we can post to it!
-    config:server(Server),
     % First make the schema graph
     make_branch_descriptor('TERMINUS_QA', 'TEST_DB', Branch_Descriptor),
     create_graph(Branch_Descriptor,
@@ -366,11 +359,13 @@ test(schema_update, [
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-
+    config:server(Server),
     atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB'], URI),
     admin_pass(Key),
-    http_post(URI, form_data(['terminus:schema'="main",
-                              'terminus:turtle'=TTL]),
+    http_post(URI, json(_{schema : "main",
+                          commit_info : _{ author : "Test",
+                                           message : "testing" },
+                          turtle : TTL}),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
     * writeq(In),
@@ -491,19 +486,14 @@ woql_handler(post, Path, R) :-
 
 woql_run_context(Request, Auth_ID, Context, JSON) :-
 
-    try_get_param('terminus:query',Request,Atom_Query),
-    atom_json_dict(Atom_Query, Query, []),
+    try_get_param('query',Request,Query),
 
-    * http_log('~N[Request] ~q~n',[Request]),
-
-    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
-    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    (   get_param('commit_info', Request, Commit_Info)
+    ->  true
     ;   Commit_Info = _{}
     ),
 
     woql_context(Prefixes),
-
-    http_log('~N[Commit Info] ~q~n',[Commit_Info]),
 
     context_overriding_prefixes(Context,Prefixes,Context0),
 
@@ -607,16 +597,11 @@ test(no_db, [])
                                                        variable_name : "Abstract"},
                                             graph_filter : "schema/*"}}}]}}},
 
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Query, [])
-    ),
-
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:query'=Payload]),
+              json(_{'query' : Query}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -644,16 +629,12 @@ test(indexed_get, [])
       _{'@type' : 'RemoteResource',
         remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
 
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Query, [])
-    ),
 
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:query'=Payload]),
+              json(_{query : Query}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -682,16 +663,11 @@ test(named_get, [])
       _{'@type' : 'RemoteResource',
         remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
 
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Query, [])
-    ),
-
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:query'=Payload]),
+              json(_{query : Query}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -705,7 +681,7 @@ test(branch_db, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+                create_db(Name, 'test','a test', 'http://terminushub.com/admin/test/document'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -720,30 +696,17 @@ test(branch_db, [
       predicate : "doc:test_predicate",
       object : "doc:test_object"
      },
-
-    with_output_to(
-        string(Payload0),
-        json_write(current_output, Query0, [])
-    ),
-
     Commit = commit_info{ author : 'The Gavinator',
                           message : 'Peace and goodwill' },
 
-    with_output_to(
-        string(Commit_Payload),
-        json_write(current_output, Commit, [])
-    ),
-
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:query'=Payload0,
-                         'terminus:commit_info'=Commit_Payload]),
+              json(_{'query' : Query0,
+                     'commit_info' : Commit }),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    * json_write_dict(current_output,JSON0,[]),
-
-    _{'bindings' : [_{}], inserts: 1, deletes : 0} :< JSON0,
+    _{bindings : [_{}], inserts: 1, deletes : 0} :< JSON0,
 
     % Now query the insert...
     Query1 =
@@ -755,13 +718,8 @@ test(branch_db, [
       object : _{'@type' : "Variable",
                  variable_name : "Object"}},
 
-    with_output_to(
-        string(Payload1),
-        json_write(current_output, Query1, [])
-    ),
-
     http_post(URI,
-              form_data(['terminus:query'=Payload1]),
+              json(_{query : Query1}),
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -779,7 +737,7 @@ test(update_object, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -819,23 +777,13 @@ test(update_object, [
                     'scm:database_state' : _{'@id' : 'scm:finalized'}}
      },
 
-    with_output_to(
-        string(Payload0),
-        json_write(current_output, Query0, [])
-    ),
-
     Commit = commit_info{ author : 'The Gavinator',
                           message : 'Peace and goodwill' },
 
-    with_output_to(
-        string(Commit_Payload),
-        json_write(current_output, Commit, [])
-    ),
-
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:query'=Payload0,
-                         'terminus:commit_info'=Commit_Payload]),
+              json(_{query : Query0,
+                     commit_info : Commit}),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -850,13 +798,8 @@ test(update_object, [
       object : _{'@type' : "Variable",
                  variable_name : "Object"}},
 
-    with_output_to(
-        string(Payload1),
-        json_write(current_output, Query1, [])
-    ),
-
     http_post(URI,
-              form_data(['terminus:query'=Payload1]),
+              json(_{query : Query1}),
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -884,9 +827,9 @@ test(delete_object, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+                create_db(Name,'test','a test', 'http://terminushub.com/admin/test/document'))),
          cleanup((user_database_name(admin,test, Name),
-                  * delete_db(Name)))
+                  delete_db(Name)))
      ])
 :-
 
@@ -1070,8 +1013,10 @@ graph_handler(post, Path, R) :-
     % Must be local.
     make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
 
-    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
-    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    get_payload(Document, Request),
+
+    (   _{ commit_info : Commit_Info } :< Document
+    ->  true
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
@@ -1092,9 +1037,10 @@ graph_handler(delete, Path, R) :-
 
     % Must be local.
     make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+    get_payload(Document, Request),
 
-    (   get_param('terminus:commit_info', Request, Atom_Commit_Info)
-    ->  atom_json_dict(Atom_Commit_Info, Commit_Info, [])
+    (   _{ commit_info : Commit_Info } :< Document
+    ->  true
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
@@ -1120,7 +1066,7 @@ test(create_graph, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'http://terminushub.com/admin/test/document'))),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1128,16 +1074,11 @@ test(create_graph, [
     Commit = commit_info{ author : 'The Graphinator',
                           message : 'Edges here there and everywhere' },
 
-    with_output_to(
-        string(Commit_Payload),
-        json_write(current_output, Commit, [])
-    ),
-
     config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/instance/naim'], URI),
+    atomic_list_concat([Server, '/graph/admin/test/master/instance/naim'], URI),
     admin_pass(Key),
     http_post(URI,
-              form_data(['terminus:commit_info'=Commit_Payload]),
+              json(_{commit_info : Commit}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
     * json_write_dict(current_output, JSON, []),
@@ -1292,7 +1233,7 @@ verify_access(DB, Auth, Action, Scope) :-
                                               'terminus:message' : M,
                                               'terminus:object' : 'verify_access'})))).
 
-connection_authorised_user(Request, Username, SURI) :-
+connection_authorised_user(Request, User_ID, SURI) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_authorization_data(Request, Username, KS),
     (   user_key_user_id(DB, Username, KS, User_ID)
@@ -1490,6 +1431,7 @@ try_get_param(Key,Request,Value) :-
     % POST with JSON package
     memberchk(method(post), Request),
     memberchk(content_type('application/json'), Request),
+    http_log('[Test] ~q', [Request]),
 
     (   memberchk(payload(Document), Request)
     ->  true
@@ -1564,11 +1506,11 @@ get_param(Key,Request,Value) :-
 
 
 /*
- * try_create_db(DB,DB_URI,Object) is det.
+ * try_create_db(DB,Label,Comment,Base_URI) is det.
  *
  * Try to create a database and associate resources
  */
-try_create_db(DB,Base_Uri) :-
+try_create_db(DB,Label,Comment,Base_Uri) :-
     % create the collection if it doesn't exist
     (   database_exists(DB)
     ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
@@ -1576,7 +1518,7 @@ try_create_db(DB,Base_Uri) :-
                                               'terminus:method' : 'terminus:create_database'})))
     ;   true),
 
-    (   create_db(DB, Base_Uri)
+    (   create_db(DB, Label, Comment, Base_Uri)
     ->  true
     ;   format(atom(MSG), 'Database ~s could not be created', [DB]),
         throw(http_reply(not_found(_{'terminus:message' : MSG,
@@ -1630,6 +1572,9 @@ add_payload_to_request(Request,[payload(Document)|Request]) :-
     !,
     http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,Request).
+
+get_payload(Payload,Request) :-
+    memberchk(payload(Payload),Request).
 
 /*
  * save_post_file(In,File_Spec,Options) is det.

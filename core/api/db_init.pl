@@ -1,5 +1,5 @@
 :- module(db_init, [
-              create_db/2
+              create_db/4
           ]).
 
 /** <module> Implementation of database graph management
@@ -35,7 +35,7 @@
 
 :- use_module(library(terminus_store)).
 
-insert_db_object_triples(Builder, Name) :-
+insert_db_object_triples(Builder, Name, Label, Comment) :-
     database_class_uri(Database_Class_Uri),
     database_name_property_uri(Database_Name_Property_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
@@ -46,9 +46,25 @@ insert_db_object_triples(Builder, Name) :-
     nb_add_triple(Builder,
                   Db_Uri,
                   Database_Name_Property_Uri,
-                  Name_Literal).
+                  Name_Literal),
 
-insert_db_object(Name) :-
+    label_prop_uri(Label_Prop),
+    object_storage(Label@en, Label_Literal),
+
+    nb_add_triple(Builder,
+                  Db_Uri,
+                  Label_Prop,
+                  Label_Literal),
+
+    comment_prop_uri(Comment_Prop),
+    object_storage(Comment@en, Comment_Literal),
+
+    nb_add_triple(Builder,
+                  Db_Uri,
+                  Comment_Prop,
+                  Comment_Literal).
+
+insert_db_object(Name, Label, Comment) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
     storage(Store),
     terminus_instance_name(Instance_Name),
@@ -62,7 +78,7 @@ insert_db_object(Name) :-
     ;   true),
 
     open_write(Layer, Builder),
-    insert_db_object_triples(Builder, Name),
+    insert_db_object_triples(Builder, Name, Label, Comment),
     nb_commit(Builder, New_Layer),
     nb_set_head(Graph, New_Layer).
 
@@ -119,10 +135,10 @@ finalise_terminus(Name) :-
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-create_db(Name,Base_URI) :-
+create_db(Name, Label, Comment, Base_URI) :-
     text_to_string(Name, Name_String),
     % insert new db object into the terminus db
-    insert_db_object(Name),
+    insert_db_object(Name, Label, Comment),
 
     % create repo graph - it has name as label
     create_repo_graph(Name_String),
@@ -146,7 +162,7 @@ test(create_db_and_check_master_branch, [
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
-    create_db(testdb, 'http://localhost/testdb'),
+    create_db(testdb, 'testdb', 'a test db', 'http://localhost/testdb'),
     Database_Descriptor = database_descriptor{ database_name: "testdb"},
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" }.
