@@ -334,7 +334,6 @@ schema_handler(post,Path,R) :- % should this be put?
 :- use_module(library(http/http_open)).
 
 test(schema_update, [
-         %blocked('Need to have graph creation first'),
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
@@ -883,26 +882,16 @@ test(delete_object, [
       '@type' : "DeleteObject",
       document : 'doc:my_database'},
 
-    with_output_to(
-        string(Payload1),
-        json_write(current_output, Query1, [])
-    ),
-
     Commit_Info = commit_info{
                       author : "Steve",
                       message : "Deleted baby"
                   },
 
-    with_output_to(
-        string(Commit_Payload),
-        json_write(current_output, Commit_Info, [])
-    ),
-
     admin_pass(Key),
     atomic_list_concat([Server, '/woql/admin/test'], URI),
     http_post(URI,
-              form_data(['terminus:query'=Payload1,
-                         'terminus:commit_info'=Commit_Payload]),
+              json(_{ query : Query1,
+                      commit_info : Commit_Info}),
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
@@ -921,16 +910,11 @@ test(get_object, [])
       document : _{'@type' : "Variable",
                    variable_name : "Document"}},
 
-    with_output_to(
-        string(Payload0),
-        json_write(current_output, Query0, [])
-    ),
-
     config:server(Server),
     admin_pass(Key),
     atomic_list_concat([Server, '/woql/terminus'], URI),
     http_post(URI,
-              form_data(['terminus:query'=Payload0]),
+              json(_{query : Query0}),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
     [Result] = JSON0.bindings,
@@ -1008,10 +992,10 @@ graph_handler(post, Path, R) :-
     authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
     merge_separator_split(Path, '/', Split),
-    Split = [Account_ID, DB, Type, Name],
+    Split = [Account_ID, DB, Branch, Type, Name],
 
     % Must be local.
-    make_branch_descriptor(Account_ID, DB, Branch_Descriptor),
+    make_branch_descriptor(Account_ID, DB,"local", Branch, Branch_Descriptor),
 
     get_payload(Document, Request),
 
