@@ -26,20 +26,13 @@ doc:terminus
     a terminus:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
-    terminus:database_name "terminus"^^xsd:string ;
-    terminus:allow_origin "*"^^xsd:string .
-
-doc:some_actual_database
-    a terminus:Database ;
-    rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
-    rdfs:label "Master Database"@en ;
-    terminus:database_name "terminus"^^xsd:string ;
+    terminus:resource_name "terminus"^^xsd:string ;
     terminus:allow_origin "*"^^xsd:string .
 
 doc:server
     a terminus:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
-    terminus:id "SERVER_NAME"^^xsd:anyURI ;
+    terminus:resource_name "SERVER_NAME"^^xsd:string ;
     terminus:allow_origin "*"^^xsd:string ;
     terminus:resource_includes doc:terminus .

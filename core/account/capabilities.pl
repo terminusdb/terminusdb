@@ -129,12 +129,12 @@ user_id_auth_id(DB, User_ID, Auth_ID) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(DB, Auth, Action, Resource_ID) :-
+auth_action_scope(DB, Auth, Action, Resource_Name) :-
     ask(DB,
         (
             t(Auth, terminus:action, Action),
-            t(Scope, terminus:id, Resource_ID ^^ (xsd:anyURI)),
-            t(Auth, terminus:authority_scope, Scope)
+            t(Auth, terminus:authority_scope, Scope),
+            t(Scope, terminus:resource_name, Resource_Name ^^ (xsd:string))
         )
        ).
 
@@ -165,7 +165,7 @@ write_cors_headers(Resource_Name, DB) :-
     % delete the object
     findall(Origin,
             ask(DB,
-                (   t(Internal_Resource_URI, terminus:database_name, Resource_Name^^(xsd:string)),
+                (   t(Internal_Resource_URI, terminus:resource_name, Resource_Name^^(xsd:string)),
                     t(Internal_Resource_URI, terminus:allow_origin, Origin^^(xsd:string))
                 )),
             Origins),

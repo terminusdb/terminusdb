@@ -115,15 +115,16 @@ test(connection_authorised_user_jwt, [
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJraWQiOiJ0ZXN0a2V5IiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwic3ViIjoiMTIzNDU2Nzg5MCIsIm5hbWUiOiJKb2huIERvZSIsImFkbWluIjp0cnVlLCJpYXQiOjE1MTYyMzkwMjJ9.miqwKnZKTxeKZa7UZgTpydjprHGRrReD-Rzu54H_qCH3XYuI2zwVN79N1zQOrcz8rOfeOAmbZYqyfepaWtykzaOOb8k-77-V3j4_5ZceqjCcJap9hhgmQDmmWxrPXH3537z5izACP4Nnvy6RjtDwJQIAjepCks3asEcg6_IdVUoto9Oi_t7FcdF_m2Cav-WbAw27V0uFYS1XDnpEvSEQWG4HVLoQEgoOFqz9r65-hkcWZesXaCU8mrNNPCLd5uf1aedGkTyPkE7uJoLAGrbqyrXl2nGecR36L1NY4ShwShRvrk8yfN6QlD1g2ri7jqoWNeLdiFX9CB5dr4etOdxCeQ',
     http_get(Server, _, [authorization(bearer(Bearer))]).
 
-test(connection_result_dbs, [
-     ]) :-
+test(connection_result_dbs, [])
+:-
     config:server(Server),
     http_get(Server, Result, [json_object(dict),authorization(basic(admin, root))]),
 
-    member(DB, Result),
+    * json_write_dict(current_output, Result, []),
+    memberchk(DB, Result),
     _{ '@id' : "doc:terminus",
        '@type':"terminus:Database",
-       'terminus:database_name' : _{ '@type' : "xsd:string", '@value': "terminus"}
+       'terminus:resource_name' : _{ '@type' : "xsd:string", '@value': "terminus"}
      } :< DB.
 
 :- end_tests(connect_handler).
@@ -801,7 +802,7 @@ test(update_object, [
       '@type' : "UpdateObject",
       document : _{ '@type' : "scm:Database",
                     '@id' : 'doc:my_database',
-                    'scm:database_name' : _{'@type' : "xsd:string",
+                    'scm:resource_name' : _{'@type' : "xsd:string",
                                             '@value' : "Steve"},
                     'scm:database_state' : _{'@id' : 'scm:finalized'}}
      },
@@ -835,7 +836,7 @@ test(update_object, [
     Expected = [
         _{'Object':_{'@type':"http://www.w3.org/2001/XMLSchema#string",
                      '@value':"Steve"},
-          'Predicate':"http://terminusdb.com/schema/terminus#database_name",
+          'Predicate':"http://terminusdb.com/schema/terminus#resource_name",
           'Subject':"http://terminusdb.com/admin/test/document/my_database"},
         _{'Object':"http://terminusdb.com/schema/terminus#finalized",
           'Predicate':"http://terminusdb.com/schema/terminus#database_state",
@@ -887,7 +888,7 @@ test(delete_object, [
     % Create the object
     Doc = _{ '@type' : "scm:Database",
              '@id' : 'doc:my_database',
-             'scm:database_name' :
+             'scm:resource_name' :
              _{'@type' : "xsd:string",
                '@value' : "Steve"},
              'scm:database_state' :

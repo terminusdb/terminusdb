@@ -250,16 +250,16 @@ terminus:Resource
 
 terminus:Database
   rdfs:label "Database"@en ;
-  rdfs:comment "A resource representing a database hosted on the server"@en ;
+  rdfs:comment "A resource representing a database hosted on the server."@en ;
   a owl:Class ;
   rdfs:subClassOf terminus:Resource .
 
-terminus:database_name
-  rdfs:label "Database Name"@en ;
-  rdfs:comment "The database name which is used as a reference to the repository graph"@en ;
+terminus:resource_name
+  rdfs:label "Resource Name"@en ;
+  rdfs:comment "The resource name which is used as an internal local reference."@en ;
   a owl:DatatypeProperty ;
   rdfs:range xsd:string ;
-  rdfs:domain terminus:Database .
+  rdfs:domain terminus:Resource .
 
 terminus:finalized
   a terminus:DatabaseState ;
