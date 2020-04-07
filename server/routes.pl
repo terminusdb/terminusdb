@@ -36,8 +36,6 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 
-:- use_module(library(jwt_io)).
-
 % http libraries
 :- use_module(library(http/http_log)).
 :- use_module(library(http/http_dispatch)).
