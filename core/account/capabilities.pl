@@ -107,7 +107,7 @@ user_key_auth(DB, Username, Key, Auth_ID) :-
  */
 username_auth(DB, Username, Auth) :-
     username_user_id(DB, Username, User_ID),
-    user_auth_id(DB, User_ID, Auth).
+    user_id_auth_id(DB, User_ID, Auth).
 
 /*
  * user_id_auth_id(+DB, +User_ID, -Auth_id) is semidet.
@@ -146,8 +146,9 @@ auth_action_scope(DB, Auth, Action, Resource_ID) :-
 auth_accessible_databases(DB, Auth, Databases) :-
     findall(Database,
             ask(DB,
-                (  t(Auth, terminus:action, terminus:read_access),
+                (  t(Auth, terminus:action, terminus:woql_select),
                    t(Auth, terminus:authority_scope, Resource_ID),
+                   t(Resource_ID, rdf:type, terminus:'Database'),
                    read_object(Resource_ID, Database)
                 )
                ),

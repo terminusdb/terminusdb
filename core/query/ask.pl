@@ -56,7 +56,9 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
                                          prolog_var: Pre_Term,
                                          woql_var : Woql_Var}|Bindings_In],
             freeze(Woql_Var,
-                   (   Woql_Var = _@_
+                   (   is_dict(Woql_Var) % Document
+                   ->  Woql_Var = Pre_Term
+                   ;   Woql_Var = _@_
                    ->  Pre_Term = Woql_Var
                    ;   Woql_Var = Elt^^Type
                    ->  freeze(Type,

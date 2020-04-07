@@ -98,9 +98,6 @@ connect_handler(get,Request) :-
     write_cors_headers(Server_URI, DB),
     reply_json(Databases).
 
-
-
-
 :- begin_tests(connect_handler).
 
 test(connection_authorised_user_http_basic, [
@@ -117,6 +114,17 @@ test(connection_authorised_user_jwt, [
     config:server(Server),
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJraWQiOiJ0ZXN0a2V5IiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwic3ViIjoiMTIzNDU2Nzg5MCIsIm5hbWUiOiJKb2huIERvZSIsImFkbWluIjp0cnVlLCJpYXQiOjE1MTYyMzkwMjJ9.miqwKnZKTxeKZa7UZgTpydjprHGRrReD-Rzu54H_qCH3XYuI2zwVN79N1zQOrcz8rOfeOAmbZYqyfepaWtykzaOOb8k-77-V3j4_5ZceqjCcJap9hhgmQDmmWxrPXH3537z5izACP4Nnvy6RjtDwJQIAjepCks3asEcg6_IdVUoto9Oi_t7FcdF_m2Cav-WbAw27V0uFYS1XDnpEvSEQWG4HVLoQEgoOFqz9r65-hkcWZesXaCU8mrNNPCLd5uf1aedGkTyPkE7uJoLAGrbqyrXl2nGecR36L1NY4ShwShRvrk8yfN6QlD1g2ri7jqoWNeLdiFX9CB5dr4etOdxCeQ',
     http_get(Server, _, [authorization(bearer(Bearer))]).
+
+test(connection_result_dbs, [
+     ]) :-
+    config:server(Server),
+    http_get(Server, Result, [json_object(dict),authorization(basic(admin, root))]),
+
+    member(DB, Result),
+    _{ '@id' : "doc:terminus",
+       '@type':"terminus:Database",
+       'terminus:database_name' : _{ '@type' : "xsd:string", '@value': "terminus"}
+     } :< DB.
 
 :- end_tests(connect_handler).
 
