@@ -94,16 +94,18 @@ connect_handler(get,Request) :-
     connection_authorised_user(Request, User_ID, Server_URI),
     open_descriptor(terminus_descriptor{}, DB),
     user_id_auth_id(DB, User_ID, Auth_ID),
-    auth_accessible_databases(DB, Auth_ID, Databases),
+    authorisation_object(DB, Auth_ID, Auth_Obj),
     write_cors_headers(Server_URI, DB),
-    reply_json(Databases).
+    reply_json(Auth_Obj).
 
 :- begin_tests(connect_handler).
+:- use_module(core(util/test_utils)).
 
 test(connection_authorised_user_http_basic, [
      ]) :-
     config:server(Server),
-    http_get(Server, _, [authorization(basic(admin, root))]).
+    admin_pass(Key),
+    http_get(Server, _, [authorization(basic(admin, Key))]).
 
 /*
  * Test assumes that  setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub") setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
@@ -118,14 +120,14 @@ test(connection_authorised_user_jwt, [
 test(connection_result_dbs, [])
 :-
     config:server(Server),
-    http_get(Server, Result, [json_object(dict),authorization(basic(admin, root))]),
+    admin_pass(Key),
+    http_get(Server, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     * json_write_dict(current_output, Result, []),
-    memberchk(DB, Result),
-    _{ '@id' : "doc:terminus",
-       '@type':"terminus:Database",
-       'terminus:resource_name' : _{ '@type' : "xsd:string", '@value': "terminus"}
-     } :< DB.
+
+    _{ '@id' : "doc:access_all_areas",
+       '@type':"terminus:ServerCapability"
+     } :< Result.
 
 :- end_tests(connect_handler).
 
@@ -271,9 +273,10 @@ test(db_create, [
              comment : "A quality assurance test",
              label : "A label"
            },
+    admin_pass(Key),
     http_post(URI, json(Doc),
               In, [json_object(dict),
-                   authorization(basic(admin, root))]),
+                   authorization(basic(admin, Key))]),
 
     _{'terminus:status' : "terminus:success"} = In.
 
@@ -284,8 +287,9 @@ test(db_delete, [
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    admin_pass(Key),
     http_delete(URI, Delete_In, [json_object(dict),
-                                 authorization(basic(admin, root))]),
+                                 authorization(basic(admin, Key))]),
 
     _{'terminus:status' : "terminus:success"} = Delete_In.
 

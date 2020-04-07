@@ -8,7 +8,7 @@
               auth_action_scope/4,
               write_cors_headers/2,
               check_capabilities/2,
-              auth_accessible_databases/3
+              authorisation_object/3
           ]).
 
 /** <module> Capabilities
@@ -139,21 +139,16 @@ auth_action_scope(DB, Auth, Action, Resource_Name) :-
        ).
 
 /**
- * auth_accessible_databases(DB,Auth,Databases) is det.
+ * authorisation_object(DB,Auth_ID,Auth_Obj) is det.
  *
  * Finds all database objects accessible to a user.
  */
-auth_accessible_databases(DB, Auth, Databases) :-
-    findall(Database,
-            ask(DB,
-                (  t(Auth, terminus:action, terminus:woql_select),
-                   t(Auth, terminus:authority_scope, Resource_ID),
-                   t(Resource_ID, rdf:type, terminus:'Database'),
-                   read_object(Resource_ID, Database)
-                )
-               ),
-            Databases
-           ).
+authorisation_object(DB, Auth_ID, Auth_Obj) :-
+    once(ask(DB,
+             (  t(Auth_ID, terminus:action, _), % Some action to look at...
+                read_object(Auth_ID, 2, Auth_Obj)
+             )
+            )).
 
 
 /*

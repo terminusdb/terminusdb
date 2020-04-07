@@ -133,13 +133,10 @@ terminus:DBAction
   rdfs:label "DB Action"@en ;
   a owl:Class ;
   owl:oneOf (
+   terminus:manage
    terminus:delete_database
    terminus:update_schema
    terminus:get_schema
-   terminus:create_document
-   terminus:get_document
-   terminus:update_document
-   terminus:delete_document
    terminus:class_frame
    terminus:woql_query
    terminus:clone
@@ -150,7 +147,8 @@ terminus:DBAction
    terminus:read_access
    terminus:write_access
    terminus:manage
- ).
+  ).
+
 terminus:delete_database
   rdfs:label "Delete Database"@en ;
   rdfs:comment "An action that deletes an entire database"@en ;

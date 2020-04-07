@@ -7,6 +7,6 @@
                     auth_action_scope/4,
                     write_cors_headers/2,
                     check_capabilities/2,
-                    auth_accessible_databases/3
+                    authorisation_object/3
                    ]).
 :- use_module(account/capabilities).

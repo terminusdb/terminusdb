@@ -610,7 +610,11 @@ turtle_term(Path,Vars,Prog,Options) :-
             literals:normalise_triple(Triple, rdf(X,P,Y)),
             Vars = [X,P,Y]).
 
-% TODO: This should exist.
+compile_wf(read_object(Doc_ID,N,Doc),
+           frame:document_jsonld(S0,URI,N,JSON)) -->
+    resolve(Doc_ID,URI),
+    resolve(Doc,JSON),
+    peek(S0).
 compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),

@@ -741,7 +741,7 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
                  ->  (   Depth =< 1
                      ->  New_Realiser=[V]
                      ;   New_Depth is Depth-1,
-                         document_object(V,Database,New_Depth,Object),
+                         document_object(Database,V,New_Depth,Object),
                          Object = [_Type,_Id|New_Realiser])
                  ;   realiser(V,Frame,Database,Depth,New_Realiser))),
               RealiserValues)
@@ -772,7 +772,7 @@ realise_frame(Elt,[[type=restriction|_R]|Rest],Database,Depth,Realisers) :-
 realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser|Realisers]) :-
     % We are a bare class_choice, not applied to any property
     !,
-    document_object(Elt,Database,Depth,Realiser),
+    document_object(Database,Elt,Depth,Realiser),
     realise_frame(Elt,Rest,Database,Depth,Realisers).
 realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
@@ -789,7 +789,7 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
     (   Depth =< 1
     ->  New_Realiser=[]
     ;   New_Depth is Depth-1,
-        document_object(Elt,Database,New_Depth,Object),
+        document_object(Database,Elt,New_Depth,Object),
         Object = [_Type,_Id|New_Realiser]).
 
 

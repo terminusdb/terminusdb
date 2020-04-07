@@ -693,7 +693,7 @@ test(terminus, [
     Descriptor = terminus_descriptor{},
     open_descriptor(Descriptor, Transaction),
     % check for things we know should exist in the instance, schema and inference
-    once(ask(Transaction, t(terminus_doc:terminus, rdf:type, terminus:'Database', "instance/main"))),
+    once(ask(Transaction, t(doc:terminus, rdf:type, terminus:'Database', "instance/main"))),
     once(ask(Transaction, t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', "schema/main"))),
     once(ask(Transaction, t(terminus:authority_scope, owl:propertyChainAxiom, _, "inference/main"))).
 
