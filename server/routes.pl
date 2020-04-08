@@ -293,7 +293,6 @@ test(db_delete, [
     _{'terminus:status' : "terminus:success"} = Delete_In.
 
 test(db_auth_test, [
-         blocked('Blocked as deletion is doing stupid things with comment/label'),
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
@@ -312,17 +311,13 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-    writeq(In),
-
     _{'terminus:status' : "terminus:success"} = In,
 
     user_object(terminus_descriptor{}, doc:admin, User_Obj),
     Scope = User_Obj.'terminus:authority'.'terminus:authority_scope',
-    member(Database, Scope),
-    json_write_dict(current_output,Scope,[]),
-    user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-    _{ '@value' :  DB } :< Database.'terminus:resource_name'.
-
+    once(
+        (   member(Database, Scope),
+            _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'terminus:resource_name')).
 
 :- end_tests(db_endpoint).
 
@@ -366,8 +361,7 @@ schema_handler(get,Path,Request) :-
 
     dump_schema(Transaction, turtle, Name, String),
     DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
-    config:public_url(SURI),
-    write_cors_headers(SURI, DB_Name),
+    write_cors_headers(DB_Name, Terminus),
     reply_json(String).
 schema_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
@@ -388,6 +382,9 @@ schema_handler(post,Path,R) :- % should this be put?
     % check access rights
     % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
     update_schema(Context,Schema_Name,TTL),
+
+    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
+    write_cors_headers(DB_Name, Terminus),
 
     reply_json(_{'terminus:status' : "terminus:success"}).
 
@@ -484,8 +481,8 @@ frame_handler(get, Path, Request) :-
 
     try_class_frame(Class_URI,Database,Frame),
 
-    config:public_url(SURI),
-    write_cors_headers(SURI, Terminus),
+    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
+    write_cors_headers(DB_Name, Terminus),
     reply_json(Frame).
 
 
@@ -544,10 +541,18 @@ woql_handler(post, Path, R) :-
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
-    config:public_url(SURI),
-    write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON),
-    format('~n').
+    % NOTE: This is a mess... Need a better way to create acceptable CORS
+    (   get_dict(repository_descriptor, Descriptor, Repo),
+        DB_Name = Repo.database_descriptor.database_name
+    ->  write_cors_headers(DB_Name, Terminus_Transaction_Object)
+    ;   get_dict(database_descriptor, Descriptor, Data),
+        DB_Name = Data.database_name
+    ->  write_cors_headers(DB_Name, Terminus_Transaction_Object)
+    ;   config:public_url(SURI),
+        write_cors_headers(SURI, Terminus_Transaction_Object)
+    ),
+
+    reply_json_dict(JSON).
 
 woql_run_context(Request, Auth_ID, Context, JSON) :-
 
@@ -886,7 +891,6 @@ test(update_object, [
 
 
 test(delete_object, [
-         %blocked('Delete drops write graph builder'),
          setup((config:server(Server),
                 user_database_name(admin,test, Name),
                 (   database_exists(Name)
