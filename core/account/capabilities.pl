@@ -8,7 +8,8 @@
               auth_action_scope/4,
               write_cors_headers/2,
               check_capabilities/2,
-              authorisation_object/3
+              authorisation_object/3,
+              user_object/3
           ]).
 
 /** <module> Capabilities
@@ -147,6 +148,18 @@ authorisation_object(DB, Auth_ID, Auth_Obj) :-
     once(ask(DB,
              (  t(Auth_ID, terminus:action, _), % Some action to look at...
                 read_object(Auth_ID, 2, Auth_Obj)
+             )
+            )).
+
+/**
+ * user_object(DB,User_ID,User_Obj) is det.
+ *
+ * Finds all database objects accessible to a user.
+ */
+user_object(DB, User_ID, User_Obj) :-
+    once(ask(DB,
+             (  t(User_ID, rdf:type, terminus:'User'), % Some action to look at...
+                read_object(User_ID, 3, User_Obj)
              )
             )).
 

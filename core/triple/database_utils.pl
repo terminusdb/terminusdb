@@ -1,7 +1,7 @@
 :- module(database_utils,[
               db_name_uri/2,
-              db_exists_in_layer/2,
-              db_finalized_in_layer/2,
+              database_finalized/2,
+              database_exists/2,
               database_exists/1,
               terminus_graph_layer/2,
               database_instance/2,
@@ -59,16 +59,14 @@
 db_name_uri(Name, Uri) :-
     idgen('terminus:///terminus/document/Database', [Name], Uri).
 
-db_exists_in_layer(Layer, Name) :-
-    once(ask(Layer,
-             t(_Db_Uri, terminus:database_name, Name^^xsd:string))).
+database_exists(Askable, Name) :-
+    once(ask(Askable,
+             t(_Db_Uri, terminus:resource_name, Name^^xsd:string))).
 
-db_finalized_in_layer(Layer,Name) :-
-    finalized_element_uri(Finalized),
-    database_state_prop_uri(State_Prop),
-
-    db_name_uri(Name, Db_Uri),
-    triple(Layer,Db_Uri,State_Prop,node(Finalized)).
+database_finalized(Askable,Name) :-
+    once(ask(Askable,
+             (   t(Db_Uri, terminus:resource_name, Name^^xsd:string),
+                 t(Db_Uri, terminus:database_state, terminus:finalized)))).
 
 /**
  * terminus_graph_layer(-Graph,-Layer) is det.
@@ -82,12 +80,11 @@ terminus_graph_layer(Graph,Layer) :-
     head(Graph, Layer).
 
 /*
- * database_exists(DB_URI) is semidet.
+ * database_name_exists(DB_URI) is semidet.
  *
  */
 database_exists(Name) :-
-    terminus_graph_layer(_Graph,Layer),
-    db_exists_in_layer(Layer,Name).
+    database_exists(terminus_desriptor{}, Name).
 
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(

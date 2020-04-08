@@ -981,7 +981,8 @@ delete_object(URI,Query_Context) :-
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
     union(Object_Edges,References,Edges),
-    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Edges).
+    exclude([(inferred,_,_,_)]>>true, Edges, Non_Inferred_Edges),
+    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Non_Inferred_Edges).
 
 
 /*

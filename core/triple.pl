@@ -11,9 +11,9 @@
 
               % database_utils.pl
               db_name_uri/2,
-              db_exists_in_layer/2,
-              db_finalized_in_layer/2,
+              database_finalized/2,
               database_exists/1,
+              database_exists/2,
               terminus_graph_layer/2,
               database_instance/2,
               database_inference/2,
@@ -50,10 +50,11 @@
               comment_prop_uri/1,
 
               database_class_uri/1,
-              database_name_property_uri/1,
+              resource_name_property_uri/1,
               database_state_prop_uri/1,
               finalized_element_uri/1,
               deleting_element_uri/1,
+              resource_includes_prop_uri/1,
 
               layer_class_uri/1,
               layer_id_prop_uri/1,
@@ -74,6 +75,8 @@
               repo_type_document_prefix/2,
 
               repo_name_uri/4,
+
+              terminus_server_uri/1,
 
               % triplestore
               destroy_graph/2,

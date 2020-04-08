@@ -11,12 +11,13 @@
               xsd_any_uri_type_uri/1,
               label_prop_uri/1,
               comment_prop_uri/1,
-              
+
               database_class_uri/1,
-              database_name_property_uri/1,
+              resource_name_property_uri/1,
               database_state_prop_uri/1,
               finalized_element_uri/1,
               deleting_element_uri/1,
+              resource_includes_prop_uri/1,
 
               layer_class_uri/1,
               layer_id_prop_uri/1,
@@ -36,7 +37,9 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              repo_name_uri/4
+              repo_name_uri/4,
+
+              terminus_server_uri/1
           ]).
 
 /** <module> Terminus Bootstrap
@@ -83,12 +86,11 @@ comment_prop_uri('http://www.w3.org/2000/01/rdf-schema#comment').
 
 %%% URIs from terminus schema
 database_class_uri('http://terminusdb.com/schema/terminus#Database').
-database_name_property_uri('http://terminusdb.com/schema/terminus#database_name').
+resource_name_property_uri('http://terminusdb.com/schema/terminus#resource_name').
 database_state_prop_uri('http://terminusdb.com/schema/terminus#database_state').
 finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
 deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
-
-
+resource_includes_prop_uri('http://terminusdb.com/schema/terminus#resource_includes').
 
 %%% URIs from layer schema
 layer_class_uri('http://terminusdb.com/schema/layer#Layer').
@@ -115,3 +117,6 @@ ref_settings_class_uri('http://terminusdb.com/schema/ref#Settings').
 ref_settings_base_uri_prop_uri('http://terminusdb.com/schema/ref#settings_base_uri').
 ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri').
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
+
+%%% URIs from terminus instance
+terminus_server_uri('terminus:///terminus/document/server').

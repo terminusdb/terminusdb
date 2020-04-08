@@ -37,7 +37,7 @@
 
 insert_db_object_triples(Builder, Name, Label, Comment) :-
     database_class_uri(Database_Class_Uri),
-    database_name_property_uri(Database_Name_Property_Uri),
+    resource_name_property_uri(Database_Name_Property_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
     object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
     db_name_uri(Name, Db_Uri),
@@ -62,7 +62,15 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
     nb_add_triple(Builder,
                   Db_Uri,
                   Comment_Prop,
-                  Comment_Literal).
+                  Comment_Literal),
+
+    terminus_server_uri(Server_URI),
+    resource_includes_prop_uri(Resource_Includes_Prop),
+    % Add the resource scope to server
+    nb_add_triple(Builder,
+                  Server_URI,
+                  Resource_Includes_Prop,
+                  node(Db_Uri)).
 
 insert_db_object(Name, Label, Comment) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
@@ -71,7 +79,7 @@ insert_db_object(Name, Label, Comment) :-
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
 
-    (   db_exists_in_layer(Layer, Name)
+    (   database_exists(Layer, Name)
     ->  throw(error(database_exists(Name),
                     context(insert_db_object/1,
                             'database already exists')))

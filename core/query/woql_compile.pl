@@ -635,10 +635,12 @@ compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
+    view(default_collection, Collection_Descriptor),
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
-        filter_transaction_object_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,Transaction_Object),
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, Read_Write_Objects),
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to delete. Graph Descriptor: ~q', G),
@@ -661,10 +663,12 @@ compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,_)))
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
+    view(default_collection, Collection_Descriptor),
     view(transaction_objects,Transaction_Objects),
     {
         resolve_filter(G,Filter),
-        filter_transaction_object_read_write_objects(Filter, Transaction_Objects, Read_Write_Objects),
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,Transaction_Object),
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, Read_Write_Objects),
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),

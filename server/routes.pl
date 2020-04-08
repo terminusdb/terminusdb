@@ -93,10 +93,9 @@ connect_handler(get,Request) :-
     config:public_url(Server_URI),
     connection_authorised_user(Request, User_ID, Server_URI),
     open_descriptor(terminus_descriptor{}, DB),
-    user_id_auth_id(DB, User_ID, Auth_ID),
-    authorisation_object(DB, Auth_ID, Auth_Obj),
+    user_object(DB, User_ID, User_Obj),
     write_cors_headers(Server_URI, DB),
-    reply_json(Auth_Obj).
+    reply_json(User_Obj).
 
 :- begin_tests(connect_handler).
 :- use_module(core(util/test_utils)).
@@ -125,8 +124,8 @@ test(connection_result_dbs, [])
 
     * json_write_dict(current_output, Result, []),
 
-    _{ '@id' : "doc:access_all_areas",
-       '@type':"terminus:ServerCapability"
+    _{ '@id' : "doc:admin",
+       '@type':"terminus:User"
      } :< Result.
 
 :- end_tests(connect_handler).
@@ -292,6 +291,38 @@ test(db_delete, [
                                  authorization(basic(admin, Key))]),
 
     _{'terminus:status' : "terminus:success"} = Delete_In.
+
+test(db_auth_test, [
+         blocked('Blocked as deletion is doing stupid things with comment/label'),
+         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                (   database_exists(DB)
+                ->  delete_db(DB)
+                ;   true))),
+         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                  delete_db(DB)))
+     ]) :-
+
+    config:server(Server),
+    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    Doc = _{ base_uri : "https://terminushub.com/document",
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              In, [json_object(dict),
+                   authorization(basic(admin, Key))]),
+    writeq(In),
+
+    _{'terminus:status' : "terminus:success"} = In,
+
+    user_object(terminus_descriptor{}, doc:admin, User_Obj),
+    Scope = User_Obj.'terminus:authority'.'terminus:authority_scope',
+    member(Database, Scope),
+    json_write_dict(current_output,Scope,[]),
+    user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+    _{ '@value' :  DB } :< Database.'terminus:resource_name'.
+
 
 :- end_tests(db_endpoint).
 
@@ -1045,6 +1076,9 @@ graph_handler(post, Path, R) :-
                  Name,
                  _Transaction_Metadata2),
 
+    user_database_name(Account_ID,DB,DB_Name),
+    write_cors_headers(DB_Name, terminus_descriptor{}),
+
     reply_json(_{'terminus:status' : "terminus:success"}).
 graph_handler(delete, Path, R) :-
     add_payload_to_request(R,Request),
@@ -1069,6 +1103,9 @@ graph_handler(delete, Path, R) :-
                  Type,
                  Name,
                  _Transaction_Metadata2),
+
+    user_database_name(Account_ID,DB,DB_Name),
+    write_cors_headers(DB_Name, terminus_descriptor{}),
 
     reply_json(_{'terminus:status' : "terminus:success"}).
 
