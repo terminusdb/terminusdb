@@ -55,6 +55,7 @@
               finalized_element_uri/1,
               deleting_element_uri/1,
               resource_includes_prop_uri/1,
+              allow_origin_prop_uri/1,
 
               layer_class_uri/1,
               layer_id_prop_uri/1,

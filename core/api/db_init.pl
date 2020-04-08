@@ -64,6 +64,14 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
                   Comment_Prop,
                   Comment_Literal),
 
+    allow_origin_prop_uri(Allow_Origin_Prop),
+    object_storage("*"^^'http://www.w3.org/2001/XMLSchema#string',All),
+    % Add default CORS
+    nb_add_triple(Builder,
+                  Db_Uri,
+                  Allow_Origin_Prop,
+                  All),
+
     terminus_server_uri(Server_URI),
     resource_includes_prop_uri(Resource_Includes_Prop),
     % Add the resource scope to server
@@ -71,7 +79,6 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
                   Server_URI,
                   Resource_Includes_Prop,
                   node(Db_Uri)).
-
 insert_db_object(Name, Label, Comment) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
     storage(Store),

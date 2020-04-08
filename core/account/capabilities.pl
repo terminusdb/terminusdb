@@ -177,13 +177,14 @@ write_cors_headers(Resource_Name, DB) :-
                     t(Internal_Resource_URI, terminus:allow_origin, Origin^^(xsd:string))
                 )),
             Origins),
+    sort(Origins,Unique_Origins),
     current_output(Out),
     format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
     format(Out,'Access-Control-Allow-Credentials: true\n',[]),
     format(Out,'Access-Control-Max-Age: 1728000\n',[]),
     format(Out,'Access-Control-Allow-Headers: Authorization, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
     format(Out,'Access-Control-Allow-Origin: ',[]),
-    write_domains(Origins, Out),
+    write_domains(Unique_Origins, Out),
     format(Out,'\n',[]).
 
 write_domains([], _).
