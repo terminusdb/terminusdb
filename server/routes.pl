@@ -1272,6 +1272,7 @@ fetch_jwt_data(Request, Username) :-
  */
 authenticate(DB, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
+    !,
     (   user_key_auth(DB, Username, KS, Auth)
     ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
