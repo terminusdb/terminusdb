@@ -39,9 +39,6 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 example_registry_path(Path) :-
     once(expand_file_search_path(template('example_registry.pl'), Path)).
 
-registry_path(Path) :-
-    once(expand_file_search_path(plugins('registry.pl'), Path)).
-
 template_terminus_instance_ttl(Path) :-
     once(expand_file_search_path(template('terminus_instance_template.ttl'), Path)).
 
@@ -127,7 +124,7 @@ initialize_config(PUBLIC_URL, Server, Port, Workers) :-
 
 
 initialize_registry :-
-    registry_path(Registry_Path),
+    config:registry_path(Registry_Path),
     (   exists_file(Registry_Path)
     ->  true
     ;   example_registry_path(Example_Registry_Path),

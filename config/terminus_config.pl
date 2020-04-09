@@ -9,6 +9,7 @@
               default_database_path/1,
               jwt_public_key_path/1,
               jwt_public_key_id/1,
+              registry_path/1,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -46,6 +47,10 @@ jwt_public_key_path(Value) :-
 
 jwt_public_key_id(Value) :-
     getenv_default('TERMINUS_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
+
+registry_path(Value) :-
+    once(expand_file_search_path(plugins('registry.pl'), Path)),
+    getenv_default('TERMINUS_SERVER_REGISTRY_PATH', Path, Value).
 
 tmp_path(Value) :-
     user:file_search_path(terminus_home, Dir),
