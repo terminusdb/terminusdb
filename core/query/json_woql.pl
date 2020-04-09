@@ -654,8 +654,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                   |Path])
     ;   true = JSON
     ->  WOQL = true
-    ;   throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+    ;   reverse(Path,Director),
+        throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
                                      'terminus:message' :'Un-parsable Query',
+                                     'vio:path' : Director,
                                      'vio:query' : JSON})))
     ).
 json_to_woql_ast(JSON,WOQL,_Path) :-

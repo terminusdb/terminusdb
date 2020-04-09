@@ -63,6 +63,8 @@
 % TODO: There must be a cleaner way to do this
 :- (  config:jwt_public_key_path(JWTPubKeyPath), JWTPubKeyPath = '' -> true ; use_module(library(jwt_io))).
 
+% Suppress warnings
+:- dynamic jwt_decode/3.
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
