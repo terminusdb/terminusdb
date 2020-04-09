@@ -113,7 +113,7 @@ test(connection_authorised_user_jwt, [
          condition(getenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", _))
      ]) :-
     config:server(Server),
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJraWQiOiJ0ZXN0a2V5IiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwic3ViIjoiMTIzNDU2Nzg5MCIsIm5hbWUiOiJKb2huIERvZSIsImFkbWluIjp0cnVlLCJpYXQiOjE1MTYyMzkwMjJ9.miqwKnZKTxeKZa7UZgTpydjprHGRrReD-Rzu54H_qCH3XYuI2zwVN79N1zQOrcz8rOfeOAmbZYqyfepaWtykzaOOb8k-77-V3j4_5ZceqjCcJap9hhgmQDmmWxrPXH3537z5izACP4Nnvy6RjtDwJQIAjepCks3asEcg6_IdVUoto9Oi_t7FcdF_m2Cav-WbAw27V0uFYS1XDnpEvSEQWG4HVLoQEgoOFqz9r65-hkcWZesXaCU8mrNNPCLd5uf1aedGkTyPkE7uJoLAGrbqyrXl2nGecR36L1NY4ShwShRvrk8yfN6QlD1g2ri7jqoWNeLdiFX9CB5dr4etOdxCeQ',
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwiaWF0IjoxNTE2MjM5MDIyfQ.ZHqEzJViUkP41NuyWGY97uyzrXvBsuOvOjIz00VgP9H3NHfnbO_h51nqbjt3UqBeKJ7U0wGUMTePuhXCGsAPoI9rLRSK9NzlFKGde-wTs4lAhDpp6rGhmVzVcJAYtJg8RbTGlJ78SFK6SSTpi2sXOMgVeu8fZwGnnp7ZJjP1mtJdEreDEwlZYqgy21BltmuzQ08qC70R-jRFHY2IeVBarcbqJgxjjb3BrNA5fByMD4ESOBVJlmCg8PzaI4hEdW-lSsQK8XWWYTnndB8IFdD3GYIwMovsT9dVZ4m3HrGGywGSP7TxDquvvK9ollA2JV2tLMsbk_Nqo-s7fhBbH9xjsA',
     http_get(Server, _, [authorization(bearer(Bearer))]).
 
 test(connection_result_dbs, [])
@@ -1311,16 +1311,17 @@ connection_authorised_user(Request, User_ID, SURI) :-
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
-connection_authorised_user(Request, Username, SURI) :-
+connection_authorised_user(Request, User_ID, SURI) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_jwt_data(Request, Username),
+    username_user_id(DB, Username, User_ID),
     !,
-    authenticate(DB, Request, Auth),
-    verify_access(DB, Auth, terminus:get_document, SURI)
+    (   authenticate(DB, Request, Auth),
+        verify_access(DB, Auth, terminus:get_document, SURI)
     ->  true
     ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                               'terminus:message' : 'Bad user object',
-                                              'terminus:object' : Username}))).
+                                              'terminus:object' : Username})))).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
