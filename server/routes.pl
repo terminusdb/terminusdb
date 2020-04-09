@@ -341,8 +341,7 @@ schema_handler(options,Path,_Request) :-
     merge_separator_split(Path, '/', Split),
     Split = [Account_ID, DB_Name|_],
     user_database_name(Account_ID, DB_Name, DB),
-    try_db_uri(DB,DB_URI),
-    write_cors_headers(DB_URI, Terminus),
+    write_cors_headers(DB, Terminus),
     format('~n'). % send headers
 schema_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
