@@ -3,8 +3,7 @@ WORKDIR /usr/lib/swipl/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
         && git clone https://github.com/terminusdb/jwt_io.git \
-        && cd jwt_io && make && apt-get purge -y $BUILD_DEPS \
-        && rm -rf /var/cache/apt/*
+        && cd jwt_io && make
 
 FROM terminusdb/terminus_store_prolog:v0.9.9.1
 WORKDIR /app/terminusdb
