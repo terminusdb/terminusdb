@@ -61,6 +61,13 @@ must_be_proper_version :-
 
 :- initialization must_be_proper_version.
 
+initialise_hup :-
+    (   current_prolog_flag(unix, true)
+    ->  on_signal(hup, _, hup)
+    ;   true).
+
+:- initialise_hup.
+
 
 initialise_log_settings :-
     file_search_path(terminus_home, BasePath),
@@ -94,8 +101,6 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 
 :- use_module(library(http/http_log)).
-
-:- on_signal(hup, _, hup).
 
 hup(_Signal) :-
   thread_send_message(main, stop).
