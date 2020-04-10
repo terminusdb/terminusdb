@@ -1,5 +1,4 @@
 mkdir "%APPDATA%\TerminusDB"
-mkdir "%APPDATA%\TerminusDB\db"
 mkdir "%APPDATA%\TerminusDB\tmp"
 set TERMINUS_SERVER_DB_PATH=%APPDATA%\TerminusDB\db
 set TERMINUS_SERVER_REGISTRY_PATH=%APPDATA%\TerminusDB\registry.pl
