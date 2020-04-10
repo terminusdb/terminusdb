@@ -1172,6 +1172,7 @@ cors_catch(Goal,Request) :-
          ),
     !.
 cors_catch(_,_Request) :-
+    cors_enable,
     % Probably should extract the path from Request
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : _{'@type' : 'xsd:string',
