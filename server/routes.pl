@@ -357,16 +357,17 @@ schema_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
-    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
+
+    merge_separator_split(Path, '/', Split),
+    maplist(atom_string, Split, Split_String),
+    Split_String = [Account_ID, DB, Repo, "branch", Branch, Name],
+    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+
     open_descriptor(Branch_Descriptor, Transaction),
 
-    get_payload(Schema_Document,Request),
-    (   _{ schema : Name } :< Schema_Document
-    ->  true
-    ;   throw(error(bad_api_document('Bad API document')))),
-
     % check access rights
-    verify_access(Terminus,Auth,terminus:get_schema,Name),
+    user_database_name(Account_ID, DB, Database_Name),
+    verify_access(Terminus,Auth,terminus:get_schema, Database_Name),
 
     dump_schema(Transaction, turtle, Name, String),
     DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
