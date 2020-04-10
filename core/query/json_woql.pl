@@ -631,7 +631,9 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  WOQL = true
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
           'http://terminusdb.com/schema/woql#variable_name' : Name} :< JSON
-    ->  coerce_atom(Name, Atom_Name),
+    ->  json_to_woql_ast(Name, Result, Path),
+        Result = String_or_Atom_Name^^_,
+        coerce_atom(String_or_Atom_Name, Atom_Name),
         WOQL = v(Atom_Name)
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
