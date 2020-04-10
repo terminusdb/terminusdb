@@ -160,6 +160,14 @@ console_handler(get,_Request) :-
                 [method(Method),
                  methods([options,get,post])]).
 
+:- begin_tests(console_route).
+
+test(console_route) :-
+    config:public_url(SURI),
+    format(string(ConsoleURL), "~s/console", [SURI]),
+    http_get(ConsoleURL, _, []).
+
+:- end_tests(console_route).
 
 /*
  * message_handler(+Method,+Request) is det.
