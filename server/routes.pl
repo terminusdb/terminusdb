@@ -1092,7 +1092,8 @@ graph_handler(delete, Path, R) :-
     authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
     merge_separator_split(Path, '/', Split),
-    Split = [Account_ID, DB, Repo, Branch, Type, Name],
+    maplist(atom_string, Split, Split_String),
+    Split_String = [Account_ID, DB, Repo, "branch", Branch, Type, Name],
 
     % Must be local.
     make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
