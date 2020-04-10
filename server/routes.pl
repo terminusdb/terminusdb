@@ -369,10 +369,14 @@ schema_handler(post,Path,R) :- % should this be put?
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,_Auth),
-    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
+
+    merge_separator_split(Path, '/', Split),
+    maplist(atom_string, Split, Split_String),
+    Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name],
+    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+
     get_payload(Schema_Document,Request),
-    (   _{ schema : Schema_Name,
-           turtle : TTL,
+    (   _{ turtle : TTL,
            commit_info : Commit_Info } :< Schema_Document
     ->  true
     ;   throw(error(bad_api_document('Bad API document')))),
@@ -423,10 +427,9 @@ test(schema_update, [
     interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     config:server(Server),
-    atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB'], URI),
+    atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB/local/branch/master/main'], URI),
     admin_pass(Key),
-    http_post(URI, json(_{schema : "main",
-                          commit_info : _{ author : "Test",
+    http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
                           turtle : TTL}),
               _In, [json_object(dict),
