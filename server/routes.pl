@@ -1137,7 +1137,7 @@ test(create_graph, [
                           message : 'Edges here there and everywhere' },
 
     config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/master/instance/naim'], URI),
+    atomic_list_concat([Server, '/graph/admin/test/local/master/instance/naim'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{commit_info : Commit}),
