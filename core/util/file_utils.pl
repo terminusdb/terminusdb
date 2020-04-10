@@ -7,8 +7,7 @@
               subdirectories/2,
               files/2,
               directories/2,
-              terminus_schema_path/1,
-              temp_path/1
+              terminus_schema_path/1
           ]).
 
 :- use_module(utils).
@@ -43,13 +42,6 @@
  */
 
 /**
- * db_relative_path(-Path) is det.
- *
- * Storage location for hdt files
- */
-temp_relative_path('/tmp/').
-
-/**
  * terminus_path(-Path) is det.
  *
  * Fully qualified path name to current terminus installation.
@@ -66,16 +58,6 @@ terminus_path(Path) :-
 db_path(Path) :-
     config:default_database_path(PathWithoutSlash),
     atomic_list_concat([PathWithoutSlash, '/'], Path).
-
-/**
- * temp_path(-Path) is det.
- *
- * Temporary file location
- */
-temp_path(Path) :-
-    terminus_path(BasePath),
-    temp_relative_path(RelPath),
-    interpolate([BasePath,RelPath],Path).
 
 /**
  * terminus_schema_path(Path) is det.
