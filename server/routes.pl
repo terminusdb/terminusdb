@@ -360,18 +360,25 @@ schema_handler(get,Path,Request) :-
 
     merge_separator_split(Path, '/', Split),
     maplist(atom_string, Split, Split_String),
-    Split_String = [Account_ID, DB, Repo, "branch", Branch, Name],
-    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+    (   Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch, Descriptor),
+        user_database_name(Account_ID, DB, Database_Name),
+        verify_access(Terminus,Auth,terminus:get_schema, Database_Name),
+        Resource_Name = Descriptor.repository_descriptor.database_descriptor.database_name
+    ;   Split_String = ["terminus"]
+    ->  Schema_Name = "main",
+        Descriptor = terminus_descriptor{},
+        verify_access(Terminus,Auth,terminus:get_schema, "terminus"),
+        config:public_url(Resource_Name)
+    ),
 
-    open_descriptor(Branch_Descriptor, Transaction),
+    create_context(Descriptor, Context),
 
     % check access rights
-    user_database_name(Account_ID, DB, Database_Name),
-    verify_access(Terminus,Auth,terminus:get_schema, Database_Name),
 
-    dump_schema(Transaction, turtle, Name, String),
-    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
-    write_cors_headers(DB_Name, Terminus),
+    dump_schema(Context, turtle, Schema_Name, String),
+
+    write_cors_headers(Resource_Name, Terminus),
     reply_json(String).
 schema_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
@@ -381,8 +388,14 @@ schema_handler(post,Path,R) :- % should this be put?
 
     merge_separator_split(Path, '/', Split),
     maplist(atom_string, Split, Split_String),
-    Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name],
-    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+    (   Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name]
+    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch, Descriptor),
+        Resource_Name = Descriptor.repository_descriptor.database_descriptor.database_name
+    ;   Split_String = ["terminus"]
+    ->  Schema_Name = "main",
+        Descriptor = terminus_descriptor{},
+        config:public_url(Resource_Name)
+    ),
 
     get_payload(Schema_Document,Request),
     (   _{ turtle : TTL,
@@ -390,15 +403,14 @@ schema_handler(post,Path,R) :- % should this be put?
     ->  true
     ;   throw(error(bad_api_document('Bad API document')))),
 
-    create_context(Branch_Descriptor, Pre_Context),
+    create_context(Descriptor, Pre_Context),
     Context = Pre_Context.put(commit_info, Commit_Info),
 
     % check access rights
     % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
     update_schema(Context,Schema_Name,TTL),
 
-    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
-    write_cors_headers(DB_Name, Terminus),
+    write_cors_headers(Resource_Name, Terminus),
 
     reply_json(_{'terminus:status' : "terminus:success"}).
 
@@ -452,6 +464,16 @@ test(schema_update, [
             Triples),
     memberchk('http://terminusdb.com/schema/terminus'-(rdf:type)-(owl:'Ontology'), Triples).
 
+
+test(schema_get, [])
+:-
+
+    config:server(Server),
+    atomic_list_concat([Server, '/schema/terminus'], URI),
+    admin_pass(Key),
+    http_get(URI, In, [json_object(dict),
+                       authorization(basic(admin, Key))]),
+    string(In).
 
 :- end_tests(schema_endpoint).
 
@@ -1757,12 +1779,14 @@ update_schema(Database,Schema,TTL) :-
 dump_schema(Database,Encoding,Schema,String) :-
     atom_string(Schema,Schema_Name),
     Graph_Filter = type_name_filter{ type: schema, names : [Schema_Name]},
-    filter_transaction_object_read_write_objects(Graph_Filter, Database, [Schema_Graph]),
+    [Transaction_Object] = Database.transaction_objects,
+    filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Schema_Graph]),
     (   Encoding = turtle
     ->  with_output_to(
             string(String),
             (   current_output(Stream),
-                graph_to_turtle(Database.prefixes, Schema_Graph, Stream)
+                dict_pairs(Database.prefixes, _, Pairs),
+                graph_to_turtle(Pairs, Schema_Graph, Stream)
             )
         )
     ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),

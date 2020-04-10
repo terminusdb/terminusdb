@@ -25,7 +25,9 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(core(util)).
 :- use_module(triplestore).
+:- use_module(literals).
 
 :- use_module(library(semweb/turtle)).
 
@@ -42,7 +44,10 @@ graph_to_turtle(Prefixes,G,Out_Stream) :-
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
  */
 turtle_triples(Layer,X,P,Y,_) :-
-    xrdf_db(Layer,X,P,Y).
+    xrdf_db(Layer,X,P,YO),
+    (   is_literal(YO)
+    ->  fixup_schema_literal(YO,Y)
+    ;   Y = YO).
 
 /**
  * layer_to_turtle(Layer,Prefixes,Out_Stream) is det.
