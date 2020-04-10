@@ -1758,7 +1758,7 @@ dump_schema(Database,Encoding,Schema,String) :-
     atom_string(Schema,Schema_Name),
     Graph_Filter = type_name_filter{ type: schema, names : [Schema_Name]},
     filter_transaction_object_read_write_objects(Graph_Filter, Database, [Schema_Graph]),
-    (   Encoding = "terminus:turtle"
+    (   Encoding = turtle
     ->  with_output_to(
             string(String),
             (   current_output(Stream),
