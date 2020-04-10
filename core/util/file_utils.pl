@@ -1,6 +1,5 @@
 :- module(file_utils,[
               terminus_path/1,
-              db_relative_path/1,
               db_path/1,
               touch/1,
               ensure_directory/1,
@@ -48,13 +47,6 @@
  *
  * Storage location for hdt files
  */
-db_relative_path('/storage/db/').
-
-/**
- * db_relative_path(-Path) is det.
- *
- * Storage location for hdt files
- */
 temp_relative_path('/tmp/').
 
 /**
@@ -72,9 +64,8 @@ terminus_path(Path) :-
  *
  */
 db_path(Path) :-
-    terminus_path(BasePath),
-    db_relative_path(RelPath),
-    interpolate([BasePath,RelPath],Path).
+    config:default_database_path(PathWithoutSlash),
+    atomic_list_concat([PathWithoutSlash, '/'], Path).
 
 /**
  * temp_path(-Path) is det.
