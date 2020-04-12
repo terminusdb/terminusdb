@@ -24,7 +24,7 @@ install:
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/libterminus_store.dll
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/terminus_store_prolog.dll
   - mkdir swipl
-  - xcopy /E /q "%SWI_INSTALL_DIR" swipl\
+  - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
 
 ## Build Script ##
 
