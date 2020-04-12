@@ -130,7 +130,15 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                         |Path]),
         json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
                                    |Path]),
-        WOQL = using(WC,WQ)
+        (   WC = Collection_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                               'terminus:message' :'Poorly formed collection descriptor',
+                                               'vio:path' : Director,
+                                               'vio:query' : JSON})))
+        ),
+        WOQL = using(Collection_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#From',
           'http://terminusdb.com/schema/woql#graph_filter' : Graph_Filter,
           'http://terminusdb.com/schema/woql#query' : Query } :< JSON
@@ -138,7 +146,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                           |Path]),
         json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
                                    |Path]),
-        WOQL = from(WG,WQ)
+        (   WG = Graph_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed graph descriptor',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = from(Graph_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Into',
           'http://terminusdb.com/schema/woql#graph' : Graph,
           'http://terminusdb.com/schema/woql#query' : Query } :< JSON
@@ -146,7 +161,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                    |Path]),
         json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
                                    |Path]),
-        WOQL = into(WG,WQ)
+        (   WG = Graph_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed graph descriptor',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = into(Graph_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Quad',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -161,7 +183,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                      |Path]),
         json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
                                    |Path]),
-        WOQL = t(WQA,WQB,WQC,WG)
+        (   WG = Graph_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed graph descriptor',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = t(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Triple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -263,7 +292,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                      |Path]),
         json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
                                    |Path]),
-        WOQL = insert(WG,WQA,WQB,WQC)
+        (   WG = Graph_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed graph descriptor',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = insert(Graph_String,WQA,WQB,WQC)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteTriple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -289,8 +325,15 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
                                      |Path]),
         json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
-                                     |Path]),
-        WOQL = delete(WG,WQA,WQB,WQC)
+                                   |Path]),
+        (   WG = Graph_String^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed graph descriptor',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = delete(Graph_String,WQA,WQB,WQC)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#When',
           'http://terminusdb.com/schema/woql#query' : Q,
           'http://terminusdb.com/schema/woql#consequent' : U
@@ -546,7 +589,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                  |Path]),
         json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                                |Path]),
-        WOQL = start(WN, WQ)
+        (   WN = Num^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                   'terminus:message' :'Poorly formed limit',
+                                   'vio:path' : Director,
+                                   'vio:query' : JSON})))),
+        WOQL = start(Num, WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Limit' :
           'http://terminusdb.com/schema/woql#limit' :  N,
           'http://terminusdb.com/schema/woql#query' : Q
@@ -555,7 +605,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                  |Path]),
         json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                                |Path]),
-        WOQL = limit(WN, WQ)
+        (   WN = Num^^_
+        ->  true
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Poorly formed limit',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON})))),
+        WOQL = limit(Num, WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Regexp',
           'http://terminusdb.com/schema/woql#pattern' : Pat,
           'http://terminusdb.com/schema/woql#regexp_string' : String,
@@ -749,13 +806,18 @@ json_to_woql_arith(JSON,WOQL,Path) :-
                            ['http://terminusdb.com/schema/woql#argument'
                             |Path]),
         WOQL=floor(WOQL_Argument)
-    ;   number(JSON)
-    ->  WOQL = JSON
+    ;   _{'@value' : V, '@type' : T } :< JSON
+    ->  atom_string(TE,T),
+        WOQL = '^^'(V,TE)
     ;   reverse(Path, Director),
         throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
                                      'vio:query' : JSON,
                                      'vio:path' : Director,
                                      'terminus:status' : 'terminus:failure'})))
     ).
-json_to_woql_arith(JSON,JSON) :-
-    number(JSON).
+json_to_woql_arith(JSON,_,Path) :-
+    reverse(Path, Director),
+    throw(http_reply(not_found(_{'terminus:message' : 'Unknown Syntax',
+                                 'vio:query' : JSON,
+                                 'vio:path' : Director,
+                                 'terminus:status' : 'terminus:failure'}))).

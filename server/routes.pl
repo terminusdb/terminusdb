@@ -632,7 +632,8 @@ test(no_db, [])
 
     Query =
     _{'@type' : "Using",
-      collection : "terminus",
+      collection : _{'@type' : "xsd:string",
+                     '@value' : "terminus"},
       query :
       _{'@type' : "Select",    %   { "select" : [ v1, v2, v3, Query ] }
         variable_list : [
@@ -663,11 +664,12 @@ test(no_db, [])
                         index : 0,
                         query : _{'@type' : 'Quad',
                                   subject : _{'@type' : "Variable",
-                                             variable_name : _{ '@type' : "xsd:string",
-                                                                '@value' : "Class"}},
+                                              variable_name : _{ '@type' : "xsd:string",
+                                                                 '@value' : "Class"}},
                                   predicate : "rdf:type",
                                   object : "owl:Class",
-                                  graph_filter : "schema/*"}},
+                                  graph_filter : _{'@type' : "xsd:string",
+                                                   '@value' : "schema/*"}}},
                       _{'@type' : 'QueryListElement',
                         index : 1,
                         query :_{'@type' : 'Not',
@@ -677,7 +679,8 @@ test(no_db, [])
                                                                          '@value' : "Class"}},
                                            predicate : "tcs:tag",
                                            object : "tcs:abstract",
-                                           graph_filter : "schema/*"}}},
+                                           graph_filter : _{'@type' : "xsd:string",
+                                                            '@value' : "schema/*"}}}},
                       _{'@type' : 'QueryListElement',
                         index : 2,
                         query : _{'@type' : 'Optional',
@@ -689,7 +692,8 @@ test(no_db, [])
                                             object : _{'@type' : "Variable",
                                                        variable_name : _{ '@type' : "xsd:string",
                                                                           '@value' : "Label"}},
-                                            graph_filter : "schema/*"}}},
+                                            graph_filter : _{'@type' : "xsd:string",
+                                                             '@value' : "schema/*"}}}},
                       _{'@type' : 'QueryListElement',
                         index : 3,
                         query : _{'@type' : 'Optional',
@@ -701,19 +705,21 @@ test(no_db, [])
                                             object : _{'@type' : "Variable",
                                                        variable_name : _{ '@type' : "xsd:string",
                                                                           '@value' : "Comment"}},
-                                            graph_filter : "schema/*"}}},
+                                            graph_filter : _{'@type' : "xsd:string",
+                                                             '@value' : "schema/*"}}}},
                       _{'@type' : 'QueryListElement',
                         index : 4,
                         query : _{'@type' : 'Optional',
                                   query : _{'@type' : 'Quad',
                                             subject : _{'@type' : "Variable",
-                                                       variable_name : _{ '@type' : "xsd:string",
-                                                                          '@value' : "Class"}},
+                                                        variable_name : _{ '@type' : "xsd:string",
+                                                                           '@value' : "Class"}},
                                             predicate : "tcs:tag",
                                             object : _{'@type' : "Variable",
                                                        variable_name : _{ '@type' : "xsd:string",
                                                                           '@value' : "Abstract"}},
-                                            graph_filter : "schema/*"}}}]}}},
+                                            graph_filter : _{'@type' : "xsd:string",
+                                                             '@value' : "schema/*"}}}}]}}},
 
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),
@@ -1055,6 +1061,32 @@ test(get_object, [])
       'terminus:authority': _}
     :< Result.'Document'.
 
+/*
+test(limit, [])
+:-
+    Query0 =
+    _{'@type' : "limit",
+      document_uri : 'doc:admin',
+      document : _{'@type' : "Variable",
+                   variable_name : _{ '@type' : "xsd:string",
+                                      '@value' : "Document"}}},
+
+    config:server(Server),
+    admin_pass(Key),
+    atomic_list_concat([Server, '/woql/terminus'], URI),
+    http_post(URI,
+              json(_{query : Query0}),
+              JSON0,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    [Result] = JSON0.bindings,
+
+    _{'@id':"doc:admin",
+      '@type':"terminus:User",
+      'terminus:agent_key_hash':_,
+      'terminus:agent_name': _,
+      'terminus:authority': _}
+    :< Result.'Document'.
+*/
 
 :- end_tests(woql_endpoint).
 
