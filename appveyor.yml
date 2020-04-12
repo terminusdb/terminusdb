@@ -22,6 +22,8 @@ install:
   - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/libterminus_store.dll
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/terminus_store_prolog.dll
+  - mkdir swipl
+  - xcopy /E "C:\Program Files\swipl" swipl\
 
 ## Build Script ##
 
