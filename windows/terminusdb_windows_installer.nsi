@@ -53,8 +53,6 @@ Section "TerminusDB" TerminusDB
   ; Start menu creation
   createDirectory "$SMPROGRAMS\${COMPANY_NAME}"
   createShortCut "$SMPROGRAMS\${COMPANY_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\start_windows.bat" "" "$INSTDIR\terminusdb_circle.ico" 0
-  SetOutPath $APPDATA\SWI-Prolog\pack\terminus_store_prolog
-  File /r "terminus_store_prolog\*"
 SectionEnd
 
 ;-------------------------------------------------------------------------------
