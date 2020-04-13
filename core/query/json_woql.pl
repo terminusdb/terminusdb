@@ -597,7 +597,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                    'vio:path' : Director,
                                    'vio:query' : JSON})))),
         WOQL = start(Num, WQ)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Limit' :
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Limit',
           'http://terminusdb.com/schema/woql#limit' :  N,
           'http://terminusdb.com/schema/woql#query' : Q
          } :< JSON
@@ -686,9 +686,20 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         WOQL = not(WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#True'} :< JSON
     ->  WOQL = true
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
+          'http://terminusdb.com/schema/woql#value': Value} :< JSON
+        % Unbox values
+    ->  json_to_woql_ast(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
+                                       |Path])
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
+          'http://terminusdb.com/schema/woql#node': Node} :< JSON
+        % Unbox values
+    ->  json_to_woql_ast(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
+                                      |Path])
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
           'http://terminusdb.com/schema/woql#variable_name' : Name} :< JSON
-    ->  json_to_woql_ast(Name, Result, Path),
+    ->  json_to_woql_ast(Name, Result, ['http://terminusdb.com/schema/woql#variable_name'
+                                        |Path]),
         Result = String_or_Atom_Name^^_,
         coerce_atom(String_or_Atom_Name, Atom_Name),
         WOQL = v(Atom_Name)
@@ -806,6 +817,16 @@ json_to_woql_arith(JSON,WOQL,Path) :-
                            ['http://terminusdb.com/schema/woql#argument'
                             |Path]),
         WOQL=floor(WOQL_Argument)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
+          'http://terminusdb.com/schema/woql#value': Value} :< JSON
+        % Unbox values
+    ->  json_to_woql_arith(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
+                                         |Path])
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
+          'http://terminusdb.com/schema/woql#node': Node} :< JSON
+        % Unbox values
+    ->  json_to_woql_arith(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
+                                        |Path])
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
         WOQL = '^^'(V,TE)
