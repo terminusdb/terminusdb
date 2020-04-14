@@ -1061,33 +1061,6 @@ test(get_object, [])
       'terminus:authority': _}
     :< Result.'Document'.
 
-/*
-test(limit, [])
-:-
-    Query0 =
-    _{'@type' : "limit",
-      document_uri : 'doc:admin',
-      document : _{'@type' : "Variable",
-                   variable_name : _{ '@type' : "xsd:string",
-                                      '@value' : "Document"}}},
-
-    config:server(Server),
-    admin_pass(Key),
-    atomic_list_concat([Server, '/woql/terminus'], URI),
-    http_post(URI,
-              json(_{query : Query0}),
-              JSON0,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    [Result] = JSON0.bindings,
-
-    _{'@id':"doc:admin",
-      '@type':"terminus:User",
-      'terminus:agent_key_hash':_,
-      'terminus:agent_name': _,
-      'terminus:authority': _}
-    :< Result.'Document'.
-*/
-
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%

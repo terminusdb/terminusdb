@@ -709,10 +709,15 @@ compile_wf(isa(X,C),(instance_class(XE,D),
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection).
-compile_wf(A << B,subsumption_of(AE,BE,C)) -->
+compile_wf(A << B,subsumption_of(AE,BE,Transaction_Object)) -->
     resolve(A,AE),
     resolve(B,BE),
-    view(default_collection,C).
+    view(default_collection,Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object)
+    }.
 compile_wf(opt(P), ignore(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
@@ -1249,3 +1254,42 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
     ->  Objects = Transaction.inference_objects),
     find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found),
     Graph_Descriptor = Found.get(descriptor).
+
+:- begin_tests(woql).
+
+% At some point this should be exhaustive. Currently we add as we find bugs.
+
+:- use_module(ask,[create_context/2, context_overriding_prefixes/3]).
+% NOTE: This circularity is very irritating...
+% We are merely hoping that query_response is loaded before we run this test.
+%:- use_module(query_response, [run_context_ast_jsonld_response/3]).
+:- use_module(library(ordsets)).
+
+test(subsumption, [])
+:-
+    Query = _{'@type' : "Subsumption",
+              'child' : _{ '@type' : "DatatypeOrID",
+                           'node' : "terminus:User"},
+              'parent' : _{ '@type' : "DatatypeOrID",
+                            'node' : _{'@type' : "Variable",
+                                       'variable_name' :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Parent"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    % Tag the dicts so we can sort them
+    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
+    list_to_ord_set(Orderable,Bindings_Set),
+    list_to_ord_set([json{'Parent':'http://www.w3.org/2002/07/owl#Thing'},
+                     json{'Parent':'http://terminusdb.com/schema/terminus#User'},
+                     json{'Parent':'http://terminusdb.com/schema/terminus#Agent'},
+                     json{'Parent':'http://terminusdb.com/schema/tcs#Document'},
+                     json{'Parent':'http://terminusdb.com/schema/tcs#Entity'}],
+                    Expected),
+    ord_seteq(Bindings_Set,Expected).
+
+:- end_tests(woql).
