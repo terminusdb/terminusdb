@@ -66,5 +66,5 @@ SectionEnd
 Section "Uninstall"
   RMDir /r "$INSTDIR"
   RMDir /r "$SMPROGRAMS\${COMPANY_NAME}"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB"
 SectionEnd
