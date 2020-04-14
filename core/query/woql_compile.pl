@@ -290,7 +290,11 @@ resolve(X,X) -->
         atom(X)
     },
     !.
-% Questionable! How can this be a number!
+resolve(X,X) -->
+    {
+        number(X)
+    },
+    !.
 resolve(X,X) -->
     {
         throw(error('How did we get here?', X))
@@ -1291,5 +1295,63 @@ test(subsumption, [])
                      json{'Parent':'http://terminusdb.com/schema/tcs#Entity'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
+
+
+test(substring, [])
+:-
+    Query = _{'@type' : "Substring",
+              'string' : _{ '@type' : "DatatypeOrID",
+                            'value' : _{'@type' : "xsd:string",
+                                        '@value' : "Test"}},
+              'before' : _{ '@type' : "DatatypeOrID",
+                            'value' : _{'@type' : "xsd:string",
+                                        '@value' : 1}},
+              'length' : _{ '@type' : "DatatypeOrID",
+                            'node' : _{'@type' : "Variable",
+                                       'variable_name' :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Length"}}},
+              'after' : _{ '@type' : "DatatypeOrID",
+                           'value' : _{'@type' : "xsd:integer",
+                                       '@value' : 1}},
+              'substring' : _{ '@type' : "DatatypeOrID",
+                               'node' : _{'@type' : "Variable",
+                                          'variable_name' :
+                                          _{'@type' : "xsd:string",
+                                            '@value' : "Substring"}}}
+             },
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':2},
+      'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
+     } :< Res.
+
+test(typecast_string_integer, [])
+:-
+    Query = _{'@type' : "Typecast",
+              'typecast_value' : _{ '@type' : "DatatypeOrID",
+                                    'value' : _{'@type' : "xsd:string",
+                                                '@value' : "202"}},
+              'typecast_type' : _{ '@type' : "DatatypeOrID",
+                                   'node' : "xsd:integer"},
+              'typecast_result' : _{ '@type' : "DatatypeOrID",
+                                     'node' : _{'@type' : "Variable",
+                                                'variable_name' :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "Casted"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
+                 '@value':202}} :< Res.
+
 
 :- end_tests(woql).
