@@ -53,6 +53,12 @@ Section "TerminusDB" TerminusDB
   ; Start menu creation
   createDirectory "$SMPROGRAMS\${COMPANY_NAME}"
   createShortCut "$SMPROGRAMS\${COMPANY_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\start_windows.bat" "" "$INSTDIR\terminusdb_circle.ico" 0
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB" \
+      "DisplayName" "TerminusDB"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB" \
+      "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB" \
+      "DisplayIcon" "$\"$INSTDIR\terminusdb_circle.ico$\""
 SectionEnd
 
 ;-------------------------------------------------------------------------------
@@ -60,5 +66,5 @@ SectionEnd
 Section "Uninstall"
   RMDir /r "$INSTDIR"
   RMDir /r "$SMPROGRAMS\${COMPANY_NAME}"
-  DeleteRegKey /ifempty HKCU "Software\DataChemist\terminus_server"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\TerminusDB"
 SectionEnd
