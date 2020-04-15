@@ -776,16 +776,9 @@ woql:Floor
 
 woql:ArithmeticValue
   a owl:Class ;
-  rdfs:subClassOf woql:ArithmeticExpression ;
+  rdfs:subClassOf woql:DatatypeOrID ;
   rdfs:label "Value"@en ;
   rdfs:comment "An arithmetic value - float, int, bignum, etc."@en .
-
-woql:arithmetic_value
-  a owl:ObjectProperty ;
-  rdfs:label "arithmetic value"@en ;
-  rdfs:comment "The value part of an expression (could also be a variable)"@en ;
-  rdfs:domain woql:ArithmeticValue ;
-  rdfs:range woql:DatatypeOrID .
 
 woql:IsA
   a owl:Class ;
