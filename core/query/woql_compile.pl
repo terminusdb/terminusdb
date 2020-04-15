@@ -1574,18 +1574,21 @@ test(like, []) :-
     _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                      '@value':1.0}} :< Res.
 
-test(like, []) :-
-    Query = _{'@type' : "Like",
-              'left' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
-                                       '@value' : "joined"}},
-              'right' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
-                                       '@value' : "joined"}},
-              'like_similarity' : _{'@type' : "Variable",
-                                    'variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Similarity"}}},
+test(exp, []) :-
+
+    Query = _{'@type' : "Eval",
+              'expression' :
+              _{ '@type' : "Exp",
+                 'first' : _{ '@type' : "ArithmeticValue",
+                              'value' : _{'@type' : "xsd:integer",
+                                          '@value' : 2}},
+                 'second' : _{ '@type' : "ArithmeticValue",
+                               'value' : _{'@type' : "xsd:integer",
+                                           '@value' : 2}}},
+              'result' : _{'@type' : "Variable",
+                           'variable_name' :
+                           _{'@type' : "xsd:string",
+                             '@value' : "Exp"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1593,8 +1596,8 @@ test(like, []) :-
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
     [Res] = JSON.bindings,
-    _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                     '@value':1.0}} :< Res.
+    _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+              '@value':4}} :< Res.
 
 
 :- end_tests(woql).

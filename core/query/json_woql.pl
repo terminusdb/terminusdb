@@ -855,7 +855,7 @@ json_to_woql_arith(JSON,WOQL,Path) :-
         json_to_woql_arith(Second, WOQL_Second,
                            ['http://terminusdb.com/schema/woql#second'
                             |Path]),
-        WOQL = 'exp'(WOQL_First,WOQL_Second)
+        WOQL = '**'(WOQL_First,WOQL_Second)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Floor',
           'http://terminusdb.com/schema/woql#argument' : Argument} :< JSON
     ->  json_to_woql_arith(Argument,WOQL_Argument,
