@@ -110,7 +110,7 @@ resolve_absolute_descriptor([User, Database, Repository, X, Commit], Descriptor)
 resolve_absolute_descriptor([User, Database, Repository, "commit", Commit],
                             commit_descriptor{
                                 repository_descriptor: Repository_Descriptor,
-                                last_commit: Commit_String
+                                commit_id: Commit_String
                             })
 :-
     !,
@@ -308,7 +308,7 @@ test(branch_descriptor) :-
 test(commit_descriptor) :-
     Descriptor = commit_descriptor{
                      repository_descriptor: Repository_Descriptor,
-                     last_commit: "a_last_commit"
+                     commit_id: "a_commit_id"
                  },
     Repository_Descriptor = repository_descriptor{
                      database_descriptor: Database_Descriptor,
@@ -318,7 +318,7 @@ test(commit_descriptor) :-
 
     resolve_absolute_descriptor(Address, Descriptor),
 
-    Address = ["a_user", "a_database", "a_repo", "commit", "a_last_commit"].
+    Address = ["a_user", "a_database", "a_repo", "commit", "a_commit_id"].
 
 :- end_tests(address_from_descriptor).
 
@@ -478,7 +478,7 @@ resolve_relative_descriptor(commit_of(Repo_Descriptor),
     !,
     resolve_relative_descriptor(commit_descriptor{
                                     repository_descriptor: Repo_Descriptor,
-                                    last_commit: Commit_Name
+                                    commit_id: Commit_Name
                                 },
                                 Descriptor).
 resolve_relative_descriptor(user(_), _Descriptor, [], []) :-

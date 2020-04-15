@@ -43,6 +43,11 @@
  *                                    branch_name : atom,
  *                                    type : atom, % {instance, schema, inference}
  *                                    name : atom }
+ *                    | single_commit_graph{ database_name: atom,
+ *                                           repository_name: atom,
+ *                                           commit_id: string,
+ *                                           type: atom,
+ *                                           name: string }
  *
  * graph_filter --> type_filter{ types : list(atom) } % instance, inference, schema
  *                | type_name_filter{ type : atom, names : list(string) }
@@ -275,6 +280,30 @@ open_read_write_obj(Descriptor,
     ->  true
     ;   Layer = _),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+open_read_write_obj(Descriptor,
+                    Read_Write_Obj,
+                    Map,
+                    [Descriptor=Read_Write_Obj|New_Map]) :-
+    Descriptor = single_commit_graph{ database_name: Database_Name,
+                                      repository_name: Repository_Name,
+                                      commit_id: Commit_Id,
+                                      type: Type,
+                                      name: Graph_Name },
+    !,
+    Commit_Descriptor = commit_graph{ database_name : Database_Name,
+                                      repository_name : Repository_Name,
+                                      type: instance,
+                                      name: "main" },
+    open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
+    (   commit_id_uri(Commit_Read_Write_Obj.read, Commit_Id, Commit_Uri),
+        graph_for_commit(Commit_Read_Write_Obj.read, Commit_Uri, Type, Graph_Name, Graph_Uri),
+        layer_uri_for_graph(Commit_Read_Write_Obj.read, Graph_Uri, Layer_Uri),
+        layer_id_uri(Commit_Read_Write_Obj.read, Layer_Id, Layer_Uri),
+        storage(Store),
+        store_id_layer(Store, Layer_Id, Layer)
+    ->  true
+    ;   Layer = _),
+    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 
 read_write_obj_reader(Read_Write_Obj, _Layer) :-
     var(Read_Write_Obj.read),
@@ -495,6 +524,83 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
                     branch_name: Branch_Name_String
+                },
+    maplist({Prototype}/[Instance_Name,Graph_Descriptor]>>(
+                Graph_Descriptor = Prototype.put(_{type : instance,
+                                                   name : Instance_Name})),
+            Instance_Names,
+            Instance_Descriptors),
+
+    mapm(open_read_write_obj,
+         Instance_Descriptors, Instance_Objects,
+         Map_1, Map_2),
+
+    maplist({Prototype}/[Schema_Name,Graph_Descriptor]>>(
+                Graph_Descriptor = Prototype.put(_{type : schema,
+                                                   name : Schema_Name})),
+            Schema_Names,
+            Schema_Descriptors),
+    mapm(open_read_write_obj,
+         Schema_Descriptors, Schema_Objects,
+         Map_2, Map_3),
+
+    maplist({Prototype}/[Inference_Name,Graph_Descriptor]>>(
+                Graph_Descriptor = Prototype.put(_{type : inference,
+                                                   name : Inference_Name})),
+            Inference_Names,
+            Inference_Descriptors),
+    mapm(open_read_write_obj,
+         Inference_Descriptors, Inference_Objects,
+         Map_3, Map_4),
+
+    Transaction_Object = transaction_object{
+                             parent : Repository_Transaction_Object,
+                             descriptor : Descriptor,
+                             commit_info : Commit_Info,
+                             instance_objects : Instance_Objects,
+                             schema_objects : Schema_Objects,
+                             inference_objects : Inference_Objects
+                         }.
+open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
+                 [Descriptor=Transaction_Object|Map_4]) :-
+    commit_descriptor{ repository_descriptor : Repository_Descriptor,
+                       commit_id: Commit_Id } = Descriptor,
+    !,
+    text_to_string(Commit_Id, Commit_Id_String),
+
+    open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
+                    Map, Map_1),
+
+    [Instance_Object] = Repository_Transaction_Object.instance_objects,
+
+    (   commit_id_uri(Instance_Object.read,
+                      Commit_Id,
+                      Commit_Uri)
+    ->  findall(Instance_Graph_Name,
+                 ask(Instance_Object.read,
+                 (   t(Commit_Uri, ref:instance, Instance_Graph),
+                     t(Instance_Graph, ref:graph_name, Instance_Graph_Name^^xsd:string)
+                 )),
+            Instance_Names),
+         findall(Schema_Graph_Name,
+                 ask(Instance_Object.read,
+                     (   t(Commit_Uri, ref:schema, Schema_Graph),
+                         t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
+                     )),
+                 Schema_Names),
+         findall(Inference_Graph_Name,
+                 ask(Instance_Object.read,
+                     (   t(Commit_Uri, ref:inference, Inference_Graph),
+                         t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
+                     )),
+                    Inference_Names)
+    ;   throw(commit_does_not_exist('commit does not exist', context(Descriptor)))
+    ),
+
+    Prototype = single_commit_graph{
+                    database_name : Repository_Descriptor.database_descriptor.database_name,
+                    repository_name : Repository_Descriptor.repository_name,
+                    commit_id: Commit_Id_String
                 },
     maplist({Prototype}/[Instance_Name,Graph_Descriptor]>>(
                 Graph_Descriptor = Prototype.put(_{type : instance,
@@ -828,5 +934,95 @@ test(open_branch_descriptor_with_nonexistent, [
           E,
           true),
     E = branch_does_not_exist(_,_).
+
+test(open_branch_descriptor_with_nonexistent, [
+         setup((setup_temp_store(State),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
+
+    catch(open_descriptor(Branch_Descriptor, _Transaction),
+          E,
+          true),
+    E = branch_does_not_exist(_,_).
+
+test(open_commit_descriptor_with_atom, [
+         setup((setup_temp_store(State),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+
+    % add a commit to open later
+    create_context(Branch_Descriptor,
+                   commit_info{author: "flurps",
+                               message: "flarps flerps florps"},
+                   Branch_Context),
+
+    with_transaction(Branch_Context,
+                     once(ask(Branch_Context,
+                              insert(foo, bar, baz))),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "master", Commit_Uri),
+    commit_id_uri(Repo_Descriptor, Commit_Id, Commit_Uri),
+
+    atom_string(Commit_Id_Atom, Commit_Id),
+
+    Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: Commit_Id_Atom },
+    open_descriptor(Descriptor, Transaction),
+
+    once(ask(Transaction, t(foo, bar, baz))).
+
+test(open_commit_descriptor_with_string, [
+         setup((setup_temp_store(State),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+
+    % add a commit to open later
+    create_context(Branch_Descriptor,
+                   commit_info{author: "flurps",
+                               message: "flarps flerps florps"},
+                   Branch_Context),
+
+    with_transaction(Branch_Context,
+                     once(ask(Branch_Context,
+                              insert(foo, bar, baz))),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "master", Commit_Uri),
+    commit_id_uri(Repo_Descriptor, Commit_Id, Commit_Uri),
+
+    Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: Commit_Id },
+    open_descriptor(Descriptor, Transaction),
+
+    once(ask(Transaction, t(foo, bar, baz))).
+
+test(open_commit_descriptor_with_nonexistent, [
+         setup((setup_temp_store(State),
+                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
+    Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: "I do not exist" },
+    catch(open_descriptor(Descriptor, _Transaction),
+          E,
+          true),
+    E = commit_does_not_exist(_,_).
+
 
 :- end_tests(open_descriptor).
