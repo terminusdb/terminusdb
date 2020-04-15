@@ -583,7 +583,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
           'http://terminusdb.com/schema/woql#start' : N,
           'http://terminusdb.com/schema/woql#query' : Q
          } :< JSON
-    ->  json_to_woql_arith(N,WN,['http://terminusdb.com/schema/woql#start'
+    ->  json_to_woql_ast(N,WN,['http://terminusdb.com/schema/woql#start'
                                  |Path]),
         json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                                |Path]),
@@ -599,8 +599,8 @@ json_to_woql_ast(JSON,WOQL,Path) :-
           'http://terminusdb.com/schema/woql#limit' :  N,
           'http://terminusdb.com/schema/woql#query' : Q
          } :< JSON
-    ->  json_to_woql_arith(N,WN,['http://terminusdb.com/schema/woql#limit'
-                                 |Path]),
+    ->  json_to_woql_ast(N,WN,['http://terminusdb.com/schema/woql#limit'
+                               |Path]),
         json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                                |Path]),
         (   WN = Num^^_

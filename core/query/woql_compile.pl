@@ -1558,8 +1558,8 @@ test(like, []) :-
                           'value' : _{ '@type' : "xsd:string",
                                        '@value' : "joined"}},
               'right' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
-                                       '@value' : "joined"}},
+                           'value' : _{ '@type' : "xsd:string",
+                                        '@value' : "joined"}},
               'like_similarity' : _{'@type' : "Variable",
                                     'variable_name' :
                                     _{'@type' : "xsd:string",
@@ -1599,5 +1599,71 @@ test(exp, []) :-
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
 
+test(limit, []) :-
+
+    Query = _{'@type' : "Limit",
+              'limit' : _{ '@type' : "DatatypeOrID",
+                           'value' : _{ '@type' : "xsd:string",
+                                        '@value' : 2}},
+              'query' : _{ '@type' : "Triple",
+                           'subject' : _{'@type' : "Variable",
+                                         'variable_name' :
+                                         _{'@type' : "xsd:string",
+                                           '@value' : "Subject"}},
+                           'predicate' : _{'@type' : "Variable",
+                                           'variable_name' :
+                                           _{'@type' : "xsd:string",
+                                             '@value' : "Predicate"}},
+                           'object' : _{'@type' : "Variable",
+                                        'variable_name' :
+                                        _{'@type' : "xsd:string",
+                                          '@value' : "Object"}}
+                         }},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
+    list_to_ord_set(Orderable,Bindings_Set),
+    list_to_ord_set([json{'Object':'http://terminusdb.com/schema/terminus#class_frame',
+                          'Predicate':'http://terminusdb.com/schema/terminus#action',
+                          'Subject':'terminus:///terminus/document/access_all_areas'},
+                     json{'Object':'http://terminusdb.com/schema/terminus#create_database',
+                          'Predicate':'http://terminusdb.com/schema/terminus#action',
+                          'Subject':'terminus:///terminus/document/access_all_areas'}],
+                    Expected),
+    ord_seteq(Bindings_Set,Expected).
+
+
+test(indexed_get, [])
+:-
+    Query =
+    _{'@type' : 'Get',
+      as_vars :
+      _{'@type' : 'IndexedAsVars',
+        indexed_as_var : [
+            _{'@type' : 'IndexedAsVar',
+              index : 0,
+              var : _{'@type' : "Variable",
+                      variable_name : _{ '@type' : "xsd:string",
+                                         '@value' : "First"}}},
+            _{'@type' : 'IndexedAsVar',
+              index : 1,
+              var : _{'@type' : "Variable",
+                      variable_name : _{ '@type' : "xsd:string",
+                                         '@value' : "Second"}}}]},
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    length(JSON.bindings, L),
+    L = 50.
 
 :- end_tests(woql).
