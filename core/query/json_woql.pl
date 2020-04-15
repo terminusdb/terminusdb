@@ -827,6 +827,13 @@ json_to_woql_arith(JSON,WOQL,Path) :-
         % Unbox values
     ->  json_to_woql_arith(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
                                         |Path])
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
+          'http://terminusdb.com/schema/woql#variable_name' : Name} :< JSON
+    ->  json_to_woql_arith(Name, Result, ['http://terminusdb.com/schema/woql#variable_name'
+                                          |Path]),
+        Result = String_or_Atom_Name^^_,
+        coerce_atom(String_or_Atom_Name, Atom_Name),
+        WOQL = v(Atom_Name)
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
         WOQL = '^^'(V,TE)

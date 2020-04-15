@@ -1354,4 +1354,54 @@ test(typecast_string_integer, [])
                  '@value':202}} :< Res.
 
 
+test(typecast_string_integer, [])
+:-
+    Query = _{'@type' : "Typecast",
+              'typecast_value' : _{ '@type' : "DatatypeOrID",
+                                    'value' : _{'@type' : "xsd:string",
+                                                '@value' : "202"}},
+              'typecast_type' : _{ '@type' : "DatatypeOrID",
+                                   'node' : "xsd:integer"},
+              'typecast_result' : _{ '@type' : "DatatypeOrID",
+                                     'node' : _{'@type' : "Variable",
+                                                'variable_name' :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "Casted"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
+                 '@value':202}} :< Res.
+
+
+test(eval, [])
+:-
+    Query = _{'@type' : "Eval",
+              'expression' :
+              _{ '@type' : "Plus",
+                 'first' : _{ '@type' : "DatatypeOrID",
+                              'value' : _{'@type' : "xsd:integer",
+                                          '@value' : 2}},
+                 'second' : _{ '@type' : "DatatypeOrID",
+                               'value' : _{'@type' : "xsd:integer",
+                                           '@value' : 2}}},
+              'result' : _{ '@type' : "DatatypeOrID",
+                            'node' : _{'@type' : "Variable",
+                                       'variable_name' :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Sum"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+              '@value':4}} :< Res.
+
 :- end_tests(woql).
