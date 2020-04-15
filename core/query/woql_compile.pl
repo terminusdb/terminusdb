@@ -1262,11 +1262,10 @@ test(subsumption, [])
     Query = _{'@type' : "Subsumption",
               'child' : _{ '@type' : "DatatypeOrID",
                            'node' : "terminus:User"},
-              'parent' : _{ '@type' : "DatatypeOrID",
-                            'node' : _{'@type' : "Variable",
-                                       'variable_name' :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Parent"}}}},
+              'parent' : _{'@type' : "Variable",
+                           'variable_name' :
+                           _{'@type' : "xsd:string",
+                             '@value' : "Parent"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1302,11 +1301,10 @@ test(substring, [])
               'after' : _{ '@type' : "DatatypeOrID",
                            'value' : _{'@type' : "xsd:integer",
                                        '@value' : 1}},
-              'substring' : _{ '@type' : "DatatypeOrID",
-                               'node' : _{'@type' : "Variable",
-                                          'variable_name' :
-                                          _{'@type' : "xsd:string",
-                                            '@value' : "Substring"}}}
+              'substring' : _{'@type' : "Variable",
+                              'variable_name' :
+                              _{'@type' : "xsd:string",
+                                '@value' : "Substring"}}
              },
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1326,11 +1324,10 @@ test(typecast_string_integer, [])
                                                 '@value' : "202"}},
               'typecast_type' : _{ '@type' : "DatatypeOrID",
                                    'node' : "xsd:integer"},
-              'typecast_result' : _{ '@type' : "DatatypeOrID",
-                                     'node' : _{'@type' : "Variable",
-                                                'variable_name' :
-                                                _{'@type' : "xsd:string",
-                                                  '@value' : "Casted"}}}},
+              'typecast_result' : _{'@type' : "Variable",
+                                    'variable_name' :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Casted"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1350,11 +1347,10 @@ test(typecast_string_integer, [])
                                                 '@value' : "202"}},
               'typecast_type' : _{ '@type' : "DatatypeOrID",
                                    'node' : "xsd:integer"},
-              'typecast_result' : _{ '@type' : "DatatypeOrID",
-                                     'node' : _{'@type' : "Variable",
-                                                'variable_name' :
-                                                _{'@type' : "xsd:string",
-                                                  '@value' : "Casted"}}}},
+              'typecast_result' : _{'@type' : "Variable",
+                                    'variable_name' :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Casted"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1371,17 +1367,16 @@ test(eval, [])
     Query = _{'@type' : "Eval",
               'expression' :
               _{ '@type' : "Plus",
-                 'first' : _{ '@type' : "DatatypeOrID",
+                 'first' : _{ '@type' : "ArithmeticValue",
                               'value' : _{'@type' : "xsd:integer",
                                           '@value' : 2}},
-                 'second' : _{ '@type' : "DatatypeOrID",
+                 'second' : _{ '@type' : "ArithmeticValue",
                                'value' : _{'@type' : "xsd:integer",
                                            '@value' : 2}}},
-              'result' : _{ '@type' : "DatatypeOrID",
-                            'node' : _{'@type' : "Variable",
-                                       'variable_name' :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Sum"}}}},
+              'result' : _{'@type' : "Variable",
+                           'variable_name' :
+                           _{'@type' : "xsd:string",
+                             '@value' : "Sum"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1477,11 +1472,10 @@ test(split, []) :-
               'split_pattern' : _{ '@type' : "DatatypeOrID",
                                    'value' : _{ '@type' : "xsd:string",
                                                 '@value' : "_"}},
-              'split_list' : _{ '@type' : "DatatypeOrID",
-                                'node' : _{'@type' : "Variable",
-                                           'variable_name' :
-                                           _{'@type' : "xsd:string",
-                                             '@value' : "Split"}}}},
+              'split_list' : _{'@type' : "Variable",
+                               'variable_name' :
+                               _{'@type' : "xsd:string",
+                                 '@value' : "Split"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1519,11 +1513,10 @@ test(join, []) :-
               'join_separator' : _{ '@type' : "DatatypeOrID",
                                     'value' : _{ '@type' : "xsd:string",
                                                  '@value' : "_"}},
-              'join' : _{ '@type' : "DatatypeOrID",
-                          'node' : _{'@type' : "Variable",
-                                     'variable_name' :
-                                     _{'@type' : "xsd:string",
-                                       '@value' : "Join"}}}},
+              'join' : _{'@type' : "Variable",
+                         'variable_name' :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Join"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1539,11 +1532,10 @@ test(isa, []) :-
     Query = _{'@type' : "IsA",
               'element' : _{ '@type' : "DatatypeOrID",
                              'node' : "doc:admin"},
-              'of_type' : _{ '@type' : "DatatypeOrID",
-                             'node' : _{'@type' : "Variable",
-                                        'variable_name' :
-                                        _{'@type' : "xsd:string",
-                                          '@value' : "IsA"}}}},
+              'of_type' : _{'@type' : "Variable",
+                            'variable_name' :
+                            _{'@type' : "xsd:string",
+                              '@value' : "IsA"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
