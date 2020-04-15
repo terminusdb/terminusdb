@@ -882,16 +882,33 @@ compile_wf(typecast(Val,Type,_Hints,Cast),
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
-compile_wf(hash(Base,Args,Id),hash(BaseE,ArgsE,IdE)) -->
+% Note: Should we not just make a transformer for marshalling?
+compile_wf(hash(Base,Args,Id),(
+               literally(BaseE,BaseL),
+               literally_list(ArgsE,ArgsL),
+               literally(IdE,IdL),
+               hash(BaseL,ArgsL,IdL),
+               unliterally(BaseL,BaseE),
+               unliterally_list(ArgsL,ArgsE),
+               unliterally(IdL,IdE)
+           )
+          ) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(random_idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),
-                                       random_idgen(BaseE,ArgsL,IdE))) -->
+compile_wf(random_idgen(Base,Args,Id),(
+               literally(BaseE,BaseL),
+               literally_list(ArgsE,ArgsL),
+               literally(IdE,IdL),
+               random_idgen(BaseL,ArgsL,IdL),
+               unliterally(BaseL,BaseE),
+               unliterally_list(ArgsL,ArgsE),
+               unliterally(IdL,IdE)
+           )) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(idgen(Base,Args,Id),(literal_list(ArgsE,ArgsL),
+compile_wf(idgen(Base,Args,Id),(literally_list(ArgsE,ArgsL),
                                 idgen(BaseE,ArgsL,IdE))) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
@@ -928,7 +945,7 @@ compile_wf(limit(N,S),limit(N,Prog)) -->
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(literal_list(LE,LL),
+compile_wf(concat(L,A),(literally_list(LE,LL),
                         utils:interpolate_string(LL,AE_raw),
                         AE = AE_raw^^'http://www.w3.org/2001/XMLSchema#string')) -->
     resolve(L,LE),
@@ -967,7 +984,7 @@ compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
     resolve(Sub,SubE).
 compile_wf(re(P,S,L),(literally(PE,PL),
                       literally(SE,SL),
-                      literal_list(LE,LL),
+                      literally_list(LE,LL),
                       utils:re(PL,SL,LL),
                       unliterally(PL,PE),
                       unliterally(SL,SE),
@@ -978,7 +995,7 @@ compile_wf(re(P,S,L),(literally(PE,PL),
     resolve(L,LE).
 compile_wf(split(S,P,L),(literally(SE,SL),
                          literally(PE,PL),
-                         literal_list(LE,LL),
+                         literally_list(LE,LL),
                          utils:pattern_string_split(PL,SL,LL),
                          unliterally(SL,SE),
                          unliterally(PL,PE),
@@ -987,7 +1004,9 @@ compile_wf(split(S,P,L),(literally(SE,SL),
     resolve(S,SE),
     resolve(P,PE),
     resolve(L,LE).
-compile_wf(upper(S,A),(literally(SE,SL),string_upper(SL,AE))) -->
+compile_wf(upper(S,A),(literally(SE,SL),
+                       string_upper(SL,AL),
+                       unliterally(AL,AE))) -->
     resolve(S,SE),
     resolve(A,AE).
 compile_wf(lower(S,A),(literally(SE,SL),string_lower(SL,AE))) -->
@@ -1014,7 +1033,7 @@ compile_wf(length(L,N),(length(LE,Num),
 compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(X,XE),
     resolve(Y,YE).
-compile_wf(join(X,S,Y),(literal_list(XE,XL),
+compile_wf(join(X,S,Y),(literally_list(XE,XL),
                         literally(SE,SL),
                         literally(YE,YL),
                         utils:join(XL,SL,YE),
@@ -1024,7 +1043,7 @@ compile_wf(join(X,S,Y),(literal_list(XE,XL),
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE).
-compile_wf(sum(X,Y),(literal_list(XE,XL),
+compile_wf(sum(X,Y),(literally_list(XE,XL),
                      literally(YE,YL),
                      sumlist(XL,YL),
                      unliterally_list(XL,XE),
@@ -1093,13 +1112,13 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     merge_options(Options,Default,New_Options),
     memberchk(Name_Atom=file(_Original,Path), Files).
 
-literal_list(X, _X) :-
+literally_list(X, _X) :-
     var(X),
     !.
-literal_list([],[]).
-literal_list([H|T],[HL|TL]) :-
+literally_list([],[]).
+literally_list([H|T],[HL|TL]) :-
     literally(H,HL),
-    literal_list(T,TL).
+    literally_list(T,TL).
 
 literally(X, _X) :-
     var(X),
@@ -1268,6 +1287,8 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
 % We are merely hoping that query_response is loaded before we run this test.
 %:- use_module(query_response, [run_context_ast_jsonld_response/3]).
 :- use_module(library(ordsets)).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
 
 test(subsumption, [])
 :-
@@ -1403,5 +1424,93 @@ test(eval, [])
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
+
+
+test(insert, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "AddTriple",
+              'subject' : _{ '@type' : "DatatypeOrID",
+                             'node' : "doc:DBadmin"},
+              'predicate' : _{ '@type' : "DatatypeOrID",
+                               'node' : "rdfs:label"},
+              'object' : _{ '@type' : "DatatypeOrID",
+                            'node' : "xxx"}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    JSON.inserts = 1.
+
+
+test(upper, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "Upper",
+              'left' : _{ '@type' : "DatatypeOrID",
+                          'value' : _{ '@type' : "xsd:string",
+                                       '@value' : "Aaaa"}},
+              'right' : _{ '@type' : "DatatypeOrID",
+                           'node' : _{'@type' : "Variable",
+                                      'variable_name' :
+                                      _{'@type' : "xsd:string",
+                                        '@value' : "Upcased"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Upcased':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                  '@value': "AAAA"}} :< Res.
+
+
+test(unique, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "Unique",
+              'base' : _{ '@type' : "DatatypeOrID",
+                          'value' : _{ '@type' : "xsd:string",
+                                       '@value' : "http://foo.com/"}},
+              'key_list' : _{ '@type' : "ValueList",
+                              'value_list_element' :
+                              [_{ '@type' : "ValueListElement",
+                                  'index' : 0,
+                                  'value' : _{ '@type' : "xsd:string",
+                                               '@value' : "a"}},
+                               _{ '@type' : "ValueListElement",
+                                  'index' : 1,
+                                  'value' : _{ '@type' : "xsd:string",
+                                               '@value' : "b"}},
+                               _{ '@type' : "ValueListElement",
+                                  'index' : 2,
+                                  'value' : _{ '@type' : "xsd:string",
+                                               '@value' : "c"}}]},
+              'uri' : _{ '@type' : "DatatypeOrID",
+                         'node' : _{'@type' : "Variable",
+                                    'variable_name' :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "URI"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'URI':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+              '@value':'http://foo.com/900150983cd24fb0d6963f7d28e17f72'}} :< Res.
 
 :- end_tests(woql).
