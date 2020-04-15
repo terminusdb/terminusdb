@@ -626,13 +626,13 @@ woql:AddTriple
 
 woql:AddQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Quad ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
   rdfs:label "Add quad"@en ;
   rdfs:comment "Add a quad"@en .
 
 woql:DeleteQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Quad ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
   rdfs:label "Delete quad"@en ;
   rdfs:comment "Delete a quad"@en .
 
