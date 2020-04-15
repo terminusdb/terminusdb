@@ -698,16 +698,11 @@ compile_wf(A<B,woql_less(AE,BE)) -->
 compile_wf(A>B,woql_greater(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
-compile_wf(like(A,B,F), Goal) -->
+compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
-    {
-        Goal = (freeze(AE,
-                       freeze(BE,
-                              (   literal_string(AE,AS),
-                                  literal_string(BE,BS),
-                                  isub(AS, BS, true, F)))))
-    }.
+    resolve(F,FE),
+    { marshall_args(isub(AE,BE,FE), Isub) }.
 compile_wf(isa(X,C),(instance_class(XE,D),
                      subsumption_of(D,CE,Collection))) -->
     resolve(X,XE),
@@ -885,33 +880,33 @@ compile_wf(typecast(Val,Type,_Hints,Cast),
 % Note: Should we not just make a transformer for marshalling?
 compile_wf(hash(Base,Args,Id),(
                literally(BaseE,BaseL),
-               literally_list(ArgsE,ArgsL),
-               literally(IdE,IdL),
-               hash(BaseL,ArgsL,IdL),
+               literally(ArgsE,ArgsL),
+               hash(BaseL,ArgsL,IdE),
                unliterally(BaseL,BaseE),
-               unliterally_list(ArgsL,ArgsE),
-               unliterally(IdL,IdE)
-           )
-          ) -->
+               unliterally(ArgsL,ArgsE)
+           )) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
 compile_wf(random_idgen(Base,Args,Id),(
                literally(BaseE,BaseL),
-               literally_list(ArgsE,ArgsL),
-               literally(IdE,IdL),
-               random_idgen(BaseL,ArgsL,IdL),
+               literally(ArgsE,ArgsL),
+               random_idgen(BaseL,ArgsL,IdE),
                unliterally(BaseL,BaseE),
-               unliterally_list(ArgsL,ArgsE),
-               unliterally(IdL,IdE)
+               unliterally(ArgsL,ArgsE)
            )) -->
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(idgen(Base,Args,Id),(literally_list(ArgsE,ArgsL),
-                                idgen(BaseE,ArgsL,IdE))) -->
+compile_wf(idgen(Base,Args,Id),(
+               literally(BaseE,BaseL),
+               literally(ArgsE,ArgsL),
+               idgen(BaseL,ArgsL,IdE),
+               unliterally(BaseL,BaseE),
+               unliterally(ArgsL,ArgsE)
+           )) -->
     resolve(Base, BaseE),
-    mapm(resolve,Args,ArgsE),
+    mapm(resolve,Args,ArgsE), % Note: How can we resolve this properly? Freeze?
     resolve(Id,IdE).
 compile_wf(start(N,S),offset(N,Prog)) -->
     compile_wf(S, Prog).
@@ -1004,14 +999,14 @@ compile_wf(split(S,P,L),(literally(SE,SL),
     resolve(S,SE),
     resolve(P,PE),
     resolve(L,LE).
-compile_wf(upper(S,A),(literally(SE,SL),
-                       string_upper(SL,AL),
-                       unliterally(AL,AE))) -->
+compile_wf(upper(S,A),Upper) -->
     resolve(S,SE),
-    resolve(A,AE).
-compile_wf(lower(S,A),(literally(SE,SL),string_lower(SL,AE))) -->
+    resolve(A,AE),
+    { marshall_args(string_upper(SE,AE), Upper) }.
+compile_wf(lower(S,A),Lower) -->
     resolve(S,SE),
-    resolve(A,AE).
+    resolve(A,AE),
+    { marshall_args(string_lower(SE,AE),Lower) }.
 compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     % TODO: You can execute an arbitrary goal!!!!
     resolve(X,XE),
@@ -1026,30 +1021,23 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     resolve(WTemplate,Template),
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
-compile_wf(length(L,N),(length(LE,Num),
-                        NE =  Num^^'http://www.w3.org/2001/XMLSchema#decimal')) -->
+compile_wf(length(L,N),Length) -->
     resolve(L,LE),
-    resolve(N,NE).
-compile_wf(member(X,Y),member(XE,YE)) -->
+    resolve(N,NE),
+    { marshall_args(length(LE,NE), Length) }.
+compile_wf(member(X,Y),Member) -->
     resolve(X,XE),
-    resolve(Y,YE).
-compile_wf(join(X,S,Y),(literally_list(XE,XL),
-                        literally(SE,SL),
-                        literally(YE,YL),
-                        utils:join(XL,SL,YE),
-                        unliterally_list(XL,XE),
-                        unliterally(SL,SE),
-                        unliterally(YL,YE))) -->
+    resolve(Y,YE),
+    { marshall_args(member(XE,YE), Member) }.
+compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),
-    resolve(Y,YE).
-compile_wf(sum(X,Y),(literally_list(XE,XL),
-                     literally(YE,YL),
-                     sumlist(XL,YL),
-                     unliterally_list(XL,XE),
-                     unliterally(YL,YE))) -->
+    resolve(Y,YE),
+    { marshall_args(utils:join(XE,SE,YE), Join) }.
+compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
-    resolve(Y,YE).
+    resolve(Y,YE),
+    { marshall_args(sumlist(XE,YE), Sum) }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
     resolve(X,XE),
@@ -1112,13 +1100,16 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     merge_options(Options,Default,New_Options),
     memberchk(Name_Atom=file(_Original,Path), Files).
 
-literally_list(X, _X) :-
-    var(X),
-    !.
-literally_list([],[]).
-literally_list([H|T],[HL|TL]) :-
-    literally(H,HL),
-    literally_list(T,TL).
+marshall_args(Pred,Trans) :-
+    Pred =.. [Func|ArgsE],
+    length(ArgsE,N),
+    length(ArgsL,N),
+    maplist([AE,AL,literally(AE,AL)]>>true, ArgsE, ArgsL, Pre),
+    maplist([AE,AL,unliterally(AL,AE)]>>true, ArgsE, ArgsL, Post),
+    xfy_list(',',Pre_Term,Pre),
+    xfy_list(',',Post_Term,Post),
+    Lit_Pred =.. [Func|ArgsL],
+    Trans = (Pre_Term, Lit_Pred, Post_Term).
 
 literally(X, _X) :-
     var(X),
@@ -1127,19 +1118,17 @@ literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
+literally([],[]).
+literally([H|T],[HL|TL]) :-
+    literally(H,HL),
+    literally(T,TL).
 literally(X, X) :-
-    % How can this happen?
     (   atom(X)
     ->  true
     ;   string(X)
     ->  true
     ;   number(X)
     ).
-
-unliterally_list([],[]).
-unliterally_list([H|T],[HL|TL]) :-
-    unliterally(H,HL),
-    unliterally_list(T,TL).
 
 unliterally(X,Y) :-
     var(Y),
@@ -1177,8 +1166,10 @@ unliterally(X,Y) :-
         ->  Lang = en
         ;   true)
     ).
-
-
+unliterally([],[]).
+unliterally([H|T],[HL|TL]) :-
+    unliterally(H,HL),
+    unliterally(T,TL).
 
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
@@ -1510,7 +1501,6 @@ test(unique, [
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
     [Res] = JSON.bindings,
-    _{'URI':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
-              '@value':'http://foo.com/900150983cd24fb0d6963f7d28e17f72'}} :< Res.
+    _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
 
 :- end_tests(woql).

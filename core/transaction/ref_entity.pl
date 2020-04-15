@@ -71,7 +71,7 @@ layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri) :-
 
 insert_branch_object(Context, Branch_Name, Base_Uri, Branch_Uri) :-
     once(ask(Context,
-             (   idgen(doc:'Branch', [Branch_Name], Branch_Uri),
+             (   idgen(doc:'Branch', [Branch_Name^^xsd:string], Branch_Uri),
                  insert(Branch_Uri, rdf:type, ref:'Branch'),
                  insert(Branch_Uri, ref:branch_base_uri, Base_Uri^^xsd:anyURI),
                  insert(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string)))).
@@ -87,7 +87,7 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ;   true),
     format(string(Timestamp_String), '~q', [Timestamp]),
     once(ask(Context,
-             (   idgen(doc:'Commit',[Commit_Id], Commit_Uri),
+             (   idgen(doc:'Commit',[Commit_Id^^xsd:string], Commit_Uri),
                  insert(Commit_Uri, rdf:type, ref:'Commit'),
                  insert(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string),
                  insert(Commit_Uri, ref:commit_author, Commit_Info.author^^xsd:string),
@@ -127,7 +127,9 @@ insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Com
 
 insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
     once(ask(Context,
-             (   idgen(doc:'Graph', [Commit_Id, Graph_Type, Graph_Name], Graph_Uri),
+             (   idgen(doc:'Graph', [Commit_Id^^xsd:string,
+                                     Graph_Type^^xsd:string,
+                                     Graph_Name^^xsd:string], Graph_Uri),
                  insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
                  insert(Graph_Uri, rdf:type, ref:'Graph'),
                  insert(Graph_Uri, ref:graph_name, Graph_Name^^xsd:string)))),
