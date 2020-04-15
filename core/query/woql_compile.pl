@@ -936,69 +936,42 @@ compile_wf(into(G,S),Goal) -->
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph,_,OG).
-compile_wf(limit(N,S),limit(N,Prog)) -->
+compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
+    resolve(N,NE),
     compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
-compile_wf(concat(L,A),(literally_list(LE,LL),
-                        utils:interpolate_string(LL,AE_raw),
-                        AE = AE_raw^^'http://www.w3.org/2001/XMLSchema#string')) -->
+compile_wf(concat(L,A),Concat) -->
     resolve(L,LE),
-    resolve(A,AE).
-compile_wf(trim(S,A),(literally(SE,SL),
-                      atom_string(SL,SS),
-                      trim(SS,X),
-                      AE = X^^'http://www.w3.org/2001/XMLSchema#string')) -->
+    resolve(A,AE),
+    { marshall_args(concat(LE,AE),Concat) }.
+compile_wf(trim(S,A),Trim) -->
     resolve(S,SE),
-    resolve(A,AE).
-compile_wf(pad(S,C,N,V),(literally(SE,SL),
-                         literally(CE,CL),
-                         literally(NE,NL),
-                         pad(SL,CL,NL,VE_raw),
-                         VE = VE_raw^^'http://www.w3.org/2001/XMLSchema#string')) -->
+    resolve(A,AE),
+    { marshall_args(trim(SE,AE),Trim) }.
+compile_wf(pad(S,C,N,V),Pad) -->
     resolve(S,SE),
     resolve(C,CE),
     resolve(N,NE),
-    resolve(V,VE).
-compile_wf(sub_string(S,B,L,A,Sub),(literally(SE,SL),
-                                    literally(BE,BL),
-                                    literally(LE,LL),
-                                    literally(AE,AL),
-                                    literally(SubE,SubL),
-                                    sub_string(SL,BL,LL,AL,SubL),
-                                    unliterally(SL,SE),
-                                    unliterally(BL,BE),
-                                    unliterally(LL,LE),
-                                    unliterally(AL,AE),
-                                    unliterally(SubL,SubE)
-                                   )) -->
+    resolve(V,VE),
+    { marshall_args(pad(SE,CE,NE,VE,Pad),Pad) }.
+compile_wf(sub_string(S,B,L,A,Sub),Sub_String) -->
     resolve(S,SE),
     resolve(B,BE),
     resolve(L,LE),
     resolve(A,AE),
-    resolve(Sub,SubE).
-compile_wf(re(P,S,L),(literally(PE,PL),
-                      literally(SE,SL),
-                      literally_list(LE,LL),
-                      utils:re(PL,SL,LL),
-                      unliterally(PL,PE),
-                      unliterally(SL,SE),
-                      unliterally_list(LL,LE)
-                     )) -->
+    resolve(Sub,SubE),
+    { marshall_args(utils:sub_string(SE,BE,LE,AE,SubE),Sub_String) }.
+compile_wf(re(P,S,L),Re) -->
     resolve(P,PE),
     resolve(S,SE),
-    resolve(L,LE).
-compile_wf(split(S,P,L),(literally(SE,SL),
-                         literally(PE,PL),
-                         literally_list(LE,LL),
-                         utils:pattern_string_split(PL,SL,LL),
-                         unliterally(SL,SE),
-                         unliterally(PL,PE),
-                         unliterally_list(LL,LE)
-                        )) -->
+    resolve(L,LE),
+    { marshall_args(utils:re(SE,PE,LE),Re) }.
+compile_wf(split(S,P,L),Split) -->
     resolve(S,SE),
     resolve(P,PE),
-    resolve(L,LE).
+    resolve(L,LE),
+    { marshall_args(utils:pattern_string_split(PE,SE,LE),Split) }.
 compile_wf(upper(S,A),Upper) -->
     resolve(S,SE),
     resolve(A,AE),
@@ -1100,7 +1073,8 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     merge_options(Options,Default,New_Options),
     memberchk(Name_Atom=file(_Original,Path), Files).
 
-marshall_args(Pred,Trans) :-
+marshall_args(M_Pred,Trans) :-
+    strip_module(M_Pred, M, Pred),
     Pred =.. [Func|ArgsE],
     length(ArgsE,N),
     length(ArgsL,N),
@@ -1109,7 +1083,7 @@ marshall_args(Pred,Trans) :-
     xfy_list(',',Pre_Term,Pre),
     xfy_list(',',Post_Term,Post),
     Lit_Pred =.. [Func|ArgsL],
-    Trans = (Pre_Term, Lit_Pred, Post_Term).
+    Trans = (Pre_Term, M:Lit_Pred, Post_Term).
 
 literally(X, _X) :-
     var(X),
@@ -1130,10 +1104,6 @@ literally(X, X) :-
     ;   number(X)
     ).
 
-unliterally(X,Y) :-
-    var(Y),
-    !,
-    Y = X^^'http://www.w3.org/2001/XMLSchema#string'.
 unliterally(X,Y) :-
     string(X),
     !,
@@ -1161,6 +1131,7 @@ unliterally(X,Y) :-
         ->  Type = 'http://www.w3.org/2001/XMLSchema#decimal'
         ;   % subsumption test here.
             true)
+    ->  true
     ;   Y = X@Lang,
         (   var(Lang)
         ->  Lang = en
@@ -1338,7 +1309,7 @@ test(substring, [])
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
     [Res] = JSON.bindings,
-    _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':2},
+    _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':2},
       'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
      } :< Res.
 
@@ -1439,12 +1410,7 @@ test(insert, [
     JSON.inserts = 1.
 
 
-test(upper, [
-         setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
-         cleanup(teardown_temp_store(State))
-     ])
-:-
+test(upper, []) :-
     Query = _{'@type' : "Upper",
               'left' : _{ '@type' : "DatatypeOrID",
                           'value' : _{ '@type' : "xsd:string",
@@ -1465,12 +1431,7 @@ test(upper, [
                   '@value': "AAAA"}} :< Res.
 
 
-test(unique, [
-         setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
-         cleanup(teardown_temp_store(State))
-     ])
-:-
+test(unique, []) :-
     Query = _{'@type' : "Unique",
               'base' : _{ '@type' : "DatatypeOrID",
                           'value' : _{ '@type' : "xsd:string",
@@ -1502,5 +1463,31 @@ test(unique, [
     query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
+
+test(split, []) :-
+    Query = _{'@type' : "Split",
+              'split_string' : _{ '@type' : "DatatypeOrID",
+                                  'value' : _{ '@type' : "xsd:string",
+                                               '@value' : "you_should_be_split"}},
+              'split_pattern' : _{ '@type' : "DatatypeOrID",
+                                   'value' : _{ '@type' : "xsd:string",
+                                                '@value' : "_"}},
+              'split_list' : _{ '@type' : "DatatypeOrID",
+                                'node' : _{'@type' : "Variable",
+                                           'variable_name' :
+                                           _{'@type' : "xsd:string",
+                                             '@value' : "Split"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Split': [_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"you"},
+                _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"should"},
+                _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"be"},
+                _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"split"}]}
+                 :< Res.
 
 :- end_tests(woql).

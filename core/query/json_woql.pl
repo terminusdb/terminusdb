@@ -530,12 +530,12 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         WOQL = pad(WS,WC,WN,WV)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Split',
           'http://terminusdb.com/schema/woql#split_string' : S,
-          'http://terminusdb.com/schema/woql#pattern' : P,
+          'http://terminusdb.com/schema/woql#split_pattern' : P,
           'http://terminusdb.com/schema/woql#split_list' : L
          } :< JSON
     ->  json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#split_string'
                                |Path]),
-        json_to_woql_ast(P,WP,['http://terminusdb.com/schema/woql#pattern'
+        json_to_woql_ast(P,WP,['http://terminusdb.com/schema/woql#split_pattern'
                                |Path]),
         json_to_woql_ast(L,WL,['http://terminusdb.com/schema/woql#split_list'
                                |Path]),
