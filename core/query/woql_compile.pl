@@ -702,7 +702,7 @@ compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
     resolve(F,FE),
-    { marshall_args(isub(AE,BE,FE), Isub) }.
+    { marshall_args(isub(AE,BE,true,FE), Isub) }.
 compile_wf(isa(X,C),(instance_class(XE,D,Transaction_Object),
                      subsumption_of(D,CE,Transaction_Object))) -->
     resolve(X,XE),
@@ -1551,5 +1551,27 @@ test(isa, []) :-
                      json{'IsA':'http://terminusdb.com/schema/tcs#Entity'}],
                     Expected),
     ord_seteq(Bindings_Set, Expected).
+
+test(like, []) :-
+    Query = _{'@type' : "Like",
+              'left' : _{ '@type' : "DatatypeOrID",
+                          'value' : _{ '@type' : "xsd:string",
+                                       '@value' : "joined"}},
+              'right' : _{ '@type' : "DatatypeOrID",
+                          'value' : _{ '@type' : "xsd:string",
+                                       '@value' : "joined"}},
+              'like_similarity' : _{'@type' : "Variable",
+                                    'variable_name' :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Similarity"}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                     '@value':1.0}} :< Res.
 
 :- end_tests(woql).
