@@ -703,11 +703,16 @@ compile_wf(like(A,B,F), Isub) -->
     resolve(B,BE),
     resolve(F,FE),
     { marshall_args(isub(AE,BE,FE), Isub) }.
-compile_wf(isa(X,C),(instance_class(XE,D),
-                     subsumption_of(D,CE,Collection))) -->
+compile_wf(isa(X,C),(instance_class(XE,D,Transaction_Object),
+                     subsumption_of(D,CE,Transaction_Object))) -->
     resolve(X,XE),
     resolve(C,CE),
-    view(default_collection,Collection).
+    view(default_collection,Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object)
+    }.
 compile_wf(A << B,subsumption_of(AE,BE,Transaction_Object)) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -1489,5 +1494,70 @@ test(split, []) :-
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"be"},
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"split"}]}
                  :< Res.
+
+
+test(join, []) :-
+    Query = _{'@type' : "Join",
+              'join_list' : _{ '@type' : 'ValueList',
+                               'value_list_element' :
+                               [_{ '@type' : "ValueListElement",
+                                   'index' : 0,
+                                   'value' : _{ '@type' : "xsd:string",
+                                                '@value' : "you"}},
+                                _{ '@type' : "ValueListElement",
+                                   'index' : 1,
+                                   'value' : _{ '@type' : "xsd:string",
+                                                '@value' : "should"}},
+                                _{ '@type' : "ValueListElement",
+                                   'index' : 2,
+                                   'value' : _{ '@type' : "xsd:string",
+                                                '@value' : "be"}},
+                                _{ '@type' : "ValueListElement",
+                                   'index' : 3,
+                                   'value' : _{ '@type' : "xsd:string",
+                                                '@value' : "joined"}}]},
+              'join_separator' : _{ '@type' : "DatatypeOrID",
+                                    'value' : _{ '@type' : "xsd:string",
+                                                 '@value' : "_"}},
+              'join' : _{ '@type' : "DatatypeOrID",
+                          'node' : _{'@type' : "Variable",
+                                     'variable_name' :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Join"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                '@value':"you_should_be_joined"}} :< Res.
+
+
+test(isa, []) :-
+    Query = _{'@type' : "IsA",
+              'element' : _{ '@type' : "DatatypeOrID",
+                             'node' : "doc:admin"},
+              'of_type' : _{ '@type' : "DatatypeOrID",
+                             'node' : _{'@type' : "Variable",
+                                        'variable_name' :
+                                        _{'@type' : "xsd:string",
+                                          '@value' : "IsA"}}}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
+    list_to_ord_set(Orderable,Bindings_Set),
+    list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
+                     json{'IsA':'http://terminusdb.com/schema/terminus#User'},
+                     json{'IsA':'http://terminusdb.com/schema/terminus#Agent'},
+                     json{'IsA':'http://terminusdb.com/schema/tcs#Document'},
+                     json{'IsA':'http://terminusdb.com/schema/tcs#Entity'}],
+                    Expected),
+    ord_seteq(Bindings_Set, Expected).
 
 :- end_tests(woql).
