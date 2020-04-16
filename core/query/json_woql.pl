@@ -618,21 +618,25 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         WOQL = re(WPat, WString, WList)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#OrderBy',
           'http://terminusdb.com/schema/woql#variable_list' : Templates,
-          'http://terminusdb.com/schema/woql#ascending' : Bool,
           'http://terminusdb.com/schema/woql#query' : Query
          } :< JSON
-    ->  maplist({Path}/[V1,V2]>>(
-                    json_to_woql_ast(V1,V2,['http://terminusdb.com/schema/woql#variable_list'
-                                            |Path])
-                ), Templates, WTemplates),
+    ->  json_to_woql_ast(Templates,WTemplates,['http://terminusdb.com/schema/woql#variable_list'
+                                               |Path]),
         json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
                                        |Path]),
-        json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
+        WOQL = order_by(WTemplates,WQuery)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#VariableOrdering',
+          'http://terminusdb.com/schema/woql#ascending' : Bool,
+          'http://terminusdb.com/schema/woql#variable' : Var
+         } :< JSON
+    ->  json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
                                           |Path]),
+        json_to_woql_ast(Var,WVar,['http://terminusdb.com/schema/woql#ascending'
+                                   |Path]),
         (   Boolean = true
         ->  Order = asc
         ;   Order = desc),
-        WOQL = order_by(WTemplates,WQuery,Order)
+        WOQL =.. [Order,WVar]
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#GroupBy',
           'http://terminusdb.com/schema/woql#variable_list' : Spec,
           'http://terminusdb.com/schema/woql#group_var' : Obj,

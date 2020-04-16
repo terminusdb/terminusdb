@@ -921,6 +921,8 @@ compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
     compile_wf(S, Prog).
 compile_wf(asc(X),asc(XE)) -->
     resolve(X,XE).
+compile_wf(desc(X),desc(XE)) -->
+    resolve(X,XE).
 compile_wf(order_by(L,S),order_by(LSpec,Prog)) -->
     mapm(compile_wf, L, LSpec),
     compile_wf(S, Prog).
@@ -1267,12 +1269,12 @@ query_test_response(Descriptor, Query, Response) :-
 test(subsumption, [])
 :-
     Query = _{'@type' : "Subsumption",
-              'child' : _{ '@type' : "Node",
-                           'node' : "terminus:User"},
-              'parent' : _{'@type' : "Variable",
-                           'variable_name' :
-                           _{'@type' : "xsd:string",
-                             '@value' : "Parent"}}},
+              child : _{ '@type' : "Node",
+                         node : "terminus:User"},
+              parent : _{'@type' : "Variable",
+                         'variable_name' :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Parent"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     % Tag the dicts so we can sort them
@@ -1290,23 +1292,23 @@ test(subsumption, [])
 test(substring, [])
 :-
     Query = _{'@type' : "Substring",
-              'string' : _{ '@type' : "Datatype",
-                            'datatype' : _{'@type' : "xsd:string",
-                                           '@value' : "Test"}},
-              'before' : _{ '@type' : "Datatype",
-                            'datatype' : _{'@type' : "xsd:string",
-                                           '@value' : 1}},
-              'length' : _{'@type' : "Variable",
-                           'variable_name' :
-                           _{'@type' : "xsd:string",
-                             '@value' : "Length"}},
-              'after' : _{ '@type' : "Datatype",
-                           'datatype' : _{'@type' : "xsd:integer",
-                                          '@value' : 1}},
-              'substring' : _{'@type' : "Variable",
-                              'variable_name' :
-                              _{'@type' : "xsd:string",
-                                '@value' : "Substring"}}
+              string : _{ '@type' : "Datatype",
+                          datatype : _{'@type' : "xsd:string",
+                                       '@value' : "Test"}},
+              before : _{ '@type' : "Datatype",
+                          datatype : _{'@type' : "xsd:string",
+                                       '@value' : 1}},
+              length : _{'@type' : "Variable",
+                         variable_name :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Length"}},
+              after : _{ '@type' : "Datatype",
+                         datatype : _{'@type' : "xsd:integer",
+                                      '@value' : 1}},
+              substring : _{'@type' : "Variable",
+                            variable_name :
+                            _{'@type' : "xsd:string",
+                              '@value' : "Substring"}}
              },
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1331,7 +1333,6 @@ test(typecast_string_integer, [])
     [Res] = JSON.bindings,
     _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                  '@value':202}} :< Res.
-
 
 test(eval, [])
 :-
@@ -1397,13 +1398,13 @@ test(add_quad, [
 
 test(upper, []) :-
     Query = _{'@type' : "Upper",
-              'left' : _{ '@type' : "Datatype",
-                          'datatype' : _{ '@type' : "xsd:string",
-                                          '@value' : "Aaaa"}},
-              'right' : _{'@type' : "Variable",
-                          'variable_name' :
-                          _{'@type' : "xsd:string",
-                            '@value' : "Upcased"}}},
+              left : _{ '@type' : "Datatype",
+                        datatype : _{ '@type' : "xsd:string",
+                                      '@value' : "Aaaa"}},
+              right : _{'@type' : "Variable",
+                        variable_name :
+                        _{'@type' : "xsd:string",
+                          '@value' : "Upcased"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1413,27 +1414,27 @@ test(upper, []) :-
 
 test(unique, []) :-
     Query = _{'@type' : "Unique",
-              'base' : _{ '@type' : "Datatype",
-                          'datatype' : _{ '@type' : "xsd:string",
-                                          '@value' : "http://foo.com/"}},
-              'key_list' : _{ '@type' : "Array",
+              base : _{ '@type' : "Datatype",
+                        datatype : _{ '@type' : "xsd:string",
+                                      '@value' : "http://foo.com/"}},
+              key_list : _{ '@type' : "Array",
                               'array_element' :
                               [_{ '@type' : "ArrayElement",
-                                  'index' : _{ '@type' : "xsd:integer", '@value' : 0},
-                                  'datatype' : _{ '@type' : "xsd:string",
+                                  index : _{ '@type' : "xsd:integer", '@value' : 0},
+                                  datatype : _{ '@type' : "xsd:string",
                                                '@value' : "a"}},
                                _{ '@type' : "ArrayElement",
-                                  'index' : _{ '@type' : "xsd:integer", '@value' : 1},
-                                  'datatype' : _{ '@type' : "xsd:string",
+                                  index : _{ '@type' : "xsd:integer", '@value' : 1},
+                                  datatype : _{ '@type' : "xsd:string",
                                                '@value' : "b"}},
                                _{ '@type' : "ArrayElement",
-                                  'index' : _{ '@type' : "xsd:integer", '@value' : 2},
-                                  'datatype' : _{ '@type' : "xsd:string",
+                                  index : _{ '@type' : "xsd:integer", '@value' : 2},
+                                  datatype : _{ '@type' : "xsd:string",
                                                '@value' : "c"}}]},
-              'uri' : _{'@type' : "Variable",
-                        'variable_name' :
-                        _{'@type' : "xsd:string",
-                          '@value' : "URI"}}},
+              uri : _{'@type' : "Variable",
+                      variable_name :
+                      _{'@type' : "xsd:string",
+                        '@value' : "URI"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1441,16 +1442,16 @@ test(unique, []) :-
 
 test(split, []) :-
     Query = _{'@type' : "Split",
-              'split_string' : _{ '@type' : "Datatype",
-                                  'datatype' : _{ '@type' : "xsd:string",
-                                                  '@value' : "you_should_be_split"}},
-              'split_pattern' : _{ '@type' : "Datatype",
-                                   'datatype' : _{ '@type' : "xsd:string",
-                                                   '@value' : "_"}},
-              'split_list' : _{'@type' : "Variable",
-                               'variable_name' :
-                               _{'@type' : "xsd:string",
-                                 '@value' : "Split"}}},
+              split_string : _{ '@type' : "Datatype",
+                                datatype : _{ '@type' : "xsd:string",
+                                              '@value' : "you_should_be_split"}},
+              split_pattern : _{ '@type' : "Datatype",
+                                 datatype : _{ '@type' : "xsd:string",
+                                               '@value' : "_"}},
+              split_list : _{'@type' : "Variable",
+                             variable_name :
+                             _{'@type' : "xsd:string",
+                               '@value' : "Split"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1463,35 +1464,35 @@ test(split, []) :-
 
 test(join, []) :-
     Query = _{'@type' : "Join",
-              'join_list' : _{ '@type' : 'Array',
-                               'array_element' :
-                               [_{ '@type' : "ArrayElement",
-                                   'index' : _{ '@type' : "xsd:integer",
-                                                '@value' : 0},
-                                   'datatype' : _{ '@type' : "xsd:string",
-                                                   '@value' : "you"}},
-                                _{ '@type' : "ArrayElement",
-                                   'index' : _{ '@type' : "xsd:integer",
-                                                '@value' : 1},
-                                   'datatype' : _{ '@type' : "xsd:string",
-                                                '@value' : "should"}},
-                                _{ '@type' : "ArrayElement",
-                                   'index' : _{ '@type' : "xsd:integer",
-                                                '@value' : 2},
-                                   'datatype' : _{ '@type' : "xsd:string",
-                                                   '@value' : "be"}},
-                                _{ '@type' : "ArrayElement",
-                                   'index' : _{ '@type' : "xsd:integer",
-                                                '@value' : 3},
-                                   'datatype' : _{ '@type' : "xsd:string",
-                                                   '@value' : "joined"}}]},
-              'join_separator' : _{ '@type' : "Datatype",
-                                    'datatype' : _{ '@type' : "xsd:string",
-                                                 '@value' : "_"}},
-              'join' : _{'@type' : "Variable",
-                         'variable_name' :
-                         _{'@type' : "xsd:string",
-                           '@value' : "Join"}}},
+              join_list : _{ '@type' : 'Array',
+                             array_element :
+                             [_{ '@type' : "ArrayElement",
+                                 index : _{ '@type' : "xsd:integer",
+                                            '@value' : 0},
+                                 datatype : _{ '@type' : "xsd:string",
+                                               '@value' : "you"}},
+                              _{ '@type' : "ArrayElement",
+                                 index : _{ '@type' : "xsd:integer",
+                                            '@value' : 1},
+                                 datatype : _{ '@type' : "xsd:string",
+                                               '@value' : "should"}},
+                              _{ '@type' : "ArrayElement",
+                                 index : _{ '@type' : "xsd:integer",
+                                            '@value' : 2},
+                                 datatype : _{ '@type' : "xsd:string",
+                                               '@value' : "be"}},
+                              _{ '@type' : "ArrayElement",
+                                 index : _{ '@type' : "xsd:integer",
+                                            '@value' : 3},
+                                 datatype : _{ '@type' : "xsd:string",
+                                               '@value' : "joined"}}]},
+              join_separator : _{ '@type' : "Datatype",
+                                  datatype : _{ '@type' : "xsd:string",
+                                                '@value' : "_"}},
+              join : _{'@type' : "Variable",
+                       variable_name :
+                       _{'@type' : "xsd:string",
+                         '@value' : "Join"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1501,12 +1502,12 @@ test(join, []) :-
 
 test(isa, []) :-
     Query = _{'@type' : "IsA",
-              'element' : _{ '@type' : "Node",
-                             'node' : "doc:admin"},
-              'of_type' : _{'@type' : "Variable",
-                            'variable_name' :
-                            _{'@type' : "xsd:string",
-                              '@value' : "IsA"}}},
+              element : _{ '@type' : "Node",
+                           node : "doc:admin"},
+              of_type : _{'@type' : "Variable",
+                          variable_name :
+                          _{'@type' : "xsd:string",
+                            '@value' : "IsA"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
@@ -1521,16 +1522,16 @@ test(isa, []) :-
 
 test(like, []) :-
     Query = _{'@type' : "Like",
-              'left' : _{ '@type' : "Datatype",
-                          'datatype' : _{ '@type' : "xsd:string",
+              left : _{ '@type' : "Datatype",
+                          datatype : _{ '@type' : "xsd:string",
                                        '@value' : "joined"}},
-              'right' : _{ '@type' : "Datatype",
-                           'datatype' : _{ '@type' : "xsd:string",
+              right : _{ '@type' : "Datatype",
+                           datatype : _{ '@type' : "xsd:string",
                                         '@value' : "joined"}},
-              'like_similarity' : _{'@type' : "Variable",
-                                    'variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Similarity"}}},
+              like_similarity : _{'@type' : "Variable",
+                                  variable_name :
+                                  _{'@type' : "xsd:string",
+                                    '@value' : "Similarity"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1540,18 +1541,18 @@ test(like, []) :-
 test(exp, []) :-
 
     Query = _{'@type' : "Eval",
-              'expression' :
+              expression :
               _{ '@type' : "Exp",
-                 'first' : _{ '@type' : "Datatype",
-                              'datatype' : _{'@type' : "xsd:integer",
-                                          '@value' : 2}},
-                 'second' : _{ '@type' : "Datatype",
-                               'datatype' : _{'@type' : "xsd:integer",
-                                           '@value' : 2}}},
-              'result' : _{'@type' : "Variable",
-                           'variable_name' :
-                           _{'@type' : "xsd:string",
-                             '@value' : "Exp"}}},
+                 first : _{ '@type' : "Datatype",
+                            datatype : _{'@type' : "xsd:integer",
+                                         '@value' : 2}},
+                 second : _{ '@type' : "Datatype",
+                             datatype : _{'@type' : "xsd:integer",
+                                          '@value' : 2}}},
+              result : _{'@type' : "Variable",
+                         variable_name :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Exp"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -1561,23 +1562,23 @@ test(exp, []) :-
 test(limit, []) :-
 
     Query = _{'@type' : "Limit",
-              'limit' : _{ '@type' : "Datatype",
-                           'datatype' : _{ '@type' : "xsd:integer",
+              limit : _{ '@type' : "Datatype",
+                           datatype : _{ '@type' : "xsd:integer",
                                            '@value' : 2}},
-              'query' : _{ '@type' : "Triple",
-                           'subject' : _{'@type' : "Variable",
-                                         'variable_name' :
-                                         _{'@type' : "xsd:string",
-                                           '@value' : "Subject"}},
-                           'predicate' : _{'@type' : "Variable",
-                                           'variable_name' :
-                                           _{'@type' : "xsd:string",
-                                             '@value' : "Predicate"}},
-                           'object' : _{'@type' : "Variable",
-                                        'variable_name' :
-                                        _{'@type' : "xsd:string",
-                                          '@value' : "Object"}}
-                         }},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "Variable",
+                                     variable_name :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Subject"}},
+                         predicate : _{'@type' : "Variable",
+                                       variable_name :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Predicate"}},
+                         object : _{'@type' : "Variable",
+                                    variable_name :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Object"}}
+                       }},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
@@ -1590,7 +1591,6 @@ test(limit, []) :-
                           'Subject':'terminus:///terminus/document/access_all_areas'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
-
 
 test(indexed_get, [])
 :-
@@ -1699,5 +1699,38 @@ test(length, [])
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                  '@value': 2}} :< Res.
+
+
+test(order_by, []) :-
+
+    Query = _{'@type' : "OrderBy",
+              variable_list : [_{ '@type' : "VariableOrdering",
+                                  index : _{'@type' : "xsd:integer",
+                                            '@value' : 0},
+                                  ascending : _{'@type' : "xsd:boolean",
+                                                '@value' : true},
+                                  variable : _{'@type' : "Variable",
+                                               variable_name : _{ '@type' : "xsd:string",
+                                                                  '@value' : "Subject"}}}],
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "Variable",
+                                     variable_name :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Subject"}},
+                         predicate : _{'@type' : "Variable",
+                                       variable_name :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Predicate"}},
+                         object : _{'@type' : "Variable",
+                                    variable_name :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Object"}}
+                       }},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [Res|_] = JSON.bindings,
+    _{'Object' : 'http://terminusdb.com/schema/terminus#class_frame',
+      'Predicate':'http://terminusdb.com/schema/terminus#action',
+      'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
 
 :- end_tests(woql).
