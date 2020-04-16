@@ -1696,4 +1696,35 @@ test(concat, [])
     _{'Concatenated':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                        '@value':"FirstSecond"}} :< Res.
 
+test(sum, [])
+:-
+    Query =
+    _{'@type' : 'Sum',
+      sum_list :
+      _{'@type' : 'ValueList',
+        value_list_element : [
+            _{'@type' : 'ValueListElement',
+              index : 0,
+              value : _{ '@type' : "xsd:integer",
+                         '@value' : 1}},
+            _{'@type' : 'ValueListElement',
+              index : 1,
+              value : _{ '@type' : "xsd:integer",
+                         '@value' : 2}}
+        ]},
+      sum :
+      _{'@type' : 'Variable',
+        variable_name : _{ '@type' : "xsd:string",
+                           '@value' : "Sum" }}},
+
+    create_context(terminus_descriptor{},Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    [Res] = JSON.bindings,
+    _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+              '@value': 3}} :< Res.
+
+
 :- end_tests(woql).
