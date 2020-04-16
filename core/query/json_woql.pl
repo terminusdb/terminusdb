@@ -299,7 +299,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                          'terminus:message' :'Poorly formed graph descriptor',
                                          'vio:path' : Director,
                                          'vio:query' : JSON})))),
-        WOQL = insert(Graph_String,WQA,WQB,WQC)
+        WOQL = insert(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteTriple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -333,7 +333,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                          'terminus:message' :'Poorly formed graph descriptor',
                                          'vio:path' : Director,
                                          'vio:query' : JSON})))),
-        WOQL = delete(Graph_String,WQA,WQB,WQC)
+        WOQL = delete(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#When',
           'http://terminusdb.com/schema/woql#query' : Q,
           'http://terminusdb.com/schema/woql#consequent' : U
@@ -648,7 +648,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         json_to_woql_ast(Collector,WCollector,['http://terminusdb.com/schema/woql#grouped'
                                                |Path]),
         WOQL = group_by(WSpec,WObj,WQuery,WCollector)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Length' :
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Length',
           'http://terminusdb.com/schema/woql#length_list' : A,
           'http://terminusdb.com/schema/woql#length' : B
          } :< JSON

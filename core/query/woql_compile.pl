@@ -1248,13 +1248,21 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
-:- use_module(ask,[create_context/2, context_overriding_prefixes/3]).
+:- use_module(ask,[create_context/3, context_overriding_prefixes/3]).
 % NOTE: This circularity is very irritating...
 % We are merely hoping that query_response is loaded before we run this test.
 %:- use_module(query_response, [run_context_ast_jsonld_response/3]).
 :- use_module(library(ordsets)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
+
+query_test_response(Descriptor, Query, Response) :-
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    woql_context(Prefixes),
+    context_overriding_prefixes(Context,Prefixes,Context0),
+    json_woql(Query, Context0.prefixes, AST),
+    query_response:run_context_ast_jsonld_response(Context0, AST, Response).
 
 test(subsumption, [])
 :-
@@ -1266,11 +1274,7 @@ test(subsumption, [])
                            _{'@type' : "xsd:string",
                              '@value' : "Parent"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     % Tag the dicts so we can sort them
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
@@ -1304,11 +1308,7 @@ test(substring, [])
                               _{'@type' : "xsd:string",
                                 '@value' : "Substring"}}
              },
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':2},
       'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
@@ -1317,44 +1317,17 @@ test(substring, [])
 test(typecast_string_integer, [])
 :-
     Query = _{'@type' : "Typecast",
-              'typecast_value' : _{ '@type' : "Datatype",
-                                    'datatype' : _{'@type' : "xsd:string",
-                                                   '@value' : "202"}},
-              'typecast_type' : _{ '@type' : "Node",
-                                   'node' : "xsd:integer"},
-              'typecast_result' : _{'@type' : "Variable",
-                                    'variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Casted"}}},
+              typecast_value : _{ '@type' : "Datatype",
+                                  datatype : _{'@type' : "xsd:string",
+                                               '@value' : "202"}},
+              typecast_type : _{ '@type' : "Node",
+                                 node : "xsd:integer"},
+              typecast_result : _{'@type' : "Variable",
+                                  variable_name :
+                                  _{'@type' : "xsd:string",
+                                    '@value' : "Casted"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
-    [Res] = JSON.bindings,
-    _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
-                 '@value':202}} :< Res.
-
-
-test(typecast_string_integer, [])
-:-
-    Query = _{'@type' : "Typecast",
-              'typecast_value' : _{ '@type' : "Datatype",
-                                    'datatype' : _{'@type' : "xsd:string",
-                                                   '@value' : "202"}},
-              'typecast_type' : _{ '@type' : "Node",
-                                   'node' : "xsd:integer"},
-              'typecast_result' : _{'@type' : "Variable",
-                                    'variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Casted"}}},
-
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                  '@value':202}} :< Res.
@@ -1363,50 +1336,64 @@ test(typecast_string_integer, [])
 test(eval, [])
 :-
     Query = _{'@type' : "Eval",
-              'expression' :
+              expression :
               _{ '@type' : "Plus",
-                 'first' : _{ '@type' : "Datatype",
-                              'datatype' : _{'@type' : "xsd:integer",
-                                             '@value' : 2}},
-                 'second' : _{ '@type' : "Datatype",
-                               'datatype' : _{'@type' : "xsd:integer",
-                                              '@value' : 2}}},
-              'result' : _{'@type' : "Variable",
-                           'variable_name' :
-                           _{'@type' : "xsd:string",
-                             '@value' : "Sum"}}},
+                 first : _{ '@type' : "Datatype",
+                            datatype : _{'@type' : "xsd:integer",
+                                         '@value' : 2}},
+                 second : _{ '@type' : "Datatype",
+                               datatype : _{'@type' : "xsd:integer",
+                                            '@value' : 2}}},
+              result : _{'@type' : "Variable",
+                         variable_name :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Sum"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
 
 
-test(insert, [
+test(add_triple, [
          setup((setup_temp_store(State),
                 create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
     Query = _{'@type' : "AddTriple",
-              'subject' : _{ '@type' : "Node",
-                             'node' : "doc:DBadmin"},
-              'predicate' : _{ '@type' : "Node",
-                               'node' : "rdfs:label"},
-              'object' : _{ '@type' : "Node",
-                            'node' : "xxx"}},
+              subject : _{ '@type' : "Node",
+                           node : "doc:DBadmin"},
+              predicate : _{ '@type' : "Node",
+                               node : "rdfs:label"},
+              object : _{ '@type' : "Node",
+                            node : "xxx"}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    make_branch_descriptor('admin', 'test', Descriptor),
+    query_test_response(Descriptor, Query, JSON),
     JSON.inserts = 1.
 
+test(add_quad, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "AddQuad",
+              subject : _{ '@type' : "Node",
+                             node : "doc:DBadmin"},
+              predicate : _{ '@type' : "Node",
+                               node : "rdfs:label"},
+              object : _{ '@type' : "Node",
+                          node : "xxx"},
+              graph : _{ '@type' : "Datatype",
+                         datatype : _{'@type' : "xsd:string",
+                                      '@value' : "instance/main"}
+                       }},
+
+    make_branch_descriptor('admin', 'test', Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    JSON.inserts = 1.
 
 test(upper, []) :-
     Query = _{'@type' : "Upper",
@@ -1418,11 +1405,7 @@ test(upper, []) :-
                           _{'@type' : "xsd:string",
                             '@value' : "Upcased"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Upcased':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                   '@value': "AAAA"}} :< Res.
@@ -1452,11 +1435,7 @@ test(unique, []) :-
                         _{'@type' : "xsd:string",
                           '@value' : "URI"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
 
@@ -1473,11 +1452,7 @@ test(split, []) :-
                                _{'@type' : "xsd:string",
                                  '@value' : "Split"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Split': [_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"you"},
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"should"},
@@ -1518,11 +1493,7 @@ test(join, []) :-
                          _{'@type' : "xsd:string",
                            '@value' : "Join"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
@@ -1537,11 +1508,7 @@ test(isa, []) :-
                             _{'@type' : "xsd:string",
                               '@value' : "IsA"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
@@ -1565,11 +1532,7 @@ test(like, []) :-
                                     _{'@type' : "xsd:string",
                                       '@value' : "Similarity"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                      '@value':1.0}} :< Res.
@@ -1590,11 +1553,7 @@ test(exp, []) :-
                            _{'@type' : "xsd:string",
                              '@value' : "Exp"}}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -1620,11 +1579,7 @@ test(limit, []) :-
                                           '@value' : "Object"}}
                          }},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'Object':'http://terminusdb.com/schema/terminus#class_frame',
@@ -1660,11 +1615,7 @@ test(indexed_get, [])
       _{'@type' : 'RemoteResource',
         remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     length(JSON.bindings, L),
     L = 50.
 
@@ -1691,12 +1642,8 @@ test(concat, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Concatenated" }}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
-    [Res] = JSON.bindings, 
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [Res] = JSON.bindings,
     _{'Concatenated':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                        '@value':"FirstSecond"}} :< Res.
 
@@ -1723,14 +1670,34 @@ test(sum, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Sum" }}},
 
-    create_context(terminus_descriptor{},Context),
-    woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Context0.prefixes, AST),
-    query_response:run_context_ast_jsonld_response(Context0, AST, JSON),
+    query_test_response(terminus_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value': 3}} :< Res.
 
+test(length, [])
+:-
+    Query = _{'@type' : "Length",
+              length_list : _{'@type' : 'Array',
+                              array_element : [
+                                  _{'@type' : 'ArrayElement',
+                                    index : _{ '@type' : "xsd:integer",
+                                               '@value' : 0},
+                                    datatype : _{ '@type' : "xsd:integer",
+                                                  '@value' : 1}},
+                                  _{'@type' : 'ArrayElement',
+                                    index : _{ '@type' : "xsd:integer",
+                                               '@value' : 1},
+                                    datatype : _{ '@type' : "xsd:integer",
+                                                  '@value' : 2}}
+                              ]},
+              length : _{ '@type' : "Variable",
+                          variable_name : _{ '@type' : "xsd:string",
+                                             '@value'  : "Length"}}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [Res] = JSON.bindings,
+    _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                 '@value': 2}} :< Res.
 
 :- end_tests(woql).

@@ -820,25 +820,25 @@ woql:like_similarity
   rdfs:domain woql:Like ;
   rdfs:range woql:Value .
 
-woql:Less 
+woql:Less
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;
   rdfs:label "Less"@en ;
   rdfs:comment "One value less than another"@en .
 
-woql:Greater 
+woql:Greater
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;
   rdfs:label "Greater"@en ;
   rdfs:comment "One value greater than another"@en .
 
-woql:Optional 
+woql:Optional
   a owl:Class ;
   rdfs:subClassOf woql:QueryWithSubQuery ;
   rdfs:comment "Query which is optional"@en ;
   rdfs:label "Optional"@en .
 
-woql:Put 
+woql:Put
   a owl:Class ;
   rdfs:subClassOf woql:GetOrPut ;
   rdfs:label "Put"@en ;
@@ -889,13 +889,13 @@ woql:uri
   rdfs:domain woql:URIGenerator ;
   rdfs:range woql:Value .
 
-woql:Unique 
+woql:Unique
   a owl:Class ;
   rdfs:subClassOf woql:URIGenerator ;
   rdfs:label "Unique"@en ;
   rdfs:comment "An irreversible unique identifier generated from a Base and a Key"@en .
 
-woql:IDGenerator 
+woql:IDGenerator
   a owl:Class ;
   rdfs:subClassOf woql:URIGenerator ;
   rdfs:label "ID Gen"@en ;
