@@ -617,7 +617,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                      |Path]),
         WOQL = re(WPat, WString, WList)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#OrderBy',
-          'http://terminusdb.com/schema/woql#variable_list' : Templates,
+          'http://terminusdb.com/schema/woql#variable_ordering' : Templates,
           'http://terminusdb.com/schema/woql#query' : Query
          } :< JSON
     ->  json_to_woql_ast(Templates,WTemplates,['http://terminusdb.com/schema/woql#variable_list'
@@ -626,11 +626,12 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                        |Path]),
         WOQL = order_by(WTemplates,WQuery)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#VariableOrdering',
-          'http://terminusdb.com/schema/woql#ascending' : Bool,
           'http://terminusdb.com/schema/woql#variable' : Var
          } :< JSON
-    ->  json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
-                                          |Path]),
+    ->  (   get_dict('http://terminusdb.com/schema/woql#ascending', JSON, Bool)
+        ->  json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
+                                              |Path])
+        ;   Boolean = false),
         json_to_woql_ast(Var,WVar,['http://terminusdb.com/schema/woql#ascending'
                                    |Path]),
         (   Boolean = true

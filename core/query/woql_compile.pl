@@ -1704,14 +1704,14 @@ test(length, [])
 test(order_by, []) :-
 
     Query = _{'@type' : "OrderBy",
-              variable_list : [_{ '@type' : "VariableOrdering",
-                                  index : _{'@type' : "xsd:integer",
-                                            '@value' : 0},
-                                  ascending : _{'@type' : "xsd:boolean",
-                                                '@value' : true},
-                                  variable : _{'@type' : "Variable",
-                                               variable_name : _{ '@type' : "xsd:string",
-                                                                  '@value' : "Subject"}}}],
+              variable_ordering : [_{ '@type' : "VariableOrdering",
+                                      index : _{'@type' : "xsd:integer",
+                                                '@value' : 0},
+                                      ascending : _{'@type' : "xsd:boolean",
+                                                    '@value' : true},
+                                      variable : _{'@type' : "Variable",
+                                                   variable_name : _{ '@type' : "xsd:string",
+                                                                      '@value' : "Subject"}}}],
               query : _{ '@type' : "Triple",
                          subject : _{'@type' : "Variable",
                                      variable_name :
