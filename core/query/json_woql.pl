@@ -603,14 +603,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                |Path]),
         json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                                |Path]),
-        (   WN = Num^^_
-        ->  true
-        ;   reverse(Path,Director),
-            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
-                                         'terminus:message' :'Poorly formed limit',
-                                         'vio:path' : Director,
-                                         'vio:query' : JSON})))),
-        WOQL = limit(Num, WQ)
+        WOQL = limit(WN, WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Regexp',
           'http://terminusdb.com/schema/woql#pattern' : Pat,
           'http://terminusdb.com/schema/woql#regexp_string' : String,
@@ -684,21 +677,29 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         WOQL = not(WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#True'} :< JSON
     ->  WOQL = true
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ValueList',
-          'http://terminusdb.com/schema/woql#value_list_element' : List} :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Array',
+          'http://terminusdb.com/schema/woql#array_element' : List} :< JSON
         % Unbox values
-    ->  json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#value_list_element'
+    ->  json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#array_element'
                                       |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ValueListElement',
-          'http://terminusdb.com/schema/woql#value' : Value} :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ArrayElement',
+          'http://terminusdb.com/schema/woql#variable_name' : Value} :< JSON
         % Unbox values
-    ->  json_to_woql_ast(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
-                                       |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ValueListElement',
+    ->  json_to_woql_ast(Value, Result, ['http://terminusdb.com/schema/woql#variable_name'
+                                         |Path]),
+        Result = String_or_Atom_Name^^_,
+        coerce_atom(String_or_Atom_Name, Atom_Name),
+        WOQL = v(Atom_Name)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ArrayElement',
           'http://terminusdb.com/schema/woql#node' : Node} :< JSON
         % Unbox values
     ->  json_to_woql_ast(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
                                       |Path])
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ArrayElement',
+          'http://terminusdb.com/schema/woql#datatype' : DT} :< JSON
+        % Unbox values
+    ->  json_to_woql_ast(DT, WOQL, ['http://terminusdb.com/schema/woql#datatype'
+                                    |Path])
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVars',
           'http://terminusdb.com/schema/woql#indexed_as_var' : List} :< JSON
         % Unbox values
@@ -710,12 +711,12 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#named_as_var'
                                        |Path])
 
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
-          'http://terminusdb.com/schema/woql#value': Value} :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Datatype',
+          'http://terminusdb.com/schema/woql#datatype': Value} :< JSON
         % Unbox values
-    ->  json_to_woql_ast(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
+    ->  json_to_woql_ast(Value, WOQL, ['http://terminusdb.com/schema/woql#datatype'
                                        |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#DatatypeOrID',
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Node',
           'http://terminusdb.com/schema/woql#node': Node} :< JSON
         % Unbox values
     ->  json_to_woql_ast(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
@@ -784,14 +785,13 @@ is_json_var(A) :-
 
 woql_index_sort(Comp,Left,Right) :-
     (   is_dict(Left),
-        get_dict('http://terminusdb.com/schema/woql#index', Left, I)
-    ->  Left_I = I
-    ;   Left_I = 0),
-    (   is_dict(Right),
-        get_dict('http://terminusdb.com/schema/woql#index', Right, J)
-    ->  Right_J = J
-    ;   Right_J = 0),
-    compare(Comp, Left_I, Right_J).
+        is_dict(Right),
+        get_dict('http://terminusdb.com/schema/woql#index', Left, Left_Lit),
+        get_dict('@value', Left_Lit, I),
+        get_dict('http://terminusdb.com/schema/woql#index', Right, Right_Lit),
+        get_dict('@value', Right_Lit, J)
+    ->  compare(Comp, I, J)
+    ;   compare(Comp, Left, Right)).
 
 json_to_woql_arith(JSON,WOQL,Path) :-
     is_dict(JSON),
@@ -862,12 +862,12 @@ json_to_woql_arith(JSON,WOQL,Path) :-
                            ['http://terminusdb.com/schema/woql#argument'
                             |Path]),
         WOQL=floor(WOQL_Argument)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ArithmeticValue',
-          'http://terminusdb.com/schema/woql#value': Value} :< JSON
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Datatype',
+          'http://terminusdb.com/schema/woql#datatype': Value} :< JSON
         % Unbox values
     ->  json_to_woql_arith(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
                                          |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#ArithmeticValue',
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Node',
           'http://terminusdb.com/schema/woql#node': Node} :< JSON
         % Unbox values
     ->  json_to_woql_arith(Node, WOQL, ['http://terminusdb.com/schema/woql#node'

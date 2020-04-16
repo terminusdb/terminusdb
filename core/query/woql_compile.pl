@@ -913,9 +913,11 @@ compile_wf(idgen(Base,Args,Id),(
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE), % Note: How can we resolve this properly? Freeze?
     resolve(Id,IdE).
-compile_wf(start(N,S),offset(N,Prog)) -->
+compile_wf(start(N,S),(literally(NE,Num),offset(Num,Prog))) -->
+    resolve(N,NE),
     compile_wf(S, Prog).
-compile_wf(limit(N,S),limit(N,Prog)) -->
+compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
+    resolve(N,NE),
     compile_wf(S, Prog).
 compile_wf(asc(X),asc(XE)) -->
     resolve(X,XE).
@@ -941,9 +943,6 @@ compile_wf(into(G,S),Goal) -->
     compile_wf(S,Goal),
     % swap old graph back in
     update(write_graph,_,OG).
-compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
-    resolve(N,NE),
-    compile_wf(S, Prog).
 compile_wf(not(P),not(Q)) -->
     compile_wf(P, Q).
 compile_wf(concat(L,A),Concat) -->
@@ -1260,7 +1259,7 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
 test(subsumption, [])
 :-
     Query = _{'@type' : "Subsumption",
-              'child' : _{ '@type' : "DatatypeOrID",
+              'child' : _{ '@type' : "Node",
                            'node' : "terminus:User"},
               'parent' : _{'@type' : "Variable",
                            'variable_name' :
@@ -1287,20 +1286,19 @@ test(subsumption, [])
 test(substring, [])
 :-
     Query = _{'@type' : "Substring",
-              'string' : _{ '@type' : "DatatypeOrID",
-                            'value' : _{'@type' : "xsd:string",
-                                        '@value' : "Test"}},
-              'before' : _{ '@type' : "DatatypeOrID",
-                            'value' : _{'@type' : "xsd:string",
-                                        '@value' : 1}},
-              'length' : _{ '@type' : "DatatypeOrID",
-                            'node' : _{'@type' : "Variable",
-                                       'variable_name' :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Length"}}},
-              'after' : _{ '@type' : "DatatypeOrID",
-                           'value' : _{'@type' : "xsd:integer",
-                                       '@value' : 1}},
+              'string' : _{ '@type' : "Datatype",
+                            'datatype' : _{'@type' : "xsd:string",
+                                           '@value' : "Test"}},
+              'before' : _{ '@type' : "Datatype",
+                            'datatype' : _{'@type' : "xsd:string",
+                                           '@value' : 1}},
+              'length' : _{'@type' : "Variable",
+                           'variable_name' :
+                           _{'@type' : "xsd:string",
+                             '@value' : "Length"}},
+              'after' : _{ '@type' : "Datatype",
+                           'datatype' : _{'@type' : "xsd:integer",
+                                          '@value' : 1}},
               'substring' : _{'@type' : "Variable",
                               'variable_name' :
                               _{'@type' : "xsd:string",
@@ -1319,10 +1317,10 @@ test(substring, [])
 test(typecast_string_integer, [])
 :-
     Query = _{'@type' : "Typecast",
-              'typecast_value' : _{ '@type' : "DatatypeOrID",
-                                    'value' : _{'@type' : "xsd:string",
-                                                '@value' : "202"}},
-              'typecast_type' : _{ '@type' : "DatatypeOrID",
+              'typecast_value' : _{ '@type' : "Datatype",
+                                    'datatype' : _{'@type' : "xsd:string",
+                                                   '@value' : "202"}},
+              'typecast_type' : _{ '@type' : "Node",
                                    'node' : "xsd:integer"},
               'typecast_result' : _{'@type' : "Variable",
                                     'variable_name' :
@@ -1342,10 +1340,10 @@ test(typecast_string_integer, [])
 test(typecast_string_integer, [])
 :-
     Query = _{'@type' : "Typecast",
-              'typecast_value' : _{ '@type' : "DatatypeOrID",
-                                    'value' : _{'@type' : "xsd:string",
-                                                '@value' : "202"}},
-              'typecast_type' : _{ '@type' : "DatatypeOrID",
+              'typecast_value' : _{ '@type' : "Datatype",
+                                    'datatype' : _{'@type' : "xsd:string",
+                                                   '@value' : "202"}},
+              'typecast_type' : _{ '@type' : "Node",
                                    'node' : "xsd:integer"},
               'typecast_result' : _{'@type' : "Variable",
                                     'variable_name' :
@@ -1367,12 +1365,12 @@ test(eval, [])
     Query = _{'@type' : "Eval",
               'expression' :
               _{ '@type' : "Plus",
-                 'first' : _{ '@type' : "ArithmeticValue",
-                              'value' : _{'@type' : "xsd:integer",
-                                          '@value' : 2}},
-                 'second' : _{ '@type' : "ArithmeticValue",
-                               'value' : _{'@type' : "xsd:integer",
-                                           '@value' : 2}}},
+                 'first' : _{ '@type' : "Datatype",
+                              'datatype' : _{'@type' : "xsd:integer",
+                                             '@value' : 2}},
+                 'second' : _{ '@type' : "Datatype",
+                               'datatype' : _{'@type' : "xsd:integer",
+                                              '@value' : 2}}},
               'result' : _{'@type' : "Variable",
                            'variable_name' :
                            _{'@type' : "xsd:string",
@@ -1395,11 +1393,11 @@ test(insert, [
      ])
 :-
     Query = _{'@type' : "AddTriple",
-              'subject' : _{ '@type' : "DatatypeOrID",
+              'subject' : _{ '@type' : "Node",
                              'node' : "doc:DBadmin"},
-              'predicate' : _{ '@type' : "DatatypeOrID",
+              'predicate' : _{ '@type' : "Node",
                                'node' : "rdfs:label"},
-              'object' : _{ '@type' : "DatatypeOrID",
+              'object' : _{ '@type' : "Node",
                             'node' : "xxx"}},
 
     create_context(terminus_descriptor{},Context),
@@ -1412,14 +1410,13 @@ test(insert, [
 
 test(upper, []) :-
     Query = _{'@type' : "Upper",
-              'left' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
-                                       '@value' : "Aaaa"}},
-              'right' : _{ '@type' : "DatatypeOrID",
-                           'node' : _{'@type' : "Variable",
-                                      'variable_name' :
-                                      _{'@type' : "xsd:string",
-                                        '@value' : "Upcased"}}}},
+              'left' : _{ '@type' : "Datatype",
+                          'datatype' : _{ '@type' : "xsd:string",
+                                          '@value' : "Aaaa"}},
+              'right' : _{'@type' : "Variable",
+                          'variable_name' :
+                          _{'@type' : "xsd:string",
+                            '@value' : "Upcased"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1433,28 +1430,27 @@ test(upper, []) :-
 
 test(unique, []) :-
     Query = _{'@type' : "Unique",
-              'base' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
-                                       '@value' : "http://foo.com/"}},
-              'key_list' : _{ '@type' : "ValueList",
-                              'value_list_element' :
-                              [_{ '@type' : "ValueListElement",
-                                  'index' : 0,
-                                  'value' : _{ '@type' : "xsd:string",
+              'base' : _{ '@type' : "Datatype",
+                          'datatype' : _{ '@type' : "xsd:string",
+                                          '@value' : "http://foo.com/"}},
+              'key_list' : _{ '@type' : "Array",
+                              'array_element' :
+                              [_{ '@type' : "ArrayElement",
+                                  'index' : _{ '@type' : "xsd:integer", '@value' : 0},
+                                  'datatype' : _{ '@type' : "xsd:string",
                                                '@value' : "a"}},
-                               _{ '@type' : "ValueListElement",
-                                  'index' : 1,
-                                  'value' : _{ '@type' : "xsd:string",
+                               _{ '@type' : "ArrayElement",
+                                  'index' : _{ '@type' : "xsd:integer", '@value' : 1},
+                                  'datatype' : _{ '@type' : "xsd:string",
                                                '@value' : "b"}},
-                               _{ '@type' : "ValueListElement",
-                                  'index' : 2,
-                                  'value' : _{ '@type' : "xsd:string",
+                               _{ '@type' : "ArrayElement",
+                                  'index' : _{ '@type' : "xsd:integer", '@value' : 2},
+                                  'datatype' : _{ '@type' : "xsd:string",
                                                '@value' : "c"}}]},
-              'uri' : _{ '@type' : "DatatypeOrID",
-                         'node' : _{'@type' : "Variable",
-                                    'variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "URI"}}}},
+              'uri' : _{'@type' : "Variable",
+                        'variable_name' :
+                        _{'@type' : "xsd:string",
+                          '@value' : "URI"}}},
 
     create_context(terminus_descriptor{},Context),
     woql_context(Prefixes),
@@ -1466,12 +1462,12 @@ test(unique, []) :-
 
 test(split, []) :-
     Query = _{'@type' : "Split",
-              'split_string' : _{ '@type' : "DatatypeOrID",
-                                  'value' : _{ '@type' : "xsd:string",
-                                               '@value' : "you_should_be_split"}},
-              'split_pattern' : _{ '@type' : "DatatypeOrID",
-                                   'value' : _{ '@type' : "xsd:string",
-                                                '@value' : "_"}},
+              'split_string' : _{ '@type' : "Datatype",
+                                  'datatype' : _{ '@type' : "xsd:string",
+                                                  '@value' : "you_should_be_split"}},
+              'split_pattern' : _{ '@type' : "Datatype",
+                                   'datatype' : _{ '@type' : "xsd:string",
+                                                   '@value' : "_"}},
               'split_list' : _{'@type' : "Variable",
                                'variable_name' :
                                _{'@type' : "xsd:string",
@@ -1492,26 +1488,30 @@ test(split, []) :-
 
 test(join, []) :-
     Query = _{'@type' : "Join",
-              'join_list' : _{ '@type' : 'ValueList',
-                               'value_list_element' :
-                               [_{ '@type' : "ValueListElement",
-                                   'index' : 0,
-                                   'value' : _{ '@type' : "xsd:string",
-                                                '@value' : "you"}},
-                                _{ '@type' : "ValueListElement",
-                                   'index' : 1,
-                                   'value' : _{ '@type' : "xsd:string",
+              'join_list' : _{ '@type' : 'Array',
+                               'array_element' :
+                               [_{ '@type' : "ArrayElement",
+                                   'index' : _{ '@type' : "xsd:integer",
+                                                '@value' : 0},
+                                   'datatype' : _{ '@type' : "xsd:string",
+                                                   '@value' : "you"}},
+                                _{ '@type' : "ArrayElement",
+                                   'index' : _{ '@type' : "xsd:integer",
+                                                '@value' : 1},
+                                   'datatype' : _{ '@type' : "xsd:string",
                                                 '@value' : "should"}},
-                                _{ '@type' : "ValueListElement",
-                                   'index' : 2,
-                                   'value' : _{ '@type' : "xsd:string",
-                                                '@value' : "be"}},
-                                _{ '@type' : "ValueListElement",
-                                   'index' : 3,
-                                   'value' : _{ '@type' : "xsd:string",
-                                                '@value' : "joined"}}]},
-              'join_separator' : _{ '@type' : "DatatypeOrID",
-                                    'value' : _{ '@type' : "xsd:string",
+                                _{ '@type' : "ArrayElement",
+                                   'index' : _{ '@type' : "xsd:integer",
+                                                '@value' : 2},
+                                   'datatype' : _{ '@type' : "xsd:string",
+                                                   '@value' : "be"}},
+                                _{ '@type' : "ArrayElement",
+                                   'index' : _{ '@type' : "xsd:integer",
+                                                '@value' : 3},
+                                   'datatype' : _{ '@type' : "xsd:string",
+                                                   '@value' : "joined"}}]},
+              'join_separator' : _{ '@type' : "Datatype",
+                                    'datatype' : _{ '@type' : "xsd:string",
                                                  '@value' : "_"}},
               'join' : _{'@type' : "Variable",
                          'variable_name' :
@@ -1530,7 +1530,7 @@ test(join, []) :-
 
 test(isa, []) :-
     Query = _{'@type' : "IsA",
-              'element' : _{ '@type' : "DatatypeOrID",
+              'element' : _{ '@type' : "Node",
                              'node' : "doc:admin"},
               'of_type' : _{'@type' : "Variable",
                             'variable_name' :
@@ -1554,11 +1554,11 @@ test(isa, []) :-
 
 test(like, []) :-
     Query = _{'@type' : "Like",
-              'left' : _{ '@type' : "DatatypeOrID",
-                          'value' : _{ '@type' : "xsd:string",
+              'left' : _{ '@type' : "Datatype",
+                          'datatype' : _{ '@type' : "xsd:string",
                                        '@value' : "joined"}},
-              'right' : _{ '@type' : "DatatypeOrID",
-                           'value' : _{ '@type' : "xsd:string",
+              'right' : _{ '@type' : "Datatype",
+                           'datatype' : _{ '@type' : "xsd:string",
                                         '@value' : "joined"}},
               'like_similarity' : _{'@type' : "Variable",
                                     'variable_name' :
@@ -1579,11 +1579,11 @@ test(exp, []) :-
     Query = _{'@type' : "Eval",
               'expression' :
               _{ '@type' : "Exp",
-                 'first' : _{ '@type' : "ArithmeticValue",
-                              'value' : _{'@type' : "xsd:integer",
+                 'first' : _{ '@type' : "Datatype",
+                              'datatype' : _{'@type' : "xsd:integer",
                                           '@value' : 2}},
-                 'second' : _{ '@type' : "ArithmeticValue",
-                               'value' : _{'@type' : "xsd:integer",
+                 'second' : _{ '@type' : "Datatype",
+                               'datatype' : _{'@type' : "xsd:integer",
                                            '@value' : 2}}},
               'result' : _{'@type' : "Variable",
                            'variable_name' :
@@ -1602,9 +1602,9 @@ test(exp, []) :-
 test(limit, []) :-
 
     Query = _{'@type' : "Limit",
-              'limit' : _{ '@type' : "DatatypeOrID",
-                           'value' : _{ '@type' : "xsd:string",
-                                        '@value' : 2}},
+              'limit' : _{ '@type' : "Datatype",
+                           'datatype' : _{ '@type' : "xsd:integer",
+                                           '@value' : 2}},
               'query' : _{ '@type' : "Triple",
                            'subject' : _{'@type' : "Variable",
                                          'variable_name' :
@@ -1645,12 +1645,14 @@ test(indexed_get, [])
       _{'@type' : 'IndexedAsVars',
         indexed_as_var : [
             _{'@type' : 'IndexedAsVar',
-              index : 0,
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 0},
               var : _{'@type' : "Variable",
                       variable_name : _{ '@type' : "xsd:string",
                                          '@value' : "First"}}},
             _{'@type' : 'IndexedAsVar',
-              index : 1,
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 1},
               var : _{'@type' : "Variable",
                       variable_name : _{ '@type' : "xsd:string",
                                          '@value' : "Second"}}}]},
@@ -1671,16 +1673,18 @@ test(concat, [])
     Query =
     _{'@type' : 'Concatenate',
       concat_list :
-      _{'@type' : 'ValueList',
-        value_list_element : [
-            _{'@type' : 'ValueListElement',
-              index : 0,
-              value : _{ '@type' : "xsd:string",
-                         '@value' : "First"}},
-            _{'@type' : 'ValueListElement',
-              index : 1,
-              value : _{ '@type' : "xsd:string",
-                         '@value' : "Second"}}
+      _{'@type' : 'Array',
+        array_element : [
+            _{'@type' : 'ArrayElement',
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 0},
+              datatype : _{ '@type' : "xsd:string",
+                            '@value' : "First"}},
+            _{'@type' : 'ArrayElement',
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 1},
+              datatype : _{ '@type' : "xsd:string",
+                            '@value' : "Second"}}
         ]},
       concatenated :
       _{'@type' : 'Variable',
@@ -1701,16 +1705,18 @@ test(sum, [])
     Query =
     _{'@type' : 'Sum',
       sum_list :
-      _{'@type' : 'ValueList',
-        value_list_element : [
-            _{'@type' : 'ValueListElement',
-              index : 0,
-              value : _{ '@type' : "xsd:integer",
-                         '@value' : 1}},
-            _{'@type' : 'ValueListElement',
-              index : 1,
-              value : _{ '@type' : "xsd:integer",
-                         '@value' : 2}}
+      _{'@type' : 'Array',
+        array_element : [
+            _{'@type' : 'ArrayElement',
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 0},
+              datatype : _{ '@type' : "xsd:integer",
+                            '@value' : 1}},
+            _{'@type' : 'ArrayElement',
+              index : _{ '@type' : "xsd:integer",
+                         '@value' : 1},
+              datatype : _{ '@type' : "xsd:integer",
+                            '@value' : 2}}
         ]},
       sum :
       _{'@type' : 'Variable',
