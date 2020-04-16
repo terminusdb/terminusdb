@@ -61,13 +61,13 @@
  * collection_descriptor --> terminus_descriptor{}
  *                         | label_descriptor{ label: string }
  *                         | id_descriptor{ id : string } % only for querying!
- *                         | database_descriptor{ database_name : atom }
+ *                         | database_descriptor{ database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
- *                                                  repository_name : atom }
+ *                                                  repository_name : string }
  *                         | branch_descriptor{ repository_descriptor: repository_descriptor,
- *                                              branch_name : atom}, % the name of the thing advancing
+ *                                              branch_name : string}, % the name of the thing advancing
  *                         | commit_descriptor{ repository_descriptor: repository_descriptor,
- *                                              last_commit : atom} % the base of the commit
+ *                                              commit_id : string} % the base of the commit
  *
  *
  * terminus_descriptor: refers to the core database with user and database management.
