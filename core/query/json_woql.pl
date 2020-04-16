@@ -631,7 +631,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  (   get_dict('http://terminusdb.com/schema/woql#ascending', JSON, Bool)
         ->  json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
                                               |Path])
-        ;   Boolean = false),
+        ;   Boolean = true),
         json_to_woql_ast(Var,WVar,['http://terminusdb.com/schema/woql#ascending'
                                    |Path]),
         (   Boolean = true
