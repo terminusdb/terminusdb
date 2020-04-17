@@ -501,41 +501,17 @@ run_term(Query,JSON) :-
     run_term(Query,Ctx,JSON).
 
 run_term(Query,Ctx_In,JSON) :-
-    debug(terminus(woql_compile(run_term)), 'Query: ~q',[Query]),
     compile_query(Query,Prog,Ctx_In,Ctx_Out),
-    debug(terminus(woql_compile(run_term)), 'Program: ~q',[Prog]),
-    debug(terminus(woql_compile(run_term)), 'Ctx: ~q',[Ctx_Out]),
-    elt(definitions=Definitions,Ctx_Out),
-    elt(database=_Database,Ctx_Out),
-    debug(terminus(woql_compile(run_term)),'We are here -1',[]),
-    assert_program(Definitions),
-    debug(terminus(woql_compile(run_term)),'We are here -0.5',[]),
-    findall((B-OGs),
-            (   elt(output_graphs=OGs,Ctx_Out),
-                % sets head to graph start and tail to the empty list.
-                bookend_graphs(OGs),
-                catch(
-                    call(Prog),
-                    error(instantiation_error, C),
-                    % We need to find the offending unbound culprit here
-                    woql_compile:report_instantiation_error(Prog,C,Ctx_Out)
-                ),
-                elt(bindings=B,Ctx_Out)
+    findall(JSON_Binding,
+            (   % sets head to graph start and tail to the empty list.
+                call(Prog),
+                elt(bindings=B,Ctx_Out),
+                once(patch_bindings(B,Patched)),
+                once(term_jsonld(Patched,JSON_Binding))
             ),
-            BGs),
+            Bindings),
 
-    zip(Bindings,Database_List_List,BGs),
-
-    merge_graphs(Database_List_List,Database_List),
-
-    maplist([B0,B1]>>patch_bindings(B0,B1),Bindings,Patched_Bindings),
-    % maplist({Database}/[OGs,Gs]>>enrich_graphs(OGs,Database,Gs),Database_List,E_Databases),
-    Database_List= E_Databases,
-
-    debug(terminus(woql_compile(run_term)), 'We are here 1',[]),
-
-    term_jsonld([bindings=Patched_Bindings,graphs=E_Databases],JSON),
-    ignore(retract_program(Definitions)).
+    JSON = _{bindings : Bindings}.
 
 get_varname(Var,[X=Y|_Rest],Name) :-
     Y == Var,

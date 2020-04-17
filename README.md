@@ -111,7 +111,7 @@ should be available by the end of February 2020.
 
 ## Contact 
 
-You can write the authors, or connect to us on FreeNode IRC on the `#TerminusDB` channel.
+You can write the authors, or connect to our community server on [Discord](https://discord.gg/mAQyYBa).
 
 ## Authors
 
