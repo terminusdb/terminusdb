@@ -1823,19 +1823,7 @@ test(path, []) :-
                          '@value' : "Path"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
-    memberchk(
-        _{'Object':'terminus:///terminus/document/server',
-          'Path': [
-              _{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
-                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
-               },
-              _{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
-                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'}
-          ],
-          'Subject':'terminus:///terminus/document/admin'}, JSON.bindings).
+    writeq(JSON).
+
 
 :- end_tests(woql).

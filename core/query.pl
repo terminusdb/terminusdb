@@ -89,7 +89,7 @@
 
               % path.pl
               compile_pattern/3,
-              calcuate_path_solutions/6
+              calculate_path_solutions/6
           ]).
 
 :- use_module(query/expansions).
@@ -103,3 +103,4 @@
 :- use_module(query/resolve_query_resource).
 :- use_module(query/global_prefixes).
 :- use_module(query/query_response).
+:- use_module(query/path).
