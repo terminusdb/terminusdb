@@ -42,6 +42,7 @@
 %:- use_module(ask), [enrich_graph_fragment/5]).
 :- use_module(global_prefixes, [default_prefixes/1]).
 :- use_module(resolve_query_resource).
+:- use_module(path).
 
 :- use_module(core(util)).
 % Get op precedence
@@ -750,6 +751,20 @@ compile_wf(t(X,P,Y,G),Goal) -->
         filter_transaction_object_goal(Filter, Transaction_Object, t(XE,PE,YE), Search_Clause),
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
+compile_wf(path(X,Pattern,Y,Path),Goal) -->
+    resolve(X,XE),
+    resolve(Y,YE),
+    resolve(Path,PathE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
+        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
+        compile_pattern(Pattern,Compiled_Pattern,New_Transaction_Object),
+        Goal = calculate_path_solutions(Compiled_Pattern,XE,YE,PathE,Filter,New_Transaction_Object)
+    }.
 compile_wf((A;B),(ProgA;ProgB)) -->
     peek(S0),
     compile_wf(A,ProgA),
@@ -1079,17 +1094,25 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     merge_options(Options,Default,New_Options),
     memberchk(Name_Atom=file(_Original,Path), Files).
 
-marshall_args(M_Pred,Trans) :-
+
+%%
+% marshall_args(M_Pred, Trans) is det.
+%
+% NOTE: The marshalling of args creates a situation in which incorrect modes
+% of underlying predicates report the wrong value.
+%
+% Better is if we had a registration system, which took allowed modes and types.
+%
+marshall_args(M_Pred,Goal) :-
     strip_module(M_Pred, M, Pred),
     Pred =.. [Func|ArgsE],
     length(ArgsE,N),
     length(ArgsL,N),
     maplist([AE,AL,literally(AE,AL)]>>true, ArgsE, ArgsL, Pre),
     maplist([AE,AL,unliterally(AL,AE)]>>true, ArgsE, ArgsL, Post),
-    xfy_list(',',Pre_Term,Pre),
-    xfy_list(',',Post_Term,Post),
     Lit_Pred =.. [Func|ArgsL],
-    Trans = (Pre_Term, M:Lit_Pred, Post_Term).
+    append([Pre,[M:Lit_Pred],Post], Term_List),
+    xfy_list(',',Goal,Term_List).
 
 literally(X, _X) :-
     var(X),
@@ -1245,6 +1268,32 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
     ->  Objects = Transaction.inference_objects),
     find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found),
     Graph_Descriptor = Found.get(descriptor).
+
+filter_transaction(type_filter{ types : _Types }, Transaction, Transaction).
+filter_transaction(type_name_filter{ type : instance, names : Names}, Transaction, New_Transaction) :-
+    filter_read_write_objects(Transaction.instance_objects, Names, Objects),
+    New_Transaction = transaction_object{
+                          parent : Transaction.parent,
+                          instance_objects : Objects,
+                          inference_objects : Transaction.inference_objects,
+                          schema_objects : Transaction.schema_objects
+                      }.
+filter_transaction(type_name_filter{ type : schema, names : Names}, Transaction, New_Transaction) :-
+    filter_read_write_objects(Transaction.schema_objects, Names, Objects),
+    New_Transaction = transaction_object{
+                          parent : Transaction.parent,
+                          instance_objects : [],
+                          inference_objects : [],
+                          schema_objects : Objects
+                      }.
+filter_transaction(type_name_filter{ type : inference, names : Names}, Transaction, New_Transaction) :-
+    filter_read_write_objects(Transaction.inference_objects, Names, Objects),
+    New_Transaction = transaction_object{
+                          parent : Transaction.parent,
+                          instance_objects : [],
+                          inference_objects : Objects,
+                          schema_objects : []
+                      }.
 
 :- begin_tests(woql).
 

@@ -1211,7 +1211,91 @@ woql:typecast_result
   rdfs:domain woql:Typecast ;
   rdfs:range woql:Value .
 
-terminus:Document 
-  a owl:Class;
-  rdfs:label "Document Class"@en;
-  rdfs:comment "Terminus Document Class included as it is a dependancy"@en.
+terminus:Document
+  a owl:Class ;
+  rdfs:label "Document Class"@en ;
+  rdfs:comment "Terminus Document Class included as it is a dependancy"@en .
+
+woql:PathPattern
+  a owl:Class ;
+  rdfs:label "Path Pattern"@en ;
+  rdfs:comment "The pattern which specifies a given path"@en .
+
+woql:PathSequence
+  a owl:Class ;
+  rdfs:subClassOf woql:PathPattern ;
+  rdfs:label "Sequence"@en ;
+  rdsf:comment "path_first followed by path_second"@en .
+
+woql:path_first
+  a owl:ObjectProperty ;
+  rdfs:domain woql:PathSequence ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "first"@en ;
+  rdfs:comment "Pattern to deploy first in a sequence"@en .
+
+woql:path_second
+  a owl:ObjectProperty ;
+  rdfs:domain woql:PathSequence ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "second"@en ;
+  rdfs:comment "Pattern to deploy second in a sequence"@en .
+
+woql:PathOr
+  a owl:Class ;
+  rdfs:subClassOf woql:PathPattern ;
+  rdfs:label "Sequence"@en ;
+  rdsf:comment "path_first followed by path_second"@en .
+
+woql:path_first
+  a owl:ObjectProperty ;
+  rdfs:domain woql:PathOr ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "first"@en ;
+  rdfs:comment "Pattern to deploy first in a sequence"@en .
+
+woql:path_second
+  a owl:ObjectProperty ;
+  rdfs:domain woql:PathOr ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "second"@en ;
+  rdfs:comment "Pattern to deploy second in a sequence"@en .
+
+woql:HasPathPattern ;
+  a owl:Class ;
+  terminus:tag terminus:abstract ;
+  rdfs:label "Has Pattern"@en ;
+  rdfs:comment "Abstract mixin with a pattern"@en .
+
+woql:path_pattern
+  a owl:ObjectProperty ;
+  rdfs:domain woql:HasPathPattern ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "pattern"@en ;
+  rdfs:comment "Path pattern associated with modal operator"@en .
+
+woql:PathPlus
+  a owl:Class ;
+  rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
+  rdfs:label "Plus"@en ;
+  rdsf:comment "Follow pattern at least once"@en .
+
+woql:PathTimes
+  a owl:Class ;
+  rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
+  rdfs:label "Plus"@en ;
+  rdsf:comment "Follow pattern at least once"@en .
+
+woql:path_minimum
+  a owl:DatatypeProperty ;
+  rdfs:domain woql:PathTimes ;
+  rdfs:range xsd:nonNegativeInteger ;
+  rdfs:label "minimum"@en ;
+  rdfs:comment "Minumum applications of pattern."@en .
+
+woql:path_maximum
+  a owl:DatatypeProperty ;
+  rdfs:domain woql:PathTimes ;
+  rdfs:range xsd:nonNegativeInteger ;
+  rdfs:label "maximum"@en ;
+  rdfs:comment "Maximum applications of pattern."@en .

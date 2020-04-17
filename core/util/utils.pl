@@ -48,7 +48,9 @@
               random_string/1,
               uri_has_protocol/1,
               uri_has_prefix/1,
-              choice_points/1
+              choice_points/1,
+              sol_set/2,
+              sol_bag/2
           ]).
 
 /** <module> Utils
@@ -742,3 +744,28 @@ choice_points_(F, M) :-
     prolog_choice_attribute(F, parent, G),
     choice_points_(G, N),
     M is N + 1.
+
+/**
+ * sol_set(+Predicate,-Result:list) is det.
+ *
+ * Takes a uniary-predicate of mode p(-X) and finds all
+ * unique generated solutions.
+ */
+:- meta_predicate sol_set(1,?).
+sol_set(Predicate,Result) :-
+    findall(Template,
+            call(Predicate, Template),
+            Templates),
+    sort(Templates, Result).
+
+/**
+ * sol_set(+Predicate,-Result:list) is det.
+ *
+ * Takes a uniary-predicate of mode p(-X) and finds all
+ * generated solutions.
+ */
+:- meta_predicate sol_bag(1,?).
+sol_bag(Predicate,Result) :-
+    findall(Template,
+            call(Predicate, Template),
+            Result).

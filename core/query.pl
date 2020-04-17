@@ -78,14 +78,18 @@
               resolve_query_resource/2,
               resolve_filter/2,
 
-              % woql_compile
+              % woql_compile.pl
               lookup/3,
               lookup_backwards/3,
               compile_query/3,
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              filter_transaction_object_read_write_objects/3
+              filter_transaction_object_read_write_objects/3,
+
+              % path.pl
+              compile_pattern/3,
+              calcuate_path_solutions/6
           ]).
 
 :- use_module(query/expansions).

@@ -83,6 +83,8 @@
               uri_has_prefix/1,
               uri_has_protocol/1,
               choice_points/1,
+              sol_bag/2,
+              sol_set/2,
 
               % speculative_parse.pl
               guess_date/2,
