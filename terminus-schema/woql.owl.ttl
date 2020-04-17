@@ -1348,3 +1348,29 @@ woql:Edge
   rdfs:label "Plus"@en ;
   rdsf:comment "Follow pattern at least once"@en .
 
+woql:Dot
+  a owl:Class ;
+  rdfs:subClassOf woql:Query ;
+  rdfs:label "Dot"@en ;
+  rdsf:comment "Select from a dictionary"@en .
+
+woql:dictionary
+  a owl:ObjectProperty
+  rdfs:domain woql:Dot ;
+  rdfs:range woql:Value ;
+  rdfs:label "dictionary"@en ;
+  rdsf:comment "Dictionary of a selection"@en .
+
+woql:dictionary_key
+  a owl:ObjectProperty
+  rdfs:domain woql:Dot ;
+  rdfs:range woql:Value ;
+  rdfs:label "key"@en ;
+  rdsf:comment "Dictionary key of a selection"@en .
+
+woql:dictionary_value
+  a owl:ObjectProperty
+  rdfs:domain woql:Dot ;
+  rdfs:range woql:Value ;
+  rdfs:label "value"@en ;
+  rdsf:comment "Dictionary value of a selection"@en .

@@ -1010,6 +1010,10 @@ compile_wf(X is Arith, (Pre_Term,
                         XE = XA^^'http://www.w3.org/2001/XMLSchema#decimal')) -->
     resolve(X,XE),
     compile_arith(Arith,Pre_Term,ArithE).
+compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
+    resolve(Dict,DictE),
+    resolve(Key,KeyE),
+    resolve(Value,ValueE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
     resolve(WGroup,Group),
     resolve(WTemplate,Template),
@@ -1131,6 +1135,8 @@ literally(X, X) :-
     ;   string(X)
     ->  true
     ;   number(X)
+    ->  true
+    ;   is_dict(X)
     ).
 
 unliterally(X,Y) :-
@@ -1166,6 +1172,10 @@ unliterally(X,Y) :-
         ->  Lang = en
         ;   true)
     ).
+unliterally(X,Y) :-
+    is_dict(X),
+    !,
+    X = Y.
 unliterally([],[]).
 unliterally([H|T],[HL|TL]) :-
     unliterally(H,HL),
@@ -1808,22 +1818,72 @@ test(path, []) :-
                _{ '@type' : "PathPredicate",
                   path_predicate : _{ '@id' : "terminus:resource_includes"}}}}}},
 
-    Query = _{'@type' : "Path",
-              subject : _{'@type' : "Variable",
-                          variable_name : _{ '@type' : "xsd:string",
-                                             '@value' : "Subject"}},
-              path_pattern : Pattern,
-              object : _{'@type' : "Variable",
-                         variable_name :
-                         _{'@type' : "xsd:string",
-                           '@value' : "Object"}},
-              path : _{'@type' : "Variable",
-                       variable_name :
-                       _{'@type' : "xsd:string",
-                         '@value' : "Path"}}},
+    Query = _{'@type' : "And",
+              query_list :
+              [_{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 0},
+                 query :
+                 _{'@type' : "Path",
+                   subject : _{'@type' : "Variable",
+                               variable_name : _{ '@type' : "xsd:string",
+                                                  '@value' : "Subject"}},
+                   path_pattern : Pattern,
+                   object : _{'@type' : "Variable",
+                              variable_name :
+                              _{'@type' : "xsd:string",
+                                '@value' : "Object"}},
+                   path : _{'@type' : "Variable",
+                            variable_name :
+                            _{'@type' : "xsd:string",
+                              '@value' : "Path"}}}},
+               _{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 1},
+                 query :
+                 _{'@type' : "Member",
+                   member_list : _{'@type' : "Variable",
+                                   variable_name : _{ '@type' : "xsd:string",
+                                                      '@value' : "Path"}},
+                   member : _{'@type' : "Variable",
+                              variable_name : _{ '@type' : "xsd:string",
+                                                 '@value' : "Edge"}}}},
+               _{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 2},
+                 query :
+                 _{'@type' : "Dot",
+                   dictionary : _{'@type' : "Variable",
+                                  variable_name : _{ '@type' : "xsd:string",
+                                                     '@value' : "Edge"}},
+                   dictionary_key : _{'@type' : "Node",
+                                      node : "object"},
+                   dictionary_value : _{'@type' : "Variable",
+                                        variable_name : _{ '@type' : "xsd:string",
+                                                           '@value' : "Edge_Object"}}}}
+              ]
+             },
 
     query_test_response(terminus_descriptor{}, Query, JSON),
-    writeq(JSON).
+    [Res|_] = JSON.bindings,
+    _{'Edge':_{'@type':"http://terminusdb.com/schema/woql#Edge",
+               'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
+               'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
+               'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
+              },
+      'Edge_Object': 'terminus:///terminus/document/access_all_areas',
+      'Object': 'terminus:///terminus/document/server',
+      'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
+                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
+                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
+               },
+              _{'@type':"http://terminusdb.com/schema/woql#Edge",
+                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
+                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'
+               }],
+      'Subject':'terminus:///terminus/document/admin'} :< Res.
 
 
 :- end_tests(woql).

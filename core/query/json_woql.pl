@@ -680,6 +680,18 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#typecast_result'
                                |Path]),
         WOQL = not(WQ)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Dot',
+          'http://terminusdb.com/schema/woql#dictionary' : Dictionary,
+          'http://terminusdb.com/schema/woql#dictionary_key' : Key,
+          'http://terminusdb.com/schema/woql#dictionary_value' : Value
+         } :< JSON
+    ->  json_to_woql_ast(Dictionary, WDictionary, ['http://terminusdb.com/schema/woql#dictionary_key'
+                                                   |Path]),
+        json_to_woql_ast(Key, WKey, ['http://terminusdb.com/schema/woql#dictionary_key'
+                                     |Path]),
+        json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#dictionary_value'
+                                       |Path]),
+        WOQL = dot(WDictionary,WKey,WValue)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Path',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#path_pattern' : Pattern,

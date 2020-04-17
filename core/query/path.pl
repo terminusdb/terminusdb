@@ -40,6 +40,12 @@ in_open_set(Elt,[Elt|_]) :-
 in_open_set(Elt,[_|Set]) :-
     in_open_set(Elt,Set).
 
+make_edge(X,P,Y,
+          _{ '@type' : "http://terminusdb.com/schema/woql#Edge",
+             'http://terminusdb.com/schema/woql#subject' : X,
+             'http://terminusdb.com/schema/woql#predicate' : P,
+             'http://terminusdb.com/schema/woql#object' : Y}).
+
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     ground(Y),
     var(X),
@@ -50,10 +56,12 @@ run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Y,Path,Path-[],Filter,Transaction_Object).
 
 run_pattern_forward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    in_open_set(edge(X,P,Y),Open_Set),
+    make_edge(X,P,Y,Edge),
+    in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_forward(p(P),X,Y,_Open_Set,[edge(X,P,Y)|Tail]-Tail,Filter,Transaction_Object) :-
+run_pattern_forward(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
     hop(Filter,X,P,Y,Transaction_Object).
 run_pattern_forward((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object),
@@ -76,10 +84,12 @@ run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) 
     run_pattern_n_m_forward(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
 
 run_pattern_backward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    in_open_set(edge(X,P,Y),Open_Set),
+    make_edge(X,P,Y,Edge),
+    in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_backward(p(P),X,Y,_Open_Set,[edge(X,P,Y)|Tail]-Tail,Filter,Transaction_Object) :-
+run_pattern_backward(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
     hop(Filter,X,P,Y,Transaction_Object).
 run_pattern_backward((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_backward(Q,ZE,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object),
@@ -130,6 +140,10 @@ compile_pattern(times(X,N,M), times(XC,N,M), Transaction_Object) :-
     compile_pattern(X,XC,Transaction_Object).
 
 right_edges(p(P),[P]).
+right_edges(plus(P),Ps) :-
+    right_edges(P,Ps).
+right_edges(times(P,_,_),Ps) :-
+    right_edges(P,Ps).
 right_edges((X,_Y),Ps) :-
     right_edges(X,Ps).
 right_edges((X;Y),Rs) :-
@@ -138,6 +152,10 @@ right_edges((X;Y),Rs) :-
     append(Ps,Qs,Rs).
 
 left_edges(p(P),[P]).
+left_edges(plus(P),Ps) :-
+    left_edges(P,Ps).
+left_edges(times(P,_,_),Ps) :-
+    left_edges(P,Ps).
 left_edges((_X,Y),Ps) :-
     left_edges(Y,Ps).
 left_edges((X;Y),Rs) :-
