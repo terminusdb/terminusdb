@@ -199,24 +199,11 @@ woql:variable_list
   rdfs:domain woql:HasVariableList ;
   rdfs:range woql:VariableListElement .
 
-woql:ObjectWithVariable
-  a owl:Class ;
-  rdfs:label "Object With Variable"@en ;
-  rdfs:comment "An abstraction of the type of objects that contain a pointer to a variable"@en ;
-  terminus:tag terminus:abstract.
-
 woql:VariableListElement
   a owl:Class ;
   rdfs:label "Variable List Element"@en ;
   rdfs:comment "An element of a list by position"@en ;
-  rdfs:subClassOf woql:Indexable, woql:ObjectWithVariable.
-
-woql:variable
-  a owl:ObjectProperty ;
-  rdfs:label "Variable Name"@en ;
-  rdfs:comment "The name of a variable"@en ;
-  rdfs:domain woql:ObjectWithVariable ;
-  rdfs:range woql:Variable .
+  rdfs:subClassOf woql:Indexable, woql:Variable.
 
 woql:Select
   a owl:Class ;
@@ -515,7 +502,7 @@ woql:AsVars
 
 woql:AsVar
   a owl:Class ;
-  rdfs:subClassOf woql:ObjectWithVariable;
+  rdfs:subClassOf woql:Variable;
   rdfs:label "As Var"@en ;
   rdfs:comment "As Var"@en .
 
@@ -1165,21 +1152,28 @@ woql:GroupBy
   a owl:Class ;
   rdfs:label "Group By"@en ;
   rdfs:comment "Group a query by a spec"@en ;
-  rdfs:subClassOf woql:QueryWithSubQuery, woql:HasVariableList .
+  rdfs:subClassOf woql:QueryWithSubQuery .
 
-woql:group_var
-  a owl:ObjectProperty ;
-  rdfs:label "group var"@en ;
-  rdfs:comment "Variable which to group"@en ;
-  rdfs:domain woql:GroupBy ;
-  rdfs:range woql:Variable .
-
-woql:grouped
+woql:group_template
   a owl:ObjectProperty ;
   rdfs:label "grouped"@en ;
   rdfs:comment "Variable in which to place the grouping"@en ;
   rdfs:domain woql:GroupBy ;
-  rdfs:range woql:Variable .
+  rdfs:range woql:VariableListElement  .
+
+woql:group_by
+  a owl:ObjectProperty ;
+  rdfs:label "grouped"@en ;
+  rdfs:comment "Variable in which to place the grouping"@en ;
+  rdfs:domain woql:GroupBy ;
+  rdfs:range woql:VariableListElement  .
+
+woql:grouped
+  a owl:ObjectProperty ;
+  rdfs:label "group var"@en ;
+  rdfs:comment "Variable which to group"@en ;
+  rdfs:domain woql:GroupBy ;
+  rdfs:range woql:Value .
 
 woql:Length
   a owl:Class ;

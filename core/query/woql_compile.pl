@@ -1886,4 +1886,48 @@ test(path, []) :-
       'Subject':'terminus:///terminus/document/admin'} :< Res.
 
 
+test(group_by, []) :-
+
+    Query = _{'@type' : "GroupBy",
+              group_by : [_{ '@type' : "VariableListElement",
+                             index : _{'@type' : "xsd:integer",
+                                       '@value' : 0},
+                             variable_name : _{ '@type' : "xsd:string",
+                                                '@value' : "Subject"}}],
+              group_template :  [_{ '@type' : "VariableListElement",
+                                    index : _{'@type' : "xsd:integer",
+                                              '@value' : 0},
+                                    variable_name : _{ '@type' : "xsd:string",
+                                                       '@value' : "Subject"}},
+                                 _{ '@type' : "VariableListElement",
+                                    index : _{'@type' : "xsd:integer",
+                                              '@value' : 1},
+                                    variable_name : _{ '@type' : "xsd:string",
+                                                       '@value' : "Object"}}],
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "Variable",
+                                     variable_name :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Subject"}},
+                         predicate : _{'@type' : "Variable",
+                                       variable_name :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Predicate"}},
+                         object : _{'@type' : "Variable",
+                                    variable_name :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Object"}}
+                       },
+              grouped : _{'@type' : "Variable",
+                          variable_name :
+                          _{'@type' : "xsd:string",
+                            '@value' : "Grouped"}}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+
+    [Res|_] = JSON.bindings,
+
+    [['terminus:///terminus/document/access_all_areas',
+      'http://terminusdb.com/schema/terminus#class_frame']|_] = Res.'Grouped'.
+
 :- end_tests(woql).

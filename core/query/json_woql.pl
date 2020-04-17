@@ -639,14 +639,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         ;   Order = desc),
         WOQL =.. [Order,WVar]
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#GroupBy',
-          'http://terminusdb.com/schema/woql#variable_list' : Spec,
-          'http://terminusdb.com/schema/woql#group_var' : Obj,
+          'http://terminusdb.com/schema/woql#group_by' : Spec,
+          'http://terminusdb.com/schema/woql#group_template' : Obj,
           'http://terminusdb.com/schema/woql#query' : Query,
           'http://terminusdb.com/schema/woql#grouped' : Collector
          } :< JSON
-    ->  json_to_woql_ast(Spec,WSpec,['http://terminusdb.com/schema/woql#variable_list'
+    ->  json_to_woql_ast(Spec,WSpec,['http://terminusdb.com/schema/woql#group_by'
                                      |Path]),
-        json_to_woql_ast(Obj,WObj,['http://terminusdb.com/schema/woql#group_var'
+        json_to_woql_ast(Obj,WObj,['http://terminusdb.com/schema/woql#group_template'
                                    |Path]),
         json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
                                        |Path]),
@@ -732,6 +732,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         % Unbox values
     ->  json_to_woql_ast(DT, WOQL, ['http://terminusdb.com/schema/woql#datatype'
                                     |Path])
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#VariableListElement',
+          'http://terminusdb.com/schema/woql#variable_name' : Value} :< JSON
+        % Unbox values
+    ->  json_to_woql_ast(Value, Result, ['http://terminusdb.com/schema/woql#variable_name'
+                                         |Path]),
+        Result = String_or_Atom_Name^^_,
+        coerce_atom(String_or_Atom_Name, Atom_Name),
+        WOQL = v(Atom_Name)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVars',
           'http://terminusdb.com/schema/woql#indexed_as_var' : List} :< JSON
         % Unbox values
