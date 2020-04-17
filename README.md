@@ -34,7 +34,9 @@ v1.1.1
 
 For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
 
-Follow the instructions there.
+Follow the instructions there. If you choose to run the Docker image directly, please not that
+the default password is "root" (without the double quotes) and that you should change it in a
+production environment.
 
 ### Building from source
 
