@@ -276,28 +276,44 @@ woql:Into
 
 woql:Triple
   a owl:Class ;
+  rdfs:subClassOf woql:HasSubject, woql:HasObject, woql:HasPredicate, woql:Query
   rdfs:label "Triple"@en ;
   rdfs:comment "A edge in the graph specified by subject, predicate, object"@en .
+
+woql:HasSubject
+  a owl:Class ;
+  rdfs:label "Subject"@en ;
+  rdfs:comment "A class which has a subject of an edge"@en .
 
 woql:subject
   a owl:ObjectProperty ;
   rdfs:label "subject"@en ;
   rdfs:comment "The subject of a triple"@en ;
-  rdfs:domain woql:Triple ;
+  rdfs:domain woql:HasSubject ;
   rdfs:range owl:Thing .
+
+woql:HasPredicate
+  a owl:Class ;
+  rdfs:label "Predicate"@en ;
+  rdfs:comment "A class which has a predicate of an edge"@en .
 
 woql:predicate
   a owl:ObjectProperty ;
   rdfs:label "predicate"@en ;
   rdfs:comment "The predicate of a triple"@en ;
-  rdfs:domain woql:Triple ;
+  rdfs:domain woql:HasPredicate ;
   rdfs:range owl:Thing .
+
+woql:HasObject
+  a owl:Class ;
+  rdfs:label "Object"@en ;
+  rdfs:comment "A class which has the object of an edge"@en .
 
 woql:object
   a owl:ObjectProperty ;
   rdfs:label "object"@en ;
   rdfs:comment "The object of a triple"@en ;
-  rdfs:domain woql:Triple ;
+  rdfs:domain woql:HasObject ;
   rdfs:range woql:Value .
 
 woql:Quad
@@ -1216,6 +1232,25 @@ terminus:Document
   rdfs:label "Document Class"@en ;
   rdfs:comment "Terminus Document Class included as it is a dependancy"@en .
 
+woql:Path
+  a owl:Class ;
+  rdfs:label "Path"@en ;
+  rdfs:comment "A path query"@en ;
+  rdfs:subClassOf woql:Query, woql:HasSubject, woql:HasObject, woql:HasPathPattern .
+
+woql:PathPredicate
+  a owl:Class ;
+  rdfs:label "Predicate"@en ;
+  rdfs:comment "Contains a predicate to follow in a pattern"@en ;
+  rdfs:subClassOf woql:PathPattern .
+
+woql:path_predicate
+  a owl:ObjectProperty ;
+  rdfs:domain woql:PathPredicate ;
+  rdfs:range owl:Thing ;
+  rdfs:label "first"@en ;
+  rdfs:comment "Pattern to deploy first in a sequence"@en .
+
 woql:PathPattern
   a owl:Class ;
   rdfs:label "Path Pattern"@en ;
@@ -1247,19 +1282,19 @@ woql:PathOr
   rdfs:label "Sequence"@en ;
   rdsf:comment "path_first followed by path_second"@en .
 
-woql:path_first
+woql:path_left
   a owl:ObjectProperty ;
   rdfs:domain woql:PathOr ;
   rdfs:range woql:PathPattern ;
-  rdfs:label "first"@en ;
-  rdfs:comment "Pattern to deploy first in a sequence"@en .
+  rdfs:label "left"@en ;
+  rdfs:comment "The left branch pattern in a fork"@en .
 
-woql:path_second
+woql:path_right
   a owl:ObjectProperty ;
   rdfs:domain woql:PathOr ;
   rdfs:range woql:PathPattern ;
-  rdfs:label "second"@en ;
-  rdfs:comment "Pattern to deploy second in a sequence"@en .
+  rdfs:label "right"@en ;
+  rdfs:comment "The right branch pattern in a fork"@en .
 
 woql:HasPathPattern ;
   a owl:Class ;
@@ -1273,6 +1308,13 @@ woql:path_pattern
   rdfs:range woql:PathPattern ;
   rdfs:label "pattern"@en ;
   rdfs:comment "Path pattern associated with modal operator"@en .
+
+woql:path
+  a owl:ObjectProperty ;
+  rdfs:domain woql:Path ;
+  rdfs:range woql:PathPattern ;
+  rdfs:label "path"@en ;
+  rdfs:comment "The path taken by a pattern"@en .
 
 woql:PathPlus
   a owl:Class ;
@@ -1299,3 +1341,10 @@ woql:path_maximum
   rdfs:range xsd:nonNegativeInteger ;
   rdfs:label "maximum"@en ;
   rdfs:comment "Maximum applications of pattern."@en .
+
+woql:Edge
+  a owl:Class ;
+  rdfs:subClassOf woql:HasSubject, woql:HasPredicate, woql:HasObject ;
+  rdfs:label "Plus"@en ;
+  rdsf:comment "Follow pattern at least once"@en .
+

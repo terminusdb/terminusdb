@@ -1782,4 +1782,60 @@ test(order_by, []) :-
       'Predicate':'http://terminusdb.com/schema/terminus#action',
       'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
 
+test(path, []) :-
+
+    % Pattern is:
+    % terminus:authority , (  terminus:authority_scope
+    %                      ;  terminus:authority_scope, plus(terminus:resource_includes))
+    Pattern =
+    _{'@type' : "PathSequence",
+      path_first :
+      _{ '@type' : "PathPredicate",
+         path_predicate : _{ '@id' : "terminus:authority"}},
+      path_second :
+      _{ '@type' : "PathOr",
+         path_left :
+         _{ '@type' : "PathPredicate",
+            path_predicate : _{ '@id' : "terminus:authority_scope"}},
+         path_right :
+         _{ '@type' : "PathSequence",
+            path_first :
+            _{ '@type' : "PathPredicate",
+               path_predicate : _{ '@id' : "terminus:authority_scope"}},
+            path_second :
+            _{ '@type' : "PathPlus",
+               path_pattern :
+               _{ '@type' : "PathPredicate",
+                  path_predicate : _{ '@id' : "terminus:resource_includes"}}}}}},
+
+    Query = _{'@type' : "Path",
+              subject : _{'@type' : "Variable",
+                          variable_name : _{ '@type' : "xsd:string",
+                                             '@value' : "Subject"}},
+              path_pattern : Pattern,
+              object : _{'@type' : "Variable",
+                         variable_name :
+                         _{'@type' : "xsd:string",
+                           '@value' : "Object"}},
+              path : _{'@type' : "Variable",
+                       variable_name :
+                       _{'@type' : "xsd:string",
+                         '@value' : "Path"}}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    memberchk(
+        _{'Object':'terminus:///terminus/document/server',
+          'Path': [
+              _{'@type':"http://terminusdb.com/schema/woql#Edge",
+                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
+                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
+               },
+              _{'@type':"http://terminusdb.com/schema/woql#Edge",
+                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
+                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'}
+          ],
+          'Subject':'terminus:///terminus/document/admin'}, JSON.bindings).
+
 :- end_tests(woql).

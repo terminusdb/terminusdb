@@ -680,6 +680,21 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#typecast_result'
                                |Path]),
         WOQL = not(WQ)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Path',
+          'http://terminusdb.com/schema/woql#subject' : Subject,
+          'http://terminusdb.com/schema/woql#path_pattern' : Pattern,
+          'http://terminusdb.com/schema/woql#object' : Object,
+          'http://terminusdb.com/schema/woql#path' : Edge_Path
+         } :< JSON
+    ->  json_to_woql_ast(Subject,WSubject,['http://terminusdb.com/schema/woql#subject'
+                                           |Path]),
+        json_to_woql_path_pattern(Pattern,WPattern,['http://terminusdb.com/schema/woql#path_pattern'
+                                                    |Path]),
+        json_to_woql_ast(Object,WObject,['http://terminusdb.com/schema/woql#object'
+                                         |Path]),
+        json_to_woql_ast(Edge_Path,WEdge_Path,['http://terminusdb.com/schema/woql#path'
+                                               |Path]),
+        WOQL = path(WSubject,WPattern,WObject,WEdge_Path)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#True'} :< JSON
     ->  WOQL = true
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Array',
@@ -784,6 +799,64 @@ json_to_woql_ast(JSON,_,Path) :-
                                  'vio:query' : JSON,
                                  'vio:path' : Director,
                                  'terminus:status' : 'terminus:failure'}))).
+
+json_to_woql_path_pattern(JSON,Pattern,Path) :-
+    is_dict(JSON),
+    !,
+    (   _{'@type' : 'http://terminusdb.com/schema/woql#PathPredicate',
+          'http://terminusdb.com/schema/woql#path_predicate' : Node} :< JSON
+    ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
+                                      |Path]),
+        Pattern = p(WNode)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathSequence',
+          'http://terminusdb.com/schema/woql#path_first' : First,
+          'http://terminusdb.com/schema/woql#path_second' : Second} :< JSON
+    ->  json_to_woql_path_pattern(First,PFirst,['http://terminusdb.com/schema/woql#path_first'
+                                                |Path]),
+        json_to_woql_path_pattern(Second,PSecond,['http://terminusdb.com/schema/woql#path_second'
+                                                  |Path]),
+        Pattern = (PFirst,PSecond)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathOr',
+          'http://terminusdb.com/schema/woql#path_left' : Left,
+          'http://terminusdb.com/schema/woql#path_right' : Right} :< JSON
+    ->  json_to_woql_path_pattern(Left,PLeft,['http://terminusdb.com/schema/woql#path_left'
+                                              |Path]),
+        json_to_woql_path_pattern(Right,PRight,['http://terminusdb.com/schema/woql#path_right'
+                                                |Path]),
+        Pattern = (PLeft;PRight)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathPlus',
+          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern} :< JSON
+    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
+                                  ['http://terminusdb.com/schema/woql#path_left'
+                                   |Path]),
+        Pattern = plus(PSubPattern)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathTimes',
+          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern,
+          'http://terminusdb.com/schema/woql#path_minimum' : N,
+          'http://terminusdb.com/schema/woql#path_maximum' : M
+         } :< JSON
+    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
+                                  ['http://terminusdb.com/schema/woql#path_left'
+                                   |Path]),
+        json_to_woql_ast(N,WN,
+                         ['http://terminusdb.com/schema/woql#path_minimum'
+                          |Path]),
+        json_to_woql_ast(M,WM,
+                         ['http://terminusdb.com/schema/woql#path_maximum'
+                          |Path]),
+        (   WM = M_int ^^ _,
+            WN = N_int ^^ _
+        ->  Pattern = times(PSubPattern,N_int,M_int)
+        ;   reverse(Path,Director),
+            throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                         'terminus:message' :'Un-parsable Query due to max/min',
+                                         'vio:path' : Director,
+                                         'vio:query' : JSON}))))
+    ;   reverse(Path,Director),
+        throw(http_reply(not_found(_{'@type' : 'vio:WOQLSyntaxError',
+                                     'terminus:message' :'Un-parsable Query',
+                                     'vio:path' : Director,
+                                     'vio:query' : JSON})))).
 
 is_json_var(A) :-
     sub_atom(A, 0, _, _, 'http://terminusdb.com/schema/woql/variable/').
