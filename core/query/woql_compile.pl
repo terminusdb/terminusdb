@@ -430,10 +430,12 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
                    ->  Value = Xe
                    ;   typecast(Value,Type,[],Xe))
                ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
-                   throw(error(syntax_error(Msg)))
+                   throw(error(syntax_error(Msg),
+                               context(indexing_as_list/5,_)))
                )
            ;   format(string(Msg),"No such indexed name in get: ~q with header: ~q and values: ~q giving",[N,Header,Values]),
-               throw(error(syntax_error(Msg)))
+               throw(error(syntax_error(Msg),
+                           context(indexing_as_list/5,_)))
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
 
@@ -443,7 +445,8 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     Term = (   nth0(N,Values,Xe)
            ->  true
            ;   format(string(Msg),"No such index in get: ~q for values: ~q",[N,Values]),
-               throw(error(syntax_error(Msg)))
+               throw(error(syntax_error(Msg),
+                           context(indexing_position_list/5,_)))
            ),
     M is N+1,
     indexing_position_list(Rest,M,Values,Bindings,Result).
@@ -553,7 +556,8 @@ csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
 csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
     format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
            [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
-    throw(error(M)).
+    throw(error(syntax_error(M),
+                context(csv_term/7,Path))).
 
 json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
     setup_call_cleanup(
@@ -649,7 +653,8 @@ compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to delete. Graph Descriptor: ~q', G),
-            throw(syntax_error(M,context(compile_wf//2,delete/4)))
+            throw(error(syntax_error(M),
+                        context(compile_wf//2,delete/4)))
         )
     }.
 compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
@@ -677,7 +682,8 @@ compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,_)))
         (   Read_Write_Objects = [Read_Write_Object]
         ->  true
         ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
-            throw(syntax_error(M,context(compile_wf//2,insert/4)))
+            throw(error(syntax_error(M),
+                        context(compile_wf//2,insert/4)))
         )
     }.
 compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,_)))
@@ -953,7 +959,8 @@ compile_wf(into(G,S),Goal) -->
         (   Filter = type_name_filter{ type : _Type, name : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
         ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
-            throw(syntax_error(M,context(compile_wf//2, into/2)))
+            throw(error(syntax_error(M),
+                        context(compile_wf//2, into/2)))
         )
     },
     update(write_graph,OG,Graph_Descriptor),
@@ -1047,7 +1054,8 @@ compile_wf(true,true) -->
 compile_wf(Q,_) -->
     {
         format(atom(M), 'Unable to compile AST query ~q', [Q]),
-        throw(syntax_error(M))
+        throw(error(syntax_error(M),
+                    context(compile_wf//1,Q)))
     }.
 
 debug_wf(Lit) -->
