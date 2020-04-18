@@ -506,27 +506,7 @@ woql:AsVar
   rdfs:label "As Var"@en ;
   rdfs:comment "As Var"@en .
 
-woql:IndexedAsVars
-  a owl:Class
-  rdfs:subClassOf woql:AsVars ;
-  rdfs:label "As Vars by index"@en ;
-  rdfs:comment "As Vars by index"@en .
-
-woql:named_as_var
-  a owl:ObjectProperty ;
-  rdfs:label "as var"@en ;
-  rdfs:comment "as vars"@en ;
-  rdfs:domain woql:NamedAsVars ;
-  rdfs:range woql:NamedAsVar .
-
-woql:indexed_as_var
-  a owl:ObjectProperty ;
-  rdfs:label "indexed as var"@en ;
-  rdfs:comment "Indexed as vars"@en ;
-  rdfs:domain woql:IndexedAsVars ;
-  rdfs:range woql:IndexedAsVar .
-
-woql:IndexedAsVar
+owoql:IndexedAsVar
   a owl:Class ;
   rdfs:subClassOf woql:Indexable, woql:AsVar ;
   rdfs:label "A var by index"@en ;
@@ -543,7 +523,7 @@ woql:var_type
   rdfs:label "var type"@en ;
   rdfs:comment "An AsVar casting type"@en ;
   rdfs:domain woql:AsVar ;
-  rdfs:range xsd:anyURI .
+  rdfs:range xsd:Node .
 
 woql:NamedAsVars
   a owl:Class

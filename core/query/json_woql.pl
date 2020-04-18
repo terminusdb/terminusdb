@@ -90,16 +90,9 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Select',
           'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
           'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON
-    ->  deindex_list('http://terminusdb.com/schema/woql#variable',
-                     Indexed_Variables,
-                     Variables),
-        maplist({Path}/[V_ID,V]>>(
-                    json_to_woql_ast(V_ID,V,
-                                     ['http://terminusdb.com/schema/woql#variable',
-                                      'http://terminusdb.com/schema/woql#variable_list'
-                                      |Path])
-                ),
-                Variables, WOQL_Args),
+    ->  json_to_woql_ast(Indexed_Variables,WOQL_Args,
+                         ['http://terminusdb.com/schema/woql#variable_list'
+                          |Path]),
         json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
                                              |Path]),
         WOQL = select(WOQL_Args,Sub_WOQL)
@@ -407,41 +400,37 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                |Path]),
         WOQL = 'opt'(WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Get',
-          'http://terminusdb.com/schema/woql#as_vars' : Header,
+          'http://terminusdb.com/schema/woql#as_vars' : AsVars,
           'http://terminusdb.com/schema/woql#query_resource' : Resource
          } :< JSON
-    ->  (   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVars',
-              'http://terminusdb.com/schema/woql#indexed_as_var' : Indexed
-             } :< Header
-        ->  deindex_list('http://terminusdb.com/schema/woql#var',
-                         Indexed,
-                         Deindexed_Header)
-        ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVars',
-              'http://terminusdb.com/schema/woql#named_as_var' : Named
-             } :< Header
-        ->  deindex_list('http://terminusdb.com/schema/woql#var',
-                         Named,
-                         Deindexed_Header)
-        ),
-        maplist({Path}/[Q,W]>>(% probably need an index...
-                    json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#var',
-                                          'http://terminusdb.com/schema/woql#named_as_var'
-                                          |Path])
-                ), Deindexed_Header, WHeader),
+    ->  json_to_woql_ast(AsVars,WAsVars,['http://terminusdb.com/schema/woql#as_vars'
+                                         |Path]),
         json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
                                               |Path]),
-        WOQL = get(WHeader,WResource)
+        WOQL = get(WAsVars,WResource)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVar',
           'http://terminusdb.com/schema/woql#var' : Var,
           'http://terminusdb.com/schema/woql#identifier' : Identifier
          } :< JSON
     ->  json_to_woql_ast(Var, WOQL_Var, ['http://terminusdb.com/schema/woql#var'
                                          |Path]),
+        json_to_woql_ast(Identifier, WIdentifier, ['http://terminusdb.com/schema/woql#identifier'
+                                                   |Path]),
+        (   WIdentifier = ID_String^^_,
+            atom_string(ID, ID_String)
+        ->  true
+        ;   reverse(Path, Director),
+            throw(http_reply(error(_{'@type' : 'vio:WOQLSyntaxError',
+                                     'terminus:message' :'Poorly constructed var',
+                                     'vio:path' : Director,
+                                     'vio:query' : JSON})))),
         (   get_dict('http://terminusdb.com/schema/woql#var_type',
                      JSON,
-                     Type)
-        ->  WOQL = as(Identifier, v(WOQL_Var), Type)
-        ;   WOQL = as(Identifier, v(WOQL_Var)))
+                     Type),
+            json_to_woql_ast(Type, WType, ['http://terminusdb.com/schema/woql#var_type'
+                                           |Path])
+        ->  WOQL = as(ID, WOQL_Var, WType)
+        ;   WOQL = as(ID, WOQL_Var))
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVar',
           'http://terminusdb.com/schema/woql#var' : Var
          } :< JSON

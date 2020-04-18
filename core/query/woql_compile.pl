@@ -1678,6 +1678,37 @@ test(indexed_get, [])
     length(JSON.bindings, L),
     L = 50.
 
+
+test(named_get, [])
+:-
+    Query =
+    _{'@type' : 'Get',
+      as_vars : [
+          _{'@type' : 'NamedAsVar',
+            identifier : _{ '@type' : "xsd:string",
+                            '@value' : "Duration"},
+            var : _{'@type' : "Variable",
+                    variable_name : _{ '@type' : "xsd:string",
+                                       '@value' : "Duration"}}},
+          _{'@type' : 'NamedAsVar',
+            identifier : _{ '@type' : "xsd:string",
+                            '@value' : "Bike number"},
+            var : _{'@type' : "Variable",
+                    variable_name : _{ '@type' : "xsd:string",
+                                       '@value' : "Bike_Number"}}}
+      ],
+      query_resource :
+      _{'@type' : 'RemoteResource',
+        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [First|_] = JSON.bindings,
+    _{'Bike_Number': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                      '@value':"W21477"},
+      'Duration': _{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                    '@value':790}
+     } :< First.
+
 test(concat, [])
 :-
     Query =
@@ -1929,5 +1960,35 @@ test(group_by, []) :-
 
     [['terminus:///terminus/document/access_all_areas',
       'http://terminusdb.com/schema/terminus#class_frame']|_] = Res.'Grouped'.
+
+
+test(select, []) :-
+
+    Query = _{'@type' : "Limit",
+              limit : _{'@type' : "xsd:integer",
+                        '@value' : 1},
+              query : _{'@type' : "Select",
+                        variable_list : [_{ '@type' : "VariableListElement",
+                                            index : _{'@type' : "xsd:integer",
+                                                      '@value' : 0},
+                                            variable_name : _{ '@type' : "xsd:string",
+                                                               '@value' : "Subject"}}],
+                        query : _{ '@type' : "Triple",
+                                   subject : _{'@type' : "Variable",
+                                               variable_name :
+                                               _{'@type' : "xsd:string",
+                                                 '@value' : "Subject"}},
+                                   predicate : _{'@type' : "Variable",
+                                                 variable_name :
+                                                 _{'@type' : "xsd:string",
+                                                   '@value' : "Predicate"}},
+                                   object : _{'@type' : "Variable",
+                                              variable_name :
+                                              _{'@type' : "xsd:string",
+                                                '@value' : "Object"}}
+                                 }}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
 
 :- end_tests(woql).
