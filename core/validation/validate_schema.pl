@@ -153,10 +153,7 @@ immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
 % This makes me nervous... [ Gavin ]
 immediate_class('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
-immediate_class('http://terminusdb.com/schema/tcs#Entity', _).
-immediate_class('http://terminusdb.com/schema/tcs#Document', _).
-immediate_class('http://terminusdb.com/schema/tcs#Relationship', _).
-
+immediate_class('http://terminusdb.com/schema/terminus#Document', _).
 
 %% class(?X:uri_or_id, +Schema:database is nondet
 % class(+X:uri_or_id, +Schema:database is det
@@ -476,8 +473,6 @@ sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y
 %
 % static solutions first.
 subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
-subsumption_of('http://terminusdb.com/schema/tcs#Entity','http://terminusdb.com/schema/tcs#Document',_).
-subsumption_of('http://terminusdb.com/schema/tcs#Relationship','http://terminusdb.com/schema/tcs#Document',_).
 subsumption_of(CC,CC,Database) :-
     immediate_class(CC,Database).
 subsumption_of(CC,CP,Database) :-
@@ -907,7 +902,7 @@ range(P,R,Database) :-
  * the places in which to "clip" the graph.
  */
 document(Class,Database) :-
-	subsumption_of(Class,'http://terminusdb.com/schema/tcs#Document', Database).
+	subsumption_of(Class,'http://terminusdb.com/schema/terminus#Document', Database).
 
 /**
  * any_range(?P,?R,+Database:database is nondet.

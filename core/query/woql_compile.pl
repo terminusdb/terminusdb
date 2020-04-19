@@ -1350,8 +1350,7 @@ test(subsumption, [])
     list_to_ord_set([json{'Parent':'http://www.w3.org/2002/07/owl#Thing'},
                      json{'Parent':'http://terminusdb.com/schema/terminus#User'},
                      json{'Parent':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'Parent':'http://terminusdb.com/schema/tcs#Document'},
-                     json{'Parent':'http://terminusdb.com/schema/tcs#Entity'}],
+                     json{'Parent':'http://terminusdb.com/schema/terminus#Document'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
@@ -1582,8 +1581,7 @@ test(isa, []) :-
     list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
                      json{'IsA':'http://terminusdb.com/schema/terminus#User'},
                      json{'IsA':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'IsA':'http://terminusdb.com/schema/tcs#Document'},
-                     json{'IsA':'http://terminusdb.com/schema/tcs#Entity'}],
+                     json{'IsA':'http://terminusdb.com/schema/terminus#Document'}],
                     Expected),
     ord_seteq(Bindings_Set, Expected).
 

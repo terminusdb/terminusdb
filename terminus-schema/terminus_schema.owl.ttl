@@ -2,7 +2,6 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix terminus: <http://terminusdb.com/schema/terminus#> .
 @prefix layer: <http://terminusdb.com/schema/layer#> .
@@ -17,7 +16,7 @@
 
 terminus:Document
   a owl:Class ;
-  tcs:tag tcs:abstract ;
+  terminus:tag terminus:abstract ;
   rdfs:label "Document Class"@en ;
   rdfs:comment "A class used to designate the primary data objects managed by the system - relationships and entities"@en .
 
@@ -25,24 +24,24 @@ terminus:Agent
   rdfs:label "Agent"@en ;
   rdfs:comment "An agent is an abstraction of a thing that can have a capability"@en ;
   a owl:Class ;
-  tcs:tag tcs:abstract ;
-  rdfs:subClassOf tcs:Entity .
+  terminus:tag terminus:abstract ;
+  rdfs:subClassOf terminus:Document .
 
-tcs:rights
+terminus:rights
   a owl:DatatypeProperty ;
   rdfs:range xsd:string ;
   rdfs:domain owl:Ontology ;
   rdfs:label "Rights"@en ;
   rdfs:comment "The statement of rights of the owner"@en .
 
-tcs:author
+terminus:author
   a owl:DatatypeProperty ;
   rdfs:domain owl:Ontology ;
   rdfs:range xsd:string ;
   rdfs:label "Author"@en ;
   rdfs:comment "The authors who developed the ontology"@en .
 
-tcs:license
+terminus:license
   a owl:ObjectProperty ;
   rdfs:domain owl:Ontology ;
   rdfs:range owl:Thing ;
@@ -78,9 +77,9 @@ terminus:email
 terminus:Capability
   rdfs:label "Capability"@en ;
   rdfs:comment "A capability confers access to a database or server action"@en ;
-  tcs:tag tcs:abstract ;
+  terminus:tag terminus:abstract ;
   a owl:Class ;
-  rdfs:subClassOf tcs:Entity.
+  rdfs:subClassOf terminus:Document.
 
 terminus:ServerCapability
   rdfs:label "Server Capability"@en ;
@@ -243,8 +242,8 @@ terminus:Resource
   rdfs:label "Resource"@en ;
   rdfs:comment "A resource is a thing that can be accessed and given instructions and for which capabilities can be allocated"@en ;
   a owl:Class ;
-  tcs:tag tcs:abstract ;
-  rdfs:subClassOf tcs:Entity .
+  terminus:tag terminus:abstract ;
+  rdfs:subClassOf terminus:Document .
 
 terminus:Database
   rdfs:label "Database"@en ;
