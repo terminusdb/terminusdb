@@ -412,14 +412,12 @@ json_to_woql_ast(JSON,WOQL,Path) :-
           'http://terminusdb.com/schema/woql#variable_name' : Var_Name,
           'http://terminusdb.com/schema/woql#identifier' : Identifier
          } :< JSON
-    ->  json_to_woql_ast(Var_Name, Var_Literal, ['http://terminusdb.com/schema/woql#var'
-                                                 |Path]),
+    ->  json_to_woql_ast(_{'@type' : 'http://terminusdb.com/schema/woql#Variable',
+                           'http://terminusdb.com/schema/woql#variable_name' : Var_Name},
+                         WOQL_Var, Path),
         json_to_woql_ast(Identifier, WIdentifier, ['http://terminusdb.com/schema/woql#identifier'
                                                    |Path]),
-        (   Var_Literal = Var_String^^_,
-            atom_string(Var_ID,Var_String),
-            WOQL_Var = v(Var_ID),
-            WIdentifier = ID_String^^_,
+        (   WIdentifier = ID_String^^_,
             atom_string(ID, ID_String)
         ->  true
         ;   reverse(Path, Director),
@@ -435,10 +433,12 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         ->  WOQL = as(ID, WOQL_Var, WType)
         ;   WOQL = as(ID, WOQL_Var))
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVar',
-          'http://terminusdb.com/schema/woql#var' : Var
+          'http://terminusdb.com/schema/woql#variable_name' : Var_Name
          } :< JSON
-    ->  json_to_woql_ast(Var, WOQL,['http://terminusdb.com/schema/woql#var'
-                                    |Path])
+    ->  json_to_woql_ast(
+            _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
+              'http://terminusdb.com/schema/woql#variable_name' : Var_Name},
+            WOQL,Path)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Put',
           'http://terminusdb.com/schema/woql#as_vars' : Header,
           'http://terminusdb.com/schema/woql#query' : Query,

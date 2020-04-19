@@ -1663,30 +1663,53 @@ test(indexed_get, [])
 :-
     Query =
     _{'@type' : 'Get',
-      as_vars :
-      _{'@type' : 'IndexedAsVars',
-        indexed_as_var : [
-            _{'@type' : 'IndexedAsVar',
-              index : _{ '@type' : "xsd:integer",
-                         '@value' : 0},
-              var : _{'@type' : "Variable",
-                      variable_name : _{ '@type' : "xsd:string",
-                                         '@value' : "First"}}},
-            _{'@type' : 'IndexedAsVar',
-              index : _{ '@type' : "xsd:integer",
-                         '@value' : 1},
-              var : _{'@type' : "Variable",
-                      variable_name : _{ '@type' : "xsd:string",
-                                         '@value' : "Second"}}}]},
+      as_vars : [
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 0},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "First"}},
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 1},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Second"}}],
       query_resource :
       _{'@type' : 'RemoteResource',
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
-    length(JSON.bindings, L),
-    L = 50.
+    [Res|_] = JSON.bindings,
+    % Should this really be without a header?
+    _{'First':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"Duration"},
+      'Second':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"Start date"}} :< Res.
 
+/*
+{
+  "@type": "woql:Get",
+  "woql:as_vars": [
+    {
+      "@type": "woql:IndexedAsVar",
+      "woql:index": {
+        "@type": "xsd:nonNegativeInteger",
+        "@value": 0
+      },
+      "woql:variable_name": {
+        "@type": "xsd:string",
+        "@value": "VarName"
+      }
+    }
+  ],
+  "woql:query_resource": {
+    "@type": "woql:RemoteResource",
+    "woql:remote_uri": {
+      "@type": "xsd:anyURI",
+      "@value": "https://terminusdb.com/t/data/bikeshare/2011-capitalbikeshare-tripdata.csv"
+    }
+  }
+}
+*/
 
 test(named_get, [])
 :-

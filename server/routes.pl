@@ -743,21 +743,17 @@ test(indexed_get, [])
 :-
     Query =
     _{'@type' : 'Get',
-      as_vars :
-      _{'@type' : 'IndexedAsVars',
-        indexed_as_var : [
-            _{'@type' : 'IndexedAsVar',
-              index : _{'@type' : "xsd:integer",
-                        '@value' : 0},
-              var : _{'@type' : "Variable",
-                     variable_name : _{ '@type' : "xsd:string",
-                                        '@value' : "First"}}},
-            _{'@type' : 'IndexedAsVar',
-              index : _{'@type' : "xsd:integer",
-                        '@value' : 1},
-              var : _{'@type' : "Variable",
-                     variable_name : _{ '@type' : "xsd:string",
-                                        '@value' : "Second"}}}]},
+      as_vars : [
+          _{'@type' : 'IndexedAsVar',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 0},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "First"}},
+          _{'@type' : 'IndexedAsVar',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 1},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Second"}}],
       query_resource :
       _{'@type' : 'RemoteResource',
         remote_uri : _{ '@type' : "xsd:anyURI",
