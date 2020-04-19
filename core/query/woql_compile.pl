@@ -1717,6 +1717,110 @@ test(named_get, [])
                     '@value':790}
      } :< First.
 
+test(named_get_two, [])
+:-
+    Query =
+    _{
+        '@type': "woql:Get",
+        'woql:as_vars': [
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "Start station"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "Start_Station"}
+             },
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "End station"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "End_Station"
+                                      }
+             },
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "Start date"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "Start_Time"
+                                      }
+             },
+            _{
+                '@type': "woql:NamedAsVar",
+                'woql:identifier': _{ '@type': "xsd:string",
+                                      '@value': "End date"
+                                    },
+                'woql:variable_name': _{ '@type': "xsd:string",
+                                         '@value': "End_Time"
+                                       }
+            },
+            _{
+                '@type': "woql:NamedAsVar",
+                'woql:identifier': _{ '@type': "xsd:string",
+                                      '@value': "Duration"
+                                    },
+                'woql:variable_name': _{ '@type': "xsd:string",
+                                         '@value': "Duration"}
+            },
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "Start station number"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "Start_ID" }
+             },
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "End station number"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "End_ID"
+                                      }
+             },
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "Bike number"
+                                   },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "Bike"
+                                      }},
+            _{ '@type': "woql:NamedAsVar",
+               'woql:identifier': _{ '@type': "xsd:string",
+                                     '@value': "Member type" },
+               'woql:variable_name': _{ '@type': "xsd:string",
+                                        '@value': "Member_Type" }}
+        ],
+        'woql:query_resource':
+        _{ '@type': "woql:RemoteResource",
+           'woql:remote_uri': _{'@type': "xsd:anyURI",
+                                '@value': "https://terminusdb.com/t/data/bikeshare/2011-capitalbikeshare-tripdata.csv"
+                               }
+         }
+    },
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+
+    [Res|_] = JSON.bindings,
+    _{'Bike':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+               '@value':"W00247"},
+      'Duration':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                   '@value':3548},
+      'End_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                 '@value':31620},
+      'End_Station':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                      '@value':"5th & F St NW"},
+      'End_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"2011-01-01 01:00:37"},
+      'Member_Type':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                      '@value':"Member"},
+      'Start_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                   '@value':31620},
+      'Start_Station':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"5th & F St NW"},
+      'Start_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                     '@value':"2011-01-01 00:01:29"}} :< Res.
+
 test(concat, [])
 :-
     Query =

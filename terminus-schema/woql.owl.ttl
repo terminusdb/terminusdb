@@ -493,12 +493,7 @@ woql:as_vars
   rdfs:label "as vars"@en ;
   rdfs:comment "The variable captures associated with a get"@en ;
   rdfs:domain woql:GetOrPut ;
-  rdfs:range woql:AsVars .
-
-woql:AsVars
-  a owl:Class ;
-  rdfs:label "As Vars"@en ;
-  rdfs:comment "As Vars Specification"@en .
+  rdfs:range woql:AsVar .
 
 woql:AsVar
   a owl:Class ;
