@@ -760,7 +760,8 @@ test(indexed_get, [])
                                         '@value' : "Second"}}}]},
       query_resource :
       _{'@type' : 'RemoteResource',
-        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+        remote_uri : _{ '@type' : "xsd:anyURI",
+                        '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
 
     config:server(Server),
@@ -798,7 +799,8 @@ test(named_get, [])
       ],
       query_resource :
       _{'@type' : 'RemoteResource',
-        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+        remote_uri : _{ '@type' : "xsd:anyURI",
+                        '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     config:server(Server),
     atomic_list_concat([Server, '/woql'], URI),

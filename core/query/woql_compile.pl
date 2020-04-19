@@ -1680,7 +1680,8 @@ test(indexed_get, [])
                                          '@value' : "Second"}}}]},
       query_resource :
       _{'@type' : 'RemoteResource',
-        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+        remote_uri : _{ '@type' : "xsd:anyURI",
+                        '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     length(JSON.bindings, L),
@@ -1707,7 +1708,8 @@ test(named_get, [])
       ],
       query_resource :
       _{'@type' : 'RemoteResource',
-        remote_uri : "https://terminusdb.com/t/data/bike_tutorial.csv"}},
+        remote_uri : _{ '@type' : "xsd:anyURI",
+                        '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [First|_] = JSON.bindings,

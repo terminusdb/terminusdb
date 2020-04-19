@@ -451,7 +451,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#RemoteResource',
           'http://terminusdb.com/schema/woql#remote_uri' : URI
          } :< JSON
-    ->  WOQL = remote(URI,JSON)
+    ->  json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#remote_uri'
+                                   |Path]),
+        WURI = URI_String^^_,
+        WOQL = remote(URI_String,JSON)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#FileResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
