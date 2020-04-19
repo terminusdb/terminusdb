@@ -787,15 +787,13 @@ test(named_get, [])
                           node : "xsd:integer"},
             identifier : _{ '@type' : "xsd:string",
                             '@value' : "Duration"},
-            var : _{'@type' : "Variable",
-                    variable_name : _{ '@type' : "xsd:string",
-                                       '@value' : "Duration"}}},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Duration"}},
           _{'@type' : 'NamedAsVar',
             identifier : _{ '@type' : "xsd:string",
                             '@value' : "Bike number"},
-            var : _{'@type' : "Variable",
-                    variable_name : _{ '@type' : "xsd:string",
-                                       '@value' : "Bike_Number"}}}
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Bike_Number"}}
       ],
       query_resource :
       _{'@type' : 'RemoteResource',

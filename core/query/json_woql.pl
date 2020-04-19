@@ -409,14 +409,17 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                               |Path]),
         WOQL = get(WAsVars,WResource)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVar',
-          'http://terminusdb.com/schema/woql#var' : Var,
+          'http://terminusdb.com/schema/woql#variable_name' : Var_Name,
           'http://terminusdb.com/schema/woql#identifier' : Identifier
          } :< JSON
-    ->  json_to_woql_ast(Var, WOQL_Var, ['http://terminusdb.com/schema/woql#var'
-                                         |Path]),
+    ->  json_to_woql_ast(Var_Name, Var_Literal, ['http://terminusdb.com/schema/woql#var'
+                                                 |Path]),
         json_to_woql_ast(Identifier, WIdentifier, ['http://terminusdb.com/schema/woql#identifier'
                                                    |Path]),
-        (   WIdentifier = ID_String^^_,
+        (   Var_Literal = Var_String^^_,
+            atom_string(Var_ID,Var_String),
+            WOQL_Var = v(Var_ID),
+            WIdentifier = ID_String^^_,
             atom_string(ID, ID_String)
         ->  true
         ;   reverse(Path, Director),
