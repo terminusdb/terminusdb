@@ -2096,7 +2096,6 @@ test(group_by, []) :-
     [['terminus:///terminus/document/access_all_areas',
       'http://terminusdb.com/schema/terminus#class_frame']|_] = Res.'Grouped'.
 
-
 test(select, []) :-
 
     Query = _{'@type' : "Limit",
@@ -2125,5 +2124,15 @@ test(select, []) :-
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
+
+
+test(when, []) :-
+
+    Query = _{'@type' : "When",
+              query : _{'@type' : "True"},
+              consequent : _{'@type' : "True"}},
+
+    query_test_response(terminus_descriptor{}, Query, JSON),
+    [_{}] = JSON.bindings.
 
 :- end_tests(woql).

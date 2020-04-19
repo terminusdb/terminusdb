@@ -335,7 +335,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                |Path]),
         json_to_woql_ast(U,WU,['http://terminusdb.com/schema/woql#consequent'
                                |Path]),
-        WOQL = '=>'(WQ,WU)
+        WOQL = when(WQ,WU)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Trim',
           'http://terminusdb.com/schema/woql#untrimmed' :  A,
           'http://terminusdb.com/schema/woql#trimmed' : T
