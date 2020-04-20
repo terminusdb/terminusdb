@@ -839,7 +839,7 @@ test(class_frame, [])
               domain='http://terminusdb.com/schema/terminus#Agent',
               restriction=true,range='http://www.w3.org/2001/XMLSchema#string']].
 
-test(realise_frame, [])
+test(document_filled_frame, [])
 :-
     open_descriptor(terminus_descriptor{}, Database),
     document_filled_frame('terminus:///terminus/document/admin',Database,Frame),
@@ -873,7 +873,7 @@ test(realise_frame, [])
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent Key"@en,
               comment="An agent key for API authentication"@en,
-              rangeValue="$pbkdf2-sha512$t=32768$n/AnE8SRnf28gyMygmrecw$OGOkYCYA9njysK8vnta2boegOUHxPp9EN2e5VmwVU85mojKuuEm7tGXY8f6Jz2P7gwy9CbTqnaA3PPlEzwxhTA"^^'http://www.w3.org/2001/XMLSchema#string'],
+              rangeValue=_],
              [type=datatypeProperty,
               domainValue='terminus:///terminus/document/admin',
               property='http://www.w3.org/2000/01/rdf-schema#label',
