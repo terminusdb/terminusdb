@@ -729,7 +729,7 @@ compile_wf(A << B,subsumption_of(AE,BE,Transaction_Object)) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object)
     }.
-compile_wf(opt(P), ignore(Goal)) -->
+compile_wf(opt(P), optional(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(t(X,P,Y),Goal) -->
     resolve(X,XE),

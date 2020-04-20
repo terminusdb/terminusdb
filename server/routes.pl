@@ -481,45 +481,78 @@ test(schema_get, [])
 :- http_handler(root(frame/Path), cors_catch(frame_handler(Method,Path)),
                 [method(Method),
                  prefix,
-                 methods([options,get])]).
+                 methods([options,post])]).
 
 /**
  * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
  *
  * Establishes frame responses
  */
-frame_handler(options,Path,_Request) :-
+frame_handler(options,_Path,_Request) :-
+    config:public_url(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
-    merge_separator_split(Path, '/', Split),
-    Split = [Account_ID, DB_Name|_],
-    user_database_name(Account_ID, DB_Name, DB),
-    write_cors_headers(DB, Terminus),
-    format('~n'). % send headers
-frame_handler(get, Path, Request) :-
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+frame_handler(post, Path, R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Terminus, Request, Auth),
-    merge_separator_split(Path, '/', Split),
-    (   Split = [Account_ID, DB]
-    ->  make_branch_descriptor(Account_ID, DB, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch_Descriptor)
-    ;   Split = [Account_ID, DB, Repo, Ref]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Ref, Branch_Descriptor)
+    % authenticate(Terminus, Request, Auth),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    create_context(Descriptor, Database),
+    % NOTE: Access rights should be checked against a descriptor
+    % using a verify_access predicate - not a database name.
+    %
+    % user_database_name(Account_ID, DB, DB_Name),
+    %% check access rights
+    % verify_access(Terminus,Auth,terminus:class_frame,DB_Name),
+    get_payload(Doc,Request),
+    (   get_dict(class,Doc,Class_URI)
+    ->  try_class_frame(Class_URI,Database,Frame)
+    ;   get_dict(instance,Doc,Instance_URI)
+    ->  try_filled_frame(Instance_URI,Database,Frame)
     ),
-    open_descriptor(Branch_Descriptor, Database),
-    user_database_name(Account_ID, DB, DB_Name),
 
-    % check access rights
-    verify_access(Terminus,Auth,terminus:class_frame,DB_Name),
+    (   get_dict(repository_descriptor,Descriptor, Repo),
+        Resource = Repo.database_descriptor.database_name
+    ->  true
+    ;   config:public_url(Resource)),
 
-    try_get_param('terminus:class',Request,Class_URI),
-
-    try_class_frame(Class_URI,Database,Frame),
-
-    DB_Name = Branch_Descriptor.repository_descriptor.database_descriptor.database_name,
-    write_cors_headers(DB_Name, Terminus),
+    write_cors_headers(Resource, Terminus),
     reply_json(Frame).
+
+:- begin_tests(frame_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(get_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/terminus'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ class : "terminus:Agent"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key))]),
+    _{'@type':"terminus:Frame"} :< JSON.
+
+
+test(get_filled_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/terminus'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ instance : "doc:admin"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key))]),
+    _{'@type':"terminus:FilledFrame"} :< JSON.
+
+:- end_tests(frame_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
@@ -1754,13 +1787,27 @@ collect_posted_files(_Request,[]).
  * try_class_frame(Class,Database,Frame) is det.
  */
 try_class_frame(Class,Database,Frame) :-
-    (   class_frame_jsonld(Class,Database,Frame)
+    prefix_expand(Class, Database.prefixes, ClassEx),
+    (   class_frame_jsonld(Database,ClassEx,Frame)
     ->  true
     ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
         % Give a better error code etc. This is silly.
         throw(http_reply(not_found(_{ 'terminus:message' : MSG,
                                       'terminus:status' : 'terminus:failure',
                                       'terminus:class' : Class})))).
+
+/*
+ * try_class_frame(Class,Database,Frame) is det.
+ */
+try_filled_frame(Instance,Database,Frame) :-
+    prefix_expand(Instance, Database.prefixes, InstanceEx),
+    (   filled_frame_jsonld(Database,InstanceEx,Frame)
+    ->  true
+    ;   format(atom(MSG), 'Filled Class Frame could not be json-ld encoded for instance ~s', [Instance]),
+        % Give a better error code etc. This is silly.
+        throw(http_reply(not_found(_{ 'terminus:message' : MSG,
+                                      'terminus:status' : 'terminus:failure',
+                                      'terminus:instance' : Instance})))).
 
 /*
  * update_schema(+DB,+Schema,+TTL) is det.

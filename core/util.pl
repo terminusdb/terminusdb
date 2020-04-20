@@ -85,6 +85,7 @@
               choice_points/1,
               sol_bag/2,
               sol_set/2,
+              optional/1,
 
               % speculative_parse.pl
               guess_date/2,

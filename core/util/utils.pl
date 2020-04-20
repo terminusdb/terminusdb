@@ -50,7 +50,8 @@
               uri_has_prefix/1,
               choice_points/1,
               sol_set/2,
-              sol_bag/2
+              sol_bag/2,
+              optional/1
           ]).
 
 /** <module> Utils
@@ -769,3 +770,14 @@ sol_bag(Predicate,Result) :-
     findall(Template,
             call(Predicate, Template),
             Result).
+
+
+/**
+ * optional(+Goal) is nondet.
+ *
+ */
+:- meta_predicate optional(0).
+optional(Goal) :-
+    (   call(Goal)
+    *-> true
+    ;   true).

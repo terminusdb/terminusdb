@@ -19,6 +19,7 @@
               % As JSON-LD with a depth
               document_jsonld/4,
               class_frame_jsonld/3,
+              filled_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
               update_object/2,
@@ -1014,7 +1015,17 @@ document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
 class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     class_frame(Class,Collection,Frame),
-    term_jsonld(Frame,JSON_LD),
+    term_jsonld(['@type'='terminus:Frame', 'terminus:properties'=Frame],JSON_LD),
+    compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
+
+/*
+ * filled_frame_jsonld(Query_Context,Class,JSON_Frame) is det.
+ *
+ */
+filled_frame_jsonld(Query_Context,Class,JSON_Frame) :-
+    query_default_collection(Query_Context, Collection),
+    document_filled_frame(Class,Collection,Frame),
+    term_jsonld(['@type'='terminus:FilledFrame', 'terminus:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*

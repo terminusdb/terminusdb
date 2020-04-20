@@ -23,6 +23,7 @@
               document_jsonld/3,
               document_jsonld/4,
               class_frame_jsonld/3,
+              filled_frame_jsonld/3,
               object_edges/3,
               delete_object/2,
               update_object/2,
