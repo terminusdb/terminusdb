@@ -274,7 +274,7 @@ class_or_restriction(X,Database) :- restriction(X,Database).
 
 % TODO: compound is vague, reasons should have a specification.
 
-%% not_unique_class(+Y:uri_or_id, +Database:database -Reason:any) is nondet
+%% not_unique_class(+Y:uri_or_id, +Database:database, -Reason:any) is nondet
 %
 % Is a class multiply defined?
 %
@@ -295,7 +295,7 @@ not_unique_class(Y, Database, Reason) :-
 not_unique_class_SC(Database,Reason) :- not_unique_class(_,Database,Reason).
 
 
-%% collect(+collection:atom, +Database_ID:graph_identifier, +X:uri_or_id, -L:any) is semidet.
+%% collect(+collection:atom, +Database_ID:graph_identifier, +X:uri_or_id, -L:any) is semidet
 %
 % Collect the RDF list into a prolog list.
 % It may be better to treat lists programmatically through rdf rather than
@@ -503,8 +503,8 @@ custom_datatype(X,Database) :-
     xrdf(Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
 
 /**
- * datatype(-X:uri_or_id,+Database:database is nondet.
- * datatype(-X:uri_or_id,+Database:database is det.
+ * datatype(-X:uri_or_id,+Database:database) is nondet.
+ * datatype(-X:uri_or_id,+Database:database) is det.
  */
 %% :- rdf_meta datatype(r,o).
 datatype(X,Database) :- custom_datatype(X,Database).
@@ -555,7 +555,7 @@ basetype_subsumption_of(Sub,Super) :-
     base_type_parent(Sub,Parent), basetype_subsumption_of(Parent,Super).
 
 /**
- * datatype_subsumption_of(?Sub,?Super,+Database:database is nondet.
+ * datatype_subsumption_of(?Sub,?Super,+Database:database) is nondet.
  *
  * Implements the subsumption latice for datatypes by making use of reflexivity and
  * base_type_parent\2.
@@ -577,10 +577,10 @@ datatype_subsumption_of(Sub,Super,Database) :-
     base_type_parent(Sub,Parent), datatype_subsumption_of(Parent,Super,Database).
 
 /**
- * datatype_subsumption_of(?Sub,?Super,+Database:database is nondet.
+ * datatype_subsumption_of(?Sub,?Super,+Database:database) is nondet.
  *
  * Implements strict (non reflexive) subsumption latice for datatypes by
- * base_type_parent\2.
+ * base_type_parent/2.
  */
 %% :- rdf_meta datatype_strict_subsumption_of(r,r).
 datatype_strict_subsumption_of(Sub,Super,_) :-
@@ -724,7 +724,7 @@ object_property(P,Database) :-
 object_property(P,_) :- rdfs_object_property(P).
 
 /**
- * property(?P,+Database:database is nondet.
+ * property(?P,+Database:database) is nondet.
  *
  * ?P is a valid property in the schema.
  */
@@ -788,7 +788,7 @@ sub_property_of(X,Y,Database) :-
     xrdf(Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
 
 /**
- * subsumption_properties_of(?PChild,?PParent,+Database:database is nondet.
+ * subsumption_properties_of(?PChild,?PParent,+Database:database) is nondet.
  *
  * Transitive reflexive closure of Subproperty relation.
  */
@@ -803,7 +803,7 @@ subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Dat
     datatype_property(PC,Database).
 
 /**
- * strict_subsumption_property_of(?PChild,?PParent,-Database:database is nondet.
+ * strict_subsumption_property_of(?PChild,?PParent,-Database:database) is nondet.
  *
  * Non-reflexive subsumption relation for properties in Database.
  */
@@ -887,7 +887,7 @@ property_cycle(P,PC,Database,Reason) :-
 property_cycle_SC(Database,Reason) :- property_cycle(_,_,Database,Reason).
 
 /**
- * range(?P:uri, ?R:uri, +Database:database is nondet.
+ * range(?P:uri, ?R:uri, +Database:database) is nondet.
  *
  * Actually specified range for P.
  */
@@ -905,7 +905,7 @@ document(Class,Database) :-
 	subsumption_of(Class,'http://terminusdb.com/schema/terminus#Document', Database).
 
 /**
- * any_range(?P,?R,+Database:database is nondet.
+ * any_range(?P,?R,+Database:database) is nondet.
  *
  * Determine if R is a viable range for P.
  * This must be ordered according to Hasse diagram!
@@ -1152,7 +1152,7 @@ schema_object_blank_node(Z,Database) :-
     is_bnode(Z).
 
 /**
- * label(?X,?Y,+Database:database is det.
+ * label(?X,?Y,+Database:database) is det.
  *
  * Get the rdfs:label for X as Y.
  */
@@ -1164,7 +1164,7 @@ label(X,Y,Database) :-
     xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
 
 /**
- * comment(?X,?Y,+Database:database is det.
+ * comment(?X,?Y,+Database:database) is det.
  *
  * Get the rdfs:comment for X as Y.
  */
@@ -1176,7 +1176,7 @@ comment(X,Y,Database) :-
     xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /**
- * tcs_tag(?X:uri_or_id,?Y:any,+Database:database is det.
+ * tcs_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
  *
  * TODO: Rename!
  * Get the tcs:tag for X as Y.
