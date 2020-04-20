@@ -521,7 +521,6 @@ frame_handler(get, Path, Request) :-
     write_cors_headers(DB_Name, Terminus),
     reply_json(Frame).
 
-
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
 :- http_handler(root(woql), cors_catch(woql_handler(Method)),

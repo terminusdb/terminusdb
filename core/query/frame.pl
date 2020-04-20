@@ -621,8 +621,8 @@ fill_class_frame(_,_,[],[]) :- !.
 fill_class_frame(Elt,Database,[[type=objectProperty|P]|Rest], Frames) :-
     % object property
     !,
-    member(property=Prop, P),
-    select(frame=Frame,P,Pp),
+    memberchk(property=Prop, P),
+    once(select(frame=Frame,P,Pp)),
     Prefix=[type=objectProperty,domainValue=Elt|Pp],
     (   setof([frame=FilledFrame],
               V^(inferredEdge(Elt, Prop, V, Database),
@@ -635,7 +635,7 @@ fill_class_frame(Elt,Database,[[type=objectProperty|P]|Rest], Frames) :-
 fill_class_frame(Elt,Database,[[type=datatypeProperty|P]|Rest],Frames) :-
     % datatype property
     !,
-    member(property=Prop, P),
+    memberchk(property=Prop, P),
     Prefix = [type=datatypeProperty,domainValue=Elt|P],
     (   setof([rangeValue=V], inferredEdge(Elt, Prop, V, Database), Vs)
     ->  maplist(append(Prefix),Vs,PrefixFrames),
@@ -650,7 +650,8 @@ fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     % A class choice (the choice has already been made...)
     !,
     debug(terminus(frame(fill)), 'Elt: ~q~n', [Elt]),
-    instance_class(Elt,Class,Database),
+    % Needs to be a principle class
+    once(instance_class(Elt,Class,Database)),
     debug(terminus(frame(fill)), 'Class: ~q~n', [Class]),
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp),
     debug(terminus(frame(fill)), 'Fsp: ~q~n', [Fsp]),
@@ -661,14 +662,14 @@ fill_class_frame(Elt,Database,[type=class_choice,operands=Fs],Fsp_Filtered) :-
     debug(terminus(frame(fill)),'fill_class_frame/4 choice Filtered: ~q~n', [Filtered]),
     Filtered = [Fsp_Filtered].
 fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
-    member(type=Type, C),
-    member(operands=Fs, C),
+    memberchk(type=Type, C),
+    memberchk(operands=Fs, C),
     % An operand
     !,
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp).
 fill_class_frame(Elt,_,F,DocumentFrame) :-
-    member(type=Type, F),
-    member(Type,[oneOf,document]),
+    memberchk(type=Type, F),
+    memberchk(Type,[oneOf,document]),
     % Just need one type
     !,
     append(F,[domainValue=Elt],DocumentFrame).
@@ -706,7 +707,8 @@ class_property_frame(Class, Property, Database, PropertyFrame) :-
 
 % get filled frame for document
 document_filled_frame(Document,Database,Filled) :-
-    instance_class(Document,Class,Database),
+    % Probably needs to be replaced with a "principle class"
+    once(instance_class(Document,Class,Database)),
     class_frame(Class,Database,Frame),
     fill_class_frame(Document,Database,Frame,Filled).
 
@@ -733,8 +735,8 @@ realise_frame(_,[],_,_,[]) :-
     !.
 realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
     !, % no turning back if we are an object property
-    member(property=Prop, P),
-    select(frame=Frame,P,_FrameLessP),
+    memberchk(property=Prop, P),
+    once(select(frame=Frame,P,_FrameLessP)),
     (   setof(New_Realiser,
               V^(inferredEdge(Elt, Prop, V, Database),
                  (   document(V,Database)
@@ -754,7 +756,7 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
     ).
 realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Database,Depth,Realisers) :-
     !, % no turning back if we are a datatype property
-    member(property=Prop, P),
+    memberchk(property=Prop, P),
     (   setof(V,
               inferredEdge(Elt, Prop, V, Database),
               RealiserValues)
@@ -777,7 +779,7 @@ realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser
 realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
     % member(type=Type, Frame),
-    member(operands=Fs, Frame),
+    memberchk(operands=Fs, Frame),
     !, % We're an operator, so stick with it
     maplist({Elt,Database,Depth}/[TheFrame,New_Realiser]
             >>(realiser(Elt,TheFrame,Database,Depth,New_Realiser)),Fs,Realisers).
@@ -792,13 +794,103 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
         document_object(Database,Elt,New_Depth,Object),
         Object = [_Type,_Id|New_Realiser]).
 
+:- begin_tests(frame).
+:- use_module(core(util/test_utils)).
+:- use_module(library(http/json)).
+:- use_module(core(query)).
 
-/*
- * TODO: Frames are completely broken and need new attention
- *
- * Specifically we need to pass in a query object for realisation,
- * not a "database". - Gavin March 21st
- */
+test(class_frame, [])
+:-
+    open_descriptor(terminus_descriptor{}, Database),
+    class_frame('http://terminusdb.com/schema/terminus#Agent',Database,Frame),
+    % Not sure how stable this order is.
+    Frame = [[type=objectProperty,
+              property='http://terminusdb.com/schema/terminus#authority',
+              domain='http://terminusdb.com/schema/terminus#Agent',
+              range='http://terminusdb.com/schema/terminus#Capability',
+              restriction=true,
+              frame=[type=document,
+                     class='http://terminusdb.com/schema/terminus#Capability',
+                     label="Capability"@en,
+                     comment="A capability confers access to a database or server action"@en],
+              label="Has Capability"@en,
+              comment="A property that links an agent to a capability that they possess"@en],
+             [type=datatypeProperty,
+              property='http://terminusdb.com/schema/terminus#agent_name',
+              domain='http://terminusdb.com/schema/terminus#Agent',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              label="Agent name"@en,
+              comment="An name for API authentication"@en],
+             [type=datatypeProperty,
+              property='http://terminusdb.com/schema/terminus#agent_key_hash',
+              domain='http://terminusdb.com/schema/terminus#Agent',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              label="Agent Key"@en,
+              comment="An agent key for API authentication"@en],
+             [type=datatypeProperty,
+              property='http://www.w3.org/2000/01/rdf-schema#label',
+              domain='http://terminusdb.com/schema/terminus#Agent',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string'],
+             [type=datatypeProperty,
+              property='http://www.w3.org/2000/01/rdf-schema#comment',
+              domain='http://terminusdb.com/schema/terminus#Agent',
+              restriction=true,range='http://www.w3.org/2001/XMLSchema#string']].
+
+test(realise_frame, [])
+:-
+    open_descriptor(terminus_descriptor{}, Database),
+    document_filled_frame('terminus:///terminus/document/admin',Database,Frame),
+    Frame = [[type=objectProperty,
+              domainValue='terminus:///terminus/document/admin',
+              property='http://terminusdb.com/schema/terminus#authority',
+              domain='http://terminusdb.com/schema/terminus#User',
+              range='http://terminusdb.com/schema/terminus#Capability',
+              restriction=true,
+              label="Has Capability"@en,
+              comment="A property that links an agent to a capability that they possess"@en,
+              frame=[type=document,
+                     class='http://terminusdb.com/schema/terminus#Capability',
+                     label="Capability"@en,
+                     comment="A capability confers access to a database or server action"@en,
+                     domainValue='terminus:///terminus/document/access_all_areas']],
+             [type=datatypeProperty,
+              domainValue='terminus:///terminus/document/admin',
+              property='http://terminusdb.com/schema/terminus#agent_name',
+              domain='http://terminusdb.com/schema/terminus#User',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              label="Agent name"@en,
+              comment="An name for API authentication"@en,
+              rangeValue="admin"^^'http://www.w3.org/2001/XMLSchema#string'],
+             [type=datatypeProperty,
+              domainValue='terminus:///terminus/document/admin',
+              property='http://terminusdb.com/schema/terminus#agent_key_hash',
+              domain='http://terminusdb.com/schema/terminus#User',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              label="Agent Key"@en,
+              comment="An agent key for API authentication"@en,
+              rangeValue="$pbkdf2-sha512$t=32768$n/AnE8SRnf28gyMygmrecw$OGOkYCYA9njysK8vnta2boegOUHxPp9EN2e5VmwVU85mojKuuEm7tGXY8f6Jz2P7gwy9CbTqnaA3PPlEzwxhTA"^^'http://www.w3.org/2001/XMLSchema#string'],
+             [type=datatypeProperty,
+              domainValue='terminus:///terminus/document/admin',
+              property='http://www.w3.org/2000/01/rdf-schema#label',
+              domain='http://terminusdb.com/schema/terminus#User',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              rangeValue="Server Admin User"@en],
+             [type=datatypeProperty,
+              domainValue='terminus:///terminus/document/admin',
+              property='http://www.w3.org/2000/01/rdf-schema#comment',
+              domain='http://terminusdb.com/schema/terminus#User',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              rangeValue="This is the server super user account"@en]].
+
+
+:- end_tests(frame).
 
 /*
  * realise_quads(Elt,Frame,Database,Realiser) is det.
