@@ -124,6 +124,17 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :
                                               'vio:literal' : JVal,
                                               'vio:message' : M})))
     ).
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#long', _, Cast) :-
+    (   guess_integer(Val,Cast),
+        Cast < 2**64
+    ->  !
+    ;   format(atom(M),'Unable to cast as (xsd:long): ~q~n',
+               [Val]),
+        term_jsonld(Val,JVal),
+        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
+                                              'vio:literal' : JVal,
+                                              'vio:message' : M})))
+    ).
 typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
                 _ST,
                 'http://www.w3.org/2001/XMLSchema#decimal',
