@@ -3,6 +3,7 @@
               branch_name_uri/3,
               branch_base_uri/3,
               branch_head_commit/3,
+              has_commit/2,
               commit_id_uri/3,
               commit_to_metadata/5,
               commit_to_parent/3,
@@ -18,6 +19,7 @@
               insert_commit_object_on_branch/4,
               insert_commit_object_on_branch/5,
               insert_commit_object_on_branch/6,
+              link_commit_object_to_branch/3,
               insert_graph_object/7
           ]).
 :- use_module(core(util)).
@@ -42,6 +44,10 @@ branch_head_commit(Askable, Branch_Name, Commit_Uri) :-
     branch_name_uri(Askable, Branch_Name, Branch_Uri),
     once(ask(Askable,
              t(Branch_Uri, ref:ref_commit, Commit_Uri))).
+
+has_commit(Askable, Commit_Id) :-
+    ground(Commit_Id), % todo make this an error-throwing assertion
+    commit_id_uri(Askable, Commit_Id, _).
 
 commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
@@ -86,9 +92,13 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ->  random_string(Commit_Id)
     ;   true),
     format(string(Timestamp_String), '~q', [Timestamp]),
+    (   var(Commit_Uri)
+    ->  once(ask(Context, idgen(doc:'Commit', [Commit_Id^^xsd:string], Commit_Uri)))
+    ;   true),
+
+
     once(ask(Context,
-             (   idgen(doc:'Commit',[Commit_Id^^xsd:string], Commit_Uri),
-                 insert(Commit_Uri, rdf:type, ref:'Commit'),
+             (   insert(Commit_Uri, rdf:type, ref:'Commit'),
                  insert(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string),
                  insert(Commit_Uri, ref:commit_author, Commit_Info.author^^xsd:string),
                  insert(Commit_Uri, ref:commit_message, Commit_Info.message^^xsd:string),
@@ -122,24 +132,81 @@ insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Com
     ;   insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri)),
 
     % in both cases, we need to insert the new reference to the commit
+    link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
+
+link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri) :-
     once(ask(Context,
              insert(Branch_Uri, ref:ref_commit, Commit_Uri))).
+
+attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
+    once(ask(Context,
+             (   insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
+                 insert(Graph_Uri, ref:graph_name, Graph_Name^^xsd:string)))).
+
+attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-
+    once(ask(Context,
+             insert(Graph_Uri, ref:graph_layer, Graph_Layer_Uri))).
 
 insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
     once(ask(Context,
              (   idgen(doc:'Graph', [Commit_Id^^xsd:string,
                                      Graph_Type^^xsd:string,
                                      Graph_Name^^xsd:string], Graph_Uri),
-                 insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
-                 insert(Graph_Uri, rdf:type, ref:'Graph'),
-                 insert(Graph_Uri, ref:graph_name, Graph_Name^^xsd:string)))),
+                 insert(Graph_Uri, rdf:type, ref:'Graph')))),
+    attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri),
 
     % also attach a layer if it is there
-    % maybe it could be nice to be able to do such checks in woql?
     (   ground(Graph_Layer_Uri)
-    ->  once(ask(Context,
-                 insert(Graph_Uri, ref:graph_layer, Graph_Layer_Uri)))
+    ->  attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri)
     ;   true).
+
+copy_graph_object(Origin_Context, Destination_Context, Graph_Uri) :-
+    once(ask(Destination_Context,
+             insert(Graph_Uri, rdf:type, ref:'Graph'))),
+
+    (   layer_uri_for_graph(Origin_Context, Graph_Uri, Layer_Uri)
+    ->  layer_id_uri(Origin_Context, Layer_Id, Layer_Uri),
+        insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
+        attach_layer_to_graph(Destination_Context, Graph_Uri, Layer_Uri)
+    ;   true).
+
+copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
+    commit_id_uri(Origin_Context,
+                  Commit_Id,
+                  Commit_Uri),
+    commit_to_metadata(Origin_Context, Commit_Id, Author, Message, Timestamp),
+    Commit_Info = commit_info{author: Author, message: Message},
+
+    (   commit_to_parent(Origin_Context, Commit_Id, Parent_Uri)
+    ->  insert_child_commit_object(Destination_Context,
+                                   Parent_Uri,
+                                   Commit_Info,
+                                   Commit_Id,
+                                   Timestamp,
+                                   Commit_Uri)
+    ;   insert_base_commit_object(Destination_Context,
+                                  Commit_Info,
+                                  Timestamp,
+                                  Commit_Id,
+                                  Commit_Uri)),
+
+    forall(graph_for_commit(Origin_Context, Commit_Uri, Type, Graph_Name, Graph_Uri),
+           (   copy_graph_object(Origin_Context, Destination_Context, Graph_Uri),
+               attach_graph_to_commit(Destination_Context, Commit_Uri, Type, Graph_Name, Graph_Uri))).
+
+copy_commits_(Origin_Context, Destination_Context, Commit_Id) :-
+    (   has_commit(Destination_Context, Commit_Id)
+    ->  true
+    ;   copy_commit(Origin_Context, Destination_Context, Commit_Id),
+        (   commit_to_parent(Origin_Context, Commit_Id, Parent_Uri)
+        ->  commit_id_uri(Origin_Context, Parent_Id, Parent_Uri),
+            copy_commits_(Origin_Context, Destination_Context, Parent_Id)
+        ;   true)).
+
+copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
+    context_default_prefixes(Origin_Context, Origin_Context_Stripped),
+    context_default_prefixes(Destination_Context, Destination_Context_Stripped),
+    copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
 
 :- begin_tests(branch_objects).
 :- use_module(core(util/test_utils)).
@@ -252,7 +319,6 @@ test(commit_on_branch_insert,
                                                     Commit_Uri),
                      _),
 
-    
     % ensure our commit can be found
     commit_id_uri(Descriptor, Commit_Id, Commit_Uri),
 
@@ -270,6 +336,7 @@ test(commit_on_branch_insert,
                                                     Commit2_Id,
                                                     Commit2_Uri),
                      _),
+
 
     
     % ensure our commit can be found
@@ -397,3 +464,74 @@ test(insert_graph_object_with_layer,
     subtract(Union, Intersection, []).
 
 :- end_tests(graph_objects).
+
+:- begin_tests(copy_commits).
+:- use_module(core(util/test_utils)).
+:- use_module(core(triple)).
+:- use_module(database).
+test(copy_base_commit,
+     [setup((setup_temp_store(State),
+             ensure_label(testlabel1),
+             ensure_label(testlabel2))),
+      cleanup(teardown_temp_store(State))]) :-
+    % set up a chain
+    Descriptor1 = label_descriptor{ label: "testlabel1" },
+    Descriptor2 = label_descriptor{ label: "testlabel2" },
+    ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
+    Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
+    Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
+    Layer3_Id = "a3a29522ec767aa1a1cf321122f833726c102749",
+    with_transaction(Context1_1,
+                     (
+                         insert_base_commit_object(Context1_1, commit_info{author: "author", message: "message"}, 'commit_id', Commit_Uri),
+                         insert_layer_object(Context1_1,
+                                             Layer1_Id,
+                                             Layer1_Uri),
+                         insert_layer_object(Context1_1,
+                                             Layer2_Id,
+                                             Layer2_Uri),
+                         insert_layer_object(Context1_1,
+                                             Layer3_Id,
+                                             Layer3_Uri),
+                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", instance, "graph_1", Layer1_Uri, Graph1_Uri),
+                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", instance, "graph_2", Layer2_Uri, Graph2_Uri),
+                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", schema, "graph_3", Layer3_Uri, Graph3_Uri)
+                     ),
+                     _),
+
+
+    ref_schema_context_from_label_descriptor(Descriptor1, Context1_2),
+    ref_schema_context_from_label_descriptor(Descriptor2, Context2),
+
+    with_transaction(Context2,
+                     copy_commits(Context1_2, Context2, "commit_id"),
+                     _),
+
+    prefixed_to_uri(Commit_Uri, Context1_1.prefixes, Commit_Uri_Unprefixed),
+    prefixed_to_uri(Graph1_Uri, Context1_1.prefixes, Graph1_Uri_Unprefixed),
+    prefixed_to_uri(Graph2_Uri, Context1_1.prefixes, Graph2_Uri_Unprefixed),
+    prefixed_to_uri(Graph3_Uri, Context1_1.prefixes, Graph3_Uri_Unprefixed),
+    prefixed_to_uri(Layer1_Uri, Context1_1.prefixes, Layer1_Uri_Unprefixed),
+    prefixed_to_uri(Layer2_Uri, Context1_1.prefixes, Layer2_Uri_Unprefixed),
+    prefixed_to_uri(Layer3_Uri, Context1_1.prefixes, Layer3_Uri_Unprefixed),
+
+    commit_id_uri(Descriptor2, "commit_id", Commit_Uri_Unprefixed),
+
+    findall(Type-Name-Graph_Uri-Layer_Uri-Layer_Id,
+            (   graph_for_commit(Descriptor2, Commit_Uri_Unprefixed, Type, Name, Graph_Uri),
+                layer_uri_for_graph(Descriptor2, Graph_Uri, Layer_Uri),
+                layer_id_uri(Descriptor2, Layer_Id, Layer_Uri)),
+            Graphs),
+    Expected = [
+        instance-"graph_1"-Graph1_Uri_Unprefixed-Layer1_Uri_Unprefixed-Layer1_Id,
+        instance-"graph_2"-Graph2_Uri_Unprefixed-Layer2_Uri_Unprefixed-Layer2_Id,
+        schema-"graph_3"-Graph3_Uri_Unprefixed-Layer3_Uri_Unprefixed-Layer3_Id
+    ],
+
+    list_to_ord_set(Graphs, Graph_Set),
+    list_to_ord_set(Expected, Expected_Set),
+    writeq(Graph_Set),nl,
+    writeq(Expected_Set),nl,
+
+    ord_seteq(Graph_Set, Expected_Set).
+:- end_tests(copy_commits).

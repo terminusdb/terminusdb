@@ -15,9 +15,11 @@ layer_id_uri(Askable, Layer_Id, Layer_Uri) :-
              t(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string))).
 
 insert_layer_object(Context, Layer_Id, Layer_Uri) :-
+    (   var(Layer_Uri)
+    ->  once(ask(Context, idgen(doc:'Layer', [Layer_Id^^xsd:string], Layer_Uri)))
+    ;   true),
     once(ask(Context,
-             (   idgen(doc:'Layer', [Layer_Id^^xsd:string], Layer_Uri),
-                 insert(Layer_Uri, rdf:type, layer:'Layer'),
+             (   insert(Layer_Uri, rdf:type, layer:'Layer'),
                  insert(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string)))).
 
 :- begin_tests(layer_objects).

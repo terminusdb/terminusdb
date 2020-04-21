@@ -5,6 +5,7 @@
               create_context/3,
               collection_descriptor_prefixes/2,
               context_overriding_prefixes/3,
+              context_default_prefixes/2,
               empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2
@@ -229,8 +230,8 @@ create_context(Askable, Commit_Info, Context) :-
 
 
 /*
- * context_overriding_prefixes(Context:query_context, Prefixes:prefixes,
- *                             New_Context:query_context) is det.
+ * context_overriding_prefixes(+Context:query_context, +Prefixes:prefixes,
+ *                             -New_Context:query_context) is det.
  *
  * Override the current query context with these prefixes when
  * there are collisions.
@@ -239,6 +240,16 @@ context_overriding_prefixes(Context, Prefixes, New_Context) :-
     Query_Prefixes = Context.prefixes,
     merge_dictionaries(Prefixes,Query_Prefixes, New_Prefixes),
     New_Context = Context.put(prefixes, New_Prefixes).
+
+/*
+ * context_default_prefixes(+Context:query_context, -New_Context:query_context) is det.
+ *
+ * Transform the given context, stripping out all prefixes, and
+ * replacing them with the default global prefix set.
+ */
+context_default_prefixes(Context, New_Context) :-
+    default_prefixes(Default),
+    New_Context = Context.put(prefixes, Default).
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
