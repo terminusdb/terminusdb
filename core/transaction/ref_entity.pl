@@ -530,8 +530,6 @@ test(copy_base_commit,
 
     list_to_ord_set(Graphs, Graph_Set),
     list_to_ord_set(Expected, Expected_Set),
-    writeq(Graph_Set),nl,
-    writeq(Expected_Set),nl,
 
     ord_seteq(Graph_Set, Expected_Set).
 :- end_tests(copy_commits).
