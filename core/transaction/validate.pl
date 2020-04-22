@@ -2,7 +2,7 @@
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1,
               validate_validation_objects/2,
-              turtle_schema_transaction/4
+              turtle_transaction/4
           ]).
 
 /** <module> Validation
@@ -702,18 +702,11 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
  */
 
 /**
- * turtle_schema_update(Database, Schema, Stream) is semidet.
+ * turtle_transaction(Database, Graph, New_Graph_Stream, Meta_Data) is semidet.
  *
- * 1) calculate delta
- * 2) update the transaction object with the delta
- * 3) make validation object
- * 4) validate
- * 5) commit?
- *
- * Should this be refute turtle schema update? Retry?
- *
+ * Updates a graph with the given turtle.
  */
-turtle_schema_transaction(Database, Schema, New_Schema_Stream, Meta_Data) :-
+turtle_transaction(Database, Graph, New_Graph_Stream, Meta_Data) :-
     with_transaction(
         Database,
         (   % make a fresh empty graph against which to diff
@@ -722,7 +715,7 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Meta_Data) :-
 
             % write to a temporary builder.
             rdf_process_turtle(
-                New_Schema_Stream,
+                New_Graph_Stream,
                 {Builder}/
                 [Triples,_Resource]>>(
                     forall(member(T, Triples),
@@ -738,14 +731,14 @@ turtle_schema_transaction(Database, Schema, New_Schema_Stream, Meta_Data) :-
             % first write everything into the layer-builder that is in the new
             % file, but not in the db.
             forall(
-                (   xrdf([Schema], A_Old, B_Old, C_Old),
+                (   xrdf([Graph], A_Old, B_Old, C_Old),
                     \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
-                delete(Schema,A_Old,B_Old,C_Old,_)
+                delete(Graph,A_Old,B_Old,C_Old,_)
             ),
             forall(
                 (   xrdf_db(Layer,A_New,B_New,C_New),
-                    \+ xrdf([Schema], A_New, B_New, C_New)),
-                insert(Schema,A_New,B_New,C_New,_)
+                    \+ xrdf([Graph], A_New, B_New, C_New)),
+                insert(Graph,A_New,B_New,C_New,_)
 
             )
         ),

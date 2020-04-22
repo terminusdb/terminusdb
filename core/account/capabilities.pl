@@ -7,7 +7,6 @@
               get_user/3,
               auth_action_scope/4,
               write_cors_headers/2,
-              check_capabilities/2,
               authorisation_object/3,
               user_object/3
           ]).
@@ -195,9 +194,3 @@ write_domains([Domain| Domains], Out) :-
     ;   write(' '),
         write_domains(Domains, Out)
     ).
-
-
-check_capabilities(_Transaction_Object, _Active) :-
-    % we need to resolve all graphs and graph_filters and
-    % see if they are accessible
-    true.

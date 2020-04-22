@@ -61,7 +61,10 @@
 
 % Conditional loading of the JWT IO library...
 % TODO: There must be a cleaner way to do this
-:- (  config:jwt_public_key_path(JWTPubKeyPath), JWTPubKeyPath = '' -> true ; use_module(library(jwt_io))).
+:- (   config:jwt_public_key_path(JWTPubKeyPath),
+       JWTPubKeyPath = ''
+   ->  true
+   ;   use_module(library(jwt_io))).
 
 % Suppress warnings
 :- dynamic jwt_decode/3.
@@ -332,74 +335,52 @@ test(db_auth_test, [
 :- end_tests(db_endpoint).
 
 
-%%%%%%%%%%%%%%%%%%%% Schema Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(schema/Path), cors_catch(schema_handler(Method,Path)),
+%%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(triples/Path), cors_catch(triples_handler(Method,Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
                  methods([options,get,post])]).
 
-% DB Endpoint tests
-
 /*
- * schema_handler(Mode,DB,Request) is det.
+ * triples_handler(Mode,DB,Request) is det.
  *
  * Get or update a schema.
  */
-schema_handler(options,Path,_Request) :-
+triples_handler(options,Path,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     merge_separator_split(Path, '/', Split),
     Split = [Account_ID, DB_Name|_],
     user_database_name(Account_ID, DB_Name, DB),
     write_cors_headers(DB, Terminus),
     format('~n'). % send headers
-schema_handler(get,Path,Request) :-
+triples_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
 
-    merge_separator_split(Path, '/', Split),
-    maplist(atom_string, Split, Split_String),
-    (   Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch, Descriptor),
-        user_database_name(Account_ID, DB, Database_Name),
-        verify_access(Terminus,Auth,terminus:get_schema, Database_Name),
-        Resource_Name = Descriptor.repository_descriptor.database_descriptor.database_name
-    ;   Split_String = ["terminus"]
-    ->  Schema_Name = "main",
-        Descriptor = terminus_descriptor{},
-        verify_access(Terminus,Auth,terminus:get_schema, "terminus"),
-        config:public_url(Resource_Name)
-    ),
+    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
+    check_descriptor_auth(Descriptor,terminus:woql_select, Auth, Terminus),
 
     create_context(Descriptor, Context),
 
     % check access rights
 
-    dump_schema(Context, turtle, Schema_Name, String),
+    dump_graph(Context, turtle, Graph.type, Graph.name, String),
 
-    write_cors_headers(Resource_Name, Terminus),
+    write_descriptor_cors(Descriptor,Terminus),
     reply_json(String).
-schema_handler(post,Path,R) :- % should this be put?
+triples_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    authenticate(Terminus,Request,_Auth),
+    authenticate(Terminus,Request,Auth),
+    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
+    check_descriptor_auth(Descriptor,terminus:woql_update, Auth,Terminus),
 
-    merge_separator_split(Path, '/', Split),
-    maplist(atom_string, Split, Split_String),
-    (   Split_String = [Account_ID, DB, Repo, "branch", Branch, Schema_Name]
-    ->  make_branch_descriptor(Account_ID, DB, Repo, Branch, Descriptor),
-        Resource_Name = Descriptor.repository_descriptor.database_descriptor.database_name
-    ;   Split_String = ["terminus"]
-    ->  Schema_Name = "main",
-        Descriptor = terminus_descriptor{},
-        config:public_url(Resource_Name)
-    ),
-
-    get_payload(Schema_Document,Request),
+    get_payload(Triples_Document,Request),
     (   _{ turtle : TTL,
-           commit_info : Commit_Info } :< Schema_Document
+           commit_info : Commit_Info } :< Triples_Document
     ->  true
     ;   throw(error(bad_api_document('Bad API document')))),
 
@@ -408,21 +389,20 @@ schema_handler(post,Path,R) :- % should this be put?
 
     % check access rights
     % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
-    update_schema(Context,Schema_Name,TTL),
+    update_graph(Context,Graph.type,Graph.name,TTL),
 
-    write_cors_headers(Resource_Name, Terminus),
-
+    write_descriptor_cors(Descriptor,Terminus),
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 
-:- begin_tests(schema_endpoint).
+:- begin_tests(triples_endpoint).
 
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(schema_update, [
+test(triples_update, [
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
@@ -448,7 +428,7 @@ test(schema_update, [
     interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     config:server(Server),
-    atomic_list_concat([Server, '/schema/TERMINUS_QA/TEST_DB/local/branch/master/main'], URI),
+    atomic_list_concat([Server, '/triples/TERMINUS_QA/TEST_DB/local/branch/master/schema/main'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
@@ -465,17 +445,17 @@ test(schema_update, [
     memberchk('http://terminusdb.com/schema/terminus'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
-test(schema_get, [])
+test(triples_get, [])
 :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/schema/terminus'], URI),
+    atomic_list_concat([Server, '/triples/terminus/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
     string(In).
 
-:- end_tests(schema_endpoint).
+:- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(frame/Path), cors_catch(frame_handler(Method,Path)),
@@ -497,28 +477,19 @@ frame_handler(post, Path, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
-    % authenticate(Terminus, Request, Auth),
+    authenticate(Terminus, Request, Auth),
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Database),
-    % NOTE: Access rights should be checked against a descriptor
-    % using a verify_access predicate - not a database name.
-    %
-    % user_database_name(Account_ID, DB, DB_Name),
-    %% check access rights
-    % verify_access(Terminus,Auth,terminus:class_frame,DB_Name),
+    check_descriptor_auth(Descriptor,terminus:woql_select,Auth,Terminus),
     get_payload(Doc,Request),
+
     (   get_dict(class,Doc,Class_URI)
     ->  try_class_frame(Class_URI,Database,Frame)
     ;   get_dict(instance,Doc,Instance_URI)
     ->  try_filled_frame(Instance_URI,Database,Frame)
     ),
 
-    (   get_dict(repository_descriptor,Descriptor, Repo),
-        Resource = Repo.database_descriptor.database_name
-    ->  true
-    ;   config:public_url(Resource)),
-
-    write_cors_headers(Resource, Terminus),
+    write_descriptor_cors(Descriptor,Terminus),
     reply_json(Frame).
 
 :- begin_tests(frame_endpoint).
@@ -581,6 +552,7 @@ woql_handler(options, _Request) :-
     format('~n').
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
+    http_log('~N[Request] ~q~n', [Request]),
     open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
     authenticate(Terminus_Transaction_Object, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -601,25 +573,15 @@ woql_handler(options, _Path, _Request) :-
 
 woql_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Context),
 
     woql_run_context(Request, Auth_ID, Context, JSON),
 
-    % NOTE: This is a mess... Need a better way to create acceptable CORS
-    (   get_dict(repository_descriptor, Descriptor, Repo),
-        DB_Name = Repo.database_descriptor.database_name
-    ->  write_cors_headers(DB_Name, Terminus_Transaction_Object)
-    ;   get_dict(database_descriptor, Descriptor, Data),
-        DB_Name = Data.database_name
-    ->  write_cors_headers(DB_Name, Terminus_Transaction_Object)
-    ;   config:public_url(SURI),
-        write_cors_headers(SURI, Terminus_Transaction_Object)
-    ),
-
+    write_descriptor_cors(Descriptor,Terminus),
     reply_json_dict(JSON).
 
 woql_run_context(Request, Auth_ID, Context, JSON) :-
@@ -933,7 +895,7 @@ test(update_object, [
                                               author : "Steve",
                                               message : "Yeah I did it"
                                           }),
-    update_schema(Database,"main",TTL),
+    update_graph(Database,schema,"main",TTL),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1025,7 +987,7 @@ test(delete_object, [
                                               author : "Steve",
                                               message : "Yeah I did it"
                                           }),
-    update_schema(Database,"main",TTL),
+    update_graph(Database,schema,"main",TTL),
 
     % Create the object
     Doc = _{ '@type' : "scm:Database",
@@ -1161,16 +1123,10 @@ graph_handler(options, _Path, _Request) :-
     format('~n').
 graph_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
-    merge_separator_split(Path, '/', Split),
-    maplist(atom_string, Split, Split_String),
-    Split_String = [Account_ID, DB, Repo, "branch", Branch, Type_String, Name],
-    atom_string(Type, Type_String),
-
-    % Must be local.
-    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
 
     get_payload(Document, Request),
 
@@ -1179,28 +1135,20 @@ graph_handler(post, Path, R) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
-    create_graph(Branch_Descriptor,
+    create_graph(Descriptor,
                  Commit_Info,
-                 Type,
-                 Name,
+                 Graph.type,
+                 Graph.name,
                  _Transaction_Metadata2),
 
-    user_database_name(Account_ID,DB,DB_Name),
-    write_cors_headers(DB_Name, terminus_descriptor{}),
-
+    write_descriptor_cors(Descriptor, Terminus),
     reply_json(_{'terminus:status' : "terminus:success"}).
 graph_handler(delete, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, _Auth_ID),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
-    merge_separator_split(Path, '/', Split),
-    maplist(atom_string, Split, Split_String),
-    Split_String = [Account_ID, DB, Repo, "branch", Branch, Type_String, Name],
-    atom_string(Type, Type_String),
-
-    % Must be local.
-    make_branch_descriptor(Account_ID, DB, Repo, Branch, Branch_Descriptor),
+    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
     get_payload(Document, Request),
 
     (   _{ commit_info : Commit_Info } :< Document
@@ -1208,16 +1156,13 @@ graph_handler(delete, Path, R) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
-    % Doesn't exist yet!
-    delete_graph(Branch_Descriptor,
+    delete_graph(Descriptor,
                  Commit_Info,
-                 Type,
-                 Name,
+                 Graph.type,
+                 Graph.name,
                  _Transaction_Metadata2),
 
-    user_database_name(Account_ID,DB,DB_Name),
-    write_cors_headers(DB_Name, terminus_descriptor{}),
-
+    write_cors_headers(Descriptor, Terminus),
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 
@@ -1429,6 +1374,40 @@ connection_authorised_user(Request, User_ID, SURI) :-
     ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
                                               'terminus:message' : 'Bad user object',
                                               'terminus:object' : Username})))).
+
+check_descriptor_auth(terminus_descriptor{},Action,Auth,Terminus) :-
+    verify_access(Terminus,Auth,Action,"terminus").
+check_descriptor_auth(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
+    verify_access(Terminus,Auth,Action,Name).
+check_descriptor_auth(repository_descriptor{ database_descriptor : DB,
+                                             repository_name : _ }, Action, Auth, Terminus) :-
+    check_descriptor_auth(DB, Action, Auth, Terminus).
+check_descriptor_auth(branch_descriptor{ repository_descriptor : Repo,
+                                         branch_name : _ }, Action, Auth, Terminus) :-
+    check_descriptor_auth(Repo, Action, Auth, Terminus).
+check_descriptor_auth(commit_descriptor{ repository_descriptor : Repo,
+                                         commit_id : _ }, Action, Auth, Terminus) :-
+    check_descriptor_auth(Repo, Action, Auth, Terminus).
+
+write_descriptor_cors(terminus_descriptor{},Terminus) :-
+    write_cors_headers("terminus",Terminus).
+write_descriptor_cors(database_descriptor{ database_name : Name },Terminus) :-
+    write_cors_headers(Name,Terminus).
+write_descriptor_cors(repository_descriptor{ database_descriptor : DB,
+                                             repository_name : _ }, Terminus) :-
+    write_descriptor_cors(DB, Terminus).
+write_descriptor_cors(branch_descriptor{ repository_descriptor : Repo,
+                                         branch_name : _ }, Terminus) :-
+    write_descriptor_cors(Repo, Terminus).
+write_descriptor_cors(commit_descriptor{ repository_descriptor : Repo,
+                                         commit_id : _ }, Terminus) :-
+    write_cors_headers(Repo, Terminus).
+
+check_capabilities(_Transaction_Object, _Active) :-
+    % we need to resolve all graphs and graph_filters and
+    % see if they are accessible
+    true.
+
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1810,41 +1789,40 @@ try_filled_frame(Instance,Database,Frame) :-
                                       'terminus:instance' : Instance})))).
 
 /*
- * update_schema(+DB,+Schema,+TTL) is det.
+ * update_graph(+DB,+Type,+Name,+TTL) is det.
  *
  */
-update_schema(Database,Schema,TTL) :-
+update_graph(Database,Type,Name,TTL) :-
     (   member(Transaction,Database.transaction_objects),
-        Filter = type_name_filter{ type : schema, names : [Schema]},
-        filter_transaction_object_read_write_objects(Filter, Transaction, [Schema_Graph])
+        Filter = type_name_filter{ type : Type, names : [Name]},
+        filter_transaction_object_read_write_objects(Filter, Transaction, [Graph])
     ->  true
-    ;   format(atom(M), 'No such schema named ~s', [Schema]),
+    ;   format(atom(M), 'No such schema named ~s', [Name]),
         throw(error(schema_error(_{'@type' : "vio:SchemaDoesNotExist",
                                    'vio:message' : M})))),
 
     coerce_literal_string(TTL, TTLS),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        turtle_schema_transaction(Database, Schema_Graph, TTLStream,_),
+        turtle_transaction(Database, Graph, TTLStream,_),
         close(TTLStream)
     ).
 
 
 /*
- * dump_schema(+DB,+Encoding,+Schema,-String) is semidet.
+ * dump_graph(+DB,+Encoding,+Type,+Name,-String) is semidet.
  *
  */
-dump_schema(Database,Encoding,Schema,String) :-
-    atom_string(Schema,Schema_Name),
-    Graph_Filter = type_name_filter{ type: schema, names : [Schema_Name]},
+dump_graph(Database,Encoding,Type,Name,String) :-
+    Graph_Filter = type_name_filter{ type: Type, names : [Name]},
     [Transaction_Object] = Database.transaction_objects,
-    filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Schema_Graph]),
+    filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Graph]),
     (   Encoding = turtle
     ->  with_output_to(
             string(String),
             (   current_output(Stream),
                 dict_pairs(Database.prefixes, _, Pairs),
-                graph_to_turtle(Pairs, Schema_Graph, Stream)
+                graph_to_turtle(Pairs, Graph, Stream)
             )
         )
     ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
