@@ -1934,27 +1934,35 @@ test(order_by, []) :-
                                                     '@value' : true},
                                       variable : _{'@type' : "Variable",
                                                    variable_name : _{ '@type' : "xsd:string",
-                                                                      '@value' : "Subject"}}}],
-              query : _{ '@type' : "Triple",
-                         subject : _{'@type' : "Variable",
-                                     variable_name :
-                                     _{'@type' : "xsd:string",
-                                       '@value' : "Subject"}},
-                         predicate : _{'@type' : "Variable",
-                                       variable_name :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Predicate"}},
-                         object : _{'@type' : "Variable",
-                                    variable_name :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Object"}}
-                       }},
+                                                                      '@value' : "X"}}}],
+              query : _{ '@type' : 'Or',
+                         query_list :
+                         [_{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 10}}},
+                          _{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 20}}}]}},
 
     query_test_response(terminus_descriptor{}, Query, JSON),
-    [Res|_] = JSON.bindings,
-    _{'Object' : 'http://terminusdb.com/schema/terminus#class_frame',
-      'Predicate':'http://terminusdb.com/schema/terminus#action',
-      'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':10}},
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':20}}].
 
 test(path, []) :-
 
