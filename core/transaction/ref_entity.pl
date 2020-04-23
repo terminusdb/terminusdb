@@ -28,6 +28,11 @@
 :- use_module(layer_entity).
 
 has_branch(Askable, Branch_Name) :-
+    ground(Branch_Name),
+    !,
+    once(ask(Askable,
+             t(_, ref:branch_name, Branch_Name^^xsd:string))).
+has_branch(Askable, Branch_Name) :-
     ask(Askable,
         t(_, ref:branch_name, Branch_Name^^xsd:string)).
 

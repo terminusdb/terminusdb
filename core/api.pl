@@ -15,10 +15,14 @@
 
               % db_graph.pl
               create_graph/5,
-              delete_graph/5
+              delete_graph/5,
+
+              % db_branch.pl
+              branch_create/5
           ]).
 
 :- use_module(api/init).
 :- use_module(api/db_init).
 :- use_module(api/db_delete).
 :- use_module(api/db_graph).
+:- use_module(api/db_branch).
