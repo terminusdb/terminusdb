@@ -3,7 +3,8 @@
               run_transaction/2,
               run_transactions/2,
               retry_transaction/2,
-              with_transaction/3
+              with_transaction/3,
+              graph_inserts_deletes/3
           ]).
 
 /** <module> Implementation of database graph management
@@ -243,7 +244,10 @@ run_transactions(Transactions, Meta_Data) :-
     collect_validations_metadata(Validations, Meta_Data).
 
 graph_inserts_deletes(Graph, I, D) :-
-    graph_validation_obj{ changed: true } :< Graph,
+    graph_validation_obj{ changed: Value } :< Graph,
+    (   ground(Value),
+        Value = true
+    ;   var(Value)),
     !,
     % layer_addition_count(Graph.read, I),
     %layer_removal_count(Graph.read, D).

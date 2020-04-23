@@ -4,6 +4,7 @@
               run_transaction/2,
               run_transactions/2,
               with_transaction/3,
+              graph_inserts_deletes/3,
 
               % descriptor.pl
               open_read_write_obj/2,

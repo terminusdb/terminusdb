@@ -70,7 +70,10 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
     ->  New_Layer = Layer,
         Changed = false
     ;   nb_commit(Layer_Builder, New_Layer),
-        Changed = true).
+        graph_inserts_deletes(Graph_Validation_Obj, N, M),
+        (   N = 0, M = 0
+        ->  Changed = false
+        ;   Changed = true)).
 
 transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
     transaction_object{descriptor: Descriptor,
@@ -819,6 +822,32 @@ test(insert_schema_terminus_descriptor, [
     once(ask(terminus_descriptor{},
              t(foo,bar,baz,"schema/main"))).
 
+
+test(double_insert, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_context(terminus_descriptor{}, Context),
+
+    with_transaction(Context,
+                     once(ask(Context, insert(foo,bar,baz,"schema/main"))),
+                     Meta_Data),
+
+
+    open_descriptor(terminus_descriptor{}, Trans),
+    [Schema] = Trans.schema_objects,
+    layer_to_id(Schema.read, ID1),
+
+    Meta_Data.inserts = 1,
+    create_context(terminus_descriptor{}, Context2),
+    with_transaction(Context2,
+                     once(ask(Context2, insert(foo,bar,baz,"schema/main"))),
+                     _),
+    open_descriptor(terminus_descriptor{}, Trans2),
+    [Schema2] = Trans2.schema_objects,
+    layer_to_id(Schema2.read, ID2),
+    ID1 = ID2.
 
 
 :- end_tests(inserts).
