@@ -123,18 +123,30 @@ commit_validation_object(Validation_Object, []) :-
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
-        instance_objects: [Instance_Object]
+        instance_objects: [Instance_Object],
+        schema_objects: [Schema_Object],
+        inference_objects: [Inference_Object]
     } :< Validation_Object,
     terminus_descriptor{
     } = Descriptor,
     !,
-    terminus_instance_name(Label),
-    % This is okay for now, since we don't want the
-    % schema to be changed in WOQL queries
+    terminus_instance_name(Instance_Label),
+    terminus_inference_name(Inference_Label),
+    terminus_schema_name(Schema_Label),
     (   validation_object_changed(Instance_Object)
     ->  storage(Store),
-        safe_open_named_graph(Store, Label, Graph),
+        safe_open_named_graph(Store, Instance_Label, Graph),
         nb_set_head(Graph, Instance_Object.read)
+    ;   true),
+    (   validation_object_changed(Inference_Object)
+    ->  storage(Store),
+        safe_open_named_graph(Store, Inference_Label, Graph),
+        nb_set_head(Graph, Inference_Object.read)
+    ;   true),
+    (   validation_object_changed(Schema_Object)
+    ->  storage(Store),
+        safe_open_named_graph(Store, Schema_Label, Graph),
+        nb_set_head(Graph, Schema_Object.read)
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
