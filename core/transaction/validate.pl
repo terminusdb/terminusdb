@@ -803,5 +803,22 @@ test(insert_on_label_descriptor, [
 
     once(ask(Descriptor, t(foo,bar,baz))).
 
+test(insert_schema_terminus_descriptor, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_context(terminus_descriptor{}, Context),
+
+    with_transaction(Context,
+                     once(ask(Context, insert(foo,bar,baz,"schema/main"))),
+                     Meta_Data),
+
+    Meta_Data.inserts = 1,
+
+    once(ask(terminus_descriptor{},
+             t(foo,bar,baz,"schema/main"))).
+
+
 
 :- end_tests(inserts).
