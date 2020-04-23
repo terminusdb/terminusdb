@@ -44,9 +44,17 @@ graph_to_turtle(Prefixes,G,Out_Stream) :-
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
  */
 turtle_triples(Layer,X,P,Y,_) :-
+    ground(Y),
+    !,
+    (   \+ (   atom(Y)
+           ;   string(Y))
+    ->  fixup_schema_literal(Y,YO)
+    ;   Y = YO),
+    xrdf_db(Layer,X,P,YO).
+turtle_triples(Layer,X,P,Y,_) :-
     xrdf_db(Layer,X,P,YO),
     (   is_literal(YO)
-    ->  fixup_schema_literal(YO,Y)
+    ->  fixup_schema_literal(Y,YO)
     ;   Y = YO).
 
 /**
@@ -58,5 +66,11 @@ turtle_triples(Layer,X,P,Y,_) :-
 layer_to_turtle(Layer,Prefixes,Out_Stream) :-
    rdf_save_canonical_turtle(
         Out_Stream,
-        [prefixes(Prefixes),expand(turtle_triples(Layer)),group(true),indent(2),silent(true)]
+        [prefixes(Prefixes),
+         encoding(utf8),
+         expand(turtle_triples(Layer)),
+         inline_bnodes(true),
+         group(true),
+         indent(2),
+         silent(true)]
     ).

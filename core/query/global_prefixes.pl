@@ -31,8 +31,6 @@
 :- reexport(core(util/syntax)).
 
 % internal
-global_prefixes(tcs,'http://terminusdb.com/schema/tcs#').
-global_prefixes(tbs,'http://terminusdb.com/schema/tbs#').
 global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
 global_prefixes(vio,'http://terminusdb.com/schema/vio#').
 global_prefixes(woql,'http://terminusdb.com/schema/woql#').
@@ -40,8 +38,6 @@ global_prefixes(terminus,'http://terminusdb.com/schema/terminus#').
 global_prefixes(ref,'http://terminusdb.com/schema/ref#').
 global_prefixes(layer,'http://terminusdb.com/schema/layer#').
 global_prefixes(repo,'http://terminusdb.com/schema/repository#').
-%global_prefixes(terminus_doc,'terminus:///terminus/document/').
-% common
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').
