@@ -133,20 +133,18 @@ commit_validation_object(Validation_Object, []) :-
     terminus_instance_name(Instance_Label),
     terminus_inference_name(Inference_Label),
     terminus_schema_name(Schema_Label),
+    storage(Store),
     (   validation_object_changed(Instance_Object)
-    ->  storage(Store),
-        safe_open_named_graph(Store, Instance_Label, Graph),
-        nb_set_head(Graph, Instance_Object.read)
+    ->  safe_open_named_graph(Store, Instance_Label, Instance_Graph),
+        nb_set_head(Instance_Graph, Instance_Object.read)
     ;   true),
     (   validation_object_changed(Inference_Object)
-    ->  storage(Store),
-        safe_open_named_graph(Store, Inference_Label, Graph),
-        nb_set_head(Graph, Inference_Object.read)
+    ->  safe_open_named_graph(Store, Inference_Label, Inference_Graph),
+        nb_set_head(Inference_Graph, Inference_Object.read)
     ;   true),
     (   validation_object_changed(Schema_Object)
-    ->  storage(Store),
-        safe_open_named_graph(Store, Schema_Label, Graph),
-        nb_set_head(Graph, Schema_Object.read)
+    ->  safe_open_named_graph(Store, Schema_Label, Schema_Graph),
+        nb_set_head(Schema_Graph, Schema_Object.read)
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
