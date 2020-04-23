@@ -13,7 +13,7 @@
               subsumption_of/3,
               strict_subsumption_of/3,
               complement_of/3,
-              tcs_tag/3,
+              terminus_tag/3,
               document/2,
 
               union_of_list/3,
@@ -702,10 +702,6 @@ datatype_property(P,_) :- rdfs_datatype_property(P).
 annotation_property(P,Database) :-
     database_schema(Database,Schema),
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
-% Gavin nuked on Sep 20th 2019
-%annotation_property(P,Database) :-
-%    subsumption_properties_of(P,'http://terminusdb.com/schema/tcs#pseudo_property', Database).
-
 
 %:- rdf_meta functional_property(r,o).
 functional_property(P,Database) :-
@@ -1176,14 +1172,13 @@ comment(X,Y,Database) :-
     xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /**
- * tcs_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
+ * terminus_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
  *
- * TODO: Rename!
- * Get the tcs:tag for X as Y.
+ * Get the terminus:tag for X as Y.
  */
-tcs_tag(X,Y,Database) :-
+terminus_tag(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://terminusdb.com/schema/tcs#tag', Y).
+    xrdf(Schema,X, 'http://terminusdb.com/schema/terminus#tag', Y).
 
 class_has_label(X,Y,Database) :- class(X,Database), label(X,Y,Database).
 %class_hasNo_label(X,Database) :- class(X,Database), \+ label(X,_,Database).

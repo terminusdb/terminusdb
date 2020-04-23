@@ -31,7 +31,7 @@
               subsumption_of/3,
               strict_subsumption_of/3,
               complement_of/3,
-              tcs_tag/3,
+              terminus_tag/3,
               document/2,
 
               union_of_list/3,
