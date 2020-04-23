@@ -1401,7 +1401,7 @@ write_descriptor_cors(branch_descriptor{ repository_descriptor : Repo,
     write_descriptor_cors(Repo, Terminus).
 write_descriptor_cors(commit_descriptor{ repository_descriptor : Repo,
                                          commit_id : _ }, Terminus) :-
-    write_cors_headers(Repo, Terminus).
+    write_descriptor_cors(Repo, Terminus).
 
 check_capabilities(_Transaction_Object, _Active) :-
     % we need to resolve all graphs and graph_filters and
