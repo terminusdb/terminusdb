@@ -300,22 +300,28 @@ terminus:Server
   rdfs:subClassOf terminus:Resource .
 
 terminus:agent_name
-  a owl:DatatypeProperty;
-  rdfs:label "Agent name"@en;
-  rdfs:comment "An name for API authentication"@en;
-  rdfs:domain terminus:Agent;
+  a owl:DatatypeProperty ;
+  rdfs:label "Agent name"@en ;
+  rdfs:comment "An name for API authentication"@en ;
+  rdfs:domain terminus:Agent ;
   rdfs:range xsd:string .
 
 terminus:agent_key_hash
-  a owl:DatatypeProperty;
-  rdfs:label "Agent Key"@en;
-  rdfs:comment "An agent key for API authentication"@en;
-  rdfs:domain terminus:Agent;
+  a owl:DatatypeProperty ;
+  rdfs:label "Agent Key"@en ;
+  rdfs:comment "An agent key for API authentication"@en ;
+  rdfs:domain terminus:Agent ;
   rdfs:range xsd:string.
 
 terminus:user_key_hash
-  a owl:DatatypeProperty;
+  a owl:DatatypeProperty ;
   rdfs:label "User Key"@en;
-  rdfs:comment "A user key for API authentication"@en;
+  rdfs:comment "A user key for API authentication"@en ;
   rdfs:domain terminus:User;
   rdfs:range xsd:string.
+
+terminus:Prefixes
+  a owl:Class ;
+  rdfs:label "Prefixes"@en ;
+  rdfs:comment "Default prefixes for a given database"@en .
+  

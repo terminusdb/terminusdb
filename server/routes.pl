@@ -349,10 +349,8 @@ test(db_auth_test, [
  */
 triples_handler(options,Path,_Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
-    merge_separator_split(Path, '/', Split),
-    Split = [Account_ID, DB_Name|_],
-    user_database_name(Account_ID, DB_Name, DB),
-    write_cors_headers(DB, Terminus),
+    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, _Graph),
+    write_descriptor_cors(Descriptor,Terminus),
     format('~n'). % send headers
 triples_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
