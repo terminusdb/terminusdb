@@ -1505,6 +1505,11 @@ customise_error(error(origin_branch_does_not_exist(Branch_Name))) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : Msg},
                [status(400)]).
+customise_error(error(origin_commit_does_not_exist(Commit_Id))) :-
+    format(string(Msg), "origin commit ~w does not exist", [Commit_Id]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : Msg},
+               [status(400)]).
 customise_error(error(origin_cannot_be_branched(Descriptor))) :-
     format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
     reply_json(_{'terminus:status' : 'terminus:failure',

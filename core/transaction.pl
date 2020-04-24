@@ -57,6 +57,7 @@
               insert_commit_object_on_branch/6,
               link_commit_object_to_branch/3,
               insert_graph_object/7,
+              copy_commits/3,
 
               % repo_entity.pl
               has_repository/2,
