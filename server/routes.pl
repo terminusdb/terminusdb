@@ -1106,8 +1106,92 @@ push_handler(_Method,_Path,_Request) :-
                  prefix,
                  methods([options,post])]).
 
-branch_handler(_Method,_Path,_Request) :-
-    throw(error('Not implemented')).
+branch_handler(options,Path,_Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    write_descriptor_cors(Descriptor, terminus_descriptor{}),
+    nl.
+branch_handler(post,Path,R) :-
+    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
+    branch_descriptor{
+        repository_descriptor: Destination_Descriptor,
+        branch_name: Branch_Name
+    } :< Branch_Descriptor,
+    
+    add_payload_to_request(R,Request),
+    get_payload(Document, Request),
+
+    (   get_dict(origin, Document, Origin_Path)
+    ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
+    ;   Origin_Descriptor = empty),
+
+    (   get_dict(base_uri, Document, Base_Uri)
+    ->  Options = [base_uri(Base_Uri)]
+    ;   Options = []),
+
+    branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, Options, _Branch_Uri),
+
+    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    reply_json(_{'terminus:status' : "terminus:success"}).
+
+:- begin_tests(branch_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(create_empty_branch, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{base_uri: 'http://terminushub.com/admin/test/foodocument'}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    has_branch(Repository_Descriptor, "foo"),
+    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/foodocument").
+
+test(create_empty_branch_without_base_uri_errors, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key)),
+               status_code(400)]),
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    \+ has_branch(Repository_Descriptor, "foo").
+
+:- end_tests(branch_endpoint).
+
+
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(graph/Path), cors_catch(graph_handler(Method,Path)),
@@ -1268,13 +1352,17 @@ customise_error(http_reply(authorize(JSON))) :-
 customise_error(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
 customise_error(time_limit_exceeded) :-
-    reply_json(_{'terminus:status' : 'teriminus:error',
+    reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : 'Connection timed out'
                },
                [status(408)]).
 customise_error(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
+customise_error(error(branch_creation_base_uri_not_specified)) :-
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : 'branch has no specified base uri'},
+               [status(400)]).
 customise_error(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
     reply_json(_{'terminus:status' : 'terminus:failure',
