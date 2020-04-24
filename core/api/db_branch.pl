@@ -19,6 +19,11 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Option
     branch_descriptor{} :< Branch_Descriptor,
     Repository_Descriptor = Branch_Descriptor.repository_descriptor,
     !,
+
+    (   has_branch(Repository_Descriptor, Branch_Descriptor.branch_name)
+    ->  true
+    ;   throw(error(origin_branch_does_not_exist(Branch_Descriptor.branch_name)))),
+
     % In this case, both source and destination branch exist in the same repository.
     % A new branch is trivial to create by inserting the branch object and pointing it at the head of the other branch.
     create_context(Repository_Descriptor, Context),
@@ -34,7 +39,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Option
                          ->  link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri)
                          ;   true)),
                      _).
-branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Options, Branch_Uri) :-
+branch_create_(Repository_Descriptor, Branch_Descriptor, _New_Branch_Name, _Options, _Branch_Uri) :-
     branch_descriptor{} :< Branch_Descriptor,
     Repository_Descriptor \= Branch_Descriptor.repository_descriptor,
     !,
@@ -43,7 +48,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Option
     throw(error(not_implemented)),
 
     true.
-branch_create_(Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Options, Branch_Uri) :-
+branch_create_(_Repository_Descriptor, Commit_Descriptor, _New_Branch_Name, _Options, _Branch_Uri) :-
     commit_descriptor{} :< Commit_Descriptor,
     % easy! make a new branch object and point it at the given commit
     throw(error(not_implemented)),
@@ -60,7 +65,14 @@ branch_create(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Options
     ->  true
     ;   throw(error(repository_is_not_local(Repository_Descriptor)))),
 
-    branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Options, Branch_Uri).
+    (   has_branch(Repository_Descriptor, New_Branch_Name)
+    ->  throw(error(branch_already_exists(New_Branch_Name)))
+    ;   true),
+
+    (   branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Options, Branch_Uri)
+    ->  true
+    ;   throw(error(origin_cannot_be_branched(Origin_Descriptor)))).
+
 
 :- begin_tests(branch_api).
 :- use_module(core(util/test_utils)).

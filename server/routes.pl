@@ -1182,13 +1182,145 @@ test(create_empty_branch_without_base_uri_errors, [
               json(_{}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key)),
-               status_code(400)]),
+               status_code(Status_Code)]),
+    Status_Code = 400,
     * json_write_dict(current_output, JSON, []),
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
     \+ has_branch(Repository_Descriptor, "foo").
 
+test(create_branch_from_local_without_base_uri, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{origin:'/admin/test/local/branch/master'}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    has_branch(Repository_Descriptor, "foo"),
+    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/document").
+
+test(create_branch_from_local_with_base_uri, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{origin:'/admin/test/local/branch/master',
+                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    has_branch(Repository_Descriptor, "foo"),
+    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/foodocument").
+
+test(create_branch_that_already_exists_error, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/master'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{origin:'/admin/test/local/branch/master',
+                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+              JSON,
+              [json_object(dict),
+               authorization(basic(admin,Key)),
+               status_code(Status_Code)]),
+    Status_Code = 400,
+    * json_write_dict(current_output, JSON, []).
+
+test(create_branch_from_nonexisting_origin_error, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{origin:'/admin/test/local/branch/bar',
+                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+              JSON,
+              [json_object(dict),
+               authorization(basic(admin,Key)),
+               status_code(Status_Code)]),
+    Status_Code = 400,
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    \+ has_branch(Repository_Descriptor, "foo").
+
+test(create_branch_from_commit_graph_error, [
+         setup((config:server(Server),
+                user_database_name(admin,test, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,test, Name),
+                  delete_db(Name)))
+     ])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{origin:'/admin/test/local/_commits',
+                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+              JSON,
+              [json_object(dict),
+               authorization(basic(admin,Key)),
+               status_code(Status_Code)]),
+    Status_Code = 400,
+    * json_write_dict(current_output, JSON, []),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    \+ has_branch(Repository_Descriptor, "foo").
+   
 :- end_tests(branch_endpoint).
 
 
@@ -1362,6 +1494,21 @@ customise_error(error(schema_check_failure(Witnesses))) :-
 customise_error(error(branch_creation_base_uri_not_specified)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : 'branch has no specified base uri'},
+               [status(400)]).
+customise_error(error(branch_already_exists(Branch_Name))) :-
+    format(string(Msg), "branch ~w already exists", [Branch_Name]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : Msg},
+               [status(400)]).
+customise_error(error(origin_branch_does_not_exist(Branch_Name))) :-
+    format(string(Msg), "origin branch ~w does not exist", [Branch_Name]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : Msg},
+               [status(400)]).
+customise_error(error(origin_cannot_be_branched(Descriptor))) :-
+    format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : Msg},
                [status(400)]).
 customise_error(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
