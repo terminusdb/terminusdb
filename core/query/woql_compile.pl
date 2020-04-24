@@ -1317,13 +1317,14 @@ filter_transaction(type_name_filter{ type : inference, names : Names}, Transacti
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
-:- use_module(ask,[create_context/3, context_overriding_prefixes/3]).
+:- use_module(ask,[ask/2,create_context/2, create_context/3, context_overriding_prefixes/3]).
 % NOTE: This circularity is very irritating...
 % We are merely hoping that query_response is loaded before we run this test.
 %:- use_module(query_response, [run_context_ast_jsonld_response/3]).
 :- use_module(library(ordsets)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
+:- use_module(core(transaction)).
 
 query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
@@ -1624,12 +1625,26 @@ test(exp, []) :-
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
 
-test(limit, []) :-
+test(limit, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))]) :-
+
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert('x','y','z'),
+                      insert('x','y','w'),
+                      insert('x','y','q'))),
+        _Meta),
 
     Query = _{'@type' : "Limit",
               limit : _{ '@type' : "Datatype",
                            datatype : _{ '@type' : "xsd:integer",
-                                           '@value' : 2}},
+                                         '@value' : 2}},
               query : _{ '@type' : "Triple",
                          subject : _{'@type' : "Variable",
                                      variable_name :
@@ -1645,15 +1660,12 @@ test(limit, []) :-
                                       '@value' : "Object"}}
                        }},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(Descriptor, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
+
     list_to_ord_set(Orderable,Bindings_Set),
-    list_to_ord_set([json{'Object':'http://terminusdb.com/schema/terminus#class_frame',
-                          'Predicate':'http://terminusdb.com/schema/terminus#action',
-                          'Subject':'terminus:///terminus/document/access_all_areas'},
-                     json{'Object':'http://terminusdb.com/schema/terminus#create_database',
-                          'Predicate':'http://terminusdb.com/schema/terminus#action',
-                          'Subject':'terminus:///terminus/document/access_all_areas'}],
+    list_to_ord_set([json{'Object':q,'Predicate':y,'Subject':x},
+                     json{'Object':w,'Predicate':y,'Subject':x}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
@@ -1967,13 +1979,13 @@ test(order_by, []) :-
 test(path, []) :-
 
     % Pattern is:
-    % terminus:authority , (  terminus:authority_scope
-    %                      ;  terminus:authority_scope, plus(terminus:resource_includes))
+    % terminus:access , (  terminus:authority_scope
+    %                   ;  terminus:authority_scope, plus(terminus:resource_includes))
     Pattern =
     _{'@type' : "PathSequence",
       path_first :
       _{ '@type' : "PathPredicate",
-         path_predicate : _{ '@id' : "terminus:authority"}},
+         path_predicate : _{ '@id' : "terminus:access"}},
       path_second :
       _{ '@type' : "PathOr",
          path_left :
@@ -2039,26 +2051,40 @@ test(path, []) :-
     query_test_response(terminus_descriptor{}, Query, JSON),
     [Res|_] = JSON.bindings,
     _{'Edge':_{'@type':"http://terminusdb.com/schema/woql#Edge",
-               'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
-               'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
-               'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
-              },
-      'Edge_Object': 'terminus:///terminus/document/access_all_areas',
-      'Object': 'terminus:///terminus/document/server',
+               'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
+               'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
+               'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
+      'Edge_Object':'terminus:///terminus/document/server_access',
+      'Object':'terminus:///terminus/document/server',
       'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/access_all_areas',
-                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/admin'
-               },
+                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
+                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
               _{'@type':"http://terminusdb.com/schema/woql#Edge",
                 'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
                 'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'
-               }],
-      'Subject':'terminus:///terminus/document/admin'} :< Res.
+                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/server_access'}],
+      'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
 
 
-test(group_by, []) :-
+test(group_by, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert('x','p','z'),
+                      insert('x','p','w'),
+                      insert('x','p','q'),
+                      insert('y','p','z'),
+                      insert('y','p','w'))),
+        _Meta),
 
     Query = _{'@type' : "GroupBy",
               group_by : [_{ '@type' : "VariableListElement",
@@ -2070,7 +2096,7 @@ test(group_by, []) :-
                                     index : _{'@type' : "xsd:integer",
                                               '@value' : 0},
                                     variable_name : _{ '@type' : "xsd:string",
-                                                       '@value' : "Subject"}},
+                                                       '@value' : "Predicate"}},
                                  _{ '@type' : "VariableListElement",
                                     index : _{'@type' : "xsd:integer",
                                               '@value' : 1},
@@ -2095,12 +2121,14 @@ test(group_by, []) :-
                           _{'@type' : "xsd:string",
                             '@value' : "Grouped"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
-
-    [Res|_] = JSON.bindings,
-
-    [['terminus:///terminus/document/access_all_areas',
-      'http://terminusdb.com/schema/terminus#class_frame']|_] = Res.'Grouped'.
+    query_test_response(Descriptor, Query, JSON),
+    [_{'Grouped': [[p,q],
+                   [p,w],
+                   [p,z]],
+       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':x},
+     _{'Grouped': [[p,w],
+                   [p,z]],
+       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':y}] = JSON.bindings.
 
 test(select, []) :-
 

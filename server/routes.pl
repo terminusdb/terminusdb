@@ -327,9 +327,10 @@ test(db_auth_test, [
     _{'terminus:status' : "terminus:success"} = In,
 
     user_object(terminus_descriptor{}, doc:admin, User_Obj),
-    Scope = User_Obj.'terminus:authority'.'terminus:authority_scope',
+    Access = User_Obj.'terminus:authority'.'terminus:access',
+    Resources = Access.'terminus:authority_scope',
     once(
-        (   member(Database, Scope),
+        (   memberchk(Database,Resources),
             _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'terminus:resource_name')).
 
 :- end_tests(db_endpoint).

@@ -132,8 +132,9 @@ user_id_auth_id(DB, User_ID, Auth_ID) :-
 auth_action_scope(DB, Auth, Action, Resource_Name) :-
     ask(DB,
         (
-            t(Auth, terminus:action, Action),
-            t(Auth, terminus:authority_scope, Scope),
+            t(Auth, terminus:access, Access),
+            t(Access, terminus:action, Action),
+            t(Access, terminus:authority_scope, Scope),
             t(Scope, terminus:resource_name, Resource_Name ^^ (xsd:string))
         )
        ).

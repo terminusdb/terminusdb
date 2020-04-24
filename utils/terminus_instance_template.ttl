@@ -11,6 +11,12 @@ doc:access_all_areas
     a terminus:ServerCapability ;
     rdfs:comment "Access all server functions"@en ;
     rdfs:label "All Capabilities"@en ;
+    terminus:access doc:server_access .
+
+doc:server_access
+    a terminus:Access ;
+    rdfs:label "server access"@en ;
+    rdfs:comment "Server wide access Object"@en ;
     terminus:action terminus:class_frame, terminus:create_database, terminus:create_document, terminus:delete_database, terminus:delete_document, terminus:get_document, terminus:get_schema, terminus:update_document, terminus:update_schema, terminus:woql_select, terminus:woql_update , terminus:read_access, terminus:write_access ;
     terminus:authority_scope doc:server .
 
