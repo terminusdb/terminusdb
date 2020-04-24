@@ -228,6 +228,14 @@ create_context(Askable, Commit_Info, Context) :-
     create_context(Askable, Context_Without_Commit),
     Context = Context_Without_Commit.put(commit_info, Commit_Info).
 
+/**
+ * descriptor_capabilities_context(Askable, Capabilities, Context) is det.
+ *
+ * Create a context with capabilities included
+ */
+descriptor_capabilities_context(Askable, Capabilities, Context) :-
+    create_context(Askable, Context),
+    Context.put(capabilities, Capabilities).
 
 /*
  * context_overriding_prefixes(+Context:query_context, +Prefixes:prefixes,
