@@ -144,55 +144,50 @@ terminus:DBAction
   rdfs:label "DB Action"@en ;
   a owl:Class ;
   owl:oneOf (
-   terminus:manage
-   terminus:delete_database
-   terminus:update_schema
-   terminus:get_schema
-   terminus:class_frame
-   terminus:woql_query
-   terminus:clone
-   terminus:fetch
-   terminus:push
-   terminus:branch
-   terminus:rebase
-   terminus:read_access
-   terminus:write_access
-   terminus:manage
-  ).
+    terminus:create_database
+    terminus:delete_database
+    terminus:class_frame
+    terminus:clone
+    terminus:fetch
+    terminus:push
+    terminus:branch
+    terminus:rebase
+    terminus:instance_read_access
+    terminus:instance_write_access
+    terminus:schema_read_access
+    terminus:schema_write_access
+    terminus:inference_read_access
+    terminus:inference_write_access
+    terminus:meta_read_access
+    terminus:meta_write_access
+    terminus:commit_read_access
+    terminus:commit_write_access
+    terminus:manage
+    ).
 
 terminus:delete_database
   rdfs:label "Delete Database"@en ;
   rdfs:comment "An action that deletes an entire database"@en ;
   a terminus:DBAction.
 
-terminus:update_schema
+terminus:schema_write_access
   rdfs:label "Update Schema"@en ;
   rdfs:comment "An action that updates the DB schema"@en ;
   a terminus:DBAction.
 
-terminus:get_schema
+terminus:schema_read_access
   rdfs:label "Get Schema"@en ;
   rdfs:comment "An action that fetches the DB Schema"@en ;
   a terminus:DBAction.
 
-terminus:create_document
-  rdfs:label "Create Document"@en ;
-  rdfs:comment "An action that creates a new document"@en ;
+terminus:inference_write_access
+  rdfs:label "Update Inference"@en ;
+  rdfs:comment "An action that updates the DB inference"@en ;
   a terminus:DBAction.
 
-terminus:get_document
-  rdfs:label "Get Document"@en ;
-  rdfs:comment "An action that retrieves a document from the DB"@en ;
-  a terminus:DBAction.
-
-terminus:update_document
-  rdfs:label "Update Document"@en ;
-  rdfs:comment "An action that updates the contents of a docoument"@en ;
-  a terminus:DBAction.
-
-terminus:delete_document
-  rdfs:label "Delete Document"@en ;
-  rdfs:comment "An action that deletes a document from the DB"@en ;
+terminus:inference_read_access
+  rdfs:label "Get Inference"@en ;
+  rdfs:comment "An action that fetches the DB Inference"@en ;
   a terminus:DBAction.
 
 terminus:class_frame
@@ -204,11 +199,6 @@ terminus:create_database
   rdfs:label "Create Database"@en ;
   rdfs:comment "An action which creates a new database"@en ;
   a terminus:DBAction.
-
-terminus:woql_query
-  rdfs:label "WOQL Select"@en ;
-  rdfs:comment "An action which returns the results of a read-only query to the DB"@en ;
-  a terminus:DBAction .
 
 terminus:clone
   rdfs:label "Clone"@en ;
@@ -237,12 +227,32 @@ terminus:rebase
 
 terminus:read_access
   rdfs:label "Read Access"@en ;
-  rdfs:comment "An action which allows all read-only accesses to the database"@en ;
+  rdfs:comment "An action which allows all read-only instance data accesses to the database"@en ;
   a terminus:DBAction .
 
 terminus:write_access
   rdfs:label "Write Access"@en ;
-  rdfs:comment "An action which allows all write accesses to the database"@en ;
+  rdfs:comment "An action which allows all write instance data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:meta_read_access
+  rdfs:label "Meta Read Access"@en ;
+  rdfs:comment "An action which allows all read-only meta data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:meta_write_access
+  rdfs:label "Meta Write Access"@en ;
+  rdfs:comment "An action which allows meta data write accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:commit_read_access
+  rdfs:label "Commit Read Access"@en ;
+  rdfs:comment "An action which allows all read-only commit data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:commit_write_access
+  rdfs:label "Commit Write Access"@en ;
+  rdfs:comment "An action which allows commit data write accesses to the database"@en ;
   a terminus:DBAction .
 
 terminus:manage

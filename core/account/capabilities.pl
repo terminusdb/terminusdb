@@ -6,6 +6,13 @@
               username_auth/3,
               get_user/3,
               auth_action_scope/4,
+              assert_auth_action_scope/4,
+              assert_read_access/1,
+              assert_read_access/2,
+              assert_read_access/3,
+              assert_write_access/1,
+              assert_write_access/2,
+              assert_write_access/3,
               write_cors_headers/2,
               authorisation_object/3,
               user_object/3
@@ -138,6 +145,227 @@ auth_action_scope(DB, Auth, Action, Resource_Name) :-
             t(Scope, terminus:resource_name, Resource_Name ^^ (xsd:string))
         )
        ).
+
+/**
+ * assert_write_access(Graph_Descriptor,Context,Context) is det + error.
+ *
+ * Temporarily set the write_graph for permissions check.
+ */
+assert_write_access(G, Context, Context) :-
+    New_Context = Context.put(write_graph,G),
+    assert_write_access(New_Context, _).
+
+write_type_access(instance,terminus:instance_write_access).
+write_type_access(schema,terminus:schema_write_access).
+write_type_access(inference,terminus:inference_write_access).
+
+require_super_user(Context) :-
+    
+    % This allows us to shortcut looking in the database,
+    % avoiding infinite regression
+    %prefixed_to_uri(Context.authorization, Context.prefixes, Auth),
+    Context.authorization = Auth,
+    (   Auth = doc:access_all_areas
+    ;   Auth = 'terminus:///terminus/document/access_all_areas'),
+    !.
+require_super_user(Context) :-
+    throw(error(not_super_user(Context))).
+
+/**
+ * assert_write_access(Context, Context) is det + error.
+ *
+ * Throws an error when access is forbidden
+ *
+ * Simply copies the context so it can be used as assert_write_access//0.
+ */
+assert_write_access(Context, Context) :-
+    assert_write_access(Context).
+
+assert_write_access(Context) :-
+    terminus_descriptor{} :< Context.default_collection,
+    !,
+    % This allows us to shortcut looking in the database,
+    % avoiding infinite regression
+    require_super_user(Context).
+assert_write_access(Context) :-
+    database_descriptor{ database_name : Name
+                       } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    assert_auth_action_scope(DB, Auth, terminus:meta_write_access, Name).
+assert_write_access(Context) :-
+    repository_descriptor{
+        database_descriptor :
+        database_descriptor{
+            database_name : Name
+        },
+        repository_name : _
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    assert_auth_action_scope(DB, Auth, terminus:commit_write_access, Name).
+assert_write_access(Context) :-
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                database_name : Name
+            },
+            repository_name : _
+        },
+        branch_name : _
+    }:< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    WG = Context.write_graph,
+    write_type_access(WG.type,Access),
+    assert_auth_action_scope(DB, Auth, Access, Name).
+assert_write_access(Context) :-
+    id_descriptor{
+        id: _ID
+    } :< Context.default_collection,
+    !,
+    require_super_user(Context).
+assert_write_access(Context) :-
+    label_descriptor{
+        label: _Label
+    } :< Context.default_collection,
+    !,
+    require_super_user(Context).
+assert_write_access(Context) :-
+    throw(error(write_access_malformed_context(Context))).
+
+/**
+ * assert_read_access(Filter,Context,Context) is det + error.
+ *
+ * Temporarily set the filter for permissions check.
+ */
+assert_read_access(Filter,Context,Context) :-
+    New_Context = Context.put(filter,Filter),
+    assert_read_access(New_Context, _).
+
+read_type_access(instance,terminus:instance_read_access).
+read_type_access(schema,terminus:schema_read_access).
+read_type_access(inference,terminus:inference_read_access).
+
+filter_types(type_filter{types:Types}, Types).
+filter_types(type_name_filter{type : Type, names : _}, [Type]).
+
+/**
+ * assert_read_access(Context, Context) is det + error.
+ *
+ * Throws an error when access is forbidden
+ *
+ * Simply copies the context so it can be used as assert_read_access//0.
+ */
+assert_read_access(Context, Context) :-
+    assert_read_access(Context).
+
+assert_read_access(Context) :-
+    terminus_descriptor{} :< Context.default_collection,
+    !,
+    require_super_user(Context).
+assert_read_access(Context) :-
+    database_descriptor{ database_name : Name
+                       } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    assert_auth_action_scope(DB, Auth, terminus:meta_read_access, Name).
+assert_read_access(Context) :-
+    repository_descriptor{
+        database_descriptor :
+        database_descriptor{
+            database_name : Name
+        },
+        repository_name : _
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    assert_auth_action_scope(DB, Auth, terminus:commit_read_access, Name).
+assert_read_access(Context) :-
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                database_name : Name
+            },
+            repository_name : _
+        },
+        branch_name : _
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    Filter = Context.filter,
+    filter_types(Filter,Types),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(DB, Auth, Access, Name))).
+assert_read_access(Context) :-
+    id_descriptor{
+        id: _ID
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    % Equivalent to trying to read terminus?
+    Filter = Context.filter,
+    filter_types(Filter,Types),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(DB, Auth, Access, "terminus"))).
+assert_read_access(Context) :-
+    label_descriptor{
+        label: _Label
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    % Equivalent to trying to read terminus?
+    Filter = Context.filter,
+    filter_types(Filter,Types),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(DB, Auth, Access, "terminus"))).
+assert_read_access(Context) :-
+    commit_descriptor{
+        repository_descriptor:
+        repository_descriptor{
+            database_descriptor:
+            database_descriptor{
+                database_name : DB_Name
+            },
+            repository_name : _
+        },
+        commit_id : _ID
+    } :< Context.default_collection,
+    !,
+    Auth = Context.authorization,
+    DB = Context.terminus,
+    Filter = Context.filter,
+    filter_types(Filter,Types),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(DB, Auth, Access, DB_Name))).
+assert_read_access(Context) :-
+    throw(error(read_access_malformed_context(Context))).
+
+/**
+ * assert_auth_action_scope(DB, Auth, Action, Scope) is det + error
+ *
+ * Determinise auth_action_scope/4 by throwing an error on failure
+ */
+assert_auth_action_scope(DB, Auth, Action, Scope) :-
+    (   auth_action_scope(DB, Auth, Action, Scope)
+    ->  true
+    ;   throw(error(access_not_authorised(Auth,Action,Scope)))).
 
 /**
  * authorisation_object(DB,Auth_ID,Auth_Obj) is det.

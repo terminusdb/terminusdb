@@ -17,7 +17,7 @@ doc:server_access
     a terminus:Access ;
     rdfs:label "server access"@en ;
     rdfs:comment "Server wide access Object"@en ;
-    terminus:action terminus:class_frame, terminus:create_database, terminus:create_document, terminus:delete_database, terminus:delete_document, terminus:get_document, terminus:get_schema, terminus:update_document, terminus:update_schema, terminus:woql_select, terminus:woql_update , terminus:read_access, terminus:write_access ;
+    terminus:action terminus:create_database, terminus:delete_database, terminus:class_frame, terminus:clone, terminus:fetch, terminus:push, terminus:branch, terminus:rebase, terminus:instance_read_access, terminus:instance_write_access, terminus:schema_read_access, terminus:schema_write_access, terminus:inference_read_access, terminus:inference_write_access, terminus:meta_read_access, terminus:meta_write_access, terminus:commit_read_access, terminus:commit_write_access, terminus:manage ;
     terminus:authority_scope doc:server .
 
 doc:admin

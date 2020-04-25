@@ -23,6 +23,7 @@
               make_branch_descriptor/3,
               read_write_object_to_name/2,
               transactions_to_map/2,
+              collection_descriptor_graph_filter_graph_descriptor/3,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,

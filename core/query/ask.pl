@@ -206,11 +206,13 @@ create_context(Transaction_Object, Context) :-
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
     Context = query_context{
+        authorization : 'terminus:///terminus/document/access_all_areas',
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
+        terminus : terminus_descriptor{},
         files : [],
         bindings : [],
         selected : []

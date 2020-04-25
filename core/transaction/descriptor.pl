@@ -14,7 +14,8 @@
               make_branch_descriptor/5,
               make_branch_descriptor/4,
               make_branch_descriptor/3,
-              transactions_to_map/2
+              transactions_to_map/2,
+              collection_descriptor_graph_filter_graph_descriptor/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -53,7 +54,7 @@
  *                | type_name_filter{ type : atom, names : list(string) }
  *
  * A named_graph refers to a file in the store - this has to be made unique so we don't get
- * collisions between different databases. Currently only used for the terminus and database graph
+ * collisionI s between different databases. Currently only used for the terminus and database graph
  * - one per repository. This uses the file label mechanism.
  *
  * A ref_graph is a layer id that can be resolved to a graph.
@@ -749,6 +750,110 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
     (   memberchk(Descriptor=_,Map2)
     ->  Map_Out = Map2
     ;   Map_Out = [Descriptor=Transaction|Map2]).
+
+/**
+ * collection_descriptor_graph_filter_graph_descriptor(+Descriptor,+Filter,?Graph) is semidet.
+ * collection_descriptor_graph_filter_graph_descriptor(?Descriptor,+Filter,+Graph) is semidet.
+ * collection_descriptor_graph_filter_graph_descriptor(+Descriptor,?Filter,+Graph) is semidet.
+ *
+ * Constructs any argument from the other two.
+ *
+ */
+collection_descriptor_graph_filter_graph_descriptor(
+    terminus_descriptor{},
+    type_name_filter{ type : Type,
+                      names : [Name]},
+    terminus_graph{ type: Type,
+                    name : Name}) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    terminus_descriptor{},
+    type_filter{ types : [Type] },
+    terminus_graph{ type: Type,
+                    name : "main"}) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    database_descriptor{
+        database_name : DB_Name
+    },
+    type_name_filter{ type : Type, names : [Name]},
+    repo_graph{ database_name : DB_Name,
+                type : Type,
+                name : Name }) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    database_descriptor{
+        database_name : DB_Name
+    },
+    type_filter{ types : [Type]},
+    repo_graph{ database_name : DB_Name,
+                type : Type,
+                name : "main" }) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    repository_descriptor{
+        database_descriptor : database_descriptor{
+                                  database_name : DB_Name
+                              },
+        repository_name : Repo_Name
+    },
+    type_name_filter{ type : Type, names : [Name]},
+    commit_graph{ database_name : DB_Name,
+                  repository_name : Repo_Name,
+                  type: Type,
+                  name : Name}) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    repository_descriptor{
+        database_descriptor : database_descriptor{
+                                  database_name : DB_Name
+                              },
+        repository_name : Repo_Name
+    },
+    type_filter{ types : [Type]},
+    commit_graph{ database_name : DB_Name,
+                  repository_name : Repo_Name,
+                  type: Type,
+                  name : "main"}) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                database_name : DB_Name
+            },
+            repository_name : Repository_Name
+        },
+        branch_name : Branch_Name
+    },
+    type_name_filter{ type : Type , names : [Name]},
+    branch_graph{ database_name : DB_Name,
+                  repository_name : Repository_Name,
+                  branch_name : Branch_Name,
+                  type: Type,
+                  name : Name}) :-
+    !.
+collection_descriptor_graph_filter_graph_descriptor(
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                database_name : DB_Name
+            },
+            repository_name : Repository_Name
+        },
+        branch_name : Branch_Name
+    },
+    type_filter{ types : [Type] },
+    branch_graph{ database_name : DB_Name,
+                  repository_name : Repository_Name,
+                  branch_name : Branch_Name,
+                  type: Type,
+                  name : "main"}) :-
+    !.
 
 :- begin_tests(open_descriptor).
 :- use_module(core(util/test_utils)).

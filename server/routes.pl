@@ -96,7 +96,7 @@ connect_handler(options,_Request) :-
     format('~n').
 connect_handler(get,Request) :-
     config:public_url(Server_URI),
-    connection_authorised_user(Request, User_ID, Server_URI),
+    connection_authorised_user(Request, User_ID),
     open_descriptor(terminus_descriptor{}, DB),
     user_object(DB, User_ID, User_Obj),
     write_cors_headers(Server_URI, DB),
@@ -232,7 +232,7 @@ db_handler(post,Account,DB,R) :-
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
     config:public_url(Server),
-    verify_access(Terminus_DB, Auth, terminus:create_database, Server),
+    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, Server),
 
     get_payload(Database_Document,Request),
     (   _{ comment : Comment,
@@ -254,13 +254,12 @@ db_handler(delete,Account,DB,Request) :-
 
     config:public_url(Server),
 
-    verify_access(Terminus_DB, Auth, terminus:delete_database,Server),
     user_database_name(Account, DB, DB_Name),
+    assert_auth_action_scope(Terminus_DB, Auth, terminus:delete_database, DB_Name),
 
     try_delete_db(DB_Name),
 
     write_cors_headers(Server, Terminus_DB),
-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 
@@ -289,7 +288,6 @@ test(db_create, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-
     _{'terminus:status' : "terminus:success"} = In.
 
 
@@ -359,11 +357,16 @@ triples_handler(get,Path,Request) :-
     authenticate(Terminus,Request,Auth),
 
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-    check_descriptor_auth(Descriptor,terminus:woql_select, Auth, Terminus),
+    create_context(Descriptor, Pre_Context),
 
-    create_context(Descriptor, Context),
+    merge_dictionaries(
+        query_context{
+            terminus: Terminus,
+            authorization : Auth,
+            filter: Graph
+        }, Pre_Context, Context),
 
-    % check access rights
+    assert_read_access(Context),
 
     dump_graph(Context, turtle, Graph.type, Graph.name, String),
 
@@ -375,7 +378,6 @@ triples_handler(post,Path,R) :- % should this be put?
     /* Read Document */
     authenticate(Terminus,Request,Auth),
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-    check_descriptor_auth(Descriptor,terminus:woql_update, Auth,Terminus),
 
     get_payload(Triples_Document,Request),
     (   _{ turtle : TTL,
@@ -384,10 +386,19 @@ triples_handler(post,Path,R) :- % should this be put?
     ;   throw(error(bad_api_document('Bad API document')))),
 
     create_context(Descriptor, Pre_Context),
-    Context = Pre_Context.put(commit_info, Commit_Info),
+
+    merge_dictionaries(
+        query_context{
+            commit_info : Commit_Info,
+            terminus: Terminus,
+            authorization : Auth,
+            write_graph : Graph
+        }, Pre_Context, Context),
+
+    assert_write_access(Context),
 
     % check access rights
-    % verify_access(Terminus,Auth,terminus:update_schema,DB_Name),
+    % assert_auth_action_scope(Terminus,Auth,terminus:update_schema,DB_Name),
     update_graph(Context,Graph.type,Graph.name,TTL),
 
     write_descriptor_cors(Descriptor,Terminus),
@@ -478,8 +489,14 @@ frame_handler(post, Path, R) :-
     /* Read Document */
     authenticate(Terminus, Request, Auth),
     resolve_absolute_string_descriptor(Path, Descriptor),
-    create_context(Descriptor, Database),
-    check_descriptor_auth(Descriptor,terminus:woql_select,Auth,Terminus),
+    create_context(Descriptor, Context0),
+    merge_dictionaries(
+        query_context{
+            authorization: Auth
+        },
+        Context0,Database),
+
+    assert_read_access(Database),
     get_payload(Doc,Request),
 
     (   get_dict(class,Doc,Class_URI)
@@ -552,17 +569,16 @@ woql_handler(options, _Request) :-
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
     http_log('~N[Request] ~q~n', [Request]),
-    open_descriptor(terminus_descriptor{}, Terminus_Transaction_Object),
-    authenticate(Terminus_Transaction_Object, Request, Auth_ID),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
     empty_context(Context),
 
-    woql_run_context(Request, Auth_ID, Context, JSON),
+    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
     config:public_url(SURI),
-    write_cors_headers(SURI, Terminus_Transaction_Object),
-    reply_json_dict(JSON),
-    format('~n').
+    write_cors_headers(SURI, Terminus),
+    reply_json_dict(JSON).
 
 woql_handler(options, _Path, _Request) :-
     config:public_url(SURI),
@@ -578,12 +594,12 @@ woql_handler(post, Path, R) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Context),
 
-    woql_run_context(Request, Auth_ID, Context, JSON),
+    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
     write_descriptor_cors(Descriptor,Terminus),
     reply_json_dict(JSON).
 
-woql_run_context(Request, Auth_ID, Context, JSON) :-
+woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
 
     try_get_param('query',Request,Query),
 
@@ -602,6 +618,7 @@ woql_run_context(Request, Auth_ID, Context, JSON) :-
         query_context{
             commit_info : Commit_Info,
             files : Files,
+            terminus: Terminus,
             authorization : Auth_ID
         }, Context0, Final_Context),
 
@@ -729,7 +746,7 @@ test(no_db, [])
 
     % extra debugging...
     % nl,
-    % json_write_dict(current_output,JSON,[]),
+    * json_write_dict(current_output,JSON,[]),
     _{'bindings' : _L} :< JSON.
 
 test(indexed_get, [])
@@ -1488,6 +1505,12 @@ customise_error(time_limit_exceeded) :-
                  'terminus:message' : 'Connection timed out'
                },
                [status(408)]).
+customise_error(error(access_not_authorised(Auth,Action,Scope))) :-
+    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
+           [Auth,Action,Scope]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : Msg},
+               [status(403)]).
 customise_error(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
@@ -1579,45 +1602,24 @@ authenticate(_, _, _) :-
                                           'terminus:message' : "No authentication supplied",
                                           'terminus:object' : 'authenticate'}))).
 
-
-verify_access(DB, Auth, Action, Scope) :-
-    (   auth_action_scope(DB, Auth, Action, Scope)
-    ->  true
-    ;   format(atom(M),'Call was: ~q', [verify_access(Auth, Action, Scope)]),
-        throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                              'terminus:message' : M,
-                                              'terminus:object' : 'verify_access'})))).
-
-connection_authorised_user(Request, User_ID, SURI) :-
+connection_authorised_user(Request, User_ID) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_authorization_data(Request, Username, KS),
     !,
     (   user_key_user_id(DB, Username, KS, User_ID)
-    ->  (   authenticate(DB, Request, Auth),
-            verify_access(DB, Auth, terminus:get_document, SURI)
-        ->  true
-        ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                                  'terminus:message' : 'Bad user object',
-                                                  'terminus:object' : User_ID}))))
+    ->  true
     ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
-connection_authorised_user(Request, User_ID, SURI) :-
+connection_authorised_user(Request, User_ID) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_jwt_data(Request, Username),
-    username_user_id(DB, Username, User_ID),
-    !,
-    (   authenticate(DB, Request, Auth),
-        verify_access(DB, Auth, terminus:get_document, SURI)
-    ->  true
-    ;   throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                              'terminus:message' : 'Bad user object',
-                                              'terminus:object' : Username})))).
+    username_user_id(DB, Username, User_ID).
 
 check_descriptor_auth(terminus_descriptor{},Action,Auth,Terminus) :-
-    verify_access(Terminus,Auth,Action,"terminus").
+    assert_auth_action_scope(Terminus,Auth,Action,"terminus").
 check_descriptor_auth(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
-    verify_access(Terminus,Auth,Action,Name).
+    assert_auth_action_scope(Terminus,Auth,Action,Name).
 check_descriptor_auth(repository_descriptor{ database_descriptor : DB,
                                              repository_name : _ }, Action, Auth, Terminus) :-
     check_descriptor_auth(DB, Action, Auth, Terminus).
