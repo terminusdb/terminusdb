@@ -160,7 +160,6 @@ write_type_access(schema,terminus:schema_write_access).
 write_type_access(inference,terminus:inference_write_access).
 
 require_super_user(Context) :-
-    
     % This allows us to shortcut looking in the database,
     % avoiding infinite regression
     %prefixed_to_uri(Context.authorization, Context.prefixes, Auth),
@@ -200,7 +199,7 @@ assert_write_access(Context) :-
         database_descriptor{
             database_name : Name
         },
-        repository_name : _
+        repository_name : _Repo
     } :< Context.default_collection,
     !,
     Auth = Context.authorization,
@@ -214,9 +213,9 @@ assert_write_access(Context) :-
             database_descriptor{
                 database_name : Name
             },
-            repository_name : _
+            repository_name : _Repo
         },
-        branch_name : _
+        branch_name : _Branch_Name
     }:< Context.default_collection,
     !,
     Auth = Context.authorization,
@@ -282,7 +281,7 @@ assert_read_access(Context) :-
         database_descriptor{
             database_name : Name
         },
-        repository_name : _
+        repository_name : _Repo
     } :< Context.default_collection,
     !,
     Auth = Context.authorization,
@@ -296,9 +295,9 @@ assert_read_access(Context) :-
             database_descriptor{
                 database_name : Name
             },
-            repository_name : _
+            repository_name : _Repo
         },
-        branch_name : _
+        branch_name : _Branch_Name
     } :< Context.default_collection,
     !,
     Auth = Context.authorization,
@@ -342,7 +341,7 @@ assert_read_access(Context) :-
             database_descriptor{
                 database_name : DB_Name
             },
-            repository_name : _
+            repository_name : _Repo
         },
         commit_id : _ID
     } :< Context.default_collection,
