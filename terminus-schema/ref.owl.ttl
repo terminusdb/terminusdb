@@ -91,6 +91,12 @@ ref:Commit
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
+ref:TransientCommit
+  a owl:Class ;
+  rdfs:subClassOf ref:Commit ;
+  rdfs:comment "This is a transient commit - it can not be time-travelled to as it does not represent a consistent state."@en ;
+  rdfs:label "Transient Commit"@en .
+
 ref:CommitParentRestriction
   a owl:Restriction ;
   rdfs:comment "Commit has no more than 1 parent"@en ;

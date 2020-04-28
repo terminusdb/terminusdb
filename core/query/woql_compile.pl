@@ -2190,4 +2190,13 @@ test(when, []) :-
     query_test_response(terminus_descriptor{}, Query, JSON),
     [_{}] = JSON.bindings.
 
+/*
+test(no_access,[
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    true.
+*/
+
 :- end_tests(woql).
