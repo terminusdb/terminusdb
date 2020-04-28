@@ -91,11 +91,17 @@ ref:Commit
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
-ref:TransientCommit
+ref:ValidCommit
   a owl:Class ;
   rdfs:subClassOf ref:Commit ;
-  rdfs:comment "This is a transient commit - it can not be time-travelled to as it does not represent a consistent state."@en ;
-  rdfs:label "Transient Commit"@en .
+  rdfs:comment "This is a valid commit. It represents a consistent state with respect to the schema (and can be time-travelled to)."@en ;
+  rdfs:label "Valid Commit"@en .
+
+ref:InvalidCommit
+  a owl:Class ;
+  rdfs:subClassOf ref:Commit ;
+  rdfs:comment "This is not a valid commit. It can not be time-travelled to as it does not represent a consistent state."@en ;
+  rdfs:label "Invalid Commit"@en .
 
 ref:CommitParentRestriction
   a owl:Restriction ;

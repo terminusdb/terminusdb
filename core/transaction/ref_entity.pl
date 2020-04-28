@@ -103,12 +103,12 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ;   true),
     format(string(Timestamp_String), '~q', [Timestamp]),
     (   var(Commit_Uri)
-    ->  once(ask(Context, idgen(doc:'Commit', [Commit_Id^^xsd:string], Commit_Uri)))
+    ->  once(ask(Context, idgen(doc:'ValidCommit', [Commit_Id^^xsd:string], Commit_Uri)))
     ;   true),
 
 
     once(ask(Context,
-             (   insert(Commit_Uri, rdf:type, ref:'Commit'),
+             (   insert(Commit_Uri, rdf:type, ref:'ValidCommit'),
                  insert(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string),
                  insert(Commit_Uri, ref:commit_author, Commit_Info.author^^xsd:string),
                  insert(Commit_Uri, ref:commit_message, Commit_Info.message^^xsd:string),
@@ -735,5 +735,5 @@ test(copy_child_commit_that_already_exists,
                 "commit3_id"-Commit3_Uri_Unprefixed],
     Expected = Commits.
 
-     
+
 :- end_tests(copy_commits).
