@@ -75,6 +75,17 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
         ->  Changed = false
         ;   Changed = true)).
 
+graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, Map) :-
+    memberchk(Graph_Validation_Obj=Read_Write_Obj, Map),
+    !.
+graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, [Graph_Validation_Obj=Read_Write_Obj|Map]) :-
+    Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
+                                                 read: Layer,
+                                                 changed: _Changed },
+    Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
+                                     read: Layer,
+                                     write: _Layer_Builder }.
+
 transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
     transaction_object{descriptor: Descriptor,
                        instance_objects: Instance_Objects,
@@ -108,6 +119,40 @@ transaction_object_to_validation_object(Transaction_Object, Validation_Object, M
     (   Commit_Info = Transaction_Object.get(commit_info)
     ->  Validation_Object = Intermediate_Validation_Object_1.put(commit_info, Commit_Info)
     ;   Validation_Object = Intermediate_Validation_Object_1).
+
+validation_object_to_transaction_object(Validation_Object, Transaction_Object, Map, New_Map) :-
+    validation_object{
+        descriptor: Descriptor,
+        instance_objects: Validation_Instance_Objects,
+        schema_objects: Validation_Schema_Objects,
+        inference_objects: Validation_Inference_Objects
+    } :< Validation_Object,
+    Intermediate_Transaction_Object = transaction_object{descriptor: Descriptor,
+                                                         instance_objects: Instance_Objects,
+                                                         schema_objects: Schema_Objects,
+                                                         inference_objects: Inference_Objects},
+    (   Parent = Validation_Object.get(parent)
+    ->  Intermediate_Transaction_Object_1 = Intermediate_Transaction_Object.put(parent, Parent)
+    ;   Intermediate_Transaction_Object_1 = Intermediate_Transaction_Object
+    ),
+    mapm([Validation_Obj,Read_Write_Obj]>>graph_validation_obj_to_read_write_obj(Validation_Obj, Read_Write_Obj),
+         Validation_Instance_Objects,
+         Instance_Objects,
+         Map,
+         Map_2),
+    mapm([Validation_Obj,Read_Write_Obj]>>graph_validation_obj_to_read_write_obj(Validation_Obj, Read_Write_Obj),
+         Validation_Schema_Objects,
+         Schema_Objects,
+         Map_2,
+         Map_3),
+    mapm([Validation_Obj,Read_Write_Obj]>>graph_validation_obj_to_read_write_obj(Validation_Obj, Read_Write_Obj),
+         Validation_Inference_Objects,
+         Inference_Objects,
+         Map_3,
+         New_Map),
+    (   Commit_Info = Validation_Object.get(commit_info)
+    ->  Transaction_Object = Intermediate_Transaction_Object_1.put(commit_info, Commit_Info)
+    ;   Transaction_Object = Intermediate_Transaction_Object_1).
 
 commit_validation_object(Validation_Object, []) :-
     validation_object{
@@ -704,6 +749,9 @@ validate_validation_objects(Validation_Objects, Witnesses) :-
 
 transaction_objects_to_validation_objects(Transaction_Objects, Validation_Objects) :-
     mapm(transaction_object_to_validation_object, Transaction_Objects, Validation_Objects, [], _Map).
+
+validation_objects_to_transaction_objects(Validation_Objects, Transaction_Objects) :-
+    mapm(validation_object_to_transaction_object, Validation_Objects, Transaction_Objects, [], _Map).
 
 /*
  * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
