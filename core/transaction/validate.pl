@@ -69,11 +69,13 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
     (   var(Layer_Builder)
     ->  New_Layer = Layer,
         Changed = false
+
     ;   nb_commit(Layer_Builder, New_Layer),
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
-        (   N = 0, M = 0
-        ->  Changed = false
-        ;   Changed = true)).
+        \+ (N = 0, M = 0)
+    ->  Changed = true
+    ;   Changed = false,
+        New_Layer = Layer ).
 
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, Map) :-
     memberchk(Graph_Validation_Obj=Read_Write_Obj, Map),

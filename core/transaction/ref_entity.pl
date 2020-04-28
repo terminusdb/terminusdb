@@ -737,3 +737,53 @@ test(copy_child_commit_that_already_exists,
 
 
 :- end_tests(copy_commits).
+
+read_write_obj_for_graph(Askable, Commit_Uri, Graph_Type, Graph_Name, Read_Write_Obj) :-
+    (   graph_for_commit(Askable, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)
+    ->  true
+    ;   throw(error(graph_does_not_exist(Commit_Uri, Graph_Type, Graph_Name)))),
+
+    (   layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri),
+        layer_id_uri(Askable, Layer_Id, Layer_Uri)
+    ->  Graph_Descriptor = id_graph{
+                               id: Layer_Id,
+                               type: instance,
+                               name: "main"
+                           },
+        open_read_write_obj(Graph_Descriptor, Read_Write_Obj)
+    ;   Read_Write_obj = read_write_obj{
+                             descriptor: empty{},
+                             read: _,
+                             write: _
+                         }).
+
+apply_graph_change(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
+    % find current head layer for the given graph
+    read_write_obj_for_graph(Us_Repo_Askable, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
+    read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
+
+    forall(xrdf_added([Them_Read_Write_Obj], S, P, O),
+           insert(Us_Read_Write_Obj, S, P, O)),
+    forall(xrdf_deleted([Them_Read_Write_Obj], S, P, O),
+           delete(Us_Read_Write_Obj, S, P, O)),
+
+    read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
+    (   ground(Us_Validation_Obj.read)
+    ->  layer_to_id(Us_Validation_Obj.read, Layer_Id),
+        true % in this case, we should write a layer object
+    ;   true % in this case, we should NOT write a layer object
+    ),
+
+    % in both cases, we need to write a graph object and return its URI
+    true.
+
+apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, error_on_failure, Commit_Id, Commit_Uri) :-
+    % this is the base case, the other cases should call into this.
+    % ensure graph sets are equivalent. if not, error
+    % look up current head
+    % open the given commit, query for additions and removals
+    true.
+apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, continue_on_failure, Commit_Id, Commit_Uri) :-
+    true.
+apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, apply_fixup(Woql_Query), Commit_Id, Commit_Uri) :-
+    true.
