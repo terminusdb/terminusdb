@@ -2088,6 +2088,29 @@ test(path, []) :-
       'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
 
 
+test(path_star, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (
+                insert(a, p, b),
+                insert(b, p, c),
+                insert(c, p, a)
+            )),
+        _Meta),
+
+    findall((a-star(p)-Y=Path),
+            ask(Descriptor,
+                path(a, star(p), Y, Path)),
+            Solutions),
+    writeq(Solutions).
+
 test(group_by, [
          setup((setup_temp_store(State),
                 create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
@@ -2100,11 +2123,11 @@ test(group_by, [
 
     with_transaction(
         Context,
-        ask(Context, (insert('x','p','z'),
-                      insert('x','p','w'),
-                      insert('x','p','q'),
-                      insert('y','p','z'),
-                      insert('y','p','w'))),
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q),
+                      insert(y,p,z),
+                      insert(y,p,w))),
         _Meta),
 
     Query = _{'@type' : "GroupBy",
