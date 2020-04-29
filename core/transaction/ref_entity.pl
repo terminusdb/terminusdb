@@ -751,15 +751,15 @@ read_write_obj_for_graph(Askable, Commit_Uri, Graph_Type, Graph_Name, Read_Write
                                name: "main"
                            },
         open_read_write_obj(Graph_Descriptor, Read_Write_Obj)
-    ;   Read_Write_obj = read_write_obj{
+    ;   Read_Write_Obj = read_write_obj{
                              descriptor: empty{},
                              read: _,
                              write: _
                          }).
 
-apply_graph_change(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
+apply_graph_change(Us_Repo_Context, Them_Repo_Askable, New_Commit_Uri, New_Commit_Id, Us_Commit_Uri, Them_Commit_Uri, Graph_Type, Graph_Name, New_Graph_Uri) :-
     % find current head layer for the given graph
-    read_write_obj_for_graph(Us_Repo_Askable, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
+    read_write_obj_for_graph(Us_Repo_Context, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
     read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
 
     forall(xrdf_added([Them_Read_Write_Obj], S, P, O),
@@ -770,19 +770,63 @@ apply_graph_change(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commi
     read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
     (   ground(Us_Validation_Obj.read)
     ->  layer_to_id(Us_Validation_Obj.read, Layer_Id),
-        true % in this case, we should write a layer object
-    ;   true % in this case, we should NOT write a layer object
+        insert_layer_object(Us_Repo_Context, Layer_Id, Layer_Uri)
+    ;   Layer_Uri = _
     ),
 
     % in both cases, we need to write a graph object and return its URI
+    insert_graph_object(Us_Repo_Context, New_Commit_Uri, New_Commit_Id, Graph_Type, Graph_Name, Layer_Uri, New_Graph_Uri).
+
+ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri) :-
+    findall(Type-Name,
+            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type, Name, _),
+            Us_Graphs),
+    findall(Type-Name,
+            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type, Name, _),
+            Them_Graphs),
+    list_to_ord_set(Us_Graphs, Us_Graph_Set),
+    list_to_ord_set(Them_Graphs, Them_Graph_Set),
+    (   ord_seteq(Us_Graph_Set, Them_Graph_Set)
+    ->  true
+    ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
+
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, error_on_failure, New_Commit_Id, New_Commit_Uri) :-
+    % this is the base case, the other cases should call into this.
+    % look up current head
+    (   branch_head_commit(Us_Repo_Context, Us_Branch_Name, Us_Commit_Uri)
+    ->  true
+    ;   throw(error(not_implemented))),
+
+    % ensure graph sets are equivalent. if not, error
+    ensure_graph_sets_equal(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri),
+
+    % create new commit info
+    commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
+    commit_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
+    Commit_Info = commit_info{author: Author, message: Message},
+
+    % create new commit
+    insert_child_commit_object(Us_Repo_Context, Us_Commit_Uri, Commit_Info, Timestamp, New_Commit_Id, New_Commit_Uri),
+
+    forall(graph_for_commit(Them_Repo_Askable,
+                            Them_Commit_Uri,
+                            Type,
+                            Name,
+                            _Graph_Uri),
+           apply_graph_change(Us_Repo_Context,
+                              Them_Repo_Askable,
+                              New_Commit_Uri,
+                              New_Commit_Id,
+                              Us_Commit_Uri,
+                              Them_Commit_Uri,
+                              Type,
+                              Name,
+                              _New_Graph_Uri)),
+    % Note, this doesn't yet commit the commit graph.
+    % We may actually have written an invalid commit here.
+
     true.
 
-apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, error_on_failure, Commit_Id, Commit_Uri) :-
-    % this is the base case, the other cases should call into this.
-    % ensure graph sets are equivalent. if not, error
-    % look up current head
-    % open the given commit, query for additions and removals
-    true.
 apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, continue_on_failure, Commit_Id, Commit_Uri) :-
     true.
 apply_commit(Repo_Askable, Branch_Name, Commit_Descriptor, apply_fixup(Woql_Query), Commit_Id, Commit_Uri) :-
