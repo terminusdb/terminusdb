@@ -2152,7 +2152,7 @@ test(path_star, [
             )),
         _Meta),
 
-    findall((a-star(p)-Y=Simple_Path),
+    findall((a-Y=Simple_Path),
             (   ask(Descriptor,
                     path(a, star(p(p)), Y, Path)),
                 maplist([Edge,(A,B,C)]>>(
@@ -2162,10 +2162,76 @@ test(path_star, [
                         ), Path, Simple_Path)
             ),
             Solutions),
-    Solutions = [a-star(p)-a=[],
-                 a-star(p)-b=[(a,p,b)],
-                 a-star(p)-c=[(a,p,b),(b,p,c)],
-                 a-star(p)-a=[(a,p,b),(b,p,c),(c,p,a)]].
+    Solutions = [a-a=[],
+                 a-b=[(a,p,b)],
+                 a-c=[(a,p,b),(b,p,c)],
+                 a-a=[(a,p,b),(b,p,c),(c,p,a)]].
+
+test(complex_path, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "me",
+                               message : "Graph creation"},
+
+    create_graph(Descriptor,
+                 Commit_Info,
+                 schema,
+                 main,
+                 _Transaction_Metadata2),
+
+    create_context(Descriptor,
+                   Commit_Info,
+                   Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            (
+                insert(node, rdf:type, owl:'Class', "schema/main"),
+                insert(p, rdf:type, owl:'ObjectProperty', "schema/main"),
+                insert(p, rdfs:domain, node, "schema/main"),
+                insert(p, rdfs:range, node, "schema/main"),
+                insert(q, rdf:type, owl:'ObjectProperty', "schema/main"),
+                insert(q, rdfs:domain, node, "schema/main"),
+                insert(q, rdfs:range, node, "schema/main"),
+                insert(a, rdf:type, node),
+                insert(b, rdf:type, node),
+                insert(c, rdf:type, node),
+                insert(d, rdf:type, node),
+                insert(e, rdf:type, node),
+                insert(f, rdf:type, node),
+                insert(a, p, b),
+                insert(b, p, c),
+                insert(c, p, a),
+                insert(a, p, d),
+                insert(d, p, e),
+                insert(e, p, a),
+                insert(a, q, f)
+            )),
+        _Meta),
+
+    findall((a-Y=Simple_Path),
+            (   ask(Descriptor,
+                    path(a, (star(p(p));plus(p(q))), Y, Path)),
+                maplist([Edge,(A,B,C)]>>(
+                            get_dict('http://terminusdb.com/schema/woql#subject',Edge, A),
+                            get_dict('http://terminusdb.com/schema/woql#predicate',Edge, B),
+                            get_dict('http://terminusdb.com/schema/woql#object',Edge, C)
+                        ), Path, Simple_Path)
+            ),
+            Solutions),
+
+    Solutions = [a-a=[],
+                 a-b=[(a,p,b)],
+                 a-d=[(a,p,d)],
+                 a-c=[(a,p,b),(b,p,c)],
+                 a-a=[(a,p,b),(b,p,c),(c,p,a)],
+                 a-e=[(a,p,d),(d,p,e)],
+                 a-a=[(a,p,d),(d,p,e),(e,p,a)],
+                 a-f=[(a,q,f)]].
 
 test(group_by, [
          setup((setup_temp_store(State),
