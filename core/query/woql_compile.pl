@@ -2094,10 +2094,18 @@ test(path_star, [
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "me",
+                               message : "Graph creation"},
+
     create_context(Descriptor,
-                   commit_info{ author : "me",
-                                message : "Graph creation"},
+                   Commit_Info,
                    Context),
+
+    create_graph(Descriptor,
+                 Commit_Info,
+                 schema,
+                 main,
+                 _Transaction_Metadata2),
 
     with_transaction(
         Context,
@@ -2118,7 +2126,7 @@ test(path_star, [
     write('here'),
     findall((a-star(p)-Y=Path),
             ask(Descriptor,
-                path(a, plus(p), Y, Path)),
+                path(a, star(p), Y, Path)),
             Solutions),
     writeq(Solutions).
 

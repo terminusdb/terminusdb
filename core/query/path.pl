@@ -70,13 +70,14 @@ run_pattern_forward((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     (   run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
     ;   run_pattern_forward(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
 run_pattern_forward(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_forward(P,0,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+    (   X = Y,
+        Path = Tail
+    ;   run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
 run_pattern_forward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_forward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
-run_pattern_n_m_forward(_P,0,_,X,X,_Open_Set,Path-Path,_Filter,_Transaction_Object).
 run_pattern_n_m_forward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
@@ -100,12 +101,15 @@ run_pattern_backward((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
 run_pattern_backward((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     (   run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
     ;   run_pattern_backward(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
+run_pattern_backward(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    (   X = Y,
+        Path = Tail
+    ;   run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
 run_pattern_backward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_backward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_backward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
-run_pattern_n_m_backward(_P,0,_,X,X,_Open_Set,Path-Path,_Filter,_Transaction_Object).
 run_pattern_n_m_backward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
