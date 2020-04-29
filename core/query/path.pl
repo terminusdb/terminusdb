@@ -76,7 +76,7 @@ run_pattern_forward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
 run_pattern_forward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
-run_pattern_n_m_forward(P,0,_,X,X,Open_Set,Path-Path,Filter,Transaction_Object).
+run_pattern_n_m_forward(_P,0,_,X,X,_Open_Set,Path-Path,_Filter,_Transaction_Object).
 run_pattern_n_m_forward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
@@ -105,7 +105,7 @@ run_pattern_backward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :
 run_pattern_backward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
-run_pattern_n_m_backward(P,0,_,X,X,Open_Set,Path-Path,Filter,Transaction_Object).
+run_pattern_n_m_backward(_P,0,_,X,X,_Open_Set,Path-Path,_Filter,_Transaction_Object).
 run_pattern_n_m_backward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
@@ -146,6 +146,8 @@ compile_pattern(times(X,N,M), times(XC,N,M), Transaction_Object) :-
 right_edges(p(P),[P]).
 right_edges(plus(P),Ps) :-
     right_edges(P,Ps).
+right_edges(star(P),Ps) :-
+    right_edges(P,Ps).
 right_edges(times(P,_,_),Ps) :-
     right_edges(P,Ps).
 right_edges((X,_Y),Ps) :-
@@ -156,6 +158,8 @@ right_edges((X;Y),Rs) :-
     append(Ps,Qs,Rs).
 
 left_edges(p(P),[P]).
+left_edges(star(P),Ps) :-
+    left_edges(P,Ps).
 left_edges(plus(P),Ps) :-
     left_edges(P,Ps).
 left_edges(times(P,_,_),Ps) :-

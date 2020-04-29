@@ -2094,20 +2094,31 @@ test(path_star, [
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
-    create_context(Descriptor, Context),
+    create_context(Descriptor,
+                   commit_info{ author : "me",
+                                message : "Graph creation"},
+                   Context),
+
     with_transaction(
         Context,
         ask(Context,
             (
+                insert(node, rdf:type, owl:'Class', "schema/main"),
+                insert(p, rdf:type, owl:'ObjectProperty', "schema/main"),
+                insert(p, rdfs:domain, node, "schema/main"),
+                insert(p, rdfs:range, node, "schema/main"),
+                insert(a, rdf:type, node),
+                insert(b, rdf:type, node),
+                insert(c, rdf:type, node),
                 insert(a, p, b),
                 insert(b, p, c),
                 insert(c, p, a)
             )),
         _Meta),
-
+    write('here'),
     findall((a-star(p)-Y=Path),
             ask(Descriptor,
-                path(a, star(p), Y, Path)),
+                path(a, plus(p), Y, Path)),
             Solutions),
     writeq(Solutions).
 
