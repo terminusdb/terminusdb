@@ -23,10 +23,15 @@
               insert_graph_object/7,
               copy_commits/3
           ]).
+:- use_module(library(terminus_store)).
+
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(triple)).
 
 :- use_module(layer_entity).
+:- use_module(descriptor).
+:- use_module(validate).
 
 has_branch(Askable, Branch_Name) :-
     ground(Branch_Name),
@@ -737,3 +742,148 @@ test(copy_child_commit_that_already_exists,
 
 
 :- end_tests(copy_commits).
+
+read_write_obj_for_graph(Askable, Commit_Uri, Graph_Type, Graph_Name, Read_Write_Obj) :-
+    (   graph_for_commit(Askable, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)
+    ->  true
+    ;   throw(error(graph_does_not_exist(Commit_Uri, Graph_Type, Graph_Name)))),
+
+
+    (   layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri),
+        layer_id_uri(Askable, Layer_Id, Layer_Uri)
+    ->  Graph_Descriptor = id_graph{
+                               layer_id: Layer_Id,
+                               type: instance,
+                               name: "main"
+                           },
+        open_read_write_obj(Graph_Descriptor, Read_Write_Obj)
+    ;   Read_Write_Obj = read_write_obj{
+                             descriptor: empty{},
+                             read: _,
+                             write: _
+                         }).
+
+apply_graph_change(Us_Repo_Context, Them_Repo_Askable, New_Commit_Uri, New_Commit_Id, Us_Commit_Uri, Them_Commit_Uri, Graph_Type, Graph_Name, New_Graph_Uri) :-
+    % find current head layer for the given graph
+    read_write_obj_for_graph(Us_Repo_Context, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
+    read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
+
+    forall(xrdf_added([Them_Read_Write_Obj], S, P, O),
+           insert(Us_Read_Write_Obj, S, P, O, _)),
+    forall(xrdf_deleted([Them_Read_Write_Obj], S, P, O),
+           delete(Us_Read_Write_Obj, S, P, O, _)),
+
+
+    read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
+    (   ground(Us_Validation_Obj.read)
+    ->  layer_to_id(Us_Validation_Obj.read, Layer_Id),
+        insert_layer_object(Us_Repo_Context, Layer_Id, Layer_Uri)
+    ;   Layer_Uri = _
+    ),
+
+    % in both cases, we need to write a graph object and return its URI
+    insert_graph_object(Us_Repo_Context, New_Commit_Uri, New_Commit_Id, Graph_Type, Graph_Name, Layer_Uri, New_Graph_Uri).
+
+ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri) :-
+    findall(Type-Name,
+            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type, Name, _),
+            Us_Graphs),
+    findall(Type-Name,
+            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type, Name, _),
+            Them_Graphs),
+    list_to_ord_set(Us_Graphs, Us_Graph_Set),
+    list_to_ord_set(Them_Graphs, Them_Graph_Set),
+    (   ord_seteq(Us_Graph_Set, Them_Graph_Set)
+    ->  true
+    ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
+
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, error_on_failure, New_Commit_Id, New_Commit_Uri) :-
+    % this is the base case, the other cases should call into this.
+    % look up current head
+    (   branch_head_commit(Us_Repo_Context, Us_Branch_Name, Us_Commit_Uri)
+    ->  true
+    ;   throw(error(not_implemented))),
+
+    % ensure graph sets are equivalent. if not, error
+    ensure_graph_sets_equal(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri),
+
+    % create new commit info
+    commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
+    commit_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
+    Commit_Info = commit_info{author: Author, message: Message},
+
+    % create new commit
+    insert_commit_object_on_branch(Us_Repo_Context, Commit_Info, Timestamp, Us_Branch_Name, New_Commit_Id, New_Commit_Uri),
+
+    forall(graph_for_commit(Them_Repo_Askable,
+                            Them_Commit_Uri,
+                            Type,
+                            Name,
+                            _Graph_Uri),
+           apply_graph_change(Us_Repo_Context,
+                              Them_Repo_Askable,
+                              New_Commit_Uri,
+                              New_Commit_Id,
+                              Us_Commit_Uri,
+                              Them_Commit_Uri,
+                              Type,
+                              Name,
+                              _New_Graph_Uri)),
+
+    % Note, this doesn't yet commit the commit graph.
+    % We may actually have written an invalid commit here.
+
+    true.
+
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, continue_on_failure, New_Commit_Id, New_Commit_Uri) :-
+    true.
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, apply_fixup(Woql_Query), New_Commit_Id, New_Commit_Uri) :-
+    true.
+
+:- begin_tests(commit_application).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(api)).
+:- use_module(database).
+test(rebase_single_addition,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb1', "label", "comment", "http://something"),
+             create_db('user|testdb2', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % create single commit on both databases with the same single main graph
+    % rebase one commit on the other
+    % query to ensure all triples are now reachable
+
+    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+
+    create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
+    with_transaction(Context1,
+                     ask(Context1, insert(a,b,c)),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2),
+    with_transaction(Context2,
+                     ask(Context2, insert(d,e,f)),
+                     _),
+
+    create_context(Descriptor1.repository_descriptor, Context3),
+    create_context(Descriptor2.repository_descriptor, Context4),
+
+    branch_head_commit(Context4, "master", Commit_B_Uri),
+
+    with_transaction(Context3,
+                     apply_commit(Context3, Context4, "master", Commit_B_Uri,
+                                  "rebaser",
+                                  12345,
+                                  error_on_failure,
+                                  _New_Commit_Id,
+                                  _New_Commit_Uri),
+                     _),
+
+    ask(Descriptor1,
+        (   t(a,b,c),
+            t(d,e,f),
+            addition(d,e,f))).
+
+:- end_tests(commit_application).
