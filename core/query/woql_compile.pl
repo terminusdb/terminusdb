@@ -803,7 +803,11 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
                                                  Transaction_Object),
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
         compile_pattern(Pattern,Compiled_Pattern,New_Transaction_Object),
-        Goal = calculate_path_solutions(Compiled_Pattern,XE,YE,PathE,Filter,New_Transaction_Object)
+        Goal = (
+            calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
+            % Don't bind PathE until we're done with the full query (for constraints)
+            Full_Path = PathE
+        )
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
     peek(S0),
@@ -2121,15 +2125,15 @@ test(path_star, [
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_context(Descriptor,
-                   Commit_Info,
-                   Context),
-
     create_graph(Descriptor,
                  Commit_Info,
                  schema,
                  main,
                  _Transaction_Metadata2),
+
+    create_context(Descriptor,
+                   Commit_Info,
+                   Context),
 
     with_transaction(
         Context,
@@ -2147,12 +2151,21 @@ test(path_star, [
                 insert(c, p, a)
             )),
         _Meta),
-    write('here'),
-    findall((a-star(p)-Y=Path),
-            ask(Descriptor,
-                path(a, star(p), Y, Path)),
+
+    findall((a-star(p)-Y=Simple_Path),
+            (   ask(Descriptor,
+                    path(a, star(p(p)), Y, Path)),
+                maplist([Edge,(A,B,C)]>>(
+                            get_dict('http://terminusdb.com/schema/woql#subject',Edge, A),
+                            get_dict('http://terminusdb.com/schema/woql#predicate',Edge, B),
+                            get_dict('http://terminusdb.com/schema/woql#object',Edge, C)
+                        ), Path, Simple_Path)
+            ),
             Solutions),
-    writeq(Solutions).
+    Solutions = [a-star(p)-a=[],
+                 a-star(p)-b=[(a,p,b)],
+                 a-star(p)-c=[(a,p,b),(b,p,c)],
+                 a-star(p)-a=[(a,p,b),(b,p,c),(c,p,a)]].
 
 test(group_by, [
          setup((setup_temp_store(State),

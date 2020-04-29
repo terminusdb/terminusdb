@@ -670,7 +670,7 @@ refute_instance_schema(Validation_Object,Witness) :-
     member(Class, Classes),
     xrdf(Instance_Objects, X, rdf:type, Class),
     xrdf(Instance_Objects, X, P, Y),
-    refute_insertion(Instance_Objects, X, P, Y, Witness).
+    refute_insertion(Validation_Object, X, P, Y, Witness).
 refute_instance_schema(Validation_Object,Witness) :-
     validation_object{
         instance_objects: Instance_Objects
@@ -678,7 +678,7 @@ refute_instance_schema(Validation_Object,Witness) :-
     calculate_invalidating_properties(Validation_Object, Properties),
     member(Property, Properties),
     xrdf(Instance_Objects, X, Property, Y),
-    refute_insertion(Instance_Objects, X, Property, Y, Witness).
+    refute_insertion(Validation_Object, X, Property, Y, Witness).
 
 /*
  * refute_instance(Validation_Object,Witness) is nondet.

@@ -42,6 +42,20 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
+    freeze(Woql_Var,
+           (   is_dict(Woql_Var) % Document
+           ->  Woql_Var = Pre_Term
+           ;   is_list(Woql_Var)
+           ->  maplist(prefix_preterm(Ctx),Woql_Var,Pre_Term)
+           ;   Woql_Var = _@_
+           ->  Pre_Term = Woql_Var
+           ;   Woql_Var = Elt^^Type
+           ->  freeze(Type,
+                      (   uri_to_prefixed(Type,Ctx,Prefixed_Type),
+                          Pre_Term = Elt^^Prefixed_Type))
+           ;   uri_to_prefixed(Woql_Var,Ctx,Pre_Term))).
+
 /**
  * pre_term_to_term_and_bindings(Pre_Term, Woql_Term, Bindings_In, Bindings_Out) is det.
  *
@@ -56,16 +70,7 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
             Bindings_Out = [var_binding{ var_name : G,
                                          prolog_var: Pre_Term,
                                          woql_var : Woql_Var}|Bindings_In],
-            freeze(Woql_Var,
-                   (   is_dict(Woql_Var) % Document
-                   ->  Woql_Var = Pre_Term
-                   ;   Woql_Var = _@_
-                   ->  Pre_Term = Woql_Var
-                   ;   Woql_Var = Elt^^Type
-                   ->  freeze(Type,
-                              (   uri_to_prefixed(Type,Ctx,Prefixed_Type),
-                                  Pre_Term = Elt^^Prefixed_Type))
-                   ;   uri_to_prefixed(Woql_Var,Ctx,Pre_Term))),
+            prefix_preterm(Ctx,Woql_Var,Pre_Term),
             Term = v(G)
         )
     ;   is_dict(Pre_Term)
