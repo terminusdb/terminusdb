@@ -763,9 +763,9 @@ apply_graph_change(Us_Repo_Context, Them_Repo_Askable, New_Commit_Uri, New_Commi
     read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
 
     forall(xrdf_added([Them_Read_Write_Obj], S, P, O),
-           insert(Us_Read_Write_Obj, S, P, O)),
+           insert(Us_Read_Write_Obj, S, P, O, _)),
     forall(xrdf_deleted([Them_Read_Write_Obj], S, P, O),
-           delete(Us_Read_Write_Obj, S, P, O)),
+           delete(Us_Read_Write_Obj, S, P, O, _)),
 
     read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
     (   ground(Us_Validation_Obj.read)

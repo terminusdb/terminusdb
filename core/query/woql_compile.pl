@@ -645,28 +645,15 @@ compile_wf(delete_object(X),frame:delete_object(URI,S0)) -->
     resolve(X,URI),
     peek(S0).
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(delete(X,P,Y,G),(delete(Read_Write_Object,XE,PE,YE,_)))
+compile_wf(delete(X,P,Y,G),Goal)
 -->
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(default_collection, Collection_Descriptor),
-    view(transaction_objects,Transaction_Objects),
+    view(default_collection,Collection_Descriptor),
     {
-        (   resolve_filter(G,Filter),
-            collection_descriptor_graph_filter_graph_descriptor(Collection_Descriptor,
-                                                                Filter,
-                                                                Graph_Descriptor),
-            graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
-                                                                   Transaction_Objects,
-                                                                   Read_Write_Object)
-        ->  true
-        ;   format(atom(M), 'You must resolve to a single graph to delete. Graph Descriptor: ~q', G),
-            throw(error(syntax_error(M),
-                        context(compile_wf//2,delete/4)))
-        )
+        ensure_filter_resolves_to_graph_descriptor(G, Collection_Descriptor, Graph_Descriptor)
     },
-    assert_write_access(Graph_Descriptor).
+    update(write_graph,Old_Graph_Descriptor,Graph_Descriptor),
+    compile_wf(delete(X,P,Y), Goal),
+    update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
 -->
     assert_write_access,
@@ -679,28 +666,15 @@ compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
 % TODO: Need to translate the reference WG to a read-write object.
-compile_wf(insert(X,P,Y,G),(insert(Read_Write_Object,XE,PE,YE,_)))
+compile_wf(insert(X,P,Y,G),Goal)
 -->
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(default_collection, Collection_Descriptor),
-    view(transaction_objects,Transaction_Objects),
+    view(default_collection,Collection_Descriptor),
     {
-        (   resolve_filter(G,Filter),
-            collection_descriptor_graph_filter_graph_descriptor(Collection_Descriptor,
-                                                                Filter,
-                                                                Graph_Descriptor),
-            graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
-                                                                   Transaction_Objects,
-                                                                   Read_Write_Object)
-        ->  true
-        ;   format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
-            throw(error(syntax_error(M),
-                        context(compile_wf//2,insert/4)))
-        )
+        ensure_filter_resolves_to_graph_descriptor(G, Collection_Descriptor, Graph_Descriptor)
     },
-    assert_write_access(Graph_Descriptor).
+    update(write_graph,Old_Graph_Descriptor,Graph_Descriptor),
+    compile_wf(insert(X,P,Y), Goal),
+    update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,_)))
 -->
     assert_write_access,
@@ -747,6 +721,54 @@ compile_wf(A << B,subsumption_of(AE,BE,Transaction_Object)) -->
     }.
 compile_wf(opt(P), optional(Goal)) -->
     compile_wf(P,Goal).
+compile_wf(addition(X,P,Y),Goal) -->
+    assert_read_access,
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
+        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
+        append([New_Transaction_Object.instance_objects,
+                New_Transaction_Object.schema_objects,
+                New_Transaction_Object.inference_objects], Objects),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_added(Objects, XE, PE, YE))
+    }.
+compile_wf(addition(X,P,Y,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(addition(X,P,Y),Goal),
+    update(filter, _, Old_Filter).
+compile_wf(removal(X,P,Y),Goal) -->
+    assert_read_access,
+    resolve(X,XE),
+    resolve(P,PE),
+    resolve(Y,YE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                 Transaction_Object),
+        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
+        append([New_Transaction_Object.instance_objects,
+                New_Transaction_Object.schema_objects,
+                New_Transaction_Object.inference_objects], Objects),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(Objects, XE, PE, YE))
+    }.
+compile_wf(removal(X,P,Y,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(removal(X,P,Y), Goal),
+    update(filter, _Filter, Old_Filter).
 compile_wf(t(X,P,Y),Goal) -->
     assert_read_access,
     resolve(X,XE),
@@ -765,18 +787,9 @@ compile_wf(t(X,P,Y,G),Goal) -->
     {
         resolve_filter(G,Filter)
     },
-    assert_read_access(Filter),
-    resolve(X,XE),
-    resolve(P,PE),
-    resolve(Y,YE),
-    view(default_collection, Collection_Descriptor),
-    view(transaction_objects,Transaction_Objects),
-    {
-        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
-                                                 Transaction_Object),
-        filter_transaction_object_goal(Filter, Transaction_Object, t(XE,PE,YE), Search_Clause),
-        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
-    }.
+    update(filter, Old_Filter, Filter),
+    compile_wf(t(X,P,Y), Goal),
+    update(filter, _Filter, Old_Filter).
 compile_wf(path(X,Pattern,Y,Path),Goal) -->
     assert_read_access,
     resolve(X,XE),
@@ -1249,6 +1262,17 @@ list_disjunction(L,Goal) :-
     reverse(L,R),
     R = [A|Rest],
     foldl([X,Y,(X;Y)]>>true, Rest, A, Goal).
+
+
+ensure_filter_resolves_to_graph_descriptor(G, Collection_Descriptor, Graph_Descriptor) :-
+    resolve_filter(G,Filter),
+    collection_descriptor_graph_filter_graph_descriptor(Collection_Descriptor,
+                                                        Filter,
+                                                        Graph_Descriptor),
+    !.
+ensure_filter_resolves_to_graph_descriptor(G, _Collection_Descriptor, _Graph_Descriptor) :-
+    format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
+    throw(error(syntax_error(M), _)).
 
 /* Should this go in resolve_query_resource.pl? */
 filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
