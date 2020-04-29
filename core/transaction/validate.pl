@@ -2,7 +2,8 @@
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1,
               validate_validation_objects/2,
-              turtle_transaction/4
+              turtle_transaction/4,
+              read_write_obj_to_graph_validation_obj/4
           ]).
 
 /** <module> Validation
