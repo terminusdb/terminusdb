@@ -5,6 +5,7 @@
               agent_name_exists/2
           ]).
 
+:- use_module(core(util)).
 :- use_module(core(api)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -16,10 +17,13 @@
  * but may later be exposed for a user API.
  */
 
+/*
+ * agent_name_uri(Askable, Name, User_URI) is semidet.
+ */
 agent_name_uri(Askable, Name, User_URI) :-
-    ask(Askable,
-        t(User_URI,terminus:agent_name, Name^^xsd:string)
-       ).
+    once(ask(Askable,
+             t(User_URI, terminus:agent_name, Name^^xsd:string)
+            )).
 
 agent_name_exists(Askable, Name) :-
     agent_name_uri(Askable, Name, _URI).
@@ -77,7 +81,7 @@ test(add_user, [
 
     agent_name_uri(terminus_descriptor{}, "Gavin", URI),
 
-    ask(terminus_descriptor{},
-        t(URI, terminus:email, "gavin@terminusdb.com"^^xsd:string)).
+    once(ask(terminus_descriptor{},
+             t(URI, terminus:email, "gavin@terminusdb.com"^^xsd:string))).
 
 :- end_tests(user_management).
