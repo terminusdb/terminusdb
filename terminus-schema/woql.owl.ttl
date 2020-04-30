@@ -1291,6 +1291,12 @@ woql:PathPlus
   rdfs:label "Plus"@en ;
   rdsf:comment "Follow pattern at least once"@en .
 
+woql:PathStar
+  a owl:Class ;
+  rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
+  rdfs:label "Star"@en ;
+  rdsf:comment "Follow pattern any number of times (including the empty transition)"@en .
+
 woql:PathTimes
   a owl:Class ;
   rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;

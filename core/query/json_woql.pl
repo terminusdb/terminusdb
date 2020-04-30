@@ -842,9 +842,15 @@ json_to_woql_path_pattern(JSON,Pattern,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathPlus',
           'http://terminusdb.com/schema/woql#path_pattern' : SubPattern} :< JSON
     ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                  ['http://terminusdb.com/schema/woql#path_left'
+                                  ['http://terminusdb.com/schema/woql#path_pattern'
                                    |Path]),
         Pattern = plus(PSubPattern)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathStar',
+          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern} :< JSON
+    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
+                                  ['http://terminusdb.com/schema/woql#path_pattern'
+                                   |Path]),
+        Pattern = star(PSubPattern)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathTimes',
           'http://terminusdb.com/schema/woql#path_pattern' : SubPattern,
           'http://terminusdb.com/schema/woql#path_minimum' : N,
