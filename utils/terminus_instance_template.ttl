@@ -8,7 +8,7 @@
 @prefix doc: <terminus:///terminus/document/> .
 
 doc:access_all_areas
-    a terminus:ServerCapability ;
+    a terminus:Capability ;
     rdfs:comment "Access all server functions"@en ;
     rdfs:label "All Capabilities"@en ;
     terminus:access doc:server_access .

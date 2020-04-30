@@ -1189,7 +1189,7 @@ test(update_object, [])
                                           '@value':"test"
                                          },
                  'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:ServerCapability"}
+                                         '@type':"terminus:Capability"}
                 },
 
     update_object(Document, Query),
@@ -1238,7 +1238,7 @@ test(delete_object, [])
                                           '@value':"test"
                                          },
                  'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:ServerCapability"}
+                                         '@type':"terminus:Capability"}
                 },
 
     update_object(Document, Query),
