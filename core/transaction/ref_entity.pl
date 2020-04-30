@@ -845,7 +845,7 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
 :- use_module(core(query)).
 :- use_module(core(api)).
 :- use_module(database).
-test(rebase_single_addition,
+test(apply_single_addition,
      [setup((setup_temp_store(State),
              create_db('user|testdb1', "label", "comment", "http://something"),
              create_db('user|testdb2', "label", "comment", "http://something")
@@ -885,5 +885,135 @@ test(rebase_single_addition,
         (   t(a,b,c),
             t(d,e,f),
             addition(d,e,f))).
+
+test(apply_single_removal,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb1', "label", "comment", "http://something"),
+             create_db('user|testdb2', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % create single commit on both databases with the same single main graph
+    % rebase one commit on the other
+    % query to ensure all triples are now reachable
+
+    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+
+    create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
+    with_transaction(Context1,
+                     ask(Context1,
+                         (   insert(a,b,c),
+                             insert(d,e,f))),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2_1),
+    with_transaction(Context2_1,
+                     ask(Context2_1, insert(d,e,f)),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2_2),
+    with_transaction(Context2_2,
+                     ask(Context2_2, delete(d,e,f)),
+                     _),
+
+    create_context(Descriptor1.repository_descriptor, Context3),
+    create_context(Descriptor2.repository_descriptor, Context4),
+
+    branch_head_commit(Context4, "master", Commit_B_Uri),
+
+    with_transaction(Context3,
+                     apply_commit(Context3, Context4, "master", Commit_B_Uri,
+                                  "rebaser",
+                                  12345,
+                                  error_on_failure,
+                                  _New_Commit_Id,
+                                  _New_Commit_Uri),
+                     _),
+
+    ask(Descriptor1,
+        (   t(a,b,c),
+            removal(d,e,f))).
+test(apply_existing_addition,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb1', "label", "comment", "http://something"),
+             create_db('user|testdb2', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % create single commit on both databases with the same single main graph
+    % rebase one commit on the other
+    % query to ensure all triples are now reachable
+
+    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+
+    create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
+    with_transaction(Context1,
+                     ask(Context1, insert(a,b,c)),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2),
+    with_transaction(Context2,
+                     ask(Context2, insert(a,b,c)),
+                     _),
+
+    create_context(Descriptor1.repository_descriptor, Context3),
+    create_context(Descriptor2.repository_descriptor, Context4),
+
+    branch_head_commit(Context4, "master", Commit_B_Uri),
+
+    with_transaction(Context3,
+                     apply_commit(Context3, Context4, "master", Commit_B_Uri,
+                                  "rebaser",
+                                  12345,
+                                  error_on_failure,
+                                  _New_Commit_Id,
+                                  _New_Commit_Uri),
+                     _),
+
+    ask(Descriptor1,
+        (   t(a,b,c))).
+            %not(addition(a,b,c)))). % since we're reusing the previous layer, rather than creating a new (empty) one, we're actually still seeing an addition. Is that a problem?
+
+test(apply_nonexisting_removal,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb1', "label", "comment", "http://something"),
+             create_db('user|testdb2', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % create single commit on both databases with the same single main graph
+    % rebase one commit on the other
+    % query to ensure all triples are now reachable
+
+    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+
+    create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
+    with_transaction(Context1,
+                     ask(Context1,
+                         (   insert(a,b,c))),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2_1),
+    with_transaction(Context2_1,
+                     ask(Context2_1, insert(d,e,f)),
+                     _),
+    create_context(Descriptor2, commit_info{author: "me", message: "commit b"}, Context2_2),
+    with_transaction(Context2_2,
+                     ask(Context2_2, delete(d,e,f)),
+                     _),
+
+    create_context(Descriptor1.repository_descriptor, Context3),
+    create_context(Descriptor2.repository_descriptor, Context4),
+
+    branch_head_commit(Context4, "master", Commit_B_Uri),
+
+    with_transaction(Context3,
+                     apply_commit(Context3, Context4, "master", Commit_B_Uri,
+                                  "rebaser",
+                                  12345,
+                                  error_on_failure,
+                                  _New_Commit_Id,
+                                  _New_Commit_Uri),
+                     _),
+
+    ask(Descriptor1,
+        (   t(a,b,c),
+            not(removal(d,e,f)))).
 
 :- end_tests(commit_application).
