@@ -1278,7 +1278,7 @@ ensure_filter_resolves_to_graph_descriptor(G, _Collection_Descriptor, _Graph_Des
     format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
     throw(error(syntax_error(M), _)).
 
-/* Should this go in resolve_query_resource.pl? */
+/* NOTE: Should this go in resolve_query_resource.pl? */
 filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
     (   memberchk(instance,Types)
     ->  Instance_Objects = Transaction_Object.instance_objects

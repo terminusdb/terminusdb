@@ -100,6 +100,8 @@
 
               % turtle_utils.pl
               graph_to_turtle/3,
+              update_turtle_graph/4,
+              dump_turtle_graph/4,
 
               % upgrade_db.pl
               get_db_version/1,

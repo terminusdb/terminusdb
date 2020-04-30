@@ -46,7 +46,7 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     freeze(Woql_Var,
            (   is_dict(Woql_Var) % Document
            ->  Woql_Var = Pre_Term
-           ;   is_list(Woql_Var)
+           ;   Woql_Var = [_|_]
            ->  maplist(prefix_preterm(Ctx),Woql_Var,Pre_Term)
            ;   Woql_Var = _@_
            ->  Pre_Term = Woql_Var

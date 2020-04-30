@@ -1,5 +1,7 @@
 :- module(turtle_utils,[
-              graph_to_turtle/3
+              graph_to_turtle/3,
+              update_turtle_graph/4,
+              dump_turtle_graph/4
           ]).
 
 /** <module> Turtle utilities
@@ -28,8 +30,47 @@
 :- use_module(core(util)).
 :- use_module(triplestore).
 :- use_module(literals).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
 
 :- use_module(library(semweb/turtle)).
+
+/*
+ * update_turtle_graph(+DB,+Type,+Name,+TTL) is det.
+ *
+ */
+update_turtle_graph(Database,Type,Name,TTL) :-
+    (   member(Transaction,Database.transaction_objects),
+        Filter = type_name_filter{ type : Type, names : [Name]},
+        filter_transaction_object_read_write_objects(Filter, Transaction, [Graph])
+    ->  true
+    ;   format(atom(M), 'No such schema named ~s', [Name]),
+        throw(error(schema_error(_{'@type' : "vio:SchemaDoesNotExist",
+                                   'vio:message' : M})))),
+
+    coerce_literal_string(TTL, TTLS),
+    setup_call_cleanup(
+        open_string(TTLS, TTLStream),
+        turtle_transaction(Database, Graph, TTLStream,_),
+        close(TTLStream)
+    ).
+
+/*
+ * dump_turtle_graph(+DB,+Type,+Name,-String) is semidet.
+ *
+ */
+dump_turtle_graph(Database,Type,Name,String) :-
+    Graph_Filter = type_name_filter{ type: Type, names : [Name]},
+    [Transaction_Object] = Database.transaction_objects,
+    filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Graph]),
+
+    with_output_to(
+        string(String),
+        (   current_output(Stream),
+            dict_pairs(Database.prefixes, _, Pairs),
+            graph_to_turtle(Pairs, Graph, Stream)
+        )
+    ).
 
 /**
  * graph_to_turtle(+Prefixes,+G,+Output_Stream) is det.

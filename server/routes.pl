@@ -368,7 +368,7 @@ triples_handler(get,Path,Request) :-
 
     assert_read_access(Context),
 
-    dump_graph(Context, turtle, Graph.type, Graph.name, String),
+    dump_turtle_graph(Context, Graph.type, Graph.name, String),
 
     write_descriptor_cors(Descriptor,Terminus),
     reply_json(String).
@@ -399,7 +399,7 @@ triples_handler(post,Path,R) :- % should this be put?
 
     % check access rights
     % assert_auth_action_scope(Terminus,Auth,terminus:update_schema,DB_Name),
-    update_graph(Context,Graph.type,Graph.name,TTL),
+    update_turtle_graph(Context,Graph.type,Graph.name,TTL),
 
     write_descriptor_cors(Descriptor,Terminus),
     reply_json(_{'terminus:status' : "terminus:success"}).
@@ -911,7 +911,7 @@ test(update_object, [
                                               author : "Steve",
                                               message : "Yeah I did it"
                                           }),
-    update_graph(Database,schema,"main",TTL),
+    update_turtle_graph(Database,schema,"main",TTL),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1003,7 +1003,7 @@ test(delete_object, [
                                               author : "Steve",
                                               message : "Yeah I did it"
                                           }),
-    update_graph(Database,schema,"main",TTL),
+    update_turtle_graph(Database,schema,"main",TTL),
 
     % Create the object
     Doc = _{ '@type' : "scm:Database",
@@ -2029,45 +2029,3 @@ try_filled_frame(Instance,Database,Frame) :-
                                       'terminus:status' : 'terminus:failure',
                                       'terminus:instance' : Instance})))).
 
-/*
- * update_graph(+DB,+Type,+Name,+TTL) is det.
- *
- */
-update_graph(Database,Type,Name,TTL) :-
-    (   member(Transaction,Database.transaction_objects),
-        Filter = type_name_filter{ type : Type, names : [Name]},
-        filter_transaction_object_read_write_objects(Filter, Transaction, [Graph])
-    ->  true
-    ;   format(atom(M), 'No such schema named ~s', [Name]),
-        throw(error(schema_error(_{'@type' : "vio:SchemaDoesNotExist",
-                                   'vio:message' : M})))),
-
-    coerce_literal_string(TTL, TTLS),
-    setup_call_cleanup(
-        open_string(TTLS, TTLStream),
-        turtle_transaction(Database, Graph, TTLStream,_),
-        close(TTLStream)
-    ).
-
-
-/*
- * dump_graph(+DB,+Encoding,+Type,+Name,-String) is semidet.
- *
- */
-dump_graph(Database,Encoding,Type,Name,String) :-
-    Graph_Filter = type_name_filter{ type: Type, names : [Name]},
-    [Transaction_Object] = Database.transaction_objects,
-    filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Graph]),
-    (   Encoding = turtle
-    ->  with_output_to(
-            string(String),
-            (   current_output(Stream),
-                dict_pairs(Database.prefixes, _, Pairs),
-                graph_to_turtle(Pairs, Graph, Stream)
-            )
-        )
-    ;   format(atom(MSG), 'Unimplemented encoding ~s', [Encoding]),
-        % Give a better error code etc. This is silly.
-        throw(http_reply(method_not_allowed(_{'terminus:message' : MSG,
-                                              'terminus:status' : 'terminus:failure'})))
-    ).

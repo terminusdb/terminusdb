@@ -756,15 +756,6 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
 validation_objects_to_transaction_objects(Validation_Objects, Transaction_Objects) :-
     mapm(validation_object_to_transaction_object, Validation_Objects, Transaction_Objects, [], _Map).
 
-/*
- * turtle_schema_transaction(+Database,-Database,+Schema,+New_Schema_Stream, Witnesses) is det.
- *
- * Updates a schema using a turtle formatted stream.
- *
- * TODO: This predicate is now really quite bogus, however we have to do something similar because we need
- * calculate an intermediate graph for insertion.
- */
-
 /**
  * turtle_transaction(Database, Graph, New_Graph_Stream, Meta_Data) is semidet.
  *
