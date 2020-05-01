@@ -18,7 +18,10 @@
               delete_graph/5,
 
               % db_branch.pl
-              branch_create/5
+              branch_create/5,
+
+              % db_rebase.pl
+              rebase_on_branch/7
           ]).
 
 :- use_module(api/init).
@@ -26,3 +29,4 @@
 :- use_module(api/db_delete).
 :- use_module(api/db_graph).
 :- use_module(api/db_branch).
+:- use_module(api/db_rebase).

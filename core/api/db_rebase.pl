@@ -1,4 +1,6 @@
-:- module(db_rebase, []).
+:- module(db_rebase, [
+              rebase_on_branch/7
+          ]).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 
