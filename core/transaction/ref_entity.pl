@@ -1014,35 +1014,29 @@ test(apply_nonexisting_removal,
 
 :- end_tests(commit_application).
 
-most_recent_common_ancestor(Branch1_Descriptor, Branch2_Descriptor, Final_Commit_Id, Branch1_Path, Branch2_Path) :-
-    Repo1_Descriptor = Branch1_Descriptor.repository_descriptor,
-    Repo2_Descriptor = Branch2_Descriptor.repository_descriptor,
-    true,
-
-    create_context(Repo1_Descriptor, Repo1_Context),
-    branch_head_commit(Repo1_Context, Branch1_Descriptor.branch_name, Commit1_Uri),
-    create_context(Repo2_Descriptor, Repo2_Context),
-    branch_head_commit(Repo2_Context, Branch2_Descriptor.branch_name, Commit2_Uri),
-
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Branch1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Branch2_Edge_Path_Reversed)),
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Final_Commit_Id, Commit1_Path, Commit2_Path) :-
+    commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
+    commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
+    
+    % Note: this isn't great time complexity
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Commit2_Edge_Path_Reversed)),
 
     !, % we're only interested in one solution!
-       % actually is that now the most recent solution though?
 
-    reverse(Branch1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
-    reverse(Branch2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
+    reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
+    reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
 
     maplist({Repo1_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
                 get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
                 commit_id_uri(Repo1_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
             Commit1_Edge_Path,
-            Branch1_Path),
+            Commit1_Path),
     maplist({Repo2_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
                 get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
                 commit_id_uri(Repo2_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
             Commit2_Edge_Path,
-            Branch2_Path).
+            Commit2_Path).
 
 :- begin_tests(common_ancestor).
 :- use_module(core(util/test_utils)).
@@ -1091,7 +1085,15 @@ test(common_ancestor_after_branch_and_some_commits,
                          insert(q,r,s)),
                      _),
 
-    most_recent_common_ancestor(Descriptor, Second_Descriptor, Common_Commit_Id, Branch1_Path, Branch2_Path),
+    Repo_Descriptor = Descriptor.repository_descriptor,
+    create_context(Repo_Descriptor, Repo_Context),
+
+    branch_head_commit(Repo_Context, "master", Head1_Commit_Uri),
+    commit_id_uri(Repo_Context, Head1_Commit_Id, Head1_Commit_Uri),
+    branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
+    commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
+
+    most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id, Branch1_Path, Branch2_Path),
 
     Repo_Descriptor = Descriptor.repository_descriptor,
     commit_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
