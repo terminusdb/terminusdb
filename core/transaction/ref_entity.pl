@@ -1024,8 +1024,11 @@ most_recent_common_ancestor(Branch1_Descriptor, Branch2_Descriptor, Final_Commit
     create_context(Repo2_Descriptor, Repo2_Context),
     branch_head_commit(Repo2_Context, Branch2_Descriptor.branch_name, Commit2_Uri),
 
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id, Branch1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id, Branch2_Edge_Path_Reversed)),
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Branch1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Branch2_Edge_Path_Reversed)),
+
+    !, % we're only interested in one solution!
+       % actually is that now the most recent solution though?
 
     reverse(Branch1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
     reverse(Branch2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
@@ -1090,8 +1093,14 @@ test(common_ancestor_after_branch_and_some_commits,
 
     most_recent_common_ancestor(Descriptor, Second_Descriptor, Common_Commit_Id, Branch1_Path, Branch2_Path),
 
-    format("common commit id: ~w\nbranch 1 path: ~w\n, branch 2 path: ~w\n", [Common_Commit_Id, Branch1_Path, Branch2_Path]),
+    Repo_Descriptor = Descriptor.repository_descriptor,
+    commit_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
 
-    true.
+    Branch1_Path = [CommitC_Id, CommitD_Id],
+    Branch2_Path = [CommitE_Id, CommitF_Id],
+    commit_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
+    commit_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
+    commit_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
+    commit_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
 
 :- end_tests(common_ancestor).
