@@ -798,11 +798,14 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     view(filter, Filter),
+    view(prefixes,Prefixes),
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        compile_pattern(Pattern,Compiled_Pattern,New_Transaction_Object),
+        (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,New_Transaction_Object)
+        ->  true
+        ;   throw(error(syntax_error('Unable to compile pattern', Pattern)))),
         Goal = (
             calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
             % Don't bind PathE until we're done with the full query (for constraints)
@@ -2335,13 +2338,20 @@ test(when, []) :-
     query_test_response(terminus_descriptor{}, Query, JSON),
     [_{}] = JSON.bindings.
 
-/*
-test(no_access,[
-         setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-    true.
-*/
+
+test(compilation, [setup(setup_temp_store(State)),
+                   cleanup(teardown_temp_store(State))]) :-
+
+    Query = (
+        t(v('Auth'), terminus:access, v('Access')),
+        t(v('Access'), terminus:action, v('Action')),
+        t(v('Access'), terminus:authority_scope, v('Scope')),
+        t(v('Scope'), terminus:resource_name, v('Resource_Name') ^^ (xsd:string))
+    ),
+    create_context(terminus_descriptor{}, Context),
+
+    compile_query(Query, Prog, Context, Output_Context),
+
+    print_term(Prog, []).
 
 :- end_tests(woql).

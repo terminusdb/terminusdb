@@ -91,7 +91,7 @@
               filter_transaction_object_read_write_objects/3,
 
               % path.pl
-              compile_pattern/3,
+              compile_pattern/4,
               calculate_path_solutions/6
           ]).
 

@@ -1024,8 +1024,8 @@ most_recent_common_ancestor(Branch1_Descriptor, Branch2_Descriptor, Final_Commit
     create_context(Repo2_Descriptor, Repo2_Context),
     branch_head_commit(Repo2_Context, Branch2_Descriptor.branch_name, Commit2_Uri),
 
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), ref:commit_id), Final_Commit_Id, Branch1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), ref:commit_id), Final_Commit_Id, Branch2_Edge_Path_Reversed)),
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id, Branch1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id, Branch2_Edge_Path_Reversed)),
 
     reverse(Branch1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
     reverse(Branch2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),

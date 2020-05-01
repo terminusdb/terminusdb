@@ -1,5 +1,5 @@
 :- module(path,[
-              compile_pattern/3,
+              compile_pattern/4,
               calculate_path_solutions/6
           ]).
 
@@ -125,27 +125,28 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
  * P,Q,R := p(P) | P,Q | P;Q | plus(P) | times(P,N,M)
  *
  */
-compile_pattern(p(Pred), Compiled, Transaction_Object) :-
-    sol_set({Transaction_Object,Pred}/[p(Sub)]>>(
-                subsumption_properties_of(Sub,Pred,Transaction_Object)
+compile_pattern(p(Pred), Compiled, Prefixes, Transaction_Object) :-
+    prefixed_to_uri(Pred,Prefixes,Pred_Expanded),
+    sol_set({Transaction_Object,Pred_Expanded}/[p(Sub)]>>(
+                subsumption_properties_of(Sub,Pred_Expanded,Transaction_Object)
             ), Predicates),
     xfy_list(';',Compiled,Predicates).
-compile_pattern((X,Y), (XC,YC), Transaction_Object) :-
-    compile_pattern(X,XC,Transaction_Object),
-    compile_pattern(Y,YC,Transaction_Object),
+compile_pattern((X,Y), (XC,YC), Prefixes, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Transaction_Object),
+    compile_pattern(Y,YC,Prefixes,Transaction_Object),
     % Only compose compatible edges
     left_edges(XC,Left_Edges),
     right_edges(YC,Right_Edges),
     assert_compatible_edges(Left_Edges, Right_Edges, Transaction_Object).
-compile_pattern((X;Y), (XC;YC), Transaction_Object) :-
-    compile_pattern(X,XC,Transaction_Object),
-    compile_pattern(Y,YC,Transaction_Object).
-compile_pattern(star(X), star(XC), Transaction_Object) :-
-    compile_pattern(X,XC,Transaction_Object).
-compile_pattern(plus(X), plus(XC), Transaction_Object) :-
-    compile_pattern(X,XC,Transaction_Object).
-compile_pattern(times(X,N,M), times(XC,N,M), Transaction_Object) :-
-    compile_pattern(X,XC,Transaction_Object).
+compile_pattern((X;Y), (XC;YC), Prefixes, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Transaction_Object),
+    compile_pattern(Y,YC,Prefixes,Transaction_Object).
+compile_pattern(star(X), star(XC), Prefixes, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Transaction_Object).
+compile_pattern(plus(X), plus(XC), Prefixes, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Transaction_Object).
+compile_pattern(times(X,N,M), times(XC,N,M), Prefixes, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Transaction_Object).
 
 right_edges(p(P),[P]).
 right_edges(plus(P),Ps) :-
