@@ -21,7 +21,9 @@
               insert_commit_object_on_branch/6,
               link_commit_object_to_branch/3,
               insert_graph_object/7,
-              copy_commits/3
+              copy_commits/3,
+              apply_commit/7,
+              apply_commit/8
           ]).
 :- use_module(library(terminus_store)).
 
@@ -797,8 +799,11 @@ ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_
     ->  true
     ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
 
-apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, error_on_failure, New_Commit_Id, New_Commit_Uri) :-
-    % this is the base case, the other cases should call into this.
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
+    get_time(Now),
+    apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
+
+apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
     % look up current head
     (   branch_head_commit(Us_Repo_Context, Us_Branch_Name, Us_Commit_Uri)
     ->  true
@@ -833,11 +838,6 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
     % Note, this doesn't yet commit the commit graph.
     % We may actually have written an invalid commit here.
 
-    true.
-
-apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, continue_on_failure, New_Commit_Id, New_Commit_Uri) :-
-    true.
-apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, apply_fixup(Woql_Query), New_Commit_Id, New_Commit_Uri) :-
     true.
 
 :- begin_tests(commit_application).
@@ -876,7 +876,6 @@ test(apply_single_addition,
                      apply_commit(Context3, Context4, "master", Commit_B_Uri,
                                   "rebaser",
                                   12345,
-                                  error_on_failure,
                                   _New_Commit_Id,
                                   _New_Commit_Uri),
                      _),
@@ -923,7 +922,6 @@ test(apply_single_removal,
                      apply_commit(Context3, Context4, "master", Commit_B_Uri,
                                   "rebaser",
                                   12345,
-                                  error_on_failure,
                                   _New_Commit_Id,
                                   _New_Commit_Uri),
                      _),
@@ -962,7 +960,6 @@ test(apply_existing_addition,
                      apply_commit(Context3, Context4, "master", Commit_B_Uri,
                                   "rebaser",
                                   12345,
-                                  error_on_failure,
                                   _New_Commit_Id,
                                   _New_Commit_Uri),
                      _),
@@ -1007,7 +1004,6 @@ test(apply_nonexisting_removal,
                      apply_commit(Context3, Context4, "master", Commit_B_Uri,
                                   "rebaser",
                                   12345,
-                                  error_on_failure,
                                   _New_Commit_Id,
                                   _New_Commit_Uri),
                      _),
@@ -1017,3 +1013,85 @@ test(apply_nonexisting_removal,
             not(removal(d,e,f)))).
 
 :- end_tests(commit_application).
+
+most_recent_common_ancestor(Branch1_Descriptor, Branch2_Descriptor, Final_Commit_Id, Branch1_Path, Branch2_Path) :-
+    Repo1_Descriptor = Branch1_Descriptor.repository_descriptor,
+    Repo2_Descriptor = Branch2_Descriptor.repository_descriptor,
+    true,
+
+    create_context(Repo1_Descriptor, Repo1_Context),
+    branch_head_commit(Repo1_Context, Branch1_Descriptor.branch_name, Commit1_Uri),
+    create_context(Repo2_Descriptor, Repo2_Context),
+    branch_head_commit(Repo2_Context, Branch2_Descriptor.branch_name, Commit2_Uri),
+
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), ref:commit_id), Final_Commit_Id, Branch1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), ref:commit_id), Final_Commit_Id, Branch2_Edge_Path_Reversed)),
+
+    reverse(Branch1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
+    reverse(Branch2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
+
+    maplist({Repo1_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
+                get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
+                commit_id_uri(Repo1_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
+            Commit1_Edge_Path,
+            Branch1_Path),
+    maplist({Repo2_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
+                get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
+                commit_id_uri(Repo2_Context, Intermediate_Commit_Id, Intermediate_Commit_Uri)),
+            Commit2_Edge_Path,
+            Branch2_Path).
+
+:- begin_tests(common_ancestor).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(api)).
+:- use_module(database).
+test(common_ancestor_after_branch_and_some_commits,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+    create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
+    with_transaction(Commit_A_Context,
+                     ask(Commit_A_Context,
+                         insert(a,b,c)),
+                     _),
+    create_context(Descriptor, commit_info{author:"test",message: "commit b"}, Commit_B_Context),
+    with_transaction(Commit_B_Context,
+                     ask(Commit_B_Context,
+                         insert(d,e,f)),
+                     _),
+
+    branch_create(Descriptor.repository_descriptor, Descriptor, "second", [], _),
+
+    create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
+    with_transaction(Commit_C_Context,
+                     ask(Commit_C_Context,
+                         insert(g,h,i)),
+                     _),
+    create_context(Descriptor, commit_info{author:"test",message: "commit d"}, Commit_D_Context),
+    with_transaction(Commit_D_Context,
+                     ask(Commit_D_Context,
+                         insert(k,l,m)),
+                     _),
+
+    resolve_absolute_string_descriptor("user/testdb/local/branch/second", Second_Descriptor),
+    create_context(Second_Descriptor, commit_info{author:"test",message: "commit e"}, Commit_E_Context),
+    with_transaction(Commit_E_Context,
+                     ask(Commit_E_Context,
+                         insert(n,o,p)),
+                     _),
+    create_context(Second_Descriptor, commit_info{author:"test",message: "commit f"}, Commit_F_Context),
+    with_transaction(Commit_F_Context,
+                     ask(Commit_F_Context,
+                         insert(q,r,s)),
+                     _),
+
+    most_recent_common_ancestor(Descriptor, Second_Descriptor, Common_Commit_Id, Branch1_Path, Branch2_Path),
+
+    format("common commit id: ~w\nbranch 1 path: ~w\n, branch 2 path: ~w\n", [Common_Commit_Id, Branch1_Path, Branch2_Path]),
+
+    true.
+
+:- end_tests(common_ancestor).

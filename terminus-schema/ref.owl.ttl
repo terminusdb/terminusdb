@@ -108,7 +108,7 @@ ref:CommitParentRestriction
   rdfs:comment "Commit has no more than 1 parent"@en ;
   rdfs:label "Commit Parent restriction"@en ;
   owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
-  owl:onProperty ref:parent .
+  owl:onProperty ref:commit_parent .
 
 ref:Ref
   a owl:Class ;
