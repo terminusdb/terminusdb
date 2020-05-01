@@ -210,6 +210,8 @@ create_context(Transaction_Object, Context) :-
     collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
+    % Note: should we be using terminus_descriptor{} below? or open it?
+
     Context = query_context{
         authorization : 'terminus:///terminus/document/access_all_areas',
         transaction_objects : [Transaction_Object],

@@ -23,7 +23,9 @@
               insert_graph_object/7,
               copy_commits/3,
               apply_commit/7,
-              apply_commit/8
+              apply_commit/8,
+              commit_is_valid/2,
+              invalidate_commit/2
           ]).
 :- use_module(library(terminus_store)).
 
@@ -1106,3 +1108,16 @@ test(common_ancestor_after_branch_and_some_commits,
     commit_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
 
 :- end_tests(common_ancestor).
+
+commit_is_valid(Context, Commit_Id) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    once(ask(Context,
+             t(Commit_Uri, rdf:type, ref:'ValidCommit'))).
+
+invalidate_commit(Context, Commit_Id) :-
+    (   commit_is_valid(Context, Commit_Id)
+    ->  commit_id_uri(Context, Commit_Id, Commit_Uri),
+        once(ask(Context,
+                 (   delete(Commit_Uri, rdf:type, ref:'ValidCommit'),
+                     insert(Commit_Uri, rdf:type, ref:'InvalidCommit'))))
+    ;   true).

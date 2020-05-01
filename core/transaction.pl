@@ -28,6 +28,7 @@
               % validate.pl
               transaction_objects_to_validation_objects/2,
               commit_validation_objects/1,
+              commit_validation_object/2,
               validate_validation_objects/2,
               turtle_transaction/4,
 
@@ -61,6 +62,8 @@
               copy_commits/3,
               apply_commit/7,
               apply_commit/8,
+              commit_is_valid/2,
+              invalidate_commit/2,
 
               % repo_entity.pl
               has_repository/2,
