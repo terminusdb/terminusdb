@@ -619,6 +619,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
             commit_info : Commit_Info,
             files : Files,
             terminus: Terminus,
+            update_guard : _Guard,
             authorization : Auth_ID
         }, Context0, Final_Context),
 

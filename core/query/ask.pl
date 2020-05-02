@@ -220,6 +220,7 @@ create_context(Transaction_Object, Context) :-
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
         terminus : terminus_descriptor{},
+        update_guard : _Guard,
         files : [],
         bindings : [],
         selected : []
@@ -318,3 +319,4 @@ query_default_write_graph(Query_Context, Write_Graph) :-
     graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
                                                            Transaction_Objects,
                                                            Write_Graph).
+

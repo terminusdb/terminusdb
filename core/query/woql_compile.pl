@@ -341,7 +341,11 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   compile_wf(Term, Prog, Ctx_In, Ctx_Out)
+    (   compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+        % Unsuspend all updates so they run at the end of the query
+        % this is redundant if we do a pre-pass that sets the guard as well.
+        Guard = Ctx_Out.update_guard,
+        Prog = (Pre_Prog, Guard = true)
     ->  true
     ;   format(atom(M), 'Failure to compile term ~q', [Term]),
         throw(compilation_error(M))).
@@ -631,18 +635,27 @@ compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
-compile_wf(update_object(Doc),frame:update_object(DocE,S0)) -->
+compile_wf(update_object(Doc),(
+               freeze(Guard,
+                      frame:update_object(DocE,S0)))) -->
     assert_write_access,
     resolve(Doc,DocE),
+    view(update_guard, Guard),
     peek(S0).
-compile_wf(update_object(X,Doc),frame:update_object(URI,DocE,S0)) -->
+compile_wf(update_object(X,Doc),(
+               freeze(Guard,
+                      frame:update_object(URI,DocE,S0)))) -->
     assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
+    view(update_guard, Guard),
     peek(S0).
-compile_wf(delete_object(X),frame:delete_object(URI,S0)) -->
+compile_wf(delete_object(X),(
+               freeze(Guard,
+                      frame:delete_object(URI,S0)))) -->
     assert_write_access,
     resolve(X,URI),
+    view(update_guard, Guard),
     peek(S0).
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(delete(X,P,Y,G),Goal)
@@ -654,7 +667,11 @@ compile_wf(delete(X,P,Y,G),Goal)
     update(write_graph,Old_Graph_Descriptor,Graph_Descriptor),
     compile_wf(delete(X,P,Y), Goal),
     update(write_graph, _, Old_Graph_Descriptor).
-compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
+compile_wf(delete(X,P,Y),(
+               freeze(Guard,
+                      delete(Read_Write_Object,XE,PE,YE,_)
+                     )
+           ))
 -->
     assert_write_access,
     resolve(X,XE),
@@ -662,6 +679,7 @@ compile_wf(delete(X,P,Y),(delete(Read_Write_Object,XE,PE,YE,_)))
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    view(update_guard, Guard),
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
@@ -675,7 +693,10 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph,Old_Graph_Descriptor,Graph_Descriptor),
     compile_wf(insert(X,P,Y), Goal),
     update(write_graph, _, Old_Graph_Descriptor).
-compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,_)))
+compile_wf(insert(X,P,Y),(
+               freeze(Guard,
+                      insert(Read_Write_Object,XE,PE,YE,_))
+           ))
 -->
     assert_write_access,
     resolve(X,XE),
@@ -683,6 +704,7 @@ compile_wf(insert(X,P,Y),(insert(Read_Write_Object,XE,PE,YE,_)))
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
+    view(update_guard, Guard),
     {
         graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
@@ -2328,7 +2350,6 @@ test(select, []) :-
     query_test_response(terminus_descriptor{}, Query, JSON),
     [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
 
-
 test(when, []) :-
 
     Query = _{'@type' : "When",
@@ -2339,19 +2360,91 @@ test(when, []) :-
     [_{}] = JSON.bindings.
 
 
-test(compilation, [setup(setup_temp_store(State)),
-                   cleanup(teardown_temp_store(State))]) :-
+test(transaction_semantics_after, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]
+    ) :-
 
-    Query = (
-        t(v('Auth'), terminus:access, v('Access')),
-        t(v('Access'), terminus:action, v('Action')),
-        t(v('Access'), terminus:authority_scope, v('Scope')),
-        t(v('Scope'), terminus:resource_name, v('Resource_Name') ^^ (xsd:string))
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+
+
+    with_transaction(
+        Context,
+        forall(ask(Context,
+                   (
+                       X = 1^^xsd:integer,
+                       insert(a, b, X),
+                       X = 2^^xsd:integer
+                   )),
+               true),
+        _Meta_Data
     ),
-    create_context(terminus_descriptor{}, Context),
 
-    compile_query(Query, Prog, Context, Output_Context),
+    \+ once(ask(Descriptor,
+                t(a, b, 1^^xsd:integer))).
 
-    print_term(Prog, []).
+
+test(transaction_semantics_disjunct, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+
+
+    with_transaction(
+        Context,
+        forall(ask(Context,
+                   (
+                       (   X = 1^^xsd:integer
+                       ;   X = 2^^xsd:integer),
+                       insert(a, b, X),
+                       X = 2^^xsd:integer
+                   )),
+               true),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (   not(t(a, b, 1^^xsd:integer)),
+                 t(a, b, 2^^xsd:integer)))).
+
+
+test(transaction_semantics_conditional, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+
+    with_transaction(
+        Context,
+        forall(ask(Context,
+                   (
+                       (   X = 1^^xsd:integer
+                       ;   X = 2^^xsd:integer),
+                       insert(a, b, X),
+                       (   X = 1^^xsd:integer
+                       ;   X = 2^^xsd:integer)
+                   )),
+               true),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (   t(a, b, 1^^xsd:integer),
+                 t(a, b, 2^^xsd:integer)))).
 
 :- end_tests(woql).
