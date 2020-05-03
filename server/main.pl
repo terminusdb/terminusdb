@@ -1,4 +1,4 @@
-:- module(server, [server/1]).
+:- module(server, [terminus_server/1]).
 
 /** <module> HTTP server module
  *
@@ -52,7 +52,7 @@ load_jwt_conditionally :-
 
 :- load_jwt_conditionally.
 
-server(_Argv) :-
+terminus_server(_Argv) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),

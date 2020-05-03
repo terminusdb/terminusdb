@@ -44,6 +44,7 @@ prolog:message(error(version_error(Correct, Was), _)) -->
       [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[AcceptedVersions, W],
         nl].
 
+needs_version(80130).
 needs_version(80123).
 needs_version(80111).
 needs_version(80110).
@@ -114,7 +115,7 @@ main(Argv) :-
     initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    server(Argv),
+    terminus_server(Argv),
     run(Argv).
 
 run([test]) :-
