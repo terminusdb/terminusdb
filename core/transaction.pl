@@ -27,6 +27,7 @@
 
               % validate.pl
               transaction_objects_to_validation_objects/2,
+              validation_objects_to_transaction_objects/2,
               commit_validation_objects/1,
               commit_validation_object/2,
               validate_validation_objects/2,
@@ -43,8 +44,10 @@
               branch_base_uri/3,
               branch_head_commit/3,
               commit_id_uri/3,
-              commit_to_metadata/5,
-              commit_to_parent/3,
+              commit_id_to_metadata/5,
+              commit_uri_to_metadata/5,
+              commit_id_to_parent_uri/3,
+              commit_uri_to_parent_uri/3,
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/4,
@@ -64,6 +67,7 @@
               apply_commit/8,
               commit_is_valid/2,
               invalidate_commit/2,
+              most_recent_common_ancestor/7,
 
               % repo_entity.pl
               has_repository/2,

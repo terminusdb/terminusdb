@@ -15,7 +15,8 @@
               assert_write_access/3,
               write_cors_headers/2,
               authorisation_object/3,
-              user_object/3
+              user_object/3,
+              super_user_authority/1
           ]).
 
 /** <module> Capabilities
@@ -158,6 +159,8 @@ assert_write_access(G, Context, Context) :-
 write_type_access(instance,terminus:instance_write_access).
 write_type_access(schema,terminus:schema_write_access).
 write_type_access(inference,terminus:inference_write_access).
+
+super_user_authority('terminus:///terminus/document/access_all_areas').
 
 require_super_user(Context) :-
     % This allows us to shortcut looking in the database,

@@ -5,8 +5,10 @@
               branch_head_commit/3,
               has_commit/2,
               commit_id_uri/3,
-              commit_to_metadata/5,
-              commit_to_parent/3,
+              commit_id_to_metadata/5,
+              commit_uri_to_metadata/5,
+              commit_id_to_parent_uri/3,
+              commit_uri_to_parent_uri/3,
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/4,
@@ -25,7 +27,8 @@
               apply_commit/7,
               apply_commit/8,
               commit_is_valid/2,
-              invalidate_commit/2
+              invalidate_commit/2,
+              most_recent_common_ancestor/7
           ]).
 :- use_module(library(terminus_store)).
 
@@ -72,18 +75,22 @@ commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string))).
 
-commit_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
-    commit_id_uri(Askable, Commit_Id, Commit_Uri),
+commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, ref:commit_author, Author^^xsd:string),
                  t(Commit_Uri, ref:commit_message, Message^^xsd:string),
                  t(Commit_Uri, ref:commit_timestamp, Timestamp_String^^xsd:decimal)))),
     number_string(Timestamp, Timestamp_String).
-
-commit_to_parent(Askable, Commit_Id, Parent_Commit_Uri) :-
+commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
+    commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp).
+
+commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, ref:commit_parent, Parent_Commit_Uri))).
+commit_id_to_parent_uri(Askable, Commit_Id, Parent_Commit_Uri) :-
+    commit_id_uri(Askable, Commit_Id, Commit_Uri),
+    commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri).
 
 graph_for_commit(Askable, Commit_Uri, Type, Name, Graph_Uri) :-
     ask(Askable,
@@ -125,9 +132,11 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
 
 insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Id, Commit_Uri) :-
     insert_child_commit_object(Context, Parent_Commit_Uri, Context.commit_info, Commit_Id, Commit_Uri).
+
 insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Commit_Id, Commit_Uri) :-
     get_time(Now),
     insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Now, Commit_Id, Commit_Uri).
+
 insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
     insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri),
     once(ask(Context,
@@ -193,10 +202,10 @@ copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
     commit_id_uri(Origin_Context,
                   Commit_Id,
                   Commit_Uri),
-    commit_to_metadata(Origin_Context, Commit_Id, Author, Message, Timestamp),
+    commit_id_to_metadata(Origin_Context, Commit_Id, Author, Message, Timestamp),
     Commit_Info = commit_info{author: Author, message: Message},
 
-    (   commit_to_parent(Origin_Context, Commit_Id, Parent_Uri)
+    (   commit_id_to_parent_uri(Origin_Context, Commit_Id, Parent_Uri)
     ->  insert_child_commit_object(Destination_Context,
                                    Parent_Uri,
                                    Commit_Info,
@@ -217,7 +226,7 @@ copy_commits_(Origin_Context, Destination_Context, Commit_Id) :-
     (   has_commit(Destination_Context, Commit_Id)
     ->  true
     ;   copy_commit(Origin_Context, Destination_Context, Commit_Id),
-        (   commit_to_parent(Origin_Context, Commit_Id, Parent_Uri)
+        (   commit_id_to_parent_uri(Origin_Context, Commit_Id, Parent_Uri)
         ->  commit_id_uri(Origin_Context, Parent_Id, Parent_Uri),
             copy_commits_(Origin_Context, Destination_Context, Parent_Id)
         ;   true)).
@@ -278,7 +287,7 @@ test(base_commit_insert,
                      
                      _),
 
-    commit_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
+    commit_id_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
 
     Author = "author",
     Message = "message",
@@ -308,13 +317,13 @@ test(child_commit_insert,
                                                     _Commit_Uri)),
                      _),
 
-    commit_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
+    commit_id_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
 
     Author = "author2",
     Message = "message2",
     Timestamp = 2345.678,
 
-    commit_to_parent(Descriptor, Commit_Id, Parent_Commit_Uri).
+    commit_id_to_parent_uri(Descriptor, Commit_Id, Parent_Commit_Uri).
 
 test(commit_on_branch_insert,
      [setup((setup_temp_store(State),
@@ -342,7 +351,7 @@ test(commit_on_branch_insert,
     commit_id_uri(Descriptor, Commit_Id, Commit_Uri),
 
     % ensure it doesn't have a parent
-    (   commit_to_parent(Descriptor, Commit_Id, _)
+    (   commit_id_to_parent_uri(Descriptor, Commit_Id, _)
     ->  throw(error('found parent where none was expected'))
     ;   true),
 
@@ -362,7 +371,7 @@ test(commit_on_branch_insert,
     commit_id_uri(Descriptor, Commit2_Id, Commit2_Uri),
 
     % ensure it does have a parent
-    commit_to_parent(Descriptor, Commit2_Id, _).
+    commit_id_to_parent_uri(Descriptor, Commit2_Id, _).
 
 :- end_tests(commit_objects).
 
@@ -816,7 +825,7 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
 
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
-    commit_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
+    commit_id_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
     Commit_Info = commit_info{author: Author, message: Message},
 
     % create new commit
@@ -879,8 +888,13 @@ test(apply_single_addition,
                                   "rebaser",
                                   12345,
                                   _New_Commit_Id,
-                                  _New_Commit_Uri),
+                                  New_Commit_B_Uri),
                      _),
+
+    Repo_Descriptor = Descriptor1.repository_descriptor,
+    commit_uri_to_parent_uri(Repo_Descriptor, New_Commit_B_Uri, Commit_A_Uri),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
+    commit_uri_to_metadata(Repo_Descriptor, New_Commit_B_Uri, _, "commit b", _),
 
     ask(Descriptor1,
         (   t(a,b,c),
@@ -1098,14 +1112,14 @@ test(common_ancestor_after_branch_and_some_commits,
     most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id, Branch1_Path, Branch2_Path),
 
     Repo_Descriptor = Descriptor.repository_descriptor,
-    commit_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
+    commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
 
     Branch1_Path = [CommitC_Id, CommitD_Id],
     Branch2_Path = [CommitE_Id, CommitF_Id],
-    commit_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
-    commit_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
-    commit_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
-    commit_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
+    commit_id_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
 
 :- end_tests(common_ancestor).
 
