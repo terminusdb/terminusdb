@@ -157,7 +157,6 @@ test(rebase_fast_forward,
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
 
     [Old_Commit_B_Id, Old_Commit_C_Id] = Applied_Commit_Ids,
-    commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, What, _),
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
 
@@ -169,6 +168,84 @@ test(rebase_fast_forward,
     commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Repo_Descriptor, Commit_B_Uri, _, "commit b", _),
     commit_uri_to_metadata(Repo_Descriptor, Commit_C_Uri, _, "commit c", _),
+
+    findall(t(S,P,O),
+            ask(Master_Descriptor,
+                t(S,P,O)),
+            Triples_Unsorted),
+
+    sort(Triples_Unsorted, Triples),
+    [t(d,e,f),
+     t(g,h,i)] = Triples,
+
+    true.
+
+test(rebase_divergent_history,
+     [setup((setup_temp_store(State),
+             create_db('user|foo','test','a test', 'terminus://blah'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
+    with_transaction(Second_Context2,
+                     ask(Second_Context2,
+                         insert(g,h,i)),
+                     _),
+
+    % we're also doing a commit on the original branch, to create a divergent history
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    super_user_authority(Auth),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, Common_Commit_Id, Applied_Commit_Ids),
+    Repo_Descriptor = Master_Descriptor.repository_descriptor,
+
+    commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
+
+    [Old_Commit_B_Id, Old_Commit_C_Id] = Applied_Commit_Ids,
+    commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
+    commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
+
+    branch_head_commit(Repo_Descriptor, "master", Commit_C_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_D_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_D_Uri, Commit_A_Uri),
+
+
+    commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_B_Uri, _, "commit b", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_C_Uri, _, "commit c", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_D_Uri, _, "commit d", _),
+
+    findall(t(S,P,O),
+            ask(Master_Descriptor,
+                t(S,P,O)),
+            Triples_Unsorted),
+
+    sort(Triples_Unsorted, Triples),
+    [t(d,e,f),
+     t(g,h,i),
+     t(j,k,l)] = Triples,
 
     true.
 :- end_tests(rebase).
