@@ -13,7 +13,8 @@
               ref_schema_context_from_label_descriptor/2,
               ref_schema_context_from_label_descriptor/3,
               repo_schema_context_from_label_descriptor/2,
-              repo_schema_context_from_label_descriptor/3
+              repo_schema_context_from_label_descriptor/3,
+              create_db_with_test_schema/3
           ]).
 
 /** <module> Test Utilities
@@ -58,7 +59,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
-:- use_module(core(api/init)).
+:- use_module(core(api)).
 
 :- use_module(library(terminus_store)).
 
@@ -256,3 +257,39 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
                                                             Repo_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
+
+
+create_db_with_test_schema(User, Db_Name, Base_Uri) :-
+    user_database_name(User, Db_Name, Full_Name),
+    create_db(Full_Name, "test", "a test db", Base_Uri),
+    resolve_absolute_descriptor([User, Db_Name], Branch_Descriptor),
+
+    create_graph(Branch_Descriptor,
+                 commit_info{ author : "test",
+                              message: "Create an empty schema graph"},
+                 schema,
+                 "main",
+                 _),
+
+    create_context(Branch_Descriptor, commit_info{author: "test", message: "add test schema"}, Context),
+    terminus_path(Path),
+    interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
+    read_file_to_string(TTL_File, TTL, []),
+    update_turtle_graph(Context, schema, "main", TTL).
+
+:- begin_tests(db_test_schema_util).
+test(create_db_and_insert_invalid_data,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema("user", "test", "terminus://blah"))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(schema_check_failure(_)))])
+:-
+    resolve_absolute_string_descriptor("user/test", Descriptor),
+    create_context(Descriptor, commit_info{author:"test",message:"this should never commit"}, Context),
+
+    with_transaction(Context,
+                     ask(Context,
+                         insert(a,b,c)),
+                     _).
+
+:- end_tests(db_test_schema_util).
