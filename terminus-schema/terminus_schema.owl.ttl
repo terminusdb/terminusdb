@@ -198,14 +198,34 @@ terminus:rebase
   rdfs:comment "An action which represents Rebasing a database branch"@en ;
   a terminus:DBAction .
 
-terminus:read_access
-  rdfs:label "Read Access"@en ;
+terminus:instance_read_access
+  rdfs:label "Instance Read Access"@en ;
   rdfs:comment "An action which allows all read-only instance data accesses to the database"@en ;
   a terminus:DBAction .
 
-terminus:write_access
-  rdfs:label "Write Access"@en ;
+terminus:instance_write_access
+  rdfs:label "Instance Write Access"@en ;
   rdfs:comment "An action which allows all write instance data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:schema_read_access
+  rdfs:label "Schema Read Access"@en ;
+  rdfs:comment "An action which allows all read-only schema data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:schema_write_access
+  rdfs:label "Schema Write Access"@en ;
+  rdfs:comment "An action which allows all write schema data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:inference_read_access
+  rdfs:label "Inference Read Access"@en ;
+  rdfs:comment "An action which allows all read-only inference data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:inference_write_access
+  rdfs:label "Inference Write Access"@en ;
+  rdfs:comment "An action which allows all write inference data accesses to the database"@en ;
   a terminus:DBAction .
 
 terminus:meta_read_access

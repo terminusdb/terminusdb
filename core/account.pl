@@ -22,7 +22,9 @@
               % user_management.pl
               add_user/4,
               agent_name_uri/3,
-              agent_name_exists/2
+              agent_name_exists/2,
+              make_user_own_database/2
+
           ]).
 
 :- use_module(account/capabilities).

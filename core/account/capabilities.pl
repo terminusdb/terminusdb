@@ -58,7 +58,7 @@
 :- use_module(library(crypto)).
 
 /**
- * user_name_user_id(+DB, +Username, -User_ID) is semidet.
+ * username_user_id(+DB, +Username, -User_ID) is semidet.
  *
  * Username user association - goes only one way
  */

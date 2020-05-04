@@ -2,7 +2,8 @@
           [
               add_user/4,
               agent_name_uri/3,
-              agent_name_exists/2
+              agent_name_exists/2,
+              make_user_own_database/2
           ]).
 
 :- use_module(core(util)).
@@ -10,6 +11,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
+:- use_module(capabilities).
 
 /** <module> User
  *
@@ -67,6 +69,68 @@ add_user(Nick, Email, Pass, User_URI) :-
         _Meta_Data
     ).
 
+make_user_own_database(User_Name, Database_Name) :-
+    create_context(terminus_descriptor{},
+                   commit_info{ author: "Terminus System",
+                                message: "Creating TerminusDB"},
+                   TerminusDB),
+    with_transaction(
+        TerminusDB,
+        (
+            username_user_id(TerminusDB, User_Name, User_ID),
+            user_id_auth_id(TerminusDB, User_ID, Auth_ID),
+            % writeq(User_ID),nl,
+            % findall(DB-Name,
+            %         ask(TerminusDB,
+            %             (   t(DB, rdf:type, terminus:'Database'),
+            %                 t(DB, terminus:resource_name, Name^^(xsd:string))
+            %             )),
+            %         Names),
+            % writeq(Names),
+
+            ask(TerminusDB,
+                (   t(DB_URI, rdf:type, terminus:'Database'),
+                    t(DB_URI, terminus:resource_name, Database_Name^^(xsd:string))
+                )),
+
+            % writeq(DB_URI),nl,
+
+            ask(TerminusDB,
+                (
+                    idgen(doc:'Access', [
+                              delete_database^^(xsd:string),
+                              class_frame^^(xsd:string),
+                              clone^^(xsd:string),
+                              fetch^^(xsd:string),
+                              push^^(xsd:string),
+                              branch^^(xsd:string),
+                              rebase^^(xsd:string),
+                              instance_read_access^^(xsd:string),
+                              instance_write_access^^(xsd:string),
+                              schema_read_access^^(xsd:string),
+                              schema_write_access^^(xsd:string),
+                              manage^^(xsd:string),
+                              Database_Name^^(xsd:string)], Access_URI),
+                    insert(Auth_ID, terminus:access, Access_URI),
+                    insert(Access_URI, rdf:type, terminus:'Access'),
+                    insert(Access_URI, terminus:action, terminus:delete_database),
+                    insert(Access_URI, terminus:action, terminus:class_frame),
+                    insert(Access_URI, terminus:action, terminus:clone),
+                    insert(Access_URI, terminus:action, terminus:fetch),
+                    insert(Access_URI, terminus:action, terminus:push),
+                    insert(Access_URI, terminus:action, terminus:branch),
+                    insert(Access_URI, terminus:action, terminus:rebase),
+                    insert(Access_URI, terminus:action, terminus:instance_read_access),
+                    insert(Access_URI, terminus:action, terminus:instance_write_access),
+                    insert(Access_URI, terminus:action, terminus:schema_read_access),
+                    insert(Access_URI, terminus:action, terminus:schema_write_access),
+                    insert(Access_URI, terminus:action, terminus:manage),
+                    insert(Access_URI, terminus:authority_scope, DB_URI)
+                ))
+        ),
+        _Meta_Data
+    ).
+
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -83,5 +147,65 @@ test(add_user, [
 
     once(ask(terminus_descriptor{},
              t(URI, terminus:email, "gavin@terminusdb.com"^^xsd:string))).
+
+
+test(test_user_ownership, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Name = "Gavin",
+    add_user(Name, "gavin@terminusdb.com", "here.i.am", User_URI),
+    user_database_name(Name, 'test', Database_Name),
+
+    create_db(Database_Name, 'test', 'a test', 'http://terminushub.com/Gavin/test/document'),
+
+    make_user_own_database(Name, Database_Name),
+
+    open_descriptor(terminus_descriptor{}, TerminusDB),
+    once(user_id_auth_id(TerminusDB, User_URI, Auth_ID)),
+    resolve_absolute_string_descriptor("Gavin/test", Descriptor),
+
+    create_context(Descriptor, Context1),
+    Commit_Info = commit_info{ author: "Gavin",
+                               message : "Testing" },
+    merge_dictionaries(
+        query_context{
+            commit_info : Commit_Info,
+            files : Files,
+            terminus: TerminusDB,
+            update_guard : _Guard0,
+            authorization : Auth_ID
+        }, Context1, Context1_0),
+
+    with_transaction(
+        Context1_0,
+        ask(Context1_0,
+            insert(a, b, c)),
+        _),
+
+    create_context(Descriptor, Context2),
+    Commit_Info = commit_info{ author: "Gavin",
+                               message : "Testing" },
+
+    merge_dictionaries(
+        query_context{
+            commit_info : Commit_Info,
+            files : Files,
+            terminus: TerminusDB,
+            update_guard : _Guard1,
+            authorization : Auth_ID
+        }, Context2, _Context2_0),
+
+
+    once(ask(Descriptor, t(a,b,c))).
+
+
+test(test_no_user_ownership, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    true.
 
 :- end_tests(user_management).
