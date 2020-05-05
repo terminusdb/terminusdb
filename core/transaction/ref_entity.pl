@@ -21,6 +21,7 @@
               insert_commit_object_on_branch/4,
               insert_commit_object_on_branch/5,
               insert_commit_object_on_branch/6,
+              unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
               insert_graph_object/7,
               copy_commits/3,
@@ -161,6 +162,11 @@ insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Com
 
     % in both cases, we need to insert the new reference to the commit
     link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
+
+unlink_commit_object_from_branch(Context, Branch_Uri) :-
+    once(ask(Context,
+             t(Branch_Uri, ref:ref_commit, Commit_Uri),
+             delete(Branch_Uri, ref:ref_commit, Commit_Uri))).
 
 link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri) :-
     once(ask(Context,

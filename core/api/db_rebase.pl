@@ -88,6 +88,8 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
 
     length(Their_Branch_Path, Len),
     length(Strategies, Len),
+    % todo - we should be getting a mapping of commit id to strategy
+    %  this shoudl be processed into a list of strategies that isn't just 'error'
     maplist([error]>>true, Strategies),
 
     (   Their_Branch_Path = []

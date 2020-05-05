@@ -21,7 +21,10 @@
               branch_create/5,
 
               % db_rebase.pl
-              rebase_on_branch/7
+              rebase_on_branch/7,
+
+              % db_fast_forward.pl
+              fast_forward_branch/4
           ]).
 
 :- use_module(api/init).
@@ -30,3 +33,4 @@
 :- use_module(api/db_graph).
 :- use_module(api/db_branch).
 :- use_module(api/db_rebase).
+:- use_module(api/db_fast_forward).
