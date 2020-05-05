@@ -29,7 +29,9 @@
               apply_commit/8,
               commit_is_valid/2,
               invalidate_commit/2,
-              most_recent_common_ancestor/7
+              most_recent_common_ancestor/7,
+              commit_uri_to_history_commit_ids/3,
+              commit_uri_to_history_commit_uris/3
           ]).
 :- use_module(library(terminus_store)).
 
@@ -1141,3 +1143,86 @@ invalidate_commit(Context, Commit_Id) :-
                  (   delete(Commit_Uri, rdf:type, ref:'ValidCommit'),
                      insert(Commit_Uri, rdf:type, ref:'InvalidCommit'))))
     ;   true).
+
+commit_uri_to_history_commit_uris_(Context, Commit_Uri, [Commit_Uri|History_Commit_Uris]) :-
+    (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
+    ->  commit_uri_to_history_commit_uris_(Context, Parent_Uri, History_Commit_Uris)
+    ;   History_Commit_Uris = []).
+
+commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris) :-
+    commit_uri_to_history_commit_uris_(Context, Commit_Uri, Reversed_History_Commit_Uris),
+    reverse(Reversed_History_Commit_Uris, History_Commit_Uris).
+
+commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit_Ids]) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
+    ->  commit_uri_to_history_commit_ids_(Context, Parent_Uri, History_Commit_Ids)
+    ;   History_Commit_Ids = []).
+
+commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
+    commit_uri_to_history_commit_ids_(Context, Commit_Uri, Reversed_History_Commit_Ids),
+    reverse(Reversed_History_Commit_Ids, History_Commit_Ids).
+
+:- begin_tests(commit_history).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(api)).
+:- use_module(database).
+test(commit_history_ids,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+    create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
+    with_transaction(Commit_A_Context,
+                     ask(Commit_A_Context,
+                         insert(a,b,c)),
+                     _),
+    create_context(Descriptor, commit_info{author:"test",message: "commit b"}, Commit_B_Context),
+    with_transaction(Commit_B_Context,
+                     ask(Commit_B_Context,
+                         insert(d,e,f)),
+                     _),
+
+    Repository_Descriptor = Descriptor.repository_descriptor,
+
+    branch_head_commit(Repository_Descriptor,
+                       "master",
+                       Commit_Uri),
+    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A_Id, Commit_B_Id]),
+
+    commit_id_to_metadata(Repository_Descriptor, Commit_A_Id, _, "commit a", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_B_Id, _, "commit b", _),
+
+    true.
+test(commit_history_uris,
+     [setup((setup_temp_store(State),
+             create_db('user|testdb', "label", "comment", "http://something")
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+    create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
+    with_transaction(Commit_A_Context,
+                     ask(Commit_A_Context,
+                         insert(a,b,c)),
+                     _),
+    create_context(Descriptor, commit_info{author:"test",message: "commit b"}, Commit_B_Context),
+    with_transaction(Commit_B_Context,
+                     ask(Commit_B_Context,
+                         insert(d,e,f)),
+                     _),
+
+    Repository_Descriptor = Descriptor.repository_descriptor,
+
+    branch_head_commit(Repository_Descriptor,
+                       "master",
+                       Commit_Uri),
+    commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, [Commit_A_Uri, Commit_B_Uri]),
+
+    commit_uri_to_metadata(Repository_Descriptor, Commit_A_Uri, _, "commit a", _),
+    commit_uri_to_metadata(Repository_Descriptor, Commit_B_Uri, _, "commit b", _),
+
+    true.
+
+:- end_tests(commit_history).
