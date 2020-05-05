@@ -322,7 +322,7 @@ test(rebase_conflicting_history_errors,
     super_user_authority(Auth),
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, Common_Commit_Id, Applied_Commit_Ids),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids),
 
     print_all_triples(Master_Descriptor),
 
