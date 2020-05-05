@@ -7,6 +7,7 @@
               term_jsonld/2,
               jsonld_triples/3,
               jsonld_id/2,
+              jsonld_type/2,
               get_key_document/4
           ]).
 
@@ -426,6 +427,15 @@ jsonld_id(Obj,ID) :-
     !,
     get_dict('@id',Obj,ID).
 
+
+/*
+ * Get the type a json objct
+ *
+ */
+jsonld_type(Obj,Type) :-
+    is_dict(Obj),
+    !,
+    get_dict('@type',Obj,Type).
 
 /* Debug
  * This should not exist.... We should already be expanded.

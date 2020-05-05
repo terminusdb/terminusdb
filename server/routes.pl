@@ -610,7 +610,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
 
     woql_context(Prefixes),
 
-    context_overriding_prefixes(Context,Prefixes,Context0),
+    context_extend_prefixes(Context,Prefixes,Context0),
 
     collect_posted_files(Request,Files),
 
@@ -1021,7 +1021,7 @@ test(delete_object, [
                                                        message : "Message"}),
     Prefixes = _{ doc: "http://terminusdb.com/admin/test/document/",
                   scm: "http://terminusdb.com/schema/terminus#"},
-    context_overriding_prefixes(Pre_Database2,Prefixes,Database1),
+    context_extend_prefixes(Pre_Database2,Prefixes,Database1),
     with_transaction(Database1,
                      ask(Database1,
                          update_object(Doc)),

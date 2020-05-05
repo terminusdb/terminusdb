@@ -4,7 +4,7 @@
               create_context/2,
               create_context/3,
               collection_descriptor_prefixes/2,
-              context_overriding_prefixes/3,
+              context_extend_prefixes/3,
               context_default_prefixes/2,
               empty_context/1,
               query_default_collection/2,
@@ -248,13 +248,13 @@ descriptor_capabilities_context(Askable, Capabilities, Context) :-
     Context.put(capabilities, Capabilities).
 
 /*
- * context_overriding_prefixes(+Context:query_context, +Prefixes:prefixes,
+ * context_extend_prefixes(+Context:query_context, +Prefixes:prefixes,
  *                             -New_Context:query_context) is det.
  *
  * Override the current query context with these prefixes when
  * there are collisions.
  */
-context_overriding_prefixes(Context, Prefixes, New_Context) :-
+context_extend_prefixes(Context, Prefixes, New_Context) :-
     Query_Prefixes = Context.prefixes,
     merge_dictionaries(Prefixes,Query_Prefixes, New_Prefixes),
     New_Context = Context.put(prefixes, New_Prefixes).

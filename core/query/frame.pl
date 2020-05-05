@@ -1090,6 +1090,9 @@ delete_object(URI,Query_Context) :-
     exclude([(inferred,_,_,_)]>>true, Edges, Non_Inferred_Edges),
     maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Non_Inferred_Edges).
 
+type_to_type_word(Type, Type_Word) :-
+    pattern_string_split('#', Type, Segments),
+    append(_, [Type_Word], Segments).
 
 /*
  * update_object(Obj:dict,Query_Context) is det.
@@ -1101,9 +1104,13 @@ delete_object(URI,Query_Context) :-
  * Deletes := triples(New) / triples(New)
  */
 update_object(Obj, Query_Context) :-
-    jsonld_id(Obj,ID),
+    (   jsonld_id(Obj,ID)
+    ->  true
+    ;   jsonld_type(Obj, Full_Type),
+        type_to_type_word(Full_Type, Type),
+        get_dict(doc, Query_Context.prefixes, Doc_Prefix),
+        random_idgen(Doc_Prefix, [Type], ID)),
     update_object(ID,Obj,Query_Context).
-
 
 /*
  * update_object(ID:url,Obj:dict,Query_Context) is det.

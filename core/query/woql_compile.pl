@@ -1391,7 +1391,7 @@ filter_transaction(type_name_filter{ type : inference, names : Names}, Transacti
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
-:- use_module(ask,[ask/2,create_context/2, create_context/3, context_overriding_prefixes/3]).
+:- use_module(ask,[ask/2,create_context/2, create_context/3, context_extend_prefixes/3]).
 % NOTE: This circularity is very irritating...
 % We are merely hoping that query_response is loaded before we run this test.
 %:- use_module(query_response, [run_context_ast_jsonld_response/3]).
@@ -1404,7 +1404,7 @@ query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
     woql_context(Prefixes),
-    context_overriding_prefixes(Context,Prefixes,Context0),
+    context_extend_prefixes(Context,Prefixes,Context0),
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, Response).
 

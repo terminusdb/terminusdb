@@ -5,7 +5,7 @@
               create_context/2,
               create_context/3,
               collection_descriptor_prefixes/2,
-              context_overriding_prefixes/3,
+              context_extend_prefixes/3,
               context_default_prefixes/2,
               empty_context/1,
               query_default_collection/2,

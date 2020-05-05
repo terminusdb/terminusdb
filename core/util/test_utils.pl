@@ -14,7 +14,9 @@
               ref_schema_context_from_label_descriptor/3,
               repo_schema_context_from_label_descriptor/2,
               repo_schema_context_from_label_descriptor/3,
-              create_db_with_test_schema/3
+              create_db_with_test_schema/3,
+              print_all_triples/1,
+              print_all_triples/2
           ]).
 
 /** <module> Test Utilities
@@ -293,3 +295,17 @@ test(create_db_and_insert_invalid_data,
                      _).
 
 :- end_tests(db_test_schema_util).
+
+print_all_triples(Askable) :-
+    findall(t(S,P,O),
+            ask(Askable, t(S,P,O)),
+            Triples),
+    forall(member(Triple,Triples),
+           (   writeq(Triple), nl)).
+
+print_all_triples(Askable, Selector) :-
+    findall(t(S,P,O),
+            ask(Askable, t(S,P,O, Selector)),
+            Triples),
+    forall(member(Triple,Triples),
+           (   writeq(Triple), nl)).
