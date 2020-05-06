@@ -38,7 +38,7 @@ Docker is a prerequisite for setting it up this way, an alternative is following
 
 ## Coding conventions
 
-We have a house style for prolog, especially for conditionals. We will be releasing a prolog mode for emacs soon that 
+We have a house style for prolog, especially for conditionals. We will be releasing a prolog mode for Emacs soon that 
 helps with the indentation. Until then, try to copy what you see.
 
 ### Veterans of the Tabs / Spaces War
