@@ -895,3 +895,43 @@ test(double_insert, [
 
 
 :- end_tests(inserts).
+
+:- begin_tests(schema_validation).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+
+test(cardinality_error,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('user','test','terminus://blah'))),
+      cleanup(teardown_temp_store(State))])
+:-
+
+    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context1),
+
+    Object = _{'@type': "worldOnt:City",
+               'worldOnt:name': [_{'@type' : "xsd:string",
+                                   '@value' : "Dublin"
+                                  },
+                                 _{'@type' : "xsd:string",
+                                   '@value' : "Dubhlinn"
+                                  }]
+              },
+
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         update_object(Object)),
+                     _),
+
+    nl,
+    print_all_triples(Master_Descriptor),
+    true.
+
+
+:- end_tests(schema_validation).

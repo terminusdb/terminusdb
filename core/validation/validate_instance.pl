@@ -223,7 +223,11 @@ refute_all_restrictions(Database,X,P,Reason) :-
     restriction_on_property(CR,P,Database),
     subsumption_of(CR,C,Database),
     % check to see does X satisfy each restriction
-	refute_restriction(Database,X,CR,P,Reason).
+    (   refute_restriction(Database,X,CR,P,Reason)
+    ->  format(atom(_),'~NSuccess in refutation X: ~q~nCR: ~q~nP: ~q~nReason: ~q~n', [X,CR,P,Reason])
+    ;   format(atom(_),'~NFailure to refute refutation: X:~q~nP: ~P~n', [X,CR,P]),
+        fail
+    ).
 
 /*
  * refute_deletion(Database,X,P,Y,Reason) is nondet.

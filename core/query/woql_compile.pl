@@ -732,7 +732,7 @@ compile_wf(isa(X,C),(instance_class(XE,D,Transaction_Object),
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object)
     }.
-compile_wf(A << B,subsumption_of(AE,BE,Transaction_Object)) -->
+compile_wf(A << B,(distinct([AE,BE], subsumption_of(AE,BE,Transaction_Object)))) -->
     resolve(A,AE),
     resolve(B,BE),
     view(default_collection,Collection_Descriptor),
