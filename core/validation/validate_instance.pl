@@ -221,13 +221,9 @@ refute_all_restrictions(Database,X,P,Reason) :-
     % Domain existence must be checked separately
     instance_class(X,C,Database),
     restriction_on_property(CR,P,Database),
-    subsumption_of(CR,C,Database),
+    subsumption_of(C,CR,Database),
     % check to see does X satisfy each restriction
-    (   refute_restriction(Database,X,CR,P,Reason)
-    ->  format(atom(_),'~NSuccess in refutation X: ~q~nCR: ~q~nP: ~q~nReason: ~q~n', [X,CR,P,Reason])
-    ;   format(atom(_),'~NFailure to refute refutation: X:~q~nP: ~P~n', [X,CR,P]),
-        fail
-    ).
+    refute_restriction(Database,X,CR,P,Reason).
 
 /*
  * refute_deletion(Database,X,P,Y,Reason) is nondet.
@@ -320,7 +316,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
              }.
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:maxCardinality,CardStr^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:maxCardinality,CardStr^^xsd:nonNegativeInteger),
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N < M, atom_number(A,M),

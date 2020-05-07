@@ -168,7 +168,21 @@ class(X,Database) :- immediate_class(X,Database).
 class(X,Database) :- sub_class_of(X,Y,Database), class(Y,Database).
 class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
 
-% restriction(+R:uri_or_id, +Database:database is nondet.
+
+%
+% immediate_restriction(+R:uri_or_id, +Database:database) is nondet.
+%
+immediate_restriction(R,Database) :-
+    database_schema(Database,Schema),
+    xrdf(Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
+
+immediate_class_or_restriction(R_or_C,Database) :-
+    immediate_restriction(R_or_C,Database).
+immediate_class_or_restriction(R_or_C,Database) :-
+    immediate_class(R_or_C,Database).
+
+
+% restriction(+R:uri_or_id, +Database:database) is nondet.
 %
 % All restriction designations - with inferences.
 %
@@ -177,8 +191,7 @@ class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
 % @param Database identifying the current schema graph.
 %% :- rdf_meta restriction(r,o).
 restriction(R,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
+    immediate_restriction(R,Database).
 restriction(R,Database) :-
     sub_class_of(R,R2,Database),
     restriction(R2,Database).
@@ -474,20 +487,20 @@ sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y
 % static solutions first.
 subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
 subsumption_of(CC,CC,Database) :-
-    immediate_class(CC,Database).
+    immediate_class_or_restriction(CC,Database).
 subsumption_of(CC,CP,Database) :-
     sub_class_of(CC,CZ,Database),
     subsumption_of(CZ,CP,Database).
 subsumption_of(CC,CP,Database) :-
-    immediate_class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     union_of(CZ,CC,Database),
     subsumption_of(CZ,CP,Database).
 subsumption_of(CC,CP,Database) :-
-    immediate_class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     disjoint_union_of(CZ,CC,Database),
     subsumption_of(CZ,CP,Database).
 subsumption_of(CC,CP,Database) :-
-    immediate_class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     intersection_of(CC,CZ,Database),
     subsumption_of(CZ,CP,Database).
 subsumption_of(CC,CP,Database) :-
@@ -517,24 +530,24 @@ strict_subsumption_of('http://www.w3.org/2002/07/owl#Nothing',CP,_) :- CP \= 'ht
 strict_subsumption_of(CC,CP,Database) :-
     sub_class_of(CC,CP,Database).
 strict_subsumption_of(CC,CP,Database) :-
-    class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     union_of(CP,CC,Database).
 strict_subsumption_of(CC,CP,Database) :-
-    class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     intersection_of(CC,CP,Database).
 strict_subsumption_of(CC,CP,Database) :-
     sub_class_of(CC,CZ,Database),
     strict_subsumption_of(CZ,CP,Database).
 strict_subsumption_of(CC,CP,Database) :-
-    class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     union_of(CZ,CC,Database),
     strict_subsumption_of(CZ,CP,Database).
 strict_subsumption_of(CC,CP,Database) :-
-    class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     disjoint_union_of(CZ,CC,Database),
     strict_subsumption_of(CZ,CP,Database).
 strict_subsumption_of(CC,CP,Database) :-
-    class(CC,Database),
+    immediate_class_or_restriction(CC,Database),
     intersection_of(CC,CZ,Database),
     strict_subsumption_of(CZ,CP,Database).
 strict_subsumption_of(CC,CP,Database) :- % xsd and custom data types

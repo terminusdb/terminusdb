@@ -254,7 +254,9 @@ test(rebase_divergent_history,
 test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('user','test','terminus://blah'))),
-      cleanup(teardown_temp_store(State))])
+      cleanup(teardown_temp_store(State)),
+      throws(error(schema_check_failure(_)))
+     ])
 :-
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
@@ -293,17 +295,14 @@ test(rebase_conflicting_history_errors,
 
     with_transaction(Master_Context3,
                      ask(Master_Context3,
-                         (   update_object(Object2),
-
-                             % So it turns out we're not checking cardinality here?
-                             % inserting Glasgow to demonstrate
-                             insert(City_Uri, worldOnt:name, "Glasgow"^^xsd:string)
-                         )),
-                    _),
+                         update_object(Object2)
+                         ),
+                     _),
 
     nl,
     print_all_triples(Master_Descriptor),
-
+    nl,
+    format('~N*****************************~n',[]),
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
     context_extend_prefixes(Second_Context_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Second_Context),
@@ -320,12 +319,15 @@ test(rebase_conflicting_history_errors,
                          update_object(Object3)),
                     _),
 
+    format('~N===============================~n',[]),
+
     % rebase time!
     super_user_authority(Auth),
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
+    trace(validate_instance:refute_all_restrictions),
     rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids),
-
+    trace(validate_instance:refute_all_restrictions,-all),
     print_all_triples(Master_Descriptor),
 
     true.
