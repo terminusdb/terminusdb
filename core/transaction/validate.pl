@@ -914,7 +914,7 @@ test(cardinality_error,
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': [_{'@type' : "xsd:string",
@@ -941,7 +941,7 @@ test(cardinality_error,
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': [_{'@type' : "xsd:string",
@@ -957,6 +957,48 @@ test(cardinality_error,
                          update_object(Object)),
                      _).
 
+test(cardinality_min_error,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('user','test','http://terminusdb.com/world'))),
+      cleanup(teardown_temp_store(State))])
+:-
+
+    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
+
+    % Check to see that we get the restriction on personal name via the
+    % property subsumption hierarch *AND* the class subsumption hierarchy
+
+    Object = _{'@type': "worldOnt:Person",
+               'worldOnt:personal_name': [_{'@type' : "xsd:string",
+                                            '@value' : "Duke"
+                                           },
+                                          _{'@type' : "xsd:integer",
+                                            '@value' : "Doug"
+                                           }]
+              },
+
+    catch(
+        with_transaction(Master_Context1,
+                         ask(Master_Context1,
+                             update_object(Object)),
+                         _),
+        error(schema_check_failure(Witnesses)),
+        true
+    ),
+
+    once((member(Witness0, Witnesses),
+          Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
+          Witness0.'vio:predicate'.'@value' = 'http://example.com/data/worldOntology#personal_name',
+          '2' = Witness0.'vio:cardinality'.'@value'
+         )),
+    once((member(Witness1, Witnesses),
+          Witness1.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
+          Witness1.'vio:predicate'.'@value' = 'http://example.com/data/worldOntology#address',
+          '0' = Witness1.'vio:cardinality'.'@value'
+         )).
 
 
 :- end_tests(instance_validation).

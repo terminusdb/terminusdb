@@ -166,6 +166,7 @@ refute_insertion(Database,_X,P,Y,Reason) :-
                  }
     ).
 refute_insertion(Database,X,P,_Y,Reason) :-
+    % Note: This does too much work in the case that we are not a newly inserted object.
     refute_all_restrictions(Database,X,P,Reason).
 refute_insertion(Database,X,P,Y,Reason) :-
     refute_functional_property(X,P,Y,Database,Reason).
@@ -180,7 +181,9 @@ refute_insertion(Database,X,P,Y,Reason) :-
 refute_node_at_class(Database,X,Class,Reason) :-
     (   instance_class(X,IC,Database)
     ->  (   subsumption_of(IC,Class,Database)
-        ->  false
+        ->  subsumption_of(IC,Super,Database),
+            any_domain(P,Super,Database),
+            refute_all_restrictions(Database,X,P,Reason)
         ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
             Reason = _{
                          '@type' : 'vio:InstanceSubsumptionViolation',
@@ -240,22 +243,22 @@ forall (x p y) \in Deletes.
     S,G' |- Ca(x p y)
 
 */
-
-/* Is this even valid? If we have deleted this it shouldn't exist...
 refute_deletion(Database,
                 X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',_Class,
                 Reason) :-
     !,
     database_instance(Database,Instance),
     \+ xrdf(Instance,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',_SomeClass),
+    % And yet something exists...
+    xrdf(Instance,X,_,_),
     interpolate(['The subject ',X,' has no defined class.'],Message),
     Reason = _{
                  '@type' : 'vio:UntypedInstance',
                  'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
                  'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' }
              }.
-*/
 refute_deletion(Database,X,P,_Y,Reason) :-
+    % Note: This only needs to happen if there is an object deletion
     refute_all_restrictions(Database,X,P,Reason).
 refute_deletion(Database,X,P,Y,Reason) :-
     refute_functional_property(X,P,Y,Database,Reason).

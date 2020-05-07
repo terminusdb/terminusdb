@@ -73,11 +73,11 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
     ->  (   Strategy = error
         ->  Our_Repo_Context3 = Our_Repo_Context2
         ;   Strategy = continue
-        ->  throw(error(commit_apply(continue_on_valid_commit(Commit_Id))))
+        ->  throw(error(apply_commit(continue_on_valid_commit(Commit_Id))))
         ;   Strategy = fixup(_Message,_Woql)
-        ->  throw(error(commit_apply(fixup_on_valid_commit(Commit_Id)))))
+        ->  throw(error(apply_commit(fixup_on_valid_commit(Commit_Id)))))
     ;   (   Strategy = error
-        ->  throw(error(commit_apply(schema_validation_error(Commit_Id, Witnesses))))
+        ->  throw(error(apply_commit(schema_validation_error(Commit_Id, Witnesses))))
         ;   Strategy = continue
         ->  invalidate_commit(Our_Repo_Context2, Commit_Id),
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
@@ -96,7 +96,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
             validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
             (   Fixup_Witnesses = []
             ->  true
-            ;   throw(error(commit_apply(fixup_error(Commit_Id, Fixup_Witnesses))))),
+            ;   throw(error(apply_commit(fixup_error(Commit_Id, Fixup_Witnesses))))),
 
             % commit validation
             commit_validation_object(Branch_Fixup_Validation_Object, _),
@@ -132,14 +132,19 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     (   Their_Branch_Path = []
     ->  % yay we're done! All commits are known to us, no need to do a thing
         true
-    ;   apply_commit_chain(Our_Repo_Context,
-                           Their_Repo_Context,
-                           Our_Branch_Descriptor.branch_name,
-                           Author,
-                           Auth_Object,
-                           Their_Branch_Path,
-                           Strategies,
-                           Final_Context)),
+    ;   catch(
+            apply_commit_chain(Our_Repo_Context,
+                               Their_Repo_Context,
+                               Our_Branch_Descriptor.branch_name,
+                               Author,
+                               Auth_Object,
+                               Their_Branch_Path,
+                               Strategies,
+                               Final_Context),
+            error(apply_commit(Error)),
+            throw(error(rebase(Error,Their_Branch_Path)))
+        )
+    ),
 
     [Transaction_Object] = Final_Context.transaction_objects,
     Repo_Name = Transaction_Object.descriptor.repository_name,
@@ -292,12 +297,12 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('user','test','terminus://blah'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(commit_apply(schema_validation_error(_,_))))
+      throws(error(rebase(schema_validation_error(_,_),_)))
      ])
 :-
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': _{'@type' : "xsd:string",
@@ -311,7 +316,7 @@ test(rebase_conflicting_history_errors,
                     _),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context2_),
-    context_extend_prefixes(Master_Context2_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context2),
+    context_extend_prefixes(Master_Context2_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context2),
 
     once(ask(Master_Context2, t(City_Uri, worldOnt:name, "Dublin"^^xsd:string))),
     format(string(City_Uri_String), "~w", [City_Uri]),
@@ -321,7 +326,7 @@ test(rebase_conflicting_history_errors,
 
     % create a commit on the master branch, diverging history
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context3_),
-    context_extend_prefixes(Master_Context3_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Master_Context3),
+    context_extend_prefixes(Master_Context3_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context3),
 
     Object2 = _{'@type': "worldOnt:City",
                '@id': City_Uri_String,
@@ -338,7 +343,7 @@ test(rebase_conflicting_history_errors,
 
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
-    context_extend_prefixes(Second_Context_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Second_Context),
+    context_extend_prefixes(Second_Context_, _{worldOnt: "http://example.com/data/worldOntology#"}, Second_Context),
 
     Object3 = _{'@type': "worldOnt:City",
                '@id': City_Uri_String,

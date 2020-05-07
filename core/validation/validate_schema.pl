@@ -261,7 +261,7 @@ no_immediate_class_SC(Database, Reason) :-
 	             'vio:parent' : _{ '@value' : Y, '@type' : 'xsd:anyURI' }
              }.
 
-%% restrction_on_property(?CR:uri_or_id, ?P:uri_or_id, +Database:database) is nondet
+%% restriction_on_property(?CR:uri_or_id, ?P:uri_or_id, +Database:database) is nondet
 %
 % Defines the relation between properties and their restrictions.
 %
