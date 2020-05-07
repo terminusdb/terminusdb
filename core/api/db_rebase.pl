@@ -309,12 +309,10 @@ test(rebase_conflicting_history_errors,
                                   '@value' : "Dublin"
                                  }
              },
-
     with_transaction(Master_Context1,
                      ask(Master_Context1,
                          update_object(Object)),
                     _),
-
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context2_),
     context_extend_prefixes(Master_Context2_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context2),
 

@@ -182,7 +182,7 @@ refute_node_at_class(Database,X,Class,Reason) :-
     (   instance_class(X,IC,Database)
     ->  (   subsumption_of(IC,Class,Database)
         ->  subsumption_of(IC,Super,Database),
-            any_domain(P,Super,Database),
+            domain(P,Super,Database),
             refute_all_restrictions(Database,X,P,Reason)
         ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
             Reason = _{
