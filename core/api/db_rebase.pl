@@ -6,7 +6,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 
-cycle_context(Context, New_Context, Transaction_Object, Validation_Object) :-
+cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :-
     [Transaction_Object] = Context.transaction_objects,
     transaction_objects_to_validation_objects([Transaction_Object], [Validation_Object]),
     validate_validation_objects([Validation_Object], Witnesses),
@@ -17,6 +17,28 @@ cycle_context(Context, New_Context, Transaction_Object, Validation_Object) :-
     validation_objects_to_transaction_objects([Validation_Object], [New_Transaction_Object]),
 
     create_context(New_Transaction_Object, New_Context).
+
+make_branch_graph_validation_object_appear_as_changed(Graph_Validation_Object, New_Graph_Validation_Object) :-
+    % TODO actually do a super awesome check to see if the last layer is different and if so set changed to true
+    New_Graph_Validation_Object = Graph_Validation_Object.put(changed, true).
+
+make_branch_validation_object_appear_as_changed(Branch_Validation_Object, New_Branch_Validation_Object) :-
+    maplist(make_branch_graph_validation_object_appear_as_changed,
+            Branch_Validation_Object.schema_objects,
+            Schema_Objects),
+    maplist(make_branch_graph_validation_object_appear_as_changed,
+            Branch_Validation_Object.instance_objects,
+            Instance_Objects),
+    maplist(make_branch_graph_validation_object_appear_as_changed,
+            Branch_Validation_Object.inference_objects,
+            Inference_Objects),
+
+    New_Branch_Validation_Object = Branch_Validation_Object.put(
+                                       _{
+                                           instance_objects: Instance_Objects,
+                                           schema_objects: Schema_Objects,
+                                           inference_objects: Inference_Objects
+                                       }).
 
 apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, _Branch_Name, _Author, _Auth_Object, [], [], Our_Repo_Context) :-
     !,
@@ -33,9 +55,17 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
                             repository_descriptor: New_Our_Repo_Transaction_Object.descriptor,
                             branch_name: Branch_Name
                         },
+    % todo also include database descriptor and read write objects in that list
+    % should not actually matter though
     open_descriptor(Our_Branch_Descriptor, _, Our_Branch_Transaction, [New_Our_Repo_Transaction_Object.descriptor=New_Our_Repo_Transaction_Object], _),
 
-    transaction_objects_to_validation_objects([Our_Branch_Transaction], [Our_Branch_Validation_Object]),
+    transaction_objects_to_validation_objects([Our_Branch_Transaction], [Our_Branch_Validation_Object_Unchanged]),
+
+    make_branch_validation_object_appear_as_changed(Our_Branch_Validation_Object_Unchanged,
+                                                    Our_Branch_Validation_Object),
+    [Graph_Object] = Our_Branch_Validation_Object.instance_objects,
+    layer_to_id(Graph_Object.read, Id),
+    format("\n\n===layer id: ~w===\n\n", [Id]),
 
     % validate the branch context
     validate_validation_objects([Our_Branch_Validation_Object], Witnesses),
@@ -321,13 +351,29 @@ test(rebase_conflicting_history_errors,
 
     format('~N===============================~n',[]),
 
+    open_descriptor(Master_Descriptor, Master_Transaction_Blah),
+    [Graph_Object_Blah] = Master_Transaction_Blah.instance_objects,
+    true,
+    layer_to_id(Graph_Object_Blah.read, Blah_Id),
+    format("~Nbranch layer id before rebase: ~w\n", [Blah_Id]),
+
     % rebase time!
     super_user_authority(Auth),
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
-    trace(validate_instance:refute_all_restrictions),
+    %trace(validate_instance:refute_all_restrictions),
     rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids),
-    trace(validate_instance:refute_all_restrictions,-all),
+
+    open_descriptor(Master_Descriptor, Master_Transaction),
+    transaction_objects_to_validation_objects([Master_Transaction],[Master_Validation]),
+    make_branch_validation_object_appear_as_changed(Master_Validation, Master_Validation_Changed),
+    validate_validation_objects([Master_Validation_Changed], Witnesses),
+    [Graph_Object] = Master_Validation_Changed.instance_objects,
+    layer_to_id(Graph_Object.read, Id),
+
+    format("~NGraph with failures: ~w\nWitnesses: ~w\n", [Id,Witnesses]),
+
+    %trace(validate_instance:refute_all_restrictions,-all),
     print_all_triples(Master_Descriptor),
 
     true.
