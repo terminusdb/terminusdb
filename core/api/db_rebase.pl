@@ -57,15 +57,13 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
                         },
     % todo also include database descriptor and read write objects in that list
     % should not actually matter though
-    open_descriptor(Our_Branch_Descriptor, _, Our_Branch_Transaction, [New_Our_Repo_Transaction_Object.descriptor=New_Our_Repo_Transaction_Object], _),
+    [Commit_Read_Write_Obj] = New_Our_Repo_Transaction_Object.instance_objects,
+    open_descriptor(Our_Branch_Descriptor, _, Our_Branch_Transaction, [New_Our_Repo_Transaction_Object.descriptor=New_Our_Repo_Transaction_Object,Commit_Read_Write_Obj.descriptor=Commit_Read_Write_Obj], _Output_Map),
 
     transaction_objects_to_validation_objects([Our_Branch_Transaction], [Our_Branch_Validation_Object_Unchanged]),
 
     make_branch_validation_object_appear_as_changed(Our_Branch_Validation_Object_Unchanged,
                                                     Our_Branch_Validation_Object),
-    [Graph_Object] = Our_Branch_Validation_Object.instance_objects,
-    layer_to_id(Graph_Object.read, Id),
-    format("\n\n===layer id: ~w===\n\n", [Id]),
 
     % validate the branch context
     validate_validation_objects([Our_Branch_Validation_Object], Witnesses),
@@ -74,7 +72,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
     (   Witnesses = []
     ->  Our_Repo_Context3 = Our_Repo_Context2
     ;   Strategy = error
-        ->  throw(error(commit_apply_schema_validation_error(Commit_Id)))
+        ->  throw(error(commit_apply_schema_validation_error(Commit_Id, Witnesses)))
     ;   Strategy = continue
         ->invalidate_commit(Our_Repo_Context2, Commit_Id),
           cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
@@ -285,7 +283,7 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('user','test','terminus://blah'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(schema_check_failure(_)))
+      throws(error(commit_apply_schema_validation_error(_,_)))
      ])
 :-
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
@@ -329,10 +327,6 @@ test(rebase_conflicting_history_errors,
                          ),
                      _),
 
-    nl,
-    print_all_triples(Master_Descriptor),
-    nl,
-    format('~N*****************************~n',[]),
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
     context_extend_prefixes(Second_Context_, _{worldOnt: "http://dacura.cs.tcd.ie/data/worldOntology#"}, Second_Context),
@@ -349,33 +343,11 @@ test(rebase_conflicting_history_errors,
                          update_object(Object3)),
                     _),
 
-    format('~N===============================~n',[]),
-
-    open_descriptor(Master_Descriptor, Master_Transaction_Blah),
-    [Graph_Object_Blah] = Master_Transaction_Blah.instance_objects,
-    true,
-    layer_to_id(Graph_Object_Blah.read, Blah_Id),
-    format("~Nbranch layer id before rebase: ~w\n", [Blah_Id]),
-
     % rebase time!
     super_user_authority(Auth),
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
     %trace(validate_instance:refute_all_restrictions),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids),
-
-    open_descriptor(Master_Descriptor, Master_Transaction),
-    transaction_objects_to_validation_objects([Master_Transaction],[Master_Validation]),
-    make_branch_validation_object_appear_as_changed(Master_Validation, Master_Validation_Changed),
-    validate_validation_objects([Master_Validation_Changed], Witnesses),
-    [Graph_Object] = Master_Validation_Changed.instance_objects,
-    layer_to_id(Graph_Object.read, Id),
-
-    format("~NGraph with failures: ~w\nWitnesses: ~w\n", [Id,Witnesses]),
-
-    %trace(validate_instance:refute_all_restrictions,-all),
-    print_all_triples(Master_Descriptor),
-
-    true.
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids).
 
 :- end_tests(rebase).
