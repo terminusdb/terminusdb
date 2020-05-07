@@ -70,38 +70,51 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
 
     % if it validates, yay! continue to the next commit (see below)
     (   Witnesses = []
-    ->  Our_Repo_Context3 = Our_Repo_Context2
-    ;   Strategy = error
-    ->  throw(error(commit_apply_schema_validation_error(Commit_Id, Witnesses)))
-    ;   Strategy = continue
-    ->  invalidate_commit(Our_Repo_Context2, Commit_Id),
-        cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
-    ;   Strategy = fixup(Message, Woql)
-    ->  create_context(Our_Branch_Transaction, Our_Branch_Fixup_Context_Without_Auth),
-        put_dict(_{authorization: Auth_Object,
-                   commit_info: commit_info{author:Author,message:Message}},
-                   Our_Branch_Fixup_Context_Without_Auth,
-                   Our_Branch_Fixup_Context),
-        compile_query(Woql, Prog, Our_Branch_Fixup_Context, Our_Branch_Fixup_Context2),
-        forall(woql_compile:Prog, true),
-        % turn context into validation
-        Our_Branch_Fixup_Context2.transaction_objects = [Branch_Fixup_Transaction_Object],
-        transaction_objects_to_validation_objects([Branch_Fixup_Transaction_Object], [Branch_Fixup_Validation_Object]),
-        % validate
-        validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
-        (   Fixup_Witnesses = []
-        ->  true
-        ;   throw(error(commit_apply_fixup_error(Commit_Id, Fixup_Witnesses)))),
+    ->  (   Strategy = error
+        ->  Our_Repo_Context3 = Our_Repo_Context2
+        ;   Strategy = continue
+        ->  throw(error(commit_apply(continue_on_valid_commit(Commit_Id))))
+        ;   Strategy = fixup(_Message,_Woql)
+        ->  throw(error(commit_apply(fixup_on_valid_commit(Commit_Id)))))
+    ;   (   Strategy = error
+        ->  throw(error(commit_apply(schema_validation_error(Commit_Id, Witnesses))))
+        ;   Strategy = continue
+        ->  invalidate_commit(Our_Repo_Context2, Commit_Id),
+            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
+        ;   Strategy = fixup(Message, Woql)
+        ->  create_context(Our_Branch_Transaction, Our_Branch_Fixup_Context_Without_Auth),
+            put_dict(_{authorization: Auth_Object,
+                       commit_info: commit_info{author:Author,message:Message}},
+                     Our_Branch_Fixup_Context_Without_Auth,
+                     Our_Branch_Fixup_Context),
+            compile_query(Woql, Prog, Our_Branch_Fixup_Context, Our_Branch_Fixup_Context2),
+            forall(woql_compile:Prog, true),
+            % turn context into validation
+            Our_Branch_Fixup_Context2.transaction_objects = [Branch_Fixup_Transaction_Object],
+            transaction_objects_to_validation_objects([Branch_Fixup_Transaction_Object], [Branch_Fixup_Validation_Object]),
+            % validate
+            validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
+            (   Fixup_Witnesses = []
+            ->  true
+            ;   throw(error(commit_apply(fixup_error(Commit_Id, Fixup_Witnesses))))),
 
-        % commit validation
-        commit_validation_object(Branch_Fixup_Validation_Object, _),
-        % write commit object into our repo context
-        cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)),
+            % commit validation
+            commit_validation_object(Branch_Fixup_Validation_Object, _),
+            % write commit object into our repo context
+            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _))
+    ),
 
     apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, Branch_Name, Author, Auth_Object, Commit_Ids, Strategies, Return_Context).
 
 
-rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Object, _Strategy, Common_Commit_Id, Their_Branch_Path) :-
+create_strategies([], _Strategy_Map, []).
+create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strategies]) :-
+    (   memberchk(Commit_ID=Strategy, Strategy_Map)
+    ->  true
+    ;   Strategy = error),
+    create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
+
+rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Object, Strategy_Map, Common_Commit_Id, Their_Branch_Path) :-
     Our_Repo_Descriptor = Our_Branch_Descriptor.repository_descriptor,
     Their_Repo_Descriptor = Their_Branch_Descriptor.repository_descriptor,
     create_context(Our_Repo_Descriptor, Our_Repo_Context),
@@ -114,17 +127,13 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
 
     most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, _Our_Branch_Path, Their_Branch_Path),
 
-    length(Their_Branch_Path, Len),
-    length(Strategies, Len),
-    % todo - we should be getting a mapping of commit id to strategy
-    %  this shoudl be processed into a list of strategies that isn't just 'error'
-    maplist([error]>>true, Strategies),
+    create_strategies(Their_Branch_Path, Strategy_Map, Strategies),
 
     (   Their_Branch_Path = []
     ->  % yay we're done! All commits are known to us, no need to do a thing
         true
     ;   apply_commit_chain(Our_Repo_Context,
-                           Their_Repo_Context, 
+                           Their_Repo_Context,
                            Our_Branch_Descriptor.branch_name,
                            Author,
                            Auth_Object,
@@ -181,7 +190,7 @@ test(rebase_fast_forward,
                      _),
 
     super_user_authority(Auth),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, Common_Commit_Id, Applied_Commit_Ids),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], Common_Commit_Id, Applied_Commit_Ids),
     Repo_Descriptor = Master_Descriptor.repository_descriptor,
 
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
@@ -246,7 +255,7 @@ test(rebase_divergent_history,
                      _),
 
     super_user_authority(Auth),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, Common_Commit_Id, Applied_Commit_Ids),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], Common_Commit_Id, Applied_Commit_Ids),
     Repo_Descriptor = Master_Descriptor.repository_descriptor,
 
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
@@ -283,7 +292,7 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('user','test','terminus://blah'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(commit_apply_schema_validation_error(_,_)))
+      throws(error(commit_apply(schema_validation_error(_,_))))
      ])
 :-
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
@@ -348,6 +357,6 @@ test(rebase_conflicting_history_errors,
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
     %trace(validate_instance:refute_all_restrictions),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, _, _Common_Commit_Id, _Applied_Commit_Ids).
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], _Common_Commit_Id, _Applied_Commit_Ids).
 
 :- end_tests(rebase).

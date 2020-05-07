@@ -167,8 +167,8 @@ insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Com
 
 unlink_commit_object_from_branch(Context, Branch_Uri) :-
     once(ask(Context,
-             t(Branch_Uri, ref:ref_commit, Commit_Uri),
-             delete(Branch_Uri, ref:ref_commit, Commit_Uri))).
+             (   t(Branch_Uri, ref:ref_commit, Commit_Uri),
+                 delete(Branch_Uri, ref:ref_commit, Commit_Uri)))).
 
 link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri) :-
     once(ask(Context,
