@@ -112,10 +112,11 @@ test(connection_authorised_user_http_basic, [
     http_get(Server, _, [authorization(basic(admin, Key))]).
 
 /*
- * Test assumes that  setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub") setenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
+ * Test assumes that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
+ * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
  */
 test(connection_authorised_user_jwt, [
-         condition(getenv("TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH", _))
+         condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", _))
      ]) :-
     config:server(Server),
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwiaWF0IjoxNTE2MjM5MDIyfQ.ZHqEzJViUkP41NuyWGY97uyzrXvBsuOvOjIz00VgP9H3NHfnbO_h51nqbjt3UqBeKJ7U0wGUMTePuhXCGsAPoI9rLRSK9NzlFKGde-wTs4lAhDpp6rGhmVzVcJAYtJg8RbTGlJ78SFK6SSTpi2sXOMgVeu8fZwGnnp7ZJjP1mtJdEreDEwlZYqgy21BltmuzQ08qC70R-jRFHY2IeVBarcbqJgxjjb3BrNA5fByMD4ESOBVJlmCg8PzaI4hEdW-lSsQK8XWWYTnndB8IFdD3GYIwMovsT9dVZ4m3HrGGywGSP7TxDquvvK9ollA2JV2tLMsbk_Nqo-s7fhBbH9xjsA',

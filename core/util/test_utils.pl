@@ -183,7 +183,7 @@ curl_json(Args,JSON) :-
  * or try the default ('root')
  */
 admin_pass(Pass) :-
-    (   getenv('TERMINUS_ADMIN_PASSWD', Pass)
+    (   getenv('TERMINUSDB_ADMIN_PASSWD', Pass)
     ->  true
     ;   Pass='root').
 

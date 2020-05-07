@@ -20,42 +20,42 @@
 
 
 server_name(Value) :-
-    getenv_default('TERMINUS_SERVER_NAME', 'http://localhost', Value).
+    getenv_default('TERMINUSDB_SERVER_NAME', 'http://localhost', Value).
 
 server_port(Value) :-
-    getenv_default_number('TERMINUS_SERVER_PORT', 6363, Value).
+    getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
 
 public_url(Value) :-
-    getenv_default('TERMINUS_SERVER_PUBLIC_URL', 'http://localhost:6363', Value).
+    getenv_default('TERMINUSDB_SERVER_PUBLIC_URL', 'http://localhost:6363', Value).
 
 worker_amount(Value) :-
-    getenv_default_number('TERMINUS_SERVER_WORKERS', 8, Value).
+    getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
 max_transaction_retries(Value) :-
-    getenv_default_number('TERMINUS_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
+    getenv_default_number('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
 
 index_path(Value) :-
     once(expand_file_search_path(config('index.html'), Path)),
-    getenv_default('TERMINUS_SERVER_INDEX_PATH', Path, Value).
+    getenv_default('TERMINUSDB_SERVER_INDEX_PATH', Path, Value).
 
 default_database_path(Value) :-
     once(expand_file_search_path(terminus_home(storage/db), Path)),
-    getenv_default('TERMINUS_SERVER_DB_PATH', Path, Value).
+    getenv_default('TERMINUSDB_SERVER_DB_PATH', Path, Value).
 
 jwt_public_key_path(Value) :-
-    getenv_default('TERMINUS_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).
+    getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).
 
 jwt_public_key_id(Value) :-
-    getenv_default('TERMINUS_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
+    getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
-    getenv_default('TERMINUS_SERVER_REGISTRY_PATH', Path, Value).
+    getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
 
 tmp_path(Value) :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/tmp',TmpPathRelative),
-    getenv_default('TERMINUS_SERVER_TMP_PATH', TmpPathRelative, Value).
+    getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
 
 server(Server) :-
