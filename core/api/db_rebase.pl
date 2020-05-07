@@ -72,31 +72,31 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Au
     (   Witnesses = []
     ->  Our_Repo_Context3 = Our_Repo_Context2
     ;   Strategy = error
-        ->  throw(error(commit_apply_schema_validation_error(Commit_Id, Witnesses)))
+    ->  throw(error(commit_apply_schema_validation_error(Commit_Id, Witnesses)))
     ;   Strategy = continue
-        ->invalidate_commit(Our_Repo_Context2, Commit_Id),
-          cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
+    ->  invalidate_commit(Our_Repo_Context2, Commit_Id),
+        cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
     ;   Strategy = fixup(Message, Woql)
-        ->create_context(Our_Branch_Transaction, Our_Branch_Fixup_Context_Without_Auth),
-          put_dict(_{authorization: Auth_Object,
-                     commit_info: commit_info{author:Author,message:Message}},
+    ->  create_context(Our_Branch_Transaction, Our_Branch_Fixup_Context_Without_Auth),
+        put_dict(_{authorization: Auth_Object,
+                   commit_info: commit_info{author:Author,message:Message}},
                    Our_Branch_Fixup_Context_Without_Auth,
                    Our_Branch_Fixup_Context),
-          compile_query(Woql, Prog, Our_Branch_Fixup_Context, Our_Branch_Fixup_Context2),
-          forall(woql_compile:Prog, true),
-          % turn context into validation
-          Our_Branch_Fixup_Context2.transaction_objects = [Branch_Fixup_Transaction_Object],
-          transaction_objects_to_validation_objects([Branch_Fixup_Transaction_Object], [Branch_Fixup_Validation_Object]),
-          % validate
-          validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
-          (   Fixup_Witnesses = []
-          ->  true
-          ;   throw(error(commit_apply_fixup_error(Commit_Id, Fixup_Witnesses)))),
+        compile_query(Woql, Prog, Our_Branch_Fixup_Context, Our_Branch_Fixup_Context2),
+        forall(woql_compile:Prog, true),
+        % turn context into validation
+        Our_Branch_Fixup_Context2.transaction_objects = [Branch_Fixup_Transaction_Object],
+        transaction_objects_to_validation_objects([Branch_Fixup_Transaction_Object], [Branch_Fixup_Validation_Object]),
+        % validate
+        validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
+        (   Fixup_Witnesses = []
+        ->  true
+        ;   throw(error(commit_apply_fixup_error(Commit_Id, Fixup_Witnesses)))),
 
-          % commit validation
-          commit_validation_object(Branch_Fixup_Validation_Object, _),
-          % write commit object into our repo context
-          cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)),
+        % commit validation
+        commit_validation_object(Branch_Fixup_Validation_Object, _),
+        % write commit object into our repo context
+        cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)),
 
     apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, Branch_Name, Author, Auth_Object, Commit_Ids, Strategies, Return_Context).
 
