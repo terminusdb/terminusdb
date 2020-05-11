@@ -1044,7 +1044,9 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
     
     % Note: this isn't great time complexity
     ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Commit2_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
+
+    Final_Commit_Id = Final_Commit_Id_2,
 
     !, % we're only interested in one solution!
 
