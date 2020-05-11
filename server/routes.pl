@@ -1203,8 +1203,16 @@ test(rebase_divergent_history, [
         applied_commits : [_Thing, _Another_Thing ],
         common_commit_id : _Common_Something,
         'terminus:status' : "terminus:success"
-    } :< JSON.
+    } :< JSON,
 
+    Repository_Descriptor = Master_Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
+    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_D, Commit_B, Commit_C]),
+
+    commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_D, "test", "commit d", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_B, "Gavsky", "commit b", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_C, "Gavsky", "commit c", _).
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
