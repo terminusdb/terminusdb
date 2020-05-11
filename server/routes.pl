@@ -1107,8 +1107,105 @@ fetch_handler(_Method,_Path,_Request) :-
                  prefix,
                  methods([options,post])]).
 
-rebase_handler(_Method,_Path,_Request) :-
-    throw(error('Not implemented')).
+
+rebase_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+rebase_handler(post, Path, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, Auth_ID),
+    % No descriptor to work with until the query sets one up
+
+    resolve_absolute_string_descriptor(Path, Our_Descriptor),
+    check_descriptor_auth(Terminus, Our_Descriptor, terminus:rebase, Auth_ID),
+
+    get_payload(Document, Request),
+    (   get_dict(rebase_from, Document, Their_Path)
+    ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
+    ;   throw(error(rebase_from_missing))),
+    check_descriptor_auth(Terminus, Their_Descriptor, terminus:instance_read_access, Auth_ID),
+    check_descriptor_auth(Terminus, Their_Descriptor, terminus:schema_read_access, Auth_ID),
+
+    (   get_dict(author, Document, Author)
+    ->  true
+    ;   throw(error(rebase_author_missing))),
+
+    Strategy_Map = [],
+    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID, Applied_Commits),
+
+    reply_json_dict(_{ 'terminus:status' : "terminus:success",
+                       common_commit_id : Common_Commit_ID,
+                       applied_commits : Applied_Commits}).
+
+:- begin_tests(rebase_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(rebase_divergent_history, [
+         setup((config:server(Server),
+                user_database_name(admin,foo, Name),
+                (   database_exists(Name)
+                ->  delete_db(Name)
+                ;   true),
+                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+         cleanup((user_database_name(admin,foo, Name),
+                  delete_db(Name)))
+     ])
+:-
+
+    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
+    with_transaction(Second_Context2,
+                     ask(Second_Context2,
+                         insert(g,h,i)),
+                     _),
+
+    % we're also doing a commit on the original branch, to create a divergent history
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/rebase/admin/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{rebase_from: 'admin/foo/local/branch/second',
+                     author : "Gavsky"}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    json_write_dict(current_output, JSON, []),
+
+    _{
+        applied_commits : [_Thing, _Another_Thing ],
+        common_commit_id : _Common_Something,
+        'terminus:status' : "terminus:success"
+    } :< JSON.
+
+:- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
@@ -1618,19 +1715,19 @@ connection_authorised_user(Request, User_ID) :-
     fetch_jwt_data(Request, Username),
     username_user_id(DB, Username, User_ID).
 
-check_descriptor_auth(terminus_descriptor{},Action,Auth,Terminus) :-
+check_descriptor_auth(Terminus,terminus_descriptor{},Action,Auth) :-
     assert_auth_action_scope(Terminus,Auth,Action,"terminus").
-check_descriptor_auth(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
+check_descriptor_auth(Terminus,database_descriptor{ database_name : Name }, Action, Auth) :-
     assert_auth_action_scope(Terminus,Auth,Action,Name).
-check_descriptor_auth(repository_descriptor{ database_descriptor : DB,
-                                             repository_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth(DB, Action, Auth, Terminus).
-check_descriptor_auth(branch_descriptor{ repository_descriptor : Repo,
-                                         branch_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth(Repo, Action, Auth, Terminus).
-check_descriptor_auth(commit_descriptor{ repository_descriptor : Repo,
-                                         commit_id : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth(Repo, Action, Auth, Terminus).
+check_descriptor_auth(Terminus,repository_descriptor{ database_descriptor : DB,
+                                                      repository_name : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus, DB, Action, Auth).
+check_descriptor_auth(Terminus,branch_descriptor{ repository_descriptor : Repo,
+                                         branch_name : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus, Repo, Action, Auth).
+check_descriptor_auth(Terminus,commit_descriptor{ repository_descriptor : Repo,
+                                                  commit_id : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus,Repo, Action, Auth).
 
 write_descriptor_cors(terminus_descriptor{},Terminus) :-
     write_cors_headers("terminus",Terminus).
