@@ -4,7 +4,7 @@
 
 
 % Set up access to the libraries
-:- ['../load_paths.pl'].
+%:- ['../load_paths.pl'].
 
 :- initialization(main).
 
