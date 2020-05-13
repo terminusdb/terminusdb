@@ -2447,4 +2447,39 @@ test(transaction_semantics_conditional, [
              (   t(a, b, 1^^xsd:integer),
                  t(a, b, 2^^xsd:integer)))).
 
+
+test(disjunction_equality, [
+         setup((setup_temp_store(State),
+                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+         cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            (
+                insert(a, public, c),
+                insert(a, private, f)
+            )),
+        _Meta_Data
+    ),
+
+    findall(
+        Elt-Status,
+        ask(Descriptor,
+            (
+                (   t(a, private, Elt),
+                    Status = private
+                ;   t(a, public, Elt),
+                    Status = public)
+            )),
+        Statuses),
+
+    Statuses = [f-private,c-(public)].
+
 :- end_tests(woql).

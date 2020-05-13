@@ -79,7 +79,9 @@ dump_turtle_graph(Database,Type,Name,String) :-
  * database named N.
  */
 graph_to_turtle(Prefixes,G,Out_Stream) :-
-    layer_to_turtle(G.read,Prefixes,Out_Stream).
+    (   var(G.read)
+    ->  true
+    ;   layer_to_turtle(G.read,Prefixes,Out_Stream)).
 
 /**
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.

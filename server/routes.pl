@@ -1241,7 +1241,7 @@ test(rebase_divergent_history, [
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    json_write_dict(current_output, JSON, []),
+    * json_write_dict(current_output, JSON, []),
 
     _{
         applied_commits : [_Thing, _Another_Thing ],
@@ -1257,6 +1257,7 @@ test(rebase_divergent_history, [
     commit_id_to_metadata(Repository_Descriptor, Commit_D, "test", "commit d", _),
     commit_id_to_metadata(Repository_Descriptor, Commit_B, "Gavsky", "commit b", _),
     commit_id_to_metadata(Repository_Descriptor, Commit_C, "Gavsky", "commit c", _).
+
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
