@@ -240,7 +240,7 @@ db_handler(post,Account,DB,R) :-
            label : Label,
            base_uri : Base_Uri } :< Database_Document
     ->  true
-    ;   throw(error(bad_api_document('Bad API document')))),
+    ;   throw(error(bad_api_document(Database_Document)))),
 
     user_database_name(Account, DB, DB_Name),
 
@@ -276,8 +276,7 @@ test(db_create, [
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true))),
-         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                  delete_db(DB)))
+         cleanup(delete_db(DB))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
@@ -385,7 +384,7 @@ triples_handler(post,Path,R) :- % should this be put?
     (   _{ turtle : TTL,
            commit_info : Commit_Info } :< Triples_Document
     ->  true
-    ;   throw(error(bad_api_document('Bad API document')))),
+    ;   throw(error(bad_api_document(Triples_Document)))),
 
     create_context(Descriptor, Pre_Context),
 
@@ -1686,6 +1685,18 @@ customise_error(time_limit_exceeded) :-
                  'terminus:message' : 'Connection timed out'
                },
                [status(408)]).
+customise_error(error(unqualified_resource_id(Doc_ID))) :-
+    format(atom(MSG), 'Document resource ~s could not be expanded', [Doc_ID]),
+    reply_json(_{'terminus:status' : 'terminus_failure',
+                 'terminus:message' : MSG,
+                 'terminus:object' : Doc_ID},
+               [status(400)]).
+customise_error(error(unknown_deletion_error(Doc_ID))) :-
+    format(atom(MSG), 'unqualfied deletion error for id ~s', [Doc_ID]),
+    reply_json(_{'terminus:status' : 'terminus_failure',
+                 'terminus:message' : MSG,
+                 'terminus:object' : Doc_ID},
+               [status(400)]).
 customise_error(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Auth,Action,Scope]),
@@ -1695,6 +1706,81 @@ customise_error(error(access_not_authorised(Auth,Action,Scope))) :-
 customise_error(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
+customise_error(error(database_not_found(DB))) :-
+    format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
+    reply_json(_{'terminus:message' : MSG,
+                 'terminus:status' : 'terminus:failure'},
+               [status(400)]).
+customise_error(error(database_does_not_exist(DB))) :-
+    format(atom(M), 'Database does not exist with the name ~q', [DB]),
+    reply_json(_{'terminus:message' : M,
+                 'terminus:status' : 'terminus:failure'},
+               [status(400)]).
+customise_error(error(database_files_do_not_exist(DB))) :-
+    format(atom(M), 'Database fiels do not exist for database with the name ~q', [DB]),
+    reply_json(_{'terminus:message' : M,
+                 'terminus:status' : 'terminus:failure'},
+               [status(400)]).
+customise_error(error(bad_api_document(Document))) :-
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:document' : Document},
+               [status(400)]).
+customise_error(error(database_already_exists(DB))) :-
+    format(atom(MSG), 'Database ~s already exists', [DB]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:object' : DB,
+                 'terminus:message' : MSG,
+                 'terminus:method' : 'terminus:create_database'},
+               [status(409)]).
+customise_error(error(database_could_not_be_created(DB))) :-
+    format(atom(MSG), 'Database ~s could not be created', [DB]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:method' : 'terminus:create_database'},
+               [status(409)]).
+customise_error(error(could_not_create_class_frame(Class))) :-
+    format(atom(MSG), 'Class Frame could not be generated for class ~s', [Class]),
+    reply_json(_{ 'terminus:message' : MSG,
+                  'terminus:status' : 'terminus:failure',
+                  'terminus:class' : Class},
+               [status(400)]).
+customise_error(error(could_not_create_filled_class_frame(Instance))) :-
+    format(atom(MSG), 'Class Frame could not be generated for instance ~s', [Instance]),
+    reply_json(_{ 'terminus:message' : MSG,
+                  'terminus:status' : 'terminus:failure',
+                  'terminus:instance' : Instance},
+               [status(400)]).
+customise_error(error(maformed_json(Atom))) :-
+    format(atom(MSG), 'Malformed JSON Object ~q', [MSG]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:object' : Atom},
+               [status(400)]).
+customise_error(error(no_document_for_key(Key))) :-
+    format(atom(MSG), 'No document in request for key ~q', [Key]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:key' : Key},
+               [status(400)]).
+customise_error(error(no_parameter_key_in_document(Key,Document))) :-
+    format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Document]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:key' : Key,
+                 'terminus:object' : Document},
+               [status(400)]).
+customise_error(error(no_parameter_key_form_method(Key,Method))) :-
+    format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Method]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:object' : Key},
+               [status(400)]).
+customise_error(error(no_parameter_key(Key))) :-
+    format(atom(MSG), 'No parameter key ~q', [Key]),
+    reply_json(_{'terminus:status' : 'terminus:failure',
+                 'terminus:message' : MSG,
+                 'terminus:object' : Key},
+               [status(400)]).
 customise_error(error(branch_creation_base_uri_not_specified)) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : 'branch has no specified base uri'},
@@ -1825,161 +1911,12 @@ write_descriptor_cors(commit_descriptor{ repository_descriptor : Repo,
                                          commit_id : _ }, Terminus) :-
     write_descriptor_cors(Repo, Terminus).
 
-check_capabilities(_Transaction_Object, _Active) :-
-    % we need to resolve all graphs and graph_filters and
-    % see if they are accessible
-    true.
-
-
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
-
-/*
- * reply_with_witnesses(+Resource_URI,+Witnesses) is det.
- *
- */
-reply_with_witnesses(Resource_URI, DB, Witnesses) :-
-    write_cors_headers(Resource_URI, DB),
-
-    (   Witnesses = []
-    ->  reply_json(_{'terminus:status' : 'terminus:success'})
-    ;   reply_json(_{'terminus:status' : 'terminus:failure',
-                     'terminus:witnesses' : Witnesses},
-                   [status(406)])
-    ).
-
 
 /********************************************************
  * Determinising predicates used in handlers            *
  *                                                      *
- * It's not fun to fail, so don't!                      *
  ********************************************************/
-
-
-/*
- * try_get_document(ID, Database, Object) is det.
- *
- * Actually has determinism: det + error
- *
- * Gets document (JSON-LD) associated with ID
- */
-try_get_document(ID,Database,Object) :-
-    (   document_jsonld(ID,Database,Object)
-    ->  true
-    ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:object' : ID,
-                                     'terminus:status' : 'terminus:failure'})))).
-
-/*
- * try_get_document(ID, Database) is det.
- *
- * Actually has determinism: det + error
- *
- * Gets document as filled frame (JSON-LD) associated with ID
- */
-try_get_filled_frame(ID,Database,Object) :-
-    (   document_filled_class_frame_jsonld(ID,_{},Database,Object)
-    ->  true
-    ;   format(atom(MSG), 'Document resource ~s can not be found', [ID]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG,
-                                     'terminus:object' : ID})))).
-
-/*
- * try_delete_document(+ID, +Database, -Meta_Data) is det.
- *
- * Actually has determinism: det + error
- *
- * Deletes the object associated with ID, and throws an
- * http error otherwise.
- */
-try_delete_document(Pre_Doc_ID, Database, Meta_Data) :-
-    (   collection_descriptor_prefixes(Database.descriptor, Ctx)
-    ->  prefix_expand(Pre_Doc_ID,Ctx,Doc_ID)
-    ;   format(atom(MSG), 'Document resource ~s could not be expanded', [Pre_Doc_ID]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
-                                     'terminus:message' : MSG,
-                                     'terminus:object' : Pre_Doc_ID})))),
-
-    (   with_transaction(Database,
-                         ask(Database,
-                             delete_object(Doc_ID)),
-                         Meta_Data)
-    ->  true
-    ;   format(atom(MSG), 'Document resource ~s could not be deleted', [Doc_ID]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus_failure',
-                                     'terminus:message' : MSG,
-                                     'terminus:object' : Doc_ID})))).
-
-/*
- * try_update_document(ID, Doc, Database, Meta_Data) is det.
- *
- * Actually has determinism: det + error
- *
- * Updates the object associated with ID, and throws an
- * http error otherwise.
- */
-try_update_document(Doc_ID, Doc_In, Database, Meta_Data) :-
-    % if there is no id, we'll use the requested one.
-    (   jsonld_id(Doc_In,Doc_ID_Match)
-    ->  Doc_In = Doc
-    %   This is wrong - we need to have the base path here as well.
-    ;   put_dict(Doc_ID,'@id',Doc_In,Doc)),
-
-    (   get_key_document('@id',Database.prefixes,Doc,Doc_ID_Match)
-    ->  true
-    ;   format(atom(MSG),'Unable to match object ids ~q and ~q', [Doc_ID, Doc_ID_Match]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure'})))),
-
-    (   with_transaction(Database,
-                         ask(Database,
-                             update_object(Doc)),
-                         Meta_Data)
-    ->  true
-    ;   format(atom(MSG),'Unable to update object at Doc_ID: ~q', [Doc_ID]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure'})))).
-
-/*
- * try_db_uri(DB,DB_URI) is det.
- *
- * Die if we can't form a document uri.
- */
-try_db_uri(DB,DB_URI) :-
-    (   config:public_url(Server_Name),
-        interpolate([Server_Name,'/',DB],DB_URI)
-    ->  true
-    ;   throw(http_reply(not_found(_{'terminus:message' : 'Database resource can not be found',
-                                     'terminus:status' : 'terminus:failure',
-                                     'terminus:object' : DB})))).
-
-/*
- * try_doc_uri(DB,Doc,Doc_URI) is det.
- *
- * Die if we can't form a document uri.
- */
-try_doc_uri(DB_URI,Doc_ID,Doc_URI) :-
-    uri_encoded(path,Doc_ID,Doc_ID_Safe),
-    (   interpolate([DB_URI,'/',document, '/',Doc_ID_Safe],Doc_URI)
-    ->  true
-    ;   format(atom(MSG), 'Document resource ~s can not be constructed in ~s', [DB_URI,Doc_ID]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure',
-                                     'terminus:object' : DB_URI})))).
-
-/*
- * try_db_graph(+DB:uri,-Database:database) is det.
- *
- * Die if we can't form a graph
- */
-try_db_graph(DB_URI,Database) :-
-    (   resolve_query_resource(DB_URI, Descriptor)
-    ->  open_descriptor(Descriptor,Database)
-    ;   format(atom(MSG), 'Resource ~s can not be found', [DB_URI]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure',
-                                     'terminus:object' : DB_URI})))).
 
 /*
  * try_get_param(Key,Request:request,Value) is det.
@@ -1993,9 +1930,7 @@ try_get_param(Key,Request,Value) :-
     !,
     (   memberchk(Key=Encoded_Value, Parts)
     ->  uri_encoded(query_value, Value, Encoded_Value)
-    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Parts]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG})))).
+    ;   throw(error(no_parameter_key_in_document(Key,Parts)))).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
@@ -2006,10 +1941,7 @@ try_get_param(Key,Request,Value) :-
     http_parameters(Request, [], [form_data(Data)]),
 
     (   memberchk(Key=Value,Data)
-    ->  true
-    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Data]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG})))),
+    <>  throw(error(no_parameter_key_in_document(Key,Data)))),
     !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
@@ -2018,31 +1950,19 @@ try_get_param(Key,Request,Value) :-
     http_log('[Test] ~q', [Request]),
 
     (   memberchk(payload(Document), Request)
-    ->  true
-    ;   format(atom(MSG), 'No JSON payload resource ~q for POST ~q', [Key,Request]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG})))),
+        <>  throw(error(no_document_for_key(Key)))),
 
-    (   Value = Document.get(Key)
-    ->  true
-    ;   format(atom(MSG), 'Parameter resource ~q can not be found in ~q', [Key,Document]),
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG})))),
+    (   get_dict(Key,Document,Value)
+        <>  throw(error(no_parameter_key_in_document(Key,Document)))),
     !.
 try_get_param(Key,Request,_Value) :-
     % OTHER with method
     memberchk(method(Method), Request),
     !,
-
-    format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Key,Method]),
-    throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                 'terminus:status' : 'terminus:failure',
-                                 'terminus:object' : Key}))).
+    throw(error(no_parameter_key_for_method(Key,Method))).
 try_get_param(Key,_Request,_Value) :-
     % Catch all.
-    format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
-    throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                 'terminus:message' : MSG}))).
+    throw(error(no_parameter_key(Key))).
 
 /*
  * get_param_default(Key,Request:request,Value,Default) is semidet.
@@ -2072,22 +1992,6 @@ get_param(Key,Request,Value) :-
     memberchk(content_type('application/json'), Request),
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
-%%% cut goes to method(post) above
-%     !.
-% get_param(Key,Request,_Value) :-
-%     % OTHER with method
-%     memberchk(method(Method), Request),
-%     !,
-%     format(atom(MSG), 'Method ~q has no parameter key transport for key ~q', [Method,Key]),
-%     throw(http_reply(not_found(_{'terminus:message' : MSG,
-%                                  'terminus:status' : 'terminus:failure',
-%                                  'terminus:object' : Key}))).
-% get_param(Key,_Request,_Value) :-
-%     % Catch all.
-%     format(atom(MSG), 'Request has no parameter key transport for key ~q', [Key]),
-%     throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-%                                  'terminus:message' : MSG}))).
-
 
 /*
  * try_create_db(DB,Label,Comment,Base_URI) is det.
@@ -2096,17 +2000,11 @@ get_param(Key,Request,Value) :-
  */
 try_create_db(DB,Label,Comment,Base_Uri) :-
     % create the collection if it doesn't exist
-    (   database_exists(DB)
-    ->  throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                              'terminus:message' : 'Database already exists',
-                                              'terminus:method' : 'terminus:create_database'})))
-    ;   true),
+    (   not(database_exists(DB))
+        <>  throw(error(database_already_exists(DB)))),
 
     (   create_db(DB, Label, Comment, Base_Uri)
-    ->  true
-    ;   format(atom(MSG), 'Database ~s could not be created', [DB]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure'})))).
+        <>  throw(error(database_could_not_be_created(DB)))).
 
 
 /*
@@ -2115,23 +2013,15 @@ try_create_db(DB,Label,Comment,Base_Uri) :-
  * Attempt to delete a database given its URI
  */
 try_delete_db(DB) :-
-    (   delete_db(DB)
-    ->  true
-    ;   format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
-        throw(http_reply(not_found(_{'terminus:message' : MSG,
-                                     'terminus:status' : 'terminus:failure'})))).
+    delete_db(DB)
+    <> throw(error(database_not_found(DB))).
 
 /*
  * try_atom_json(Atom,JSON) is det.
  */
 try_atom_json(Atom,JSON) :-
-    (   atom_json_dict(Atom, JSON, [])
-    ->  true
-    ;   format(atom(MSG), 'Malformed JSON Object', []),
-        % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : MSG,
-                                     'terminus:object' : Atom})))).
+    atom_json_dict(Atom, JSON, [])
+    <> throw(error(malformed_json(Atom))).
 
 /*
  * add_payload_to_request(Request:request,JSON:json) is det.
@@ -2187,24 +2077,13 @@ collect_posted_files(_Request,[]).
  */
 try_class_frame(Class,Database,Frame) :-
     prefix_expand(Class, Database.prefixes, ClassEx),
-    (   class_frame_jsonld(Database,ClassEx,Frame)
-    ->  true
-    ;   format(atom(MSG), 'Class Frame could not be json-ld encoded for class ~s', [Class]),
-        % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(_{ 'terminus:message' : MSG,
-                                      'terminus:status' : 'terminus:failure',
-                                      'terminus:class' : Class})))).
+    class_frame_jsonld(Database,ClassEx,Frame)
+    <>  throw(error(could_not_create_class_frame(Class))).
 
 /*
  * try_class_frame(Class,Database,Frame) is det.
  */
 try_filled_frame(Instance,Database,Frame) :-
     prefix_expand(Instance, Database.prefixes, InstanceEx),
-    (   filled_frame_jsonld(Database,InstanceEx,Frame)
-    ->  true
-    ;   format(atom(MSG), 'Filled Class Frame could not be json-ld encoded for instance ~s', [Instance]),
-        % Give a better error code etc. This is silly.
-        throw(http_reply(not_found(_{ 'terminus:message' : MSG,
-                                      'terminus:status' : 'terminus:failure',
-                                      'terminus:instance' : Instance})))).
-
+    filled_frame_jsonld(Database,InstanceEx,Frame)
+    <> throw(could_not_create_filled_class_frame(Instance)).

@@ -59,9 +59,7 @@ delete_db_from_terminus(Terminus,DB_Name) :-
 delete_db(DB_Name) :-
     create_context(terminus_descriptor{}, Terminus),
     (   database_exists(Terminus,DB_Name)
-    ->  true
-    ;   format(atom(M), 'Database does not exist with the name ~q', [DB_Name]),
-        throw(database_does_not_exist(M))),
+    <>  throw(database_does_not_exist(DB_Name))),
     % Do something here? User may need to know what went wrong
     database_finalized(Terminus,DB_Name),
 
@@ -73,8 +71,7 @@ delete_db(DB_Name) :-
 
     (   exists_file(File_Path)
     ->  delete_file(File_Path)
-    ;   format(atom(M), 'Database files do not exist with the name ~w', [DB_Name]),
-        throw(database_does_not_exist(M))
+    ;   throw(database_files_do_not_exist(DB_Name))
     ),
 
     create_context(terminus_descriptor{}, Terminus_Staged),
