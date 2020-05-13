@@ -103,6 +103,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(library(http/http_log)).
 
+:- set_test_options([run(manual)]).
+
 hup(_Signal) :-
   thread_send_message(main, stop).
 

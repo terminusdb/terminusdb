@@ -613,13 +613,14 @@ resolve_relative_string_descriptor(Context, String, Descriptor) :-
 resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
     pattern_string_split('/', String, Path_Unfiltered),
     exclude('='(""), Path_Unfiltered, Path),
-    append(Descriptor_Path,[_Type,_Name],Path),
+    once(append(Descriptor_Path,[_Type,_Name],Path)),
     resolve_absolute_descriptor(Descriptor_Path, Descriptor),
     resolve_absolute_graph_descriptor(Path, Graph).
 
 % Note: Currently we only have instance/schema/inference updates for normal and terminus graphs.
 % so this resolution is limited to these types.
 resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "branch", Branch, Type, Name], Graph) :-
+    !,
     user_database_name(Account_ID, DB, DB_Name),
     atom_string(Type_Atom, Type),
     Graph = branch_graph{ database_name : DB_Name,
@@ -628,6 +629,7 @@ resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "branch", Branch, Type,
                           type : Type_Atom,
                           name : Name}.
 resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "commit", RefID, Type, Name], Graph) :-
+    !,
     user_database_name(Account_ID, DB, DB_Name),
     atom_string(Type_Atom, Type),
     Graph = single_commit_graph{ database_name : DB_Name,
