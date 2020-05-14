@@ -7,8 +7,8 @@
 		<link rel="shortcut icon" type="image/png" href="https://terminusdb.com/t/favicon.png"/>
 		<script src="https://d3js.org/d3.v5.min.js"></script>
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.css">
-		<link rel="stylesheet" href="https://terminusdb.github.io/terminus-dashboard/dist/css/theme.css">
-	 <script src="https://terminusdb.github.io/terminus-dashboard/dist/terminus-dashboard.min.js"></script>
+		<link rel="stylesheet" href="~s/css/theme.css">
+	 <script src="~s/terminus-dashboard.min.js"></script>
 	</head>
 	<body>
 	<div class="terminus-client-ui">

@@ -113,7 +113,8 @@ write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
     open(Index_Path, write, Stream),
-    format(Stream, Tpl_String, [URL, Password]),
+    config:console_base_url(BaseURL),
+    format(Stream, Tpl_String, [BaseURL, BaseURL, URL, Password]),
     close(Stream).
 
 initialize_config(PUBLIC_URL, Server, Port, Workers) :-
