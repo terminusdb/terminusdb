@@ -8,7 +8,7 @@
 		<script src="https://d3js.org/d3.v5.min.js"></script>
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.css">
 		<link rel="stylesheet" href="~s/css/theme.css">
-	 <script src="~s/terminus-dashboard.min.js"></script>
+	 <script src="~s/terminusdb-console.min.js"></script>
 	</head>
 	<body>
 	<div class="terminus-client-ui">
