@@ -13,8 +13,6 @@ stages:
     if: branch = master AND type != pull_request
   - name: deploy_dev
     if: branch = dev AND type != pull_request
-  - name: deploy_hub
-    if: branch = hub AND type != pull_request
   - name: deploy_tag
     if: tag =~ ^v AND type != pull_request
 
@@ -38,13 +36,6 @@ jobs:
         - docker run -it terminusdb/terminus-server:dev bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminus-server:dev
-
-    - stage: deploy_hub
-      script:
-        - docker build -t terminusdb/terminus-server:hub .
-        - docker run -it terminusdb/terminus-server:hub bash -c "/app/terminusdb/utils/db_util -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
-        - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminus-server:hub
 
     - stage: deploy_tag
       script:
