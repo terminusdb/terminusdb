@@ -1264,15 +1264,34 @@ test(rebase_divergent_history, [
                 [method(Method),
                  methods([options,post])]).
 
-push_handler(_Method,_Path,_Request) :-
-    throw(error('Not implemented')).
+push_handler(post,_Path,Request) :-
+    member(content_type('application/octet'), Request),
+    http_read_data(Request, Str, []),
 
+    string_codes(Str,[0,1,2,3,4,5,6,7,8]),
+    reply_json(_{asdf : "FDSA"}).
 
 % Currently just sending binary around...
 :- begin_tests(push_endpoint).
+:- use_module(core(util/test_utils)).
+%:- use_module(core(transaction)).
+%:- use_module(core(api)).
+:- use_module(library(http/http_open)).
 
 test(push_stuff, []) :-
-    true.
+
+    config:server(Server),
+    atomic_list_concat([Server, '/push/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+
+    Byte_List = [0,1,2,3,4,5,6,7,8],
+    string_codes(Bytes,Byte_List),
+    http_post(URI,
+              bytes('application/octet',Bytes),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    write(JSON).
 
 :- end_tests(push_endpoint).
 
