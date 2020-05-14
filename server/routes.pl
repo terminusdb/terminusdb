@@ -1268,6 +1268,14 @@ push_handler(_Method,_Path,_Request) :-
     throw(error('Not implemented')).
 
 
+% Currently just sending binary around...
+:- begin_tests(push_endpoint).
+
+test(push_stuff, []) :-
+    true.
+
+:- end_tests(push_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
                 [method(Method),
