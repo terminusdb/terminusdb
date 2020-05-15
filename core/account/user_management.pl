@@ -69,6 +69,19 @@ add_user(Nick, Email, Pass, User_URI) :-
         _Meta_Data
     ).
 
+/*
+ * delete_user(+User_ID) is semidet.
+ */
+delete_user(User_URI) :-
+    create_context(terminus_descriptor{}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   t(User_URI, rdf:type, terminus:'User'),
+                delete_object(User_URI)
+            )),
+        _).
+
 make_user_own_database(User_Name, Database_Name) :-
     create_context(terminus_descriptor{},
                    commit_info{ author: "Terminus System",

@@ -1141,6 +1141,14 @@ clone_handler(_Method,_Request) :-
                  methods([options,post])]).
 
 fetch_handler(_Method,_Path,_Request) :-
+    % Calls pack on remote
+    % Does the unpack
+    % Does some checking on the unpack
+    % all layers and their parents [Layer-Parent,....]
+    % Are these valid? Parent is a Layer in the list or we have the parent.
+    % Filter this list to layers we don't know about
+    % Extract only these layers.
+    % forall( member(Layer, Valid), extract(Store,Layer_ID,Layer_Pack))
     throw(error('Not implemented')).
 
 
@@ -1259,41 +1267,128 @@ test(rebase_divergent_history, [
 
 :- end_tests(rebase_endpoint).
 
-%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
+%%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(pack/Path), cors_catch(pack_handler(Method,Path)),
                 [method(Method),
                  methods([options,post])]).
 
-push_handler(post,_Path,Request) :-
-    member(content_type('application/octet'), Request),
-    http_read_data(Request, Str, []),
+pack_handler(post,Path,R) :-
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, R, Auth_ID),
 
-    string_codes(Str,[0,1,2,3,4,5,6,7,8]),
-    reply_json(_{asdf : "FDSA"}).
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    create_context(Descriptor, Pre_Context),
+    merge_dictionaries(
+        query_context{
+            authorization : Auth_ID,
+            terminus : Terminus
+        }, Pre_Context, Context),
+
+    assert_read_access(Context),
+
+    add_payload_to_request(R,Request),
+    get_payload(Document,Request),
+
+    (   _{ commit : Commit } :< Document
+    ->  true
+    ;   throw(error(bad_api_document(Document)))),
+
+    get_pack(Context, Commit, Pack),
+    http_reply('application/octet',Pack).
+
+/* NOTE: stub */
+get_pack(Context, Commit, Pack) :-
+    % NOTE: Check to see that commit is in the history of Descriptor
+    calculate_layers(Context, Commit, Layers),
+    % get_layer_pack(Layers,Pack)
+    % For now just sent back the string representing the history
+    format(string(Pack),'Layers: ~q', [Layers]).
+
+:- use_module(core(transaction)).
+% NOTE: Completely wrong - start over from Repo graph parentage.
+%
+% Can we just do a diff of ref:layer_id between commit graphs instead?
+calculate_layers(Context, Commit, Layers) :-
+    % Redo correctly
+    Branch = (Context.default_collection),
+    branch_head_commit(Context, Branch.branch_name, Commit_Head),
+    ask(Context,
+        t(Commit, star(p(ref:commit_parent)), Commit_Head, Path)
+       ),
+    (   Commit = Commit_Head
+    ->  Layers = [] % no change
+    ;   findall(Layer_Id,
+                (   member(Element,Path),
+                    get_dict('http://terminusdb.com/schema/woql#object',Element, Past_Commit_URI),
+                    graph_for_commit(Context,Past_Commit_URI,_Type,_Graph_Name, Graph_URI),
+                    layer_uri_for_graph(Descriptor, Graph_URI, Layer_URI),
+                    layer_id_uri(Descriptor, Layer_Id, Layer_URI)),
+                Graph_Layers),
+        % NOTE: We need the commit graph here! Presumably we look this up in the Repo graph
+        Layers = Graph_Layers
+    ).
 
 % Currently just sending binary around...
-:- begin_tests(push_endpoint).
+:- begin_tests(pack_endpoint).
 :- use_module(core(util/test_utils)).
 %:- use_module(core(transaction)).
 %:- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(push_stuff, []) :-
+test(pack_stuff, [
+         setup((add_user('user','user@example.com','password',User_ID),
+                user_database_name('user', 'foo', DB_Name),
+                (   database_exists(DB_Name)
+                ->  delete_db(DB_Name)
+                ;   true),
+                create_db(DB_Name,'foo','a test',"https://terminushub.com/"),
+                make_user_own_database('user',DB_Name)
+               )),
+         cleanup((delete_db(DB_Name),
+                  delete_user(User_ID)))
+     ]) :-
+
+    resolve_absolute_string_descriptor(DB_Name, Descriptor),
+    % First commit
+    create_context(Descriptor, commit_info{author:"user",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                     _),
+    % Second commit
+    create_context(Descriptor, commit_info{author:"user",message:"commit b"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    Repo = (Descriptor.repository_descriptor),
+    branch_head_commit(Repo, "master", Commit_URI),
+    commit_uri_to_parent_uri(Commit_URI, Parent_URI),
 
     config:server(Server),
-    atomic_list_concat([Server, '/push/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
+    atomic_list_concat([Server, '/pack/user/foo/local/branch/master'], URI),
+
+    Document = _{ commit : Parent_URI },
+    http_post(URI,
+              json(Document),
+              Pack,
+              [json_object(dict),authorization(basic('user','password'))]),
 
     Byte_List = [0,1,2,3,4,5,6,7,8],
     string_codes(Bytes,Byte_List),
-    http_post(URI,
-              bytes('application/octet',Bytes),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
+    Pack = Bytes.
 
-    write(JSON).
+:- end_tests(pack_endpoint).
 
-:- end_tests(push_endpoint).
+%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
+                [method(Method),
+                 methods([options,post])]).
+
+push_handler(_Method,_Path,_Request) :-
+    throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
