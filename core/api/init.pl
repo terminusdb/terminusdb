@@ -114,7 +114,7 @@ write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
     close(Tpl_Stream),
     open(Index_Path, write, Stream),
     config:console_base_url(BaseURL),
-    format(Stream, Tpl_String, [BaseURL, BaseURL]),
+    format(Stream, Tpl_String, [BaseURL]),
     close(Stream).
 
 initialize_config(PUBLIC_URL, Server, Port, Workers) :-
