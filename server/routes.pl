@@ -138,7 +138,7 @@ test(connection_result_dbs, [])
 
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root('console/'), cors_catch(console_handler(Method)),
+:- http_handler(root(console/Path), cors_catch(console_handler(Method)),
                 [method(Method),
                  methods([options,get])]).
 
