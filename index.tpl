@@ -3,8 +3,7 @@
   <!-- include "meta-head.html" -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <base href="~s">
+<head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="description" content="TerminusDB is an open source model driven graph database for knowledge graph representation designed specifically for the web-age.">
@@ -17,7 +16,7 @@
       integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
       crossorigin="anonymous"
     />
-    <link rel="stylesheet" href="terminusdb-console-main.css">
+    <link rel="stylesheet" href="~s/terminusdb-console-main.css">
 
     <title>TerminusDB</title>
     <!--<link rel="stylesheet" href="css/main.css?v=1.0">-->
@@ -42,7 +41,7 @@
 
     <script src="js/homepage.js"></script>-->
    <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=UA-151888980-1"></script>-->
-  <script src="terminusdb-console.min.js"></script>
+  <script src="~s/terminusdb-console.min.js"></script>
   </body>
 </html>
 
