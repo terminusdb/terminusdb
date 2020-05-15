@@ -1336,6 +1336,7 @@ calculate_layers(Context, Commit, Layers) :-
 :- use_module(library(http/http_open)).
 
 test(pack_stuff, [
+         blocked('Will be enabled later'),
          setup((add_user('user','user@example.com','password',User_ID),
                 user_database_name('user', 'foo', DB_Name),
                 (   database_exists(DB_Name)
