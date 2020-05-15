@@ -168,7 +168,7 @@ console_handler(get,_Request) :-
 
 test(console_route) :-
     config:public_url(SURI),
-    format(string(ConsoleURL), "~s/console", [SURI]),
+    format(string(ConsoleURL), "~s/console/", [SURI]),
     http_get(ConsoleURL, _, []).
 
 :- end_tests(console_route).
