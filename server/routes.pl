@@ -1288,7 +1288,7 @@ pack_handler(post,Path,R) :-
             terminus : Terminus
         }, Pre_Context, Context),
 
-    assert_read_access(Context),
+    * assert_read_access(Context),
 
     add_payload_to_request(R,Request),
     get_payload(Document,Request),
@@ -1300,7 +1300,8 @@ pack_handler(post,Path,R) :-
     ;   throw(error(bad_api_document(Document)))),
 
     context_repository_head_pack(Context, Repo_Head_Option, Pack),
-    http_reply('application/octet',Pack).
+    % Why throw?
+    throw(http_reply(bytes('application/octets',Pack))).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -1310,29 +1311,37 @@ pack_handler(post,Path,R) :-
 :- use_module(library(http/http_open)).
 
 test(pack_stuff, [
-         setup((add_user('user','user@example.com','password',User_ID),
-                user_database_name('user', 'foo', DB_Name),
+         setup((user_database_name('_a_test_user_', foo, DB_Name),
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
                 ;   true),
+                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
+                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
+                    delete_user(Old_User_ID)
+                ;   true),
+                add_user('_a_test_user_','user@example.com','password',User_ID),
                 create_db(DB_Name,'foo','a test',"https://terminushub.com/"),
-                make_user_own_database('user',DB_Name)
+                make_user_own_database('_a_test_user_',DB_Name)
                )),
          cleanup((delete_db(DB_Name),
                   delete_user(User_ID)))
      ]) :-
 
-    resolve_absolute_string_descriptor(DB_Name, Descriptor),
+    resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
+
     % First commit
     create_context(Descriptor, commit_info{author:"user",message:"commit a"}, Master_Context1),
+
     with_transaction(Master_Context1,
                      ask(Master_Context1,
                          insert(a,b,c)),
                      _),
+
     % Second commit
     create_context(Descriptor, commit_info{author:"user",message:"commit b"}, Master_Context2),
     % Before updating, grab the repository head layer_ID
-    Repository = (Master_Context2.parent),
+    [Branch_Transaction] = (Master_Context2.transaction_objects),
+    Repository = (Branch_Transaction.parent),
     repository_head_layerid(Repository,Repository_Head_Layer_ID),
 
     with_transaction(Master_Context2,
@@ -1343,15 +1352,15 @@ test(pack_stuff, [
 
 
     config:server(Server),
-    atomic_list_concat([Server, '/pack/user/foo/local/branch/master'], URI),
+    atomic_list_concat([Server, '/pack/_a_test_user_/foo/local/_commits'], URI),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
     http_post(URI,
               json(Document),
               Pack,
-              [json_object(dict),authorization(basic('user','password'))]),
+              [authorization(basic('_a_test_user_','password'))]),
 
-    writeq(Pack).
+    Pack = _Something.
 
 :- end_tests(pack_endpoint).
 

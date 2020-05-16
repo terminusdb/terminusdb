@@ -23,11 +23,10 @@ store_layerids_pack(_Store, Layer_Ids, Pack) :-
 :- use_module(core(transaction)).
 context_repository_layerids(Context, Repo_Head_Option, Layer_Ids) :-
     % Should only be one instance object
-    [Read_Write_Obj] = (Context.instance_objects),
+    [Transaction_Object] = (Context.transaction_objects),
+    [Read_Write_Obj] = (Transaction_Object.instance_objects),
     Layer = (Read_Write_Obj.read),
-    child_parents_until(Layer, Layers, Repo_Head_Option),
-    maplist(layer_layerids, Layers, Layer_Ids_List),
-    append(Layer_Ids_List, Layer_Ids).
+    child_parents_until(Layer, Layer_Ids, Repo_Head_Option).
 
 child_parents_until(Child, [], Until) :-
     layer_to_id(Child, Child_ID),

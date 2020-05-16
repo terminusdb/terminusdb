@@ -24,7 +24,7 @@
               agent_name_uri/3,
               agent_name_exists/2,
               make_user_own_database/2,
-              delete_user/2
+              delete_user/1
           ]).
 
 :- use_module(account/capabilities).
