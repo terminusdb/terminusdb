@@ -21,10 +21,14 @@
               branch_create/5,
 
               % db_rebase.pl
-              rebase_on_branch/7
+              rebase_on_branch/7,
 
               % db_fast_forward.pl
               % fast_forward_branch/4
+
+              % db_pack.pl
+              context_repository_head_pack/3,
+              repository_head_layerid/2
           ]).
 
 :- use_module(api/init).
@@ -34,3 +38,4 @@
 :- use_module(api/db_branch).
 :- use_module(api/db_rebase).
 :- use_module(api/db_fast_forward).
+:- use_module(api/db_pack).

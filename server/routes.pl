@@ -1277,6 +1277,10 @@ pack_handler(post,Path,R) :-
     authenticate(Terminus, R, Auth_ID),
 
     resolve_absolute_string_descriptor(Path, Descriptor),
+
+    ((repository_descriptor{} :< Descriptor)
+     <> throw(error(not_a_repository_descriptor(Descriptor)))),
+
     create_context(Descriptor, Pre_Context),
     merge_dictionaries(
         query_context{
@@ -1289,44 +1293,14 @@ pack_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     get_payload(Document,Request),
 
-    (   _{ commit : Commit } :< Document
-    ->  true
+    (   _{ repository_head : Layer_ID } :< Document
+    ->  Repo_Head_Option = just(Layer_ID)
+    ;   _{} :< Document
+    ->  Repo_Head_Option = none
     ;   throw(error(bad_api_document(Document)))),
 
-    get_pack(Context, Commit, Pack),
+    context_repository_head_pack(Context, Repo_Head_Option, Pack),
     http_reply('application/octet',Pack).
-
-/* NOTE: stub */
-get_pack(Context, Commit, Pack) :-
-    % NOTE: Check to see that commit is in the history of Descriptor
-    calculate_layers(Context, Commit, Layers),
-    % get_layer_pack(Layers,Pack)
-    % For now just sent back the string representing the history
-    format(string(Pack),'Layers: ~q', [Layers]).
-
-:- use_module(core(transaction)).
-% NOTE: Completely wrong - start over from Repo graph parentage.
-%
-% Can we just do a diff of ref:layer_id between commit graphs instead?
-calculate_layers(Context, Commit, Layers) :-
-    % Redo correctly
-    Branch = (Context.default_collection),
-    branch_head_commit(Context, Branch.branch_name, Commit_Head),
-    ask(Context,
-        t(Commit, star(p(ref:commit_parent)), Commit_Head, Path)
-       ),
-    (   Commit = Commit_Head
-    ->  Layers = [] % no change
-    ;   findall(Layer_Id,
-                (   member(Element,Path),
-                    get_dict('http://terminusdb.com/schema/woql#object',Element, Past_Commit_URI),
-                    graph_for_commit(Context,Past_Commit_URI,_Type,_Graph_Name, Graph_URI),
-                    layer_uri_for_graph(Descriptor, Graph_URI, Layer_URI),
-                    layer_id_uri(Descriptor, Layer_Id, Layer_URI)),
-                Graph_Layers),
-        % NOTE: We need the commit graph here! Presumably we look this up in the Repo graph
-        Layers = Graph_Layers
-    ).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -1358,28 +1332,27 @@ test(pack_stuff, [
                      _),
     % Second commit
     create_context(Descriptor, commit_info{author:"user",message:"commit b"}, Master_Context2),
+    % Before updating, grab the repository head layer_ID
+    Repository = (Master_Context2.parent),
+    repository_head_layerid(Repository,Repository_Head_Layer_ID),
+
     with_transaction(Master_Context2,
                      ask(Master_Context2,
                          (   insert(d,e,f),
                              delete(a,b,c))),
                      _),
 
-    Repo = (Descriptor.repository_descriptor),
-    branch_head_commit(Repo, "master", Commit_URI),
-    commit_uri_to_parent_uri(Commit_URI, Parent_URI),
 
     config:server(Server),
     atomic_list_concat([Server, '/pack/user/foo/local/branch/master'], URI),
 
-    Document = _{ commit : Parent_URI },
+    Document = _{ repository_head : Repository_Head_Layer_ID },
     http_post(URI,
               json(Document),
               Pack,
               [json_object(dict),authorization(basic('user','password'))]),
 
-    Byte_List = [0,1,2,3,4,5,6,7,8],
-    string_codes(Bytes,Byte_List),
-    Pack = Bytes.
+    writeq(Pack).
 
 :- end_tests(pack_endpoint).
 
