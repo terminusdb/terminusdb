@@ -28,7 +28,8 @@
 
               % db_pack.pl
               context_repository_head_pack/3,
-              repository_head_layerid/2
+              repository_head_layerid/2,
+              unpack/1
           ]).
 
 :- use_module(api/init).

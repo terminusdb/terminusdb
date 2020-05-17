@@ -1,6 +1,7 @@
 :- module(db_pack, [
               context_repository_head_pack/3,
-              repository_head_layerid/2
+              repository_head_layerid/2,
+              unpack/1
           ]).
 
 :- use_module(library(terminus_store)).
@@ -26,21 +27,18 @@ context_repository_layerids(Context, Repo_Head_Option, Layer_Ids) :-
     [Transaction_Object] = (Context.transaction_objects),
     [Read_Write_Obj] = (Transaction_Object.instance_objects),
     Layer = (Read_Write_Obj.read),
-    child_parents_until(Layer, Layer_Ids, Repo_Head_Option).
+    child_parents_until(Layer, Layers, Repo_Head_Option),
+    maplist(layer_layerids, Layers, Layer_Ids_List),
+    append(Layer_Ids_List, Layer_Ids).
 
-child_parents_until(Child, [], Until) :-
+child_parents_until(Child, [], just(Child_ID)) :-
     layer_to_id(Child, Child_ID),
-    just(Child_ID) = Until,
     !.
-child_parents_until(Child, [Child_ID|Layer], Until) :-
+child_parents_until(Child, [Child|Layer], Until) :-
     parent(Child,Parent), % has a parent
     !,
-    layer_to_id(Child, Child_ID),
     child_parents_until(Parent, Layer, Until).
-child_parents_until(Child, [Child_ID], _Until) :-
-    % \+ parent(Child,Parent)
-    % has no parent
-    layer_to_id(Child, Child_ID).
+child_parents_until(Child, [Child], _Until).
 
 % Include self!
 layer_layerids(Layer, [Self_Layer_Id|Layer_Ids]) :-
@@ -54,4 +52,40 @@ repository_head_layerid(Repository,Layer_ID) :-
     [Read_Write_Obj] = (Repository.instance_objects),
     Layer = (Read_Write_Obj.read),
     layer_to_id(Layer,Layer_ID).
+
+layer_exists(Layer_ID) :-
+    storage(Store),
+    store_id_layer(Store,Layer_ID,_).
+
+assert_fringe_is_known([]).
+assert_fringe_is_known([Layer_ID|Rest]) :-
+    (   layer_exists(Layer_ID)
+    ->  true
+    ;   throw(error(unknown_layer_reference(Layer_ID)))),
+    assert_fringe_is_known(Rest).
+
+layerids_and_parents_fringe([],[]).
+layerids_and_parents_fringe([Layer_ID-Parent_ID|Remainder], Fringe) :-
+    member(Parent_ID-_,Remainder),
+    !,
+    layerids_and_parents_fringe(Remainder,Fringe).
+layerids_and_parents_fringe([Layer_ID-Parent_ID|Remainder], [Parent_ID|Fringe]) :-
+    layerids_and_parents_fringe(Remainder,Fringe).
+
+layerids_unknown(Layer_Ids,Unknown_Layer_Ids) :-
+    exclude(layer_exists,Layer_Ids,Unknown_Layer_Ids).
+
+unpack(Pack) :-
+   pack_layerids_and_parents(Pack,Layer_Parents),
+    % all layers and their parents [Layer_ID-Parent_ID,....]
+    % Are these valid? Parent is a Layer in the list or we have the parent.
+   layerids_and_parents_fringe(Layer_Parents,Fringe),
+   assert_fringe_is_known(Fringe),
+   % Filter this list to layers we don't know about
+   findall(L, member(L-,Layer_Parents), Layer_Ids),
+   layerids_unknown(Layer_Ids, Unknown_Layer_Ids),
+   % Extract only these layers.
+   storage(Store),
+   forall( member(Layer_Id, Unknown_Layer_Ids), extract(Store,Layer_Id,Pack)).
+
 

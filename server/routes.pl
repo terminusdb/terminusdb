@@ -1140,13 +1140,43 @@ clone_handler(_Method,_Request) :-
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(_Method,_Path,_Request) :-
+fetch_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+fetch_handler(post,Path,Request) :-
     % Calls pack on remote
+    resolve_absolute_string_descriptor(Path,Descriptor),
+
+    ((repository_descriptor{} :< Descriptor)
+     <> throw(error(fetch_requires_repository(Path)))),
+
+    Database = (Descriptor.database_descriptor),
+    (repository_remote_url(Database, Descriptor.repository_name, URL)
+     <> throw(error(fetch_remote_has_no_url(Path)))),
+
+    open_descriptor(Descriptor, Repository),
+    repository_head_layerid(Repository, Repository_Head_Layer_ID),
+    Document = _{ repository_head : Repository_Head_Layer_ID },
+
+    % What is this? Where does it come from?
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwiaWF0IjoxNTE2MjM5MDIyfQ.ZHqEzJViUkP41NuyWGY97uyzrXvBsuOvOjIz00VgP9H3NHfnbO_h51nqbjt3UqBeKJ7U0wGUMTePuhXCGsAPoI9rLRSK9NzlFKGde-wTs4lAhDpp6rGhmVzVcJAYtJg8RbTGlJ78SFK6SSTpi2sXOMgVeu8fZwGnnp7ZJjP1mtJdEreDEwlZYqgy21BltmuzQ08qC70R-jRFHY2IeVBarcbqJgxjjb3BrNA5fByMD4ESOBVJlmCg8PzaI4hEdW-lSsQK8XWWYTnndB8IFdD3GYIwMovsT9dVZ4m3HrGGywGSP7TxDquvvK9ollA2JV2tLMsbk_Nqo-s7fhBbH9xjsA',
+
+    http_post(URL,
+              json(Document),
+              Pack,
+              [authorization(bearer(Bearer))]),
+
     % Does the unpack
-    % Does some checking on the unpack
+    pack_layers_and_parents(Pack,Layer_Parents)
     % all layers and their parents [Layer-Parent,....]
     % Are these valid? Parent is a Layer in the list or we have the parent.
+    layer_and_parents_fringe(Layer_Parents,Fringe),
+    assert_fringe_is_known(Fringe),
     % Filter this list to layers we don't know about
+    
+    layer_parents_unknown(Layer_Parents, Unknown)
     % Extract only these layers.
     % forall( member(Layer, Valid), extract(Store,Layer_ID,Layer_Pack))
     throw(error('Not implemented')).
@@ -1370,6 +1400,8 @@ test(pack_stuff, [
                  methods([options,post])]).
 
 push_handler(_Method,_Path,_Request) :-
+    _Source = _Something,
+    _Target = _Something_Else,
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
