@@ -153,7 +153,7 @@ finalise_terminus(Name) :-
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-create_db_without_schema(Name, Label, Comment) :-
+create_db(Name, Label, Comment, Prefixes) :-
     text_to_string(Name, Name_String),
     % insert new db object into the terminus db
     insert_db_object(Name, Label, Comment),
@@ -180,7 +180,8 @@ test(create_db_and_check_master_branch, [
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
-    create_db_without_schema(testdb, 'testdb', 'a test db'),
+    Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
+    create_db(testdb, 'testdb', 'a test db', Prefixes),
     Database_Descriptor = database_descriptor{ database_name: "testdb"},
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" }.
