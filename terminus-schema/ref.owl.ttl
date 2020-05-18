@@ -201,7 +201,7 @@ ref:ref_identifier
 ref:default_prefixes
   a ref:Prefixes ;
   rdfs:label "Default Prefixes"@en ;
-  rdfs:comment "Default Prefixes for the Database"@en ;
+  rdfs:comment "Default Prefixes for the Database"@en .
 
 ref:Prefixes
   a owl:Class ;

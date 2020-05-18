@@ -906,7 +906,7 @@ test(double_insert, [
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test','terminus://blah'))),
+             create_db_with_test_schema('user','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
@@ -933,7 +933,7 @@ test(cardinality_error,
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test','terminus://blah'))),
+             create_db_with_test_schema('user','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
@@ -959,7 +959,7 @@ test(cardinality_error,
 
 test(cardinality_min_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test','http://terminusdb.com/world'))),
+             create_db_with_test_schema('user','test'))),
       cleanup(teardown_temp_store(State))])
 :-
 

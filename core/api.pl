@@ -18,7 +18,7 @@
               delete_graph/5,
 
               % db_branch.pl
-              branch_create/5,
+              branch_create/4,
 
               % db_rebase.pl
               rebase_on_branch/7,

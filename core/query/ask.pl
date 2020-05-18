@@ -115,16 +115,17 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
     % We're querying the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
     branch_descriptor{
-        repository_descriptor: Repository_Descriptor,
-        branch_name: Branch_Name
+        repository_descriptor: Repository_Descriptor
     } :< Descriptor,
     !,
-    once(ask(Repository_Descriptor,
-             (   t(Branch_URI, ref:branch_name, Branch_Name^^xsd:string),
-                 t(Branch_URI, ref:branch_base_uri, Branch_Base_Uri^^xsd:anyURI)))),
-
-    atomic_list_concat([Branch_Base_Uri, '/document/'], Document_Prefix),
-    Prefixes = _{doc : Document_Prefix}.
+    findall(Key-Value,
+            (   ask(Repository_Descriptor,
+                    (   t(PrefixPair, ref:prefix, Key_String^^xsd:string),
+                        t(PrefixPair, ref:prefix_uri, Value_String^^xsd:string))),
+                atom_string(Key,Key_String),
+                atom_string(Value,Value_String)),
+            Key_Value_Pairs),
+    dict_create(Prefixes,_,Key_Value_Pairs).
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % We don't know which documents you are retrieving
     % because we don't know the branch you are on,

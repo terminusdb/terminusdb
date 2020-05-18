@@ -286,7 +286,8 @@ test(db_create, [
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
-    Doc = _{ base_uri : "https://terminushub.com/document",
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
              label : "A label"
            },
@@ -320,7 +321,8 @@ test(db_auth_test, [
 
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
-    Doc = _{ base_uri : "https://terminushub.com/document",
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
              label : "A label"
            },
@@ -1241,7 +1243,7 @@ test(rebase_divergent_history, [
                          insert(a,b,c)),
                     _),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
     resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -1397,7 +1399,7 @@ test(pack_stuff, [
     layer_to_id(Layer,Layer_ID),
 
     sort([New_Repository_Head_Layer_ID,Layer_ID], Layer_Ids),
-    format(atom(Pack),'Layer Ids: ~q', [Layer_Ids]).
+    * format(atom(Pack),'Layer Ids: ~q', [Layer_Ids]).
 
 :- end_tests(pack_endpoint).
 
@@ -1415,16 +1417,15 @@ push_handler(options, _Path, _Request) :-
 push_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+    authenticate(Terminus, Request, _Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,Us),
+    resolve_absolute_string_descriptor(Path,_Us),
 
     get_payload(Document, Request),
     do_or_die(
-        _{ remote : Remote_Name } :< Document,
+        _{ remote : _Remote_Name } :< Document,
         error(push_has_no_remote(Document))),
 
-    
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1451,11 +1452,7 @@ branch_handler(post,Path,R) :-
     ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
     ;   Origin_Descriptor = empty),
 
-    (   get_dict(base_uri, Document, Base_Uri)
-    ->  Options = [base_uri(Base_Uri)]
-    ;   Options = []),
-
-    branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, Options, _Branch_Uri),
+    branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
     reply_json(_{'terminus:status' : "terminus:success"}).
@@ -1481,43 +1478,18 @@ test(create_empty_branch, [
     atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{base_uri: 'http://terminushub.com/admin/test/foodocument'}),
+              json(_{prefixes : _{ doc : "https://terminushub.com/document",
+                                   scm : "https://terminushub.com/schema"}
+                    }),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
     * json_write_dict(current_output, JSON, []),
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
-    has_branch(Repository_Descriptor, "foo"),
-    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/foodocument").
+    has_branch(Repository_Descriptor, "foo").
 
-test(create_empty_branch_without_base_uri_errors, [
-         setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
-                ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
-     ])
-:-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-    Status_Code = 400,
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    \+ has_branch(Repository_Descriptor, "foo").
-
-test(create_branch_from_local_without_base_uri, [
+test(create_branch_from_local_without_prefixes, [
          setup((config:server(Server),
                 user_database_name(admin,test, Name),
                 (   database_exists(Name)
@@ -1539,10 +1511,9 @@ test(create_branch_from_local_without_base_uri, [
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
-    has_branch(Repository_Descriptor, "foo"),
-    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/document").
+    has_branch(Repository_Descriptor, "foo").
 
-test(create_branch_from_local_with_base_uri, [
+test(create_branch_from_local_with_prefixes, [
          setup((config:server(Server),
                 user_database_name(admin,test, Name),
                 (   database_exists(Name)
@@ -1558,15 +1529,16 @@ test(create_branch_from_local_with_base_uri, [
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/master',
-                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+                     prefixes : _{ doc : "https://terminushub.com/document",
+                                   scm : "https://terminushub.com/schema"}
+                    }),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
     * json_write_dict(current_output, JSON, []),
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
-    has_branch(Repository_Descriptor, "foo"),
-    branch_base_uri(Repository_Descriptor, "foo", "http://terminushub.com/admin/test/foodocument").
+    has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_that_already_exists_error, [
          setup((config:server(Server),
@@ -1636,7 +1608,8 @@ test(create_branch_from_commit_graph_error, [
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/_commits',
-                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
+                     prefixes : _{ doc : "https://terminushub.com/document",
+                                   scm : "https://terminushub.com/schema"}}),
               JSON,
               [json_object(dict),
                authorization(basic(admin,Key)),
@@ -1657,8 +1630,8 @@ test(create_branch_from_commit_graph_error, [
                  prefix,
                  methods([options,post])]).
 
-prefix_handler(options, Path, R) :-
-    
+prefix_handler(options, _Path, _R) :-
+
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1948,10 +1921,6 @@ customise_error(error(no_parameter_key(Key))) :-
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : MSG,
                  'terminus:object' : Key},
-               [status(400)]).
-customise_error(error(branch_creation_base_uri_not_specified)) :-
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : 'branch has no specified base uri'},
                [status(400)]).
 customise_error(error(branch_already_exists(Branch_Name))) :-
     format(string(Msg), "branch ~w already exists", [Branch_Name]),

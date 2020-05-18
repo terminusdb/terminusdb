@@ -30,7 +30,8 @@
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
-              commit_uri_to_history_commit_uris/3
+              commit_uri_to_history_commit_uris/3,
+              update_prefixes/2
           ]).
 :- use_module(library(terminus_store)).
 
@@ -259,8 +260,8 @@ test(branch_insert,
             has_branch(Descriptor, Branch_Name),
             Branches),
 
-    Branches = ["bar"
-                "baz"
+    Branches = ["bar",
+                "baz",
                 "foo"].
 
 :- end_tests(branch_objects).
@@ -853,16 +854,18 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
     true.
 
 update_prefixes(Context, Prefixes) :-
-    assert_prefixes(Prefixes)
-    ask(Context,
-        (   t(ref:default_prefixes, ref:prefix_pair, Pair),
-            delete_object(Pair),
-            delete(ref_default_prefixes, ref:prefix_pair, Pair))),
+    forall(ask(Context,
+               (   t(ref:default_prefixes, ref:prefix_pair, Pair),
+                   delete_object(Pair),
+                   delete(ref_default_prefixes, ref:prefix_pair, Pair))),
+           true),
+
     dict_keys(Prefixes, Keys),
     forall((   member(Key, Keys),
                get_dict(Key,Prefixes,URI)),
            ask(Context,
                (   idgen('terminus://PrefixPair',[Key], Pair),
+                   insert(Pair, rdf:type, ref:'PrefixPair'),
                    insert(ref:default_prefixes, ref:prefix_pair, Pair),
                    insert(Pair, ref:prefix, Key^^xsd:string),
                    insert(Pair, ref:prefix_uri, URI^^xsd:string)
@@ -1097,7 +1100,7 @@ test(common_ancestor_after_branch_and_some_commits,
                          insert(d,e,f)),
                      _),
 
-    branch_create(Descriptor.repository_descriptor, Descriptor, "second", [], _),
+    branch_create(Descriptor.repository_descriptor, Descriptor, "second", _),
 
     create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
     with_transaction(Commit_C_Context,

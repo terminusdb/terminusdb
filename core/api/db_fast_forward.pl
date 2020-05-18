@@ -59,7 +59,7 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
     resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
 
     % create a branch off the master branch (which should result in an empty branch)
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
 
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
@@ -80,7 +80,7 @@ test(fast_forward_empty_branch_from_same_repo,
     resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
 
     % create a branch off the master branch (which should result in an empty branch)
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
 
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
@@ -125,7 +125,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
                      _),
 
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
 
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
@@ -173,7 +173,7 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
                      _),
 
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
 
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
@@ -222,7 +222,7 @@ test(fast_forward_branch_from_other_repo,
 
     % create a branch off the master branch
     resolve_absolute_string_descriptor("user/bar/local/branch/second", Bar_Descriptor),
-    branch_create(Bar_Descriptor.repository_descriptor, Foo_Descriptor, "second", [], _),
+    branch_create(Bar_Descriptor.repository_descriptor, Foo_Descriptor, "second", _),
 
 
     % create two commits on the new branch

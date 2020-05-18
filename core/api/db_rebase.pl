@@ -178,7 +178,7 @@ test(rebase_fast_forward,
                          insert(a,b,c)),
                     _),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -236,7 +236,7 @@ test(rebase_divergent_history,
                          insert(a,b,c)),
                     _),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
     resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -295,7 +295,7 @@ test(rebase_divergent_history,
 
 test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test','terminus://blah'))),
+             create_db_with_test_schema('user','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(rebase(schema_validation_error(_,_),_)))
      ])
@@ -319,7 +319,7 @@ test(rebase_conflicting_history_errors,
     once(ask(Master_Context2, t(City_Uri, worldOnt:name, "Dublin"^^xsd:string))),
     format(string(City_Uri_String), "~w", [City_Uri]),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", [], _),
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
     resolve_absolute_string_descriptor("user/test/local/branch/second", Second_Descriptor),
 
     % create a commit on the master branch, diverging history
