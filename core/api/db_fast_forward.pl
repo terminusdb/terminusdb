@@ -52,7 +52,7 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
 :- use_module(db_branch).
 test(fast_forward_empty_branch_on_empty_from_same_repo,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ])
 :-
@@ -73,7 +73,7 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
 
 test(fast_forward_empty_branch_from_same_repo,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ])
 :-
@@ -111,7 +111,7 @@ test(fast_forward_empty_branch_from_same_repo,
 
 test(fast_forward_nonempty_branch_from_same_repo,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ])
 :-
@@ -158,7 +158,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
 
 test(fast_forward_branch_with_divergent_history_from_same_repo,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(fast_forward(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id]))))
      ])
@@ -206,8 +206,8 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
 
 test(fast_forward_branch_from_other_repo,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'),
-             create_db('user|bar','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'),
+             create_db_without_schema('user|bar','test','a test'))),
       cleanup(teardown_temp_store(State))
      ])
 :-

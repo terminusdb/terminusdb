@@ -865,7 +865,7 @@ collection_descriptor_graph_filter_graph_descriptor(
 
 test(transactions_to_map,[
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -943,7 +943,7 @@ test(id, [
 
 test(open_database_descriptor_as_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -952,7 +952,7 @@ test(open_database_descriptor_as_atom, [
 
 test(open_database_descriptor_as_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -961,7 +961,7 @@ test(open_database_descriptor_as_string, [
 
 test(open_nonexistent_database_descriptor, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -970,7 +970,7 @@ test(open_nonexistent_database_descriptor, [
 
 test(open_repository_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -981,7 +981,7 @@ test(open_repository_descriptor_with_atom, [
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -992,7 +992,7 @@ test(open_repository_descriptor_with_string, [
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1003,7 +1003,7 @@ test(open_repository_descriptor_with_string, [
 
 test(open_branch_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1015,7 +1015,7 @@ test(open_branch_descriptor_with_atom, [
 
 test(open_branch_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1027,7 +1027,7 @@ test(open_branch_descriptor_with_string, [
 
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1042,7 +1042,7 @@ test(open_branch_descriptor_with_nonexistent, [
 
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1057,7 +1057,7 @@ test(open_branch_descriptor_with_nonexistent, [
 
 test(open_commit_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1088,7 +1088,7 @@ test(open_commit_descriptor_with_atom, [
 
 test(open_commit_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1117,7 +1117,7 @@ test(open_commit_descriptor_with_string, [
 
 test(open_commit_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db(testdb, 'test','a test', "http://localhost/testdb"))),
+                create_db_without_schema(testdb, 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-

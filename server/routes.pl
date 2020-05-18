@@ -299,7 +299,7 @@ test(db_create, [
 
 test(db_delete, [
          setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                create_db(DB,'test','a test',"https://terminushub.com/")))
+                create_db_without_schema(DB,'test','a test')))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
@@ -424,7 +424,7 @@ test(triples_update, [
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true),
-                create_db(DB,'test','a test','http://hub.terminusdb.com/TERMINUS_QA/TEST_DB/document'))),
+                create_db_without_schema(DB,'test','a test'))),
          cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                   delete_db(DB)))
 
@@ -478,7 +478,7 @@ test(triples_post_get, [
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true),
-                create_db(DB,'test','a test','http://hub.terminusdb.com/monkey/Jumanji/document'))),
+                create_db_without_schema(DB,'test','a test'))),
          cleanup((user_database_name('admin', 'Jumanji', DB),
                   delete_db(DB)))
      ])
@@ -877,7 +877,7 @@ test(branch_db, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test', 'http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -936,7 +936,7 @@ test(update_object, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1028,7 +1028,7 @@ test(delete_object, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name,'test','a test', 'http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name,'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1228,7 +1228,7 @@ test(rebase_divergent_history, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,foo, Name),
                   delete_db(Name)))
      ])
@@ -1346,7 +1346,7 @@ test(pack_stuff, [
                     delete_user(Old_User_ID)
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',User_ID),
-                create_db(DB_Name,'foo','a test',"https://terminushub.com/"),
+                create_db_without_schema(DB_Name,'foo','a test'),
                 make_user_own_database('_a_test_user_',DB_Name)
                )),
          cleanup((delete_db(DB_Name),
@@ -1472,7 +1472,7 @@ test(create_empty_branch, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1497,7 +1497,7 @@ test(create_empty_branch_without_base_uri_errors, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1523,7 +1523,7 @@ test(create_branch_from_local_without_base_uri, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1548,7 +1548,7 @@ test(create_branch_from_local_with_base_uri, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1574,7 +1574,7 @@ test(create_branch_that_already_exists_error, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1598,7 +1598,7 @@ test(create_branch_from_nonexisting_origin_error, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1626,7 +1626,7 @@ test(create_branch_from_commit_graph_error, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup((user_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
@@ -1729,7 +1729,7 @@ test(create_graph, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'))),
+                create_db_without_schema(Name, 'test','a test'))),
          cleanup(delete_db(Name))
      ])
 :-
@@ -1760,7 +1760,7 @@ test(delete_graph, [
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
-                create_db(Name, 'test','a test','http://terminushub.com/admin/test/document'),
+                create_db_without_schema(Name, 'test','a test'),
                 resolve_absolute_string_descriptor('admin/test',Branch_Descriptor),
                 create_graph(Branch_Descriptor,
                              commit_info{ author : "test",

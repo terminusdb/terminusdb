@@ -140,7 +140,7 @@ branch_create(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Options
 
 test(create_branch_from_nothing_without_uri_produces_error,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(branch_creation_base_uri_not_specified))]
     ) :-
@@ -154,7 +154,7 @@ test(create_branch_from_nothing_without_uri_produces_error,
 
 test(create_branch_from_nothing,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -172,7 +172,7 @@ test(create_branch_from_nothing,
 
 test(create_branch_from_local_empty_branch_copying_base_uri,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -195,7 +195,7 @@ test(create_branch_from_local_empty_branch_copying_base_uri,
 
 test(create_branch_from_local_empty_branch_overriding_base_uri,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -218,7 +218,7 @@ test(create_branch_from_local_empty_branch_overriding_base_uri,
 
 test(create_branch_from_local_branch_with_commits,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -251,8 +251,8 @@ test(create_branch_from_local_branch_with_commits,
 
 test(create_branch_from_remote_branch,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://foo'),
-             create_db('user|bar','test','a test', 'terminus://bar'))),
+             create_db_without_schema('user|foo','test','a test'),
+             create_db_without_schema('user|bar','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -301,7 +301,7 @@ test(create_branch_from_remote_branch,
 
 test(create_branch_from_local_commit,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -350,8 +350,8 @@ test(create_branch_from_local_commit,
 
 test(create_branch_from_remote_commit,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://foo'),
-             create_db('user|bar','test','a test', 'terminus://bar'))),
+             create_db_without_schema('user|foo','test','a test'),
+             create_db_without_schema('user|bar','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-

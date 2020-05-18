@@ -877,8 +877,8 @@ update_prefixes(Context, Prefixes) :-
 :- use_module(database).
 test(apply_single_addition,
      [setup((setup_temp_store(State),
-             create_db('user|testdb1', "label", "comment", "http://something"),
-             create_db('user|testdb2', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb1', "label", "comment"),
+             create_db_without_schema('user|testdb2', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
@@ -922,8 +922,8 @@ test(apply_single_addition,
 
 test(apply_single_removal,
      [setup((setup_temp_store(State),
-             create_db('user|testdb1', "label", "comment", "http://something"),
-             create_db('user|testdb2', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb1', "label", "comment"),
+             create_db_without_schema('user|testdb2', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
@@ -966,8 +966,8 @@ test(apply_single_removal,
             removal(d,e,f))).
 test(apply_existing_addition,
      [setup((setup_temp_store(State),
-             create_db('user|testdb1', "label", "comment", "http://something"),
-             create_db('user|testdb2', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb1', "label", "comment"),
+             create_db_without_schema('user|testdb2', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
@@ -1005,8 +1005,8 @@ test(apply_existing_addition,
 
 test(apply_nonexisting_removal,
      [setup((setup_temp_store(State),
-             create_db('user|testdb1', "label", "comment", "http://something"),
-             create_db('user|testdb2', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb1', "label", "comment"),
+             create_db_without_schema('user|testdb2', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
@@ -1082,7 +1082,7 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
 :- use_module(database).
 test(common_ancestor_after_branch_and_some_commits,
      [setup((setup_temp_store(State),
-             create_db('user|testdb', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     resolve_absolute_string_descriptor("user/testdb", Descriptor),
@@ -1183,7 +1183,7 @@ commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
 :- use_module(database).
 test(commit_history_ids,
      [setup((setup_temp_store(State),
-             create_db('user|testdb', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     resolve_absolute_string_descriptor("user/testdb", Descriptor),
@@ -1211,7 +1211,7 @@ test(commit_history_ids,
     true.
 test(commit_history_uris,
      [setup((setup_temp_store(State),
-             create_db('user|testdb', "label", "comment", "http://something")
+             create_db_without_schema('user|testdb', "label", "comment")
             )),
       cleanup(teardown_temp_store(State))]) :-
     resolve_absolute_string_descriptor("user/testdb", Descriptor),

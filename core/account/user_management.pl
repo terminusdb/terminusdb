@@ -172,7 +172,7 @@ test(test_user_ownership, [
     add_user(Name, "gavin@terminusdb.com", "here.i.am", User_URI),
     user_database_name(Name, 'test', Database_Name),
 
-    create_db(Database_Name, 'test', 'a test', 'http://terminushub.com/Gavin/test/document'),
+    create_db_without_schema(Database_Name, 'test', 'a test'),
 
     make_user_own_database(Name, Database_Name),
 

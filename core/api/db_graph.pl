@@ -120,7 +120,7 @@ delete_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
 
 test(create_graph_on_empty_branch,
      [setup((setup_temp_store(State),
-             create_db('user|foo', 'test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo', 'test','a test'))),
       cleanup(teardown_temp_store(State))]
     ) :-
     make_branch_descriptor("user", "foo", Descriptor),
@@ -141,7 +141,7 @@ test(create_graph_on_empty_branch,
 
 test(delete_graph_on_branch,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))]
     )
 :-

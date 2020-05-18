@@ -1499,7 +1499,7 @@ test(eval, [])
 
 test(add_triple, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1517,7 +1517,7 @@ test(add_triple, [
 
 test(add_quad, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1701,7 +1701,7 @@ test(exp, []) :-
 
 test(limit, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))]) :-
 
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2143,7 +2143,7 @@ test(path, []) :-
 
 test(path_star, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2194,7 +2194,7 @@ test(path_star, [
 
 test(complex_path, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2260,7 +2260,7 @@ test(complex_path, [
 
 test(group_by, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -2362,7 +2362,7 @@ test(when, []) :-
 
 test(transaction_semantics_after, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2390,7 +2390,7 @@ test(transaction_semantics_after, [
 
 test(transaction_semantics_disjunct, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2420,7 +2420,7 @@ test(transaction_semantics_disjunct, [
 
 test(transaction_semantics_conditional, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2450,7 +2450,7 @@ test(transaction_semantics_conditional, [
 
 test(disjunction_equality, [
          setup((setup_temp_store(State),
-                create_db('admin|test', 'test','a test', 'http://somewhere.com/'))),
+                create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-

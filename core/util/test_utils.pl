@@ -265,7 +265,7 @@ create_db_with_test_schema(User, Db_Name) :-
     user_database_name(User, Db_Name, Full_Name),
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    create_db(Full_Name, "test", "a test db", Prefixes),
+    create_db_without_schema(Full_Name, "test", "a test db"),
     resolve_absolute_descriptor([User, Db_Name], Branch_Descriptor),
 
     create_graph(Branch_Descriptor,
@@ -285,7 +285,7 @@ create_db_without_schema(User, Db_Name) :-
     user_database_name(User, Db_Name, Full_Name),
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    create_db(Full_Name, "test", "a test db", Prefixes).
+    create_db_without_schema(Full_Name, "test", "a test db").
 
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,

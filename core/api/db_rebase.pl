@@ -168,7 +168,7 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
 :- use_module(db_branch).
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
@@ -226,7 +226,7 @@ test(rebase_fast_forward,
 
 test(rebase_divergent_history,
      [setup((setup_temp_store(State),
-             create_db('user|foo','test','a test', 'terminus://blah'))),
+             create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
