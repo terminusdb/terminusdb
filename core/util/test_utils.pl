@@ -261,9 +261,11 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
     create_context(Transaction_Object, Commit_Info, Context).
 
 
-create_db_with_test_schema(User, Db_Name, Base_Uri) :-
+create_db_with_test_schema(User, Db_Name) :-
     user_database_name(User, Db_Name, Full_Name),
-    create_db(Full_Name, "test", "a test db", Base_Uri),
+    Prefixes = _{ doc : 'http://somewhere.for.now/document',
+                  scm : 'http://somewhere.for.now/schema' },
+    create_db(Full_Name, "test", "a test db", Prefixes),
     resolve_absolute_descriptor([User, Db_Name], Branch_Descriptor),
 
     create_graph(Branch_Descriptor,
@@ -279,10 +281,16 @@ create_db_with_test_schema(User, Db_Name, Base_Uri) :-
     read_file_to_string(TTL_File, TTL, []),
     update_turtle_graph(Context, schema, "main", TTL).
 
+create_db_without_schema(User, Db_Name) :-
+    user_database_name(User, Db_Name, Full_Name),
+    Prefixes = _{ doc : 'http://somewhere.for.now/document',
+                  scm : 'http://somewhere.for.now/schema' },
+    create_db(Full_Name, "test", "a test db", Prefixes).
+
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema("user", "test", "terminus://blah"))),
+             create_db_with_test_schema("user", "test"))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-

@@ -44,6 +44,7 @@
               '*'/1,
               op(1100,xfy,<>),
               '<>'/2,
+              do_or_die/2,
               whole_arg/2,
               random_string/1,
               uri_has_protocol/1,
@@ -82,6 +83,7 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
+
 /*
  * Forget the next phrase.
  *
@@ -99,6 +101,17 @@
     (   call(Goal1)
     ->  true
     ;   call(Goal2)).
+
+/*
+ * do_or_die(:Goal1,:Goal2) is det
+ *
+ * Deterministic
+ */
+:- meta_predicate do_or_die(:,?).
+do_or_die(Goal, Error) :-
+    (   call(Goal)
+    ->  true
+    ;   throw(Error)).
 
 /**
  * get_key(+Key,+Object,-Val,+Default) is det.

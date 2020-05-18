@@ -1,7 +1,6 @@
 :- module(ref_entity, [
               has_branch/2,
               branch_name_uri/3,
-              branch_base_uri/3,
               branch_head_commit/3,
               has_commit/2,
               commit_id_uri/3,
@@ -11,7 +10,7 @@
               commit_uri_to_parent_uri/3,
               graph_for_commit/5,
               layer_uri_for_graph/3,
-              insert_branch_object/4,
+              insert_branch_object/3,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
               insert_base_commit_object/5,
@@ -56,11 +55,6 @@ branch_name_uri(Askable, Branch_Name, Branch_Uri) :-
     once(ask(Askable,
              t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string))).
 
-branch_base_uri(Askable, Branch_Name, Base_Uri) :-
-    branch_name_uri(Askable, Branch_Name, Branch_Uri),
-    once(ask(Askable,
-             t(Branch_Uri, ref:branch_base_uri, Base_Uri^^xsd:anyURI))).
-
 branch_head_commit(Askable, Branch_Name, Commit_Uri) :-
     branch_name_uri(Askable, Branch_Name, Branch_Uri),
     once(ask(Askable,
@@ -104,11 +98,10 @@ layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri) :-
     once(ask(Askable,
              (   t(Graph_Uri, ref:graph_layer, Layer_Uri)))).
 
-insert_branch_object(Context, Branch_Name, Base_Uri, Branch_Uri) :-
+insert_branch_object(Context, Branch_Name, Branch_Uri) :-
     once(ask(Context,
              (   idgen(doc:'Branch', [Branch_Name^^xsd:string], Branch_Uri),
                  insert(Branch_Uri, rdf:type, ref:'Branch'),
-                 insert(Branch_Uri, ref:branch_base_uri, Base_Uri^^xsd:anyURI),
                  insert(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string)))).
 
 insert_base_commit_object(Context, Commit_Id, Commit_Uri) :-
@@ -257,19 +250,19 @@ test(branch_insert,
     ref_schema_context_from_label_descriptor(Descriptor, Context),
     
     with_transaction(Context,
-                     (   insert_branch_object(Context, "foo", "terminus://base1", _),
-                         insert_branch_object(Context, "bar", "terminus://base2", _),
-                         insert_branch_object(Context, "baz", "terminus://base2", _)),
+                     (   insert_branch_object(Context, "foo", _),
+                         insert_branch_object(Context, "bar", _),
+                         insert_branch_object(Context, "baz", _)),
                      _),
 
-    findall(Branch_Name-Base_Uri,
-            (   has_branch(Descriptor, Branch_Name),
-                branch_base_uri(Descriptor, Branch_Name, Base_Uri)),
+    findall(Branch_Name,
+            has_branch(Descriptor, Branch_Name),
             Branches),
 
-    Branches = ["bar"-"terminus://base2",
-                "baz"-"terminus://base2",
-                "foo"-"terminus://base1"].
+    Branches = ["bar"
+                "baz"
+                "foo"].
+
 :- end_tests(branch_objects).
 
 
@@ -343,7 +336,7 @@ test(commit_on_branch_insert,
     % first set up the branch
     ref_schema_context_from_label_descriptor(Descriptor, Context1),
     with_transaction(Context1,
-                     insert_branch_object(Context1, "foo", "terminus://base1", _),
+                     insert_branch_object(Context1, "foo", _),
                      _),
 
     % then add a commit
@@ -858,6 +851,24 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
     % We may actually have written an invalid commit here.
 
     true.
+
+update_prefixes(Context, Prefixes) :-
+    assert_prefixes(Prefixes)
+    ask(Context,
+        (   t(ref:default_prefixes, ref:prefix_pair, Pair),
+            delete_object(Pair),
+            delete(ref_default_prefixes, ref:prefix_pair, Pair))),
+    dict_keys(Prefixes, Keys),
+    forall((   member(Key, Keys),
+               get_dict(Key,Prefixes,URI)),
+           ask(Context,
+               (   idgen('terminus://PrefixPair',[Key], Pair),
+                   insert(ref:default_prefixes, ref:prefix_pair, Pair),
+                   insert(Pair, ref:prefix, Key^^xsd:string),
+                   insert(Pair, ref:prefix_uri, URI^^xsd:string)
+               )
+              )
+          ).
 
 :- begin_tests(commit_application).
 :- use_module(core(util/test_utils)).

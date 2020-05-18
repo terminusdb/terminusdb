@@ -69,6 +69,8 @@
 % Suppress warnings
 :- dynamic jwt_decode/3.
 
+
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
@@ -236,15 +238,19 @@ db_handler(post,Account,DB,R) :-
     assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, Server),
 
     get_payload(Database_Document,Request),
-    (   _{ comment : Comment,
-           label : Label,
-           base_uri : Base_Uri } :< Database_Document
-    ->  true
-    ;   throw(error(bad_api_document(Database_Document)))),
+    do_or_die(
+        (_{ comment : Comment,
+            label : Label } :< Database_Document),
+        error(bad_api_document(Database_Document))),
+
+    do_or_die(
+        (_{ prefixes : Prefixes } :< Database_Document,
+         _{ doc : _Doc, scm : _Scm} :< Prefixes),
+        error(under_specified_prefixes(Database_Document))),
 
     user_database_name(Account, DB, DB_Name),
 
-    try_create_db(DB_Name, Label, Comment, Base_Uri),
+    try_create_db(DB_Name, Label, Comment, Prefixes),
 
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
@@ -1145,7 +1151,7 @@ fetch_handler(options, _Path, _Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-fetch_handler(post,Path,Request) :-
+fetch_handler(post,Path,_Request) :-
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Descriptor),
 
@@ -1169,18 +1175,7 @@ fetch_handler(post,Path,Request) :-
               [authorization(bearer(Bearer))]),
 
     % Does the unpack
-    pack_layers_and_parents(Pack,Layer_Parents)
-    % all layers and their parents [Layer-Parent,....]
-    % Are these valid? Parent is a Layer in the list or we have the parent.
-    layer_and_parents_fringe(Layer_Parents,Fringe),
-    assert_fringe_is_known(Fringe),
-    % Filter this list to layers we don't know about
-    
-    layer_parents_unknown(Layer_Parents, Unknown)
-    % Extract only these layers.
-    % forall( member(Layer, Valid), extract(Store,Layer_ID,Layer_Pack))
-    throw(error('Not implemented')).
-
+    unpack(Pack).
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
@@ -1339,6 +1334,7 @@ pack_handler(post,Path,R) :-
 %:- use_module(core(transaction)).
 %:- use_module(core(api)).
 :- use_module(library(http/http_open)).
+:- use_module(library(terminus_store)).
 
 test(pack_stuff, [
          setup((user_database_name('_a_test_user_', foo, DB_Name),
@@ -1361,7 +1357,6 @@ test(pack_stuff, [
 
     % First commit
     create_context(Descriptor, commit_info{author:"user",message:"commit a"}, Master_Context1),
-
     with_transaction(Master_Context1,
                      ask(Master_Context1,
                          insert(a,b,c)),
@@ -1390,7 +1385,19 @@ test(pack_stuff, [
               Pack,
               [authorization(basic('_a_test_user_','password'))]),
 
-    Pack = _Something.
+    writeq(Pack),
+
+    create_context(Descriptor, commit_info{author:"user",message:"commit b"}, New_Head_Context),
+    % grab the repository head layer_ID and new graph layer_ID
+    [New_Head_Transaction] = (New_Head_Context.transaction_objects),
+    New_Head_Repository = (New_Head_Transaction.parent),
+    repository_head_layerid(New_Head_Repository,New_Repository_Head_Layer_ID),
+    [Instance_Graph] = (New_Head_Transaction.instance_objects),
+    Layer = (Instance_Graph.read),
+    layer_to_id(Layer,Layer_ID),
+
+    sort([New_Repository_Head_Layer_ID,Layer_ID], Layer_Ids),
+    format(atom(Pack),'Layer Ids: ~q', [Layer_Ids]).
 
 :- end_tests(pack_endpoint).
 
@@ -1399,9 +1406,25 @@ test(pack_stuff, [
                 [method(Method),
                  methods([options,post])]).
 
-push_handler(_Method,_Path,_Request) :-
-    _Source = _Something,
-    _Target = _Something_Else,
+% NOTE: We do this everytime - it should be handled automagically.
+push_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+push_handler(post,Path,R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, Auth_ID),
+
+    resolve_absolute_string_descriptor(Path,Us),
+
+    get_payload(Document, Request),
+    do_or_die(
+        _{ remote : Remote_Name } :< Document,
+        error(push_has_no_remote(Document))),
+
+    
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1420,7 +1443,7 @@ branch_handler(post,Path,R) :-
         repository_descriptor: Destination_Descriptor,
         branch_name: Branch_Name
     } :< Branch_Descriptor,
-    
+
     add_payload_to_request(R,Request),
     get_payload(Document, Request),
 
@@ -1624,10 +1647,19 @@ test(create_branch_from_commit_graph_error, [
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
     \+ has_branch(Repository_Descriptor, "foo").
-   
+
 :- end_tests(branch_endpoint).
 
+%%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
+:- http_handler(root(prefixes/Path), cors_catch(prefix_handler(Method,Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+prefix_handler(options, Path, R) :-
+    
+    throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(graph/Path), cors_catch(graph_handler(Method,Path)),
@@ -2130,17 +2162,19 @@ get_param(Key,Request,Value) :-
     Value = Document.get(Key).
 
 /*
- * try_create_db(DB,Label,Comment,Base_URI) is det.
+ * try_create_db(DB,Label,Comment,Prefixes) is det.
  *
  * Try to create a database and associate resources
  */
-try_create_db(DB,Label,Comment,Base_Uri) :-
+try_create_db(DB,Label,Comment,Prefixes) :-
     % create the collection if it doesn't exist
-    (   not(database_exists(DB))
-        <>  throw(error(database_already_exists(DB)))),
+    do_or_die(
+        not(database_exists(DB)),
+        error(database_already_exists(DB))),
 
-    (   create_db(DB, Label, Comment, Base_Uri)
-        <>  throw(error(database_could_not_be_created(DB)))).
+    do_or_die(
+        create_db(DB, Label, Comment, Prefixes),
+        error(database_could_not_be_created(DB))).
 
 
 /*

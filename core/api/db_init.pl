@@ -123,7 +123,7 @@ write_instance(Builder,URI,Label,Class) :-
     nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
     nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
-create_ref_layer(Name,Base_URI) :-
+create_ref_layer(Name,Prefixes) :-
     Descriptor = repository_descriptor{
                      database_descriptor: database_descriptor{
                                               database_name: Name
@@ -131,9 +131,12 @@ create_ref_layer(Name,Base_URI) :-
                      repository_name: "local"
                  },
     create_context(Descriptor, Context),
-    with_transaction(Context,
-                     insert_branch_object(Context, "master", Base_URI, _),
-                     _).
+    with_transaction(
+        Context,
+        (   insert_branch_object(Context, "master", _),
+            update_prefixes(Context, Prefixes)
+        ),
+        _).
 
 finalise_terminus(Name) :-
     storage(Store),
@@ -150,7 +153,7 @@ finalise_terminus(Name) :-
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-create_db(Name, Label, Comment, Base_URI) :-
+create_db(Name, Label, Comment, Prefixes) :-
     text_to_string(Name, Name_String),
     % insert new db object into the terminus db
     insert_db_object(Name, Label, Comment),
@@ -159,7 +162,7 @@ create_db(Name, Label, Comment, Base_URI) :-
     create_repo_graph(Name_String),
 
     % create ref layer with master branch
-    create_ref_layer(Name_String,Base_URI),
+    create_ref_layer(Name_String,Prefixes),
 
     % update terminusdb with finalized
     finalise_terminus(Name).

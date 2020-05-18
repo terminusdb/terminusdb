@@ -78,6 +78,7 @@
               '*'/1,
               op(700,xfy,<>),
               '<>'/2,
+              do_or_die/2,
               whole_arg/2,
               random_string/1,
               uri_has_prefix/1,

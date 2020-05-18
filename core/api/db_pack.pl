@@ -19,7 +19,8 @@ context_repository_head_pack(Context, Repo_Head_Option, Pack) :-
 
 % STUB!
 store_layerids_pack(_Store, Layer_Ids, Pack) :-
-    format(string(Pack),'Layer Ids: ~q', [Layer_Ids]).
+    sort(Layer_Ids,Sorted),
+    format(string(Pack),'Layer Ids: ~q', [Sorted]).
 
 :- use_module(core(transaction)).
 context_repository_layerids(Context, Repo_Head_Option, Layer_Ids) :-
@@ -64,13 +65,16 @@ assert_fringe_is_known([Layer_ID|Rest]) :-
     ;   throw(error(unknown_layer_reference(Layer_ID)))),
     assert_fringe_is_known(Rest).
 
-layerids_and_parents_fringe([],[]).
-layerids_and_parents_fringe([Layer_ID-Parent_ID|Remainder], Fringe) :-
-    member(Parent_ID-_,Remainder),
+layerids_and_parents_fringe(Layerids_Parents,Fringe) :-
+    layerids_and_parents_fringe_(Layerids_Parents,Layerids_Parents,Fringe).
+
+layerids_and_parents_fringe_([],_,[]).
+layerids_and_parents_fringe_([_-Parent_ID|Remainder], Layerids_Parents, Fringe) :-
+    member(Parent_ID-_,Layerids_Parents),
     !,
-    layerids_and_parents_fringe(Remainder,Fringe).
-layerids_and_parents_fringe([Layer_ID-Parent_ID|Remainder], [Parent_ID|Fringe]) :-
-    layerids_and_parents_fringe(Remainder,Fringe).
+    layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
+layerids_and_parents_fringe_([_-Parent_ID|Remainder], Layerids_Parents, [Parent_ID|Fringe]) :-
+    layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
 
 layerids_unknown(Layer_Ids,Unknown_Layer_Ids) :-
     exclude(layer_exists,Layer_Ids,Unknown_Layer_Ids).
@@ -82,10 +86,15 @@ unpack(Pack) :-
    layerids_and_parents_fringe(Layer_Parents,Fringe),
    assert_fringe_is_known(Fringe),
    % Filter this list to layers we don't know about
-   findall(L, member(L-,Layer_Parents), Layer_Ids),
+   findall(L, member(L-_,Layer_Parents), Layer_Ids),
    layerids_unknown(Layer_Ids, Unknown_Layer_Ids),
    % Extract only these layers.
    storage(Store),
    forall( member(Layer_Id, Unknown_Layer_Ids), extract(Store,Layer_Id,Pack)).
 
 
+%%% Stub
+pack_layerids_and_parents(_Pack,_Layer_Parents).
+
+%%% Stub
+extract(_Store, _Layer_Id, _Pack).

@@ -2,7 +2,6 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix ref: <http://terminusdb.com/schema/ref#> .
 @prefix terminus: <http://terminusdb.com/schema/terminus#> .
@@ -12,10 +11,10 @@
   a owl:Ontology ;
   rdfs:label "Terminus DB Reference Schema"@en ;
   rdfs:comment "Schema describing all of the structure of references (capabilities, roles, resources, users, databases)"@en ;
-  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
-  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
   owl:imports <http://terminusdb.com/schema/layer> ;
-  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
 ref:BranchBaseUriRestriction
   a owl:Restriction ;
@@ -67,7 +66,7 @@ ref:inference
 
 ref:Graph
   a owl:Class ;
-  rdfs:subClassOf tcs:Document ;
+  rdfs:subClassOf terminus:Document ;
   rdfs:comment "This is a named graph for a commit"@en ;
   rdfs:label "Graph"@en .
 
@@ -87,7 +86,7 @@ ref:graph_layer
 
 ref:Commit
   a owl:Class ;
-  rdfs:subClassOf tcs:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
+  rdfs:subClassOf terminus:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
   rdfs:comment "This is a commit for a database"@en ;
   rdfs:label "Commit"@en .
 
@@ -112,7 +111,7 @@ ref:CommitParentRestriction
 
 ref:Ref
   a owl:Class ;
-  rdfs:subClassOf tcs:Document, ref:RefRestriction ;
+  rdfs:subClassOf terminus:Document, ref:RefRestriction ;
   rdfs:comment "This is a ref for a commit"@en ;
   rdfs:label "Ref"@en .
 
@@ -197,4 +196,57 @@ ref:ref_identifier
   rdfs:comment "The identifier associated with a ref"@en ;
   rdfs:domain ref:Ref ;
   rdfs:label "identifier"@en ;
+  rdfs:range xsd:string .
+
+ref:default_prefixes
+  a ref:Prefixes ;
+  rdfs:label "Default Prefixes"@en ;
+  rdfs:comment "Default Prefixes for the Database"@en ;
+
+ref:Prefixes
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document ;
+  owl:oneOf ( ref:default_prefixes ) ;
+  rdfs:comment "The prefixes for this repository"@en ;
+  rdfs:label "Prefixes"@en .
+
+ref:prefix_pair
+  a owl:ObjectProperty ;
+  rdfs:domain ref:Prefixes ;
+  rdfs:range ref:PrefixPair ;
+  rdfs:label "prefix"@en ;
+  rdfs:comment "Associates a database with its default prefixes"@en .
+
+ref:PrefixRestriction
+  a owl:Restriction ;
+  rdfs:label "Prefix Restriction"@en ;
+  rdfs:comment "Only one prefix per object"@en ;
+  rdfs:onProperty ref:prefix_pair ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+ref:PrefixURIRestriction
+  a owl:Restriction ;
+  rdfs:label "Prefix URI Restriction"@en ;
+  rdfs:comment "Only one prefix URI per object"@en ;
+  rdfs:onProperty ref:prefix_uri ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+ref:PrefixPair
+  a owl:Class ;
+  rdfs:subClassOf ref:PrefixRestriction, ref:PrefixURIRestriction ;
+  rdfs:label "Prefixes"@en ;
+  rdfs:comment "Default prefixes for a given database"@en .
+
+ref:prefix
+  a owl:DatatypeProperty ;
+  rdfs:label "prefix"@en ;
+  rdfs:comment "The shorthand for the initial segment of an IRI"@en ;
+  rdfs:domain ref:PrefixPair ;
+  rdfs:range xsd:string .
+
+ref:prefix_uri
+  a owl:DatatypeProperty ;
+  rdfs:label "prefix uri"@en ;
+  rdfs:comment "The uri associated with a shorthand"@en ;
+  rdfs:domain ref:PrefixPair ;
   rdfs:range xsd:string .

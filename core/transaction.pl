@@ -41,7 +41,6 @@
               % ref_entity.pl
               has_branch/2,
               branch_name_uri/3,
-              branch_base_uri/3,
               branch_head_commit/3,
               commit_id_uri/3,
               commit_id_to_metadata/5,
@@ -50,7 +49,7 @@
               commit_uri_to_parent_uri/3,
               graph_for_commit/5,
               layer_uri_for_graph/3,
-              insert_branch_object/4,
+              insert_branch_object/3,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
               insert_base_commit_object/5,
