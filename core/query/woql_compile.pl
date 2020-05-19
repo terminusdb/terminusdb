@@ -144,11 +144,30 @@ merge(S0) -->
 
     put(bindings,Bindings).
 
+identify_([], Var1, Var1).
+identify_([Var|Vars], Var1, UVar) :-
+    Var = Var1,
+    identify_(Vars, Var1, UVar).
+
+identify([Var1|Vars], UVar) :-
+    identify_(Vars,Var1,UVar).
+
+unify_same_named_vars(_Var, []).
+unify_same_named_vars(Var, [Var1|Vars]) :-
+    (   var_compare((=), Var, Var1)
+    ->  Var = Var1
+    ;   true),
+    unify_same_named_vars(Var,Vars).
+
+unify_output_bindings([], _).
+unify_output_bindings([Var|Vars], Bindings) :-
+    unify_same_named_vars(Var, Bindings),
+    unify_output_bindings(Vars, Bindings).
 
 merge_output_bindings(B0, B1, Bindings) :-
+    unify_output_bindings(B0,B1),
     append(B0, B1, All),
     predsort(var_compare, All, Bindings).
-
 
 /**
  * empty_context(Context).
@@ -1457,7 +1476,8 @@ query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
     woql_context(Prefixes),
-    context_extend_prefixes(Context,Prefixes,Context0),
+    New_Prefixes = (Prefixes.put(_{ empty : "" })), % convenient for testing...
+    context_extend_prefixes(Context,New_Prefixes,Context0),
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, Response).
 
@@ -2452,7 +2472,6 @@ test(transaction_semantics_disjunct, [
     Commit_Info = commit_info{ author : "test", message : "testing semantics"},
     create_context(Descriptor, Commit_Info, Context),
 
-
     with_transaction(
         Context,
         forall(ask(Context,
@@ -2502,7 +2521,7 @@ test(transaction_semantics_conditional, [
 
 
 test(disjunction_equality, [
-          setup((setup_temp_store(State),
+         setup((setup_temp_store(State),
                 create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
@@ -2671,5 +2690,169 @@ test(metadata_triple_count_json, [
     (Binding.'Size'.'@value' = Val),
     Val > 0,
     Val < 1000.
+
+test(ast_disjunction_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(account1, account_owner, user1),
+                      insert(account1, public_databases, my_database1),
+                      insert(account1, private_databases, my_database2))),
+        _Meta_Data
+    ),
+
+    findall(AID-UID-DBID-Public_Or_Private,
+            ask(Descriptor,
+                (   (t(AID, account_owner, UID),
+                     (   (   t(AID, public_databases, DBID),
+                             Public_Or_Private = "public"^^xsd:string)
+                     ;   (   t(AID, private_databases, DBID),
+                             Public_Or_Private = "private"^^xsd:string)
+                     )))),
+            Results),
+
+    Results = [account1-user1-my_database1-("public"^^xsd:string),
+               account1-user1-my_database2-("private"^^xsd:string)].
+
+
+test(json_disjunction_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(account1, account_owner, user1),
+                      insert(account1, public_databases, my_database1),
+                      insert(account1, private_databases, my_database2))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "And",
+              query_list :
+              [_{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 0},
+                 query :
+                 _{'@type' : "Triple",
+                   subject : _{'@type' : "Variable",
+                               variable_name :
+                               _{ '@type' : "xsd:string",
+                                  '@value' : "AID"}},
+                   predicate : _{'@type' : "Node",
+                                 node : _{ '@id' : "empty:account_owner"}},
+                   object : _{'@type' : "Variable",
+                              variable_name :
+                              _{'@type' : "xsd:string",
+                                '@value' : "UID"}}}},
+               _{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 1},
+                 query :
+                 _{'@type' : "Or",
+                   query_list :
+                   [_{'@type' : "QueryListElement",
+                      index : _{'@type' : "xsd:integer",
+                                '@value' : 0},
+                      query :
+                      _{'@type' : "And",
+                        query_list :
+                        [_{'@type' : "QueryListElement",
+                           index : _{'@type' : "xsd:integer",
+                                     '@value' : 0},
+                           query :
+                           _{'@type' : "Triple",
+                             subject : _{'@type' : "Variable",
+                                         variable_name :
+                                         _{ '@type' : "xsd:string",
+                                            '@value' : "AID"}},
+                             predicate : _{'@type' : "Node",
+                                           node : _{ '@id' : "empty:public_databases"}},
+                             object : _{'@type' : "Variable",
+                                        variable_name :
+                                        _{'@type' : "xsd:string",
+                                          '@value' : "DBID"}}}},
+                         _{'@type' : "QueryListElement",
+                           index : _{'@type' : "xsd:integer",
+                                     '@value' : 0},
+                           query : _{'@type' : "Equals",
+                                     left : _{'@type' : "Variable",
+                                              variable_name :
+                                              _{'@type' : "xsd:string",
+                                                '@value' : "Public_Or_Private"}},
+                                     right : _{'@type' : "Datatype",
+                                               datatype : _{'@type' : "xsd:string",
+                                                            '@value' : "public"}}}}]}},
+                    _{'@type' : "QueryListElement",
+                      index : _{'@type' : "xsd:integer",
+                                '@value' : 0},
+                      query :
+                      _{'@type' : "And",
+                        query_list :
+                        [_{'@type' : "QueryListElement",
+                           index : _{'@type' : "xsd:integer",
+                                     '@value' : 0},
+                           query :
+                           _{'@type' : "Triple",
+                             subject : _{'@type' : "Variable",
+                                         variable_name :
+                                         _{ '@type' : "xsd:string",
+                                            '@value' : "AID"}},
+                             predicate : _{'@type' : "Node",
+                                           node : _{'@id' : "empty:private_databases"}},
+                             object : _{'@type' : "Variable",
+                                        variable_name :
+                                        _{'@type' : "xsd:string",
+                                          '@value' : "DBID"}}}},
+                         _{'@type' : "QueryListElement",
+                           index : _{'@type' : "xsd:integer",
+                                     '@value' : 0},
+                           query : _{'@type' : "Equals",
+                                     left : _{'@type' : "Variable",
+                                              variable_name :
+                                              _{'@type' : "xsd:string",
+                                                '@value' : "Public_Or_Private"}},
+                                     right : _{'@type' : "Datatype",
+                                               datatype : _{'@type' : "xsd:string",
+                                                            '@value' : "private"}}}}]}}
+                   ]}}]},
+
+    woql_context(Prefixes),
+    New_Prefixes = (Prefixes.put(_{ empty : "" })),
+    json_woql(Query, New_Prefixes, AST),
+    AST = (
+        t(v('AID'),account_owner,v('UID')),
+        (
+            t(v('AID'),public_databases,v('DBID')),
+            v('Public_Or_Private')="public"^^'http://www.w3.org/2001/XMLSchema#string'
+        ;   t(v('AID'),private_databases,v('DBID')),
+            v('Public_Or_Private')="private"^^'http://www.w3.org/2001/XMLSchema#string')),
+
+    query_test_response(Descriptor, Query, Response),
+
+    Bindings = (Response.bindings),
+    Bindings = [_{'AID':account1,
+                  'DBID':my_database1,
+                  'Public_Or_Private':
+                  _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                    '@value':"public"},
+                  'UID':user1},
+                _{'AID':account1,
+                  'DBID':my_database2,
+                  'Public_Or_Private':
+                  _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                    '@value':"private"},
+                  'UID':user1}].
 
 :- end_tests(woql).
