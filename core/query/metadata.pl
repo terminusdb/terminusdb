@@ -32,11 +32,19 @@ transaction_object_size(Descriptor, Size) :-
     maplist(read_object_size, Objects, Sizes),
     sumlist(Sizes, Size).
 
+layer_parents(Layer, [Parent|Parents]) :-
+    parent(Layer,Parent),
+    !,
+    layer_parents(Parent,Parents).
+layer_parents(_Layer, []).
+
 read_object_size(Object, Size) :-
     Layer = (Object.read),
     (   var(Layer)
     ->  Size = 0
-    ;   layer_size(Layer,Size)).
+    ;   layer_parents(Layer, Parents),
+        maplist(layer_size,[Layer|Parents],Sizes),
+        sumlist(Sizes,Size)).
 
 % NOTE: Stub! Should be in store.
 layer_directory_prefix_length(3).

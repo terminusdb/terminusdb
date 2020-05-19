@@ -2563,8 +2563,8 @@ test(metadata_branch, [
             triple_count('admin/test', Count_Lit)
         )),
 
-    Size_Lit = Size^^_,
-    Count_Lit = 5^^_,
+    Size_Lit = Size^^xsd:decimal,
+    Count_Lit = 5^^xsd:decimal,
     Size < 1000,
     Size > 0.
 
@@ -2596,8 +2596,8 @@ test(metadata_graph, [
             triple_count('admin/test/local/branch/master/instance/main', Count_Lit)
         )),
 
-    Size_Lit = Size^^_,
-    Count_Lit = 5^^_,
+    Size_Lit = Size^^xsd:decimal,
+    Count_Lit = 5^^xsd:decimal,
     Size < 1000,
     Size > 0.
 

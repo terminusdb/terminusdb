@@ -15,11 +15,11 @@ context_repository_head_pack(Context, Repo_Head_Option, Pack) :-
     % NOTE: Check to see that commit is in the history of Descriptor
     context_repository_layerids(Context, Repo_Head_Option, Layer_Ids),
     storage(Store),
-    store_layerids_pack(Store,Layer_Ids,Pack).
+    pack_export(Store,Layer_Ids,Pack).
     % For now just sent back the string representing the history
 
 % STUB!
-store_layerids_pack(_Store, Layer_Ids, Pack) :-
+pack_export(_Store, Layer_Ids, Pack) :-
     sort(Layer_Ids,Sorted),
     format(string(Pack),'Layer Ids: ~q', [Sorted]).
 
@@ -81,8 +81,8 @@ layerids_unknown(Layer_Ids,Unknown_Layer_Ids) :-
 
 unpack(Pack) :-
    pack_layerids_and_parents(Pack,Layer_Parents),
-    % all layers and their parents [Layer_ID-Parent_ID,....]
-    % Are these valid? Parent is a Layer in the list or we have the parent.
+   % all layers and their parents [Layer_ID-Parent_ID,....]
+   % Are these valid? Parent is a Layer in the list or we have the parent.
    layerids_and_parents_fringe(Layer_Parents,Fringe),
    assert_fringe_is_known(Fringe),
    % Filter this list to layers we don't know about
@@ -90,11 +90,10 @@ unpack(Pack) :-
    layerids_unknown(Layer_Ids, Unknown_Layer_Ids),
    % Extract only these layers.
    storage(Store),
-   forall( member(Layer_Id, Unknown_Layer_Ids), extract(Store,Layer_Id,Pack)).
-
+   pack_import(Store,Pack,Unknown_Layer_Ids).
 
 %%% Stub
 pack_layerids_and_parents(_Pack,_Layer_Parents).
 
 %%% Stub
-extract(_Store, _Layer_Id, _Pack).
+pack_import(_Store, _Pack, _Layer_Id).

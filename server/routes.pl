@@ -675,7 +675,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
             authorization : Auth_ID
         }, Context0, Final_Context),
 
-    http_log('~N[Prefixes] ~q~n', [Context0.prefixes]),
+    http_log('~N[Request] ~q~n', [Request]),
 
     json_woql(Query, Context0.prefixes, AST),
 
@@ -1153,31 +1153,41 @@ fetch_handler(options, _Path, _Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-fetch_handler(post,Path,_Request) :-
+fetch_handler(post,Path,Request) :-
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Descriptor),
 
-    ((repository_descriptor{} :< Descriptor)
-     <> throw(error(fetch_requires_repository(Path)))),
+    do_or_die(
+        (repository_descriptor{} :< Descriptor),
+        error(fetch_requires_repository(Path))),
 
     Database = (Descriptor.database_descriptor),
-    (repository_remote_url(Database, Descriptor.repository_name, URL)
-     <> throw(error(fetch_remote_has_no_url(Path)))),
+    do_or_die(
+        repository_remote_url(Database, Descriptor.repository_name, URL),
+        error(fetch_remote_has_no_url(Path))),
 
     open_descriptor(Descriptor, Repository),
     repository_head_layerid(Repository, Repository_Head_Layer_ID),
     Document = _{ repository_head : Repository_Head_Layer_ID },
 
-    % What is this? Where does it come from?
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwiaWF0IjoxNTE2MjM5MDIyfQ.ZHqEzJViUkP41NuyWGY97uyzrXvBsuOvOjIz00VgP9H3NHfnbO_h51nqbjt3UqBeKJ7U0wGUMTePuhXCGsAPoI9rLRSK9NzlFKGde-wTs4lAhDpp6rGhmVzVcJAYtJg8RbTGlJ78SFK6SSTpi2sXOMgVeu8fZwGnnp7ZJjP1mtJdEreDEwlZYqgy21BltmuzQ08qC70R-jRFHY2IeVBarcbqJgxjjb3BrNA5fByMD4ESOBVJlmCg8PzaI4hEdW-lSsQK8XWWYTnndB8IFdD3GYIwMovsT9dVZ4m3HrGGywGSP7TxDquvvK9ollA2JV2tLMsbk_Nqo-s7fhBbH9xjsA',
+    request_remote_authorization(Request, Authorization),
 
     http_post(URL,
               json(Document),
               Pack,
-              [authorization(bearer(Bearer))]),
+              [request_header('Authorization'=Authorization)]),
 
     % Does the unpack
     unpack(Pack).
+
+:- begin_tests(fetch_endpoint).
+
+test(fetch_something,[
+     ]) :-
+
+    true.
+
+:- end_tests(fetch_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
@@ -1305,8 +1315,9 @@ pack_handler(post,Path,R) :-
 
     resolve_absolute_string_descriptor(Path, Descriptor),
 
-    ((repository_descriptor{} :< Descriptor)
-     <> throw(error(not_a_repository_descriptor(Descriptor)))),
+    do_or_die(
+        (repository_descriptor{} :< Descriptor),
+        error(not_a_repository_descriptor(Descriptor))),
 
     create_context(Descriptor, Pre_Context),
     merge_dictionaries(
@@ -2186,6 +2197,12 @@ add_payload_to_request(Request,Request).
 
 get_payload(Payload,Request) :-
     memberchk(payload(Payload),Request).
+
+/*
+ * request_remote_authorization(Request, Authorization) is det.
+ */
+request_remote_authorization(Request, Token) :-
+    memberchk(authorization_remote(Token),Request).
 
 /*
  * save_post_file(In,File_Spec,Options) is det.
