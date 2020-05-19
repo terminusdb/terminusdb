@@ -144,14 +144,6 @@ merge(S0) -->
 
     put(bindings,Bindings).
 
-identify_([], Var1, Var1).
-identify_([Var|Vars], Var1, UVar) :-
-    Var = Var1,
-    identify_(Vars, Var1, UVar).
-
-identify([Var1|Vars], UVar) :-
-    identify_(Vars,Var1,UVar).
-
 unify_same_named_vars(_Var, []).
 unify_same_named_vars(Var, [Var1|Vars]) :-
     (   var_compare((=), Var, Var1)
@@ -867,7 +859,7 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     {
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
-compile_wf(when(A,B),forall(ProgA,ProgB)) -->
+compile_wf(when(A,B),(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
     compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
@@ -2854,5 +2846,35 @@ test(json_disjunction_test, [
                   _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                     '@value':"private"},
                   'UID':user1}].
+
+
+test(ast_when_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(a, b, d),
+                      insert(a, b, e))),
+        _Meta_Data1
+    ),
+
+    create_context(Descriptor, Commit_Info, Context2),
+
+    AST = when(t(a,b,v('X')),
+               insert(e, f, v('X'))),
+    query_response:run_context_ast_jsonld_response(Context2, AST, _JSON),
+
+    findall(t(X,P,Y),
+            ask(Descriptor, t(X, P, Y)),
+            Triples),
+
+    Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
 
 :- end_tests(woql).
