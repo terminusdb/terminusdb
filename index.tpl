@@ -27,6 +27,13 @@
   <body class="h-100">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root" class="h-100"></div>
+    <script>
+      window.TERMINUSDB_USER="admin";
+      var key = "~s";
+      if (key) {
+          window.TERMINUSDB_PASSWORD=key
+      }
+    </script>
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
