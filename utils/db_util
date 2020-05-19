@@ -160,7 +160,7 @@ run(Args) :-
         ),
 
         initialize_registry,
-        initialize_index(PUBLIC_URL, Key, Opts),
+        initialize_index,
 
         (   memberchk(onlyconfig(false), Opts)
         ->  initialize_database(PUBLIC_URL, Key),

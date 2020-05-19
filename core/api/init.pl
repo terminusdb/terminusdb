@@ -1,7 +1,7 @@
 :- module(init, [
               initialize_config/4,
               initialize_registry/0,
-              initialize_index/3,
+              initialize_index/0,
               initialize_database/2,
               initialize_database_with_path/3,
               initialize_database_with_store/3
@@ -108,7 +108,7 @@ write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, W
     format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
     close(Stream).
 
-write_index_file(Index_Tpl_Path, Index_Path, URL, Password) :-
+write_index_file(Index_Tpl_Path, Index_Path) :-
     open(Index_Tpl_Path, read, Tpl_Stream),
     read_string(Tpl_Stream, _, Tpl_String),
     close(Tpl_Stream),
@@ -181,9 +181,9 @@ initialize_database_with_store(Public_URL, Key, Store) :-
     create_graph_from_turtle(Store,Repository_Name,Terminus_Repository_TTL).
 
 
-initialize_index(Url, Key, Opts) :-
-    index_key(Key, Password, Opts),
-    index_url(Url, PublicUrl, Opts),
+initialize_index :-
+    %index_key(Key, Password, Opts),
+    %index_url(Url, PublicUrl, Opts),
     index_template_path(IndexTplPath),
     config:index_path(IndexPath),
-    write_index_file(IndexTplPath, IndexPath, PublicUrl, Password).
+    write_index_file(IndexTplPath, IndexPath).
