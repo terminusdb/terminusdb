@@ -50,7 +50,7 @@ jwt_public_key_id(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://terminusdb.github.io/terminus-dashboard/dist', Value).
+    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dl.bintray.com/terminusdb/terminusdb/0.0.1', Value).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
