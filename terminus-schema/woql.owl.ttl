@@ -1349,3 +1349,42 @@ woql:dictionary_value
   rdfs:range woql:Value ;
   rdfs:label "value"@en ;
   rdsf:comment "Dictionary value of a selection"@en .
+
+woql:HasResource
+  a owl:Class
+  rdfs:subClassOf woql:Query ;
+  rdfs:comment "Has a graph or collection resource descriptor"@en ;
+  rdfs:label "Has a resource"@en .
+
+woql:resource
+  a owl:DatatypeProperty ;
+  rdfs:comment "A graph or collection resource descriptor"@en ;
+  rdfs:label "resource"@en ;
+  rdfs:domain woql:HasResource ;
+  rdfs:range xsd:string .
+
+woql:Size
+  a owl:Class ;
+  rdfs:subClassOf woql:HasResource ;
+  rdfs:comment "Size of a resource"@en ;
+  rdfs:label "Size"@en .
+
+woql:size
+  a owl:ObjectProperty ;
+  rdfs:comment "Calculated size of a graph or collection resource"@en ;
+  rdfs:label "size"@en ;
+  rdfs:domain woql:Size ;
+  rdfs:range woql:Value .
+
+woql:TripleCount
+  a owl:Class ;
+  rdfs:subClassOf woql:HasResource ;
+  rdfs:comment "Size of a resource"@en ;
+  rdfs:label "Size"@en .
+
+woql:triple_count
+  a owl:ObjectProperty ;
+  rdfs:comment "Triple count of a graph or collection resource"@en ;
+  rdfs:label "triple count"@en ;
+  rdfs:domain woql:TripleCount ;
+  rdfs:range woql:Value .

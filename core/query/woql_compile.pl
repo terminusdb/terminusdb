@@ -43,6 +43,7 @@
 :- use_module(global_prefixes, [default_prefixes/1]).
 :- use_module(resolve_query_resource).
 :- use_module(path).
+:- use_module(metadata).
 
 :- use_module(core(util)).
 % Get op precedence
@@ -1112,6 +1113,56 @@ compile_wf(timestamp_now(X), (get_time(Timestamp)))
     {
         XE = Timestamp^^'http://www.w3.org/2001/XMLSchema#decimal'
     }.
+compile_wf(size(Path,Size),Goal) -->
+    resolve(Size,SizeE),
+    peek(Context),
+    {
+        (   resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph)
+        ->  true
+        ;   resolve_absolute_string_descriptor(Path, Descriptor),
+            Graph = none
+        )
+    },
+    update_descriptor_transactions(Descriptor),
+    {
+        Context_2 = (Context.put(_{ default_collection : Descriptor })),
+        assert_read_access(Context_2),
+        Transaction_Objects = (Context_2.transaction_objects),
+        (   Graph = none
+        ->  collection_descriptor_transaction_object(Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            Goal = (transaction_object_size(Transaction_Object,Numerical_Size),
+                    unliterally(Numerical_Size,SizeE))
+        ;   graph_descriptor_transaction_objects_read_write_object(Graph, Transaction_Objects, Read_Write_Object),
+            Goal = (read_object_size(Read_Write_Object,Numerical_Size),
+                    unliterally(Numerical_Size,SizeE))
+        )
+    }.
+compile_wf(triple_count(Path,Count),Goal) -->
+    resolve(Count,CountE),
+    peek(Context),
+    {
+        (   resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph)
+        ->  true
+        ;   resolve_absolute_string_descriptor(Path, Descriptor),
+            Graph = none
+        )
+    },
+    update_descriptor_transactions(Descriptor),
+    {
+        Context_2 = (Context.put(_{ default_collection : Descriptor })),
+        assert_read_access(Context_2),
+        Transaction_Objects = (Context_2.transaction_objects),
+        (   Graph = none
+        ->  collection_descriptor_transaction_object(Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            Goal = (transaction_object_triple_count(Transaction_Object,Numerical_Count),
+                    unliterally(Numerical_Count,CountE))
+        ;   graph_descriptor_transaction_objects_read_write_object(Graph, Transaction_Objects, Read_Write_Object),
+            Goal = (read_object_triple_count(Read_Write_Object,Numerical_Count),
+                    unliterally(Numerical_Count,CountE))
+        )
+    }.
 compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
@@ -1137,8 +1188,10 @@ debug_wf(Fmt, Args) -->
 update_descriptor_transactions(Descriptor)
 -->
     update(transaction_objects, Transaction_Objects, New_Transaction_Objects),
-    view(commit_info, Commit_Info),
-    {
+    peek(Context),
+    {   (   get_dict(commit_info, Context, Commit_Info)
+        ->  true
+        ;   Commit_Info = _{}),
         transactions_to_map(Transaction_Objects, Map),
         open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
         union([Transaction_Object], Transaction_Objects, New_Transaction_Objects)
@@ -2449,7 +2502,7 @@ test(transaction_semantics_conditional, [
 
 
 test(disjunction_equality, [
-         setup((setup_temp_store(State),
+          setup((setup_temp_store(State),
                 create_db_without_schema('admin|test', 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
@@ -2481,5 +2534,142 @@ test(disjunction_equality, [
         Statuses),
 
     Statuses = [f-private,c-(public)].
+
+test(metadata_branch, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup((metadata:unset_current_db_path(Path),
+                  teardown_temp_store(State)))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        (   size('admin/test',Size_Lit),
+            triple_count('admin/test', Count_Lit)
+        )),
+
+    Size_Lit = Size^^_,
+    Count_Lit = 5^^_,
+    Size < 1000,
+    Size > 0.
+
+test(metadata_graph, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup((metadata:unset_current_db_path(Path),
+                  teardown_temp_store(State)))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        (   size('admin/test/local/branch/master/instance/main',Size_Lit),
+            triple_count('admin/test/local/branch/master/instance/main', Count_Lit)
+        )),
+
+    Size_Lit = Size^^_,
+    Count_Lit = 5^^_,
+    Size < 1000,
+    Size > 0.
+
+test(metadata_triple_count_json, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup((metadata:unset_current_db_path(Path),
+                  teardown_temp_store(State)))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "TripleCount",
+              resource : _{'@type' : "xsd:string",
+                           '@value' : "admin/test"},
+              triple_count : _{'@type' : "Variable",
+                               variable_name :
+                               _{'@type' : "xsd:string",
+                                 '@value' : "Count"}}},
+
+    query_test_response(Descriptor, Query, JSON),
+    [Binding] = (JSON.bindings),
+    (Binding.'Count'.'@value' = 5).
+
+
+test(metadata_triple_count_json, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup((metadata:unset_current_db_path(Path),
+                  teardown_temp_store(State)))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "Size",
+              resource : _{'@type' : "xsd:string",
+                           '@value' : "admin/test"},
+              size : _{'@type' : "Variable",
+                       variable_name :
+                       _{'@type' : "xsd:string",
+                         '@value' : "Size"}}},
+
+    query_test_response(Descriptor, Query, JSON),
+    [Binding] = (JSON.bindings),
+    (Binding.'Size'.'@value' = Val),
+    Val > 0,
+    Val < 1000.
 
 :- end_tests(woql).

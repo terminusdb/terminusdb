@@ -87,6 +87,34 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     !,
     (   _{'@type' : 'http://terminusdb.com/schema/woql#Comment'} :< JSON
     ->  WOQL = true
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#TripleCount',
+          'http://terminusdb.com/schema/woql#resource' : Resource,
+          'http://terminusdb.com/schema/woql#triple_count' : Count
+         } :< JSON
+    ->  json_to_woql_ast(Resource,WOQL_Resource,
+                         ['http://terminusdb.com/schema/woql#resource'
+                          |Path]),
+        json_to_woql_ast(Count,WOQL_Count,
+                         ['http://terminusdb.com/schema/woql#triple_count'
+                          |Path]),
+        do_or_die(
+            (WOQL_Resource = Resource_String^^_),
+            error(woql_syntax_error(Path,JSON))),
+        WOQL = triple_count(Resource_String,WOQL_Count)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Size',
+          'http://terminusdb.com/schema/woql#resource' : Resource,
+          'http://terminusdb.com/schema/woql#size' : Size
+         } :< JSON
+    ->  json_to_woql_ast(Resource,WOQL_Resource,
+                         ['http://terminusdb.com/schema/woql#resource'
+                          |Path]),
+        json_to_woql_ast(Size,WOQL_Size,
+                         ['http://terminusdb.com/schema/woql#size'
+                          |Path]),
+        do_or_die(
+            (WOQL_Resource = Resource_String^^_),
+            error(woql_syntax_error(Path,JSON))),
+        WOQL = size(Resource_String,WOQL_Size)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Select',
           'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
           'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON

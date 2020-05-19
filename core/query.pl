@@ -92,7 +92,14 @@
 
               % path.pl
               compile_pattern/4,
-              calculate_path_solutions/6
+              calculate_path_solutions/6,
+
+              % metadata.pl
+              transaction_object_size/2,
+              transaction_object_triple_count/2,
+              read_object_size/2,
+              read_object_triple_count/2
+
           ]).
 
 :- use_module(query/expansions).
@@ -107,3 +114,4 @@
 :- use_module(query/global_prefixes).
 :- use_module(query/query_response).
 :- use_module(query/path).
+:- use_module(query/metadata).

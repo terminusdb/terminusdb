@@ -1,7 +1,8 @@
 :- module(db_pack, [
               context_repository_head_pack/3,
               repository_head_layerid/2,
-              unpack/1
+              unpack/1,
+              layer_layerids/2
           ]).
 
 :- use_module(library(terminus_store)).
@@ -22,7 +23,6 @@ store_layerids_pack(_Store, Layer_Ids, Pack) :-
     sort(Layer_Ids,Sorted),
     format(string(Pack),'Layer Ids: ~q', [Sorted]).
 
-:- use_module(core(transaction)).
 context_repository_layerids(Context, Repo_Head_Option, Layer_Ids) :-
     % Should only be one instance object
     [Transaction_Object] = (Context.transaction_objects),
