@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="shortcut icon" type="image/png" href="img/favicon.png"/>
     <link
-      rel="stylesheet"
+      Rel="stylesheet"
       href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
       integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
       crossorigin="anonymous"
@@ -28,11 +28,10 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root" class="h-100"></div>
     <script>
-      window.TERMINUSDB_USER="admin";
-      var key = "~s";
-      if (key) {
-          window.TERMINUSDB_PASSWORD=key
-      }
+      ;((key) => {
+        window.TERMINUSDB = { user: { username: "admin" }}
+        if (key) window.TERMINUSDB.user.password = key
+      })("~s")
     </script>
     <!--
       This HTML file is a template.
