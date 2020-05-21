@@ -1877,7 +1877,7 @@ customise_error(error(database_does_not_exist(DB))) :-
                  'terminus:status' : 'terminus:failure'},
                [status(400)]).
 customise_error(error(database_files_do_not_exist(DB))) :-
-    format(atom(M), 'Database fiels do not exist for database with the name ~q', [DB]),
+    format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
     reply_json(_{'terminus:message' : M,
                  'terminus:status' : 'terminus:failure'},
                [status(400)]).
@@ -2158,11 +2158,11 @@ try_create_db(DB,Label,Comment,Prefixes) :-
     % create the collection if it doesn't exist
     do_or_die(
         not(database_exists(DB)),
-        error(database_already_exists(DB))),
+        error(database_already_exists(Label))),
 
     do_or_die(
         create_db(DB, Label, Comment, Prefixes),
-        error(database_could_not_be_created(DB))).
+        error(database_could_not_be_created(Label))).
 
 
 /*
