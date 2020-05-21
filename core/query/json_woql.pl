@@ -280,11 +280,11 @@ json_to_woql_ast(JSON,WOQL,Path) :-
           'http://terminusdb.com/schema/woql#document' : Doc
          } :< JSON
     ->  do_or_die(
-            (_{'@id' : _ID} :< Doc),
+            (_{'@id' : ID} :< Doc),
             error(woql_syntax_error(JSON,
                                     ['@id'|Path],
                                     Doc))),
-        WOQL = delete_object(Doc)
+        WOQL = delete_object(ID)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#AddTriple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -1002,11 +1002,11 @@ json_to_woql_arith(JSON,WOQL,Path) :-
 json_to_woql_arith(JSON,_,Path) :-
     throw(error(woql_syntax_error(JSON,Path,JSON))).
 
-json_woql_path_element_error_message(JSON,Path,Element,Message) :-
+json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],
         woql_element_error_message(Head,Element,Message)
     ->  true
-    ;   format(string(Message),'Not well formed WOQL JSON-LD: ~q', JSON)).
+    ;   format(string(Message),'Not well formed WOQL JSON-LD', [])).
 
 woql_element_error_message(
     'http://terminusdb.com/schema/woql#resource',
@@ -1068,3 +1068,22 @@ woql_element_error_message(
     Element,
     Message) :-
     format(string(Message),'Not a well formed arithmetic expression: ~q',Element).
+
+:- begin_tests(woql_jsonld).
+
+test(not_a_query, []) :-
+    JSON = _{'@type' : "And",
+             query_list :
+             [_{'@type' : "QueryListElement",
+                index : _{'@type' : "xsd:integer",
+                          '@value' : 0},
+                query : _{'@type' : "Frob"}}]},
+
+    woql_context(Prefixes),
+    catch(
+        json_woql(JSON,Prefixes,_WOQL),
+        error(woql_syntax_error(Q,P,E)),
+        json_woql_path_element_error_message(Q,P,E,Message)),
+    Message = "Not well formed WOQL JSON-LD".
+
+:- end_tests(woql_jsonld).
