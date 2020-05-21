@@ -96,4 +96,4 @@ unpack(Pack) :-
 pack_layerids_and_parents(_Pack,_Layer_Parents).
 
 %%% Stub
-pack_import(_Store, _Pack, _Layer_Id).
+pack_import(_Store, _Pack, _Layer_Ids).

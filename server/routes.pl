@@ -1805,6 +1805,14 @@ customise_error(error(syntax_error(M),_)) :-
                  'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
+customise_error(error(woql_syntax_error(JSON,Path,Element))) :-
+    json_woql_path_element_error_message(JSON,Path,Element,Message),
+    reverse(Path,Director),
+    reply_json(_{'@type' : 'vio:WOQLSyntaxError',
+                 'terminus:message' : Message,
+                 'vio:path' : Director,
+                 'vio:query' : JSON},
+               [status(400)]).
 customise_error(error(syntax_error(M))) :-
     format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
@@ -1851,7 +1859,7 @@ customise_error(error(unknown_deletion_error(Doc_ID))) :-
                [status(400)]).
 customise_error(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
-           [Auth,Action,Scope]),
+           [Scope,Action,Auth]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : Msg},
                [status(403)]).
