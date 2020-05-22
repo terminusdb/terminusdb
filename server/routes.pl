@@ -1355,7 +1355,7 @@ pack_handler(post,Path,R) :-
 :- use_module(library(terminus_store)).
 
 test(pack_stuff, [
-         blocked('Blocked do to build problems - missing new store?'),
+         blocked('Blocked due to build problems - missing new store?'),
          setup((user_database_name('_a_test_user_', foo, DB_Name),
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
