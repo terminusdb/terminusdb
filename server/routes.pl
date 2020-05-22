@@ -453,8 +453,8 @@ test(triples_update, [
                                            message : "testing" },
                           turtle : TTL}),
               _In, [json_object(dict),
-                   authorization(basic(admin, Key)),
-                   reply_header(Fields)]),
+                    authorization(basic(admin, Key)),
+                    reply_header(Fields)]),
     * writeq(Fields),
 
     findall(A-B-C,
@@ -1332,14 +1332,19 @@ pack_handler(post,Path,R) :-
     get_payload(Document,Request),
 
     (   _{ repository_head : Layer_ID } :< Document
-    ->  Repo_Head_Option = just(Layer_ID)
+    ->  Repo_Head_Option = some(Layer_ID)
     ;   _{} :< Document
     ->  Repo_Head_Option = none
     ;   throw(error(bad_api_document(Document)))),
 
-    context_repository_head_pack(Context, Repo_Head_Option, Pack),
-    % Why throw?
-    throw(http_reply(bytes('application/octets',Pack))).
+    repository_context__previous_head_option__current_repository_head__pack(
+        Context, Repo_Head_Option, Current_Repo_Head, Pack),
+
+    (   Repo_Head_Option = some(Current_Repo_Head)
+    ->  throw(http_reply(bytes('application/octets',"No content"),[status(204)]))
+    ;   payload_repository_head_and_pack(Data,Current_Repo_Head,Pack),
+        % Why throw?
+        throw(http_reply(bytes('application/octets',Data)))).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -1395,22 +1400,60 @@ test(pack_stuff, [
     Document = _{ repository_head : Repository_Head_Layer_ID },
     http_post(URI,
               json(Document),
-              Pack,
+              Data,
               [authorization(basic('_a_test_user_','password'))]),
 
-    writeq(Pack),
+    payload_repository_head_and_pack(Data, Head, Pack),
 
+    % Check pack validity
     create_context(Descriptor, commit_info{author:"user",message:"commit b"}, New_Head_Context),
     % grab the repository head layer_ID and new graph layer_ID
     [New_Head_Transaction] = (New_Head_Context.transaction_objects),
     New_Head_Repository = (New_Head_Transaction.parent),
-    repository_head_layerid(New_Head_Repository,New_Repository_Head_Layer_ID),
+    repository_head_layerid(New_Head_Repository,New_Repository_Head_Layer_Id),
     [Instance_Graph] = (New_Head_Transaction.instance_objects),
     Layer = (Instance_Graph.read),
-    layer_to_id(Layer,Layer_ID),
+    layer_to_id(Layer,Layer_Id),
 
-    sort([New_Repository_Head_Layer_ID,Layer_ID], Layer_Ids),
-    * format(atom(Pack),'Layer Ids: ~q', [Layer_Ids]).
+    pack_layerids_and_parents(Pack,Layerids_and_Parents),
+
+    memberchk(New_Repository_Head_Layer_Id-_,Layerids_and_Parents),
+    memberchk(Layer_Id-_,Layerids_and_Parents),
+    memberchk(Head-_,Layerids_and_Parents),
+
+    Head = New_Repository_Head_Layer_Id.
+
+
+test(pack_nothing, [
+         setup((user_database_name('_a_test_user_', foo, DB_Name),
+                (   database_exists(DB_Name)
+                ->  delete_db(DB_Name)
+                ;   true),
+                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
+                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
+                    delete_user(Old_User_ID)
+                ;   true),
+                add_user('_a_test_user_','user@example.com','password',User_ID),
+                create_db_without_schema(DB_Name,'foo','a test'),
+                make_user_own_database('_a_test_user_',DB_Name)
+               )),
+         cleanup((delete_db(DB_Name),
+                  delete_user(User_ID)))
+     ]) :-
+
+    resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    open_descriptor(Repository_Descriptor, Repo_Transaction),
+    repository_head_layerid(Repo_Transaction, Repository_Head_Layer_ID),
+
+    Document = _{ repository_head : Repository_Head_Layer_ID },
+    config:server(Server),
+    atomic_list_concat([Server, '/pack/_a_test_user_/foo/local/_commits'], URI),
+    http_post(URI,
+              json(Document),
+              _Data,
+              [authorization(basic('_a_test_user_','password')),status_code(Status)]),
+    Status = 204.
 
 :- end_tests(pack_endpoint).
 

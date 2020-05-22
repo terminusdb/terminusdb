@@ -27,7 +27,8 @@
               % fast_forward_branch/4
 
               % db_pack.pl
-              context_repository_head_pack/3,
+              repository_context__previous_head_option__current_repository_head__pack/4,
+              payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
               layer_layerids/2

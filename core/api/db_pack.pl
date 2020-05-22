@@ -1,5 +1,6 @@
 :- module(db_pack, [
-              context_repository_head_pack/3,
+              repository_context__previous_head_option__current_repository_head__pack/4,
+              payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
               layer_layerids/2
@@ -11,35 +12,45 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 
-context_repository_head_pack(Context, Repo_Head_Option, Pack) :-
+payload_repository_head_and_pack(Data, Head, Pack) :-
+    ground(Head),
+    ground(Pack),
+    !,
+    string_concat(Head,Pack,Data).
+payload_repository_head_and_pack(Data, Head, Pack) :-
+    ground(Data),
+    !,
+    sub_string(Data, 0, 40, Remaining_Length, Head),
+    sub_string(Data, 40, Remaining_Length, _, Pack).
+
+repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack) :-
     % NOTE: Check to see that commit is in the history of Descriptor
-    context_repository_layerids(Context, Repo_Head_Option, Layer_Ids),
+    repository_context_to_layer(Repository_Context, Layer),
+    layer_to_id(Layer, Current_Repository_Head),
+    repository_layer_to_layerids(Layer, Repo_Head_Option, Layer_Ids),
     storage(Store),
     pack_export(Store,Layer_Ids,Pack).
     % For now just sent back the string representing the history
 
-% STUB!
-pack_export(_Store, Layer_Ids, Pack) :-
-    sort(Layer_Ids,Sorted),
-    format(string(Pack),'Layer Ids: ~q', [Sorted]).
-
-context_repository_layerids(Context, Repo_Head_Option, Layer_Ids) :-
-    % Should only be one instance object
-    [Transaction_Object] = (Context.transaction_objects),
+repository_context_to_layer(Repository_Context,Layer) :-
+    [Transaction_Object] = (Repository_Context.transaction_objects),
     [Read_Write_Obj] = (Transaction_Object.instance_objects),
-    Layer = (Read_Write_Obj.read),
-    child_parents_until(Layer, Layers, Repo_Head_Option),
+    Layer = (Read_Write_Obj.read).
+
+repository_layer_to_layerids(Layer, Repo_Head_Option, Layer_Ids) :-
+    % Should only be one instance object
+    child_until_parents(Layer, Repo_Head_Option, Layers),
     maplist(layer_layerids, Layers, Layer_Ids_List),
     append(Layer_Ids_List, Layer_Ids).
 
-child_parents_until(Child, [], just(Child_ID)) :-
+child_until_parents(Child, some(Child_ID), []) :-
     layer_to_id(Child, Child_ID),
     !.
-child_parents_until(Child, [Child|Layer], Until) :-
+child_until_parents(Child, Until, [Child|Layer]) :-
     parent(Child,Parent), % has a parent
     !,
-    child_parents_until(Parent, Layer, Until).
-child_parents_until(Child, [Child], _Until).
+    child_until_parents(Parent, Until, Layer).
+child_until_parents(Child, _Until, [Child]).
 
 % Include self!
 layer_layerids(Layer, [Self_Layer_Id|Layer_Ids]) :-
@@ -69,11 +80,14 @@ layerids_and_parents_fringe(Layerids_Parents,Fringe) :-
     layerids_and_parents_fringe_(Layerids_Parents,Layerids_Parents,Fringe).
 
 layerids_and_parents_fringe_([],_,[]).
-layerids_and_parents_fringe_([_-Parent_ID|Remainder], Layerids_Parents, Fringe) :-
+layerids_and_parents_fringe_([_-some(Parent_ID)|Remainder], Layerids_Parents, Fringe) :-
     member(Parent_ID-_,Layerids_Parents),
     !,
     layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
-layerids_and_parents_fringe_([_-Parent_ID|Remainder], Layerids_Parents, [Parent_ID|Fringe]) :-
+layerids_and_parents_fringe_([_-some(Parent_ID)|Remainder], Layerids_Parents, [Parent_ID|Fringe]) :-
+    !,
+    layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
+layerids_and_parents_fringe_([_-none|Remainder], Layerids_Parents, Fringe) :-
     layerids_and_parents_fringe_(Remainder,Layerids_Parents,Fringe).
 
 layerids_unknown(Layer_Ids,Unknown_Layer_Ids) :-
@@ -90,10 +104,59 @@ unpack(Pack) :-
    layerids_unknown(Layer_Ids, Unknown_Layer_Ids),
    % Extract only these layers.
    storage(Store),
-   pack_import(Store,Pack,Unknown_Layer_Ids).
+   pack_import(Store,Unknown_Layer_Ids,Pack).
 
-%%% Stub
-pack_layerids_and_parents(_Pack,_Layer_Parents).
 
-%%% Stub
-pack_import(_Store, _Pack, _Layer_Ids).
+:- begin_tests(pack).
+:- use_module(core(util/test_utils)).
+:- use_module(db_branch).
+
+test(context_repository_head_pack,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Repository_Descriptor = repository_descriptor{
+                                database_descriptor: database_descriptor{
+                                                         database_name: 'user|foo'
+                                                     },
+                                repository_name: "local"
+                            },
+    Origin_Branch_Descriptor = branch_descriptor{
+                                   repository_descriptor: Repository_Descriptor,
+                                   branch_name: "master"
+                               },
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
+    with_transaction(Context1,
+                     once(ask(Context1, insert(foo,bar,baz))),
+                     _),
+
+    open_descriptor(database_descriptor{ database_name: 'user|foo' },
+                    Database_Transaction),
+
+    repository_head(Database_Transaction, "local", Repo_Stage_1_Layer_ID),
+
+    create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"second commit"}, Context2),
+    with_transaction(Context2,
+                     once(ask(Context2, insert(baz,bar,foo))),
+                     _),
+
+    branch_create(Repository_Descriptor, Origin_Branch_Descriptor, "moo", _),
+
+    create_context(Repository_Descriptor, Repository_Context),
+
+    repository_context__previous_head_option__current_repository_head__pack(
+        Repository_Context,
+        some(Repo_Stage_1_Layer_ID),
+        _Repository_Head,
+        Pack),
+
+    pack_layerids_and_parents(Pack,Layerids_and_Parents),
+    writeq(Layerids_and_Parents),
+    nl,
+    true.
+
+:- end_tests(pack).
