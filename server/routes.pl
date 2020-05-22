@@ -1425,6 +1425,7 @@ test(pack_stuff, [
 
 
 test(pack_nothing, [
+         blocked('causing travis to die'),
          setup((user_database_name('_a_test_user_', foo, DB_Name),
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
