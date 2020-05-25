@@ -1,4 +1,4 @@
-FROM terminusdb/terminus_store_prolog:v0.9.9.1
+FROM terminusdb/terminus_store_prolog:v0.10.0
 WORKDIR /usr/lib/swipl/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
