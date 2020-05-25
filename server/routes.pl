@@ -1216,7 +1216,7 @@ fetch_path(Path,Authorization) :-
           'head' : Head}).
 
 :- begin_tests(fetch_endpoint).
-
+:- use_module(core(util/test_utils)).
 test(fetch_something,[
          setup((config:server(Server),
                 user_database_name(admin,"test", Name),

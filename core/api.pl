@@ -28,10 +28,14 @@
 
               % db_pack.pl
               repository_context__previous_head_option__current_repository_head__pack/4,
+              repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
-              layer_layerids/2
+              layer_layerids/2,
+
+              % db_fetch.pl
+              remote_fetch/3
           ]).
 
 :- use_module(api/init).
@@ -42,3 +46,4 @@
 :- use_module(api/db_rebase).
 :- use_module(api/db_fast_forward).
 :- use_module(api/db_pack).
+:- use_module(api/db_fetch).

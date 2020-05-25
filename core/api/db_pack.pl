@@ -1,5 +1,6 @@
 :- module(db_pack, [
               repository_context__previous_head_option__current_repository_head__pack/4,
+              repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
@@ -31,6 +32,10 @@ repository_context__previous_head_option__current_repository_head__pack(Reposito
     storage(Store),
     pack_export(Store,Layer_Ids,Pack).
     % For now just sent back the string representing the history
+
+repository_context__previous_head_option__payload(Repository_Context, Repo_Head_Option, Payload) :-
+    repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack),
+    payload_repository_head_and_pack(Payload, Current_Repository_Head, Pack).
 
 repository_context_to_layer(Repository_Context,Layer) :-
     [Transaction_Object] = (Repository_Context.transaction_objects),
