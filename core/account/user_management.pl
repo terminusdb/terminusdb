@@ -134,6 +134,8 @@ make_user_own_database(User_Name, Database_Name) :-
                     insert(Access_URI, terminus:action, terminus:push),
                     insert(Access_URI, terminus:action, terminus:branch),
                     insert(Access_URI, terminus:action, terminus:rebase),
+                    insert(Access_URI, terminus:action, terminus:meta_read_access),
+                    insert(Access_URI, terminus:action, terminus:commit_read_access),
                     insert(Access_URI, terminus:action, terminus:instance_read_access),
                     insert(Access_URI, terminus:action, terminus:instance_write_access),
                     insert(Access_URI, terminus:action, terminus:schema_read_access),

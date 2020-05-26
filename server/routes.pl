@@ -1155,20 +1155,8 @@ fetch_handler(options, _Path, _Request) :-
     format('~n').
 fetch_handler(post,Path,Request) :-
     request_remote_authorization(Request, Authorization),
-    fetch_path(Path,Authorization).
-
-fetch_path(Path,Authorization) :-
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Repository_Descriptor),
-
-    do_or_die(
-        (repository_descriptor{} :< Repository_Descriptor),
-        error(fetch_requires_repository(Path))),
-
-    Database_Descriptor = (Repository_Descriptor.database_descriptor),
-    do_or_die(
-        repository_remote_url(Database_Descriptor, Repository_Descriptor.repository_name, URL),
-        error(fetch_remote_has_no_url(Path))),
 
     create_context(Database_Descriptor, Database_Context),
     repository_head(Database_Context,
@@ -1407,7 +1395,7 @@ pack_handler(post,Path,R) :-
             terminus : Terminus
         }, Pre_Context, Context),
 
-    * assert_read_access(Context),
+    assert_read_access(Context),
 
     add_payload_to_request(R,Request),
     get_payload(Document,Request),
