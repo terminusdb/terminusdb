@@ -259,8 +259,6 @@ db_handler(delete,Account,DB,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
-    config:public_url(Server),
-
     user_database_name(Account, DB, DB_Name),
     assert_auth_action_scope(Terminus_DB, Auth, terminus:delete_database, DB_Name),
 
@@ -330,10 +328,10 @@ test(db_auth_test, [
              comment : "A quality assurance test",
              label : "A label"
            },
-    admin_pass(Key),
+
     http_post(URI, json(Doc),
               In, [json_object(dict),
-                   authorization(basic(admin, Key))]),
+                   authorization(basic('TERIMINUS_QA', "password"))]),
     _{'terminus:status' : "terminus:success"} = In,
 
     user_object(terminus_descriptor{}, doc:admin, User_Obj),
