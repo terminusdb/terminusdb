@@ -1146,6 +1146,11 @@ clone_handler(options, _, _, _Request) :-
 clone_handler(post, Account, DB, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
 
+    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    authenticate(Terminus_DB, Request, Auth),
+    config:public_url(Server),
+    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, Server),
+
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
 
