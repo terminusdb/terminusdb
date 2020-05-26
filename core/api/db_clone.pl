@@ -16,6 +16,9 @@ clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
     user_database_name(Account, DB, DB_Name),
     try_create_db(DB_Name, Label, Comment, _{}),
+
+    resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
+    create_context(Database_Descriptor, Database_Context),
     % Add remote
     with_transaction(
         Database_Context,
