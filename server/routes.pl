@@ -1338,7 +1338,9 @@ pack_handler(post,Path,R) :-
         (repository_descriptor{} :< Repository_Descriptor),
         error(not_a_repository_descriptor(Repository_Descriptor))),
 
-    create_context(Repository_Descriptor, Pre_Context),
+    do_or_die(create_context(Repository_Descriptor, Pre_Context),
+              error(unknown_repository_descriptor(Repository_Descriptor))),
+
     merge_dictionaries(
         query_context{
             authorization : Auth_ID,

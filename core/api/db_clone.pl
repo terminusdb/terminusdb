@@ -13,6 +13,19 @@
 
 :- meta_predicate clone(+,+,+,+,+,3,-).
 clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+    setup_call_catcher_cleanup(
+        true,
+        clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
+        exception(_),
+
+        (   user_database_name(Account, DB, DB_Name),
+            catch(try_delete_db(DB_Name),
+                  error(database_not_found(_)),
+                  true))).
+
+
+:- meta_predicate clone_(+,+,+,+,+,3,-).
+clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
     user_database_name(Account, DB, DB_Name),
     try_create_db(DB_Name, Label, Comment, _{}),
