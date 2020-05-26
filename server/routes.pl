@@ -252,6 +252,7 @@ db_handler(post,Account,DB,R) :-
 
     try_create_db(DB_Name, Label, Comment, Prefixes),
 
+    config:public_url(Server),
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
@@ -264,6 +265,7 @@ db_handler(delete,Account,DB,Request) :-
 
     try_delete_db(DB_Name),
 
+    config:public_url(Server),
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -331,7 +333,7 @@ test(db_auth_test, [
 
     http_post(URI, json(Doc),
               In, [json_object(dict),
-                   authorization(basic('TERIMINUS_QA', "password"))]),
+                   authorization(basic('TERMINUS_QA', "password"))]),
     _{'terminus:status' : "terminus:success"} = In,
 
     user_object(terminus_descriptor{}, doc:admin, User_Obj),
