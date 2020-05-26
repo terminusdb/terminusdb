@@ -31,7 +31,9 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
-              update_prefixes/2
+              update_prefixes/2,
+              repository_prefixes/2,
+              copy_prefixes/2
           ]).
 :- use_module(library(terminus_store)).
 
@@ -853,6 +855,16 @@ apply_commit(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri
 
     true.
 
+repository_prefixes(Repository_Askable, Prefixes) :-
+    findall(Key-Value,
+            (   ask(Repository_Askable,
+                    (   t(PrefixPair, ref:prefix, Key_String^^xsd:string),
+                        t(PrefixPair, ref:prefix_uri, Value_String^^xsd:string))),
+                atom_string(Key,Key_String),
+                atom_string(Value,Value_String)),
+            Key_Value_Pairs),
+    dict_create(Prefixes,_,Key_Value_Pairs).
+
 update_prefixes(Context, Prefixes) :-
     forall(ask(Context,
                (   t(ref:default_prefixes, ref:prefix_pair, Pair),
@@ -872,6 +884,10 @@ update_prefixes(Context, Prefixes) :-
                )
               )
           ).
+
+copy_prefixes(Repo_From_Askable, Repo_To_Context) :-
+    repository_prefixes(Repo_From_Askable, Prefixes),
+    update_prefixes(Repo_To_Context, Prefixes).
 
 :- begin_tests(commit_application).
 :- use_module(core(util/test_utils)).

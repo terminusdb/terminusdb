@@ -1134,13 +1134,34 @@ test(get_object, [])
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone), cors_catch(clone_handler(Method)),
+:- http_handler(root(clone/Account/DB), cors_catch(clone_handler(Method, Account, DB)),
                 [method(Method),
-                 prefix,
-                 methods([options,get])]).
+                 methods([options,post])]).
 
-clone_handler(_Method,_Request) :-
-    throw(error('Not implemented')).
+clone_handler(options, _, _, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+clone_handler(post, Account, DB, R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+
+    request_remote_authorization(Request, Authorization),
+    get_payload(Database_Document,Request),
+
+    do_or_die(
+        (_{ comment : Comment,
+            label : Label } :< Database_Document),
+        error(bad_api_document(Database_Document))),
+
+    do_or_die(
+        (_{ remote_url : Remote_URL } :< Database_Document),
+        error(no_remote_specified(Database_Document))),
+
+    clone(Account,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+
+    reply_json_dict(
+        _{'terminus:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(fetch/Path), cors_catch(fetch_handler(Method,Path)),
@@ -1158,31 +1179,32 @@ fetch_handler(post,Path,Request) :-
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
-    Fetch_Predicate = {Authorization}/[URL, Repository_Head_Option, Payload_Option]>>
-                      (
-                          (   some(Repository_Head) = Repository_Head_Option
-                          ->  Document = _{ repository_head: Repository_Head }
-                          ;   Document = _{}),
-
-                          http_post(URL,
-                                    json(Document),
-                                    Payload,
-                                    [request_header('Authorization'=Authorization),
-                                     status_code(Status)]),
-
-                          (   Status = 200
-                          ->  Payload_Option = some(Payload)
-                          ;   Status = 204
-                          ->  Payload_Option = none
-                          ;   throw(error(remote_connection_error(Payload))))
-                      ),
-
-    remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated),
+    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
+                 New_Head_Layer_Id, Head_Has_Updated),
 
     reply_json_dict(
             _{'terminus:status' : 'terminus:success',
               'head_has_changed' : Head_Has_Updated,
               'head' : New_Head_Layer_Id}).
+
+
+authorized_fetch(Authorization,URL, Repository_Head_Option, Payload_Option) :-
+    (   some(Repository_Head) = Repository_Head_Option
+    ->  Document = _{ repository_head: Repository_Head }
+    ;   Document = _{}),
+
+    http_post(URL,
+              json(Document),
+              Payload,
+              [request_header('Authorization'=Authorization),
+               status_code(Status)]),
+
+    (   Status = 200
+    ->  Payload_Option = some(Payload)
+    ;   Status = 204
+    ->  Payload_Option = none
+    ;   throw(error(remote_connection_error(Payload)))).
+
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
@@ -2193,30 +2215,6 @@ get_param(Key,Request,Value) :-
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
 
-/*
- * try_create_db(DB,Label,Comment,Prefixes) is det.
- *
- * Try to create a database and associate resources
- */
-try_create_db(DB,Label,Comment,Prefixes) :-
-    % create the collection if it doesn't exist
-    do_or_die(
-        not(database_exists(DB)),
-        error(database_already_exists(Label))),
-
-    do_or_die(
-        create_db(DB, Label, Comment, Prefixes),
-        error(database_could_not_be_created(Label))).
-
-
-/*
- * try_delete_db(DB_URI) is det.
- *
- * Attempt to delete a database given its URI
- */
-try_delete_db(DB) :-
-    delete_db(DB)
-    <> throw(error(database_not_found(DB))).
 
 /*
  * try_atom_json(Atom,JSON) is det.

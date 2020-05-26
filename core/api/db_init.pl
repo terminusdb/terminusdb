@@ -1,5 +1,7 @@
 :- module(db_init, [
-              create_db/4
+              create_db/4,
+              try_delete_db/1,
+              try_create_db/4
           ]).
 
 /** <module> Implementation of database graph management
@@ -167,6 +169,32 @@ create_db(Name, Label, Comment, Prefixes) :-
     % update terminusdb with finalized
     finalise_terminus(Name).
 
+
+/*
+ * try_create_db(DB,Label,Comment,Prefixes) is det.
+ *
+ * Try to create a database and associate resources
+ */
+try_create_db(DB,Label,Comment,Prefixes) :-
+    % create the collection if it doesn't exist
+    do_or_die(
+        not(database_exists(DB)),
+        error(database_already_exists(Label))),
+
+    do_or_die(
+        create_db(DB, Label, Comment, Prefixes),
+        error(database_could_not_be_created(Label))).
+
+
+/*
+ * try_delete_db(DB_URI) is det.
+ *
+ * Attempt to delete a database given its URI
+ */
+try_delete_db(DB) :-
+    do_or_die(
+        delete_db(DB),
+        error(database_not_found(DB))).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).

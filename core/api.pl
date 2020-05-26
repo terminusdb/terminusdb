@@ -4,6 +4,8 @@
 
               % db_init.pl
               create_db/4,
+              try_delete_db/1,
+              try_create_db/4,
 
               % init.pl
               initialize_config/4,
@@ -34,7 +36,10 @@
               layer_layerids/2,
 
               % db_fetch.pl
-              remote_fetch/4
+              remote_fetch/4,
+
+              % db_clone.pl
+              clone/7
           ]).
 
 :- use_module(api/init).
@@ -46,3 +51,4 @@
 :- use_module(api/db_fast_forward).
 :- use_module(api/db_pack).
 :- use_module(api/db_fetch).
+:- use_module(api/db_clone).

@@ -71,6 +71,8 @@
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
               update_prefixes/2,
+              repository_prefixes/2,
+              copy_prefixes/2,
 
               % repo_entity.pl
               has_repository/2,

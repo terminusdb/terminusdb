@@ -118,14 +118,7 @@ collection_descriptor_prefixes_(Descriptor, Prefixes) :-
         repository_descriptor: Repository_Descriptor
     } :< Descriptor,
     !,
-    findall(Key-Value,
-            (   ask(Repository_Descriptor,
-                    (   t(PrefixPair, ref:prefix, Key_String^^xsd:string),
-                        t(PrefixPair, ref:prefix_uri, Value_String^^xsd:string))),
-                atom_string(Key,Key_String),
-                atom_string(Value,Value_String)),
-            Key_Value_Pairs),
-    dict_create(Prefixes,_,Key_Value_Pairs).
+    repository_prefixes(Repository_Descriptor, Prefixes).
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % We don't know which documents you are retrieving
     % because we don't know the branch you are on,

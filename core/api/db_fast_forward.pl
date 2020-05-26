@@ -1,5 +1,5 @@
 :- module(db_fast_forward, [
-%              fast_forward_branch/4
+              fast_forward_branch/3
           ]).
 
 :- use_module(core(util)).
