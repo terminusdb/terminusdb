@@ -1158,50 +1158,31 @@ fetch_handler(post,Path,Request) :-
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
-    create_context(Database_Descriptor, Database_Context),
-    repository_head(Database_Context,
-                    (Repository_Descriptor.repository_name),
-                    Repository_Head_Layer_ID),
-    Document = _{ repository_head : Repository_Head_Layer_ID },
+    Fetch_Predicate = {Authorization}/[URL, Repository_Head_Option, Payload_Option]>>
+                      (
+                          (   some(Repository_Head) = Repository_Head_Option
+                          ->  Document = _{ repository_head: Repository_Head }
+                          ;   Document = _{}),
 
-    http_post(URL,
-              json(Document),
-              Payload,
-              [request_header('Authorization'=Authorization),
-               status_code(Status)]),
+                          http_post(URL,
+                                    json(Document),
+                                    Payload,
+                                    [request_header('Authorization'=Authorization),
+                                     status_code(Status)]),
 
-    (   Status = 200
-    ->  true
-    ;   Status = 204
-    ->  throw(reply_json(
-                  _{'terminus:status' : 'terminus:success',
-                    'head_has_changed' : false,
-                    'head' : Repository_Head_Layer_ID}))
-    ;   throw(error(remote_connection_error(Payload)))),
+                          (   Status = 200
+                          ->  Payload_Option = some(Payload)
+                          ;   Status = 204
+                          ->  Payload_Option = none
+                          ;   throw(error(remote_connection_error(Payload))))
+                      ),
 
-    payload_repository_head_and_pack(Payload, Head, Pack),
-    % Does the unpack
-    unpack(Pack),
-
-    create_context(Database_Descriptor, Database_Context),
-
-    with_transaction(
-        Database_Context,
-        (   do_or_die(
-                repository_head(Database_Context, (Repository_Descriptor.repository_name), Repository_Head_Layer_ID),
-                error(repository_head_moved(
-                          Repository_Descriptor,
-                          Repository_Head_Layer_ID))),
-
-            update_repository_head(Database_Descriptor,
-                                   (Repository_Descriptor.repository_name),
-                                   Head)
-        ),_Meta_Data),
+    remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated),
 
     reply_json_dict(
-        _{'terminus:status' : 'terminus:success',
-          'head_has_changed' : true,
-          'head' : Head}).
+            _{'terminus:status' : 'terminus:success',
+              'head_has_changed' : Head_Has_Updated,
+              'head' : New_Head_Layer_Id}).
 
 :- begin_tests(fetch_endpoint).
 :- use_module(core(util/test_utils)).
