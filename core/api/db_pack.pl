@@ -1,5 +1,4 @@
 :- module(db_pack, [
-              repository_context__previous_head_option__current_repository_head__pack/4,
               repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
@@ -24,18 +23,24 @@ payload_repository_head_and_pack(Data, Head, Pack) :-
     sub_string(Data, 0, 40, Remaining_Length, Head),
     sub_string(Data, 40, Remaining_Length, _, Pack).
 
-repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack) :-
+repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack_Option) :-
     % NOTE: Check to see that commit is in the history of Descriptor
     repository_context_to_layer(Repository_Context, Layer),
     layer_to_id(Layer, Current_Repository_Head),
-    repository_layer_to_layerids(Layer, Repo_Head_Option, Layer_Ids),
-    storage(Store),
-    pack_export(Store,Layer_Ids,Pack).
-    % For now just sent back the string representing the history
 
-repository_context__previous_head_option__payload(Repository_Context, Repo_Head_Option, Payload) :-
-    repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack),
-    payload_repository_head_and_pack(Payload, Current_Repository_Head, Pack).
+    (   Repo_Head_Option = some(Current_Repository_Head)
+    ->  Pack_Option = none
+    ;   repository_layer_to_layerids(Layer, Repo_Head_Option, Layer_Ids),
+        storage(Store),
+        pack_export(Store,Layer_Ids,Pack),
+        Pack_Option = some(Pack)).
+
+repository_context__previous_head_option__payload(Repository_Context, Repo_Head_Option, Payload_Option) :-
+    repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack_Option),
+    (   some(Pack) = Pack_Option
+    ->  payload_repository_head_and_pack(Payload, Current_Repository_Head, Pack),
+        Payload_Option = some(Payload)
+    ;   Payload_Option = none).
 
 repository_context_to_layer(Repository_Context,Layer) :-
     [Transaction_Object] = (Repository_Context.transaction_objects),

@@ -1418,14 +1418,12 @@ pack_handler(post,Path,R) :-
     ->  Repo_Head_Option = none
     ;   throw(error(bad_api_document(Document)))),
 
-    repository_context__previous_head_option__current_repository_head__pack(
-        Context, Repo_Head_Option, Current_Repo_Head, Pack),
+    repository_context__previous_head_option__payload(
+        Context, Repo_Head_Option, Payload_Option),
 
-    (   Repo_Head_Option = some(Current_Repo_Head)
-    ->  throw(http_reply(bytes('application/octets',"No content"),[status(204)]))
-    ;   payload_repository_head_and_pack(Data,Current_Repo_Head,Pack),
-        % Why throw?
-        throw(http_reply(bytes('application/octets',Data)))).
+    (   Payload_Option = some(Payload)
+    ->  throw(http_reply(bytes('application/octets',Payload)))
+    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
