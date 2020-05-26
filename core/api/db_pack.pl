@@ -122,8 +122,7 @@ unpack(Pack) :-
 :- use_module(db_branch).
 
 test(context_repository_head_pack,
-     [blocked('Probably also a store build problem'),
-      setup((setup_temp_store(State),
+     [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State))
      ]
@@ -159,15 +158,16 @@ test(context_repository_head_pack,
 
     create_context(Repository_Descriptor, Repository_Context),
 
-    repository_context__previous_head_option__current_repository_head__pack(
+    repository_context__previous_head_option__payload(
         Repository_Context,
         some(Repo_Stage_1_Layer_ID),
-        _Repository_Head,
-        Pack),
+        Payload_Option),
 
-    pack_layerids_and_parents(Pack,Layerids_and_Parents),
-    writeq(Layerids_and_Parents),
-    nl,
-    true.
+    % We test that the payload behaves like we expect, meaning
+    % - it is splittable into a layer id and a pack
+    % - the pack can be queried for its ids and parents
+    some(Payload) = Payload_Option,
+    payload_repository_head_and_pack(Payload, _New_Head_Layer_Id, Pack),
+    pack_layerids_and_parents(Pack, _Layerids_and_Parents).
 
 :- end_tests(pack).
