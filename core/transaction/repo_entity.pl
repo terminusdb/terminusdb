@@ -73,9 +73,10 @@ insert_local_repository(Context, Repo_Name, Head_Layer_Id, Repo_Uri) :-
 
 insert_remote_repository(Context, Repo_Name, Remote_Url, Repo_Uri) :-
     insert_remote_repository(Context, Repo_Name, Remote_Url, _, Repo_Uri).
+
 insert_remote_repository(Context, Repo_Name, Remote_Url, Head_Layer_Id, Repo_Uri) :-
     once(ask(Context,
-             (   idgen(doc:'Local', [Repo_Name^^xsd:string], Repo_Uri),
+             (   idgen(doc:'Remote', [Repo_Name^^xsd:string], Repo_Uri),
                  insert(Repo_Uri, rdf:type, repo:'Remote'),
                  insert(Repo_Uri, repo:repository_name, Repo_Name^^xsd:string),
                  insert(Repo_Uri, repo:remote_url, Remote_Url^^xdd:url)))),
