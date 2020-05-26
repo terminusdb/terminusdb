@@ -234,8 +234,8 @@ db_handler(post,Account,DB,R) :-
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
-    config:public_url(Server),
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, Server),
+
+    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
 
     get_payload(Database_Document,Request),
     do_or_die(
@@ -311,12 +311,16 @@ test(db_delete, [
     _{'terminus:status' : "terminus:success"} = Delete_In.
 
 test(db_auth_test, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         setup((add_user('TERMINUS_QA','user@example.com','password',User_ID),
+                user_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true))),
          cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                  delete_db(DB)))
+                  (   database_exists(DB)
+                  ->  delete_db(DB)
+                  ;   true),
+                  delete_user(User_ID)))
      ]) :-
 
     config:server(Server),
@@ -1148,8 +1152,8 @@ clone_handler(post, Account, DB, R) :-
 
     open_descriptor(terminus_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
-    config:public_url(Server),
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, Server),
+
+    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
 
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
