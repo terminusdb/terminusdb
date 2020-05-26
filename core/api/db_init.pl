@@ -1,6 +1,5 @@
 :- module(db_init, [
               create_db/4,
-              try_delete_db/1,
               try_create_db/4
           ]).
 
@@ -185,16 +184,6 @@ try_create_db(DB,Label,Comment,Prefixes) :-
         create_db(DB, Label, Comment, Prefixes),
         error(database_could_not_be_created(Label))).
 
-
-/*
- * try_delete_db(DB_URI) is det.
- *
- * Attempt to delete a database given its URI
- */
-try_delete_db(DB) :-
-    do_or_die(
-        delete_db(DB),
-        error(database_not_found(DB))).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).

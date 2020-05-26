@@ -1,4 +1,5 @@
 :- module(db_delete,[
+              try_delete_db/1,
               delete_db/1
           ]).
 
@@ -77,3 +78,12 @@ delete_db(DB_Name) :-
     create_context(terminus_descriptor{}, Terminus_Staged),
     delete_db_from_terminus(Terminus_Staged,DB_Name).
 
+/*
+ * try_delete_db(DB_URI) is det.
+ *
+ * Attempt to delete a database given its URI
+ */
+try_delete_db(DB) :-
+    do_or_die(
+        delete_db(DB),
+        error(database_not_found(DB))).

@@ -8,6 +8,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(db_init).
+:- use_module(db_delete).
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 
