@@ -1069,7 +1069,7 @@ compile_wf(re(P,S,L),Re) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE),
-    { marshall_args(utils:re(SE,PE,LE),Re) }.
+    { marshall_args(utils:re(PE,SE,LE),Re) }.
 compile_wf(split(S,P,L),Split) -->
     resolve(S,SE),
     resolve(P,PE),

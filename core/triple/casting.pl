@@ -47,7 +47,7 @@
  * Create a safe uri starting from @Base using key @Args.
  *
  * NOTE: Invertibility is due to the impossibility of having a %5f
- * as the result of a path encodig. _ translates as _ and
+ * as the result of a path encoding. _ translates as _ and
  * %5f translates as %255f.
  */
 idgen(Base,Args,Output) :-
@@ -55,9 +55,9 @@ idgen(Base,Args,Output) :-
     ground(Args),
     !,
     maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts),
-    merge_separator_split(Output, '%5f',[Base|Safe_Parts]).
+    merge_separator_split(Output,'_',[Base|Safe_Parts]).
 idgen(Base,Args,Output) :-
-    merge_separator_split(Output,'%5f',[Base|Safe_Parts]),
+    merge_separator_split(Output,'_',[Base|Safe_Parts]),
     maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts).
 
 random_idgen(Base,Args,Output) :-
