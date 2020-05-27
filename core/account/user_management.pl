@@ -119,6 +119,8 @@ make_user_own_database(User_Name, Database_Name) :-
                               push^^(xsd:string),
                               branch^^(xsd:string),
                               rebase^^(xsd:string),
+                              meta_read_access^^(xsd:string),
+                              commit_read_access^^(xsd:string),
                               instance_read_access^^(xsd:string),
                               instance_write_access^^(xsd:string),
                               schema_read_access^^(xsd:string),
