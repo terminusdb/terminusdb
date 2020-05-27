@@ -619,8 +619,8 @@ convert_csv_options(Options,CSV_Options) :-
 
     (   memberchk('http://terminusdb.com/woql#convert'(Bool_Str),Options)
     ->  bool_convert(Bool_Str,Bool),
-        CSV_Options2 = [convert(Bool)]
-    ;   CSV_Options2 = CSV_Options1),
+        CSV_Options2 = [convert(Bool)|CSV_Options1]
+    ;   CSV_Options2 = [convert(false)|CSV_Options1]),
 
     CSV_Options = CSV_Options2.
 
@@ -923,7 +923,7 @@ compile_wf(get(Spec,File_Spec), Prog) -->
 
         (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
-            csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,New_Options)
+            csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,CSV_Options)
         ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
@@ -1883,10 +1883,11 @@ test(named_get, [])
 
     query_test_response(terminus_descriptor{}, Query, JSON),
     [First|_] = JSON.bindings,
+
     _{'Bike_Number': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                       '@value':"W21477"},
-      'Duration': _{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                    '@value':790}
+      'Duration': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                    '@value':"790"}
      } :< First.
 
 test(named_get_two, [])
@@ -1976,18 +1977,18 @@ test(named_get_two, [])
     [Res|_] = JSON.bindings,
     _{'Bike':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                '@value':"W00247"},
-      'Duration':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                   '@value':3548},
-      'End_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                 '@value':31620},
+      'Duration':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"3548"},
+      'End_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                 '@value':"31620"},
       'End_Station':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                       '@value':"5th & F St NW"},
       'End_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                    '@value':"2011-01-01 01:00:37"},
       'Member_Type':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                       '@value':"Member"},
-      'Start_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                   '@value':31620},
+      'Start_ID':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"31620"},
       'Start_Station':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                         '@value':"5th & F St NW"},
       'Start_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
