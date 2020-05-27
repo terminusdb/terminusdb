@@ -94,11 +94,6 @@ directly through clients you should look at the documentation on our
 * Improvements to query processing speed
 * We now have decoupled public URI from internal database URI
 
-## Future
-
-We are working hard on our collaboration and data-ops features. They
-should be available by the end of February 2020.
-
 ## TODO
 
 * Improve error handling and logging
