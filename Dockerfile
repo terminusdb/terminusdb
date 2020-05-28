@@ -5,7 +5,7 @@ RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config
         && git clone https://github.com/terminusdb/jwt_io.git \
         && cd jwt_io && make
 
-FROM terminusdb/terminus_store_prolog:v0.9.9.1
+FROM terminusdb/terminus_store_prolog:v0.10.0
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/lib/swipl/pack/jwt_io /usr/lib/swipl/pack/jwt_io/
