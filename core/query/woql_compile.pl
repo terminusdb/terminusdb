@@ -1126,7 +1126,6 @@ compile_wf(timestamp_now(X), (get_time(Timestamp)))
     }.
 compile_wf(size(Path,Size),Goal) -->
     resolve(Size,SizeE),
-    peek(Context),
     {
         (   resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph)
         ->  true
@@ -1135,6 +1134,7 @@ compile_wf(size(Path,Size),Goal) -->
         )
     },
     update_descriptor_transactions(Descriptor),
+    peek(Context),
     {
         Context_2 = (Context.put(_{ default_collection : Descriptor })),
         assert_read_access(Context_2),
@@ -1151,7 +1151,6 @@ compile_wf(size(Path,Size),Goal) -->
     }.
 compile_wf(triple_count(Path,Count),Goal) -->
     resolve(Count,CountE),
-    peek(Context),
     {
         (   resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph)
         ->  true
@@ -1160,6 +1159,7 @@ compile_wf(triple_count(Path,Count),Goal) -->
         )
     },
     update_descriptor_transactions(Descriptor),
+    peek(Context),
     {
         Context_2 = (Context.put(_{ default_collection : Descriptor })),
         assert_read_access(Context_2),
@@ -2552,7 +2552,7 @@ test(metadata_branch, [
                 State = _-Path,
                 metadata:set_current_db_path(Path),
                 create_db_without_schema('admin|test', 'test','a test'))),
-         cleanup((metadata:unset_current_db_path(Path),
+         cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
     ) :-
@@ -2585,7 +2585,7 @@ test(metadata_graph, [
                 State = _-Path,
                 metadata:set_current_db_path(Path),
                 create_db_without_schema('admin|test', 'test','a test'))),
-         cleanup((metadata:unset_current_db_path(Path),
+         cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
     ) :-
@@ -2618,7 +2618,7 @@ test(metadata_triple_count_json, [
                 State = _-Path,
                 metadata:set_current_db_path(Path),
                 create_db_without_schema('admin|test', 'test','a test'))),
-         cleanup((metadata:unset_current_db_path(Path),
+         cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
 
@@ -2653,7 +2653,7 @@ test(metadata_triple_count_json, [
                 State = _-Path,
                 metadata:set_current_db_path(Path),
                 create_db_without_schema('admin|test', 'test','a test'))),
-         cleanup((metadata:unset_current_db_path(Path),
+         cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
 
@@ -2683,6 +2683,42 @@ test(metadata_triple_count_json, [
     (Binding.'Size'.'@value' = Val),
     Val > 0,
     Val < 1000.
+
+test(metadata_size_commits_json, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema('admin|test', 'test','a test'))),
+         cleanup((metadata:unset_current_db_path,
+                  teardown_temp_store(State)))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "Size",
+              resource : _{'@type' : "xsd:string",
+                           '@value' : "admin/test/local/_commits"},
+              size : _{'@type' : "Variable",
+                       variable_name :
+                       _{'@type' : "xsd:string",
+                         '@value' : "Size"}}},
+
+    query_test_response(Descriptor, Query, JSON),
+    [Binding] = (JSON.bindings),
+    (Binding.'Size'.'@value' = Val),
+    Val > 0,
+    Val < 15000.
 
 test(ast_disjunction_test, [
          setup((setup_temp_store(State),

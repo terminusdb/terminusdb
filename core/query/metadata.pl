@@ -27,8 +27,8 @@ read_object_triple_count(Object, Count) :-
         Count is Off_Count - 1
     ).
 
-transaction_object_size(Descriptor, Size) :-
-    transaction_object_read_write_objs(Descriptor,Objects),
+transaction_object_size(Transaction, Size) :-
+    transaction_object_read_write_objs(Transaction,Objects),
     maplist(read_object_size, Objects, Sizes),
     sumlist(Sizes, Size).
 
@@ -55,18 +55,19 @@ layer_size(Layer,Size) :-
     layerid_to_directory(ID,Directory),
     size_directory(Directory,Size).
 
-:- dynamic current_db_path/1.
+:- thread_local current_db_path_pred/1.
+current_db_path(Path) :-
+    current_db_path_pred(Path),
+    !.
 current_db_path(Path) :-
     db_path(Path).
 
 set_current_db_path(Path) :-
     atomic_list_concat([Path,'/'],Directory),
-    retractall(current_db_path(_)),
-    assertz(current_db_path(Directory)).
+    asserta(current_db_path_pred(Directory)).
 
-unset_current_db_path(Path) :-
-    retractall(current_db_path(_)),
-    assertz((current_db_path(Path) :- db_path(Path))).
+unset_current_db_path :-
+    retractall(current_db_path_pred(_)).
 
 % layerid_to_directory
 layerid_to_directory(Layer_ID, Directory) :-
@@ -94,7 +95,7 @@ test(count_and_size, [
                 State = _-Path,
                 metadata:set_current_db_path(Path),
                 create_db_without_schema('admin|test', 'test','a test'))),
-         cleanup((metadata:unset_current_db_path(Path),
+         cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
 

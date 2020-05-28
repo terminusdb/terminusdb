@@ -1262,17 +1262,17 @@ rebase_handler(post, Path, R) :-
 
 test(rebase_divergent_history, [
          setup((config:server(Server),
-                user_database_name(admin,foo, Name),
+                user_database_name('TERMINUSQA',foo, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,foo, Name),
+         cleanup((user_database_name('TERMINUSQA',foo, Name),
                   delete_db(Name)))
      ])
 :-
 
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    resolve_absolute_string_descriptor("TERMINUSQA/foo", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
     with_transaction(Master_Context1,
                      ask(Master_Context1,
@@ -1280,7 +1280,7 @@ test(rebase_divergent_history, [
                     _),
 
     branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor("TERMINUSQA/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
     with_transaction(Second_Context1,
@@ -1303,10 +1303,10 @@ test(rebase_divergent_history, [
                      _),
 
     config:server(Server),
-    atomic_list_concat([Server, '/rebase/admin/foo'], URI),
+    atomic_list_concat([Server, '/rebase/TERMINUSQA/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{rebase_from: 'admin/foo/local/branch/second',
+              json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
                      author : "Gavsky"}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
@@ -1490,6 +1490,7 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
                 [method(Method),
+                 prefix,
                  methods([options,post])]).
 
 % NOTE: We do this everytime - it should be handled automagically.
@@ -1510,7 +1511,41 @@ push_handler(post,Path,R) :-
         _{ remote : _Remote_Name } :< Document,
         error(push_has_no_remote(Document))),
 
+    % 1. rebase on remote
+    % 2. pack and send
+    % 3. error if head moved
     throw(error('Not implemented')).
+
+%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+% NOTE: We do this everytime - it should be handled automagically.
+pull_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+pull_handler(post,Path,R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, Request, _Auth_ID),
+
+    resolve_absolute_string_descriptor(Path,_Us),
+
+    get_payload(Document, Request),
+    % Can't we just ask for the default remote?
+    do_or_die(
+        _{ remote : _Remote_Name } :< Document,
+        error(pull_has_no_remote(Document))),
+
+    % 1. rebase on remote
+    % 2. pack and send
+    % 3. error if head moved
+    throw(error('Not implemented')).
+
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),

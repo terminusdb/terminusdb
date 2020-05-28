@@ -1,6 +1,7 @@
 :- module(db_delete,[
               try_delete_db/1,
-              delete_db/1
+              delete_db/1,
+              force_delete_db/1
           ]).
 
 /** <module> Database Deletion Logic
@@ -62,7 +63,10 @@ delete_db(DB_Name) :-
     (   database_exists(Terminus,DB_Name)
     <>  throw(database_does_not_exist(DB_Name))),
     % Do something here? User may need to know what went wrong
-    database_finalized(Terminus,DB_Name),
+
+    do_or_die(
+        database_finalized(Terminus,DB_Name),
+        error(database_not_finalized(DB_Name))),
 
     begin_deleting_db_from_terminus(Terminus,DB_Name),
 
@@ -78,6 +82,18 @@ delete_db(DB_Name) :-
     create_context(terminus_descriptor{}, Terminus_Staged),
     delete_db_from_terminus(Terminus_Staged,DB_Name).
 
+/* Force deletion of databases in an inconsistent state */
+force_delete_db(DB_Name) :-
+    create_context(terminus_descriptor{}, Terminus),
+    ignore(delete_db_from_terminus(Terminus,DB_Name)),
+    db_path(Path),
+    www_form_encode(DB_Name,DB_Name_Safe),
+    atomic_list_concat([Path,DB_Name_Safe,'.label'], File_Path),
+    catch(
+        delete_file(File_Path),
+        error(existence_error(file,_Fname), _Ctx),
+        true).
+
 /*
  * try_delete_db(DB_URI) is det.
  *
@@ -86,4 +102,4 @@ delete_db(DB_Name) :-
 try_delete_db(DB) :-
     do_or_die(
         delete_db(DB),
-        error(database_not_found(DB))).
+        error(database_cannot_be_deleted(DB))).
