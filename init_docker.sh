@@ -8,7 +8,7 @@ TERMINUSDB_AUTOATTACH=${TERMINUSDB_AUTOATTACH:-true}
 TERMINUSDB_AUTOLOGIN=${TERMINUSDB_AUTOLOGIN:-false}
 TERMINUSDB_ENABLE_WELCOME_SCREEN=${TERMINUSDB_ENABLE_WELCOME_SCREEN:-false}
 
-if [ ! -f /app/terminusdb/storage/prefix.db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
+if [ ! -d /app/terminusdb/storage/db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
     /app/terminusdb/utils/db_util -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --public_url "$TERMINUSDB_SERVER_PUBLIC_URL" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH"
 elif [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
     /app/terminusdb/utils/db_util -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$SERVER_PORT" --public_url "$TERMINUSDB_SERVER_PUBLIC_URL" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH" --only-config
