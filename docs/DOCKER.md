@@ -1,4 +1,4 @@
-# Run terminus-server from Docker
+# Run terminusdb-server from Docker
 
 1. Install Docker as described on the [Docker installation page](https://docs.docker.com/install/). Choose your
    operating system on the left sidebar.

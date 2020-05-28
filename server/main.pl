@@ -71,12 +71,12 @@ terminus_server(_Argv) :-
 			   prefix
 			 ]),
             (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-                print_message(banner, welcome('terminus-server', Server))
+                print_message(banner, welcome('terminusdb-server', Server))
             ),
 	    http_delete_handler(id(busy_loading))).
 
 
-% See https://github.com/terminusdb/terminus-server/issues/91
+% See https://github.com/terminusdb/terminusdb-server/issues/91
 %  TODO replace this with a proper page
 %
 busy_loading(_) :-
@@ -92,8 +92,8 @@ loading_page -->
 
 :- multifile prolog:message//1.
 
-prolog:message(welcome('terminus-server', Server)) -->
-         [ '~N% Welcome to TerminusDB\'s terminus-server!',
+prolog:message(welcome('terminusdb-server', Server)) -->
+         [ '~N% Welcome to TerminusDB\'s terminusdb-server!',
          nl,
          '% You can view your server in a browser at \'~s/console\''-[Server],
          nl,

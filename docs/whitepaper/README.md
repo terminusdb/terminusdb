@@ -1,7 +1,7 @@
 
 # Introduction
 
-The TerminusDB whitepaper is distributed with terminus-server as a pdf.
+The TerminusDB whitepaper is distributed with terminusdb-server as a pdf.
 
 However, it is also possible to build it from latex.
 

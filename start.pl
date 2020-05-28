@@ -113,7 +113,7 @@ main(Argv) :-
     initialise_log_settings,
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
-    http_log('terminus-server started at ~w (utime ~w) args ~w~n',
+    http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
     initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),

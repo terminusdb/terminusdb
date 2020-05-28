@@ -11,7 +11,7 @@
 
 # Terminus Server
 
-[![Build Status](https://travis-ci.com/terminusdb/terminus-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminus-server)
+[![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
 TerminusDB is an open source model driven graph database for knowledge
 graph representation designed specifically for the web-age.
@@ -23,7 +23,7 @@ utilise the powerful features of graph search and graph storage.
 
 We use an advanced git-like model storing append only changes to
 graphs represented in concise datastructures using
-[terminus-store](https://github.com/terminusdb/terminus-store). You
+[terminusdb-store](https://github.com/terminusdb/terminusdb-store). You
 can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](https://github.com/terminusdb/terminusdb-knowledge/blob/master/succinct-data-structures-whitepaper/terminusdb.pdf)
 whitepaper.
 
@@ -35,7 +35,7 @@ v1.1.6
 
 ### Install from Docker image (*RECOMMENDED*)
 
-For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
+For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminusdb-quickstart) installer.
 
 Follow the instructions there. If you choose to run the Docker image directly, please not that
 the default username is "admin" and the password is "root" (without the double quotes) and that you should change it in a
@@ -43,11 +43,11 @@ production environment.
 
 ### Building from source
 
-In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/docs/BUILD.md) directions.
+In order to build from source, follow the [build from source](https://github.com/terminusdb/terminusdb-server/blob/master/docs/BUILD.md) directions.
 
 ### Open Console
 
-Once you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
 
 ## Why
 
@@ -87,7 +87,7 @@ directly through clients you should look at the documentation on our
 
 ## Changes in this Version
 
-* Now with our own [terminus-store](https://github.com/terminusdb/terminus-store) backend!
+* Now with our own [terminusdb-store](https://github.com/terminusdb/terminusdb-store) backend!
 * Extended WOQL to greater functionality for string and arithmetic processing
 * Better date handling in WOQL
 * Improved type casting in WOQL
