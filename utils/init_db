@@ -1,6 +1,6 @@
 #!/usr/bin/env swipl
 % -*- mode: prolog;-*-
-:- module(db_util, [run/1]).
+:- module(db_init, [run/1]).
 
 
 % Set up access to the libraries

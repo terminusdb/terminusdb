@@ -38,7 +38,7 @@ build_script:
   - cd ..\
 
 test_script:
-  - swipl utils\db_util -s localhost -k root
+  - swipl utils\db_init -s localhost -k root
   - swipl -g run_tests -g halt start.pl
 
 artifacts:

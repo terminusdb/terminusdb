@@ -9,7 +9,7 @@
 
 term_expansion((:- initialization(_)), []).
 
-:- load_files("db_util").
+:- load_files("db_init").
 
 :- http_handler(root(.), welcome_screen, [methods([get])]).
 :- http_handler(root(submit), server_catch(welcome_screen_submit), [methods([post])]).
@@ -27,7 +27,7 @@ welcome_screen_submit(Request) :-
     http_parameters(Request, [password(Password, []),
                               port(Port_Arg, []),
                               public_url(Public_URL, [])]),
-    Args = ['db_util', '--public_url', Public_URL, '--port ', Port_Arg, '-k ', Password],
+    Args = ['db_init', '--public_url', Public_URL, '--port ', Port_Arg, '-k ', Password],
     process_create(path(swipl), Args, [process(PID)]),
     process_release(PID),
     atom_concat(Public_URL, '/console', Redirect_URL),

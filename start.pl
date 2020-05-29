@@ -87,7 +87,7 @@ prolog:message(server_missing_config(BasePath)) -->
     'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
     nl,
     nl,
-    'Run: ~s/utils/db_util first'-[BasePath],
+    'Run: ~s/utils/db_init first'-[BasePath],
     nl
     ].
 
