@@ -1510,16 +1510,31 @@ push_handler(post,Path,R) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,_Us),
+    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
+
+    do_or_die(
+        (branch_descriptor{} :< Branch_Descriptor),
+        error(push_requires_branch_descriptor(Branch_Descriptor))),
 
     get_payload(Document, Request),
     do_or_die(
-        _{ remote : _Remote_Name } :< Document,
+        _{ remote : Remote_Name,
+           remote_branch : Remote_Branch } :< Document,
         error(push_has_no_remote(Document))),
+
+    (   get_dict(force, Document, true)
+    ->  Force = true
+    ;   Force = false),
 
     % 1. rebase on remote
     % 2. pack and send
     % 3. error if head moved
+    push(Descriptor,Remote_Name,Remote_Branch,authorised_push(Auth),Force,
+         Result),
+    % nothing required
+    % this was great success
+    % you can't do this - head has moved
+
     throw(error('Not implemented')).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
