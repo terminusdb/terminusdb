@@ -1,4 +1,4 @@
-:- module(db_init, [
+:- module(db_create, [
               create_db/4,
               try_create_db/4
           ]).

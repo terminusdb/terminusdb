@@ -164,7 +164,7 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
-:- use_module(db_init).
+:- use_module(db_create).
 :- use_module(db_branch).
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),

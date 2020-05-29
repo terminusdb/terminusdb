@@ -116,7 +116,7 @@ delete_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
 :- begin_tests(graph_creation).
 :- use_module(core(transaction)).
 :- use_module(core(util/test_utils)).
-:- use_module(db_init).
+:- use_module(db_create).
 
 test(create_graph_on_empty_branch,
      [setup((setup_temp_store(State),

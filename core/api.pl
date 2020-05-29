@@ -4,7 +4,7 @@
               try_delete_db/1,
               force_delete_db/1,
 
-              % db_init.pl
+              % db_create.pl
               create_db/4,
               try_delete_db/1,
               try_create_db/4,
@@ -45,7 +45,7 @@
           ]).
 
 :- use_module(api/init).
-:- use_module(api/db_init).
+:- use_module(api/db_create).
 :- use_module(api/db_delete).
 :- use_module(api/db_graph).
 :- use_module(api/db_branch).

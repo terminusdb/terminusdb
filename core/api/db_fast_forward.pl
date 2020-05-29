@@ -48,7 +48,7 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
 :- use_module(core(query)).
 :- use_module(core(triple)).
 
-:- use_module(db_init).
+:- use_module(db_create).
 :- use_module(db_branch).
 test(fast_forward_empty_branch_on_empty_from_same_repo,
      [setup((setup_temp_store(State),

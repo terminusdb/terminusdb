@@ -115,7 +115,7 @@ branch_create(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_
 :- use_module(core(query)).
 :- use_module(core(triple)).
 
-:- use_module(db_init).
+:- use_module(db_create).
 
 test(create_branch_from_nothing,
      [setup((setup_temp_store(State),
