@@ -824,6 +824,22 @@ apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_
     ->  true
     ;   throw(error(not_implemented))),
 
+    branch_name_uri(Us_Repo_Context, Us_Branch_Name, Us_Branch_Uri),
+
+    apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri),
+    unlink_commit_object_from_branch(Us_Repo_Context, Us_Branch_Uri),
+    link_commit_object_to_branch(Us_Repo_Context, Us_Branch_Uri, New_Commit_Uri),
+
+    % Note, this doesn't yet commit the commit graph.
+    % We may actually have written an invalid commit here.
+
+    true.
+
+apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
+    get_time(Now),
+    apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
+
+apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
     % ensure graph sets are equivalent. if not, error
     ensure_graph_sets_equal(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri),
 
@@ -833,7 +849,13 @@ apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_
     Commit_Info = commit_info{author: Author, message: Message},
 
     % create new commit
-    insert_commit_object_on_branch(Us_Repo_Context, Commit_Info, Timestamp, Us_Branch_Name, New_Commit_Id, New_Commit_Uri),
+    insert_child_commit_object(
+        Us_Repo_Context,
+        Us_Commit_Uri,
+        Commit_Info,
+        Timestamp,
+        New_Commit_Id,
+        New_Commit_Uri),
 
     forall(graph_for_commit(Them_Repo_Askable,
                             Them_Commit_Uri,
