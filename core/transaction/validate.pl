@@ -3,6 +3,7 @@
               validation_objects_to_transaction_objects/2,
               commit_validation_object/2,
               commit_validation_objects/1,
+              commit_commit_validation_object/4,
               validate_validation_objects/2,
               turtle_transaction/4,
               read_write_obj_to_graph_validation_obj/4
@@ -287,6 +288,43 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                    insert_graph_object(Parent_Transaction,
                                        Commit_Uri,
                                        Commit_Id,
+                                       Graph_Object.descriptor.type,
+                                       Graph_Object.descriptor.name,
+                                       Graph_Layer_Uri,
+                                       _Graph_Uri)))
+
+    ;   true
+    ).
+
+commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], New_Commit_Id, New_Commit_Uri) :-
+    validation_object{
+        parent : Parent_Transaction,
+        descriptor: Descriptor,
+        instance_objects: Instance_Objects,
+        schema_objects: Schema_Objects,
+        inference_objects: Inference_Objects
+    } :< Commit_Validation_Object,
+
+    commit_descriptor{commit_id : Commit_Id} :< Descriptor,
+    !,
+    commit_id_uri(Parent_Transaction, Commit_Id, Commit_Uri),
+
+    append([Instance_Objects,Schema_Objects,Inference_Objects],
+           Union_Objects),
+
+    (   exists(validation_object_changed, Union_Objects)
+    ->  insert_child_commit_object(Parent_Transaction,
+                                   Commit_Uri,
+                                   (Commit_Validation_Object.commit_info),
+                                   New_Commit_Id,
+                                   New_Commit_Uri),
+        forall(member(Graph_Object, Union_Objects),
+               (   ignore((ground(Graph_Object.read),
+                           layer_to_id(Graph_Object.read, Layer_Id),
+                           insert_layer_object(Parent_Transaction, Layer_Id, Graph_Layer_Uri))),
+                   insert_graph_object(Parent_Transaction,
+                                       New_Commit_Uri,
+                                       New_Commit_Id,
                                        Graph_Object.descriptor.type,
                                        Graph_Object.descriptor.name,
                                        Graph_Layer_Uri,

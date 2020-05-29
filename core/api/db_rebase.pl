@@ -18,93 +18,95 @@ cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :
 
     create_context(New_Transaction_Object, New_Context).
 
-make_branch_graph_validation_object_appear_as_changed(Graph_Validation_Object, New_Graph_Validation_Object) :-
+make_graph_validation_object_appear_as_changed(Graph_Validation_Object, New_Graph_Validation_Object) :-
     % TODO actually do a super awesome check to see if the last layer is different and if so set changed to true
     New_Graph_Validation_Object = Graph_Validation_Object.put(changed, true).
 
-make_branch_validation_object_appear_as_changed(Branch_Validation_Object, New_Branch_Validation_Object) :-
-    maplist(make_branch_graph_validation_object_appear_as_changed,
-            Branch_Validation_Object.schema_objects,
+make_validation_object_appear_as_changed(Validation_Object, New_Validation_Object) :-
+    maplist(make_graph_validation_object_appear_as_changed,
+            Validation_Object.schema_objects,
             Schema_Objects),
-    maplist(make_branch_graph_validation_object_appear_as_changed,
-            Branch_Validation_Object.instance_objects,
+    maplist(make_graph_validation_object_appear_as_changed,
+            Validation_Object.instance_objects,
             Instance_Objects),
-    maplist(make_branch_graph_validation_object_appear_as_changed,
-            Branch_Validation_Object.inference_objects,
+    maplist(make_graph_validation_object_appear_as_changed,
+            Validation_Object.inference_objects,
             Inference_Objects),
 
-    New_Branch_Validation_Object = Branch_Validation_Object.put(
-                                       _{
-                                           instance_objects: Instance_Objects,
-                                           schema_objects: Schema_Objects,
-                                           inference_objects: Inference_Objects
-                                       }).
+    New_Validation_Object = Validation_Object.put(
+                                                  _{
+                                                      instance_objects: Instance_Objects,
+                                                      schema_objects: Schema_Objects,
+                                                      inference_objects: Inference_Objects
+                                                  }).
 
-apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, _Branch_Name, _Author, _Auth_Object, [], [], Our_Repo_Context) :-
+apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context) :-
     !,
     true.
-apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Auth_Object, [Commit_Id|Commit_Ids], [Strategy|Strategies], Return_Context) :-
+apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context) :-
     % apply the commit
-    commit_id_uri(Their_Repo_Context, Commit_Id, Commit_Uri),
-    apply_commit_on_branch(Our_Repo_Context, Their_Repo_Context, Branch_Name, Commit_Uri, Author, _New_Commit_Id, _New_Commit_Uri),
+    commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri), % we are renaming, Commit_Uri -> Their_Commit_Uri
+    apply_commit_on_commit(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri),
 
     % turn our repo context into a validation object
     cycle_context(Our_Repo_Context, Our_Repo_Context2, New_Our_Repo_Transaction_Object, _Our_Repo_Validation_Object),
 
-    Our_Branch_Descriptor = branch_descriptor{
+    Our_Commit_Descriptor = commit_descriptor{
                             repository_descriptor: New_Our_Repo_Transaction_Object.descriptor,
-                            branch_name: Branch_Name
+                            commit_id: New_Commit_Id
                         },
     % todo also include database descriptor and read write objects in that list
     % should not actually matter though
     [Commit_Read_Write_Obj] = New_Our_Repo_Transaction_Object.instance_objects,
-    open_descriptor(Our_Branch_Descriptor, _, Our_Branch_Transaction, [New_Our_Repo_Transaction_Object.descriptor=New_Our_Repo_Transaction_Object,Commit_Read_Write_Obj.descriptor=Commit_Read_Write_Obj], _Output_Map),
+    open_descriptor(Our_Commit_Descriptor, _, Our_Commit_Transaction, [New_Our_Repo_Transaction_Object.descriptor=New_Our_Repo_Transaction_Object,Commit_Read_Write_Obj.descriptor=Commit_Read_Write_Obj], _Output_Map),
 
-    transaction_objects_to_validation_objects([Our_Branch_Transaction], [Our_Branch_Validation_Object_Unchanged]),
+    transaction_objects_to_validation_objects([Our_Commit_Transaction], [Our_Commit_Validation_Object_Unchanged]),
 
-    make_branch_validation_object_appear_as_changed(Our_Branch_Validation_Object_Unchanged,
-                                                    Our_Branch_Validation_Object),
+    make_validation_object_appear_as_changed(Our_Commit_Validation_Object_Unchanged,
+                                             Our_Commit_Validation_Object),
 
     % validate the branch context
-    validate_validation_objects([Our_Branch_Validation_Object], Witnesses),
+    validate_validation_objects([Our_Commit_Validation_Object], Witnesses),
 
     % if it validates, yay! continue to the next commit (see below)
     (   Witnesses = []
     ->  (   Strategy = error
-        ->  Our_Repo_Context3 = Our_Repo_Context2
+        ->  Our_Repo_Context3 = Our_Repo_Context2,
+            New_Commit_Uri2 = New_Commit_Uri
         ;   Strategy = continue
-        ->  throw(error(apply_commit(continue_on_valid_commit(Commit_Id))))
+        ->  throw(error(apply_commit(continue_on_valid_commit(Their_Commit_Id))))
         ;   Strategy = fixup(_Message,_Woql)
-        ->  throw(error(apply_commit(fixup_on_valid_commit(Commit_Id)))))
+        ->  throw(error(apply_commit(fixup_on_valid_commit(Their_Commit_Id)))))
     ;   (   Strategy = error
-        ->  throw(error(apply_commit(schema_validation_error(Commit_Id, Witnesses))))
+        ->  throw(error(apply_commit(schema_validation_error(Their_Commit_Id, Witnesses))))
         ;   Strategy = continue
-        ->  invalidate_commit(Our_Repo_Context2, Commit_Id),
-            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _)
+        ->  invalidate_commit(Our_Repo_Context2, New_Commit_Id),
+            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
+            New_Commit_Uri2 = New_Commit_Uri
         ;   Strategy = fixup(Message, Woql)
-        ->  create_context(Our_Branch_Transaction, Our_Branch_Fixup_Context_Without_Auth),
+        ->  create_context(Our_Commit_Transaction, Our_Commit_Fixup_Context_Without_Auth),
             put_dict(_{authorization: Auth_Object,
                        commit_info: commit_info{author:Author,message:Message}},
-                     Our_Branch_Fixup_Context_Without_Auth,
-                     Our_Branch_Fixup_Context),
-            compile_query(Woql, Prog, Our_Branch_Fixup_Context, Our_Branch_Fixup_Context2),
+                     Our_Commit_Fixup_Context_Without_Auth,
+                     Our_Commit_Fixup_Context),
+            compile_query(Woql, Prog, Our_Commit_Fixup_Context, Our_Commit_Fixup_Context2),
             forall(woql_compile:Prog, true),
             % turn context into validation
-            Our_Branch_Fixup_Context2.transaction_objects = [Branch_Fixup_Transaction_Object],
-            transaction_objects_to_validation_objects([Branch_Fixup_Transaction_Object], [Branch_Fixup_Validation_Object]),
+            Our_Commit_Fixup_Context2.transaction_objects = [Commit_Fixup_Transaction_Object],
+            transaction_objects_to_validation_objects([Commit_Fixup_Transaction_Object], [Commit_Fixup_Validation_Object]),
             % validate
-            validate_validation_objects([Branch_Fixup_Validation_Object], Fixup_Witnesses),
+            validate_validation_objects([Commit_Fixup_Validation_Object], Fixup_Witnesses),
             (   Fixup_Witnesses = []
             ->  true
-            ;   throw(error(apply_commit(fixup_error(Commit_Id, Fixup_Witnesses))))),
+            ;   throw(error(apply_commit(fixup_error(Their_Commit_Id, Fixup_Witnesses))))),
 
             % commit validation
-            commit_validation_object(Branch_Fixup_Validation_Object, _),
+            commit_commit_validation_object(Commit_Fixup_Validation_Object, _New_Commit_Id2, New_Commit_Uri2),
             % write commit object into our repo context
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _))
     ),
 
-    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, Branch_Name, Author, Auth_Object, Commit_Ids, Strategies, Return_Context).
+    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context).
 
 
 create_strategies([], _Strategy_Map, []).
@@ -120,9 +122,10 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     create_context(Our_Repo_Descriptor, Our_Repo_Context),
     create_context(Their_Repo_Descriptor, Their_Repo_Context),
 
-    branch_head_commit(Our_Repo_Context, "master", Our_Commit_Uri),
+    branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
+    branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
     commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
-    branch_head_commit(Their_Repo_Context, "second", Their_Commit_Uri),
+    branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
 
     most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, _Our_Branch_Path, Their_Branch_Path),
@@ -135,18 +138,23 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     ;   catch(
             apply_commit_chain(Our_Repo_Context,
                                Their_Repo_Context,
-                               Our_Branch_Descriptor.branch_name,
+                               Our_Commit_Uri,
                                Author,
                                Auth_Object,
                                Their_Branch_Path,
                                Strategies,
-                               Final_Context),
+                               Final_Commit_Uri,
+                               Semifinal_Context),
             error(apply_commit(Error)),
             throw(error(rebase(Error,Their_Branch_Path)))
         )
     ),
 
-    [Transaction_Object] = Final_Context.transaction_objects,
+    unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri),
+    link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
+
+    cycle_context(Semifinal_Context, _Final_Context, Transaction_Object, _),
+
     Repo_Name = Transaction_Object.descriptor.repository_name,
     [Read_Write_Obj] = Transaction_Object.instance_objects,
     Layer = Read_Write_Obj.read,

@@ -30,6 +30,7 @@
               validation_objects_to_transaction_objects/2,
               commit_validation_objects/1,
               commit_validation_object/2,
+              commit_commit_validation_object/4,
               validate_validation_objects/2,
               turtle_transaction/4,
 
@@ -65,6 +66,8 @@
               copy_commits/3,
               apply_commit_on_branch/7,
               apply_commit_on_branch/8,
+              apply_commit_on_commit/7,
+              apply_commit_on_commit/8,
               commit_is_valid/2,
               invalidate_commit/2,
               most_recent_common_ancestor/7,
