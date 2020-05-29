@@ -1,5 +1,5 @@
 :- module(db_rebase, [
-              rebase_on_branch/7
+              rebase_on_branch/8
           ]).
 :- use_module(library(terminus_store)).
 
@@ -40,10 +40,15 @@ make_validation_object_appear_as_changed(Validation_Object, New_Validation_Objec
                                                       inference_objects: Inference_Objects
                                                   }).
 
-apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context) :-
+apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context, []) :-
     !,
     true.
-apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context) :-
+apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context, [Report|Reports]) :-
+    Report = report{
+                 origin_commit: Their_Commit_Id,
+                 applied: Applied_Commit_Ids,
+                 type: Commit_Application_Type
+             },
     % apply the commit
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri), % we are renaming, Commit_Uri -> Their_Commit_Uri
     apply_commit_on_commit(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Their_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri),
@@ -69,10 +74,13 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
     validate_validation_objects([Our_Commit_Validation_Object], Witnesses),
 
     % if it validates, yay! continue to the next commit (see below)
+
     (   Witnesses = []
     ->  (   Strategy = error
         ->  Our_Repo_Context3 = Our_Repo_Context2,
-            New_Commit_Uri2 = New_Commit_Uri
+            New_Commit_Uri2 = New_Commit_Uri,
+            Commit_Application_Type = valid,
+            Applied_Commit_Ids = [New_Commit_Id]
         ;   Strategy = continue
         ->  throw(error(apply_commit(continue_on_valid_commit(Their_Commit_Id))))
         ;   Strategy = fixup(_Message,_Woql)
@@ -82,7 +90,9 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
         ;   Strategy = continue
         ->  invalidate_commit(Our_Repo_Context2, New_Commit_Id),
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
-            New_Commit_Uri2 = New_Commit_Uri
+            New_Commit_Uri2 = New_Commit_Uri,
+            Commit_Application_Type = invalid,
+            Applied_Commit_Ids = [New_Commit_Id]
         ;   Strategy = fixup(Message, Woql)
         ->  create_context(Our_Commit_Transaction, Our_Commit_Fixup_Context_Without_Auth),
             put_dict(_{authorization: Auth_Object,
@@ -101,13 +111,15 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
             ;   throw(error(apply_commit(fixup_error(Their_Commit_Id, Fixup_Witnesses))))),
 
             % commit validation
-            commit_commit_validation_object(Commit_Fixup_Validation_Object, _New_Commit_Id2, New_Commit_Uri2),
+            commit_commit_validation_object(Commit_Fixup_Validation_Object, New_Commit_Id2, New_Commit_Uri2),
             % write commit object into our repo context
-            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _))
+            cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
+
+            Commit_Application_Type = fixup,
+            Applied_Commit_Ids = [New_Commit_Id, New_Commit_Id2])
     ),
 
-    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context).
-
+    apply_commit_chain(Our_Repo_Context3, Their_Repo_Context, New_Commit_Uri2, Author, Auth_Object, Their_Commit_Ids, Strategies, Final_Commit_Uri, Return_Context, Reports).
 
 create_strategies([], _Strategy_Map, []).
 create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strategies]) :-
@@ -116,7 +128,7 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     ;   Strategy = error),
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
-rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Object, Strategy_Map, Common_Commit_Id, Their_Branch_Path) :-
+rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Object, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_Path, Reports) :-
     Our_Repo_Descriptor = Our_Branch_Descriptor.repository_descriptor,
     Their_Repo_Descriptor = Their_Branch_Descriptor.repository_descriptor,
     create_context(Our_Repo_Descriptor, Our_Repo_Context),
@@ -128,25 +140,38 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
 
-    most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, _Our_Branch_Path, Their_Branch_Path),
+    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
+    ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
+    ;   Optional_Common_Commit_Id = none,
+        commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_Path),
+        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_Path)),
 
-    create_strategies(Their_Branch_Path, Strategy_Map, Strategies),
+    % copy commits from their repo into ours, ensuring we got the latest
+    copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
+    cycle_context(Our_Repo_Context, Our_Repo_Context2, _, _),
 
-    (   Their_Branch_Path = []
-    ->  % yay we're done! All commits are known to us, no need to do a thing
-        true
+    % take their commit uri as the top on which we're gonna apply_commit_chain
+    % list of commits to apply is ours since common
+
+    create_strategies(Our_Branch_Path, Strategy_Map, Strategies),
+
+    (   Our_Branch_Path = []
+    % yay we're done! All commits are known to us, no need to do a thing
+    ->  Semifinal_Context = Our_Repo_Context2,
+        Final_Commit_Uri = Their_Commit_Uri
     ;   catch(
-            apply_commit_chain(Our_Repo_Context,
+            apply_commit_chain(Our_Repo_Context2,
                                Their_Repo_Context,
-                               Our_Commit_Uri,
+                               Their_Commit_Uri,
                                Author,
                                Auth_Object,
-                               Their_Branch_Path,
+                               Our_Branch_Path,
                                Strategies,
                                Final_Commit_Uri,
-                               Semifinal_Context),
+                               Semifinal_Context,
+                               Reports),
             error(apply_commit(Error)),
-            throw(error(rebase(Error,Their_Branch_Path)))
+            throw(error(rebase(Error,Our_Branch_Path)))
         )
     ),
 
@@ -203,12 +228,12 @@ test(rebase_fast_forward,
                      _),
 
     super_user_authority(Auth),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], Common_Commit_Id, Applied_Commit_Ids),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], some(Common_Commit_Id), Their_Applied_Commit_Ids, []),
     Repo_Descriptor = Master_Descriptor.repository_descriptor,
 
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
 
-    [Old_Commit_B_Id, Old_Commit_C_Id] = Applied_Commit_Ids,
+    [Old_Commit_B_Id, Old_Commit_C_Id] = Their_Applied_Commit_Ids,
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
 
@@ -267,27 +292,32 @@ test(rebase_divergent_history,
                          insert(j,k,l)),
                      _),
 
-    super_user_authority(Auth),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], Common_Commit_Id, Applied_Commit_Ids),
     Repo_Descriptor = Master_Descriptor.repository_descriptor,
+    branch_head_commit(Repo_Descriptor, "master", Old_Commit_D_Uri),
+    commit_id_uri(Repo_Descriptor, Old_Commit_D_Id, Old_Commit_D_Uri),
+
+    super_user_authority(Auth),
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], some(Common_Commit_Id), Their_Commit_Ids, Reports),
 
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
 
-    [Old_Commit_B_Id, Old_Commit_C_Id] = Applied_Commit_Ids,
-    commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
-    commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
-
-    branch_head_commit(Repo_Descriptor, "master", Commit_C_Uri),
+    branch_head_commit(Repo_Descriptor, "master", New_Commit_D_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, New_Commit_D_Uri, Commit_C_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
-    commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
-    commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_D_Uri),
-    commit_uri_to_parent_uri(Repo_Descriptor, Commit_D_Uri, Commit_A_Uri),
-
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_A_Uri),
 
     commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Repo_Descriptor, Commit_B_Uri, _, "commit b", _),
     commit_uri_to_metadata(Repo_Descriptor, Commit_C_Uri, _, "commit c", _),
-    commit_uri_to_metadata(Repo_Descriptor, Commit_D_Uri, _, "commit d", _),
+    commit_uri_to_metadata(Repo_Descriptor, New_Commit_D_Uri, _, "commit d", _),
+    commit_id_uri(Repo_Descriptor, Commit_B_Id, Commit_B_Uri),
+    commit_id_uri(Repo_Descriptor, Commit_C_Id, Commit_C_Uri),
+    commit_id_uri(Repo_Descriptor, New_Commit_D_Id, New_Commit_D_Uri),
+
+    [Commit_B_Id, Commit_C_Id] = Their_Commit_Ids,
+    [_{origin_commit: Old_Commit_D_Id,
+       applied: [New_Commit_D_Id],
+       type: valid}] = Reports,
 
     findall(t(S,P,O),
             ask(Master_Descriptor,
@@ -305,7 +335,7 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('user','test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(rebase(schema_validation_error(_,_),_)))
+      throws(error(rebase(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id])))
      ])
 :-
     resolve_absolute_string_descriptor("user/test", Master_Descriptor),
@@ -327,7 +357,8 @@ test(rebase_conflicting_history_errors,
     once(ask(Master_Context2, t(City_Uri, worldOnt:name, "Dublin"^^xsd:string))),
     format(string(City_Uri_String), "~w", [City_Uri]),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    Repository_Descriptor = (Master_Descriptor.repository_descriptor),
+    branch_create(Repository_Descriptor, Master_Descriptor, "second", _),
     resolve_absolute_string_descriptor("user/test/local/branch/second", Second_Descriptor),
 
     % create a commit on the master branch, diverging history
@@ -346,6 +377,9 @@ test(rebase_conflicting_history_errors,
                          update_object(Object2)
                          ),
                      _),
+
+    branch_head_commit(Repository_Descriptor, "master", Failure_Commit_Uri),
+    commit_id_uri(Repository_Descriptor, Failure_Commit_Id, Failure_Commit_Uri),
 
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
@@ -368,6 +402,6 @@ test(rebase_conflicting_history_errors,
 
     % this rebase should fail, but it doesn't right now due to failing cardinality check.
     %trace(validate_instance:refute_all_restrictions),
-    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], _Common_Commit_Id, _Applied_Commit_Ids).
+    rebase_on_branch(Master_Descriptor, Second_Descriptor, "rebaser", Auth, [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
 
 :- end_tests(rebase).

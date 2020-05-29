@@ -1248,11 +1248,17 @@ rebase_handler(post, Path, R) :-
     ;   throw(error(rebase_author_missing))),
 
     Strategy_Map = [],
-    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID, Applied_Commits),
+    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    reply_json_dict(_{ 'terminus:status' : "terminus:success",
-                       common_commit_id : Common_Commit_ID,
-                       applied_commits : Applied_Commits}).
+    Incomplete_Reply = _{ 'terminus:status' : "terminus:success",
+                          forwarded_commits : Forwarded_Commits,
+                          reports: Reports
+                        },
+    (   Common_Commit_ID_Option = some(Common_Commit_ID)
+    ->  Reply = (Incomplete_Reply.put(common_commit_id, Common_Commit_ID))
+    ;   Reply = Incomplete_Reply),
+    
+    reply_json_dict(Reply).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1314,20 +1320,20 @@ test(rebase_divergent_history, [
     * json_write_dict(current_output, JSON, []),
 
     _{
-        applied_commits : [_Thing, _Another_Thing ],
+        forwarded_commits : [_Thing, _Another_Thing ],
         common_commit_id : _Common_Something,
+        reports: _Reports,
         'terminus:status' : "terminus:success"
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
     branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
-    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_D, Commit_B, Commit_C]),
+    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_B, Commit_C, Commit_D]),
 
     commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),
-    commit_id_to_metadata(Repository_Descriptor, Commit_D, "test", "commit d", _),
-    commit_id_to_metadata(Repository_Descriptor, Commit_B, "Gavsky", "commit b", _),
-    commit_id_to_metadata(Repository_Descriptor, Commit_C, "Gavsky", "commit c", _).
-
+    commit_id_to_metadata(Repository_Descriptor, Commit_B, "test", "commit b", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_C, "test", "commit c", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_D, "Gavsky", "commit d", _).
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%

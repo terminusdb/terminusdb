@@ -691,7 +691,7 @@ whole_arg(_, _) :-
 random_string(String) :-
     Size is 2 ** (20 * 8),
     random(0, Size, Num),
-    format(atom(String), '~36r', [Num]).
+    format(string(String), '~36r', [Num]).
 
 /*
  * uri_has_protocol(K) is semidet.
