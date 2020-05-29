@@ -46,7 +46,7 @@ apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, _Branch_Name, _Author,
 apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Branch_Name, Author, Auth_Object, [Commit_Id|Commit_Ids], [Strategy|Strategies], Return_Context) :-
     % apply the commit
     commit_id_uri(Their_Repo_Context, Commit_Id, Commit_Uri),
-    apply_commit(Our_Repo_Context, Their_Repo_Context, Branch_Name, Commit_Uri, Author, _New_Commit_Id, _New_Commit_Uri),
+    apply_commit_on_branch(Our_Repo_Context, Their_Repo_Context, Branch_Name, Commit_Uri, Author, _New_Commit_Id, _New_Commit_Uri),
 
     % turn our repo context into a validation object
     cycle_context(Our_Repo_Context, Our_Repo_Context2, New_Our_Repo_Transaction_Object, _Our_Repo_Validation_Object),
