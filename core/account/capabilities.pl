@@ -412,7 +412,7 @@ write_cors_headers(Resource_Name, DB) :-
     format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
     format(Out,'Access-Control-Allow-Credentials: true\n',[]),
     format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-    format(Out,'Access-Control-Allow-Headers: Authorization, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
+    format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
     format(Out,'Access-Control-Allow-Origin: ',[]),
     write_domains(Unique_Origins, Out),
     format(Out,'\n',[]).

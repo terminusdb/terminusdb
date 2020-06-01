@@ -1508,7 +1508,7 @@ push_handler(options, _Path, _Request) :-
 push_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+    authenticate(Terminus, Request, Auth),
 
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
@@ -1529,13 +1529,13 @@ push_handler(post,Path,R) :-
     % 1. rebase on remote
     % 2. pack and send
     % 3. error if head moved
-    push(Descriptor,Remote_Name,Remote_Branch,authorised_push(Auth),Force,
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorised_push(Auth),Force,
          Result),
     % nothing required
     % this was great success
     % you can't do this - head has moved
 
-    throw(error('Not implemented')).
+    throw(error(Result)).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
