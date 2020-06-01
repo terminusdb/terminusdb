@@ -1169,6 +1169,9 @@ clone_handler(post, Account, DB, R) :-
 
     clone(Account,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
 
+    resolve_absolute_descriptor([Account,DB], Descriptor),
+
+    write_descriptor_cors(Descriptor, Terminus_DB),
     reply_json_dict(
         _{'terminus:status' : 'terminus:success'}).
 
