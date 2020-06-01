@@ -1199,13 +1199,18 @@ fetch_handler(post,Path,Request) :-
               'head_has_changed' : Head_Has_Updated,
               'head' : New_Head_Layer_Id}).
 
+remote_pack_url(URL, Pack_URL) :-
+    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"pack"|Rest]).
 
-authorized_fetch(Authorization,URL, Repository_Head_Option, Payload_Option) :-
+authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head }
     ;   Document = _{}),
 
-    http_post(URL,
+    remote_pack_url(URL,Pack_URL),
+
+    http_post(Pack_URL,
               json(Document),
               Payload,
               [request_header('Authorization'=Authorization),
