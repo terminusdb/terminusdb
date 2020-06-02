@@ -23,7 +23,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Push_Predicate, Force, Resul
 
     % 1. Begin hypothetical rebase for pack
     create_context(Repository_Descriptor, Repository_Context),
-    % Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
 
     resolve_relative_descriptor(Database_Descriptor,[Remote_Name],
                                 Remote_Repository),

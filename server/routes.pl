@@ -1501,6 +1501,39 @@ test(pack_nothing, [
 
 :- end_tests(pack_endpoint).
 
+%%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(unpack/Path), cors_catch(unpack_handler(Method,Path)),
+                [method(Method),
+                 methods([options,post])]).
+
+unpack_handler(options, _Path, _Request) :-
+    config:public_url(SURI),
+    open_descriptor(terminus_descriptor{}, Terminus),
+    write_cors_headers(SURI, Terminus),
+    format('~n').
+unpack_handler(post, Path, Request) :-
+    add_payload_to_request(R,Request),
+
+    open_descriptor(terminus_descriptor{}, Terminus),
+    authenticate(Terminus, R, Auth_ID),
+
+    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
+
+    do_or_die(
+        (branch_descriptor{} :< Branch_Descriptor),
+        error(not_a_branch_descriptor(Branch_Descriptor))),
+
+    (   memberchk(search(Query_Params), Request),
+        memberchk(force=true, Query_Params)
+    ->  Force = true
+    ;   Force = false),
+
+    get_payload(Payload, Request),
+    unpack(Branch_Descriptor, Payload, Force),
+
+    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    reply_json(_{'terminus:status' : "terminus:success"}).
+
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
                 [method(Method),
@@ -1537,13 +1570,27 @@ push_handler(post,Path,R) :-
     % 1. rebase on remote
     % 2. pack and send
     % 3. error if head moved
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorised_push(Auth),Force,
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorized_push(Auth),Force,
          Result),
     % nothing required
     % this was great success
     % you can't do this - head has moved
 
     throw(error(Result)).
+
+remote_unpack_url(URL, Pack_URL) :-
+    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
+
+authorized_push(Auth, Remote_URL, Remote_Branch, Payload, Force, Result) :-
+    remote_unpack_url(Remote_URL, Unpack_URL),
+
+    atomic_list_concat([Unpack_URL,'?force=',Force], URL),
+
+    http_post(URL,
+              bytes('application/octets',Payload),
+              Result,
+              [request_header('Authorization'=Authorization)]).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),

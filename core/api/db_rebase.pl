@@ -111,7 +111,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
             ;   throw(error(apply_commit(fixup_error(Their_Commit_Id, Fixup_Witnesses))))),
 
             % commit validation
-            commit_commit_validation_object(Commit_Fixup_Validation_Object, New_Commit_Id2, New_Commit_Uri2),
+            commit_commit_validation_object(Commit_Fixup_Validation_Object, _Parent_Transaction_List, New_Commit_Id2, New_Commit_Uri2),
             % write commit object into our repo context
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
 
