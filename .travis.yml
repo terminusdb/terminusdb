@@ -22,34 +22,34 @@ jobs:
   include:
     - stage: build
     - script:
-        - docker build -t terminusdb/terminus-server:latest .
-        - docker run -it terminusdb/terminus-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker build -t terminusdb/terminusdb-server:latest .
+        - docker run -it terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
 
     - stage: deploy
       script:
-        - docker build -t terminusdb/terminus-server:latest .
-        - docker run -it terminusdb/terminus-server bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker build -t terminusdb/terminusdb-server:latest .
+        - docker run -it terminusdb/terminusdb-server bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminus-server:latest
+        - docker push terminusdb/terminusdb-server:latest
 
     - stage: deploy_dev
       script:
-        - docker build -t terminusdb/terminus-server:dev .
-        - docker run -it terminusdb/terminus-server:dev bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker build -t terminusdb/terminusdb-server:dev .
+        - docker run -it terminusdb/terminusdb-server:dev bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminus-server:dev
+        - docker push terminusdb/terminusdb-server:dev
 
     - stage: deploy_canary
       script:
-        - docker build -t terminusdb/terminus-server:canary .
-        - docker run -it terminusdb/terminus-server:canary bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker build -t terminusdb/terminusdb-server:canary .
+        - docker run -it terminusdb/terminusdb-server:canary bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - bash .ci/trigger_canary.sh
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminus-server:canary
+        - docker push terminusdb/terminusdb-server:canary
 
     - stage: deploy_tag
       script:
-        - docker build -t "terminusdb/terminus-server:$TRAVIS_TAG" .
-        - docker run -it "terminusdb/terminus-server:$TRAVIS_TAG" bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker build -t "terminusdb/terminusdb-server:$TRAVIS_TAG" .
+        - docker run -it "terminusdb/terminusdb-server:$TRAVIS_TAG" bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push "terminusdb/terminus-server:$TRAVIS_TAG"
+        - docker push "terminusdb/terminusdb-server:$TRAVIS_TAG"
