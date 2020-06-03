@@ -1520,7 +1520,7 @@ unpack_handler(post, Path, Request) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
     check_descriptor_auth(Terminus, Branch_Descriptor,
                           terminus:commit_write_access,
-                          Auth_Id),
+                          Auth_ID),
 
     do_or_die(
         (branch_descriptor{} :< Branch_Descriptor),
@@ -1581,10 +1581,10 @@ remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
-authorized_push(Auth, Remote_URL, Remote_Branch, Payload, Result) :-
+authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload, Result) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
-    http_post(URL,
+    http_post(Unpack_URL,
               bytes('application/octets',Payload),
               Result,
               [request_header('Authorization'=Authorization)]).

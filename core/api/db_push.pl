@@ -1,5 +1,5 @@
 :- module(db_push, [
-              push/5
+              push/6
           ]).
 
 :- use_module(core(util)).
@@ -11,10 +11,10 @@
 % 2. pack and send
 % 3. error if head moved
 
-push(Branch_Descriptor, Remote_Name, Remote_Branch, Auth_ID,
+push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
      Push_Predicate, Result) :-
     do_or_die(
-        open_descriptor(Branch_Descriptor, Branch_Transaction),
+        open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscoroe
         error(branch_does_not_exist_in_push(Branch_Descriptor))),
 
     Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
@@ -63,8 +63,9 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Auth_ID,
 
         commit_id_uri(Repository_Context, Local_Commit_Id, Local_Commit_Uri),
         (   Remote_Commit_Uri_Option = some(Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Context, Remote_Commit_Id, Remote_Commit_Uri),
             most_recent_common_ancestor(Repository_Context, Remote_Repository_Context, Local_Commit_Id,
-                                        Remote_Commit_Id, Common_Commit_Id, Local_Branch_Path, Remote_Branch_Path)
+                                        Remote_Commit_Id, _Common_Commit_Id, _Local_Branch_Path, Remote_Branch_Path)
         % Shared history
         ->  (   Remote_Branch_Path = []
             ->  true
@@ -81,7 +82,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Auth_ID,
     ),
 
     cycle_context(Remote_Repository_Context, Final_Context, Remote_Transaction_Object, _),
-    repository_context__previous_head_option__payload(Final_Context, some(Last_Head_Id), Payload)
+    repository_context__previous_head_option__payload(Final_Context, some(Last_Head_Id), Payload),
 
     Database_Transaction_Object = (Remote_Transaction_Object.parent),
     repository_head(Database_Transaction_Object,Remote_Name,Current_Head_Id),
@@ -92,7 +93,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Auth_ID,
         (   Result = _{'terminus:status' : "terminus:success"}
         ->  true
         ;   true),
-        update_repository_head(Database_Transaction_Object, Repo_Name, Current_Head_Id),
+        update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
         run_transactions([Database_Transaction_Object], _)
     ).
 
