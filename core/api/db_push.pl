@@ -1,5 +1,5 @@
 :- module(db_push, [
-              push/6
+              push/5
           ]).
 
 :- use_module(core(util)).
@@ -11,7 +11,7 @@
 % 2. pack and send
 % 3. error if head moved
 
-push(Branch_Descriptor, Remote_Name, Remote_Branch, Push_Predicate, Force, Result) :-
+push(Branch_Descriptor, Remote_Name, Remote_Branch, Push_Predicate, Result) :-
     do_or_die(
         open_descriptor(Branch_Descriptor, Branch_Transaction),
         error(branch_does_not_exist_in_push(Branch_Descriptor))),
@@ -39,11 +39,17 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Push_Predicate, Force, Resul
                            Remote_Name,
                            Remote_Commit_Uri),
         commit_id_uri(Repository_Context, Local_Commit_Id, Local_Commit_Uri),
-        commit_id_uri(Remote_Repository_Transaction, Remote_Commit_Id, Remote_Commit_Uri),
+        commit_id_uri(Remote_Repository_Context, Remote_Commit_Id, Remote_Commit_Uri),
 
-        (   most_recent_common_ancestor(Repository_Transaction, Remote_Repository_Transaction, Local_Commit_Id, Remote_Commit_Id, Common_Commit_Id, Local_Branch_Path, Remote_Branch_Path)
+        (   most_recent_common_ancestor(Repository_Context, Remote_Repository_Context, Local_Commit_Id, Remote_Commit_Id, Common_Commit_Id, Local_Branch_Path, Remote_Branch_Path)
         ->  % Shared history
-            true
+            create_strategies(Remote_Branch_Path, [], Strategies), % all are error
+            catch(
+                apply_commit_chain(Remote_Repository_Context,Repository_Context, "rebase", Auth_Object, Remote_Branch_Path, Strategies, Final_Commit_URI, Final_Context, _Reports),
+                error(apply_commit(Error)),
+                throw(error(rebase(Error,Remote_Branch_Path)))
+            )
+
         ;   % No shared history
             true
         )
@@ -52,5 +58,5 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, Push_Predicate, Force, Resul
     ),
 
 
-    call(Push_Predicate, Remote_URL, Remote_Branch, Pack, Force, Result).
+    call(Push_Predicate, Remote_URL, Remote_Branch, Pack, Result).
 

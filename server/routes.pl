@@ -1518,18 +1518,16 @@ unpack_handler(post, Path, Request) :-
     authenticate(Terminus, R, Auth_ID),
 
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
+    check_descriptor_auth(Terminus, Branch_Descriptor,
+                          terminus:commit_write_access,
+                          Auth_Id),
 
     do_or_die(
         (branch_descriptor{} :< Branch_Descriptor),
         error(not_a_branch_descriptor(Branch_Descriptor))),
 
-    (   memberchk(search(Query_Params), Request),
-        memberchk(force=true, Query_Params)
-    ->  Force = true
-    ;   Force = false),
-
     get_payload(Payload, Request),
-    unpack(Branch_Descriptor, Payload, Force),
+    unpack(Branch_Descriptor, Payload),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
     reply_json(_{'terminus:status' : "terminus:success"}).
@@ -1563,15 +1561,10 @@ push_handler(post,Path,R) :-
            remote_branch : Remote_Branch } :< Document,
         error(push_has_no_remote(Document))),
 
-    (   get_dict(force, Document, true)
-    ->  Force = true
-    ;   Force = false),
-
     % 1. rebase on remote
     % 2. pack and send
     % 3. error if head moved
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorized_push(Auth),Force,
-         Result),
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorized_push(Auth),Result),
     % nothing required
     % this was great success
     % you can't do this - head has moved
@@ -1582,10 +1575,8 @@ remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
-authorized_push(Auth, Remote_URL, Remote_Branch, Payload, Force, Result) :-
+authorized_push(Auth, Remote_URL, Remote_Branch, Payload, Result) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
-
-    atomic_list_concat([Unpack_URL,'?force=',Force], URL),
 
     http_post(URL,
               bytes('application/octets',Payload),
