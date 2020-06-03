@@ -74,7 +74,7 @@ initialise_hup :-
 initialise_log_settings :-
     file_search_path(terminus_home, BasePath),
     !,
-    (   getenv('TERMINUS_LOG_PATH', Log_Path)
+    (   getenv('TERMINUSDB_LOG_PATH', Log_Path)
     ->  true
     ;   atom_concat(BasePath,'/storage/httpd.log', Log_Path)),
 
