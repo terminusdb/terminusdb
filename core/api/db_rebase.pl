@@ -184,7 +184,7 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     [Read_Write_Obj] = Transaction_Object.instance_objects,
     Layer = Read_Write_Obj.read,
     layer_to_id(Layer, Layer_Id),
-    Database_Transaction_Object = Transaction_Object.parent,
+    Database_Transaction_Object = (Transaction_Object.parent),
 
     update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
 

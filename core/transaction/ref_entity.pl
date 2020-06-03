@@ -22,6 +22,7 @@
               insert_commit_object_on_branch/6,
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
+              reset_branch_head/3,
               insert_graph_object/7,
               copy_commits/3,
               apply_commit_on_branch/7,
@@ -171,6 +172,11 @@ unlink_commit_object_from_branch(Context, Branch_Uri) :-
 link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri) :-
     once(ask(Context,
              insert(Branch_Uri, ref:ref_commit, Commit_Uri))).
+
+
+reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
+    ignore(unlink_commit_object_from_branch(Context,Branch_Uri)),
+    link_commit_object_to_branch(Context,Branch_Uri, Commit_Uri).
 
 attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
     once(ask(Context,

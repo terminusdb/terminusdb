@@ -1547,7 +1547,7 @@ push_handler(options, _Path, _Request) :-
 push_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth),
+    authenticate(Terminus, Request, Auth_ID),
 
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
@@ -1556,15 +1556,21 @@ push_handler(post,Path,R) :-
         error(push_requires_branch_descriptor(Branch_Descriptor))),
 
     get_payload(Document, Request),
+
     do_or_die(
         _{ remote : Remote_Name,
            remote_branch : Remote_Branch } :< Document,
         error(push_has_no_remote(Document))),
 
+    do_or_die(
+        request_remote_authorization(Request, Authorization),
+        error(no_remote_authorization)),
+
     % 1. rebase on remote
     % 2. pack and send
     % 3. error if head moved
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,authorized_push(Auth),Result),
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
+         authorized_push(Authorization),Result),
     % nothing required
     % this was great success
     % you can't do this - head has moved

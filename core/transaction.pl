@@ -62,6 +62,7 @@
               insert_commit_object_on_branch/6,
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
+              reset_branch_head/3,
               insert_graph_object/7,
               copy_commits/3,
               apply_commit_on_branch/7,
