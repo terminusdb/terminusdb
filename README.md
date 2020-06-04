@@ -88,15 +88,15 @@ Come visit us on our [discord server!](https://discord.gg/yTJKAma)
 
 ## Authors
 
-Gavin Mendel-Gleason <gavin@datachemist.com>
+Gavin Mendel-Gleason <gavin@terminusdb.com>
 
-Matthijs van Otterdijk <matthijs@datachemist.com>
+Matthijs van Otterdijk <matthijs@terminusdb.com>
 
-Robin de Rooij <robin@datachemist.com>
+Robin de Rooij <robin@terminusdb.com>
 
-Anne Ogborn <annie@datachemist.com>
+Anne Ogborn <anne@swi-prolog.org>
 
-Dmytri Kleiner <dk@datachemist.com>
+Dmytri Kleiner <dk@terminusdb.com>
 
 [Paulo Moura](https://github.com/pmoura)
 
