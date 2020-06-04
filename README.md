@@ -1,22 +1,11 @@
-
-```
-████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗██╗   ██╗███████╗
-╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██║   ██║██╔════╝
-   ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║██║   ██║███████╗
-   ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║╚════██║
-   ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║
-   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
-
-```
-
-# Terminus Server
+# TerminusDB Server
 
 [![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
 TerminusDB is an open source model driven RDF graph database for
 knowledge graph representation designed specifically for the web-age.
 
-Terminus Server provides TerminusDB with a RESTful API for interacting
+TerminusDB Server provides TerminusDB with a RESTful API for interacting
 with knowledge graphs via the JSON-LD exchange format. This means you
 can easily compose applications within your own toolchain which
 utilise the powerful features of graph search and graph storage.
