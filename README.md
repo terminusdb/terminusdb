@@ -24,7 +24,7 @@ utilise the powerful features of graph search and graph storage.
 We use an advanced git-like model, storing append only changes to
 graphs represented in succinct datastructures using
 [terminusdb-store](https://github.com/terminusdb/terminusdb-store). You
-can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](docs/succinct-data-structures-whitepaper/terminusdb.pdf)
+can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](docs/whitepaper/terminusdb.pdf)
 whitepaper.
 
 TerminusDB's *delta-encoding* approach makes possible branch, merge,
