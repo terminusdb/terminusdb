@@ -2292,7 +2292,6 @@ try_get_param(Key,Request,Value) :-
     % POST with JSON package
     memberchk(method(post), Request),
     memberchk(content_type('application/json'), Request),
-    http_log('[Test] ~q', [Request]),
 
     (   memberchk(payload(Document), Request)
         <>  throw(error(no_document_for_key(Key)))),
