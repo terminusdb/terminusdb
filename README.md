@@ -84,8 +84,8 @@ directly through clients you should look at the documentation on our
 
 ## Contact
 
-Come visit us on our [discord server!](https://discord.gg/yTJKAma)
-Or our [forum!](https://discuss.terminusdb.com)
+Come visit us on our [discord server](https://discord.gg/yTJKAma)
+or our [forum!](https://discuss.terminusdb.com)
 
 ## Authors
 
