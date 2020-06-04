@@ -17,7 +17,7 @@ can read a description of the architecture in our [Succinct Data Structures and 
 whitepaper.
 
 TerminusDB's *delta-encoding* approach makes possible branch, merge,
-push, pull, clone, time-travel and other git-like features on a fully
+push, pull, clone, time-travel and other git-like operations on a fully
 featured graph database.
 
 ## Latest Version
@@ -40,7 +40,7 @@ In order to build from source, follow the [build from source](docs/BUILD.md) dir
 
 ### Open Console
 
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
 
 ## Why
 
@@ -85,6 +85,7 @@ directly through clients you should look at the documentation on our
 ## Contact
 
 Come visit us on our [discord server!](https://discord.gg/yTJKAma)
+Or our [forum!] (https://discuss.terminusdb.com/)
 
 ## Authors
 
