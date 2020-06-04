@@ -84,7 +84,9 @@ directly through clients you should look at the documentation on our
 
 ## Contact
 
-Come visit us on our [discord server!](https://discord.gg/yTJKAma)
+If you have any questions, feel free to ask them on the [TerminusDB discuss forum.](https://discuss.terminusdb.com/)
+
+Of come visit us and have a chat on our [TerminusDB discord server!](https://discord.gg/yTJKAma)
 
 ## Authors
 
