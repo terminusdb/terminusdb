@@ -6,6 +6,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(db_pack).
+:- use_module(db_rebase).
 
 % 1. rebase on remote
 % 2. pack and send

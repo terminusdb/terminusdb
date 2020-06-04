@@ -130,7 +130,7 @@ test(connection_result_dbs, [])
     admin_pass(Key),
     http_get(Server, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
-    * json_write_dict(current_output, Result, []),
+    json_write_dict(current_output, Result, []),
 
     _{ '@id' : "doc:admin",
        '@type':"terminus:User"

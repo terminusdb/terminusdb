@@ -1,5 +1,6 @@
 :- module(db_rebase, [
-              rebase_on_branch/8
+              rebase_on_branch/8,
+              cycle_context/4
           ]).
 :- use_module(library(terminus_store)).
 
