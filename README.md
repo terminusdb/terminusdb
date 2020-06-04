@@ -1,131 +1,105 @@
+![](terminusdb.png)
 
-```
-████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗██╗   ██╗███████╗
-╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██║   ██║██╔════╝
-   ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║██║   ██║███████╗
-   ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║╚════██║
-   ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║
-   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
+# TerminusDB Server
 
-```
+[![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
-# Terminus Server
+TerminusDB is an open source model driven RDF graph database for
+knowledge graph representation designed specifically for the web-age.
 
-[![Build Status](https://travis-ci.com/terminusdb/terminus-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminus-server)
-
-TerminusDB is an open source model driven graph database for knowledge
-graph representation designed specifically for the web-age.
-
-Terminus Server provides TerminusDB with a RESTful API for interacting
+TerminusDB Server provides TerminusDB with a RESTful API for interacting
 with knowledge graphs via the JSON-LD exchange format. This means you
-can easily string together applications within your own toolchain
-which utilise the powerful features of graph search and graph storage.
+can easily compose applications within your own toolchain which
+utilise the powerful features of graph search and graph storage.
 
-We use an advanced git-like model storing append only changes to
-graphs represented in concise datastructures using [terminus-store](https://github.com/terminusdb/terminus-store).
+We use an advanced git-like model, storing append only changes to
+graphs represented in succinct datastructures using
+[terminusdb-store](https://github.com/terminusdb/terminusdb-store). You
+can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](docs/whitepaper/terminusdb.pdf)
+whitepaper.
 
-## Latest Version 
+TerminusDB's *delta-encoding* approach makes possible branch, merge,
+push, pull, clone, time-travel and other git-like operations on a fully
+featured graph database.
 
-v1.1.1
+## Latest Version
+
+v2.0.0
 
 ## Getting Started
 
 ### Install from Docker image (*RECOMMENDED*)
 
-For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminus-quickstart) installer.
+For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminusdb-quickstart) installer.
 
-Follow the instructions there. If you choose to run the Docker image directly, please not that
-the default password is "root" (without the double quotes) and that you should change it in a
+Follow the instructions there. If you choose to run the Docker image directly, please note that
+the default username is "admin" and the password is "root" (without the double quotes) and that you should change it in a
 production environment.
 
 ### Building from source
 
-In order to build from source, follow the [build from source](https://github.com/terminusdb/terminus-server/blob/master/docs/BUILD.md) directions. 
+In order to build from source, follow the [build from source](docs/BUILD.md) directions.
 
 ### Open Console
 
-Once you have installed terminus-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the dashboard "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
 
-## Documentation 
+## Why
 
-### Microservices API
+TerminusDB will:
 
-Terminus Server is organised to be _web native_ which means that all
-actions and activities are easily automated via a RESTful JSON-LD API.
-
-The Server API is documented [here](https://github.com/terminusdb/terminus-server/blob/master/docs/API.md).
-
-### WOQL 
-
-WOQL, the Web Object Query Language, allows you to seemlessly traverse the graph extracting graph 
-fragments, nodes, tables or JSON-LD documents. The syntax itself is in JSON-LD, making the syntax 
-a native data-structure in JavaScript, Python, and Prolog.
-
-The Syntax is documented [here](https://github.com/terminusdb/terminus-server/blob/master/docs/SYNTAX.md).
-
-## Why 
-
-TerminusDB will: 
-
-* Make complex data models easy, maintainable and enforced. 
-* Overcome the Object Impedance mismatch without turning your Database into an incomprehensible soup. 
-* Allow you to search for repeating patterns using recursion. 
-* Give you powerful temporal queries using finite domain constraint logic. 
+* Make complex data models easy, maintainable and enforced.
+* Overcome the Object Impedance mismatch without turning your Database into an incomprehensible soup.
+* Allow you to search for repeating patterns using recursion.
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
+* Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
 ## Client
 
 In order to begin manipulating and querying your database you can
-simply point your browser to `TERMINUS_DIR/index.html` which should
+simply point your browser to `TERMINUS_SERVER/console` which should
 allow you to manage and query your database.
 
 You can also perform all configuration, querying and management
 functions via the RESTful API. We have a number of client libraries to
 help you get started:
 
-The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you 
+The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you
 assistance with programatic access.
 
-The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example 
-application allowing manipulation of the database, queries and .
+The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example
+application allowing manipulation of the database using the javascript client fluent syntax.
 
-The [Python client libraries] Coming Soon...
+The [Python client libraries](https://github.com/terminusdb/terminus-client-python) allow
+you to use a pythonic syntax to query the database.
 
-## Changes in this Version 
+## Documentation
 
-* Now with our own [terminus-store](https://github.com/terminusdb/terminus-store) backend!
-* Extended WOQL to greater functionality for string and arithmetic processing
-* Better date handling in WOQL
-* Improved type casting in WOQL 
-* Improvements to query processing speed
-* We now have decoupled public URI from internal database URI
+In order to use your TerminusDB through the console rather than
+directly through clients you should look at the documentation on our
+[TerminusDB documentation](https://terminusdb.com/docs/) website.
 
-## Future 
+## Changes in this Version
 
-We are working hard on our collaboration and data-ops features. They
-should be available by the end of February 2020.
+[Release Notes](RELEASE_NOTES.md)
 
-## TODO
+## Contact
 
-* Improve error handling and logging
-* Convert frames into valid JSON-LD
-
-## Contact 
-
-You can write the authors, or connect to our community server on [Discord](https://discord.gg/mAQyYBa).
+Come visit us on our [discord server](https://discord.gg/yTJKAma)
+or our [forum!](https://discuss.terminusdb.com)
 
 ## Authors
 
-Gavin Mendel-Gleason <gavin@datachemist.com>
+Gavin Mendel-Gleason <gavin@terminusdb.com>
 
-Matthijs van Otterdijk <matthijs@datachemist.com>
+Matthijs van Otterdijk <matthijs@terminusdb.com>
 
-Robin de Rooij <robin@datachemist.com>
+Robin de Rooij <robin@terminusdb.com>
 
-Anne Ogborn <annie@datachemist.com>
+Anne Ogborn <anne@swi-prolog.org>
 
-Dmytri Kleiner <dk@datachemist.com>
+Dmytri Kleiner <dk@terminusdb.com>
 
 [Paulo Moura](https://github.com/pmoura)
 

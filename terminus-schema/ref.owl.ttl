@@ -1,0 +1,252 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix ref: <http://terminusdb.com/schema/ref#> .
+@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+
+<http://terminusdb.com/schema/ref>
+  a owl:Ontology ;
+  rdfs:label "Terminus DB Reference Schema"@en ;
+  rdfs:comment "Schema describing all of the structure of references (capabilities, roles, resources, users, databases)"@en ;
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
+  owl:imports <http://terminusdb.com/schema/layer> ;
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+ref:BranchBaseUriRestriction
+  a owl:Restriction ;
+  rdfs:comment "A branch has no more than one base URI"@en ;
+  rdfs:label "Branch base URI restriction"@en ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:branch_base_uri .
+
+ref:branch_base_uri
+  a owl:DatatypeProperty ;
+  rdfs:comment "Base URI for the current repository"@en ;
+  rdfs:label "Base URI"@en ;
+  rdfs:domain ref:Branch ;
+  rdfs:range xsd:anyURI.
+
+ref:Branch
+  a owl:Class ;
+  rdfs:subClassOf ref:Ref, ref:BranchBaseUriRestriction;
+  rdfs:comment "This is a repo branch"@en ;
+  rdfs:label "Branch"@en .
+
+ref:branch_name
+  a owl:DatatypeProperty ;
+  rdfs:comment "Name of a branch"@en ;
+  rdfs:domain ref:Branch ;
+  rdfs:label "name"@en ;
+  rdfs:range xsd:string .
+
+ref:instance
+  a owl:ObjectProperty ;
+  rdfs:comment "An instance graph of a branch"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "instance"@en ;
+  rdfs:range ref:Graph .
+
+ref:schema
+  a owl:ObjectProperty ;
+  rdfs:comment "A schema graph of a branch"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "schema"@en ;
+  rdfs:range ref:Graph .
+
+ref:inference
+  a owl:ObjectProperty ;
+  rdfs:comment "An inference graph of a branch"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "inference"@en ;
+  rdfs:range ref:Graph .
+
+ref:Graph
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document ;
+  rdfs:comment "This is a named graph for a commit"@en ;
+  rdfs:label "Graph"@en .
+
+ref:graph_name
+  a owl:DatatypeProperty ;
+  rdfs:domain ref:Graph ;
+  rdfs:range xsd:string ;
+  rdfs:comment "This is the name of a graph"@en ;
+  rdfs:label "Name"@en .
+
+ref:graph_layer
+  a owl:ObjectProperty ;
+  rdfs:domain ref:Graph ;
+  rdfs:range layer:Layer ;
+  rdfs:comment "This is the layer associated with a named graph"@en ;
+  rdfs:label "Layer"@en .
+
+ref:Commit
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document, ref:CommitParentRestriction, ref:CommitTimestampRestriction, ref:CommitAuthorRestriction ;
+  rdfs:comment "This is a commit for a database"@en ;
+  rdfs:label "Commit"@en .
+
+ref:ValidCommit
+  a owl:Class ;
+  rdfs:subClassOf ref:Commit ;
+  rdfs:comment "This is a valid commit. It represents a consistent state with respect to the schema (and can be time-travelled to)."@en ;
+  rdfs:label "Valid Commit"@en .
+
+ref:InvalidCommit
+  a owl:Class ;
+  rdfs:subClassOf ref:Commit ;
+  rdfs:comment "This is not a valid commit. It can not be time-travelled to as it does not represent a consistent state."@en ;
+  rdfs:label "Invalid Commit"@en .
+
+ref:CommitParentRestriction
+  a owl:Restriction ;
+  rdfs:comment "Commit has no more than 1 parent"@en ;
+  rdfs:label "Commit Parent restriction"@en ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:commit_parent .
+
+ref:Ref
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document, ref:RefRestriction ;
+  rdfs:comment "This is a ref for a commit"@en ;
+  rdfs:label "Ref"@en .
+
+ref:RefRestriction
+  a owl:Restriction ;
+  rdfs:comment "Exactly one commit"@en ;
+  rdfs:label "Ref Commit restriction"@en ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:ref_commit .
+
+ref:Tag
+  a owl:Class ;
+  rdfs:subClassOf ref:Ref ;
+  rdfs:comment "This is a tag for a commit"@en ;
+  rdfs:label "Tag"@en .
+
+ref:CommitTimestampRestriction
+  a owl:Restriction ;
+  rdfs:comment "Only one timestamp per commit allowed"@en ;
+  rdfs:label "Timestamp restriction"@en ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:commit_timestamp .
+
+ref:commit_author
+  a owl:DatatypeProperty ;
+  rdfs:comment "Author string for a commit"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "Author"@en ;
+  rdfs:range xsd:string .
+
+ref:commit_message
+  a owl:DatatypeProperty ;
+  rdfs:comment "Message string for a commit"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "Message"@en ;
+  rdfs:range xsd:string .
+
+ref:commit_id
+  a owl:DatatypeProperty ;
+  rdfs:comment "Identifier string for a commit"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "Identifier"@en ;
+  rdfs:range xsd:string .
+
+ref:CommitAuthorRestriction
+  a owl:Restriction ;
+  rdfs:comment "Only one timestamp per commit allowed"@en ;
+  rdfs:label "Timestamp restriction"@en ;
+  owl:minCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:commit_author .
+
+ref:CommitIdentifierRestriction
+  a owl:Restriction ;
+  rdfs:comment "Each commit requires one identifier"@en ;
+  rdfs:label "Commit identifier restriction"@en ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty ref:commit_id .
+
+ref:commit_timestamp
+  a owl:DatatypeProperty ;
+  rdfs:comment "UNIX timestamp of the date and time of the commit"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "Date and time"@en ;
+  rdfs:range xsd:decimal .
+
+ref:commit_parent
+  a owl:ObjectProperty ;
+  rdfs:comment "The parent of a commit"@en ;
+  rdfs:domain ref:Commit ;
+  rdfs:label "parent"@en ;
+  rdfs:range ref:Commit .
+
+ref:ref_commit
+  a owl:ObjectProperty ;
+  rdfs:comment "The commit associated with a ref"@en ;
+  rdfs:domain ref:Ref ;
+  rdfs:label "commit"@en ;
+  rdfs:range ref:Commit .
+
+ref:ref_identifier
+  a owl:DatatypeProperty ;
+  rdfs:comment "The identifier associated with a ref"@en ;
+  rdfs:domain ref:Ref ;
+  rdfs:label "identifier"@en ;
+  rdfs:range xsd:string .
+
+ref:default_prefixes
+  a ref:Prefixes ;
+  rdfs:label "Default Prefixes"@en ;
+  rdfs:comment "Default Prefixes for the Database"@en .
+
+ref:Prefixes
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document ;
+  owl:oneOf ( ref:default_prefixes ) ;
+  rdfs:comment "The prefixes for this repository"@en ;
+  rdfs:label "Prefixes"@en .
+
+ref:prefix_pair
+  a owl:ObjectProperty ;
+  rdfs:domain ref:Prefixes ;
+  rdfs:range ref:PrefixPair ;
+  rdfs:label "prefix"@en ;
+  rdfs:comment "Associates a database with its default prefixes"@en .
+
+ref:PrefixRestriction
+  a owl:Restriction ;
+  rdfs:label "Prefix Restriction"@en ;
+  rdfs:comment "Only one prefix per object"@en ;
+  rdfs:onProperty ref:prefix_pair ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+ref:PrefixURIRestriction
+  a owl:Restriction ;
+  rdfs:label "Prefix URI Restriction"@en ;
+  rdfs:comment "Only one prefix URI per object"@en ;
+  rdfs:onProperty ref:prefix_uri ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+ref:PrefixPair
+  a owl:Class ;
+  rdfs:subClassOf ref:PrefixRestriction, ref:PrefixURIRestriction ;
+  rdfs:label "Prefixes"@en ;
+  rdfs:comment "Default prefixes for a given database"@en .
+
+ref:prefix
+  a owl:DatatypeProperty ;
+  rdfs:label "prefix"@en ;
+  rdfs:comment "The shorthand for the initial segment of an IRI"@en ;
+  rdfs:domain ref:PrefixPair ;
+  rdfs:range xsd:string .
+
+ref:prefix_uri
+  a owl:DatatypeProperty ;
+  rdfs:label "prefix uri"@en ;
+  rdfs:comment "The uri associated with a shorthand"@en ;
+  rdfs:domain ref:PrefixPair ;
+  rdfs:range xsd:string .

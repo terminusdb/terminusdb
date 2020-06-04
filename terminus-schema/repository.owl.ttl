@@ -1,0 +1,78 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+@prefix repository: <http://terminusdb.com/schema/repository#> .
+
+<http://terminusdb.com/schema/repository>
+  a owl:Ontology ;
+  rdfs:label "Terminus DB Repository Schema"@en ;
+  rdfs:comment "Schema describing all of the structure of repositories (local, remote, etc.)"@en ;
+  tcs:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
+  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  owl:imports <http://terminusdb.com/schema/layer> ;
+  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+repository:Local
+  a owl:Class ;
+  rdfs:comment "A local repository location"@en ;
+  rdfs:label "Local"@en ;
+  rdfs:subClassOf repository:Repository .
+
+repository:Remote
+  a owl:Class ;
+  rdfs:comment "A Remote location"@en ;
+  rdfs:label "Remote"@en ;
+  rdfs:subClassOf repository:Repository .
+
+repository:RemoteURLRestriction
+  a owl:Restriction ;
+  rdfs:comment "Remote URL restriction maintaining exactly one link"@en ;
+  rdfs:label ""@en ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty repository:remote_url .
+
+repository:Repository
+  a owl:Class ;
+  rdfs:comment "A repository"@en ;
+  rdfs:label "Repository"@en ;
+  rdfs:subClassOf tcs:Document .
+
+repository:RepositoryHeadRestriction
+  a owl:Restriction ;
+  rdfs:comment "We can have no more than one head for a repository."@en ;
+  rdfs:label ""@en ;
+  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty repository:repository_head .
+
+repository:RepositoryNameRestriction
+  a owl:Restriction ;
+  rdfs:comment "Every repository has a single name."@en ;
+  rdfs:label ""@en ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger ;
+  owl:onProperty repository:repository_name .
+
+repository:remote_url
+  a owl:DatatypeProperty ;
+  rdfs:comment "The URI associated with a remote."@en ;
+  rdfs:domain repository:Remote ;
+  rdfs:label "uri"@en ;
+  rdfs:range xdd:url .
+
+repository:repository_head
+  a owl:ObjectProperty ;
+  rdfs:comment "The layer associated with the (head) of the repository graph."@en ;
+  rdfs:domain repository:Repository ;
+  rdfs:label "head"@en ;
+  rdfs:range layer:Layer .
+
+repository:repository_name
+  a owl:DatatypeProperty ;
+  rdfs:domain repository:Repository ;
+  rdfs:range xsd:string ;
+  rdfs:label "Name"@en ;
+  rdfs:comment "The name of the repository."@en .

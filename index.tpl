@@ -1,95 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-	    <meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-	    <title>Terminus DB Management Dashboard</title>
-		<link rel="shortcut icon" type="image/png" href="https://terminusdb.com/t/favicon.png"/>
-		<script src="https://d3js.org/d3.v5.min.js"></script>
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.css">
-		<link rel="stylesheet" href="https://terminusdb.github.io/terminus-dashboard/dist/css/theme.css">
-	 <script src="https://terminusdb.github.io/terminus-dashboard/dist/terminus-dashboard.min.js"></script>
-	</head>
-	<body>
-	<div class="terminus-client-ui">
-		<table class="terminus-client-table-layout" style="width: 100%">
-			<tr class="main-table-height">
-				<td class='terminus-control-panel terminus-control-panel-table-layout'>
-					<table class="terminus-application-controls terminus-control-panel-layout" style='width: 350px;'>
-						<tr><th class="terminus-logo">
-							 <img src='https://terminusdb.github.io/terminus-dashboard/dist/css/img/TerminusDB_Logo_Original.png' class='terminus-logo-container'></img></th></tr>
-						<tr><td class="terminus-application-control terminus-client-body"
-								id="terminus-control-panel" ></td></tr>
-						<tr><td class="terminus-application-control terminus-expolrer-body terminus-explorer-hide"
-										id="terminus-explorer"></td></tr>
-					</table>
-				</td>
-				<td class='terminus-main-window terminus-main-window-full-css' style="width: 100%; vertical-align: top;">
-					<div class='terminus-user-messages' id='terminus-user-messages'></div>
-                    <div class='terminus-content-layout'>
-				   	    <div class='terminus-main-content terminus-print' id='terminus-content-viewer'></div>
-                    </div>
-				</td>
-			</tr>
-	</table>
-	</div>
-	<script>
-		window.css_base="https://terminusdb.github.io/terminus-dashboard/dist/"
-		let TerminusConfig = {
-			controls: ["collaborate", "server", "db", "import_schema", "create_database",
-						"get_document", "get_schema", "update_schema", "woql_select"],
-			css: "theme",
-			plugins: {
-				"font-awesome": true,
-				gmaps: {
-					key: "GMAPS_DEV_KEY_HERE",
-					loaded: false
-				},
-				jquery: true,
-				jqueryui: false,
-				datatables: false,
-				quill: true,
-				select2: false,
-				codemirror: {
-					darkMode: false, // true for dark theamed text editor
-					loaded: true
-				}
-			}
-		};
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="description" content="TerminusDB is an open source model driven graph database for knowledge graph representation designed specifically for the web-age.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="shortcut icon" type="image/png" href="img/favicon.png"/>
+    <link
+      Rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+      integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="~s/terminusdb-console-main.css">
 
-		let server = "~s";
-    let key = "~s";
-    if (server) {
-      TerminusConfig.attach_server = server;
-    }
-    if (key) {
-      TerminusConfig.location = {server: server, key: key};
-    }
+    <title>TerminusDB</title>
+    <!--<link rel="stylesheet" href="css/main.css?v=1.0">-->
+    <!--<link href="https://fonts.googleapis.com/css?family=Lexend+Deca&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Poppins&display=swap" rel="stylesheet">-->
 
-		function loadTerminatorWhenReady(){
-			if (typeof TerminusDashboard != "undefined"){
-				initTerminator();
-			}
-			else {
-		    	setTimeout(function() { loadTerminatorWhenReady() }, 50);
-			}
-		}
-		
-		function initTerminator(){
-			var terminator = new TerminusDashboard.TerminusUI(TerminusConfig);
-			var pconfig = {};
-			pconfig.buttons = {'client'   : document.getElementById("terminus-client-btn"),
-							   'explorer' : document.getElementById("terminus-explorer-btn")}
-			pconfig.controller 	= document.getElementById("terminus-control-panel");
-			pconfig.messages = document.getElementById("terminus-user-messages");
-			pconfig.plugins = document.getElementById("terminus-plugin-loader");
-			pconfig.explorer = document.getElementById("terminus-explorer");
-			pconfig.viewer = document.getElementById("terminus-content-viewer");
-			var nlocation = (TerminusConfig && TerminusConfig.location) ? TerminusConfig.location : false;
-			terminator.draw(pconfig, nlocation);
-		}
+  </head>
+  <body class="h-100">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root" class="h-100"></div>
+    <script>
+      ;((key) => {
+        window.TERMINUSDB = { user: { username: "admin" }}
+        if (key) window.TERMINUSDB.user.password = key
+      })("~s")
+    </script>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
 
-		loadTerminatorWhenReady();
-        </script>
-        </body>
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+
+    <script src="js/main.js"></script>
+
+    <script src="js/homepage.js"></script>-->
+   <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=UA-151888980-1"></script>-->
+  <script src="~s/terminusdb-console.min.js"></script>
+  </body>
 </html>
+
+<!-- <script src="bundle.js"></script> -->

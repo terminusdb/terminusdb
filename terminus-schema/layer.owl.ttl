@@ -1,0 +1,35 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+
+<http://terminusdb.com/schema/layer>
+  a owl:Ontology ;
+  rdfs:label "Terminus Layer Schema"@en ;
+  rdfs:comment "Schema describing layers and their identifiers."@en ;
+  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en;
+  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+layer:LayerIdRestriction
+  a owl:Restriction ;
+  rdfs:label "Layer ID restriction"@en ;
+  rdfs:comment "Restrict layers to have one identifier"@en ;
+  owl:onProperty layer:layer_id ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+layer:Layer
+  a owl:Class ;
+  rdfs:subClassOf tcs:Document, layer:LayerIdRestriction ;
+  rdfs:comment "A Layer object with its identifying information "@en ;
+  rdfs:label "Layer"@en .
+
+layer:layer_id
+  a owl:DatatypeProperty ;
+  rdfs:comment "A property holding the layer"@en ;
+  rdfs:label "Layer ID"@en ;
+  rdfs:domain layer:Layer ;
+  rdfs:range xsd:string .

@@ -1,0 +1,336 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+
+<http://terminusdb.com/schema/terminus>
+  a owl:Ontology ;
+  rdfs:label "Terminus DB Management Schema"@en ;
+  rdfs:comment "Schema describing all of the structure of the documents (capabilities, roles, resources, users, databases) in the capability database used by Terminus DB to manage the internal state of the server and the databases it manages"@en ;
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+terminus:Document
+  a owl:Class ;
+  terminus:tag terminus:abstract ;
+  rdfs:label "Document Class"@en ;
+  rdfs:comment "A class used to designate the primary data objects managed by the system - relationships and entities"@en .
+
+terminus:Agent
+  rdfs:label "Agent"@en ;
+  rdfs:comment "An agent is an abstraction of a thing that can have a capability"@en ;
+  a owl:Class ;
+  terminus:tag terminus:abstract ;
+  rdfs:subClassOf terminus:Document .
+
+terminus:rights
+  a owl:DatatypeProperty ;
+  rdfs:range xsd:string ;
+  rdfs:domain owl:Ontology ;
+  rdfs:label "Rights"@en ;
+  rdfs:comment "The statement of rights of the owner"@en .
+
+terminus:author
+  a owl:DatatypeProperty ;
+  rdfs:domain owl:Ontology ;
+  rdfs:range xsd:string ;
+  rdfs:label "Author"@en ;
+  rdfs:comment "The authors who developed the ontology"@en .
+
+terminus:license
+  a owl:ObjectProperty ;
+  rdfs:domain owl:Ontology ;
+  rdfs:range owl:Thing ;
+  rdfs:label "License"@en ;
+  rdfs:comment "The license governing the use of the resource"@en .
+
+terminus:authority
+  rdfs:label "Has Capability"@en ;
+  rdfs:comment "A property that links an agent to a capability that they possess"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain terminus:Agent ;
+  rdfs:range terminus:Capability .
+
+terminus:Role
+  rdfs:label "Role"@en ;
+  rdfs:comment "A role is a collection of capabilities that can be allocated to any user"@en ;
+  a owl:Class ;
+  rdfs:subClassOf terminus:Agent .
+
+terminus:User
+  rdfs:label "User"@en ;
+  rdfs:comment "A user of the database"@en ;
+  a owl:Class ;
+  rdfs:subClassOf terminus:Agent .
+
+terminus:email
+  rdfs:label "Email Address"@en ;
+  rdfs:comment "A email address that allows the user to be contacted outside the system"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain terminus:User ;
+  rdfs:range xdd:email .
+
+terminus:Capability
+  a owl:Class ;
+  rdfs:subClassOf terminus:Document ;
+  rdfs:label "Capability"@en ;
+  rdfs:comment "A capability confers access to a database or server action"@en .
+
+terminus:Access
+  a owl:Class ;
+  rdfs:label "Access"@en ;
+  rdfs:comment "Access actions and scopes"@en .
+
+terminus:access
+  a owl:ObjectProperty ;
+  rdfs:label "access"@en ;
+  rdfs:comment "associates a capability with its access patterns"@en ;
+  rdfs:domain terminus:Capability ;
+  rdfs:range terminus:Access .
+
+terminus:authority_scope
+  a owl:ObjectProperty ;
+  rdfs:label "Capability Scope"@en ;
+  rdfs:comment "The scope of the access - the resource that the capability applies to"@en ;
+  rdfs:domain terminus:Access ;
+  rdfs:range terminus:Resource .
+
+terminus:resource_includes
+  rdfs:label "Resource Inclusion"@en ;
+  rdfs:comment "Resource A includes Resource B if A resource_includes B i.e. A Server might include a Database within its scope"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain terminus:Resource ;
+  rdfs:range terminus:Resource .
+
+terminus:action
+  rdfs:label "Action"@en ;
+  rdfs:comment "Refers to a specific API access call"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain terminus:Access ;
+  rdfs:range terminus:DBAction .
+
+terminus:DBAction
+  rdfs:label "DB Action"@en ;
+  a owl:Class ;
+  owl:oneOf (
+    terminus:create_database
+    terminus:delete_database
+    terminus:class_frame
+    terminus:clone
+    terminus:fetch
+    terminus:push
+    terminus:branch
+    terminus:rebase
+    terminus:instance_read_access
+    terminus:instance_write_access
+    terminus:schema_read_access
+    terminus:schema_write_access
+    terminus:inference_read_access
+    terminus:inference_write_access
+    terminus:meta_read_access
+    terminus:meta_write_access
+    terminus:commit_read_access
+    terminus:commit_write_access
+    terminus:manage
+    ).
+
+terminus:delete_database
+  rdfs:label "Delete Database"@en ;
+  rdfs:comment "An action that deletes an entire database"@en ;
+  a terminus:DBAction.
+
+terminus:schema_write_access
+  rdfs:label "Update Schema"@en ;
+  rdfs:comment "An action that updates the DB schema"@en ;
+  a terminus:DBAction.
+
+terminus:schema_read_access
+  rdfs:label "Get Schema"@en ;
+  rdfs:comment "An action that fetches the DB Schema"@en ;
+  a terminus:DBAction.
+
+terminus:inference_write_access
+  rdfs:label "Update Inference"@en ;
+  rdfs:comment "An action that updates the DB inference"@en ;
+  a terminus:DBAction.
+
+terminus:inference_read_access
+  rdfs:label "Get Inference"@en ;
+  rdfs:comment "An action that fetches the DB Inference"@en ;
+  a terminus:DBAction.
+
+terminus:class_frame
+  rdfs:label "Class Frame"@en ;
+  rdfs:comment "An action that fetches a Frame JSON for the appropriate Class"@en ;
+  a terminus:DBAction.
+
+terminus:create_database
+  rdfs:label "Create Database"@en ;
+  rdfs:comment "An action which creates a new database"@en ;
+  a terminus:DBAction.
+
+terminus:clone
+  rdfs:label "Clone"@en ;
+  rdfs:comment "An action which represents cloning a database"@en ;
+  a terminus:DBAction .
+
+terminus:fetch
+  rdfs:label "Fetch"@en ;
+  rdfs:comment "An action which represents fetching a database from a remote origin"@en ;
+  a terminus:DBAction .
+
+terminus:push
+  rdfs:label "Push"@en ;
+  rdfs:comment "An action which represents pushing a database to a remote origin"@en ;
+  a terminus:DBAction .
+
+terminus:branch
+  rdfs:label "Branch"@en ;
+  rdfs:comment "An action which represents creating a new branch of a database"@en ;
+  a terminus:DBAction .
+
+terminus:rebase
+  rdfs:label "Rebase"@en ;
+  rdfs:comment "An action which represents Rebasing a database branch"@en ;
+  a terminus:DBAction .
+
+terminus:instance_read_access
+  rdfs:label "Instance Read Access"@en ;
+  rdfs:comment "An action which allows all read-only instance data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:instance_write_access
+  rdfs:label "Instance Write Access"@en ;
+  rdfs:comment "An action which allows all write instance data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:schema_read_access
+  rdfs:label "Schema Read Access"@en ;
+  rdfs:comment "An action which allows all read-only schema data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:schema_write_access
+  rdfs:label "Schema Write Access"@en ;
+  rdfs:comment "An action which allows all write schema data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:inference_read_access
+  rdfs:label "Inference Read Access"@en ;
+  rdfs:comment "An action which allows all read-only inference data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:inference_write_access
+  rdfs:label "Inference Write Access"@en ;
+  rdfs:comment "An action which allows all write inference data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:meta_read_access
+  rdfs:label "Meta Read Access"@en ;
+  rdfs:comment "An action which allows all read-only meta data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:meta_write_access
+  rdfs:label "Meta Write Access"@en ;
+  rdfs:comment "An action which allows meta data write accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:commit_read_access
+  rdfs:label "Commit Read Access"@en ;
+  rdfs:comment "An action which allows all read-only commit data accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:commit_write_access
+  rdfs:label "Commit Write Access"@en ;
+  rdfs:comment "An action which allows commit data write accesses to the database"@en ;
+  a terminus:DBAction .
+
+terminus:manage
+  rdfs:label "Management Access"@en ;
+  rdfs:comment "An action which allows a user to manage a given database (add users, change meta-data)"@en ;
+  a terminus:DBAction .
+
+terminus:Resource
+  rdfs:label "Resource"@en ;
+  rdfs:comment "A resource is a thing that can be accessed and given instructions and for which capabilities can be allocated"@en ;
+  a owl:Class ;
+  terminus:tag terminus:abstract ;
+  rdfs:subClassOf terminus:Document .
+
+terminus:Database
+  rdfs:label "Database"@en ;
+  rdfs:comment "A resource representing a database hosted on the server."@en ;
+  a owl:Class ;
+  rdfs:subClassOf terminus:Resource .
+
+terminus:resource_name
+  rdfs:label "Resource Name"@en ;
+  rdfs:comment "The resource name which is used as an internal local reference."@en ;
+  a owl:DatatypeProperty ;
+  rdfs:range xsd:string ;
+  rdfs:domain terminus:Resource .
+
+terminus:finalized
+  a terminus:DatabaseState ;
+  rdfs:label "Finalized"@en ;
+  rdfs:comment "The database has been fully constructed"@en .
+
+terminus:deleting
+  a terminus:DatabaseState ;
+  rdfs:label "Deleting"@en ;
+  rdfs:comment "TerminusDB is in the process of deleting your database"@en .
+
+terminus:DatabaseState
+  rdfs:label "Database State"@en ;
+  rdfs:comment "Class for keeping information about the state of a database." ;
+  a owl:Class ;
+  owl:oneOf ( terminus:finalized terminus:deleting ) .
+
+terminus:database_state
+  rdfs:label "State"@en ;
+  rdfs:comment "The databases current state"@en ;
+  a owl:ObjectProperty ;
+  rdfs:range terminus:DatabaseState ;
+  rdfs:domain terminus:Database .
+
+terminus:allow_origin
+  rdfs:label "Allow Requests from"@en ;
+  rdfs:comment "Specify which domains can access this database from the web. Set to \"*\" for universal access. Sets the HTTP Access-Control-Allow-Origin header. "@en ;
+  a owl:DatatypeProperty;
+  rdfs:domain terminus:Resource;
+  rdfs:range xsd:string.
+
+terminus:server
+  a terminus:Server ;
+  rdfs:label "server"@en .
+
+terminus:Server
+  rdfs:label "Server"@en ;
+  rdfs:comment "A Resource Object Representing the Database Server itself"@en ;
+  a owl:Class ;
+  owl:oneOf (terminus:server) ;
+  rdfs:subClassOf terminus:Resource .
+
+terminus:agent_name
+  a owl:DatatypeProperty ;
+  rdfs:label "Agent name"@en ;
+  rdfs:comment "An name for API authentication"@en ;
+  rdfs:domain terminus:Agent ;
+  rdfs:range xsd:string .
+
+terminus:agent_key_hash
+  a owl:DatatypeProperty ;
+  rdfs:label "Agent Key"@en ;
+  rdfs:comment "An agent key for API authentication"@en ;
+  rdfs:domain terminus:Agent ;
+  rdfs:range xsd:string.
+
+terminus:user_key_hash
+  a owl:DatatypeProperty ;
+  rdfs:label "User Key"@en ;
+  rdfs:comment "A user key for API authentication"@en ;
+  rdfs:domain terminus:User ;
+  rdfs:range xsd:string .

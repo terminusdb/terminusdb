@@ -1,0 +1,759 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tcs: <http://terminusdb.com/schema/tcs#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+
+tcs:Box
+  a owl:Class ;
+  rdfs:label "Box Class"@en ;
+  tcs:tag tcs:abstract ;
+  rdfs:comment "Box super-class capturing all classes that are primarily used for annotating datatypes"@en .
+
+tcs:EntityReference
+  a owl:Class ;
+  rdfs:label "Entity Reference"@en ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:comment "An Entity Reference Box is an annotated reference to other entity."@en .
+
+tcs:AnySimpleType
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Any Simple Type"@en ;
+  rdfs:comment "Any simple type - super class of all basic datatypes"@en .
+
+tcs:String
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box;
+  rdfs:label "String"@en ;
+  rdfs:comment "A string of characters"@en .
+
+tcs:Boolean
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box;
+  rdfs:label "Boolean"@en ;
+  rdfs:comment "An annotated boolean: true/false value"@en .
+
+tcs:Decimal
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box;
+  rdfs:label "Decimal"@en ;
+  rdfs:comment "An annotated decimal value"@en .
+
+tcs:Double
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Double"@en ;
+  rdfs:comment "An annotated double precision floating point number"@en .
+
+tcs:Float
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Float"@en ;
+  rdfs:comment "An annotated floating point number"@en .
+
+tcs:Time
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Time"@en ;
+  rdfs:comment "An annotated xsd:time (HH:MM:SS) value"@en .
+
+tcs:Date
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Date"@en ;
+  rdfs:comment "An annotated xsd:date value (YYYY-MM-DD)"@en .
+
+tcs:DateTime
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Date Time"@en ;
+  rdfs:comment "An annotated xsd:dateTime value (YYYY-MM-DDTHH:MM:SS)"@en .
+
+tcs:DateTimeStamp
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Date-Time Stamp"@en ;
+  rdfs:comment "An annotated xsd:dateTimeStamp - (timezone is required)"@en .
+
+tcs:GYear
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Year"@en ;
+  rdfs:comment "An annotated xsd:gYear (format: YYYY 4 numbers)"@en .
+
+tcs:GMonth
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Month"@en ;
+  rdfs:comment "An annotated xsd:gMonth datatype (format: --MM)"@en .
+
+tcs:GDay
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Day"@en ;
+  rdfs:comment "An annotated xsd:gDay (format: ---DD)"@en .
+
+tcs:GYearMonth
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Year-Month"@en ;
+  rdfs:comment "An annotated xsd:gYearMonth (format: YYYY-MM)"@en .
+
+tcs:GMonthDay
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Month-Day"@en ;
+  rdfs:comment "An annotated xsd:gMonthDay (format: --MM-DD)"@en .
+
+tcs:Duration
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Duration"@en ;
+  rdfs:comment "An annotated xsd:duration value (format: PnYnMnDTnHnMnS - e.g P1Y2D - 1 year, 2 days duration)"@en .
+
+tcs:YearMonthDuration
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Year-Month Duration"@en ;
+  rdfs:comment "An annotated xsd:yearMonthDuration value"@en .
+
+tcs:DayTimeDuration
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Day-Time Duration"@en ;
+  rdfs:comment "An annotated xsd:dayTimeDuration (Format: PnDTnHnMnS - e.g. P1D2H - 1 day, 2 hours)"@en .
+
+tcs:Byte
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Byte"@en ;
+  rdfs:comment "An annotated xsd:byte value"@en .
+
+tcs:Short
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Short"@en ;
+  rdfs:comment "An annotated xsd:short value"@en .
+
+tcs:Integer
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Integer"@en ;
+  rdfs:comment "An annotated xsd:integer value"@en .
+
+tcs:Long
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Long Integer"@en ;
+  rdfs:comment "An annotated xsd:long value"@en .
+
+tcs:UnsignedByte
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Unsigned Byte"@en ;
+  rdfs:comment "An annotated xsd:unsignedByte value"@en .
+
+tcs:UnsignedInt
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Unsigned Integer"@en ;
+  rdfs:comment "An annotated xsd:unsignedInt value"@en .
+
+tcs:UnsignedLong
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Unsigned Long Integer"@en ;
+  rdfs:comment "An annotated xsd:unsignedLong value"@en .
+
+tcs:PositiveInteger
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Positive Integer"@en ;
+  rdfs:comment "An annotated xsd:positiveInteger value"@en .
+
+tcs:NonNegativeInteger
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Non Negative Integer"@en ;
+  rdfs:comment "An annotated xsd:nonNegativeInteger value >= 0"@en .
+
+tcs:NegativeInteger
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Negative Integer"@en ;
+  rdfs:comment "An annotated xsd:negativeInteger value <0"@en .
+
+tcs:NonPositiveInteger
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Non Positive Integer"@en ;
+  rdfs:comment "An annotated xsd:nonPositiveInteger value <= 0"@en .
+
+tcs:Base64Binary
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Base 64 Binary"@en ;
+  rdfs:comment "An annotated xsd:base64Binary value"@en .
+
+tcs:AnyURI
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Any URI"@en ;
+  rdfs:comment "An annotated xsd:anyURI value"@en .
+
+tcs:Language
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Language Code"@en ;
+  rdfs:comment "An annotated xsd:language value"@en .
+
+tcs:NormalizedString
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Normalized String"@en ;
+  rdfs:comment "An annotated xsd:normalizedString value"@en .
+
+tcs:Token
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Token"@en ;
+  rdfs:comment "An annotated xsd:token value"@en .
+
+tcs:NMTOKEN
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "NMTOKEN"@en ;
+  rdfs:comment "An annotated xsd:NMTOKEN value"@en .
+
+tcs:Name
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Name"@en ;
+  rdfs:comment "An annotated xsd:Name box"@en .
+
+tcs:NCName
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "NCName"@en ;
+  rdfs:comment "An annotated xsd:NCName box"@en .
+
+tcs:NOTATION
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "NOTATION"@en ;
+  rdfs:comment "An annotated xsd:NOTATION box"@en .
+
+tcs:QName
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "QName"@en ;
+  rdfs:comment "An annotated xsd:QName"@en .
+
+tcs:ID
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "ID"@en ;
+  rdfs:comment "An annotated xsd:ID"@en .
+
+tcs:IDREF
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "IDREF"@en ;
+  rdfs:comment "An annotated xsd:IDREF box"@en .
+
+tcs:ENTITY
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "ENTITY"@en ;
+  rdfs:comment "An annotated xsd:ENTITY box"@en .
+
+tcs:XMLLiteral
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "XML Literal"@en ;
+  rdfs:comment "An annotated rdf:XMLLiteral box"@en .
+
+tcs:PlainLiteral
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Plain Literal"@en ;
+  rdfs:comment "An annotated rdf:PlainLiteral box"@en .
+
+tcs:Literal
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Literal"@en ;
+  rdfs:comment "An annotated rdfs:Literal box"@en .
+
+tcs:Coordinate
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Geographic Coordinate"@en ;
+  rdfs:comment "An annotated coordinate on the earth expressed as longitde / latitude"@en .
+
+tcs:CoordinatePolygon
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Geographic Shape"@en ;
+  rdfs:comment "An annotated geographic shape - a coordinate polygon"@en .
+
+tcs:CoordinatePolyline
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Geographic Line"@en ;
+  rdfs:comment "An annotated geographic line of lat/long coordinates"@en .
+
+tcs:GYearRange
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Year (or range of years)"@en ;
+  rdfs:comment "An annotated year or uncertain range of years"@en .
+
+tcs:DateRange
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Date (or date-range)"@en ;
+  rdfs:comment "An annotated date or a range of dates YYYY-MM-DD"@en .
+
+tcs:IntegerRange
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Integer Range"@en ;
+  rdfs:comment "An annotated xdd:integerRange value"@en .
+
+tcs:DecimalRange
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Decimal Range"@en ;
+  rdfs:comment "An annotated xdd:decimalRange value"@en .
+
+tcs:HTML
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "HTML"@en ;
+  rdfs:comment "An annotated HTML string value"@en .
+
+tcs:JSON
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "JSON"@en ;
+  rdfs:comment "An annotated JSON string value"@en .
+
+tcs:Url
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "URL"@en ;
+  rdfs:comment "An annotated xdd:url value"@en .
+
+tcs:Email
+  a owl:Class ;
+  rdfs:subClassOf tcs:Box ;
+  rdfs:label "Email"@en ;
+  rdfs:comment "An annotated xdd:email value - valid email address"@en .
+
+tcs:entityReference
+  a owl:ObjectProperty ;
+  rdfs:label "Reference to Entity"@en ;
+  rdfs:comment "A reference to another entity"@en ;
+  rdfs:domain tcs:EntityReference ;
+  rdfs:range tcs:Entity .
+
+tcs:dateRange
+  a owl:DatatypeProperty ;
+  rdfs:label "Date Range"@en ;
+  rdfs:comment "A date or a range of dates YYYY-MM-DD"@en ;
+  rdfs:domain tcs:DateRange ;
+  rdfs:range xdd:dateRange .
+
+tcs:anySimpleType
+  a owl:DatatypeProperty ;
+  rdfs:label "Any Simple Type"@en ;
+  rdfs:comment "Any basic data type such as string or integer. An xsd:anySimpleType value."@en ;
+  rdfs:domain tcs:AnySimpleType ;
+  rdfs:range xsd:anySimpleType .
+
+tcs:string
+  a owl:DatatypeProperty ;
+  rdfs:label "String"@en ;
+  rdfs:comment "Any text or sequence of characters"@en ;
+  rdfs:domain tcs:String ;
+  rdfs:range xsd:string .
+
+tcs:boolean
+  a owl:DatatypeProperty ;
+  rdfs:label "Boolean"@en ;
+  rdfs:comment "A true or false value. An xsd:boolean value."@en ;
+  rdfs:domain tcs:Boolean ;
+  rdfs:range xsd:boolean .
+
+tcs:decimal
+  a owl:DatatypeProperty ;
+  rdfs:label "Decimal"@en ;
+  rdfs:comment "A decimal number. An xsd:decimal value."@en ;
+  rdfs:domain tcs:Decimal ;
+  rdfs:range xsd:decimal .
+
+tcs:double
+  a owl:DatatypeProperty ;
+  rdfs:label "Double"@en ;
+  rdfs:comment "A double-precision decimal number. An xsd:double value."@en ;
+  rdfs:domain tcs:Double ;
+  rdfs:range xsd:double .
+
+tcs:float
+  a owl:DatatypeProperty ;
+  rdfs:label "Float"@en ;
+  rdfs:comment "A floating-point number. An xsd:float value."@en ;
+  rdfs:domain tcs:Float ;
+  rdfs:range xsd:float .
+
+tcs:time
+  a owl:DatatypeProperty ;
+  rdfs:label "Time"@en ;
+  rdfs:comment "A time. An xsd:time value. hh:mm:ss.ssss"@en ;
+  rdfs:domain tcs:Time ;
+  rdfs:range xsd:time .
+
+tcs:date
+  a owl:DatatypeProperty ;
+  rdfs:label "Date"@en ;
+  rdfs:comment "A date. An xsd:date value. YYYY-MM-DD"@en ;
+  rdfs:domain tcs:Date ;
+  rdfs:range xsd:date .
+
+tcs:dateTime
+  a owl:DatatypeProperty ;
+  rdfs:label "Date Time"@en ;
+  rdfs:comment "A date and time. An xsd:dateTime value."@en ;
+  rdfs:domain tcs:DateTime ;
+  rdfs:range xsd:dateTime .
+
+tcs:dateTimeStamp
+  a owl:DatatypeProperty ;
+  rdfs:label "Date-Time Stamp"@en ;
+  rdfs:comment "An xsd:dateTimeStamp value."@en ;
+  rdfs:domain tcs:DateTimeStamp ;
+  rdfs:range xsd:dateTimeStamp .
+
+tcs:gYear
+  a owl:DatatypeProperty ;
+  rdfs:label "Year"@en ;
+  rdfs:comment " A particular 4 digit year YYYY - negative years are BCE."@en ;
+  rdfs:domain tcs:GYear ;
+  rdfs:range xsd:gYear .
+
+tcs:gMonth
+  a owl:DatatypeProperty ;
+  rdfs:label "Month"@en ;
+  rdfs:comment "A particular month. An xsd:gMonth value. --MM"@en ;
+  rdfs:domain tcs:GMonth ;
+  rdfs:range xsd:gMonth .
+
+tcs:gDay
+  a owl:DatatypeProperty ;
+  rdfs:label "Day"@en ;
+  rdfs:comment "A particular day. An xsd:gDay value. ---DD"@en ;
+  rdfs:domain tcs:GDay ;
+  rdfs:range xsd:gDay .
+
+tcs:gYearMonth
+  a owl:DatatypeProperty ;
+  rdfs:label "Year / Month"@en ;
+  rdfs:comment "A year and a month. An xsd:gYearMonth value."@en ;
+  rdfs:domain tcs:GYearMonth ;
+  rdfs:range xsd:gYearMonth .
+
+tcs:gMonthDay
+  a owl:DatatypeProperty ;
+  rdfs:label "Month / Day"@en ;
+  rdfs:comment "A month and a day. An xsd:gMonthDay value."@en ;
+  rdfs:domain tcs:GMonthDay ;
+  rdfs:range xsd:gMonthDay .
+
+tcs:duration
+  a owl:DatatypeProperty ;
+  rdfs:label "Duration"@en ;
+  rdfs:comment "A period of time. An xsd:duration value."@en ;
+  rdfs:domain tcs:Duration ;
+  rdfs:range xsd:duration .
+
+tcs:yearMonthDuration
+  a owl:DatatypeProperty ;
+  rdfs:label "Year / Month Duration"@en ;
+  rdfs:comment "A duration measured in years and months. An xsd:yearMonthDuration value."@en ;
+  rdfs:domain tcs:YearMonthDuration ;
+  rdfs:range xsd:yearMonthDuration .
+
+tcs:dayTimeDuration
+  a owl:DatatypeProperty ;
+  rdfs:label "Day / Time Duration"@en ;
+  rdfs:comment "A duration measured in days and time. An xsd:dayTimeDuration value."@en ;
+  rdfs:domain tcs:DayTimeDuration ;
+  rdfs:range xsd:dayTimeDuration .
+
+tcs:byte
+  a owl:DatatypeProperty ;
+  rdfs:label "Byte"@en ;
+  rdfs:comment "An xsd:byte value."@en ;
+  rdfs:domain tcs:Byte ;
+  rdfs:range xsd:byte .
+
+tcs:short
+  a owl:DatatypeProperty ;
+  rdfs:label "Short"@en ;
+  rdfs:comment "An xsd:short value."@en ;
+  rdfs:domain tcs:Short ;
+  rdfs:range xsd:short .
+
+tcs:integer
+  a owl:DatatypeProperty ;
+  rdfs:label "Integer"@en ;
+  rdfs:comment "A simple number. An xsd:integer value."@en ;
+  rdfs:domain tcs:Integer ;
+  rdfs:range xsd:integer .
+
+tcs:long
+  a owl:DatatypeProperty ;
+  rdfs:label "Long"@en ;
+  rdfs:comment "An xsd:long value."@en ;
+  rdfs:domain tcs:Long ;
+  rdfs:range xsd:long .
+
+tcs:unsignedByte
+  a owl:DatatypeProperty ;
+  rdfs:label "Unsigned Byte"@en ;
+  rdfs:comment "An xsd:unsignedByte value."@en ;
+  rdfs:domain tcs:UnsignedByte ;
+  rdfs:range xsd:unsignedByte .
+
+tcs:unsignedInt
+  a owl:DatatypeProperty ;
+  rdfs:label "Unsigned Integer"@en ;
+  rdfs:comment "An xsd:unsignedInt value."@en ;
+  rdfs:domain tcs:UnsignedInt ;
+  rdfs:range xsd:unsignedInt .
+
+tcs:unsignedLong
+  a owl:DatatypeProperty ;
+  rdfs:label "Unsigned Long Integer"@en ;
+  rdfs:comment "An xsd:unsignedLong value."@en ;
+  rdfs:domain tcs:UnsignedLong ;
+  rdfs:range xsd:unsignedLong .
+
+tcs:positiveInteger
+  a owl:DatatypeProperty ;
+  rdfs:label "Positive Integer"@en ;
+  rdfs:comment "A simple number greater than 0. An xsd:positiveInteger value."@en ;
+  rdfs:domain tcs:PositiveInteger ;
+  rdfs:range xsd:positiveInteger .
+
+tcs:nonNegativeInteger
+  a owl:DatatypeProperty ;
+  rdfs:label "Non-Negative Integer"@en ;
+  rdfs:comment "A simple number that can't be less than 0. An xsd:nonNegativeInteger value."@en ;
+  rdfs:domain tcs:NonNegativeInteger ;
+  rdfs:range xsd:nonNegativeInteger .
+
+tcs:negativeInteger
+  a owl:DatatypeProperty ;
+  rdfs:label "Negative Integer"@en ;
+  rdfs:comment "A negative integer. An xsd:negativeInteger value."@en ;
+  rdfs:domain tcs:NegativeInteger ;
+  rdfs:range xsd:negativeInteger .
+
+tcs:nonPositiveInteger
+  a owl:DatatypeProperty ;
+  rdfs:label "Non-Positive Integer"@en ;
+  rdfs:comment "A number less than or equal to zero. An xsd:nonPositiveInteger value."@en ;
+  rdfs:domain tcs:NonPositiveInteger ;
+  rdfs:range xsd:nonPositiveInteger .
+
+tcs:base64Binary
+  a owl:DatatypeProperty ;
+  rdfs:label "Base 64 Binary"@en ;
+  rdfs:comment "An xsd:base64Binary value."@en ;
+  rdfs:domain tcs:Base64Binary ;
+  rdfs:range xsd:base64Binary .
+
+tcs:anyURI
+  a owl:DatatypeProperty ;
+  rdfs:label "Any URI"@en ;
+  rdfs:comment "Any URl. An xsd:anyURI value."@en ;
+  rdfs:domain tcs:AnyURI ;
+  rdfs:range xsd:anyURI .
+
+tcs:language
+  a owl:DatatypeProperty ;
+  rdfs:label "Language"@en ;
+  rdfs:comment "A natural language identifier as defined by by [RFC 3066] . An xsd:language value."@en ;
+  rdfs:domain tcs:Language ;
+  rdfs:range xsd:language .
+
+tcs:normalizedString
+  a owl:DatatypeProperty ;
+  rdfs:label "Normalized String"@en ;
+  rdfs:comment "An xsd:normalizedString value."@en ;
+  rdfs:domain tcs:NormalizedString ;
+  rdfs:range xsd:normalizedString .
+
+tcs:token
+  a owl:DatatypeProperty ;
+  rdfs:label "Token"@en ;
+  rdfs:comment "An xsd:token value."@en ;
+  rdfs:domain tcs:Token ;
+  rdfs:range xsd:token .
+
+tcs:nMTOKEN
+  a owl:DatatypeProperty ;
+  rdfs:label "NMTOKEN"@en ;
+  rdfs:comment "An xsd:NMTOKEN value."@en ;
+  rdfs:domain tcs:NMTOKEN ;
+  rdfs:range xsd:NMTOKEN .
+
+tcs:name
+  a owl:DatatypeProperty ;
+  rdfs:label "Name"@en ;
+  rdfs:comment "An xsd:Name value."@en ;
+  rdfs:domain tcs:Name ;
+  rdfs:range xsd:Name .
+
+tcs:nCName
+  a owl:DatatypeProperty ;
+  rdfs:label "NCName"@en ;
+  rdfs:comment "An xsd:NCName value."@en ;
+  rdfs:domain tcs:NCName ;
+  rdfs:range xsd:NCName .
+
+tcs:nOTATION
+  a owl:DatatypeProperty ;
+  rdfs:label "NOTATION"@en ;
+  rdfs:comment "An xsd:NOTATION value."@en ;
+  rdfs:domain tcs:NOTATION ;
+  rdfs:range xsd:NOTATION .
+
+tcs:qName
+  a owl:DatatypeProperty ;
+  rdfs:label "QName"@en ;
+  rdfs:comment "An xsd:QName value."@en ;
+  rdfs:domain tcs:QName ;
+  rdfs:range xsd:QName .
+
+tcs:iD
+  a owl:DatatypeProperty ;
+  rdfs:label "ID"@en ;
+  rdfs:comment "An xsd:ID value."@en ;
+  rdfs:domain tcs:ID ;
+  rdfs:range xsd:ID .
+
+tcs:iDREF
+  a owl:DatatypeProperty ;
+  rdfs:label "IDREF"@en ;
+  rdfs:comment "An xsd:IDREF value."@en ;
+  rdfs:domain tcs:IDREF ;
+  rdfs:range xsd:IDREF .
+
+tcs:eNTITY
+  a owl:DatatypeProperty ;
+  rdfs:label "ENTITY"@en ;
+  rdfs:comment "An xsd:ENTITY value."@en ;
+  rdfs:domain tcs:ENTITY ;
+  rdfs:range xsd:ENTITY .
+
+tcs:xMLLiteral
+  a owl:DatatypeProperty ;
+  rdfs:label "XML Literal"@en ;
+  rdfs:comment "An rdf:XMLLiteral value."@en ;
+  rdfs:domain tcs:XMLLiteral ;
+  rdfs:range rdf:XMLLiteral .
+
+tcs:plainLiteral
+  a owl:DatatypeProperty ;
+  rdfs:label "Plain Literal"@en ;
+  rdfs:comment "An rdf:PlainLiteral value."@en ;
+  rdfs:domain tcs:PlainLiteral ;
+  rdfs:range rdf:PlainLiteral .
+
+tcs:literal
+  a owl:DatatypeProperty ;
+  rdfs:label "Literal"@en ;
+  rdfs:comment "An rdfs:Literal value."@en ;
+  rdfs:domain tcs:Literal ;
+  rdfs:range rdfs:Literal .
+
+tcs:coordinate
+  a owl:DatatypeProperty ;
+  rdfs:label "Coordinate"@en ;
+  rdfs:comment "A particular location on the surface of the earth, defined by latitude and longitude . An xdd:coordinate value."@en ;
+  rdfs:domain tcs:Coordinate ;
+  rdfs:range xdd:coordinate .
+
+tcs:coordinatePolygon
+  a owl:DatatypeProperty ;
+  rdfs:label "Geographic Area"@en ;
+  rdfs:comment "A shape on a map which defines an area. within the defined set of coordinates   An xdd:coordinatePolygon value."@en ;
+  rdfs:domain tcs:CoordinatePolygon ;
+  rdfs:range xdd:coordinatePolygon .
+
+tcs:coordinatePolyline
+  a owl:DatatypeProperty ;
+  rdfs:label "Coordinate Path"@en ;
+  rdfs:comment "A set of coordinates forming a line on a map, representing a route. An xdd:coordinatePolyline value."@en ;
+  rdfs:domain tcs:CoordinatePolyline ;
+  rdfs:range xdd:coordinatePolyline .
+
+tcs:gYearRange
+  a owl:DatatypeProperty ;
+  rdfs:label "Year"@en ;
+  rdfs:comment "A 4-digit year, YYYY, or if uncertain, a range of years. An xdd:gYearRange value."@en ;
+  rdfs:domain tcs:GYearRange ;
+  rdfs:range xdd:gYearRange .
+
+tcs:integerRange
+  a owl:DatatypeProperty ;
+  rdfs:label "Integer"@en ;
+  rdfs:comment "A simple number or range of numbers. An xdd:integerRange value."@en ;
+  rdfs:domain tcs:IntegerRange ;
+  rdfs:range xdd:integerRange .
+
+tcs:decimalRange
+  a owl:DatatypeProperty ;
+  rdfs:label "Decimal Number"@en ;
+  rdfs:comment "A decimal value or, if uncertain, a range of decimal values. An xdd:decimalRange value."@en ;
+  rdfs:domain tcs:DecimalRange ;
+  rdfs:range xdd:decimalRange .
+
+tcs:url
+  a owl:DatatypeProperty ;
+  rdfs:label "URL"@en ;
+  rdfs:comment "A valid url."@en ;
+  rdfs:domain tcs:Url ;
+  rdfs:range xdd:url .
+
+tcs:email
+  a owl:DatatypeProperty ;
+  rdfs:label "Email"@en ;
+  rdfs:comment "A valid email address."@en ;
+  rdfs:domain tcs:Email ;
+  rdfs:range xdd:email .
+
+tcs:html
+  a owl:DatatypeProperty ;
+  rdfs:label "HTML"@en ;
+  rdfs:comment "A safe HTML string"@en ;
+  rdfs:domain tcs:HTML ;
+  rdfs:range xdd:html .
+
+tcs:json
+  a owl:DatatypeProperty ;
+  rdfs:label "JSON"@en ;
+  rdfs:comment "A JSON Encoded String"@en ;
+  rdfs:domain tcs:JSON ;
+  rdfs:range xdd:json .
+
+tcs:SingleTimepoint 
+	rdfs:label "Temporal Box Restriction"@en;
+	rdfs:comment "Applies the cardinality restriction specifying that a timepoint should have a single value to box classes"@en;
+	owl:onProperty tcs:dateTime, 
+		tcs:time, tcs:gYearRange, tcs:gMonthDay, tcs:gYear, tcs:date, tcs:dateRange .

@@ -1,0 +1,45 @@
+os: Visual Studio 2015
+
+# If you only care about stable channel build failures, uncomment the following line:
+    #- channel: beta
+
+## Install Script ##
+
+# This is the most important part of the Appveyor configuration. This installs the version of Rust
+# specified by the 'channel' and 'target' environment variables from the build matrix. This uses
+# rustup to install Rust.
+#
+# For simple configurations, instead of using the build matrix, you can simply set the
+# default-toolchain and default-host manually here.
+install:
+  - choco install swi-prolog
+  - set SWI_INSTALL_DIR=C:\Program Files\swipl
+  - mkdir "%SWI_INSTALL_DIR%\pack"
+  - cd "%SWI_INSTALL_DIR%\pack"
+  - git clone https://github.com/terminusdb/terminus_store_prolog.git
+  - cd terminus_store_prolog
+  - git checkout v0.9.9.1
+  - cd %APPVEYOR_BUILD_FOLDER%
+  - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/libterminus_store.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/terminus_store_prolog.dll
+  - mkdir swipl
+  - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
+
+## Build Script ##
+
+build_script:
+  - cd windows
+  - git clone https://github.com/terminusdb/terminus_store_prolog.git
+  - cd terminus_store_prolog
+  - git checkout v0.9.9.1
+  - cd ..\
+  - makensis.exe terminusdb_windows_installer.nsi
+  - cd ..\
+
+test_script:
+  - swipl utils\db_init -s localhost -k root
+  - swipl -g run_tests -g halt start.pl
+
+artifacts:
+  - path: windows\terminusdb_setup.exe

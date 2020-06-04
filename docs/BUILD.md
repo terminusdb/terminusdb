@@ -48,19 +48,19 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The Terminus Server source tree should then be cloned from GitHub:
 
 ```
-git clone https://github.com/terminusdb/terminus-server
-cd terminus-server
+git clone https://github.com/terminusdb/terminusdb-server
+cd terminusdb-server
 git submodule init
 git submodule update
 ```
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_util` script. The script should also be used to
+`db_init` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/db_util -k "my_password_here" -s "my_server_name_here"
+utils/db_init -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -86,7 +86,7 @@ https://www.rust-lang.org/tools/install
 
 ### SWIPL
 
-SWI-Prolog is needed to run terminus-server. Install SWI-PROLOG with:
+SWI-Prolog is needed to run terminusdb-server. Install SWI-PROLOG with:
 
 ```
 sudo dnf install pl pl-devel
@@ -116,19 +116,19 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The Terminus Server source tree should then be cloned from GitHub:
 
 ```
-git clone https://github.com/terminusdb/terminus-server
-cd terminus-server
+git clone https://github.com/terminusdb/terminusdb-server
+cd terminusdb-server
 git submodule init
 git submodule update
 ```
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_util` script. The script should also be used to
+`db_init` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/db_util -k "my_password_here" -s "my_server_name_here"
+utils/db_init -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -182,19 +182,19 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The Terminus Server source tree should then be cloned from GitHub:
 
 ```
-git clone https://github.com/terminusdb/terminus-server
-cd terminus-server
+git clone https://github.com/terminusdb/terminusdb-server
+cd terminusdb-server
 git submodule init
 git submodule update
 ```
 
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_util` script. The script should also be used to
+`db_init` script. The script should also be used to
 configure the server name, as shown in the example.
 
 ```
-utils/db_util -k "my_password_here" -s "my_server_name_here"
+utils/db_init -k "my_password_here" -s "my_server_name_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:

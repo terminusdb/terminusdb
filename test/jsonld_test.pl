@@ -1,5 +1,4 @@
 :- module(jsonld_test,[
-              run_jsonld_tests/0
           ]).
 
 /** <module> JSON-LD Test
@@ -29,17 +28,16 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
-:- use_module(test(test_utils)).
-:- use_module(library(utils)).
-:- use_module(library(jsonld)).
+
+:- begin_tests(jsonld_test).
+
+:- use_module(core(util)).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
 :- use_module(library(http/json)).
 
-run_jsonld_tests :-
-    debug(terminus(testing_progress(run)), 'running jsonld tests', []),
-    try(run_woql_expand),
-    debug(terminus(testing_progress(run)), 'running api tests', []).
-
-run_woql_expand :-
+test(run_woql_expand) :-
     Doc = _{'@context' :
             _{'@version': 1.1,
               '@base': "http://terminusdb.com/woql",
@@ -65,7 +63,7 @@ run_woql_expand :-
     expand(Doc,Expanded),
     % remove the context for simplicity (and because it may be expanded)
     select_dict(_{'@context' : _Ctx}, Expanded, Query),
-    json_write_dict(current_output,Query),
+
     Query = _{'http://terminusdb.com/woql#select':
               [_{'@id':'http://terminusdb.com/woql/variable/c'},
                _{'@id':'http://terminusdb.com/woql/variable/f'},
@@ -80,3 +78,6 @@ run_woql_expand :-
                      _{'@id':'http://terminusdb.com/woql/variable/e'},
                      _{'@id':'http://terminusdb.com/woql/variable/f'}]}]}]}.
 
+
+
+:- end_tests(jsonld_test).

@@ -18,6 +18,7 @@
  *
  */
 
+:- [load_paths].
 :- initialization(main).
 
 %!  version_string(+Int:integer, -Str:string) is det
@@ -43,6 +44,9 @@ prolog:message(error(version_error(Correct, Was), _)) -->
       [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[AcceptedVersions, W],
         nl].
 
+needs_version(80131).
+needs_version(80130).
+needs_version(80123).
 needs_version(80111).
 needs_version(80110).
 needs_version(80003).
@@ -54,65 +58,24 @@ must_be_proper_version :-
     ;
         findall(Version, needs_version(Version), SupportedVersions),
         print_message(error,
-                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup)),
-        halt
+                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup))
    ).
 
 :- initialization must_be_proper_version.
 
+initialise_hup :-
+    (   current_prolog_flag(unix, true)
+    ->  on_signal(hup, _, hup)
+    ;   true).
 
-:- dynamic user:file_search_path/2.
-:- multifile user:file_search_path/2.
+:- initialise_hup.
 
-:- prolog_load_context(directory, Dir),
-   asserta(user:file_search_path(terminus_home, Dir)).
-
-add_library_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/library',Library),
-    asserta(user:file_search_path(library, Library)).
-
-:- add_library_path.
-
-add_config_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/config',Config),
-    asserta(user:file_search_path(config, Config)).
-
-:- add_config_path.
-
-add_test_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/test',Config),
-    asserta(user:file_search_path(test, Config)).
-
-:- add_test_path.
-
-add_plugin_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/plugins',Config),
-    asserta(user:file_search_path(plugins, Config)).
-
-:- add_plugin_path.
-
-initialise_server_settings :-
-    file_search_path(terminus_home, BasePath),
-    !,
-    atom_concat(BasePath, '/config/config.pl', Settings_Path),
-    (   exists_file(Settings_Path)
-    ->  true
-    ;   print_message(error, server_missing_config(BasePath)),
-        halt(10)
-    ).
 
 initialise_log_settings :-
-    file_search_path(terminus_home, BasePath),
-    !,
-    (   getenv('TERMINUS_LOG_PATH', Log_Path)
-    ->  true
-    ;   atom_concat(BasePath,'/storage/httpd.log', Log_Path)),
-
-    set_setting(http:logfile, Log_Path).
+    (   getenv('TERMINUSDB_LOG_PATH', Log_Path)
+    ->  set_setting(http:logfile, Log_Path)
+    ;   get_time(Time),
+        asserta(http_log:log_stream(user_error, Time))).
 
 :-multifile prolog:message//1.
 
@@ -121,42 +84,38 @@ prolog:message(server_missing_config(BasePath)) -->
     'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
     nl,
     nl,
-    'Run: ~s/utils/db_util first'-[BasePath],
+    'Run: ~s/utils/db_init first'-[BasePath],
     nl
     ].
 
 
-:- initialise_server_settings.
+:- reexport(core(util/syntax)).
 
-:- use_module(library(api)).
-:- use_module(library(server)).
-:- use_module(library(upgrade_db)).
-:- use_module(library(prefixes)).
-% We only need this if we are interactive...
-:- use_module(library(sdk)).
-:- use_module(test(tests)).
-:- use_module(library(http/http_log)).
+:- use_module(server(routes)).
+:- use_module(server(main)).
+
 % Plugins
 %:- use_module(plugins(registry)).
 
-:- on_signal(hup, _, hup).
+:- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
+
+:- use_module(library(http/http_log)).
+
+:- set_test_options([run(manual)]).
 
 hup(_Signal) :-
   thread_send_message(main, stop).
 
 main(Argv) :-
+    initialise_log_settings,
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
-    http_log('terminus-server started at ~w (utime ~w) args ~w~n',
+    http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
-    %maybe_upgrade,
-    initialise_prefix_db,
-    debug(terminus(main), 'prefix_db initialized', []),
-    initialise_contexts,
-    debug(terminus(main), 'initialise_contexts completed', []),
-    initialise_log_settings,
+    initialise_woql_contexts,
+    debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    server(Argv),
+    terminus_server(Argv),
     run(Argv).
 
 run([test]) :-

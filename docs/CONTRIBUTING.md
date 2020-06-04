@@ -1,6 +1,6 @@
 # How to contribute
 
-Thanks for taking the time to contribute to terminus-server!
+Thanks for taking the time to contribute to terminusdb-server!
 
 ## Testing
 
@@ -12,7 +12,7 @@ password is `root` or that the enviroment variable
 
 ## Submitting changes
 
-Please send a [GitHub Pull Request](https://github.com/terminusdb/terminus-server/pull/new/dev) to the dev branch.
+Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb-server/pull/new/dev) to the dev branch.
 
 Please write clear log messages with your commits. Small changes can be a one line message, 
 but big changes should have a descriptive paragraph with a newline after the title in the message.
@@ -29,16 +29,16 @@ One of the easier ways to set up a development environment is by forking the git
 Docker is a prerequisite for setting it up this way, an alternative is following the instructions in [BUILD.md](BUILD.md).
 
 1. Make a fork on GitHub
-2. Clone the repository with `git clone git@github.com:[your_username]/terminus-server.git`
-3. Go to the directory `cd terminus-server`.
-4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm  terminusdb/terminus-server:latest` 
-   inside the terminus-server directory. It will mount the current sources to the Docker container.
+2. Clone the repository with `git clone git@github.com:[your_username]/terminusdb-server.git`
+3. Go to the directory `cd terminusdb-server`.
+4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm  terminusdb/terminusdb-server:dev`
+   inside the terminusdb-server directory. It will mount the current sources to the Docker container.
 5. Run `make.` inside the swipl console after you changed the code.
 
 
 ## Coding conventions
 
-We have a house style for prolog, especially for conditionals. We will be releasing a prolog mode for emacs soon that 
+We have a house style for prolog, especially for conditionals. We will be releasing a prolog mode for Emacs soon that 
 helps with the indentation. Until then, try to copy what you see.
 
 ### Veterans of the Tabs / Spaces War

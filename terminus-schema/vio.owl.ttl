@@ -1,7 +1,6 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix vio: <http://terminusdb.com/schema/vio#> .
 
@@ -9,27 +8,27 @@
   a owl:Ontology ;
   rdfs:label "Terminus Violations Schema"@en ;
   rdfs:comment "Schema describing all of the errors and violations that can be detected by the Terminus DB Engine and the structure of the documents produced"@en ;
-  tcs:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
-  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en, "Kitty Jose"@en;
-  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+  terminus:rights "Copyright Data Chemist Ltd. 2017-2019"@en ;
+  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en, "Kitty Jose"@en;
+  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
 vio:ViolationReport
   rdfs:label "Violation Report"@en ;
   rdfs:comment "A report of violations found in quality-testing of a document or graph fragment"@en ;
   a owl:Class ;
-  rdfs:subClassOf tcs:Entity.
+  rdfs:subClassOf terminus:Entity.
 
 vio:InstanceDataViolationReport
   rdfs:label "Instance Data Violation Report"@en ;
   rdfs:comment "A report of violations of schema rules encountered in quality-testing of instance data"@en;
   a owl:Class ;
-  rdfs:subClassOf tcs:Entity, vio:ViolationReport, vio:RestrictInstanceViolation .
+  rdfs:subClassOf terminus:Entity, vio:ViolationReport, vio:RestrictInstanceViolation .
 
 vio:SchemaViolationReport
   rdfs:label "Schema Violation Report"@en ;
   rdfs:comment "A report of violations encountered in quality-testing of schema rules"@en;
   a owl:Class ;
-  rdfs:subClassOf tcs:Entity, vio:ViolationReport, vio:RestrictSchemaViolation .
+  rdfs:subClassOf terminus:Entity, vio:ViolationReport, vio:RestrictSchemaViolation .
 
 vio:violation
   rdfs:label "Violation"@en ;
@@ -54,7 +53,7 @@ vio:RestrictInstanceViolation
 
 vio:Violation
   rdfs:label "Violation"@en ;
-  tcs:tag tcs:abstract;
+  terminus:tag terminus:abstract;
   rdfs:comment "A specific violation of a reasoning rule"@en ;
   rdfs:subClassOf vio:MessageCardinalityRestriction;
   a owl:Class .
@@ -74,7 +73,7 @@ vio:MessageCardinalityRestriction
   owl:onProperty vio:message .
   
 vio:SchemaViolation
-  tcs:tag tcs:abstract;
+  terminus:tag terminus:abstract;
   rdfs:label "Schema Violation"@en ;
   rdfs:comment "A Violation of the rules relating to valid schema definition. 
   Schema violations indicate an attempt to change a schema into an invalid state 
@@ -83,7 +82,7 @@ vio:SchemaViolation
   rdfs:subClassOf vio:Violation .
 
 vio:ClassViolation
-  tcs:tag tcs:abstract;
+  terminus:tag terminus:abstract;
   rdfs:label "Class Violation"@en ;
   rdfs:comment "A violation that relates to a class definition in the schema"@en;
   a owl:Class ;
@@ -125,7 +124,7 @@ vio:ViolationWithParent
  a owl:Class;
  rdfs:label "Violation with Parent"@en;
  rdfs:comment "A violation which relates to the parent of a class or instance"@en;
- tcs:tag tcs:abstract.
+ terminus:tag terminus:abstract.
 
 vio:parent
   rdfs:label "Parent Class"@en ;
@@ -209,7 +208,7 @@ vio:PathComponentCardinalityRestriction
 vio:PropertyViolation
   rdfs:label "Property Violation"@en ;
   a owl:Class ;
-  tcs:tag tcs:abstract;
+  terminus:tag terminus:abstract;
   rdfs:comment "A violation that relates to a property definition in the schema"@en;
   rdfs:subClassOf vio:PropertyCardinalityRestriction, vio:SchemaViolation .
 
@@ -249,7 +248,7 @@ vio:PropertyInheritanceViolation
   rdfs:label "Property Inheritance Violation"@en ;
   rdfs:comment "A violation that relates to property inheritance"@en ;
   a owl:Class ;
-  tcs:tag tcs:abstract ;
+  terminus:tag terminus:abstract ;
   rdfs:subClassOf vio:PropertyViolation, vio:ParentPropertyCardinalityRestriction .
   
 vio:parent_property
@@ -345,7 +344,7 @@ vio:InstanceDataViolation
   rdfs:comment "A Violation of the rules defined in the schema, related to instance data. 
   Instance Data violations indicate situations where the data does not conform to the rules defined in the schema"@en ;
   a owl:Class ;
-  tcs:tag tcs:abstract ;
+  terminus:tag terminus:abstract ;
   rdfs:subClassOf vio:Violation .
 
 vio:ViolationWithSubject

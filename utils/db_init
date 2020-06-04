@@ -1,0 +1,174 @@
+#!/usr/bin/env swipl
+% -*- mode: prolog;-*-
+:- module(db_init, [run/1]).
+
+
+% Set up access to the libraries
+:- if(current_prolog_flag(version, 80131)).
+:- else.
+:- ['../load_paths.pl'].
+:- endif.
+
+:- initialization(main).
+
+% I have no clue why the config module is not accessible
+% in another way :(
+
+:- use_module(config(terminus_config)).
+:- use_module(core(triple/literals)).
+:- use_module(core(triple/triplestore)).
+:- use_module(core(triple/terminus_bootstrap)).
+:- use_module(core(api/init)).
+
+:- use_module(library(filesex)).
+:- use_module(library(crypto)).
+:- use_module(library(process)).
+:- use_module(library(optparse)).
+:- use_module(library(terminus_store)).
+:- use_module(library(semweb/turtle)).
+
+
+/*****************************************************
+ * Utils
+ *****************************************************/
+
+/*
+ * command(Cmd) is semidet.
+ *
+ * True if Cmd exists.
+ */
+command(Cmd) :-
+    catch(
+        (   process_create(path(Cmd), [], [ stderr(null),
+                                            stdout(null),
+                                            process(PID)
+                                          ]),
+            process_wait(PID,_Status)),
+        error(existence_error(source_sink,path(Cmd)),_),
+        fail).
+
+/*****************************************************
+ * Opts
+ *****************************************************/
+opt_spec([[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print this help')],
+
+          [opt(onlyconfig),
+           type(boolean),
+           shortflags([n]),
+           longflags(['only-config']),
+           default(false),
+           help('Only generate config file, not database')],
+
+          [opt(autoattach),
+           type(boolean),
+           longflags(['autoattach']),
+           default(true),
+           help('Automatically attach console to server on same host')],
+
+          [opt(autologin),
+           type(boolean),
+           longflags(['autologin']),
+           default(false),
+           help('Automatically login to console.')],
+
+          [opt(server),
+           type(atom),
+           shortflags([s]),
+           longflags([server]),
+           default('localhost'),
+           help('set the server name')],
+
+          [opt(public_url),
+           type(atom),
+           longflags([public_url]),
+           default(false),
+           help('set the public URL')],
+
+          [opt(workers),
+           type(integer),
+           shortflags([w]),
+           longflags([workers]),
+           default(8),
+           help('set the amount of server workers')],
+
+          [opt(port),
+           type(integer),
+           shortflags([p]),
+           longflags([port]),
+           default(6363),
+           help('set the server port')],
+
+          [opt(protocol),
+           type(atom),
+           longflags([protocol]),
+           default(http),
+           help('set the protocol used by the server')],
+
+          [opt(key),
+           type(atom),
+           shortflags([k]),
+           longflags([key]),
+           default(admin),
+           help('key of admin user')]]).
+
+/*
+ * help(+Cmd:atom,-Help:atom) is det.
+ */
+help(Cmd,Spec,Help) :-
+    file_base_name(Cmd,Name),
+    opt_help(Spec,Help_Text),
+    format(atom(Help),'Usage: ~s [OPTIONS]
+
+Set the administrative key - necessary before superuser can begin to set other permissions
+
+~s', [Name,Help_Text]).
+
+/*****************************************************
+ * Main
+ *****************************************************/
+
+program(Prog) :-
+    current_prolog_flag(associated_file,Prog).
+
+run(Args) :-
+    program(Prog),
+    opt_spec(Spec),
+    opt_parse(Spec,Args,Opts,_),
+    help(Prog,Spec,Help_Text),
+
+    (   memberchk(help(true), Opts)
+    ->  write(Help_Text),
+        halt
+    ;   memberchk(key(admin), Opts)
+    ->  format('~nThink of a better administrator key please...~n~n'),
+        write(Help_Text),
+        halt
+    ;   memberchk(key(Key), Opts),
+
+        memberchk(server(Server), Opts),
+        memberchk(port(Port), Opts),
+        memberchk(protocol(Protocol), Opts),
+        memberchk(public_url(Public_URL), Opts),
+        (   Public_URL \= false
+        ->  PUBLIC_URL = Public_URL
+        ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
+        ),
+
+        initialize_registry,
+        initialize_index(Key, Opts),
+
+        (   memberchk(onlyconfig(false), Opts)
+        ->  initialize_database(PUBLIC_URL, Key),
+            format('Successfully initialised database!!!~n')
+        ;   true
+        ),
+        halt
+    ).
+
+main(Args) :-
+    run(Args).

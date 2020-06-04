@@ -1,0 +1,34 @@
+@prefix worldOnt: <http://dacura.cs.tcd.ie/data/worldOntology#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#>. 
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix owl:  <http://www.w3.org/2002/07/owl#>.
+@prefix dc:   <http://purl.org/dc/elements/1.1/>.
+
+worldOnt:OneName a owl:Restriction ;
+    owl:onProperty worldOnt:name ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+worldOnt:Entity a owl:Class ;
+    rdfs:subClassOf worldOnt:OneName ;
+    rdfs:comment "Abstract superclass of a thingy" ;
+    rdfs:label "Entity" .
+
+worldOnt:City a owl:Class ;
+    rdfs:subClassOf worldOnt:Entity ;
+    rdfs:label "City" ;
+    rdfs:comment "A City" .
+
+worldOnt:Person a owl:Class ;
+    rdfs:subClassOf worldOnt:Entity ;
+    rdfs:label "Person" ;
+    rdfs:comment "A Person" .
+
+worldOnt:name a owl:DatatypeProperty ;
+    rdfs:domain worldOnt:Entity ;
+    rdfs:range xsd:string .
+
+worldOnt:personal_name a owl:DatatypeProperty ;
+    rdfs:subPropertyOf worldOnt:name ;
+    rdfs:domain worldOnt:Person ;
+    rdfs:range xsd:string .
