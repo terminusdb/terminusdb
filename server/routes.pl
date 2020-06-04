@@ -130,7 +130,7 @@ test(connection_result_dbs, [])
     admin_pass(Key),
     http_get(Server, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
-    json_write_dict(current_output, Result, []),
+    * json_write_dict(current_output, Result, []),
 
     _{ '@id' : "doc:admin",
        '@type':"terminus:User"
@@ -653,6 +653,7 @@ woql_handler(post, Path, R) :-
     woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
     write_descriptor_cors(Descriptor,Terminus),
+
     reply_json_dict(JSON).
 
 woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
@@ -679,7 +680,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
             authorization : Auth_ID
         }, Context0, Final_Context),
 
-    http_log('~N[Request] ~q~n', [Request]),
+    * http_log('~N[Request] ~q~n', [Request]),
 
     json_woql(Query, Context0.prefixes, AST),
 
@@ -1961,7 +1962,6 @@ cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
           (   cors_enable,
-              http_log('~N[Exception] ~q~n',[E]),
               customise_exception(E)
           )
          ),
@@ -2152,11 +2152,15 @@ customise_exception(error(E)) :-
                  'terminus:message' : EM},
                [status(500)]).
 customise_exception(error(E, CTX)) :-
+    http_log('~N[Exception] ~q~n',[error(E,CTX)]),
     format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' : EM},
                [status(500)]).
+customise_exception(http_reply(Obj)) :-
+    throw(http_reply(Obj)).
 customise_exception(E) :-
+    http_log('~N[Exception] ~q~n',[E]),
     throw(E).
 
 %%%%%%%%%%%%%%%%%%%% Access Rights %%%%%%%%%%%%%%%%%%%%%%%%%

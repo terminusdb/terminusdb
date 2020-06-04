@@ -139,8 +139,15 @@ initialize_database(Public_URL, Key) :-
 initialize_database_with_path(Public_URL, Key, DB_Path) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
+    initialize_server_version(DB_Path),
     open_directory_store(DB_Path, Store),
     initialize_database_with_store(Public_URL, Key, Store).
+
+initialize_server_version(DB_Path) :-
+    atomic_list_concat([DB_Path,'/SERVER_VERSION'],Path),
+    open(Path, write, FileStream),
+    writeq(FileStream, 1),
+    close(FileStream).
 
 initialize_database_with_store(Public_URL, Key, Store) :-
     template_terminus_instance_ttl(Example_Instance_TTL),
