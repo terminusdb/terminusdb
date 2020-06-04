@@ -15,7 +15,7 @@
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
      Push_Predicate, Result) :-
     do_or_die(
-        open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscoroe
+        open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscore
         error(branch_does_not_exist_in_push(Branch_Descriptor))),
 
     Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
@@ -92,10 +92,9 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
     ->  Result = _{'terminus:status' : "terminus:success"} % nothing to be done!
     ;   call(Push_Predicate, Remote_URL, Remote_Branch, Payload, Result),
         (   Result = _{'terminus:status' : "terminus:success"}
-        ->  true
-        ;   true),
-        update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-        run_transactions([Database_Transaction_Object], _)
+        ->  update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+            run_transactions([Database_Transaction_Object], _)
+        ;   true)
     ).
 
 
