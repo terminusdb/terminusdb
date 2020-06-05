@@ -929,8 +929,6 @@ test(branch_db, [
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    * json_write_dict(current_output,JSON1,[]),
-
     (   _{'bindings' : L} :< JSON1
     ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
                'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
