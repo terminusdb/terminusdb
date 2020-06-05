@@ -16,7 +16,8 @@
               write_cors_headers/2,
               authorisation_object/3,
               user_object/3,
-              super_user_authority/1
+              super_user_authority/1,
+              check_descriptor_auth/4
           ]).
 
 /** <module> Capabilities
@@ -393,6 +394,20 @@ user_object(DB, User_ID, User_Obj) :-
              )
             )).
 
+
+check_descriptor_auth(Terminus,terminus_descriptor{},Action,Auth) :-
+    assert_auth_action_scope(Terminus,Auth,Action,"terminus").
+check_descriptor_auth(Terminus,database_descriptor{ database_name : Name }, Action, Auth) :-
+    assert_auth_action_scope(Terminus,Auth,Action,Name).
+check_descriptor_auth(Terminus,repository_descriptor{ database_descriptor : DB,
+                                                      repository_name : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus, DB, Action, Auth).
+check_descriptor_auth(Terminus,branch_descriptor{ repository_descriptor : Repo,
+                                         branch_name : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus, Repo, Action, Auth).
+check_descriptor_auth(Terminus,commit_descriptor{ repository_descriptor : Repo,
+                                                  commit_id : _ }, Action, Auth) :-
+    check_descriptor_auth(Terminus,Repo, Action, Auth).
 
 /*
  * write_cors_headers(Resource_Name) is det.

@@ -1582,7 +1582,7 @@ remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
-authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload, Result) :-
+authorized_push(Authorization, Remote_URL, Payload, Result) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     http_post(Unpack_URL,
@@ -2227,20 +2227,6 @@ connection_authorised_user(Request, User_ID) :-
     open_descriptor(terminus_descriptor{}, DB),
     fetch_jwt_data(Request, Username),
     username_user_id(DB, Username, User_ID).
-
-check_descriptor_auth(Terminus,terminus_descriptor{},Action,Auth) :-
-    assert_auth_action_scope(Terminus,Auth,Action,"terminus").
-check_descriptor_auth(Terminus,database_descriptor{ database_name : Name }, Action, Auth) :-
-    assert_auth_action_scope(Terminus,Auth,Action,Name).
-check_descriptor_auth(Terminus,repository_descriptor{ database_descriptor : DB,
-                                                      repository_name : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus, DB, Action, Auth).
-check_descriptor_auth(Terminus,branch_descriptor{ repository_descriptor : Repo,
-                                         branch_name : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus, Repo, Action, Auth).
-check_descriptor_auth(Terminus,commit_descriptor{ repository_descriptor : Repo,
-                                                  commit_id : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus,Repo, Action, Auth).
 
 write_descriptor_cors(terminus_descriptor{},Terminus) :-
     write_cors_headers("terminus",Terminus).
