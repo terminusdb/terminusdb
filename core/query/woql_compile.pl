@@ -169,7 +169,7 @@ merge_output_bindings(B0, B1, Bindings) :-
 empty_context(Context) :-
     Context = query_context{
         transaction_objects : [],
-        default_collection : empty,
+        default_collection : root,
         filter : type_filter{ types : [instance] },
         prefixes : _{},
         write_graph : empty,
@@ -867,13 +867,7 @@ compile_wf(select(VL,P), Prog) -->
     restrict(VL).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
-    {
-        (   resolve_absolute_string_descriptor(Collection_String, Default_Collection)
-        ->  true
-        ;   resolve_relative_string_descriptor(Old_Default_Collection,
-                                               Collection_String,
-                                               Default_Collection))
-    },
+    { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection) },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
     update(default_collection,_,Old_Default_Collection).
