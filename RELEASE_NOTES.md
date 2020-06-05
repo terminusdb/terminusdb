@@ -1,4 +1,13 @@
-# TerminusDB Server Version 2.0 Release Notes
+# TerminusDB Server v2.0.1 Release Notes
+
+## Bug Fixes
+
++ Resolution of resource descriptors now attempts to resolve relative
+  to the current context before trying to resolve as an absolute path.
++ woql:Size was using a database path predicate which was not imported
+  causing it to fail.
+
+# TerminusDB Server v2.0.0 Release Notes
 
 ## New
 
