@@ -11,6 +11,9 @@
               jwt_public_key_id/1,
               registry_path/1,
               console_base_url/1,
+              ssl_cert/1,
+              ssl_cert_key/1,
+              https_enabled/0,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -51,6 +54,16 @@ jwt_public_key_id(Value) :-
 
 console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dl.bintray.com/terminusdb/terminusdb/0.0.1', Value).
+
+https_enabled :-
+    getenv('TERMINUSDB_HTTPS_ENABLED', Value),
+    Value = 'true'.
+
+ssl_cert(Value) :-
+    getenv_default('TERMINUSDB_SSL_CERT', 'localhost.crt', Value).
+
+ssl_cert_key(Value) :-
+    getenv_default('TERMINUSDB_SSL_CERT_KEY', 'localhost.key', Value).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
