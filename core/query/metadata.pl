@@ -7,6 +7,7 @@
 
 :- use_module(library(terminus_store)).
 :- use_module(core(transaction)).
+:- use_module(core(util)).
 
 transaction_object_read_write_objs(Transaction, Objects) :-
     Instance_Objects = (Transaction.instance_objects),
