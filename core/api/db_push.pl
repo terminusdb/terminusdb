@@ -118,9 +118,8 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
-
 %:- use_module(db_create).
-%:- use_module(db_branch).
+:- use_module(db_branch).
 
 test_pusher(Expected, _Remote_URL, _Remote_Branch, Payload) :-
     payload_repository_head_and_pack(Payload, _Head, Pack),
@@ -248,6 +247,34 @@ test(push_empty_branch,
     super_user_authority(Auth),
     push(Descriptor, "remote", "master", Auth, test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "master"),
+
+    true.
+
+test(push_new_nonmaster_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    branch_create(Repository_Descriptor, empty, "work", _),
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth),
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+    has_branch(Remote_Repository_Descriptor, "work"),
 
     true.
 
