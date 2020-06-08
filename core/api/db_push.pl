@@ -17,6 +17,10 @@
 % - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
 % - remote diverged - someone else committed and pushed and we know about that
 % - We try to push an empty branch, but we know that remote is non-empty
+% - remote returns an error
+% -- history diverged (we check locally, but there's a race)
+% -- remote doesn't know what we're talking about
+% - communication error while talking to the remote
 
 :- meta_predicate push(+, +, +, +, 3, -).
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
@@ -312,8 +316,5 @@ test(push_new_nonmaster_branch_with_content,
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
 
     true.
-
-
-
 
 :- end_tests(push).

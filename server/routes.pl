@@ -1516,14 +1516,15 @@ unpack_handler(post, Path, Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, R, Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-    check_descriptor_auth(Terminus, Branch_Descriptor,
+    string_concat(Path, "/local/_commits", Full_Path),
+    do_or_die(
+        (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
+            (repository_descriptor{} :< Repository_Descriptor)),
+        error(not_a_repository_descriptor(Repository_Descriptor))),
+
+    check_descriptor_auth(Terminus, Repository_Descriptor,
                           terminus:commit_write_access,
                           Auth_ID),
-
-    do_or_die(
-        (branch_descriptor{} :< Branch_Descriptor),
-        error(not_a_branch_descriptor(Branch_Descriptor))),
 
     get_payload(Payload, Request),
     unpack(Branch_Descriptor, Payload),
