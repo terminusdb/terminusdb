@@ -10,9 +10,13 @@
 :- use_module(db_rebase).
 :- use_module(db_create).
 
-% 1. rebase on remote
-% 2. pack and send
-% 3. error if head moved
+% error conditions:
+% - branch to push does not exist
+% - repository does not exist
+% - we tried to push to a repository that is not a remote
+% - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
+% - remote diverged - someone else committed and pushed and we know about that
+% - We try to push an empty branch, but we know that remote is non-empty
 
 :- meta_predicate push(+, +, +, +, 3, -).
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
@@ -32,9 +36,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
         Type = remote,
         error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name))),
 
-    do_or_die(
-        repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
-        error(remote_repository_does_not_exist(Remote_Name))),
+    repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
 
     % Begin hypothetical rebase for pack
     create_context(Repository_Descriptor, Repository_Context_With_Prefixes),
@@ -43,53 +45,48 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
     resolve_relative_descriptor(Database_Descriptor,[Remote_Name, "_commits"],
                                 Remote_Repository),
 
-    (   create_context(Remote_Repository, Remote_Repository_Context_With_Prefixes),
-        context_default_prefixes(Remote_Repository_Context_With_Prefixes,
-                                 Remote_Repository_Context),
-        context_to_parent_transaction(Remote_Repository_Context, Database_Transaction),
-        do_or_die(repository_head(Database_Transaction, Remote_Name, Last_Head_Id),
-                  error(push_has_no_repository_head(Remote_Repository)))
-    ->  (   branch_head_commit(Repository_Context,
-                               (Branch_Descriptor.branch_name),
-                               Local_Commit_Uri)
-        ->  (   has_branch(Remote_Repository_Context,
-                           Remote_Branch)
-            ->  (   branch_head_commit(Remote_Repository_Context,
-                                       Remote_Branch,
-                                       Remote_Commit_Uri)
-                ->  Remote_Commit_Uri_Option = some(Remote_Commit_Uri)
-                ;   Remote_Commit_Uri_Option = none
-                ),
-                branch_name_uri(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri)
-            ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, Remote_Branch_Uri),
-                Remote_Commit_Uri_Option = none
+    create_context(Remote_Repository, Remote_Repository_Context_With_Prefixes),
+    context_default_prefixes(Remote_Repository_Context_With_Prefixes,
+                             Remote_Repository_Context),
+    context_to_parent_transaction(Remote_Repository_Context, Database_Transaction),
+    do_or_die(repository_head(Database_Transaction, Remote_Name, Last_Head_Id),
+              error(push_has_no_repository_head(Remote_Repository))),
+    (   branch_head_commit(Repository_Context,
+                           (Branch_Descriptor.branch_name),
+                           Local_Commit_Uri)
+    ->  (   has_branch(Remote_Repository_Context,
+                       Remote_Branch)
+        ->  (   branch_head_commit(Remote_Repository_Context,
+                                   Remote_Branch,
+                                   Remote_Commit_Uri)
+            ->  Remote_Commit_Uri_Option = some(Remote_Commit_Uri)
+            ;   Remote_Commit_Uri_Option = none
             ),
+            branch_name_uri(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri)
+        ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, Remote_Branch_Uri),
+            Remote_Commit_Uri_Option = none
+        ),
 
-            commit_id_uri(Repository_Context, Local_Commit_Id, Local_Commit_Uri),
-            (   Remote_Commit_Uri_Option = some(Remote_Commit_Uri),
-                commit_id_uri(Remote_Repository_Context, Remote_Commit_Id, Remote_Commit_Uri),
-                most_recent_common_ancestor(Repository_Context, Remote_Repository_Context, Local_Commit_Id,
-                                            Remote_Commit_Id, _Common_Commit_Id, _Local_Branch_Path, Remote_Branch_Path)
-            % Shared history
-            ->  (   Remote_Branch_Path = []
-                ->  true
-                ;   throw(error(remote_diverged(Remote_Repository,Remote_Branch_Path)))
-                )
-            % No shared history
-            ;   true),
+        commit_id_uri(Repository_Context, Local_Commit_Id, Local_Commit_Uri),
+        (   Remote_Commit_Uri_Option = some(Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Context, Remote_Commit_Id, Remote_Commit_Uri),
+            most_recent_common_ancestor(Repository_Context, Remote_Repository_Context, Local_Commit_Id,
+                                        Remote_Commit_Id, _Common_Commit_Id, _Local_Branch_Path, Remote_Branch_Path)
+        % Shared history
+        ->  do_or_die(Remote_Branch_Path = [],
+                      error(remote_diverged(Remote_Repository,Remote_Branch_Path)))
+        % No shared history
+        ;   true),
 
-            copy_commits(Repository_Context, Remote_Repository_Context, Local_Commit_Id),
-            reset_branch_head(Remote_Repository_Context_With_Prefixes, Remote_Branch_Uri, Local_Commit_Uri)
-        ;   (   has_branch(Remote_Repository_Context,
-                           Remote_Branch),
-                branch_head_commit(Remote_Repository_Context,
-                                   Remote_Branch, _)
-            ->  throw(error(remote_not_empty_on_local_empty(Remote_Repository)))
-            ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
-            )
+        copy_commits(Repository_Context, Remote_Repository_Context, Local_Commit_Id),
+        reset_branch_head(Remote_Repository_Context_With_Prefixes, Remote_Branch_Uri, Local_Commit_Uri)
+    ;   (   has_branch(Remote_Repository_Context,
+                       Remote_Branch),
+            branch_head_commit(Remote_Repository_Context,
+                               Remote_Branch, _)
+        ->  throw(error(remote_not_empty_on_local_empty(Remote_Repository)))
+        ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
         )
-    ;   % Remote doesn't even exist yet
-        throw(error(remote_does_not_exist(Remote_Repository)))
     ),
 
     cycle_context(Remote_Repository_Context, Final_Context, Remote_Transaction_Object, _),
