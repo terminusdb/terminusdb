@@ -61,7 +61,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
                 ;   Remote_Commit_Uri_Option = none
                 ),
                 branch_name_uri(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri)
-            ;   insert_branch_object(Remote_Repository_Context, Remote_Branch, Remote_Branch_Uri),
+            ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, Remote_Branch_Uri),
                 Remote_Commit_Uri_Option = none
             ),
 
@@ -85,7 +85,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
                 branch_head_commit(Remote_Repository_Context,
                                    Remote_Branch, _)
             ->  throw(error(remote_not_empty_on_local_empty(Remote_Repository)))
-            ;   insert_branch_object(Remote_Repository_Context, Remote_Branch, _)
+            ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
             )
         )
     ;   % Remote doesn't even exist yet
@@ -246,9 +246,7 @@ test(push_empty_branch,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    writeq('testing 1'),
     push(Descriptor, "remote", "master", Auth, test_pusher(_New_Layer_Id), _Result),
-    writeq('testing'),
     has_branch(Remote_Repository_Descriptor, "master"),
 
     true.
