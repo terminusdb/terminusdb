@@ -79,7 +79,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
             ;   true),
 
             copy_commits(Repository_Context, Remote_Repository_Context, Local_Commit_Id),
-            reset_branch_head(Remote_Repository_Context, Remote_Branch_Uri, Local_Commit_Uri)
+            reset_branch_head(Remote_Repository_Context_With_Prefixes, Remote_Branch_Uri, Local_Commit_Uri)
         ;   (   has_branch(Remote_Repository_Context,
                            Remote_Branch),
                 branch_head_commit(Remote_Repository_Context,
@@ -275,6 +275,44 @@ test(push_new_nonmaster_branch,
     super_user_authority(Auth),
     push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
+
+    true.
+
+test(push_new_nonmaster_branch_with_content,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    branch_create(Repository_Descriptor, empty, "work", _),
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+
+    create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
+    with_transaction(Work_Branch_Context,
+                     ask(Work_Branch_Context,
+                         insert(a,b,c)),
+                     _),
+
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth),
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+    has_branch(Remote_Repository_Descriptor, "work"),
+    branch_head_commit(Repository_Descriptor, "work", Head_Commit),
+    branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
 
     true.
 
