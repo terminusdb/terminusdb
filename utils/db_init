@@ -4,11 +4,6 @@
 
 
 % Set up access to the libraries
-:- if(current_prolog_flag(version, 80131)).
-:- else.
-:- ['../load_paths.pl'].
-:- endif.
-
 :- initialization(main).
 
 % I have no clue why the config module is not accessible
