@@ -2,6 +2,8 @@
 % -*- mode: prolog;-*-
 :- module(db_init, [run/1]).
 
+% Set up access to the libraries
+:- ['../load_paths.pl'].
 
 % Set up access to the libraries
 :- initialization(main).
