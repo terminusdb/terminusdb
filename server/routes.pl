@@ -1516,14 +1516,15 @@ unpack_handler(post, Path, Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, R, Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-    check_descriptor_auth(Terminus, Branch_Descriptor,
+    string_concat(Path, "/local/_commits", Full_Path),
+    do_or_die(
+        (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
+            (repository_descriptor{} :< Repository_Descriptor)),
+        error(not_a_repository_descriptor(Repository_Descriptor))),
+
+    check_descriptor_auth(Terminus, Repository_Descriptor,
                           terminus:commit_write_access,
                           Auth_ID),
-
-    do_or_die(
-        (branch_descriptor{} :< Branch_Descriptor),
-        error(not_a_branch_descriptor(Branch_Descriptor))),
 
     get_payload(Payload, Request),
     unpack(Branch_Descriptor, Payload),
@@ -1605,7 +1606,8 @@ pull_handler(post,Path,R) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,Branch),
+    atomic_list_concat([Path,"/_commits"],Repo_Path),
+    resolve_absolute_string_descriptor(Repo_Path,Repository_Descriptor),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
@@ -1616,6 +1618,10 @@ pull_handler(post,Path,R) :-
     % Which branches to fetch?
     % a) All of them?
     % b) Just the one specified in the path?
+
+    do_or_die(
+        request_remote_authorization(Request, Authorization),
+        error(no_remote_authorization)),
 
     % 1. fetch
     remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),

@@ -17,6 +17,10 @@
 % - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
 % - remote diverged - someone else committed and pushed and we know about that
 % - We try to push an empty branch, but we know that remote is non-empty
+% - remote returns an error
+% -- history diverged (we check locally, but there's a race)
+% -- remote doesn't know what we're talking about
+% - communication error while talking to the remote
 
 :- meta_predicate push(+, +, +, +, 3, -).
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
@@ -30,11 +34,11 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
 
     do_or_die(
         repository_type(Database_Descriptor, Remote_Name, Type),
-        error(no_repository_with_name(Database_Descriptor,Remote_Name))),
+        error(no_repository_with_name(Database_Descriptor,Remote_Name),_)),
 
     do_or_die(
         Type = remote,
-        error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name))),
+        error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name),_)),
 
     repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
 
@@ -50,7 +54,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
                              Remote_Repository_Context),
     context_to_parent_transaction(Remote_Repository_Context, Database_Transaction),
     do_or_die(repository_head(Database_Transaction, Remote_Name, Last_Head_Id),
-              error(push_has_no_repository_head(Remote_Repository))),
+              error(push_has_no_repository_head(Remote_Repository), _)),
     (   branch_head_commit(Repository_Context,
                            (Branch_Descriptor.branch_name),
                            Local_Commit_Uri)
@@ -74,7 +78,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
                                         Remote_Commit_Id, _Common_Commit_Id, _Local_Branch_Path, Remote_Branch_Path)
         % Shared history
         ->  do_or_die(Remote_Branch_Path = [],
-                      error(remote_diverged(Remote_Repository,Remote_Branch_Path)))
+                      error(remote_diverged(Remote_Repository,Remote_Branch_Path),_))
         % No shared history
         ;   true),
 
@@ -84,7 +88,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
                        Remote_Branch),
             branch_head_commit(Remote_Repository_Context,
                                Remote_Branch, _)
-        ->  throw(error(remote_not_empty_on_local_empty(Remote_Repository)))
+        ->  throw(error(remote_not_empty_on_local_empty(Remote_Repository),_))
         ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
         )
     ),
@@ -313,20 +317,13 @@ test(push_new_nonmaster_branch_with_content,
 
     true.
 
-% error conditions:
-% - branch to push does not exist
-% - repository does not exist
-% - we tried to push to a repository that is not a remote
-% - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
-% - remote diverged - someone else committed and pushed and we know about that
-% - We try to push an empty branch, but we know that remote is non-empty
-
 test(push_without_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'))),
-      cleanup(teardown_temp_store(State))])
+      cleanup(teardown_temp_store(State)),
+      error(branch_does_not_exist(_))])
 :-
-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
 
     resolve_absolute_string_descriptor("user/foo", Descriptor),
@@ -344,12 +341,118 @@ test(push_without_branch,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
+
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result).
+
+test(push_without_repository,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      error(no_repository_with_name(_,_))])
+:-
+        resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    branch_create(Repository_Descriptor, empty, "work", _),
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+    super_user_authority(Auth),
     push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+    has_branch(Remote_Repository_Descriptor, "work"),
 
     true.
 
+test(push_local,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      error(push_attempted_on_non_remote(_,_))])
+:-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    branch_create(Repository_Descriptor, empty, "work", _),
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+
+    create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
+    with_transaction(Work_Branch_Context,
+                     ask(Work_Branch_Context,
+                         insert(a,b,c)),
+                     _),
+
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
 
 
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_local_repository(Database_Context, "remote", _),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth),
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+    has_branch(Remote_Repository_Descriptor, "work"),
+    branch_head_commit(Repository_Descriptor, "work", Head_Commit),
+    branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
+
+    true.
+
+test(push_headless_remote,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      error(push_has_no_repository_head(_))])
+:-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    branch_create(Repository_Descriptor, empty, "work", _),
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+
+    create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
+    with_transaction(Work_Branch_Context,
+                     ask(Work_Branch_Context,
+                         insert(a,b,c)),
+                     _),
+
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://fakeytown.mock",_),
+                     _),
+
+    super_user_authority(Auth),
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+    has_branch(Remote_Repository_Descriptor, "work"),
+    branch_head_commit(Repository_Descriptor, "work", Head_Commit),
+    branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
+
+    true.
+
+% Remaining unhappy paths:
+%
+% * outstanding,
+% - done
+%
+% error conditions:
+% - branch to push does not exist
+% - repository does not exist
+% - we tried to push to a repository that is not a remote
+% - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
+% * remote diverged - someone else committed and pushed and we know about that
+% * We try to push an empty branch, but we know that remote is non-empty
+% - authorization fails for remote
 
 
 :- end_tests(push).
