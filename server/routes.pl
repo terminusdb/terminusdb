@@ -1605,7 +1605,7 @@ pull_handler(post,Path,R) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,_Us),
+    resolve_absolute_string_descriptor(Path,Branch),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
@@ -1613,9 +1613,15 @@ pull_handler(post,Path,R) :-
         _{ remote : _Remote_Name } :< Document,
         error(pull_has_no_remote(Document))),
 
-    % 1. rebase on remote
-    % 2. pack and send
-    % 3. error if head moved
+    % Which branches to fetch?
+    % a) All of them?
+    % b) Just the one specified in the path?
+
+    % 1. fetch
+    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
+                 New_Head_Layer_Id, Head_Has_Updated),
+    % 2. rebase
+
     throw(error('Not implemented')).
 
 

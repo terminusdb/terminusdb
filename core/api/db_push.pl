@@ -313,6 +313,42 @@ test(push_new_nonmaster_branch_with_content,
 
     true.
 
+% error conditions:
+% - branch to push does not exist
+% - repository does not exist
+% - we tried to push to a repository that is not a remote
+% - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
+% - remote diverged - someone else committed and pushed and we know about that
+% - We try to push an empty branch, but we know that remote is non-empty
+
+test(push_without_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+
+    resolve_absolute_string_descriptor("user/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth),
+    push(Work_Branch_Descriptor, "remote", "work", Auth, test_pusher(_New_Layer_Id), _Result),
+
+    true.
+
+
 
 
 
