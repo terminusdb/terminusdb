@@ -65,18 +65,18 @@ terminus_server(_Argv) :-
     ;   HTTPOptions = [port('127.0.0.1':Port), workers(Workers)]
     ),
     http_server(http_dispatch, HTTPOptions),
-        setup_call_cleanup(
-	    http_handler(root(.), busy_loading,
-			 [ priority(1000),
-			   hide_children(true),
-			   id(busy_loading),
-                           time_limit(infinite),
-			   prefix
-			 ]),
-            (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-                print_message(banner, welcome('terminusdb-server', Server))
-            ),
-	    http_delete_handler(id(busy_loading))).
+    setup_call_cleanup(
+        http_handler(root(.), busy_loading,
+                     [ priority(1000),
+                       hide_children(true),
+                       id(busy_loading),
+                       time_limit(infinite),
+                       prefix
+                     ]),
+        (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
+            print_message(banner, welcome('terminusdb-server', Server))
+        ),
+        http_delete_handler(id(busy_loading))).
 
 
 % See https://github.com/terminusdb/terminusdb-server/issues/91
