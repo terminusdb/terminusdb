@@ -28,7 +28,7 @@ unpack(Repository_Descriptor, Payload) :-
     create_context(Database_Descriptor, Database_Context),
     with_transaction(
         Database_Context,
-        (   
+        (
             repository_head(Database_Context,
                             (Repository_Descriptor.repository_name),
                             Repository_Head_Layer_Id),
@@ -43,6 +43,6 @@ unpack(Repository_Descriptor, Payload) :-
             update_repository_head(Database_Context, "local", New_Head)
         ),
         _),
-    
+
     true.
 

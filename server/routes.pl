@@ -1527,7 +1527,16 @@ unpack_handler(post, Path, Request) :-
                           Auth_ID),
 
     get_payload(Payload, Request),
-    unpack(Branch_Descriptor, Payload),
+
+    catch(
+        unpack(Branch_Descriptor, Payload),
+        E,
+        (   E = error(Inner_E)
+        ->  (   Inner_E = not_a_linear_history_in_unpack(History)
+            ->  true
+            ;   true)
+        ;   true)
+    ),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
     reply_json(_{'terminus:status' : "terminus:success"}).
@@ -1566,16 +1575,11 @@ push_handler(post,Path,R) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    % 1. rebase on remote
-    % 2. pack and send
-    % 3. error if head moved
     push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
          authorized_push(Authorization),Result),
-    % nothing required
-    % this was great success
-    % you can't do this - head has moved
 
-    throw(error(Result)).
+    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    reply_json(Result).
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
@@ -1587,7 +1591,13 @@ authorized_push(Authorization, Remote_URL, Payload, Result) :-
     http_post(Unpack_URL,
               bytes('application/octets',Payload),
               Result,
-              [request_header('Authorization'=Authorization)]).
+              [request_header('Authorization'=Authorization),
+               status_code(Status_Code)]),
+
+    (   200 = Status_Code
+    ->  true
+    ;   true
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
