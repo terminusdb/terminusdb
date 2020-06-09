@@ -20,6 +20,7 @@
 % - remote returns an error
 % -- history diverged (we check locally, but there's a race)
 % -- remote doesn't know what we're talking about
+% -- remote authorization failed
 % - communication error while talking to the remote
 
 :- meta_predicate push(+, +, +, +, 3, -).
@@ -100,7 +101,15 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
     (   Payload_Option = none % Last_Head_Id = Current_Head_Id
     ->  Result = none
     ;   Payload_Option = some(Payload),
-        call(Push_Predicate, Remote_URL, Remote_Branch, Payload),
+        catch(call(Push_Predicate, Remote_URL, Remote_Branch, Payload),
+              E,
+              (   E = error(Inner_E),
+                  (   Inner_E = history_diverged(_)
+                  ;   Inner_E = remote_unknown(_)
+                  ;   Inner_E = authorization_failure(_)
+                  ;   Inner_E = communication_failure(_))
+              ->  throw(error(remote_unpack_failed(Inner_E)))
+              ;   throw(error(remote_unpack_unexpected_failure(E))))),
         Database_Transaction_Object = (Remote_Transaction_Object.parent),
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
@@ -440,19 +449,82 @@ test(push_headless_remote,
 
     true.
 
-% Remaining unhappy paths:
-%
-% * outstanding,
-% - done
-%
-% error conditions:
-% - branch to push does not exist
-% - repository does not exist
-% - we tried to push to a repository that is not a remote
-% - tried to push without having fetched first. The repository exists as an entity in our metadata graph but it hasn't got an associated commit graph. We always need one.
-% * remote diverged - someone else committed and pushed and we know about that
-% * We try to push an empty branch, but we know that remote is non-empty
-% - authorization fails for remote
+erroring_push_predicate(Error, _Remote_Url, _Remote_Branch, _Payload) :-
+    throw(Error).
 
+generic_setup_for_error_conditions(Branch_Descriptor, Auth) :-
+    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "master"], Branch_Descriptor),
+
+    create_context(Branch_Descriptor, commit_info{author:"test", message:"test"}, Branch_Context),
+    with_transaction(Branch_Context,
+                     ask(Branch_Context,
+                         insert(a,b,c)),
+                     _),
+
+    Database_Descriptor = (Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://fakeytown.mock",_),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth).
+    
+
+test(remote_diverged,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(remote_unpack_failed(history_diverged(_))))])
+:-
+    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
+
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(history_diverged(some_context_idunno))), _Result).
+
+test(remote_does_not_exist,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(remote_unpack_failed(remote_unknown(_))))])
+:-
+    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
+
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(remote_unknown(some_context_idunno))), _Result).
+
+test(remote_authorization_failed,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(remote_unpack_failed(authorization_failure(_))))])
+:-
+    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
+
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(authorization_failure(some_context_idunno))), _Result).
+
+test(remote_communication_failed,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(remote_unpack_failed(communication_failure(_))))])
+:-
+    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
+
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(communication_failure(some_context_idunno))), _Result).
+
+test(remote_gave_unknown_error,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full)))))])
+:-
+    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
+
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(phase_of_the_moon_is_wrong(full))), _Result).
 
 :- end_tests(push).
