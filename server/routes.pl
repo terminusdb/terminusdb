@@ -1529,17 +1529,33 @@ unpack_handler(post, Path, Request) :-
     get_payload(Payload, Request),
 
     catch(
-        unpack(Branch_Descriptor, Payload),
+        (   unpack(Branch_Descriptor, Payload),
+            Json_Reply = _{'terminus:status' : "terminus:success"},
+            Status = 200
+        ),
         E,
         (   E = error(Inner_E)
-        ->  (   Inner_E = not_a_linear_history_in_unpack(History)
-            ->  true
-            ;   true)
-        ;   true)
+        ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
+            ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "Not a linear history"
+                              },
+                Status = 400
+            ;   Inner_E = unknown_layer_reference(Layer_Id)
+            ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "A layer in the pack has an unknown parent",
+                               'layer_id' : _{'@type': "xsd:string",
+                                              '@value' : Layer_Id}
+                              },
+                Status = 400
+            ;   throw(E))
+        ;   throw(E))
     ),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(Json_Reply,
+               [status(Status)]).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
