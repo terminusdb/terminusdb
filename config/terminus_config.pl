@@ -56,7 +56,7 @@ console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dl.bintray.com/terminusdb/terminusdb/dev', Value).
 
 https_enabled :-
-    getenv('TERMINUSDB_HTTPS_ENABLED', Value),
+    getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
     Value = 'true'.
 
 ssl_cert(Value) :-

@@ -62,7 +62,7 @@ terminus_server(_Argv) :-
     (   config:https_enabled
     ->  HTTPOptions = [ssl([certificate_file(CertFile), key_file(CertKeyFile)]),
                         port(Port), workers(Workers)]
-    ;   HTTPOptions = [port('127.0.0.1':Port), workers(Workers)]
+    ;   HTTPOptions = [port(Port), workers(Workers)]
     ),
     http_server(http_dispatch, HTTPOptions),
     setup_call_cleanup(
