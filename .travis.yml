@@ -6,6 +6,7 @@ language: shell
 env:
   - TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub
   - TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey
+  - TERMINUSDB_HTTPS_ENABLED=false
 
 stages:
   - build
