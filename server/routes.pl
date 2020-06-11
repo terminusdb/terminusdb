@@ -1520,7 +1520,11 @@ unpack_handler(post, Path, Request) :-
     do_or_die(
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
             (repository_descriptor{} :< Repository_Descriptor)),
-        error(not_a_repository_descriptor(Repository_Descriptor))),
+        % todo actually throw a reply I guess
+        reply_json(_{'@type' : "vio:UnpackPathInvalid",
+                           'terminus:status' : "terminus:failure",
+                           'terminus:message' : "The path to the database to unpack to was invalid"
+                    })),
 
     check_descriptor_auth(Terminus, Repository_Descriptor,
                           terminus:commit_write_access,
@@ -1547,6 +1551,12 @@ unpack_handler(post, Path, Request) :-
                                'terminus:message' : "A layer in the pack has an unknown parent",
                                'layer_id' : _{'@type': "xsd:string",
                                               '@value' : Layer_Id}
+                              },
+                Status = 400
+            ;   Inner_E = database_not_found(_)
+            ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "The database to unpack to has not be found"
                               },
                 Status = 400
             ;   throw(E))
@@ -1612,7 +1622,11 @@ authorized_push(Authorization, Remote_URL, Payload, Result) :-
 
     (   200 = Status_Code
     ->  true
-    ;   true
+    ;   400 = Status_Code,
+        Result :< _{'@type': Vio_Type} % is this possible?
+    ->  (   Vio_Type = "vio:DatabaseNotFound"
+        )
+    ;   throw(error(unknown_status_code))
     ).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2011,9 +2025,11 @@ cors_catch(_,_Request) :-
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
 
-customise_exception(reply_json(M)) :-
+customise_exception(reply_json(M,Status)) :-
     reply_json(M,
-               [status(200)]).
+               [status(Status)]).
+customise_exception(reply_json(M)) :-
+    customise_exception(reply_json(M,200)).
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',

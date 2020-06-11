@@ -25,7 +25,8 @@ unpack(Repository_Descriptor, Payload) :-
     payload_repository_head_and_pack(Payload,New_Head,Pack),
     % 2. linear future for current repository head
     Database_Descriptor = (Repository_Descriptor.database_descriptor),
-    create_context(Database_Descriptor, Database_Context),
+    do_or_die(create_context(Database_Descriptor, Database_Context),
+              error(database_not_found(Database_Descriptor))),
     with_transaction(
         Database_Context,
         (
