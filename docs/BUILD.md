@@ -17,16 +17,34 @@ Rust installation guide.
 
 https://www.rust-lang.org/tools/install
 
-### SWIPL
+### swi-prolog
 
-To use Terminus Server, you will need the SWIPL installation of
-prolog. To install this in Debian variants simply use the apt package
+To use Terminus Server, you will need the swi-prolog installation of
+prolog. The TerminusDB team tends to use the latest stable for local
+development and packaging, but likely, other versions of swi-prolog since
+8.0.3 will work as well.
+Currently we don't have an officially supported version of swi-prolog,
+but latest stable is likely to work.
+
+To install swi-prolog in Debian variants simply use the apt package
 manager:
 
 ```
 apt install swi-prolog
 ```
-Once installed, you will have to install two library dependencies from SWIPL.
+
+the swi-prolog project website also contains downloadable packages for
+swi-prolog for different operating systems:
+[stable](https://www.swi-prolog.org/download/stable)
+[devel](https://www.swi-prolog.org/download/devel).
+
+If you want to experiment with multiple builds of swi-prolog, you may
+be interested in [swivm](https://github.com/fnogatz/swivm). This tool
+lets you build and install multiple versions of swi-prolog and switch
+between them.
+
+Once installed, you will have to install one library dependency for
+our storage backend: [terminus_store_prolog](https://github.com/terminusdb/terminus_store_prolog).
 
 This can be done by typing:
 

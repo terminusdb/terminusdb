@@ -1,6 +1,7 @@
 :- module(db_create, [
               create_db/4,
-              try_create_db/4
+              try_create_db/4,
+              create_ref_layer/2
           ]).
 
 /** <module> Implementation of database graph management
@@ -124,13 +125,7 @@ write_instance(Builder,URI,Label,Class) :-
     nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
     nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
-create_ref_layer(Name,Prefixes) :-
-    Descriptor = repository_descriptor{
-                     database_descriptor: database_descriptor{
-                                              database_name: Name
-                                          },
-                     repository_name: "local"
-                 },
+create_ref_layer(Descriptor,Prefixes) :-
     create_context(Descriptor, Context),
     with_transaction(
         Context,
@@ -163,7 +158,14 @@ create_db(Name, Label, Comment, Prefixes) :-
     create_repo_graph(Name_String),
 
     % create ref layer with master branch
-    create_ref_layer(Name_String,Prefixes),
+    Repository_Descriptor = repository_descriptor{
+                                database_descriptor:
+                                database_descriptor{
+                                    database_name: Name_String
+                                },
+                                repository_name: "local"
+                            },
+    create_ref_layer(Repository_Descriptor,Prefixes),
 
     % update terminusdb with finalized
     finalise_terminus(Name).

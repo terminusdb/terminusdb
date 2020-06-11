@@ -929,8 +929,6 @@ test(branch_db, [
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    * json_write_dict(current_output,JSON1,[]),
-
     (   _{'bindings' : L} :< JSON1
     ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
                'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
@@ -1512,26 +1510,65 @@ unpack_handler(options, _Path, _Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-unpack_handler(post, Path, Request) :-
+unpack_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, R, Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-    check_descriptor_auth(Terminus, Branch_Descriptor,
+    string_concat(Path, "/local/_commits", Full_Path),
+    do_or_die(
+        (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
+            (repository_descriptor{} :< Repository_Descriptor)),
+        reply_json(_{'@type' : "vio:UnpackPathInvalid",
+                           'terminus:status' : "terminus:failure",
+                           'terminus:message' : "The path to the database to unpack to was invalid"
+                    },
+                   400)),
+
+    check_descriptor_auth(Terminus, Repository_Descriptor,
                           terminus:commit_write_access,
                           Auth_ID),
 
-    do_or_die(
-        (branch_descriptor{} :< Branch_Descriptor),
-        error(not_a_branch_descriptor(Branch_Descriptor))),
-
     get_payload(Payload, Request),
-    unpack(Branch_Descriptor, Payload),
+
+    catch(
+        (   unpack(Branch_Descriptor, Payload),
+            Json_Reply = _{'terminus:status' : "terminus:success"},
+            Status = 200
+        ),
+        E,
+        (   E = error(Inner_E)
+        ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
+            ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "Not a linear history"
+                              },
+                Status = 400
+            ;   Inner_E = unknown_layer_reference(Layer_Id)
+            ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "A layer in the pack has an unknown parent",
+                               'layer_id' : _{'@type': "xsd:string",
+                                              '@value' : Layer_Id}
+                              },
+                Status = 400
+            ;   Inner_E = database_not_found(_)
+            ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
+                               'terminus:status' : "terminus:failure",
+                               'terminus:message' : "The database to unpack to has not be found"
+                              },
+                Status = 400
+            ;   throw(E))
+        ;   throw(E))
+    ),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(Json_Reply,
+               [status(Status)]).
+
+:- begin_tests(unpack_endpoint).
+:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
@@ -1567,28 +1604,47 @@ push_handler(post,Path,R) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    % 1. rebase on remote
-    % 2. pack and send
-    % 3. error if head moved
     push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
          authorized_push(Authorization),Result),
-    % nothing required
-    % this was great success
-    % you can't do this - head has moved
 
-    throw(error(Result)).
+    (   Result = none
+    ->  write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+        reply_json(_{'terminus:status' : "terminus:success"})
+    ;   Result = some(Head_ID)
+    ->  reply_json(_{'terminus:status' : "terminus:success",
+                     'head' : Head_ID})
+    ;   throw(error(internal_server_error))).
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
-authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload, Result) :-
+% NOTE: What do we do with the remote branch? How do we send it?
+authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
-    http_post(Unpack_URL,
-              bytes('application/octets',Payload),
-              Result,
-              [request_header('Authorization'=Authorization)]).
+    catch(http_post(Unpack_URL,
+                    bytes('application/octets',Payload),
+                    Result,
+                    [request_header('Authorization'=Authorization),
+                     status_code(Status_Code)]),
+          E,
+          throw(error(communication_failure(E)))),
+
+    (   200 = Status_Code
+    ->  true
+    ;   400 = Status_Code,
+        Result :< _{'@type': Vio_Type}
+    ->  (   Vio_Type = "vio:NotALinearHistory"
+        ->  throw(error(history_diverged))
+        ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
+        ->  throw(error(remote_unknown))
+        ;   throw(error(unknown_status_code(Status_Code, Result)))
+        )
+    ;   403 = Status_Code
+    ->  throw(error(authorization_failure(Result)))
+    ;   throw(error(unknown_status_code))
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
@@ -1607,7 +1663,8 @@ pull_handler(post,Path,R) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
 
-    resolve_absolute_string_descriptor(Path,_Us),
+    atomic_list_concat([Path,"/_commits"],Repo_Path),
+    resolve_absolute_string_descriptor(Repo_Path,Repository_Descriptor),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
@@ -1615,9 +1672,19 @@ pull_handler(post,Path,R) :-
         _{ remote : _Remote_Name } :< Document,
         error(pull_has_no_remote(Document))),
 
-    % 1. rebase on remote
-    % 2. pack and send
-    % 3. error if head moved
+    % Which branches to fetch?
+    % a) All of them?
+    % b) Just the one specified in the path?
+
+    do_or_die(
+        request_remote_authorization(Request, Authorization),
+        error(no_remote_authorization)),
+
+    % 1. fetch
+    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
+                 _New_Head_Layer_Id, _Head_Has_Updated),
+    % 2. rebase
+
     throw(error('Not implemented')).
 
 
@@ -1975,9 +2042,11 @@ cors_catch(_,_Request) :-
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
 
-customise_exception(reply_json(M)) :-
+customise_exception(reply_json(M,Status)) :-
     reply_json(M,
-               [status(200)]).
+               [status(Status)]).
+customise_exception(reply_json(M)) :-
+    customise_exception(reply_json(M,200)).
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
     reply_json(_{'terminus:status' : 'terminus:failure',
@@ -2228,20 +2297,6 @@ connection_authorised_user(Request, User_ID) :-
     fetch_jwt_data(Request, Username),
     username_user_id(DB, Username, User_ID).
 
-check_descriptor_auth(Terminus,terminus_descriptor{},Action,Auth) :-
-    assert_auth_action_scope(Terminus,Auth,Action,"terminus").
-check_descriptor_auth(Terminus,database_descriptor{ database_name : Name }, Action, Auth) :-
-    assert_auth_action_scope(Terminus,Auth,Action,Name).
-check_descriptor_auth(Terminus,repository_descriptor{ database_descriptor : DB,
-                                                      repository_name : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus, DB, Action, Auth).
-check_descriptor_auth(Terminus,branch_descriptor{ repository_descriptor : Repo,
-                                         branch_name : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus, Repo, Action, Auth).
-check_descriptor_auth(Terminus,commit_descriptor{ repository_descriptor : Repo,
-                                                  commit_id : _ }, Action, Auth) :-
-    check_descriptor_auth(Terminus,Repo, Action, Auth).
-
 write_descriptor_cors(terminus_descriptor{},Terminus) :-
     write_cors_headers("terminus",Terminus).
 write_descriptor_cors(database_descriptor{ database_name : Name },Terminus) :-
@@ -2358,13 +2413,17 @@ add_payload_to_request(Request,[multipart(Parts)|Request]) :-
         content_type, ContentType,
         media(multipart/'form-data', _)
     ),
+    http_log('~Nmulti-part form?~n', []),
     !,
-
     http_read_data(Request, Parts, [on_filename(save_post_file)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
-    member(content_type('application/json'), Request),
+    memberchk(content_type('application/json'), Request),
     !,
     http_read_data(Request, Document, [json_object(dict)]).
+add_payload_to_request(Request,[payload(Document)|Request]) :-
+    memberchk(content_type(_Some_Other_Type), Request),
+    !,
+    http_read_data(Request, Document, []).
 add_payload_to_request(Request,Request).
 
 get_payload(Payload,Request) :-

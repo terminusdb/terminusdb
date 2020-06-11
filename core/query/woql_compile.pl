@@ -235,7 +235,7 @@ resolve_prefix(Pre,Suf,URI) -->
         (   Full_Prefix = Prefixes.get(Pre)
         ->  true
         ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
-            throw(error(syntax_error,M)))
+            throw(error(syntax_error(M))))
     },
     (   {v(Var_Name) = Suf}
     ->  view(bindings, Bindings),
