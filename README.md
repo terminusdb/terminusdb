@@ -24,7 +24,7 @@ featured graph database.
 
 ## Latest Version
 
-v2.0.3
+v2.0.2
 
 ## Getting Started
 
