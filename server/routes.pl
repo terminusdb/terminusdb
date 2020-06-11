@@ -1682,7 +1682,7 @@ pull_handler(post,Path,R) :-
 
     % 1. fetch
     remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
-                 New_Head_Layer_Id, Head_Has_Updated),
+                 _New_Head_Layer_Id, _Head_Has_Updated),
     % 2. rebase
 
     throw(error('Not implemented')).
