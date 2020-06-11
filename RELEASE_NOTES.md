@@ -7,6 +7,7 @@
 ## Bug fixes
 
 + The built-in web console now works on different ports
++ The built-in web console now works on different hosts
 
 # TerminusDB Server v2.0.1 Release Notes
 
