@@ -1520,11 +1520,11 @@ unpack_handler(post, Path, Request) :-
     do_or_die(
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
             (repository_descriptor{} :< Repository_Descriptor)),
-        % todo actually throw a reply I guess
         reply_json(_{'@type' : "vio:UnpackPathInvalid",
                            'terminus:status' : "terminus:failure",
                            'terminus:message' : "The path to the database to unpack to was invalid"
-                    })),
+                    },
+                   400)),
 
     check_descriptor_auth(Terminus, Repository_Descriptor,
                           terminus:commit_write_access,
@@ -1566,6 +1566,9 @@ unpack_handler(post, Path, Request) :-
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
     reply_json(Json_Reply,
                [status(Status)]).
+
+:- begin_tests(unpack_endpoint).
+:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
@@ -1614,18 +1617,26 @@ remote_unpack_url(URL, Pack_URL) :-
 authorized_push(Authorization, Remote_URL, Payload, Result) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
-    http_post(Unpack_URL,
-              bytes('application/octets',Payload),
-              Result,
-              [request_header('Authorization'=Authorization),
-               status_code(Status_Code)]),
+    catch(http_post(Unpack_URL,
+                    bytes('application/octets',Payload),
+                    Result,
+                    [request_header('Authorization'=Authorization),
+                     status_code(Status_Code)]),
+          E,
+          throw(error(communication_failure(E)))),
 
     (   200 = Status_Code
     ->  true
     ;   400 = Status_Code,
-        Result :< _{'@type': Vio_Type} % is this possible?
-    ->  (   Vio_Type = "vio:DatabaseNotFound"
+        Result :< _{'@type': Vio_Type}
+    ->  (   Vio_Type = "vio:NotALinearHistory"
+        ->  throw(error(history_diverged))
+        ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
+        ->  throw(error(remote_unknown))
+        ;   throw(error(unknown_status_code(Status_Code, Result)))
         )
+    ;   403 = Status_Code
+    ->  throw(error(authorization_failure(Result)))
     ;   throw(error(unknown_status_code))
     ).
 

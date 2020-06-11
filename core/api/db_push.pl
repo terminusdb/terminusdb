@@ -104,8 +104,8 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
         catch(call(Push_Predicate, Remote_URL, Remote_Branch, Payload),
               E,
               (   E = error(Inner_E),
-                  (   Inner_E = history_diverged(_)
-                  ;   Inner_E = remote_unknown(_)
+                  (   Inner_E = history_diverged
+                  ;   Inner_E = remote_unknown
                   ;   Inner_E = authorization_failure(_)
                   ;   Inner_E = communication_failure(_))
               ->  throw(error(remote_unpack_failed(Inner_E)))
@@ -481,21 +481,21 @@ test(remote_diverged,
      [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(history_diverged(_))))])
+      throws(error(remote_unpack_failed(history_diverged)))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
 
-    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(history_diverged(some_context_idunno))), _Result).
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(history_diverged)), _Result).
 
 test(remote_does_not_exist,
      [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(remote_unknown(_))))])
+      throws(error(remote_unpack_failed(remote_unknown)))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
 
-    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(remote_unknown(some_context_idunno))), _Result).
+    push(Branch_Descriptor, "remote", "master", Auth, erroring_push_predicate(error(remote_unknown)), _Result).
 
 test(remote_authorization_failed,
      [setup((setup_temp_store(State),
