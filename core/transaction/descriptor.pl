@@ -518,7 +518,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
             Inference_Names = [],
             Schema_Names = []
         )
-    ;   throw(branch_does_not_exist('branch does not exist', context(Descriptor)))
+    ;   throw(error(branch_does_not_exist(Descriptor), _Ctx))
     ),
 
     Prototype = branch_graph{
@@ -1028,32 +1028,15 @@ test(open_branch_descriptor_with_string, [
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
                 create_db_without_schema(testdb, 'test','a test'))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         error(branch_does_not_exist(_))
      ])
 :-
     Database_Descriptor = database_descriptor{ database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
 
-    catch(open_descriptor(Branch_Descriptor, _Transaction),
-          E,
-          true),
-    E = branch_does_not_exist(_,_).
-
-test(open_branch_descriptor_with_nonexistent, [
-         setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
-         cleanup(teardown_temp_store(State))
-     ])
-:-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
-    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
-
-    catch(open_descriptor(Branch_Descriptor, _Transaction),
-          E,
-          true),
-    E = branch_does_not_exist(_,_).
+    open_descriptor(Branch_Descriptor, _Transaction).
 
 test(open_commit_descriptor_with_atom, [
          setup((setup_temp_store(State),

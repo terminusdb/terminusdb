@@ -3,6 +3,7 @@
               ask_ast/3,
               create_context/2,
               create_context/3,
+              context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,
@@ -262,6 +263,13 @@ context_extend_prefixes(Context, Prefixes, New_Context) :-
 context_default_prefixes(Context, New_Context) :-
     default_prefixes(Default),
     New_Context = Context.put(prefixes, Default).
+
+context_to_parent_transaction(Context,Parent_Transaction) :-
+    do_or_die(
+        (   get_dict(transaction_objects,Context,[Transaction]),
+            get_dict(parent,Transaction,Parent_Transaction)
+        ),
+        error(context_has_multiple_parents(Context))).
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.

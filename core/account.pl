@@ -18,6 +18,7 @@
               authorisation_object/3,
               user_object/3,
               super_user_authority/1,
+              check_descriptor_auth/4,
 
               % user_management.pl
               add_user/4,

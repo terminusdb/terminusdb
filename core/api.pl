@@ -8,6 +8,7 @@
               create_db/4,
               try_delete_db/1,
               try_create_db/4,
+              create_ref_layer/2,
 
               % init.pl
               initialize_config/4,

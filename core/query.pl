@@ -4,6 +4,7 @@
               ask_ast/3,
               create_context/2,
               create_context/3,
+              context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,

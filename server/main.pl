@@ -36,6 +36,7 @@
 % http server
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
+:- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
 
@@ -56,24 +57,26 @@ terminus_server(_Argv) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
-    config:http_options(HTTPOptions),
-    http_server(http_dispatch,
-		        [ port(Port),
-		          workers(Workers)
-		          | HTTPOptions
-		        ]),
-        setup_call_cleanup(
-	    http_handler(root(.), busy_loading,
-			 [ priority(1000),
-			   hide_children(true),
-			   id(busy_loading),
-                           time_limit(infinite),
-			   prefix
-			 ]),
-            (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-                print_message(banner, welcome('terminusdb-server', Server))
-            ),
-	    http_delete_handler(id(busy_loading))).
+    config:ssl_cert(CertFile),
+    config:ssl_cert_key(CertKeyFile),
+    (   config:https_enabled
+    ->  HTTPOptions = [ssl([certificate_file(CertFile), key_file(CertKeyFile)]),
+                        port(Port), workers(Workers)]
+    ;   HTTPOptions = [port(Port), workers(Workers)]
+    ),
+    http_server(http_dispatch, HTTPOptions),
+    setup_call_cleanup(
+        http_handler(root(.), busy_loading,
+                     [ priority(1000),
+                       hide_children(true),
+                       id(busy_loading),
+                       time_limit(infinite),
+                       prefix
+                     ]),
+        (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
+            print_message(banner, welcome('terminusdb-server', Server))
+        ),
+        http_delete_handler(id(busy_loading))).
 
 
 % See https://github.com/terminusdb/terminusdb-server/issues/91

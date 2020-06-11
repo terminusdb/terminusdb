@@ -21,48 +21,6 @@
 :- [load_paths].
 :- initialization(main).
 
-%!  version_string(+Int:integer, -Str:string) is det
-%
-%   convert an integer form version number as supplied by
-%   the =|version|= flag of =|current_prolog_flag/2|=
-%   to a string representation
-%
-version_string(Int, Str) :-
-    Major is floor( Int / 10_000 ) rem 100,
-    Minor is floor( Int / 100 ) rem 100,
-    Patch is Int rem 100,
-    format(string(Str), '~w.~w.~w', [Major, Minor, Patch]).
-
-:- multifile prolog:message//1.
-
-prolog:message(error(version_error(Correct, Was), _)) -->
-      {
-        maplist(version_string, Correct, VersionStrings),
-        atomic_list_concat(VersionStrings, " or ", AcceptedVersions),
-        version_string(Was, W)
-      },
-      [ 'Run TerminusDB using SWI-Prolog version ~w, you are on ~w'-[AcceptedVersions, W],
-        nl].
-
-needs_version(80131).
-needs_version(80130).
-needs_version(80123).
-needs_version(80111).
-needs_version(80110).
-needs_version(80003).
-
-must_be_proper_version :-
-    current_prolog_flag(version, RunningVersion),
-    (    needs_version(RunningVersion)
-    ->   true
-    ;
-        findall(Version, needs_version(Version), SupportedVersions),
-        print_message(error,
-                      error(version_error(SupportedVersions, RunningVersion), terminus_db_startup))
-   ).
-
-:- initialization must_be_proper_version.
-
 initialise_hup :-
     (   current_prolog_flag(unix, true)
     ->  on_signal(hup, _, hup)
