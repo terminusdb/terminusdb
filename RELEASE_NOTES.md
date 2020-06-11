@@ -4,6 +4,10 @@
 
 + Provide HTTPS support and the ability to set your own certs
 
+## Bug fixes
+
++ The built-in web console now works on different ports
+
 # TerminusDB Server v2.0.1 Release Notes
 
 ## Bug Fixes
