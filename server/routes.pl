@@ -1510,7 +1510,7 @@ unpack_handler(options, _Path, _Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
-unpack_handler(post, Path, Request) :-
+unpack_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
 
     open_descriptor(terminus_descriptor{}, Terminus),
@@ -1607,14 +1607,20 @@ push_handler(post,Path,R) :-
     push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
          authorized_push(Authorization),Result),
 
-    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
-    reply_json(Result).
+    (   Result = none
+    ->  write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+        reply_json(_{'terminus:status' : "terminus:success"})
+    ;   Result = some(Head_ID)
+    ->  reply_json(_{'terminus:status' : "terminus:success",
+                     'head' : Head_ID})
+    ;   throw(error(internal_server_error))).
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
-authorized_push(Authorization, Remote_URL, Payload, Result) :-
+% NOTE: What do we do with the remote branch? How do we send it?
+authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -2407,13 +2413,17 @@ add_payload_to_request(Request,[multipart(Parts)|Request]) :-
         content_type, ContentType,
         media(multipart/'form-data', _)
     ),
+    http_log('~Nmulti-part form?~n', []),
     !,
-
     http_read_data(Request, Parts, [on_filename(save_post_file)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
-    member(content_type('application/json'), Request),
+    memberchk(content_type('application/json'), Request),
     !,
     http_read_data(Request, Document, [json_object(dict)]).
+add_payload_to_request(Request,[payload(Document)|Request]) :-
+    memberchk(content_type(_Some_Other_Type), Request),
+    !,
+    http_read_data(Request, Document, []).
 add_payload_to_request(Request,Request).
 
 get_payload(Payload,Request) :-
