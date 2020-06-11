@@ -1,3 +1,9 @@
+# TerminusDB Server v2.0.2 Release Notes
+
+## New
+
++ Provide HTTPS support and the ability to set your own certs
+
 # TerminusDB Server v2.0.1 Release Notes
 
 ## Bug Fixes
