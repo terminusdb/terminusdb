@@ -2,6 +2,11 @@
               pull/6
           ]).
 
+:- use_module(core(util)).
+:- use_module(db_fetch).
+:- use_module(db_fast_forward).
+:- use_module(core(transaction)).
+
 pull(Our_Branch_Descriptor,_Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
      status{ fetch_status : Head_Has_Updated,
              branch_status : Branch_Status
