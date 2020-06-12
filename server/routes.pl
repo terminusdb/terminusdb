@@ -624,7 +624,6 @@ woql_handler(options, _Request) :-
     format('~n').
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
-    http_log('~N[Request] ~q~n', [Request]),
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -1533,7 +1532,7 @@ unpack_handler(post, Path, R) :-
     get_payload(Payload, Request),
 
     catch(
-        (   unpack(Branch_Descriptor, Payload),
+        (   unpack(Repository_Descriptor, Payload),
             Json_Reply = _{'terminus:status' : "terminus:success"},
             Status = 200
         ),
@@ -1563,7 +1562,7 @@ unpack_handler(post, Path, R) :-
         ;   throw(E))
     ),
 
-    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    write_descriptor_cors(Repository_Descriptor, terminus_descriptor{}),
     reply_json(Json_Reply,
                [status(Status)]).
 
@@ -1620,7 +1619,7 @@ remote_unpack_url(URL, Pack_URL) :-
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
 % NOTE: What do we do with the remote branch? How do we send it?
-authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload) :-
+authorized_push(Authorization, Remote_URL, Payload) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -1663,27 +1662,30 @@ pull_handler(post,Path,R) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
 
-    atomic_list_concat([Path,"/_commits"],Repo_Path),
-    resolve_absolute_string_descriptor(Repo_Path,Repository_Descriptor),
+    resolve_absolute_string_descriptor(Path,Our_Branch_Descriptor),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : _Remote_Name } :< Document,
+        _{ remote : _Remote_Name,
+           remote_branch : Remote_Branch_Name
+         } :< Document,
         error(pull_has_no_remote(Document))),
 
-    % Which branches to fetch?
-    % a) All of them?
-    % b) Just the one specified in the path?
-
     do_or_die(
-        request_remote_authorization(Request, Authorization),
+        request_remote_authorization(Request, Remote_Auth),
         error(no_remote_authorization)),
 
-    % 1. fetch
-    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
-                 _New_Head_Layer_Id, _Head_Has_Updated),
-    % 2. rebase
+    catch(
+        pull(Branch_Descriptor, Local_Auth, Remote_Name, Remote_Branch_Name,
+             authorized_fetch(Remote_Auth)),
+        E,
+        (   E = error(Inner_E)
+        ->  (   Inner_E = something
+            ->  false
+            ;   false)
+        ;   false)
+    ),
 
     throw(error('Not implemented')).
 

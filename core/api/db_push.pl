@@ -101,7 +101,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
     (   Payload_Option = none % Last_Head_Id = Current_Head_Id
     ->  Result = none
     ;   Payload_Option = some(Payload),
-        catch(call(Push_Predicate, Remote_URL, Remote_Branch, Payload),
+        catch(call(Push_Predicate, Remote_URL, Payload),
               E,
               (   E = error(Inner_E),
                   (   Inner_E = history_diverged
@@ -131,7 +131,7 @@ push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
 %:- use_module(db_create).
 :- use_module(db_branch).
 
-test_pusher(Expected, _Remote_URL, _Remote_Branch, Payload) :-
+test_pusher(Expected, _Remote_URL, Payload) :-
     payload_repository_head_and_pack(Payload, _Head, Pack),
     pack_layerids_and_parents(Pack, Layer_Parents),
     do_or_die(
@@ -449,7 +449,7 @@ test(push_headless_remote,
 
     true.
 
-erroring_push_predicate(Error, _Remote_Url, _Remote_Branch, _Payload) :-
+erroring_push_predicate(Error, _Remote_Url, _Payload) :-
     throw(Error).
 
 generic_setup_for_error_conditions(Branch_Descriptor, Auth) :-
