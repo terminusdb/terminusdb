@@ -1645,7 +1645,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   throw(error(unknown_status_code))
     ).
 
-%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
                 [method(Method),
                  prefix,
@@ -1678,7 +1678,8 @@ pull_handler(post,Path,R) :-
 
     catch(
         pull(Branch_Descriptor, Local_Auth, Remote_Name, Remote_Branch_Name,
-             authorized_fetch(Remote_Auth)),
+             authorized_fetch(Remote_Auth),
+             Result),
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = something
@@ -1687,8 +1688,9 @@ pull_handler(post,Path,R) :-
         ;   false)
     ),
 
-    throw(error('Not implemented')).
-
+    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    reply_json(_{'terminus:status' : "terminus:success",
+                 'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
