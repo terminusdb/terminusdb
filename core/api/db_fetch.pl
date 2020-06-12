@@ -40,7 +40,7 @@ remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has
                                        Head),
                 Head_Has_Updated = true
             ;   Repository_Head_Option = some(New_Head_Layer_Id)
-                ->  Head_Has_Updated = false
+            ->  Head_Has_Updated = false
             ;   throw(error(unexpected_pack_missing(Repository_Descriptor))))),
         _Meta_Data).
 

@@ -1660,14 +1660,14 @@ pull_handler(options, _Path, _Request) :-
 pull_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+    authenticate(Terminus, Request, Local_Auth),
 
-    resolve_absolute_string_descriptor(Path,Our_Branch_Descriptor),
+    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : _Remote_Name,
+        _{ remote : Remote_Name,
            remote_branch : Remote_Branch_Name
          } :< Document,
         error(pull_has_no_remote(Document))),
@@ -1682,10 +1682,16 @@ pull_handler(post,Path,R) :-
              Result),
         E,
         (   E = error(Inner_E)
-        ->  (   Inner_E = something
-            ->  false
-            ;   false)
-        ;   false)
+        ->  (   Inner_E = not_a_valid_local_branch(_)
+            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
+                                   'terminus:message' : "Not a valid local branch"},
+                                 400))
+            ;   Inner_E = not_a_valid_remote_branch(_)
+            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
+                                   'terminus:message' : "Not a valid remote branch"},
+                                 400))
+            ;   throw(E))
+        ;   throw(E))
     ),
 
     write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),

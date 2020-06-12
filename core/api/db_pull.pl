@@ -2,10 +2,14 @@
               pull/6
           ]).
 
-pull(Our_Branch_Descriptor,Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
+pull(Our_Branch_Descriptor,_Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
      status{ fetch_status : Head_Has_Updated,
              branch_status : Branch_Status
            }) :-
+
+    do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
+               open_descriptor(Our_Branch_Descriptor, _)),
+              error(not_a_valid_local_branch(Our_Branch_Descriptor))),
 
     Our_Repository_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repository_Descriptor = (Our_Repository_Descriptor.put({ repository_name : Remote_Name })),
@@ -14,11 +18,14 @@ pull(Our_Branch_Descriptor,Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Pre
                                   repository_descriptor : Their_Repository_Descriptor
                               },
 
+    do_or_die(open_descriptor(Their_Branch_Descriptor, _),
+              error(not_a_valid_remote_branch(Their_Branch_Descriptor))),
+
     % 1. fetch
-    remote_fetch(Repository_Descriptor, Fetch_Predicate,
+    remote_fetch(Their_Repository_Descriptor, Fetch_Predicate,
                  _New_Head_Layer_Id, Head_Has_Updated),
 
-    % 2. try fast foward - alert front end if impossible.
+    % 2. try fast forward - alert front end if impossible.
     catch(
         (   fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
             Branch_Status = branch_status{
