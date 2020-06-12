@@ -1,5 +1,5 @@
 :- module(db_pull, [
-              pull/5
+              pull/6
           ]).
 
 pull(Our_Branch_Descriptor,Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
