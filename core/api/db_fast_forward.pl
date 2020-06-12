@@ -259,6 +259,47 @@ test(fast_forward_branch_from_unrelated_branch,
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
 
+test(fast_forward_empty_branch_from_empty_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
+
+    Applied_Commit_Ids == [].
+
+test(fast_forward_nonempty_branch_from_equal_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+    create_context(Master_Descriptor, _{author:"author",message:"message"}, Master_Context),
+    with_transaction(Master_Context,
+                     ask(Master_Context,
+                         insert(a,b,c)),
+                     _),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
+
+    Applied_Commit_Ids == [].
+
 test(fast_forward_branch_from_other_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'),

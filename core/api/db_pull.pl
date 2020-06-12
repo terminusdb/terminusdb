@@ -22,25 +22,28 @@ pull(Our_Branch_Descriptor,Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Pre
     catch(
         (   fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
             Branch_Status = branch_status{
-                                status : "branch_fast_forwarded"
-                            }
+                                status: Inner_Status
+                            },
+            (   Applied_Commit_Ids = []
+            ->  Inner_Status = "branch_unchanged"
+            ;   Inner_Status = "branch_fast_forwarded"
+            )
         ),
         E,
         (   E = error(Inner_E)
-        ->  (   E = divergent_history(Common_Commit_Option)
-            ->  (   Common_Commit_Option = none
-                ->  Branch_Status = branch_status{
-                                        status : "no_common_history"
-                                    }
-                ;   Common_Commit_Option = some(Common_Commit)
-                ->  Branch_Status = branch_status{
-                                        status : "history_diverged",
-                                        common_commit : Common_Commit
-                                    }
-                )
+        ->  (   Inner_E = divergent_history(Common_Commit)
+            ->  Branch_Status = branch_status{
+                                    status : "history_diverged",
+                                    common_commit : Common_Commit
+                                }
+            ;   Inner_E = no_common_history
+            ->  Branch_Status = branch_status{
+                                    status : "no_common_history"
+                                }
             ;   throw(E)
             )
         ;   throw(E))).
+
 
 
 
