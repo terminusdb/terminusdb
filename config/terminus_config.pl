@@ -12,6 +12,7 @@
               console_base_url/1,
               ssl_cert/1,
               ssl_cert_key/1,
+              pack_dir/1,
               https_enabled/0,
               tmp_path/1,
               server_worker_options/1,
@@ -60,6 +61,9 @@ ssl_cert(Value) :-
 
 ssl_cert_key(Value) :-
     getenv_default('TERMINUSDB_SSL_CERT_KEY', 'localhost.key', Value).
+
+pack_dir(Value) :-
+    getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
