@@ -92,12 +92,12 @@ connect_handler(options,_Request) :-
     % TODO: What should this be?
     % Do a search for each config:public_server_url
     % once you know.
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
 connect_handler(get,Request) :-
-    config:public_url(Server_URI),
+    config:server(Server_URI),
     connection_authorised_user(Request, User_ID),
     open_descriptor(terminus_descriptor{}, DB),
     user_object(DB, User_ID, User_Obj),
@@ -148,14 +148,14 @@ test(connection_result_dbs, [])
  * console_handler(+Method,+Request) is det.
  */
 console_handler(options,_Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
 console_handler(get,_Request) :-
     config:index_path(Index_Path),
     read_file_to_string(Index_Path, String, []),
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n'),
@@ -169,7 +169,7 @@ console_handler(get,_Request) :-
 :- begin_tests(console_route).
 
 test(console_route) :-
-    config:public_url(SURI),
+    config:server(SURI),
     format(string(ConsoleURL), "~s/console/", [SURI]),
     http_get(ConsoleURL, _, []).
 
@@ -179,7 +179,7 @@ test(console_route) :-
  * message_handler(+Method,+Request) is det.
  */
 message_handler(options,_Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
     format('~n').
@@ -193,7 +193,7 @@ message_handler(get,Request) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
@@ -209,7 +209,7 @@ message_handler(post,R) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI, DB),
 
@@ -225,7 +225,7 @@ message_handler(post,R) :-
  */
 db_handler(options,_Account,_DB,_Request) :-
     % database may not exist - use server for CORS
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, DB),
     write_cors_headers(SURI,DB),
     format('~n').
@@ -252,7 +252,7 @@ db_handler(post,Account,DB,R) :-
 
     try_create_db(DB_Name, Label, Comment, Prefixes),
 
-    config:public_url(Server),
+    config:server(Server),
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
@@ -265,7 +265,7 @@ db_handler(delete,Account,DB,Request) :-
 
     try_delete_db(DB_Name),
 
-    config:public_url(Server),
+    config:server(Server),
     write_cors_headers(Server, Terminus_DB),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -535,7 +535,7 @@ layer:LayerIdRestriction a owl:Restriction.",
  * Establishes frame responses
  */
 frame_handler(options,_Path,_Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -618,7 +618,7 @@ test(get_filled_frame, [])
  * from terminus database on spartacus.
  */
 woql_handler(options, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -631,12 +631,12 @@ woql_handler(post, R) :-
 
     woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
-    config:public_url(SURI),
+    config:server(SURI),
     write_cors_headers(SURI, Terminus),
     reply_json_dict(JSON).
 
 woql_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1141,7 +1141,7 @@ test(get_object, [])
                  methods([options,post])]).
 
 clone_handler(options, _, _, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1180,7 +1180,7 @@ clone_handler(post, Account, DB, R) :-
                  methods([options,post])]).
 
 fetch_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1229,7 +1229,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 rebase_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1505,7 +1505,7 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1577,7 +1577,7 @@ unpack_handler(post, Path, R) :-
 
 % NOTE: We do this everytime - it should be handled automagically.
 push_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1653,7 +1653,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
 
 % NOTE: We do this everytime - it should be handled automagically.
 pull_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').
@@ -1903,7 +1903,7 @@ prefix_handler(options, _Path, _R) :-
                  methods([options,post,delete])]).
 
 graph_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
+    config:server(SURI),
     open_descriptor(terminus_descriptor{}, Terminus),
     write_cors_headers(SURI, Terminus),
     format('~n').

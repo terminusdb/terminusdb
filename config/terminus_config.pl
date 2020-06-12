@@ -2,7 +2,6 @@
               server/1,
               server_name/1,
               server_port/1,
-              public_url/1,
               worker_amount/1,
               max_transaction_retries/1,
               index_path/1,
@@ -28,9 +27,6 @@ server_name(Value) :-
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
-
-public_url(Value) :-
-    getenv_default('TERMINUSDB_SERVER_PUBLIC_URL', 'http://localhost:6363', Value).
 
 worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
