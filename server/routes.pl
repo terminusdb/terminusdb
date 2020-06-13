@@ -1610,7 +1610,8 @@ push_handler(post,Path,R) :-
     ->  write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
         reply_json(_{'terminus:status' : "terminus:success"})
     ;   Result = some(Head_ID)
-    ->  reply_json(_{'terminus:status' : "terminus:success",
+    ->  write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+        reply_json(_{'terminus:status' : "terminus:success",
                      'head' : Head_ID})
     ;   throw(error(internal_server_error))).
 
