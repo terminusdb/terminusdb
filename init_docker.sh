@@ -9,9 +9,9 @@ TERMINUSDB_AUTOLOGIN=${TERMINUSDB_AUTOLOGIN:-false}
 TERMINUSDB_ENABLE_WELCOME_SCREEN=${TERMINUSDB_ENABLE_WELCOME_SCREEN:-false}
 
 if [ ! -d /app/terminusdb/storage/db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
-    /app/terminusdb/utils/db_init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --public_url "$TERMINUSDB_SERVER_PUBLIC_URL" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH"
+    /app/terminusdb/utils/db_init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH"
 elif [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
-    /app/terminusdb/utils/db_init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --public_url "$TERMINUSDB_SERVER_PUBLIC_URL" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH" --only-config
+    /app/terminusdb/utils/db_init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH" --only-config
 fi
 
 if [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = true ]; then
