@@ -417,7 +417,7 @@ check_descriptor_auth(Terminus, Descriptor, Action, Auth) :-
  *
  * Writes cors headers associated with Resource_URI
  */
-write_cors_headers(_Resource_Name, _DB) :-
+write_cors_headers(_Resource_Name, _DB) :- % Request
     % delete the object
     %% findall(Origin,
     %%         ask(DB,
