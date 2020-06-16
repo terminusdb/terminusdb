@@ -93,7 +93,7 @@ connect_handler(options,Request) :-
     format('~n').
 connect_handler(get,Request) :-
     connection_authorised_user(Request, User_ID),
-    open_descriptor(terminus_descriptor{}, DB),
+    open_descriptor(system_descriptor{}, DB),
     user_object(DB, User_ID, User_Obj),
     write_cors_headers(Request),
     reply_json(User_Obj).
@@ -212,7 +212,7 @@ db_handler(options,_Account,_DB,Request) :-
     format('~n').
 db_handler(post,Account,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    open_descriptor(system_descriptor{}, Terminus_DB),
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
 
@@ -237,7 +237,7 @@ db_handler(post,Account,DB,R) :-
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
     /* DELETE: Delete database */
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
     user_database_name(Account, DB, DB_Name),
@@ -315,7 +315,7 @@ test(db_auth_test, [
                    authorization(basic('TERMINUS_QA', "password"))]),
     _{'terminus:status' : "terminus:success"} = In,
 
-    user_object(terminus_descriptor{}, doc:admin, User_Obj),
+    user_object(system_descriptor{}, doc:admin, User_Obj),
     Access = User_Obj.'terminus:authority'.'terminus:access',
     Resources = Access.'terminus:authority_scope',
     once(
@@ -341,7 +341,7 @@ triples_handler(options,_Path,Request) :-
     write_cors_headers(Request),
     nl. % send headers
 triples_handler(get,Path,Request) :-
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
 
@@ -364,7 +364,7 @@ triples_handler(get,Path,Request) :-
     reply_json(String).
 triples_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
@@ -516,7 +516,7 @@ frame_handler(options,_Path,Request) :-
     format('~n').
 frame_handler(post, Path, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus, Request, Auth),
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -597,7 +597,7 @@ woql_handler(options, Request) :-
     format('~n').
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
     empty_context(Context),
@@ -613,7 +613,7 @@ woql_handler(options, _Path, Request) :-
 
 woql_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -1116,7 +1116,7 @@ clone_handler(options, _, _, Request) :-
 clone_handler(post, Account, DB, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
 
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
+    open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
     assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
@@ -1198,7 +1198,7 @@ rebase_handler(options, _Path, Request) :-
     format('~n').
 rebase_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
 
@@ -1311,7 +1311,7 @@ test(rebase_divergent_history, [
                  methods([options,post])]).
 
 pack_handler(post,Path,R) :-
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, R, Auth_ID),
 
     atomic_list_concat([Path, '/local/_commits'], Repository_Path),
@@ -1363,8 +1363,8 @@ test(pack_stuff, [
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
                 ;   true),
-                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
+                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
+                ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
                     delete_user(Old_User_ID)
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',User_ID),
@@ -1434,8 +1434,8 @@ test(pack_nothing, [
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
                 ;   true),
-                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
+                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
+                ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
                     delete_user(Old_User_ID)
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',User_ID),
@@ -1473,7 +1473,7 @@ unpack_handler(options, _Path, Request) :-
 unpack_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
 
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, R, Auth_ID),
 
     string_concat(Path, "/local/_commits", Full_Path),
@@ -1542,7 +1542,7 @@ push_handler(options, _Path, Request) :-
     format('~n').
 push_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
 
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
@@ -1617,7 +1617,7 @@ pull_handler(options, _Path, Request) :-
     nl.
 pull_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Local_Auth),
 
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
@@ -1872,7 +1872,7 @@ graph_handler(options, _Path, Request) :-
     format('~n').
 graph_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
@@ -1894,7 +1894,7 @@ graph_handler(post, Path, R) :-
     reply_json(_{'terminus:status' : "terminus:success"}).
 graph_handler(delete, Path, R) :-
     add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
+    open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
@@ -2249,7 +2249,7 @@ authenticate(_, _, _) :-
                                           'terminus:object' : 'authenticate'}))).
 
 connection_authorised_user(Request, User_ID) :-
-    open_descriptor(terminus_descriptor{}, DB),
+    open_descriptor(system_descriptor{}, DB),
     fetch_authorization_data(Request, Username, KS),
     !,
     (   user_key_user_id(DB, Username, KS, User_ID)
@@ -2258,7 +2258,7 @@ connection_authorised_user(Request, User_ID) :-
                                      'terminus:message' : 'Not a valid key',
                                      'terminus:object' : KS})))).
 connection_authorised_user(Request, User_ID) :-
-    open_descriptor(terminus_descriptor{}, DB),
+    open_descriptor(system_descriptor{}, DB),
     fetch_jwt_data(Request, Username),
     username_user_id(DB, Username, User_ID).
 

@@ -1477,7 +1477,7 @@ test(subsumption, [])
                          _{'@type' : "xsd:string",
                            '@value' : "Parent"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     % Tag the dicts so we can sort them
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
@@ -1510,7 +1510,7 @@ test(substring, [])
                             _{'@type' : "xsd:string",
                               '@value' : "Substring"}}
              },
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':2},
       'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
@@ -1529,7 +1529,7 @@ test(typecast_string_integer, [])
                                   _{'@type' : "xsd:string",
                                     '@value' : "Casted"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                  '@value':202}} :< Res.
@@ -1550,7 +1550,7 @@ test(eval, [])
                          _{'@type' : "xsd:string",
                            '@value' : "Sum"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -1606,7 +1606,7 @@ test(upper, []) :-
                         _{'@type' : "xsd:string",
                           '@value' : "Upcased"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Upcased':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                   '@value': "AAAA"}} :< Res.
@@ -1636,7 +1636,7 @@ test(unique, []) :-
                       _{'@type' : "xsd:string",
                         '@value' : "URI"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
 
@@ -1653,7 +1653,7 @@ test(split, []) :-
                              _{'@type' : "xsd:string",
                                '@value' : "Split"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Split': [_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"you"},
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"should"},
@@ -1694,7 +1694,7 @@ test(join, []) :-
                        _{'@type' : "xsd:string",
                          '@value' : "Join"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
@@ -1709,7 +1709,7 @@ test(isa, []) :-
                           _{'@type' : "xsd:string",
                             '@value' : "IsA"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
@@ -1732,7 +1732,7 @@ test(like, []) :-
                                   _{'@type' : "xsd:string",
                                     '@value' : "Similarity"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                      '@value':1.0}} :< Res.
@@ -1753,7 +1753,7 @@ test(exp, []) :-
                          _{'@type' : "xsd:string",
                            '@value' : "Exp"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -1822,7 +1822,7 @@ test(indexed_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res|_] = JSON.bindings,
     % Should this really be without a header?
     _{'First':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"Duration"},
@@ -1875,7 +1875,7 @@ test(named_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [First|_] = JSON.bindings,
 
     _{'Bike_Number': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -1966,7 +1966,7 @@ test(named_get_two, [])
          }
     },
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
 
     [Res|_] = JSON.bindings,
     _{'Bike':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2011,7 +2011,7 @@ test(concat, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Concatenated" }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Concatenated':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                        '@value':"FirstSecond"}} :< Res.
@@ -2039,7 +2039,7 @@ test(sum, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Sum" }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value': 3}} :< Res.
@@ -2064,7 +2064,7 @@ test(length, [])
                           variable_name : _{ '@type' : "xsd:string",
                                              '@value'  : "Length"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                  '@value': 2}} :< Res.
@@ -2104,7 +2104,7 @@ test(order_by, []) :-
                                        right : _{'@type' : "xsd:string",
                                                  '@value' : 20}}}]}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':10}},
                      _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2182,7 +2182,7 @@ test(path, []) :-
               ]
              },
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res|_] = JSON.bindings,
     _{'Edge':_{'@type':"http://terminusdb.com/schema/woql#Edge",
                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
@@ -2407,7 +2407,7 @@ test(select, []) :-
                                                 '@value' : "Object"}}
                                  }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
 
 test(when, []) :-
@@ -2416,7 +2416,7 @@ test(when, []) :-
               query : _{'@type' : "True"},
               consequent : _{'@type' : "True"}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [_{}] = JSON.bindings.
 
 

@@ -805,7 +805,7 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
 
 test(class_frame, [])
 :-
-    open_descriptor(terminus_descriptor{}, Database),
+    open_descriptor(system_descriptor{}, Database),
     class_frame('http://terminusdb.com/schema/terminus#Agent',Database,Frame),
     % Not sure how stable this order is.
     Frame = [[type=objectProperty,
@@ -845,7 +845,7 @@ test(class_frame, [])
 
 test(document_filled_frame, [])
 :-
-    open_descriptor(terminus_descriptor{}, Database),
+    open_descriptor(system_descriptor{}, Database),
     document_filled_frame('terminus:///terminus/document/admin',Database,Frame),
     Frame = [[type=objectProperty,
               domainValue='terminus:///terminus/document/admin',
@@ -1175,7 +1175,7 @@ document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
 test(update_object, [])
 :-
 
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),
@@ -1211,7 +1211,7 @@ test(update_object, [])
 
 test(document_jsonld_depth, [])
 :-
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
     User_ID = 'terminus:///terminus/document/admin',
 
     open_descriptor(Descriptor, Transaction),
@@ -1224,7 +1224,7 @@ test(document_jsonld_depth, [])
 test(delete_object, [])
 :-
 
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),

@@ -83,7 +83,7 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
     ).
 
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    terminus_descriptor{} :< Descriptor,
+    system_descriptor{} :< Descriptor,
     !,
     Prefixes = _{doc: 'terminus:///terminus/document/'}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
@@ -134,7 +134,7 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
     collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
     merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
-collection_descriptor_default_write_graph(terminus_descriptor{}, Graph_Descriptor) :-
+collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
     !,
     Graph_Descriptor = terminus_graph{
                            type : instance,
@@ -205,7 +205,7 @@ create_context(Transaction_Object, Context) :-
     collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
-    % Note: should we be using terminus_descriptor{} below? or open it?
+    % Note: should we be using system_descriptor{} below? or open it?
 
     Context = query_context{
         authorization : 'terminus:///terminus/document/access_all_areas',
@@ -214,7 +214,7 @@ create_context(Transaction_Object, Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
-        terminus : terminus_descriptor{},
+        terminus : system_descriptor{},
         update_guard : _Guard,
         files : [],
         bindings : [],

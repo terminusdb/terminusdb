@@ -33,8 +33,8 @@
 
 :- begin_tests(transaction_test).
 
-test(terminus_descriptor_read_query_test) :-
-    Descriptor = terminus_descriptor{},
+test(system_descriptor_read_query_test) :-
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Terminus),
 

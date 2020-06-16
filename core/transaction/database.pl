@@ -45,7 +45,7 @@
 
 
 descriptor_database_name(Descriptor, 'terminus:///terminus') :-
-    terminus_descriptor{} = Descriptor,
+    system_descriptor{} = Descriptor,
     !.
 descriptor_database_name(Descriptor, ID) :-
     id_descriptor{ id : ID } = Descriptor.
@@ -272,7 +272,7 @@ validation_inserts_deletes(Validation, Inserts, Deletes) :-
     (   Descriptor = branch_descriptor{ branch_name : _,
                                         repository_descriptor : _}
     ->  true
-    ;   Descriptor = terminus_descriptor{}),
+    ;   Descriptor = system_descriptor{}),
     !,
     foldl([Graph,(I0,D0),(I1,D1)]>>(
               graph_inserts_deletes(Graph, I, D),

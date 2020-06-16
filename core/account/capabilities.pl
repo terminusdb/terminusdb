@@ -184,7 +184,7 @@ assert_write_access(Context, Context) :-
     assert_write_access(Context).
 
 assert_write_access(Context) :-
-    terminus_descriptor{} :< Context.default_collection,
+    system_descriptor{} :< Context.default_collection,
     !,
     % This allows us to shortcut looking in the database,
     % avoiding infinite regression
@@ -268,7 +268,7 @@ assert_read_access(Context, Context) :-
     assert_read_access(Context).
 
 assert_read_access(Context) :-
-    terminus_descriptor{} :< Context.default_collection,
+    system_descriptor{} :< Context.default_collection,
     !,
     require_super_user(Context).
 assert_read_access(Context) :-
@@ -394,7 +394,7 @@ user_object(DB, User_ID, User_Obj) :-
             )).
 
 
-check_descriptor_auth_(terminus_descriptor{},Action,Auth,Terminus) :-
+check_descriptor_auth_(system_descriptor{},Action,Auth,Terminus) :-
     assert_auth_action_scope(Terminus,Auth,Action,"terminus").
 check_descriptor_auth_(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
     assert_auth_action_scope(Terminus,Auth,Action,Name).

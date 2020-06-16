@@ -45,8 +45,8 @@ resolve_string_descriptor(Default_Descriptor, String, Descriptor) :-
     ->  true
     ;   resolve_absolute_string_descriptor(String, Descriptor)).
 
-resolve_absolute_descriptor(["terminus"], terminus_descriptor{}) :- !.
-resolve_absolute_descriptor([terminus], terminus_descriptor{}) :- !.
+resolve_absolute_descriptor(["terminus"], system_descriptor{}) :- !.
+resolve_absolute_descriptor([terminus], system_descriptor{}) :- !.
 resolve_absolute_descriptor([X, Label], Descriptor) :-
     ground(X),
     X = label,
@@ -331,11 +331,11 @@ test(commit_descriptor) :-
 
 :- end_tests(address_from_descriptor).
 
-descriptor_parent(terminus_descriptor{}, _) :-
-    throw(error(descriptor_has_no_parent(terminus_descriptor{}))).
+descriptor_parent(system_descriptor{}, _) :-
+    throw(error(descriptor_has_no_parent(system_descriptor{}))).
 descriptor_parent(root, _) :-
-    throw(error(descriptor_has_no_parent(terminus_descriptor{}))).
-descriptor_parent(terminus_descriptor{}, root) :- !.
+    throw(error(descriptor_has_no_parent(system_descriptor{}))).
+descriptor_parent(system_descriptor{}, root) :- !.
 descriptor_parent(user(_), root) :- !.
 descriptor_parent(some_label, root) :- !.
 descriptor_parent(branch_of(Parent), Parent) :- !.
@@ -394,8 +394,8 @@ descriptor_repository(Descriptor, Repository_Descriptor) :-
     descriptor_parent(Descriptor, Parent),
     descriptor_repository(Parent, Repository_Descriptor).
 
-context_completion(terminus_descriptor{},
-                   terminus_descriptor{}) :- !.
+context_completion(system_descriptor{},
+                   system_descriptor{}) :- !.
 context_completion(Label_Context, Label_Context) :-
     label_descriptor{} :< Label_Context,
     !.
@@ -519,7 +519,7 @@ resolve_relative_descriptor(Context, Descriptor) -->
 resolve_root_relative_descriptor(root) -->
     [ ".." ],
     !.
-resolve_root_relative_descriptor(terminus_descriptor{}) -->
+resolve_root_relative_descriptor(system_descriptor{}) -->
     [ "terminus" ],
     !.
 resolve_root_relative_descriptor(Descriptor) --> 
@@ -566,7 +566,7 @@ resolve_repository_relative_descriptor(Context, Descriptor) -->
                                 Descriptor).
 
 :- begin_tests(absolute_and_relative_paths_equivalent).
-test(terminus_descriptor) :-
+test(system_descriptor) :-
     Address = ["terminus"],
     resolve_absolute_descriptor(Address, Descriptor1),
     resolve_relative_descriptor(root, Descriptor2, Address, []),
@@ -691,7 +691,7 @@ resolve_absolute_graph_descriptor(["terminus", Type, Name], Graph) :-
 %
 % 'terminus:///terminus'
 %
-resolve_query_resource('terminus:///terminus/',terminus_descriptor{}).
+resolve_query_resource('terminus:///terminus/',system_descriptor{}).
 % Branches
 %
 % terminus

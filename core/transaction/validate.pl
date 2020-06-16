@@ -888,7 +888,7 @@ test(insert_on_label_descriptor, [
 
     once(ask(Descriptor, t(foo,bar,baz))).
 
-test(insert_schema_terminus_descriptor, [
+test(insert_schema_system_descriptor, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ])

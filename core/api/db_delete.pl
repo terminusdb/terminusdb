@@ -59,7 +59,7 @@ delete_db_from_terminus(Terminus,DB_Name) :-
  * Deletes a database if it exists, fails if it doesn't.
  */
 delete_db(DB_Name) :-
-    create_context(terminus_descriptor{}, Terminus),
+    create_context(system_descriptor{}, Terminus),
     (   database_exists(Terminus,DB_Name)
     <>  throw(database_does_not_exist(DB_Name))),
     % Do something here? User may need to know what went wrong
@@ -79,12 +79,12 @@ delete_db(DB_Name) :-
     ;   throw(database_files_do_not_exist(DB_Name))
     ),
 
-    create_context(terminus_descriptor{}, Terminus_Staged),
+    create_context(system_descriptor{}, Terminus_Staged),
     delete_db_from_terminus(Terminus_Staged,DB_Name).
 
 /* Force deletion of databases in an inconsistent state */
 force_delete_db(DB_Name) :-
-    create_context(terminus_descriptor{}, Terminus),
+    create_context(system_descriptor{}, Terminus),
     ignore(delete_db_from_terminus(Terminus,DB_Name)),
     db_path(Path),
     www_form_encode(DB_Name,DB_Name_Safe),

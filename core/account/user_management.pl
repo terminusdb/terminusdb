@@ -35,7 +35,7 @@ agent_name_exists(Askable, Name) :-
  * add_user
  */
 add_user(Nick, Email, Pass, User_URI) :-
-    create_context(terminus_descriptor{},
+    create_context(system_descriptor{},
                    commit_info{
                        author: "add_user/4",
                        message: "Non-existent"
@@ -74,7 +74,7 @@ add_user(Nick, Email, Pass, User_URI) :-
  * delete_user(+User_ID) is semidet.
  */
 delete_user(User_URI) :-
-    create_context(terminus_descriptor{}, Context),
+    create_context(system_descriptor{}, Context),
     with_transaction(
         Context,
         ask(Context,
@@ -84,7 +84,7 @@ delete_user(User_URI) :-
         _).
 
 make_user_own_database(User_Name, Database_Name) :-
-    create_context(terminus_descriptor{},
+    create_context(system_descriptor{},
                    commit_info{ author: "Terminus System",
                                 message: "Creating TerminusDB"},
                    TerminusDB),
@@ -161,9 +161,9 @@ test(add_user, [
 
     add_user("Gavin", "gavin@terminusdb.com", "here.i.am", URI),
 
-    agent_name_uri(terminus_descriptor{}, "Gavin", URI),
+    agent_name_uri(system_descriptor{}, "Gavin", URI),
 
-    once(ask(terminus_descriptor{},
+    once(ask(system_descriptor{},
              t(URI, terminus:email, "gavin@terminusdb.com"^^xsd:string))).
 
 
@@ -180,7 +180,7 @@ test(test_user_ownership, [
 
     make_user_own_database(Name, Database_Name),
 
-    open_descriptor(terminus_descriptor{}, TerminusDB),
+    open_descriptor(system_descriptor{}, TerminusDB),
     once(user_id_auth_id(TerminusDB, User_URI, Auth_ID)),
     resolve_absolute_string_descriptor("Gavin/test", Descriptor),
 

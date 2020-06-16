@@ -84,7 +84,7 @@ terminus_graph_layer(Graph,Layer) :-
  *
  */
 database_exists(Name) :-
-    database_exists(terminus_descriptor{}, Name).
+    database_exists(system_descriptor{}, Name).
 
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(
