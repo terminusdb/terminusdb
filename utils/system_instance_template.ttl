@@ -7,15 +7,15 @@
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix doc: <terminus:///terminus/document/> .
 
-doc:access_all_areas
-    a terminus:Capability ;
-    rdfs:comment "Access all server functions"@en ;
-    rdfs:label "All Capabilities"@en ;
-    terminus:access doc:server_access .
+doc:admin_role
+    a terminus:Role ;
+    rdfs:comment "Role providing admin capabilities"@en ;
+    rdfs:label "Admin Role"@en ;
+    terminus:capability doc:server_access .
 
 doc:server_access
-    a terminus:Access ;
-    rdfs:label "server access"@en ;
+    a terminus:Capability ;
+    rdfs:label "server access capability"@en ;
     rdfs:comment "Server wide access Object"@en ;
     terminus:action terminus:create_database, terminus:delete_database, terminus:class_frame, terminus:clone, terminus:fetch, terminus:push, terminus:branch, terminus:rebase, terminus:instance_read_access, terminus:instance_write_access, terminus:schema_read_access, terminus:schema_write_access, terminus:inference_read_access, terminus:inference_write_access, terminus:meta_read_access, terminus:meta_write_access, terminus:commit_read_access, terminus:commit_write_access, terminus:manage ;
     terminus:authority_scope doc:server .
@@ -24,21 +24,19 @@ doc:admin
     a terminus:User ;
     rdfs:comment "This is the server super user account"@en ;
     rdfs:label "Server Admin User"@en ;
-    terminus:authority doc:access_all_areas ;
+    terminus:role doc:admin_role ;
     terminus:agent_name "admin"^^xsd:string ;
-    terminus:agent_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
-doc:terminus
+doc:system
     a terminus:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
-    terminus:resource_name "terminus"^^xsd:string ;
-    terminus:allow_origin "*"^^xsd:string .
+    terminus:resource_name "system"^^xsd:string .
 
 doc:server
     a terminus:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
     terminus:resource_name "SERVER_NAME"^^xsd:string ;
-    terminus:allow_origin "*"^^xsd:string ;
-    terminus:resource_includes doc:terminus .
+    terminus:resource_includes doc:system .

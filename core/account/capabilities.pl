@@ -82,7 +82,7 @@ user_key_user_id(DB, Username, Key, User_ID) :-
         (
             t(User_ID, rdf:type, terminus:'User'),
             t(User_ID, terminus:agent_name, Username^^xsd:string),
-            t(User_ID, terminus:agent_key_hash, Hash^^xsd:string)
+            t(User_ID, terminus:user_key_hash, Hash^^xsd:string)
         )
        ),
     atom_string(Hash_Atom, Hash),

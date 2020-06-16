@@ -37,7 +37,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(triplestore).
-:- use_module(terminus_bootstrap).
+:- use_module(constants).
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
 

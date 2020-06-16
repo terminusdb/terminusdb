@@ -35,10 +35,10 @@
               % temp_graph.pl
               extend_database_with_temp_graph/6,
 
-              % terminus_bootstrap.pl
-              terminus_instance_name/1,
-              terminus_schema_name/1,
-              terminus_inference_name/1,
+              % constants.pl
+              system_instance_name/1,
+              system_schema_name/1,
+              system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
@@ -75,9 +75,7 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              repo_name_uri/4,
-
-              terminus_server_uri/1,
+              system_server_uri/1,
 
               % triplestore
               destroy_graph/2,
@@ -115,7 +113,7 @@
 :- use_module(triple/iana).
 :- use_module(triple/literals).
 :- use_module(triple/temp_graph).
-:- use_module(triple/terminus_bootstrap).
+:- use_module(triple/constants).
 :- use_module(triple/triplestore).
 :- use_module(triple/turtle_utils).
 :- use_module(triple/upgrade_db).

@@ -827,7 +827,7 @@ test(class_frame, [])
               label="Agent name"@en,
               comment="An name for API authentication"@en],
              [type=datatypeProperty,
-              property='http://terminusdb.com/schema/terminus#agent_key_hash',
+              property='http://terminusdb.com/schema/terminus#user_key_hash',
               domain='http://terminusdb.com/schema/terminus#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
@@ -871,7 +871,7 @@ test(document_filled_frame, [])
               rangeValue="admin"^^'http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
               domainValue='terminus:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#agent_key_hash',
+              property='http://terminusdb.com/schema/terminus#user_key_hash',
               domain='http://terminusdb.com/schema/terminus#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
@@ -1187,7 +1187,7 @@ test(update_object, [])
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:agent_key_hash':
+                 'terminus:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
@@ -1236,7 +1236,7 @@ test(delete_object, [])
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:agent_key_hash':
+                 'terminus:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"

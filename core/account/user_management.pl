@@ -57,7 +57,7 @@ add_user(Nick, Email, Pass, User_URI) :-
                     insert(User_URI,rdf:type, terminus:'User'),
                     insert(User_URI,terminus:email, Email^^xsd:string),
                     insert(User_URI,terminus:agent_name, Nick^^xsd:string),
-                    insert(User_URI,terminus:agent_key_hash, Hash^^xsd:string),
+                    insert(User_URI,terminus:user_key_hash, Hash^^xsd:string),
                     insert(User_URI,terminus:authority, Capability_URI),
                     insert(Capability_URI, rdf:type, terminus:'Capability'),
                     insert(Capability_URI, terminus:access, Access_URI),

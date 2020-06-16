@@ -1098,7 +1098,7 @@ test(get_object, [])
 
     _{'@id':"doc:admin",
       '@type':"terminus:User",
-      'terminus:agent_key_hash':_,
+      'terminus:user_key_hash':_,
       'terminus:agent_name': _,
       'terminus:authority': _}
     :< Result.'Document'.

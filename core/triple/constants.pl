@@ -1,7 +1,7 @@
-:- module(terminus_bootstrap,[
-              terminus_instance_name/1,
-              terminus_schema_name/1,
-              terminus_inference_name/1,
+:- module(constants,[
+              system_instance_name/1,
+              system_schema_name/1,
+              system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
@@ -38,12 +38,10 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              repo_name_uri/4,
-
-              terminus_server_uri/1
+              system_server_uri/1
           ]).
 
-/** <module> Terminus Bootstrap
+/** <module> Constants
  *
  * Terminus bootstrap implements hard coded constants
  *
@@ -66,11 +64,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-terminus_instance_name('terminus:///terminus/document').
+system_instance_name('terminusdb:///terminus/document').
 
-terminus_schema_name('terminus:///terminus/schema').
+system_schema_name('terminus:///terminus/schema').
 
-terminus_inference_name('terminus:///terminus/inference').
+system_inference_name('terminus:///terminus/inference').
 
 layer_ontology('http://terminusdb.com/schema/layer').
 
@@ -108,10 +106,6 @@ repository_remote_url_prop_uri('http://terminusdb.com/schema/repository#remote_u
 repo_type_document_prefix(local, 'Local_').
 repo_type_document_prefix(remote, 'Remote_').
 
-repo_name_uri(Db_Name, Repo_Name, Repo_Type, Uri) :-
-    repo_type_document_prefix(Repo_Type, Repo_Type_Prefix),
-    atomic_list_concat(['terminus:///', Db_Name, '/document/', Repo_Type_Prefix, Repo_Name], Uri).
-
 %%% URIs from ref schema
 branch_class_uri('http://terminusdb.com/schema/ref#Branch').
 ref_commit_prop_uri('http://terminusdb.com/schema/ref#ref_commit').
@@ -121,4 +115,4 @@ ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri')
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
-terminus_server_uri('terminus:///terminus/document/server').
+system_server_uri('terminusdb:///system/data/server').
