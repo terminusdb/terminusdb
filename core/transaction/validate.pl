@@ -181,12 +181,12 @@ commit_validation_object(Validation_Object, []) :-
         schema_objects: [Schema_Object],
         inference_objects: [Inference_Object]
     } :< Validation_Object,
-    terminus_descriptor{
+    system_descriptor{
     } = Descriptor,
     !,
-    terminus_instance_name(Instance_Label),
-    terminus_inference_name(Inference_Label),
-    terminus_schema_name(Schema_Label),
+    system_instance_name(Instance_Label),
+    system_inference_name(Inference_Label),
+    system_schema_name(Schema_Label),
     storage(Store),
     (   validation_object_changed(Instance_Object)
     ->  safe_open_named_graph(Store, Instance_Label, Instance_Graph),
@@ -336,7 +336,7 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
 
-descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
+descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 
 :- table descriptor_type_order/3.
 descriptor_type_order(Operator, Left, Right) :-
@@ -893,7 +893,7 @@ test(insert_schema_terminus_descriptor, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_context(terminus_descriptor{}, Context),
+    create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
                      once(ask(Context, insert(foo,bar,baz,"schema/main"))),
@@ -901,7 +901,7 @@ test(insert_schema_terminus_descriptor, [
 
     Meta_Data.inserts = 1,
 
-    once(ask(terminus_descriptor{},
+    once(ask(system_descriptor{},
              t(foo,bar,baz,"schema/main"))).
 
 
@@ -910,23 +910,23 @@ test(double_insert, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_context(terminus_descriptor{}, Context),
+    create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
                      once(ask(Context, insert(foo,bar,baz,"schema/main"))),
                      Meta_Data),
 
 
-    open_descriptor(terminus_descriptor{}, Trans),
+    open_descriptor(system_descriptor{}, Trans),
     [Schema] = Trans.schema_objects,
     layer_to_id(Schema.read, ID1),
 
     Meta_Data.inserts = 1,
-    create_context(terminus_descriptor{}, Context2),
+    create_context(system_descriptor{}, Context2),
     with_transaction(Context2,
                      once(ask(Context2, insert(foo,bar,baz,"schema/main"))),
                      _),
-    open_descriptor(terminus_descriptor{}, Trans2),
+    open_descriptor(system_descriptor{}, Trans2),
     [Schema2] = Trans2.schema_objects,
     layer_to_id(Schema2.read, ID2),
     ID1 = ID2.

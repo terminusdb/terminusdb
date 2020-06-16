@@ -30,7 +30,7 @@
  *                    | id_graph{ layer_id : atom,
                                   type: atom,
                                   name: string } % for debugging
- *                    | terminus_graph{ type : atom,
+ *                    | system_graph{ type : atom,
  *                                      name : atom }
  *                    | repo_graph { database_name : atom,
  *                                   type : atom,
@@ -59,7 +59,7 @@
  *
  * A ref_graph is a layer id that can be resolved to a graph.
  *
- * collection_descriptor --> terminus_descriptor{}
+ * collection_descriptor --> system_descriptor{}
  *                         | label_descriptor{ label: string }
  *                         | id_descriptor{ id : string } % only for querying!
  *                         | database_descriptor{ database_name : string }
@@ -71,7 +71,7 @@
  *                                              commit_id : string} % the base of the commit
  *
  *
- * terminus_descriptor: refers to the core database with user and database management.
+ * system_descriptor: refers to the core database with user and database management.
  * This database refers to the various database descriptors which can be opened "by name"
  * using the label mechanism.
  *
@@ -161,17 +161,17 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, Map) :-
     memberchk(Descriptor=Read_Write_Obj, Map),
     !.
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
-    Descriptor = terminus_graph{ type: Type, name: Name},
+    Descriptor = system_graph{ type: Type, name: Name},
     !,
     (   Type = instance,
         Name = "main"
-    ->  terminus_instance_name(Graph_Name)
+    ->  system_instance_name(Graph_Name)
     ;   Type = schema,
         Name = "main"
-    ->  terminus_schema_name(Graph_Name)
+    ->  system_schema_name(Graph_Name)
     ;   Type = inference,
         Name = "main",
-        terminus_inference_name(Graph_Name)),
+        system_inference_name(Graph_Name)),
 
     storage(Store),
     safe_open_named_graph(Store, Graph_Name, Graph),
@@ -371,20 +371,20 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
                              schema_objects : [],
                              inference_objects : []
                          }.
-open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
-                 [terminus_descriptor{}=Transaction_Object|Map_3]) :-
+open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
+                 [system_descriptor{}=Transaction_Object|Map_3]) :-
     !,
 
-    Instance_Graph = terminus_graph{ type: instance, name: "main"},
-    Schema_Graph = terminus_graph{ type: schema, name: "main"},
-    Inference_Graph = terminus_graph{ type: inference, name: "main"},
+    Instance_Graph = system_graph{ type: instance, name: "main"},
+    Schema_Graph = system_graph{ type: schema, name: "main"},
+    Inference_Graph = system_graph{ type: inference, name: "main"},
 
     open_read_write_obj(Schema_Graph, Schema_Object, Map, Map_1),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
     open_read_write_obj(Inference_Graph, Inference_Object, Map_2, Map_3),
 
     Transaction_Object = transaction_object{
-                             descriptor : terminus_descriptor{},
+                             descriptor : system_descriptor{},
                              instance_objects : [Instance_Object],
                              schema_objects : [Schema_Object],
                              inference_objects : [Inference_Object]
@@ -760,16 +760,16 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
  *
  */
 collection_descriptor_graph_filter_graph_descriptor(
-    terminus_descriptor{},
+    system_descriptor{},
     type_name_filter{ type : Type,
                       names : [Name]},
-    terminus_graph{ type: Type,
+    system_graph{ type: Type,
                     name : Name}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
-    terminus_descriptor{},
+    system_descriptor{},
     type_filter{ types : [Type] },
-    terminus_graph{ type: Type,
+    system_graph{ type: Type,
                     name : "main"}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
@@ -901,7 +901,7 @@ test(terminus, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
     open_descriptor(Descriptor, Transaction),
     % check for things we know should exist in the instance, schema and inference
     once(ask(Transaction, t(doc:terminus, rdf:type, terminus:'Database', "instance/main"))),
