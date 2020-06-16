@@ -14,7 +14,6 @@
               assert_write_access/1,
               assert_write_access/2,
               assert_write_access/3,
-              write_cors_headers/2,
               authorisation_object/3,
               user_object/3,
               super_user_authority/1,
