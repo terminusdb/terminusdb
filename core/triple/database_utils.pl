@@ -3,7 +3,7 @@
               database_finalized/2,
               database_exists/2,
               database_exists/1,
-              terminus_graph_layer/2,
+              system_graph_layer/2,
               database_instance/2,
               database_inference/2,
               database_schema/2,
@@ -57,25 +57,25 @@
  * Make a fully qualified Uri from Name or vice-versa
  */
 db_name_uri(Name, Uri) :-
-    idgen('terminus:///terminus/document/Database', [Name], Uri).
+    idgen('system:///terminus/document/Database', [Name], Uri).
 
 database_exists(Askable, Name) :-
     once(ask(Askable,
-             t(_Db_Uri, terminus:resource_name, Name^^xsd:string))).
+             t(_Db_Uri, system:resource_name, Name^^xsd:string))).
 
 database_finalized(Askable,Name) :-
     once(ask(Askable,
-             (   t(Db_Uri, terminus:resource_name, Name^^xsd:string),
-                 t(Db_Uri, terminus:database_state, terminus:finalized)))).
+             (   t(Db_Uri, system:resource_name, Name^^xsd:string),
+                 t(Db_Uri, system:database_state, terminus:finalized)))).
 
 /**
- * terminus_graph_layer(-Graph,-Layer) is det.
+ * system_graph_layer(-Graph,-Layer) is det.
  *
  * Get the document graph for Terminus as a Layer
  */
-terminus_graph_layer(Graph,Layer) :-
+system_graph_layer(Graph,Layer) :-
     storage(Store),
-    terminus_instance_name(Instance_Name),
+    system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer).
 

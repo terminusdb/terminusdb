@@ -1,11 +1,11 @@
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix tcs: <http://terminusdb.com/schema/schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix doc: <SERVER_NAME/terminus/document/> .
+@prefix doc: <terminusdb:///system/data/> .
 
-terminus:authority_scope owl:propertyChainAxiom
-    ( terminus:authority_scope terminus:resource_includes ) .
+system:capability_scope owl:propertyChainAxiom
+    ( system:capability_scope system:resource_includes ) .

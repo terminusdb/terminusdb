@@ -1,42 +1,42 @@
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix doc: <terminus:///terminus/document/> .
+@prefix doc: <terminusdb:///system/data/> .
 
 doc:admin_role
-    a terminus:Role ;
+    a system:Role ;
     rdfs:comment "Role providing admin capabilities"@en ;
     rdfs:label "Admin Role"@en ;
-    terminus:capability doc:server_access .
+    system:capability doc:server_access .
 
 doc:server_access
-    a terminus:Capability ;
+    a system:Capability ;
     rdfs:label "server access capability"@en ;
     rdfs:comment "Server wide access Object"@en ;
-    terminus:action terminus:create_database, terminus:delete_database, terminus:class_frame, terminus:clone, terminus:fetch, terminus:push, terminus:branch, terminus:rebase, terminus:instance_read_access, terminus:instance_write_access, terminus:schema_read_access, terminus:schema_write_access, terminus:inference_read_access, terminus:inference_write_access, terminus:meta_read_access, terminus:meta_write_access, terminus:commit_read_access, terminus:commit_write_access, terminus:manage ;
-    terminus:authority_scope doc:server .
+    system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage ;
+    system:capability_scope doc:server .
 
 doc:admin
-    a terminus:User ;
+    a system:User ;
     rdfs:comment "This is the server super user account"@en ;
     rdfs:label "Server Admin User"@en ;
-    terminus:role doc:admin_role ;
-    terminus:agent_name "admin"^^xsd:string ;
-    terminus:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+    system:role doc:admin_role ;
+    system:agent_name "admin"^^xsd:string ;
+    system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
 doc:system
-    a terminus:Database ;
+    a system:Database ;
     rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
     rdfs:label "Master Database"@en ;
-    terminus:resource_name "system"^^xsd:string .
+    system:resource_name "system"^^xsd:string .
 
 doc:server
-    a terminus:Server ;
+    a system:Server ;
     rdfs:comment "The current Database Server itself"@en ;
     rdfs:label "The DB server"@en ;
-    terminus:resource_name "SERVER_NAME"^^xsd:string ;
-    terminus:resource_includes doc:system .
+    system:resource_name "SERVER_NAME"^^xsd:string ;
+    system:resource_includes doc:system .

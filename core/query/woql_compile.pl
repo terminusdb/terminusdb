@@ -382,14 +382,14 @@ report_instantiation_error(_Prog,context(Pred,Var),Ctx) :-
     get_varname(Var,B,Name),
     !,
     format(string(MSG), "The variable: ~q is unbound while being proceed in the AST operator ~q, but must be instantiated", [Name,Pred]),
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : MSG}))).
+    throw(http_reply(method_not_allowed(_{'system:status' : 'terminus:failure',
+                                          'system:message' : MSG}))).
 report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     memberchk(bindings=B,Ctx),
     guess_varnames(B,Names),
     format(string(MSG), "The variables: ~q are unbound, one of which was a problem while being proceed in the AST operator ~q, which but must be instantiated", [Names,Pred]),
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : MSG}))).
+    throw(http_reply(method_not_allowed(_{'system:status' : 'terminus:failure',
+                                          'system:message' : MSG}))).
 
 literal_string(Val^^_, Val).
 literal_string(Val@_, Val).
@@ -1471,7 +1471,7 @@ test(subsumption, [])
 :-
     Query = _{'@type' : "Subsumption",
               child : _{ '@type' : "Node",
-                         node : "terminus:User"},
+                         node : "system:User"},
               parent : _{'@type' : "Variable",
                          'variable_name' :
                          _{'@type' : "xsd:string",
@@ -2113,28 +2113,28 @@ test(order_by, []) :-
 test(path, []) :-
 
     % Pattern is:
-    % terminus:access , (  terminus:authority_scope
-    %                   ;  terminus:authority_scope, plus(terminus:resource_includes))
+    % system:access , (  terminus:authority_scope
+    %                   ;  system:authority_scope, plus(terminus:resource_includes))
     Pattern =
     _{'@type' : "PathSequence",
       path_first :
       _{ '@type' : "PathPredicate",
-         path_predicate : _{ '@id' : "terminus:access"}},
+         path_predicate : _{ '@id' : "system:access"}},
       path_second :
       _{ '@type' : "PathOr",
          path_left :
          _{ '@type' : "PathPredicate",
-            path_predicate : _{ '@id' : "terminus:authority_scope"}},
+            path_predicate : _{ '@id' : "system:authority_scope"}},
          path_right :
          _{ '@type' : "PathSequence",
             path_first :
             _{ '@type' : "PathPredicate",
-               path_predicate : _{ '@id' : "terminus:authority_scope"}},
+               path_predicate : _{ '@id' : "system:authority_scope"}},
             path_second :
             _{ '@type' : "PathPlus",
                path_pattern :
                _{ '@type' : "PathPredicate",
-                  path_predicate : _{ '@id' : "terminus:resource_includes"}}}}}},
+                  path_predicate : _{ '@id' : "system:resource_includes"}}}}}},
 
     Query = _{'@type' : "And",
               query_list :
@@ -2185,20 +2185,20 @@ test(path, []) :-
     query_test_response(system_descriptor{}, Query, JSON),
     [Res|_] = JSON.bindings,
     _{'Edge':_{'@type':"http://terminusdb.com/schema/woql#Edge",
-               'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
+               'http://terminusdb.com/schema/woql#object':'system:///terminus/document/server_access',
                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
-               'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
-      'Edge_Object':'terminus:///terminus/document/server_access',
-      'Object':'terminus:///terminus/document/server',
+               'http://terminusdb.com/schema/woql#subject':'system:///terminus/document/access_all_areas'},
+      'Edge_Object':'system:///terminus/document/server_access',
+      'Object':'system:///terminus/document/server',
       'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
+                'http://terminusdb.com/schema/woql#object':'system:///terminus/document/server_access',
                 'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
+                'http://terminusdb.com/schema/woql#subject':'system:///terminus/document/access_all_areas'},
               _{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
+                'http://terminusdb.com/schema/woql#object':'system:///terminus/document/server',
                 'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/server_access'}],
-      'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
+                'http://terminusdb.com/schema/woql#subject':'system:///terminus/document/server_access'}],
+      'Subject':'system:///terminus/document/access_all_areas'} :< Res.
 
 
 test(path_star, [
@@ -2376,10 +2376,10 @@ test(group_by, [
     [_{'Grouped': [[p,q],
                    [p,w],
                    [p,z]],
-       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':x},
+       'Object':"system:unknown",'Predicate':"terminus:unknown",'Subject':x},
      _{'Grouped': [[p,w],
                    [p,z]],
-       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':y}] = JSON.bindings.
+       'Object':"system:unknown",'Predicate':"terminus:unknown",'Subject':y}] = JSON.bindings.
 
 test(select, []) :-
 
@@ -2408,7 +2408,7 @@ test(select, []) :-
                                  }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-    [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
+    [_{'Subject':'system:///terminus/document/access_all_areas'}] = JSON.bindings.
 
 test(when, []) :-
 

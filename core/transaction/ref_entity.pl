@@ -906,7 +906,7 @@ update_prefixes(Context, Prefixes) :-
     forall((   member(Key, Keys),
                get_dict(Key,Prefixes,URI)),
            ask(Context,
-               (   idgen('terminus://PrefixPair',[Key], Pair),
+               (   idgen('system://PrefixPair',[Key], Pair),
                    insert(Pair, rdf:type, ref:'PrefixPair'),
                    insert(ref:default_prefixes, ref:prefix_pair, Pair),
                    insert(Pair, ref:prefix, Key^^xsd:string),

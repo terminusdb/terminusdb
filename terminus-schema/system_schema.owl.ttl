@@ -58,8 +58,7 @@ system:authority
 system:Role
   rdfs:label "Role"@en ;
   rdfs:comment "A role is a collection of capabilities that can be allocated to any user"@en ;
-  a owl:Class ;
-  rdfs:subClassOf system:Agent .
+  a owl:Class .
 
 system:User
   rdfs:label "User"@en ;

@@ -65,8 +65,8 @@
 username_user_id(DB, Username, User_ID) :-
     ask(DB,
         (
-            t(User_ID, rdf:type, terminus:'User'),
-            t(User_ID, terminus:agent_name, Username^^xsd:string)
+            t(User_ID, rdf:type, system:'User'),
+            t(User_ID, system:agent_name, Username^^xsd:string)
         )
        ).
 
@@ -80,9 +80,9 @@ user_key_user_id(DB, Username, Key, User_ID) :-
     coerce_literal_string(Key, K),
     ask(DB,
         (
-            t(User_ID, rdf:type, terminus:'User'),
-            t(User_ID, terminus:agent_name, Username^^xsd:string),
-            t(User_ID, terminus:user_key_hash, Hash^^xsd:string)
+            t(User_ID, rdf:type, system:'User'),
+            t(User_ID, system:agent_name, Username^^xsd:string),
+            t(User_ID, system:user_key_hash, Hash^^xsd:string)
         )
        ),
     atom_string(Hash_Atom, Hash),
@@ -125,8 +125,8 @@ username_auth(DB, Username, Auth) :-
 user_id_auth_id(DB, User_ID, Auth_ID) :-
     ask(DB,
         (
-            t( User_ID , rdf:type , terminus:'User' ),
-            t( User_ID , terminus:authority, Auth_ID )
+            t( User_ID , rdf:type , system:'User' ),
+            t( User_ID , system:authority, Auth_ID )
         )
        ).
 
@@ -140,10 +140,11 @@ user_id_auth_id(DB, User_ID, Auth_ID) :-
 auth_action_scope(DB, Auth, Action, Resource_Name) :-
     ask(DB,
         (
-            t(Auth, terminus:access, Access),
-            t(Access, terminus:action, Action),
-            t(Access, terminus:authority_scope, Scope),
-            t(Scope, terminus:resource_name, Resource_Name ^^ (xsd:string))
+            t(Auth, system:role, Role),
+            t(Role, system:capability, Capability),
+            t(Capability, system:action, Action),
+            t(Capability, system:capability_scope, Scope),
+            t(Scope, system:resource_name, Resource_Name ^^ (xsd:string))
         )
        ).
 
@@ -156,19 +157,15 @@ assert_write_access(G, Context, Context) :-
     New_Context = Context.put(write_graph,G),
     assert_write_access(New_Context, _).
 
-write_type_access(instance,terminus:instance_write_access).
-write_type_access(schema,terminus:schema_write_access).
-write_type_access(inference,terminus:inference_write_access).
-
-super_user_authority('terminus:///terminus/document/access_all_areas').
+write_type_access(instance,system:instance_write_access).
+write_type_access(schema,system:schema_write_access).
+write_type_access(inference,system:inference_write_access).
 
 require_super_user(Context) :-
     % This allows us to shortcut looking in the database,
     % avoiding infinite regression
-    %prefixed_to_uri(Context.authorization, Context.prefixes, Auth),
-    Context.authorization = Auth,
-    (   Auth = doc:access_all_areas
-    ;   Auth = 'terminus:///terminus/document/access_all_areas'),
+    super_user_authority(URI),
+    prefixed_to_uri(Context.authorization, Context.prefixes, URI),
     !.
 require_super_user(Context) :-
     throw(error(not_super_user(Context))).
@@ -195,7 +192,7 @@ assert_write_access(Context) :-
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, terminus:meta_write_access, Name).
+    assert_auth_action_scope(DB, Auth, system:meta_write_access, Name).
 assert_write_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -207,7 +204,7 @@ assert_write_access(Context) :-
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, terminus:commit_write_access, Name).
+    assert_auth_action_scope(DB, Auth, system:commit_write_access, Name).
 assert_write_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -250,9 +247,9 @@ assert_read_access(Filter,Context,Context) :-
     New_Context = Context.put(filter,Filter),
     assert_read_access(New_Context, _).
 
-read_type_access(instance,terminus:instance_read_access).
-read_type_access(schema,terminus:schema_read_access).
-read_type_access(inference,terminus:inference_read_access).
+read_type_access(instance,system:instance_read_access).
+read_type_access(schema,system:schema_read_access).
+read_type_access(inference,system:inference_read_access).
 
 filter_types(type_filter{types:Types}, Types).
 filter_types(type_name_filter{type : Type, names : _}, [Type]).
@@ -277,7 +274,7 @@ assert_read_access(Context) :-
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, terminus:meta_read_access, Name).
+    assert_auth_action_scope(DB, Auth, system:meta_read_access, Name).
 assert_read_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -289,7 +286,7 @@ assert_read_access(Context) :-
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, terminus:commit_read_access, Name).
+    assert_auth_action_scope(DB, Auth, system:commit_read_access, Name).
 assert_read_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -322,7 +319,7 @@ assert_read_access(Context) :-
     filter_types(Filter,Types),
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, "terminus"))).
+               assert_auth_action_scope(DB, Auth, Access, "system"))).
 assert_read_access(Context) :-
     label_descriptor{
         label: _Label
@@ -335,7 +332,7 @@ assert_read_access(Context) :-
     filter_types(Filter,Types),
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, "terminus"))).
+               assert_auth_action_scope(DB, Auth, Access, "system"))).
 assert_read_access(Context) :-
     commit_descriptor{
         repository_descriptor:
@@ -376,7 +373,7 @@ assert_auth_action_scope(DB, Auth, Action, Scope) :-
  */
 authorisation_object(DB, Auth_ID, Auth_Obj) :-
     once(ask(DB,
-             (  t(Auth_ID, terminus:action, _), % Some action to look at...
+             (  t(Auth_ID, system:action, _), % Some action to look at...
                 read_object(Auth_ID, 2, Auth_Obj)
              )
             )).
@@ -388,14 +385,14 @@ authorisation_object(DB, Auth_ID, Auth_Obj) :-
  */
 user_object(DB, User_ID, User_Obj) :-
     once(ask(DB,
-             (  t(User_ID, rdf:type, terminus:'User'), % Some action to look at...
+             (  t(User_ID, rdf:type, system:'User'), % Some action to look at...
                 read_object(User_ID, 3, User_Obj)
              )
             )).
 
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,Terminus) :-
-    assert_auth_action_scope(Terminus,Auth,Action,"terminus").
+    assert_auth_action_scope(Terminus,Auth,Action,"system").
 check_descriptor_auth_(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
     assert_auth_action_scope(Terminus,Auth,Action,Name).
 check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,

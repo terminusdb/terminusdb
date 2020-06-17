@@ -127,7 +127,7 @@ test(connection_result_dbs, [])
     * json_write_dict(current_output, Result, []),
 
     _{ '@id' : "doc:admin",
-       '@type':"terminus:User"
+       '@type':"system:User"
      } :< Result.
 
 :- end_tests(connect_handler).
@@ -146,15 +146,10 @@ console_handler(options,Request) :-
     nl.
 console_handler(get,Request) :-
     config:index_path(Index_Path),
+    http_reply(Index_Path
     read_file_to_string(Index_Path, String, []),
     write_cors_headers(Request),
-    nl,
-    write(String).
-
-%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(message), cors_catch(message_handler(Method)),
-                [method(Method),
-                 methods([options,get,post])]).
+    format("~n~s~n", [String]).
 
 :- begin_tests(console_route).
 
@@ -165,6 +160,11 @@ test(console_route) :-
 
 :- end_tests(console_route).
 
+%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(message), cors_catch(message_handler(Method)),
+                [method(Method),
+                 methods([options,get,post])]).
+
 /*
  * message_handler(+Method,+Request) is det.
  */
@@ -172,7 +172,7 @@ message_handler(options,Request) :-
     write_cors_headers(Request),
     format('~n').
 message_handler(get,Request) :-
-    try_get_param('terminus:message',Request,Message),
+    try_get_param('system:message',Request,Message),
 
     with_output_to(
         string(Payload),
@@ -183,10 +183,10 @@ message_handler(get,Request) :-
 
     write_cors_headers(Request),
 
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'system:status' : 'terminus:success'}).
 message_handler(post,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    try_get_param('terminus:message',Request,Message),
+    try_get_param('system:message',Request,Message),
 
     with_output_to(
         string(Payload),
@@ -197,7 +197,7 @@ message_handler(post,R) :-
 
     write_cors_headers(Request),
 
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'system:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(db/Account/DB), cors_catch(db_handler(Method, Account, DB)),
@@ -216,7 +216,7 @@ db_handler(post,Account,DB,R) :-
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
 
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
+    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, "terminus"),
 
     get_payload(Database_Document,Request),
     do_or_die(
@@ -234,19 +234,19 @@ db_handler(post,Account,DB,R) :-
     try_create_db(DB_Name, Label, Comment, Prefixes),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'system:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
     /* DELETE: Delete database */
     open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
     user_database_name(Account, DB, DB_Name),
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:delete_database, DB_Name),
+    assert_auth_action_scope(Terminus_DB, Auth, system:delete_database, DB_Name),
 
     try_delete_db(DB_Name),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'system:status' : 'terminus:success'}).
 
 
 :- begin_tests(db_endpoint).
@@ -274,7 +274,7 @@ test(db_create, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-    _{'terminus:status' : "terminus:success"} = In.
+    _{'system:status' : "terminus:success"} = In.
 
 
 test(db_delete, [
@@ -287,7 +287,7 @@ test(db_delete, [
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
 
-    _{'terminus:status' : "terminus:success"} = Delete_In.
+    _{'system:status' : "terminus:success"} = Delete_In.
 
 test(db_auth_test, [
          setup((add_user('TERMINUS_QA','user@example.com','password',User_ID),
@@ -313,14 +313,14 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
-    _{'terminus:status' : "terminus:success"} = In,
+    _{'system:status' : "terminus:success"} = In,
 
     user_object(system_descriptor{}, doc:admin, User_Obj),
-    Access = User_Obj.'terminus:authority'.'terminus:access',
-    Resources = Access.'terminus:authority_scope',
+    Access = User_Obj.'system:authority'.'terminus:access',
+    Resources = Access.'system:authority_scope',
     once(
         (   memberchk(Database,Resources),
-            _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'terminus:resource_name')).
+            _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'system:resource_name')).
 
 :- end_tests(db_endpoint).
 
@@ -350,7 +350,7 @@ triples_handler(get,Path,Request) :-
 
     merge_dictionaries(
         query_context{
-            terminus: Terminus,
+            system: Terminus,
             authorization : Auth,
             filter: type_name_filter{ type: Graph.type,
                                       names: [Graph.name] }
@@ -380,7 +380,7 @@ triples_handler(post,Path,R) :- % should this be put?
     merge_dictionaries(
         query_context{
             commit_info : Commit_Info,
-            terminus: Terminus,
+            system: Terminus,
             authorization : Auth,
             write_graph : Graph
         }, Pre_Context, Context),
@@ -388,11 +388,11 @@ triples_handler(post,Path,R) :- % should this be put?
     assert_write_access(Context),
 
     % check access rights
-    % assert_auth_action_scope(Terminus,Auth,terminus:update_schema,DB_Name),
+    % assert_auth_action_scope(Terminus,Auth,system:update_schema,DB_Name),
     update_turtle_graph(Context,Graph.type,Graph.name,TTL),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'system:status' : "terminus:success"}).
 
 
 :- begin_tests(triples_endpoint).
@@ -551,11 +551,11 @@ test(get_frame, [])
     atomic_list_concat([Server, '/frame/terminus'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{ class : "terminus:Agent"
+              json(_{ class : "system:Agent"
                     }),
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
-    _{'@type':"terminus:Frame"} :< JSON.
+    _{'@type':"system:Frame"} :< JSON.
 
 
 test(get_filled_frame, [])
@@ -568,7 +568,7 @@ test(get_filled_frame, [])
                     }),
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
-    _{'@type':"terminus:FilledFrame"} :< JSON.
+    _{'@type':"system:FilledFrame"} :< JSON.
 
 :- end_tests(frame_endpoint).
 
@@ -644,7 +644,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            terminus: Terminus,
+            system: Terminus,
             update_guard : _Guard,
             authorization : Auth_ID
         }, Context0, Final_Context),
@@ -1097,10 +1097,10 @@ test(get_object, [])
     [Result] = JSON0.bindings,
 
     _{'@id':"doc:admin",
-      '@type':"terminus:User",
-      'terminus:user_key_hash':_,
-      'terminus:agent_name': _,
-      'terminus:authority': _}
+      '@type':"system:User",
+      'system:user_key_hash':_,
+      'system:agent_name': _,
+      'system:authority': _}
     :< Result.'Document'.
 
 :- end_tests(woql_endpoint).
@@ -1119,7 +1119,7 @@ clone_handler(post, Account, DB, R) :-
     open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
+    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, "terminus"),
 
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
@@ -1137,7 +1137,7 @@ clone_handler(post, Account, DB, R) :-
 
     write_cors_headers(Request),
     reply_json_dict(
-        _{'terminus:status' : 'terminus:success'}).
+        _{'system:status' : 'terminus:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(fetch/Path), cors_catch(fetch_handler(Method,Path)),
@@ -1158,7 +1158,7 @@ fetch_handler(post,Path,Request) :-
 
     write_cors_headers(Request),
     reply_json_dict(
-            _{'terminus:status' : 'terminus:success',
+            _{'system:status' : 'terminus:success',
               'head_has_changed' : Head_Has_Updated,
               'head' : New_Head_Layer_Id}).
 
@@ -1203,14 +1203,14 @@ rebase_handler(post, Path, R) :-
     % No descriptor to work with until the query sets one up
 
     resolve_absolute_string_descriptor(Path, Our_Descriptor),
-    check_descriptor_auth(Terminus, Our_Descriptor, terminus:rebase, Auth_ID),
+    check_descriptor_auth(Terminus, Our_Descriptor, system:rebase, Auth_ID),
 
     get_payload(Document, Request),
     (   get_dict(rebase_from, Document, Their_Path)
     ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
     ;   throw(error(rebase_from_missing))),
-    check_descriptor_auth(Terminus, Their_Descriptor, terminus:instance_read_access, Auth_ID),
-    check_descriptor_auth(Terminus, Their_Descriptor, terminus:schema_read_access, Auth_ID),
+    check_descriptor_auth(Terminus, Their_Descriptor, system:instance_read_access, Auth_ID),
+    check_descriptor_auth(Terminus, Their_Descriptor, system:schema_read_access, Auth_ID),
 
     (   get_dict(author, Document, Author)
     ->  true
@@ -1219,7 +1219,7 @@ rebase_handler(post, Path, R) :-
     Strategy_Map = [],
     rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    Incomplete_Reply = _{ 'terminus:status' : "terminus:success",
+    Incomplete_Reply = _{ 'system:status' : "terminus:success",
                           forwarded_commits : Forwarded_Commits,
                           reports: Reports
                         },
@@ -1292,7 +1292,7 @@ test(rebase_divergent_history, [
         forwarded_commits : [_Thing, _Another_Thing ],
         common_commit_id : _Common_Something,
         reports: _Reports,
-        'terminus:status' : "terminus:success"
+        'system:status' : "terminus:success"
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
@@ -1481,42 +1481,42 @@ unpack_handler(post, Path, R) :-
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
             (repository_descriptor{} :< Repository_Descriptor)),
         reply_json(_{'@type' : "vio:UnpackPathInvalid",
-                           'terminus:status' : "terminus:failure",
-                           'terminus:message' : "The path to the database to unpack to was invalid"
+                           'system:status' : "terminus:failure",
+                           'system:message' : "The path to the database to unpack to was invalid"
                     },
                    400)),
 
     check_descriptor_auth(Terminus, Repository_Descriptor,
-                          terminus:commit_write_access,
+                          system:commit_write_access,
                           Auth_ID),
 
     get_payload(Payload, Request),
 
     catch(
         (   unpack(Repository_Descriptor, Payload),
-            Json_Reply = _{'terminus:status' : "terminus:success"},
+            Json_Reply = _{'system:status' : "terminus:success"},
             Status = 200
         ),
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
             ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "Not a linear history"
+                               'system:status' : "terminus:failure",
+                               'system:message' : "Not a linear history"
                               },
                 Status = 400
             ;   Inner_E = unknown_layer_reference(Layer_Id)
             ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "A layer in the pack has an unknown parent",
+                               'system:status' : "terminus:failure",
+                               'system:message' : "A layer in the pack has an unknown parent",
                                'layer_id' : _{'@type': "xsd:string",
                                               '@value' : Layer_Id}
                               },
                 Status = 400
             ;   Inner_E = database_not_found(_)
             ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "The database to unpack to has not be found"
+                               'system:status' : "terminus:failure",
+                               'system:message' : "The database to unpack to has not be found"
                               },
                 Status = 400
             ;   throw(E))
@@ -1567,10 +1567,10 @@ push_handler(post,Path,R) :-
 
     (   Result = none
     ->  write_cors_headers(Request),
-        reply_json(_{'terminus:status' : "terminus:success"})
+        reply_json(_{'system:status' : "terminus:success"})
     ;   Result = some(Head_ID)
     ->  write_cors_headers(Request),
-        reply_json(_{'terminus:status' : "terminus:success",
+        reply_json(_{'system:status' : "terminus:success",
                      'head' : Head_ID})
     ;   throw(error(internal_server_error))).
 
@@ -1641,19 +1641,19 @@ pull_handler(post,Path,R) :-
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_valid_local_branch(_)
-            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
-                                   'terminus:message' : "Not a valid local branch"},
+            ->  throw(reply_json(_{'system:status' : "terminus:failure",
+                                   'system:message' : "Not a valid local branch"},
                                  400))
             ;   Inner_E = not_a_valid_remote_branch(_)
-            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
-                                   'terminus:message' : "Not a valid remote branch"},
+            ->  throw(reply_json(_{'system:status' : "terminus:failure",
+                                   'system:message' : "Not a valid remote branch"},
                                  400))
             ;   throw(E))
         ;   throw(E))
     ),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success",
+    reply_json(_{'system:status' : "terminus:success",
                  'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1682,7 +1682,7 @@ branch_handler(post,Path,R) :-
     branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'system:status' : "terminus:success"}).
 
 :- begin_tests(branch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1891,7 +1891,7 @@ graph_handler(post, Path, R) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'system:status' : "terminus:success"}).
 graph_handler(delete, Path, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(system_descriptor{}, Terminus),
@@ -1912,7 +1912,7 @@ graph_handler(delete, Path, R) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'system:status' : "terminus:success"}).
 
 
 :- begin_tests(graph_endpoint).
@@ -1993,7 +1993,7 @@ test(delete_graph, [
 cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
-          (   cors_enable,
+          (   http_log("~n[Exception] ~q~n", [E]),
               customise_exception(E)
           )
          ),
@@ -2001,8 +2001,8 @@ cors_catch(Goal,Request) :-
 cors_catch(_,_Request) :-
     cors_enable,
     % Probably should extract the path from Request
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' :
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' :
                  _{'@type' : 'xsd:string',
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
@@ -2014,36 +2014,36 @@ customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(syntax_error(M),_)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(woql_syntax_error(JSON,Path,Element))) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',
-                 'terminus:message' : Message,
+                 'system:message' : Message,
                  'vio:path' : Director,
                  'vio:query' : JSON},
                [status(400)]).
 customise_exception(error(syntax_error(M))) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:message' : M,
                                            'vio:type' : TA,
                                            'vio:literal' : OA}]},
@@ -2060,136 +2060,136 @@ customise_exception(http_reply(authorize(JSON))) :-
 customise_exception(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
 customise_exception(time_limit_exceeded) :-
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : 'Connection timed out'
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : 'Connection timed out'
                },
                [status(408)]).
 customise_exception(error(unqualified_resource_id(Doc_ID))) :-
     format(atom(MSG), 'Document resource ~s could not be expanded', [Doc_ID]),
-    reply_json(_{'terminus:status' : 'terminus_failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Doc_ID},
+    reply_json(_{'system:status' : 'terminus_failure',
+                 'system:message' : MSG,
+                 'system:object' : Doc_ID},
                [status(400)]).
 customise_exception(error(unknown_deletion_error(Doc_ID))) :-
     format(atom(MSG), 'unqualfied deletion error for id ~s', [Doc_ID]),
-    reply_json(_{'terminus:status' : 'terminus_failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Doc_ID},
+    reply_json(_{'system:status' : 'terminus_failure',
+                 'system:message' : MSG,
+                 'system:object' : Doc_ID},
                [status(400)]).
 customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : Msg},
                [status(403)]).
 customise_exception(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
 customise_exception(error(database_not_found(DB))) :-
     format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
-    reply_json(_{'terminus:message' : MSG,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'system:message' : MSG,
+                 'system:status' : 'terminus:failure'},
                [status(400)]).
 customise_exception(error(database_does_not_exist(DB))) :-
     format(atom(M), 'Database does not exist with the name ~q', [DB]),
-    reply_json(_{'terminus:message' : M,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'system:message' : M,
+                 'system:status' : 'terminus:failure'},
                [status(400)]).
 customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
-    reply_json(_{'terminus:message' : M,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'system:message' : M,
+                 'system:status' : 'terminus:failure'},
                [status(400)]).
 customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:document' : Document},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:object' : DB,
-                 'terminus:message' : MSG,
-                 'terminus:method' : 'terminus:create_database'},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:object' : DB,
+                 'system:message' : MSG,
+                 'system:method' : 'terminus:create_database'},
                [status(409)]).
 customise_exception(error(database_could_not_be_created(DB))) :-
     format(atom(MSG), 'Database ~s could not be created', [DB]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:method' : 'terminus:create_database'},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:method' : 'terminus:create_database'},
                [status(409)]).
 customise_exception(error(could_not_create_class_frame(Class))) :-
     format(atom(MSG), 'Class Frame could not be generated for class ~s', [Class]),
-    reply_json(_{ 'terminus:message' : MSG,
-                  'terminus:status' : 'terminus:failure',
-                  'terminus:class' : Class},
+    reply_json(_{ 'system:message' : MSG,
+                  'system:status' : 'terminus:failure',
+                  'system:class' : Class},
                [status(400)]).
 customise_exception(error(could_not_create_filled_class_frame(Instance))) :-
     format(atom(MSG), 'Class Frame could not be generated for instance ~s', [Instance]),
-    reply_json(_{ 'terminus:message' : MSG,
-                  'terminus:status' : 'terminus:failure',
-                  'terminus:instance' : Instance},
+    reply_json(_{ 'system:message' : MSG,
+                  'system:status' : 'terminus:failure',
+                  'system:instance' : Instance},
                [status(400)]).
 customise_exception(error(maformed_json(Atom))) :-
     format(atom(MSG), 'Malformed JSON Object ~q', [MSG]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Atom},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:object' : Atom},
                [status(400)]).
 customise_exception(error(no_document_for_key(Key))) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:key' : Key},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:key' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key_in_document(Key,Document))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Document]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:key' : Key,
-                 'terminus:object' : Document},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:key' : Key,
+                 'system:object' : Document},
                [status(400)]).
 customise_exception(error(no_parameter_key_form_method(Key,Method))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Method]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Key},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:object' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key(Key))) :-
     format(atom(MSG), 'No parameter key ~q', [Key]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Key},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : MSG,
+                 'system:object' : Key},
                [status(400)]).
 customise_exception(error(branch_already_exists(Branch_Name))) :-
     format(string(Msg), "branch ~w already exists", [Branch_Name]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_branch_does_not_exist(Branch_Name))) :-
     format(string(Msg), "origin branch ~w does not exist", [Branch_Name]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_commit_does_not_exist(Commit_Id))) :-
     format(string(Msg), "origin commit ~w does not exist", [Commit_Id]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_cannot_be_branched(Descriptor))) :-
     format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : Msg},
                [status(400)]).
 customise_exception(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : EM},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : EM},
                [status(500)]).
 customise_exception(error(E, CTX)) :-
     http_log('~N[Exception] ~q~n',[error(E,CTX)]),
     format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : EM},
+    reply_json(_{'system:status' : 'terminus:failure',
+                 'system:message' : EM},
                [status(500)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
@@ -2233,20 +2233,20 @@ authenticate(DB, Request, Auth) :-
     !,
     (   user_key_auth(DB, Username, KS, Auth)
     ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key'})))).
+    ;   throw(http_reply(authorize(_{'system:status' : 'terminus:failure',
+                                     'system:message' : 'Not a valid key'})))).
 authenticate(DB, Request, Auth) :-
     % Try JWT if no http keys
     fetch_jwt_data(Request, Username),
     !,
     (   username_auth(DB, Username, Auth)
     ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key'})))).
+    ;   throw(http_reply(authorize(_{'system:status' : 'terminus:failure',
+                                     'system:message' : 'Not a valid key'})))).
 authenticate(_, _, _) :-
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : "No authentication supplied",
-                                          'terminus:object' : 'authenticate'}))).
+    throw(http_reply(method_not_allowed(_{'system:status' : 'terminus:failure',
+                                          'system:message' : "No authentication supplied",
+                                          'system:object' : 'authenticate'}))).
 
 connection_authorised_user(Request, User_ID) :-
     open_descriptor(system_descriptor{}, DB),
@@ -2254,9 +2254,9 @@ connection_authorised_user(Request, User_ID) :-
     !,
     (   user_key_user_id(DB, Username, KS, User_ID)
     ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key',
-                                     'terminus:object' : KS})))).
+    ;   throw(http_reply(authorize(_{'system:status' : 'terminus:failure',
+                                     'system:message' : 'Not a valid key',
+                                     'system:object' : KS})))).
 connection_authorised_user(Request, User_ID) :-
     open_descriptor(system_descriptor{}, DB),
     fetch_jwt_data(Request, Username),

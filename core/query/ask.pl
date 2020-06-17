@@ -85,32 +85,25 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     system_descriptor{} :< Descriptor,
     !,
-    Prefixes = _{doc: 'terminus:///terminus/document/'}.
+    Prefixes = _{doc: 'terminusdb:///system/data/'}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     id_descriptor{} :< Descriptor,
     !,
     Prefixes = _{}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    label_descriptor{label: Label} :< Descriptor,
+    label_descriptor{} :< Descriptor,
     !,
-    atomic_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminusdb:///data/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    database_descriptor{
-        database_name: Name
-    } :< Descriptor,
+    database_descriptor{} :< Descriptor,
     !,
-    atomic_list_concat(['terminus:///',Name,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminusdb:///repository/data/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    repository_descriptor{
-        database_descriptor: Database_Descriptor
-    } :< Descriptor,
+    repository_descriptor{} :< Descriptor,
     !,
-    database_descriptor{
-        database_name: Database_Name
-    } :< Database_Descriptor,
-    atomic_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
+    atomic_list_concat(['terminusdb:///commits/data/'], Commit_Document_Prefix),
     Prefixes = _{doc : Commit_Document_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
@@ -206,9 +199,9 @@ create_context(Transaction_Object, Context) :-
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
     % Note: should we be using system_descriptor{} below? or open it?
-
+    super_user_authority(Super_User),
     Context = query_context{
-        authorization : 'terminus:///terminus/document/access_all_areas',
+        authorization : Super_User,
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         filter : type_filter{ types : [instance] },

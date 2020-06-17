@@ -38,7 +38,8 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              system_server_uri/1
+              system_server_uri/1,
+              super_user_authority/1
           ]).
 
 /** <module> Constants
@@ -64,11 +65,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-system_instance_name('terminusdb:///terminus/document').
+system_instance_name('terminusdb:///system/data').
 
-system_schema_name('terminus:///terminus/schema').
+system_schema_name('terminusdb:///system/schema').
 
-system_inference_name('terminus:///terminus/inference').
+system_inference_name('terminusdb:///system/inference').
 
 layer_ontology('http://terminusdb.com/schema/layer').
 
@@ -83,14 +84,14 @@ xsd_any_uri_type_uri('http://www.w3.org/2001/XMLSchema#anyURI').
 label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
 comment_prop_uri('http://www.w3.org/2000/01/rdf-schema#comment').
 
-%%% URIs from terminus schema
-database_class_uri('http://terminusdb.com/schema/terminus#Database').
-resource_name_property_uri('http://terminusdb.com/schema/terminus#resource_name').
-database_state_prop_uri('http://terminusdb.com/schema/terminus#database_state').
-finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
-deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
-resource_includes_prop_uri('http://terminusdb.com/schema/terminus#resource_includes').
-allow_origin_prop_uri('http://terminusdb.com/schema/terminus#allow_origin').
+%%% URIs from system schema
+database_class_uri('http://terminusdb.com/schema/system#Database').
+resource_name_property_uri('http://terminusdb.com/schema/system#resource_name').
+database_state_prop_uri('http://terminusdb.com/schema/system#database_state').
+finalized_element_uri('http://terminusdb.com/schema/system#finalized').
+deleting_element_uri('http://terminusdb.com/schema/system#deleting').
+resource_includes_prop_uri('http://terminusdb.com/schema/system#resource_includes').
+allow_origin_prop_uri('http://terminusdb.com/schema/system#allow_origin').
 
 %%% URIs from layer schema
 layer_class_uri('http://terminusdb.com/schema/layer#Layer').
@@ -116,3 +117,4 @@ ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
 system_server_uri('terminusdb:///system/data/server').
+super_user_authority('terminusdb:///system/data/admin').

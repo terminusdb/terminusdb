@@ -74,7 +74,7 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
                   Allow_Origin_Prop,
                   All),
 
-    terminus_server_uri(Server_URI),
+    system_server_uri(Server_URI),
     resource_includes_prop_uri(Resource_Includes_Prop),
     % Add the resource scope to server
     nb_add_triple(Builder,
@@ -84,7 +84,7 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
 insert_db_object(Name, Label, Comment) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
     storage(Store),
-    terminus_instance_name(Instance_Name),
+    system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
 
@@ -104,7 +104,7 @@ prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].
 
 local_repo_uri(Name, Uri) :-
-    atomic_list_concat(['terminus:///', Name, '/document/Local'], Uri).
+    atomic_list_concat(['system:///', Name, '/document/Local'], Uri).
 
 /**
  * create_repo_graph(+Name,-Repo_Write_Builder)
@@ -134,9 +134,9 @@ create_ref_layer(Descriptor,Prefixes) :-
         ),
         _).
 
-finalise_terminus(Name) :-
+finalise_system(Name) :-
     storage(Store),
-    terminus_instance_name(Instance_Name),
+    system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
     open_write(Layer, Builder),
@@ -167,8 +167,8 @@ create_db(Name, Label, Comment, Prefixes) :-
                             },
     create_ref_layer(Repository_Descriptor,Prefixes),
 
-    % update terminusdb with finalized
-    finalise_terminus(Name).
+    % update system with finalized
+    finalise_system(Name).
 
 
 /*

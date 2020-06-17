@@ -39,17 +39,17 @@ begin_deleting_db_from_terminus(Terminus,DB_Name) :-
     with_transaction(
         Terminus,
         ask(Terminus,
-            (   t(Db_Uri, terminus:resource_name, DB_Name^^xsd:string),
-                t(Db_Uri, terminus:database_state, terminus:finalized),
-                delete(Db_Uri, terminus:database_state, terminus:finalized, "instance/main"),
-                insert(Db_Uri, terminus:database_state, terminus:deleting, "instance/main"))),
+            (   t(Db_Uri, system:resource_name, DB_Name^^xsd:string),
+                t(Db_Uri, system:database_state, terminus:finalized),
+                delete(Db_Uri, system:database_state, terminus:finalized, "instance/main"),
+                insert(Db_Uri, system:database_state, terminus:deleting, "instance/main"))),
         _Meta_Data).
 
 delete_db_from_terminus(Terminus,DB_Name) :-
     with_transaction(
         Terminus,
         ask(Terminus,
-            (   t(Db_Uri, terminus:resource_name, DB_Name^^xsd:string),
+            (   t(Db_Uri, system:resource_name, DB_Name^^xsd:string),
                 delete_object(Db_Uri))),
         _Meta_Data).
 

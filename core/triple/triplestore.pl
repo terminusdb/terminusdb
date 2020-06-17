@@ -227,8 +227,8 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
  * UUU - do some transactional stuff here as with schema.
  */
 import_graph(_File, _DB_ID, _Graph_ID) :-
-    throw(error(_{'terminus:status' : 'terminus:error',
-                  'terminus:message' : "import_graph/3 is unimplemented"})).
+    throw(error(_{'system:status' : 'terminus:error',
+                  'system:message' : "import_graph/3 is unimplemented"})).
 
 /**
  * insert(+G:read_write_obj,+X,+Y,+Z,-Changed) is det.

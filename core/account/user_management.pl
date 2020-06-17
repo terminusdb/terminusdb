@@ -25,7 +25,7 @@
  */
 agent_name_uri(Askable, Name, User_URI) :-
     once(ask(Askable,
-             t(User_URI, terminus:agent_name, Name^^xsd:string)
+             t(User_URI, system:agent_name, Name^^xsd:string)
             )).
 
 agent_name_exists(Askable, Name) :-
@@ -53,17 +53,17 @@ add_user(Nick, Email, Pass, User_URI) :-
                 (   idgen(doc:'User',[Nick^^xsd:string], User_URI),
                     idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
                     idgen(doc:'Access',["terminus"^^xsd:string, "create_database"^^xsd:string], Access_URI),
-                    t(Server_URI, terminus:resource_name, "terminus"^^xsd:string),
-                    insert(User_URI,rdf:type, terminus:'User'),
-                    insert(User_URI,terminus:email, Email^^xsd:string),
-                    insert(User_URI,terminus:agent_name, Nick^^xsd:string),
-                    insert(User_URI,terminus:user_key_hash, Hash^^xsd:string),
-                    insert(User_URI,terminus:authority, Capability_URI),
-                    insert(Capability_URI, rdf:type, terminus:'Capability'),
-                    insert(Capability_URI, terminus:access, Access_URI),
-                    insert(Access_URI, rdf:type, terminus:'Access'),
-                    insert(Access_URI, terminus:authority_scope, Server_URI),
-                    insert(Access_URI, terminus:action, terminus:create_database)
+                    t(Server_URI, system:resource_name, "terminus"^^xsd:string),
+                    insert(User_URI,rdf:type, system:'User'),
+                    insert(User_URI,system:email, Email^^xsd:string),
+                    insert(User_URI,system:agent_name, Nick^^xsd:string),
+                    insert(User_URI,system:user_key_hash, Hash^^xsd:string),
+                    insert(User_URI,system:authority, Capability_URI),
+                    insert(Capability_URI, rdf:type, system:'Capability'),
+                    insert(Capability_URI, system:access, Access_URI),
+                    insert(Access_URI, rdf:type, system:'Access'),
+                    insert(Access_URI, system:authority_scope, Server_URI),
+                    insert(Access_URI, system:action, terminus:create_database)
                 )
                )
         ),
@@ -78,7 +78,7 @@ delete_user(User_URI) :-
     with_transaction(
         Context,
         ask(Context,
-            (   t(User_URI, rdf:type, terminus:'User'),
+            (   t(User_URI, rdf:type, system:'User'),
                 delete_object(User_URI)
             )),
         _).
@@ -96,15 +96,15 @@ make_user_own_database(User_Name, Database_Name) :-
             % writeq(User_ID),nl,
             % findall(DB-Name,
             %         ask(TerminusDB,
-            %             (   t(DB, rdf:type, terminus:'Database'),
-            %                 t(DB, terminus:resource_name, Name^^(xsd:string))
+            %             (   t(DB, rdf:type, system:'Database'),
+            %                 t(DB, system:resource_name, Name^^(xsd:string))
             %             )),
             %         Names),
             % writeq(Names),
 
             ask(TerminusDB,
-                (   t(DB_URI, rdf:type, terminus:'Database'),
-                    t(DB_URI, terminus:resource_name, Database_Name^^(xsd:string))
+                (   t(DB_URI, rdf:type, system:'Database'),
+                    t(DB_URI, system:resource_name, Database_Name^^(xsd:string))
                 )),
 
             % writeq(DB_URI),nl,
@@ -127,23 +127,23 @@ make_user_own_database(User_Name, Database_Name) :-
                               schema_write_access^^(xsd:string),
                               manage^^(xsd:string),
                               Database_Name^^(xsd:string)], Access_URI),
-                    insert(Auth_ID, terminus:access, Access_URI),
-                    insert(Access_URI, rdf:type, terminus:'Access'),
-                    insert(Access_URI, terminus:action, terminus:delete_database),
-                    insert(Access_URI, terminus:action, terminus:class_frame),
-                    insert(Access_URI, terminus:action, terminus:clone),
-                    insert(Access_URI, terminus:action, terminus:fetch),
-                    insert(Access_URI, terminus:action, terminus:push),
-                    insert(Access_URI, terminus:action, terminus:branch),
-                    insert(Access_URI, terminus:action, terminus:rebase),
-                    insert(Access_URI, terminus:action, terminus:meta_read_access),
-                    insert(Access_URI, terminus:action, terminus:commit_read_access),
-                    insert(Access_URI, terminus:action, terminus:instance_read_access),
-                    insert(Access_URI, terminus:action, terminus:instance_write_access),
-                    insert(Access_URI, terminus:action, terminus:schema_read_access),
-                    insert(Access_URI, terminus:action, terminus:schema_write_access),
-                    insert(Access_URI, terminus:action, terminus:manage),
-                    insert(Access_URI, terminus:authority_scope, DB_URI)
+                    insert(Auth_ID, system:access, Access_URI),
+                    insert(Access_URI, rdf:type, system:'Access'),
+                    insert(Access_URI, system:action, terminus:delete_database),
+                    insert(Access_URI, system:action, terminus:class_frame),
+                    insert(Access_URI, system:action, terminus:clone),
+                    insert(Access_URI, system:action, terminus:fetch),
+                    insert(Access_URI, system:action, terminus:push),
+                    insert(Access_URI, system:action, terminus:branch),
+                    insert(Access_URI, system:action, terminus:rebase),
+                    insert(Access_URI, system:action, terminus:meta_read_access),
+                    insert(Access_URI, system:action, terminus:commit_read_access),
+                    insert(Access_URI, system:action, terminus:instance_read_access),
+                    insert(Access_URI, system:action, terminus:instance_write_access),
+                    insert(Access_URI, system:action, terminus:schema_read_access),
+                    insert(Access_URI, system:action, terminus:schema_write_access),
+                    insert(Access_URI, system:action, terminus:manage),
+                    insert(Access_URI, system:authority_scope, DB_URI)
                 ))
         ),
         _Meta_Data
@@ -164,7 +164,7 @@ test(add_user, [
     agent_name_uri(system_descriptor{}, "Gavin", URI),
 
     once(ask(system_descriptor{},
-             t(URI, terminus:email, "gavin@terminusdb.com"^^xsd:string))).
+             t(URI, system:email, "gavin@terminusdb.com"^^xsd:string))).
 
 
 test(test_user_ownership, [
@@ -191,7 +191,7 @@ test(test_user_ownership, [
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            terminus: TerminusDB,
+            system: TerminusDB,
             update_guard : _Guard0,
             authorization : Auth_ID
         }, Context1, Context1_0),
@@ -210,7 +210,7 @@ test(test_user_ownership, [
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            terminus: TerminusDB,
+            system: TerminusDB,
             update_guard : _Guard1,
             authorization : Auth_ID
         }, Context2, _Context2_0),

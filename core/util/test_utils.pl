@@ -173,7 +173,7 @@ curl_json(Args,JSON) :-
 
     catch(json_read_dict(Out, JSON),
           _,
-          JSON = _{'terminus:status' : 'terminus:failure'}),
+          JSON = _{'system:status' : 'terminus:failure'}),
 
     close(Out).
 
@@ -264,7 +264,7 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
 
 create_db_with_test_schema(User, Db_Name) :-
     user_database_name(User, Db_Name, Full_Name),
-    Prefixes = _{ doc  : 'terminus://worldOnt/document/',
+    Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},
 
     create_db(Full_Name, "test", "a test db", Prefixes),

@@ -158,7 +158,7 @@ class_properties(Class, Database, PropertiesPrime) :-
         exclude({Schema,Database}/[X]>>(
                     xrdf(
                          Schema,
-                         X,terminus:tag,terminus:abstract)),
+                         X,system:tag,terminus:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
     ;   PropertiesPrime=DocumentProperties).
@@ -362,7 +362,7 @@ classes_below(Class,Database,BelowList) :-
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
                 xrdf(Schema,
-                     X,terminus:tag,terminus:abstract)),
+                     X,system:tag,terminus:abstract)),
             ClassesNoBottom,
             BelowList).
 
@@ -846,9 +846,9 @@ test(class_frame, [])
 test(document_filled_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
-    document_filled_frame('terminus:///terminus/document/admin',Database,Frame),
+    document_filled_frame('system:///terminus/document/admin',Database,Frame),
     Frame = [[type=objectProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='system:///terminus/document/admin',
               property='http://terminusdb.com/schema/terminus#authority',
               domain='http://terminusdb.com/schema/terminus#User',
               range='http://terminusdb.com/schema/terminus#Capability',
@@ -859,9 +859,9 @@ test(document_filled_frame, [])
                      class='http://terminusdb.com/schema/terminus#Capability',
                      label="Capability"@en,
                      comment="A capability confers access to a database or server action"@en,
-                     domainValue='terminus:///terminus/document/access_all_areas']],
+                     domainValue='system:///terminus/document/access_all_areas']],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='system:///terminus/document/admin',
               property='http://terminusdb.com/schema/terminus#agent_name',
               domain='http://terminusdb.com/schema/terminus#User',
               restriction=true,
@@ -870,7 +870,7 @@ test(document_filled_frame, [])
               comment="An name for API authentication"@en,
               rangeValue="admin"^^'http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='system:///terminus/document/admin',
               property='http://terminusdb.com/schema/terminus#user_key_hash',
               domain='http://terminusdb.com/schema/terminus#User',
               restriction=true,
@@ -879,14 +879,14 @@ test(document_filled_frame, [])
               comment="An agent key for API authentication"@en,
               rangeValue=_],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='system:///terminus/document/admin',
               property='http://www.w3.org/2000/01/rdf-schema#label',
               domain='http://terminusdb.com/schema/terminus#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               rangeValue="Server Admin User"@en],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='system:///terminus/document/admin',
               property='http://www.w3.org/2000/01/rdf-schema#comment',
               domain='http://terminusdb.com/schema/terminus#User',
               restriction=true,
@@ -1018,7 +1018,7 @@ document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
 class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     class_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='terminus:Frame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:Frame', 'terminus:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1028,7 +1028,7 @@ class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
 filled_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     document_filled_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='terminus:FilledFrame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:FilledFrame', 'terminus:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1182,21 +1182,21 @@ test(update_object, [])
 
     Document = _{'@context': Query.prefixes,
                  '@id' : "doc:new_user",
-                 '@type' : "terminus:User",
+                 '@type' : "system:User",
                  'rdfs:comment': _{'@language': "en",
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:user_key_hash':
+                 'system:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
                  },
-                 'terminus:agent_name': _{'@type':"xsd:string",
+                 'system:agent_name': _{'@type':"xsd:string",
                                           '@value':"test"
                                          },
-                 'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:Capability"}
+                 'system:authority': _{'@id':"doc:access_all_areas",
+                                         '@type':"system:Capability"}
                 },
 
     update_object(Document, Query),
@@ -1212,13 +1212,13 @@ test(update_object, [])
 test(document_jsonld_depth, [])
 :-
     Descriptor = system_descriptor{},
-    User_ID = 'terminus:///terminus/document/admin',
+    User_ID = 'system:///terminus/document/admin',
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),
     document_jsonld(Query, User_ID, 1, JSON_LD),
     % TODO: Why are these atoms? Inconsistent!
-    _{'@id':'doc:admin','@type':'terminus:User'} :< JSON_LD.
+    _{'@id':'doc:admin','@type':'system:User'} :< JSON_LD.
 
 
 test(delete_object, [])
@@ -1231,21 +1231,21 @@ test(delete_object, [])
 
     Document = _{'@context': Query.prefixes,
                  '@id' : "doc:new_user",
-                 '@type' : "terminus:User",
+                 '@type' : "system:User",
                  'rdfs:comment': _{'@language': "en",
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:user_key_hash':
+                 'system:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
                  },
-                 'terminus:agent_name': _{'@type':"xsd:string",
+                 'system:agent_name': _{'@type':"xsd:string",
                                           '@value':"test"
                                          },
-                 'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:Capability"}
+                 'system:authority': _{'@id':"doc:access_all_areas",
+                                         '@type':"system:Capability"}
                 },
 
     update_object(Document, Query),

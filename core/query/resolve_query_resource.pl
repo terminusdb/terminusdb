@@ -689,9 +689,9 @@ resolve_absolute_graph_descriptor(["terminus", Type, Name], Graph) :-
  */
 % Terminus
 %
-% 'terminus:///terminus'
+% 'system:///terminus'
 %
-resolve_query_resource('terminus:///terminus/',system_descriptor{}).
+resolve_query_resource('system:///terminus/',system_descriptor{}).
 % Branches
 %
 % terminus

@@ -44,7 +44,7 @@
 :- use_module(library(terminus_store)).
 
 
-descriptor_database_name(Descriptor, 'terminus:///terminus') :-
+descriptor_database_name(Descriptor, 'system:///terminus') :-
     system_descriptor{} = Descriptor,
     !.
 descriptor_database_name(Descriptor, ID) :-

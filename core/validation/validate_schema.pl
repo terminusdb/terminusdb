@@ -1187,7 +1187,7 @@ comment(X,Y,Database) :-
 /**
  * terminus_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
  *
- * Get the terminus:tag for X as Y.
+ * Get the system:tag for X as Y.
  */
 terminus_tag(X,Y,Database) :-
     database_schema(Database,Schema),

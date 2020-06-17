@@ -40,8 +40,8 @@ test(system_descriptor_read_query_test) :-
 
     once(ask(Terminus,
              (   t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', 'schema/*'),
-                 t(doc:admin, rdf:type, terminus:'User'),
-                 t(terminus:authority_scope, owl:propertyChainAxiom, _, 'inference/*')
+                 t(doc:admin, rdf:type, system:'User'),
+                 t(system:authority_scope, owl:propertyChainAxiom, _, 'inference/*')
              ))).
 
 test(create_db_test, [

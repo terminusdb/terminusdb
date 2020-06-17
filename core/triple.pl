@@ -14,7 +14,7 @@
               database_finalized/2,
               database_exists/1,
               database_exists/2,
-              terminus_graph_layer/2,
+              system_graph_layer/2,
               database_instance/2,
               database_inference/2,
               database_schema/2,
@@ -76,6 +76,7 @@
               repo_type_document_prefix/2,
 
               system_server_uri/1,
+              super_user_authority/1,
 
               % triplestore
               destroy_graph/2,
