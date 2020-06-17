@@ -147,7 +147,7 @@ console_handler(options,Request) :-
 console_handler(get,Request) :-
     config:index_path(Index_Path),
     write_cors_headers(Request),
-    throw(http_reply(file("application/html", Index_Path))).
+    throw(http_reply(file("text/html", Index_Path))).
 
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(message), cors_catch(message_handler(Method)),
