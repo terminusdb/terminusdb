@@ -146,10 +146,8 @@ console_handler(options,Request) :-
     nl.
 console_handler(get,Request) :-
     config:index_path(Index_Path),
-    http_reply(Index_Path
-    read_file_to_string(Index_Path, String, []),
     write_cors_headers(Request),
-    format("~n~s~n", [String]).
+    throw(http_reply(file("application/html", Index_Path))).
 
 :- begin_tests(console_route).
 
@@ -1986,14 +1984,14 @@ test(delete_graph, [
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
 % We want to use cors whenever we're throwing an error.
-:- set_setting(http:cors, [*]).
+%:- set_setting(http:cors, [*]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(1,?).
 cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
-          (   http_log("~n[Exception] ~q~n", [E]),
+          (
               customise_exception(E)
           )
          ),
