@@ -20,7 +20,7 @@
  *                                                                       *
  *                                                                       *
  *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+°*  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
  *  GNU General Public License for more details.                         *
  *                                                                       *
@@ -37,14 +37,14 @@
 
 :- use_module(library(terminus_store)).
 
-insert_db_object_triples(Builder, Name, Label, Comment) :-
+insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label, Comment, Db_Uri) :-
     database_class_uri(Database_Class_Uri),
     resource_name_property_uri(Database_Name_Property_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(Name^^Xsd_String_Type_Uri, Name_Literal),
-    db_name_uri(Name, Db_Uri),
+    object_storage(Database_Name^^Xsd_String_Type_Uri, Name_Literal),
+    random_idgen('system:///terminus/data/Database', [Organization_Name, Database_Name], Db_Uri),
 
-    write_instance(Builder,Db_Uri,Name,Database_Class_Uri),
+    write_instance(Builder,Db_Uri,Database_Name,Database_Class_Uri),
     nb_add_triple(Builder,
                   Db_Uri,
                   Database_Name_Property_Uri,
@@ -66,36 +66,29 @@ insert_db_object_triples(Builder, Name, Label, Comment) :-
                   Comment_Prop,
                   Comment_Literal),
 
-    allow_origin_prop_uri(Allow_Origin_Prop),
-    object_storage("*"^^'http://www.w3.org/2001/XMLSchema#string',All),
-    % Add default CORS
-    nb_add_triple(Builder,
-                  Db_Uri,
-                  Allow_Origin_Prop,
-                  All),
-
-    system_server_uri(Server_URI),
+    organization_name_uri(Layer, Organization_Name, Organization_Uri),
     resource_includes_prop_uri(Resource_Includes_Prop),
     % Add the resource scope to server
     nb_add_triple(Builder,
-                  Server_URI,
+                  Organization_Uri,
                   Resource_Includes_Prop,
                   node(Db_Uri)).
-insert_db_object(Name, Label, Comment) :-
+
+insert_db_object(Organization_Name, Database_Name, Label, Comment, Db_Uri) :-
     % todo we should probably retry if this fails cause others may be moving the terminus db
     storage(Store),
     system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer),
 
-    (   database_exists(Layer, Name)
-    ->  throw(error(database_exists(Name),
+    (   database_exists(Layer, Organization_Name, Database_Name)
+    ->  throw(error(database_exists(Organization_Name,Database_Name),
                     context(insert_db_object/1,
                             'database already exists')))
     ;   true),
 
     open_write(Layer, Builder),
-    insert_db_object_triples(Builder, Name, Label, Comment),
+    insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label, Comment,Db_Uri),
     nb_commit(Builder, New_Layer),
     nb_set_head(Graph, New_Layer).
 
@@ -107,12 +100,14 @@ local_repo_uri(Name, Uri) :-
     atomic_list_concat(['terminusdb:///repository/', Name, '/data/Local'], Uri).
 
 /**
- * create_repo_graph(+Name,-Repo_Write_Builder)
+ * create_repo_graph(+Organization,+Name)
  */
-create_repo_graph(Name) :-
+create_repo_graph(Organization,Database) :-
     storage(Store),
+    organization_database_name(Organization,Database,Name),
     safe_create_named_graph(Store,Name,_Graph),
-    Descriptor = database_descriptor{database_name:Name},
+    Descriptor = database_descriptor{ organization_name : Organization,
+                                      database_name: Database },
     create_context(Descriptor, Context),
     with_transaction(Context,
                      insert_local_repository(Context, "local", _),
@@ -134,7 +129,7 @@ create_ref_layer(Descriptor,Prefixes) :-
         ),
         _).
 
-finalise_system(Name) :-
+finalize_system(Db_Uri) :-
     storage(Store),
     system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
@@ -144,32 +139,32 @@ finalise_system(Name) :-
     database_state_prop_uri(State_Prop),
 
     % Tell terminus that we are actually finalized
-    db_name_uri(Name, Db_Uri),
     nb_add_triple(Builder,Db_Uri,State_Prop,node(Finalized)),
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-create_db(Organization, Name, Label, Comment, Prefixes) :-
-    text_to_string(Name, Name_String),
+create_db(Organization_Name,Database_Name, Label, Comment, Prefixes) :-
+    text_to_string(Organization_Name, Organization_Name_String),
+    text_to_string(Database_Name, Database_Name_String),
     % insert new db object into the terminus db
-    insert_db_object(Organization, Name, Label, Comment),
+    insert_db_object(Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri),
 
     % create repo graph - it has name as label
-    create_repo_graph(Organization, Name_String),
+    create_repo_graph(Organization_Name_String, Database_Name_String),
 
     % create ref layer with master branch
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor:
                                 database_descriptor{
-                                    organization_name: Organization,
-                                    database_name: Name_String
+                                    organization_name: Organization_Name_String,
+                                    database_name: Database_Name_String
                                 },
                                 repository_name: "local"
                             },
     create_ref_layer(Repository_Descriptor,Prefixes),
 
     % update system with finalized
-    finalise_system(Name).
+    finalize_system(Db_Uri).
 
 
 /*

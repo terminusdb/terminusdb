@@ -1,7 +1,7 @@
 :- module(db_delete,[
-              try_delete_db/1,
-              delete_db/1,
-              force_delete_db/1
+              try_delete_db/2,
+              delete_db/2,
+              force_delete_db/2
           ]).
 
 /** <module> Database Deletion Logic
@@ -35,63 +35,69 @@
 
 :- use_module(library(terminus_store)).
 
-begin_deleting_db_from_terminus(Terminus,DB_Name) :-
+begin_deleting_db_from_system(Organization,DB_Name) :-
+    create_context(system_descriptor{}, System),
     with_transaction(
-        Terminus,
-        ask(Terminus,
-            (   t(Db_Uri, system:resource_name, DB_Name^^xsd:string),
-                t(Db_Uri, system:database_state, system:finalized),
-                delete(Db_Uri, system:database_state, system:finalized, "instance/main"),
-                insert(Db_Uri, system:database_state, system:deleting, "instance/main"))),
+        System,
+        (   do_or_die(database_finalized(System,Organization,DB_Name),
+                      error(database_not_finalized(Organization,DB_Name))),
+            organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
+            ask(System,
+                (   delete(Db_Uri, system:database_state, system:finalized, "instance/main"),
+                    insert(Db_Uri, system:database_state, system:deleting, "instance/main")))
+        ),
         _Meta_Data).
 
-delete_db_from_terminus(Terminus,DB_Name) :-
+delete_db_from_system(Organization,DB) :-
+    create_context(system_descriptor{}, System),
     with_transaction(
-        Terminus,
-        ask(Terminus,
-            (   t(Db_Uri, system:resource_name, DB_Name^^xsd:string),
-                delete_object(Db_Uri))),
+        System,
+        (   organization_database_name_uri(System,Organization,DB,Db_Uri),
+            ask(System,
+                delete_object(Db_Uri))
+        ),
         _Meta_Data).
 
 /**
- * delete_db(+DB_Name) is semidet.
+ * delete_db(+Organization,+DB_Name) is semidet.
  *
  * Deletes a database if it exists, fails if it doesn't.
  */
-delete_db(DB_Name) :-
-    create_context(system_descriptor{}, Terminus),
-    (   database_exists(Terminus,DB_Name)
-    <>  throw(database_does_not_exist(DB_Name))),
+delete_db(Organization,DB_Name) :-
+    create_context(system_descriptor{}, System),
+    (   database_exists(System,Organization,DB_Name)
+    <>  throw(database_does_not_exist(Organization,DB_Name))),
     % Do something here? User may need to know what went wrong
 
     do_or_die(
-        database_finalized(Terminus,DB_Name),
-        error(database_not_finalized(DB_Name))),
+        database_finalized(System,Organization,DB_Name),
+        error(database_not_finalized(Organization,DB_Name),
+              context(delete_db/2))),
 
-    begin_deleting_db_from_terminus(Terminus,DB_Name),
+    begin_deleting_db_from_system(Organization,DB_Name),
 
+    delete_database_label(Organization,DB_Name),
+
+    delete_db_from_system(Organization,DB_Name).
+
+delete_database_label(Organization,Db) :-
     db_path(Path),
-    www_form_encode(DB_Name,DB_Name_Safe),
-    atomic_list_concat([Path,DB_Name_Safe,'.label'], File_Path),
+    organization_database_name(Organization,Db,Composite_Name),
+    www_form_encode(Composite_Name,Composite_Name_Safe),
+    atomic_list_concat([Path,Composite_Name_Safe,'.label'], File_Path),
 
     (   exists_file(File_Path)
     ->  delete_file(File_Path)
-    ;   throw(database_files_do_not_exist(DB_Name))
-    ),
-
-    create_context(system_descriptor{}, Terminus_Staged),
-    delete_db_from_terminus(Terminus_Staged,DB_Name).
+    ;   throw(error(database_files_do_not_exist(Organization,Db),
+                    context(delete_database_label/2)))
+    ).
 
 /* Force deletion of databases in an inconsistent state */
-force_delete_db(DB_Name) :-
-    create_context(system_descriptor{}, Terminus),
-    ignore(delete_db_from_terminus(Terminus,DB_Name)),
-    db_path(Path),
-    www_form_encode(DB_Name,DB_Name_Safe),
-    atomic_list_concat([Path,DB_Name_Safe,'.label'], File_Path),
+force_delete_db(Organization,DB) :-
+    ignore(delete_db_from_system(Organization,DB)),
     catch(
-        delete_file(File_Path),
-        error(existence_error(file,_Fname), _Ctx),
+        delete_database_label(Organization,DB),
+        error(database_files_do_not_exist(_,_), _),
         true).
 
 /*
@@ -99,7 +105,7 @@ force_delete_db(DB_Name) :-
  *
  * Attempt to delete a database given its URI
  */
-try_delete_db(DB) :-
+try_delete_db(Organization,DB) :-
     do_or_die(
-        delete_db(DB),
-        error(database_cannot_be_deleted(DB))).
+        delete_db(Organization,DB),
+        error(database_cannot_be_deleted(Organization,DB))).

@@ -471,7 +471,11 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     !,
     open_descriptor(Database_Descriptor, _, Database_Transaction_Object, Map, Map_1),
 
-    Database_Name = Database_Descriptor.database_name,
+    database_descriptor{
+        database_name : Database_Name,
+        organization_name : Organization_Name
+    } :< Database_Descriptor,
+
     Layer_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
                                          database_name: Database_Name,
                                          repository_name: Repository_Name,

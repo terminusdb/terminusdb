@@ -1,8 +1,4 @@
 :- module(database_utils,[
-              db_name_uri/2,
-              database_finalized/2,
-              database_exists/2,
-              database_exists/1,
               system_graph_layer/2,
               database_instance/2,
               database_inference/2,
@@ -50,24 +46,6 @@
 
 :- use_module(library(pcre)).
 
-/*
- * db_name_uri(+Name,-Uri) is det.
- * db_name_uri(-Name,+Uri) is det.
- *
- * Make a fully qualified Uri from Name or vice-versa
- */
-db_name_uri(Name, Uri) :-
-    idgen('system:///terminus/document/Database', [Name], Uri).
-
-database_exists(Askable, Name) :-
-    once(ask(Askable,
-             t(_Db_Uri, system:resource_name, Name^^xsd:string))).
-
-database_finalized(Askable,Name) :-
-    once(ask(Askable,
-             (   t(Db_Uri, system:resource_name, Name^^xsd:string),
-                 t(Db_Uri, system:database_state, system:finalized)))).
-
 /**
  * system_graph_layer(-Graph,-Layer) is det.
  *
@@ -78,13 +56,6 @@ system_graph_layer(Graph,Layer) :-
     system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer).
-
-/*
- * database_name_exists(DB_URI) is semidet.
- *
- */
-database_exists(Name) :-
-    database_exists(system_descriptor{}, Name).
 
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(

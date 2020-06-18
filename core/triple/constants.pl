@@ -38,7 +38,7 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              system_server_uri/1,
+              admin_organization_uri/1,
               super_user_authority/1
           ]).
 
@@ -116,5 +116,5 @@ ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri')
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
-system_server_uri('terminusdb:///system/data/server').
+admin_organization_uri('terminusdb:///system/data/admin_organization').
 super_user_authority('terminusdb:///system/data/admin').

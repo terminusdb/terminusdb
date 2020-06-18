@@ -1,5 +1,4 @@
 :- module(triplestore, [
-              destroy_graph/2,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
@@ -59,20 +58,6 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-/**
- * destroy_graph(+DBID,+GID:graph_identifier) is det.
- *
- * Completely remove a graph from disk.
- *
- * currently this is a noop - we can worry about collection
- * later.
- */
-destroy_graph(_DBID,GID) :-
-    db_path(Path),
-    www_form_encode(GID,Safe_GID),
-    interpolate([Path,Safe_GID,'.label'],Label),
-    delete_file(Label).
 
 /**
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.

@@ -10,10 +10,6 @@
               random_idgen/3,
 
               % database_utils.pl
-              db_name_uri/2,
-              database_finalized/2,
-              database_exists/1,
-              database_exists/2,
               system_graph_layer/2,
               database_instance/2,
               database_inference/2,
@@ -75,11 +71,10 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              system_server_uri/1,
+              admin_organization_uri/1,
               super_user_authority/1,
 
               % triplestore
-              destroy_graph/2,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,

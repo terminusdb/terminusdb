@@ -129,15 +129,17 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
 
 collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
     !,
-    Graph_Descriptor = terminus_graph{
+    Graph_Descriptor = system_graph{
                            type : instance,
                            name : "main"
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
-    database_descriptor{ database_name : Name } = Descriptor,
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database } = Descriptor,
     !,
     Graph_Descriptor = repo_graph{
-                           database_name : Name,
+                           organization_name : Organization,
+                           database_name : Database,
                            type : instance,
                            name : "main"
                        }.
@@ -147,8 +149,10 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
         repository_name : Repository_Name
     } = Descriptor,
     !,
-    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database_Name } = Database_Descriptor,
     Graph_Descriptor = commit_graph{
+                           organization_name : Organization,
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            type : instance,
@@ -164,10 +168,12 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
         repository_name : Repository_Name
     } :< Repository_Descriptor,
     database_descriptor{
+        organization_name : Organization,
         database_name : Database_Name
     } :< Database_Descriptor,
 
     Graph_Descriptor = branch_graph{
+                           organization_name : Organization,
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            branch_name : Branch_Name,

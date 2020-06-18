@@ -1,13 +1,12 @@
 :- module(api, [
               % db_delete.pl
-              delete_db/1,
-              try_delete_db/1,
-              force_delete_db/1,
+              delete_db/2,
+              try_delete_db/2,
+              force_delete_db/2,
 
               % db_create.pl
-              create_db/4,
-              try_delete_db/1,
-              try_create_db/4,
+              create_db/5,
+              try_create_db/5,
               create_ref_layer/2,
 
               % init.pl
