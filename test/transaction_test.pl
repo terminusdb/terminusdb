@@ -49,7 +49,7 @@ test(create_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema('admin/Database', 'test','a test').
+    create_db_without_schema("admin", "Database", 'test','a test').
 
 
 test(delete_db_test, [
@@ -58,8 +58,8 @@ test(delete_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema('admin/Database', 'test','a test'),
-    delete_db('admin/Database').
+    create_db_without_schema("admin", "Database", 'test','a test'),
+    delete_db("admin", "Database").
 
 
 test(empty_db_test, [
@@ -67,9 +67,11 @@ test(empty_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Name = 'admin/Database',
-    create_db_without_schema(Name, 'test','a test'),
-    Descriptor = database_descriptor{ database_name : Name },
+    create_db_without_schema("admin", "Database", 'test','a test'),
+    Descriptor = database_descriptor{
+                     organization_name: "admin",
+                     database_name : "Database"
+                 },
     findall(t(X,P,Y),
             ask(Descriptor,
                 (   t(X, P, Y) )),

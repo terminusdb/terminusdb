@@ -66,7 +66,8 @@ insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label
                   Comment_Prop,
                   Comment_Literal),
 
-    organization_name_uri(Layer, Organization_Name, Organization_Uri),
+    do_or_die(organization_name_uri(Layer, Organization_Name, Organization_Uri),
+              error(organization_does_not_exist(Organization_Name), context(insert_db_object_triples/7, _))),
     resource_includes_prop_uri(Resource_Includes_Prop),
     % Add the resource scope to server
     nb_add_triple(Builder,

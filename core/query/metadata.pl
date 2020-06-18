@@ -95,7 +95,7 @@ test(count_and_size, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-

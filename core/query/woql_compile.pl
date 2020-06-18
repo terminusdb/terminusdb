@@ -1558,7 +1558,7 @@ test(eval, [])
 
 test(add_triple, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1576,7 +1576,7 @@ test(add_triple, [
 
 test(add_quad, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1760,7 +1760,7 @@ test(exp, []) :-
 
 test(limit, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))]) :-
 
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2203,7 +2203,7 @@ test(path, []) :-
 
 test(path_star, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2254,7 +2254,7 @@ test(path_star, [
 
 test(complex_path, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2320,7 +2320,7 @@ test(complex_path, [
 
 test(group_by, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -2422,7 +2422,7 @@ test(when, []) :-
 
 test(transaction_semantics_after, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2450,7 +2450,7 @@ test(transaction_semantics_after, [
 
 test(transaction_semantics_disjunct, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2479,7 +2479,7 @@ test(transaction_semantics_disjunct, [
 
 test(transaction_semantics_conditional, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2509,7 +2509,7 @@ test(transaction_semantics_conditional, [
 
 test(disjunction_equality, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2545,7 +2545,7 @@ test(metadata_branch, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
@@ -2578,7 +2578,7 @@ test(metadata_graph, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
@@ -2611,7 +2611,7 @@ test(metadata_triple_count_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2646,7 +2646,7 @@ test(metadata_triple_count_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2682,7 +2682,7 @@ test(metadata_size_commits_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2716,7 +2716,7 @@ test(metadata_size_commits_json, [
 
 test(ast_disjunction_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -2747,7 +2747,7 @@ test(ast_disjunction_test, [
 
 test(json_disjunction_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -2881,7 +2881,7 @@ test(json_disjunction_test, [
 
 test(ast_when_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test", 'test','a test'))),
          cleanup(teardown_temp_store(State))
      ]) :-
 

@@ -15,7 +15,7 @@
               repo_schema_context_from_label_descriptor/2,
               repo_schema_context_from_label_descriptor/3,
               create_db_with_test_schema/2,
-              create_db_without_schema/3,
+              create_db_without_schema/2,
               print_all_triples/1,
               print_all_triples/2
           ]).
@@ -262,13 +262,12 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
     create_context(Transaction_Object, Commit_Info, Context).
 
 
-create_db_with_test_schema(User, Db_Name) :-
-    organization_database_name(User, Db_Name, Full_Name),
+create_db_with_test_schema(Organization, Db_Name) :-
     Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},
 
-    create_db(Full_Name, "test", "a test db", Prefixes),
-    resolve_absolute_descriptor([User, Db_Name], Branch_Descriptor),
+    create_db(Organization, Db_Name, "test", "a test db", Prefixes),
+    resolve_absolute_descriptor([Organization, Db_Name], Branch_Descriptor),
 
     create_graph(Branch_Descriptor,
                  commit_info{ author : "test",
@@ -283,16 +282,10 @@ create_db_with_test_schema(User, Db_Name) :-
     read_file_to_string(TTL_File, TTL, []),
     update_turtle_graph(Context, schema, "main", TTL).
 
-create_db_without_schema(User, Db_Name) :-
-    organization_database_name(User, Db_Name, Full_Name),
+create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    create_db(Full_Name, "test", "a test db", Prefixes).
-
-create_db_without_schema(DB_ID, DB_Name, Comment) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document',
-                  scm : 'http://somewhere.for.now/schema' },
-    create_db(DB_ID, DB_Name, Comment, Prefixes).
+    create_db(Organization, Db_Name, "test", "a test db", Prefixes).
 
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,
