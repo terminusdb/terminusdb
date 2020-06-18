@@ -88,20 +88,14 @@ http:location(root, '/', []).
  * connect_handler(+Method,+Request:http_request) is det.
  */
 /* NOTE: Need to return list of databases and access rights */
-connect_handler(options,_Request) :-
-    % TODO: What should this be?
-    % Do a search for each config:public_server_url
-    % once you know.
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
+connect_handler(options,Request) :-
+    write_cors_headers(Request),
     format('~n').
 connect_handler(get,Request) :-
-    config:public_url(Server_URI),
     connection_authorised_user(Request, User_ID),
     open_descriptor(terminus_descriptor{}, DB),
     user_object(DB, User_ID, User_Obj),
-    write_cors_headers(Server_URI, DB),
+    write_cors_headers(Request),
     reply_json(User_Obj).
 
 :- begin_tests(connect_handler).
@@ -147,19 +141,13 @@ test(connection_result_dbs, [])
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(options,_Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
-    format('~n').
-console_handler(get,_Request) :-
+console_handler(options,Request) :-
+    write_cors_headers(Request),
+    nl.
+console_handler(get,Request) :-
     config:index_path(Index_Path),
-    read_file_to_string(Index_Path, String, []),
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
-    format('~n'),
-    write(String).
+    write_cors_headers(Request),
+    throw(http_reply(file("text/html", Index_Path))).
 
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(message), cors_catch(message_handler(Method)),
@@ -169,19 +157,17 @@ console_handler(get,_Request) :-
 :- begin_tests(console_route).
 
 test(console_route) :-
-    config:public_url(SURI),
+    config:server(SURI),
     format(string(ConsoleURL), "~s/console/", [SURI]),
-    http_get(ConsoleURL, _, []).
+    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
 
 :- end_tests(console_route).
 
 /*
  * message_handler(+Method,+Request) is det.
  */
-message_handler(options,_Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
+message_handler(options,Request) :-
+    write_cors_headers(Request),
     format('~n').
 message_handler(get,Request) :-
     try_get_param('terminus:message',Request,Message),
@@ -193,9 +179,7 @@ message_handler(get,Request) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
+    write_cors_headers(Request),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 message_handler(post,R) :-
@@ -209,9 +193,7 @@ message_handler(post,R) :-
 
     http_log('~N[Message] ~s~n',[Payload]),
 
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI, DB),
+    write_cors_headers(Request),
 
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
@@ -223,11 +205,8 @@ message_handler(post,R) :-
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
-db_handler(options,_Account,_DB,_Request) :-
-    % database may not exist - use server for CORS
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, DB),
-    write_cors_headers(SURI,DB),
+db_handler(options,_Account,_DB,Request) :-
+    write_cors_headers(Request),
     format('~n').
 db_handler(post,Account,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
@@ -252,8 +231,7 @@ db_handler(post,Account,DB,R) :-
 
     try_create_db(DB_Name, Label, Comment, Prefixes),
 
-    config:public_url(Server),
-    write_cors_headers(Server, Terminus_DB),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 db_handler(delete,Account,DB,Request) :-
     /* DELETE: Delete database */
@@ -265,8 +243,7 @@ db_handler(delete,Account,DB,Request) :-
 
     try_delete_db(DB_Name),
 
-    config:public_url(Server),
-    write_cors_headers(Server, Terminus_DB),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : 'terminus:success'}).
 
 
@@ -358,11 +335,9 @@ test(db_auth_test, [
  *
  * Get or update a schema.
  */
-triples_handler(options,Path,_Request) :-
-    open_descriptor(terminus_descriptor{}, Terminus),
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, _Graph),
-    write_descriptor_cors(Descriptor,Terminus),
-    format('~n'). % send headers
+triples_handler(options,_Path,Request) :-
+    write_cors_headers(Request),
+    nl. % send headers
 triples_handler(get,Path,Request) :-
     open_descriptor(terminus_descriptor{}, Terminus),
     /* Read Document */
@@ -383,7 +358,7 @@ triples_handler(get,Path,Request) :-
 
     dump_turtle_graph(Context, Graph.type, Graph.name, String),
 
-    write_descriptor_cors(Descriptor,Terminus),
+    write_cors_headers(Request),
     reply_json(String).
 triples_handler(post,Path,R) :- % should this be put?
     add_payload_to_request(R,Request), % this should be automatic.
@@ -414,7 +389,7 @@ triples_handler(post,Path,R) :- % should this be put?
     % assert_auth_action_scope(Terminus,Auth,terminus:update_schema,DB_Name),
     update_turtle_graph(Context,Graph.type,Graph.name,TTL),
 
-    write_descriptor_cors(Descriptor,Terminus),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 
@@ -534,10 +509,8 @@ layer:LayerIdRestriction a owl:Restriction.",
  *
  * Establishes frame responses
  */
-frame_handler(options,_Path,_Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+frame_handler(options,_Path,Request) :-
+    write_cors_headers(Request),
     format('~n').
 frame_handler(post, Path, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
@@ -561,7 +534,7 @@ frame_handler(post, Path, R) :-
     ->  try_filled_frame(Instance_URI,Database,Frame)
     ),
 
-    write_descriptor_cors(Descriptor,Terminus),
+    write_cors_headers(Request),
     reply_json(Frame).
 
 :- begin_tests(frame_endpoint).
@@ -617,14 +590,11 @@ test(get_filled_frame, [])
  * NOTE: This is not obtaining appropriate cors response data
  * from terminus database on spartacus.
  */
-woql_handler(options, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+woql_handler(options, Request) :-
+    write_cors_headers(Request),
     format('~n').
 woql_handler(post, R) :-
     add_payload_to_request(R,Request),
-    http_log('~N[Request] ~q~n', [Request]),
     open_descriptor(terminus_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -632,14 +602,11 @@ woql_handler(post, R) :-
 
     woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
-    config:public_url(SURI),
-    write_cors_headers(SURI, Terminus),
+    write_cors_headers(Request),
     reply_json_dict(JSON).
 
-woql_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+woql_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 
 woql_handler(post, Path, R) :-
@@ -652,7 +619,7 @@ woql_handler(post, Path, R) :-
 
     woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
 
-    write_descriptor_cors(Descriptor,Terminus),
+    write_cors_headers(Request),
 
     reply_json_dict(JSON).
 
@@ -1141,11 +1108,9 @@ test(get_object, [])
                 [method(Method),
                  methods([options,post])]).
 
-clone_handler(options, _, _, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
-    format('~n').
+clone_handler(options, _, _, Request) :-
+    write_cors_headers(Request),
+    nl.
 clone_handler(post, Account, DB, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
 
@@ -1168,9 +1133,7 @@ clone_handler(post, Account, DB, R) :-
 
     clone(Account,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
 
-    resolve_absolute_descriptor([Account,DB], Descriptor),
-
-    write_descriptor_cors(Descriptor, Terminus_DB),
+    write_cors_headers(Request),
     reply_json_dict(
         _{'terminus:status' : 'terminus:success'}).
 
@@ -1180,10 +1143,8 @@ clone_handler(post, Account, DB, R) :-
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+fetch_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 fetch_handler(post,Path,Request) :-
     request_remote_authorization(Request, Authorization),
@@ -1193,6 +1154,7 @@ fetch_handler(post,Path,Request) :-
     remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
                  New_Head_Layer_Id, Head_Has_Updated),
 
+    write_cors_headers(Request),
     reply_json_dict(
             _{'terminus:status' : 'terminus:success',
               'head_has_changed' : Head_Has_Updated,
@@ -1229,10 +1191,8 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
                  methods([options,post])]).
 
 
-rebase_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+rebase_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 rebase_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
@@ -1505,10 +1465,8 @@ test(pack_nothing, [
                 [method(Method),
                  methods([options,post])]).
 
-unpack_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+unpack_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 unpack_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
@@ -1533,7 +1491,7 @@ unpack_handler(post, Path, R) :-
     get_payload(Payload, Request),
 
     catch(
-        (   unpack(Branch_Descriptor, Payload),
+        (   unpack(Repository_Descriptor, Payload),
             Json_Reply = _{'terminus:status' : "terminus:success"},
             Status = 200
         ),
@@ -1563,7 +1521,7 @@ unpack_handler(post, Path, R) :-
         ;   throw(E))
     ),
 
-    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    write_cors_headers(Request),
     reply_json(Json_Reply,
                [status(Status)]).
 
@@ -1577,10 +1535,8 @@ unpack_handler(post, Path, R) :-
                  methods([options,post])]).
 
 % NOTE: We do this everytime - it should be handled automagically.
-push_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+push_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 push_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
@@ -1608,10 +1564,11 @@ push_handler(post,Path,R) :-
          authorized_push(Authorization),Result),
 
     (   Result = none
-    ->  write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    ->  write_cors_headers(Request),
         reply_json(_{'terminus:status' : "terminus:success"})
     ;   Result = some(Head_ID)
-    ->  reply_json(_{'terminus:status' : "terminus:success",
+    ->  write_cors_headers(Request),
+        reply_json(_{'terminus:status' : "terminus:success",
                      'head' : Head_ID})
     ;   throw(error(internal_server_error))).
 
@@ -1620,7 +1577,7 @@ remote_unpack_url(URL, Pack_URL) :-
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
 
 % NOTE: What do we do with the remote branch? How do we send it?
-authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload) :-
+authorized_push(Authorization, Remote_URL, Payload) :-
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -1646,47 +1603,56 @@ authorized_push(Authorization, Remote_URL, _Remote_Branch, Payload) :-
     ;   throw(error(unknown_status_code))
     ).
 
-%%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
 % NOTE: We do this everytime - it should be handled automagically.
-pull_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
-    format('~n').
+pull_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
+    nl.
 pull_handler(post,Path,R) :-
     add_payload_to_request(R,Request),
     open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+    authenticate(Terminus, Request, Local_Auth),
 
-    atomic_list_concat([Path,"/_commits"],Repo_Path),
-    resolve_absolute_string_descriptor(Repo_Path,Repository_Descriptor),
+    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : _Remote_Name } :< Document,
+        _{ remote : Remote_Name,
+           remote_branch : Remote_Branch_Name
+         } :< Document,
         error(pull_has_no_remote(Document))),
 
-    % Which branches to fetch?
-    % a) All of them?
-    % b) Just the one specified in the path?
-
     do_or_die(
-        request_remote_authorization(Request, Authorization),
+        request_remote_authorization(Request, Remote_Auth),
         error(no_remote_authorization)),
 
-    % 1. fetch
-    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
-                 _New_Head_Layer_Id, _Head_Has_Updated),
-    % 2. rebase
+    catch(
+        pull(Branch_Descriptor, Local_Auth, Remote_Name, Remote_Branch_Name,
+             authorized_fetch(Remote_Auth),
+             Result),
+        E,
+        (   E = error(Inner_E)
+        ->  (   Inner_E = not_a_valid_local_branch(_)
+            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
+                                   'terminus:message' : "Not a valid local branch"},
+                                 400))
+            ;   Inner_E = not_a_valid_remote_branch(_)
+            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
+                                   'terminus:message' : "Not a valid remote branch"},
+                                 400))
+            ;   throw(E))
+        ;   throw(E))
+    ),
 
-    throw(error('Not implemented')).
-
+    write_cors_headers(Request),
+    reply_json(_{'terminus:status' : "terminus:success",
+                 'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
@@ -1694,9 +1660,8 @@ pull_handler(post,Path,R) :-
                  prefix,
                  methods([options,post])]).
 
-branch_handler(options,Path,_Request) :-
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    write_descriptor_cors(Descriptor, terminus_descriptor{}),
+branch_handler(options,_Path,Request) :-
+    write_cors_headers(Request),
     nl.
 branch_handler(post,Path,R) :-
     resolve_absolute_string_descriptor(Path, Branch_Descriptor),
@@ -1714,7 +1679,7 @@ branch_handler(post,Path,R) :-
 
     branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
-    write_descriptor_cors(Branch_Descriptor, terminus_descriptor{}),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 :- begin_tests(branch_endpoint).
@@ -1900,10 +1865,8 @@ prefix_handler(options, _Path, _R) :-
                  prefix,
                  methods([options,post,delete])]).
 
-graph_handler(options, _Path, _Request) :-
-    config:public_url(SURI),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    write_cors_headers(SURI, Terminus),
+graph_handler(options, _Path, Request) :-
+    write_cors_headers(Request),
     format('~n').
 graph_handler(post, Path, R) :-
     add_payload_to_request(R,Request),
@@ -1925,7 +1888,7 @@ graph_handler(post, Path, R) :-
                  Graph.name,
                  _Transaction_Metadata2),
 
-    write_descriptor_cors(Descriptor, Terminus),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : "terminus:success"}).
 graph_handler(delete, Path, R) :-
     add_payload_to_request(R,Request),
@@ -1946,7 +1909,7 @@ graph_handler(delete, Path, R) :-
                  Graph.name,
                  _Transaction_Metadata2),
 
-    write_cors_headers(Descriptor, Terminus),
+    write_cors_headers(Request),
     reply_json(_{'terminus:status' : "terminus:success"}).
 
 
@@ -2021,20 +1984,21 @@ test(delete_graph, [
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
 % We want to use cors whenever we're throwing an error.
-:- set_setting(http:cors, [*]).
+%:- set_setting(http:cors, [*]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(1,?).
 cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
-          (   cors_enable,
+          (
+              write_cors_headers(Request),
               customise_exception(E)
           )
          ),
     !.
 cors_catch(_,_Request) :-
-    cors_enable,
+    write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'terminus:status' : 'terminus:failure',
                  'terminus:message' :
@@ -2297,19 +2261,21 @@ connection_authorised_user(Request, User_ID) :-
     fetch_jwt_data(Request, Username),
     username_user_id(DB, Username, User_ID).
 
-write_descriptor_cors(terminus_descriptor{},Terminus) :-
-    write_cors_headers("terminus",Terminus).
-write_descriptor_cors(database_descriptor{ database_name : Name },Terminus) :-
-    write_cors_headers(Name,Terminus).
-write_descriptor_cors(repository_descriptor{ database_descriptor : DB,
-                                             repository_name : _ }, Terminus) :-
-    write_descriptor_cors(DB, Terminus).
-write_descriptor_cors(branch_descriptor{ repository_descriptor : Repo,
-                                         branch_name : _ }, Terminus) :-
-    write_descriptor_cors(Repo, Terminus).
-write_descriptor_cors(commit_descriptor{ repository_descriptor : Repo,
-                                         commit_id : _ }, Terminus) :-
-    write_descriptor_cors(Repo, Terminus).
+
+/*
+ * write_cors_headers(Request) is det.
+ *
+ * Writes cors headers associated with Resource_URI
+ */
+write_cors_headers(Request) :-
+    (   memberchk(origin(Origin), Request)
+    ->  current_output(Out),
+        format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
+        format(Out,'Access-Control-Allow-Credentials: true\n',[]),
+        format(Out,'Access-Control-Max-Age: 1728000\n',[]),
+        format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
+        format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
+    ;   true).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
