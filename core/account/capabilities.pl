@@ -137,14 +137,13 @@ user_id_auth_id(DB, User_ID, Auth_ID) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
-auth_action_scope(DB, Auth, Action, Resource_Name) :-
+auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ask(DB,
         (
             t(Auth, system:role, Role),
             t(Role, system:capability, Capability),
             t(Capability, system:action, Action),
-            t(Capability, system:capability_scope, Scope),
-            t(Scope, system:resource_name, Resource_Name ^^ (xsd:string))
+            t(Capability, system:capability_scope, Scope_Iri)
         )
        ).
 
@@ -202,31 +201,37 @@ assert_write_access(Context) :-
     % avoiding infinite regression
     require_super_user(Context).
 assert_write_access(Context) :-
-    database_descriptor{ database_name : Name
-                       } :< Context.default_collection,
+    database_descriptor{
+        organization_name: Organization_Name,
+        database_name: Database_Name
+    } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, system:meta_write_access, Name).
+    Auth = (Context.authorization),
+    DB = (Context.terminus),
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(DB, Auth, system:meta_write_access, Scope_Iri).
 assert_write_access(Context) :-
     repository_descriptor{
         database_descriptor :
         database_descriptor{
-            database_name : Name
+            organization_name: Organization_Name,
+            database_name : Database_Name
         },
         repository_name : _Repo
     } :< Context.default_collection,
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, system:commit_write_access, Name).
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(DB, Auth, system:commit_write_access, Scope_Iri).
 assert_write_access(Context) :-
     branch_descriptor{
         repository_descriptor :
         repository_descriptor{
             database_descriptor :
             database_descriptor{
-                database_name : Name
+                organization_name: Organization_Name,
+                database_name : Database_Name
             },
             repository_name : _Repo
         },
@@ -237,7 +242,8 @@ assert_write_access(Context) :-
     DB = Context.terminus,
     WG = Context.write_graph,
     write_type_access(WG.type,Access),
-    assert_auth_action_scope(DB, Auth, Access, Name).
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(DB, Auth, Access, Scope_Iri).
 assert_write_access(Context) :-
     id_descriptor{
         id: _ID
@@ -284,31 +290,37 @@ assert_read_access(Context) :-
     !,
     require_super_user(Context).
 assert_read_access(Context) :-
-    database_descriptor{ database_name : Name
-                       } :< Context.default_collection,
+    database_descriptor{
+        organization_name: Organization_Name,
+        database_name : Database_Name
+    } :< Context.default_collection,
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, system:meta_read_access, Name).
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(DB, Auth, system:meta_read_access, Scope_Iri).
 assert_read_access(Context) :-
     repository_descriptor{
         database_descriptor :
         database_descriptor{
-            database_name : Name
+        organization_name: Organization_Name,
+        database_name : Database_Name
         },
         repository_name : _Repo
     } :< Context.default_collection,
     !,
     Auth = Context.authorization,
     DB = Context.terminus,
-    assert_auth_action_scope(DB, Auth, system:commit_read_access, Name).
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(DB, Auth, system:commit_read_access, Scope_Iri).
 assert_read_access(Context) :-
     branch_descriptor{
         repository_descriptor :
         repository_descriptor{
             database_descriptor :
             database_descriptor{
-                database_name : Name
+                organization_name: Organization_Name,
+                database_name : Database_Name
             },
             repository_name : _Repo
         },
@@ -319,42 +331,30 @@ assert_read_access(Context) :-
     DB = Context.terminus,
     Filter = Context.filter,
     filter_types(Filter,Types),
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, Name))).
+               assert_auth_action_scope(DB, Auth, Access, Scope_Iri))).
 assert_read_access(Context) :-
     id_descriptor{
         id: _ID
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    % Equivalent to trying to read terminus?
-    Filter = Context.filter,
-    filter_types(Filter,Types),
-    forall(member(Type,Types),
-           (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, "system"))).
+    require_super_user(Context).
 assert_read_access(Context) :-
     label_descriptor{
         label: _Label
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    % Equivalent to trying to read terminus?
-    Filter = Context.filter,
-    filter_types(Filter,Types),
-    forall(member(Type,Types),
-           (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, "system"))).
+    require_super_user(Context).
 assert_read_access(Context) :-
     commit_descriptor{
         repository_descriptor:
         repository_descriptor{
             database_descriptor:
             database_descriptor{
-                database_name : DB_Name
+                organization_name: Organization_Name,
+                database_name : Database_Name
             },
             repository_name : _Repo
         },
@@ -365,9 +365,10 @@ assert_read_access(Context) :-
     DB = Context.terminus,
     Filter = Context.filter,
     filter_types(Filter,Types),
+    organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, DB_Name))).
+               assert_auth_action_scope(DB, Auth, Access, Scope_Iri))).
 assert_read_access(Context) :-
     throw(error(read_access_malformed_context(Context))).
 
