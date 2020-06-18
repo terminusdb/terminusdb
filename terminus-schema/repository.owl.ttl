@@ -2,7 +2,6 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix system: <http://terminusdb.com/schema/system#> .
 @prefix layer: <http://terminusdb.com/schema/layer#> .
@@ -12,10 +11,10 @@
   a owl:Ontology ;
   rdfs:label "Terminus DB Repository Schema"@en ;
   rdfs:comment "Schema describing all of the structure of repositories (local, remote, etc.)"@en ;
-  tcs:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
-  tcs:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  system:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
+  system:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
   owl:imports <http://terminusdb.com/schema/layer> ;
-  tcs:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+  system:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
 repository:Local
   a owl:Class ;
@@ -40,7 +39,7 @@ repository:Repository
   a owl:Class ;
   rdfs:comment "A repository"@en ;
   rdfs:label "Repository"@en ;
-  rdfs:subClassOf tcs:Document .
+  rdfs:subClassOf system:Document .
 
 repository:RepositoryHeadRestriction
   a owl:Restriction ;
