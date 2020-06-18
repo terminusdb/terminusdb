@@ -31,21 +31,25 @@
                                   type: atom,
                                   name: string } % for debugging
  *                    | system_graph{ type : atom,
- *                                      name : atom }
- *                    | repo_graph { database_name : atom,
+ *                                    name : atom }
+ *                    | repo_graph { organization_name: string,
+ *                                   database_name : string,
  *                                   type : atom,
- *                                   name : atom }
- *                    | commit_graph{ database_name : atom,
- *                                    repository_name : atom,
+ *                                   name : string }
+ *                    | commit_graph{ organization_name: string,
+ *                                    database_name : string,
+ *                                    repository_name : string,
  *                                    type : atom,
- *                                    name : atom }
- *                    | branch_graph{ database_name : atom,
- *                                    repository_name : atom,
- *                                    branch_name : atom,
+ *                                    name : string }
+ *                    | branch_graph{ organization_name: string,
+ *                                    database_name : string,
+ *                                    repository_name : string,
+ *                                    branch_name : string,
  *                                    type : atom, % {instance, schema, inference}
- *                                    name : atom }
- *                    | single_commit_graph{ database_name: atom,
- *                                           repository_name: atom,
+ *                                    name : string }
+ *                    | single_commit_graph{ organization_Name: string,
+ *                                           database_name: string,
+ *                                           repository_name: string,
  *                                           commit_id: string,
  *                                           type: atom,
  *                                           name: string }
@@ -62,7 +66,8 @@
  * collection_descriptor --> system_descriptor{}
  *                         | label_descriptor{ label: string }
  *                         | id_descriptor{ id : string } % only for querying!
- *                         | database_descriptor{ database_name : string }
+ *                         | database_descriptor{ organization_name : string,
+ *                                                database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
  *                                                  repository_name : string }
  *                         | branch_descriptor{ repository_descriptor: repository_descriptor,
@@ -196,13 +201,15 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     store_id_layer(Store, Layer_Id, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
-    Descriptor = repo_graph{ database_name: Database_Name,
+    Descriptor = repo_graph{ organization_name : Organization_Name,
+                             database_name: Database_Name,
                              type : Type,
                              name : Name},
     !,
     (   Type = instance,
         Name = "main"
     ->  storage(Store),
+        database_name(Organization_Name,Database_Name,Composit)
         safe_open_named_graph(Store, Database_Name, Graph),
         ignore(head(Graph, Layer))
     ;   Type = schema,
@@ -421,20 +428,24 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_3]) :-
     database_descriptor{
+        organization_name: Organization_Name,
         database_name: Database_Name
     } = Descriptor,
     !,
 
-    Layer_Ontology_Graph = repo_graph{ database_name: Database_Name,
+    Layer_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                       database_name: Database_Name,
                                        type: schema,
                                        name: "layer" },
-    Repository_Ontology_Graph = repo_graph{ database_name : Database_Name,
+    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                            database_name : Database_Name,
                                             type: schema,
                                             name: "repository" },
 
     open_read_write_obj(Layer_Ontology_Graph, Layer_Ontology_Object, Map, Map_1),
     open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map_1, Map_2),
-    Instance_Graph = repo_graph{ database_name: Database_Name,
+    Instance_Graph = repo_graph{ organization_name: Organization_Name,
+                                 database_name: Database_Name,
                                  type: instance,
                                  name: "main" },
     open_read_write_obj(Instance_Graph, Instance_Object, Map_2, Map_3),
@@ -455,16 +466,19 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     open_descriptor(Database_Descriptor, _, Database_Transaction_Object, Map, Map_1),
 
     Database_Name = Database_Descriptor.database_name,
-    Layer_Ontology_Graph = commit_graph{ database_name: Database_Name,
+    Layer_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
+                                         database_name: Database_Name,
                                          repository_name: Repository_Name,
                                          type: schema,
                                          name: "layer" },
-    Ref_Ontology_Graph = commit_graph{ database_name : Database_Name,
+    Ref_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
+                                       database_name : Database_Name,
                                        repository_name: Repository_Name,
                                        type: schema,
                                        name: "ref" },
 
-    Instance_Graph = commit_graph{ database_name: Database_Name,
+    Instance_Graph = commit_graph{ organization_name: Organization_Name,
+                                   database_name: Database_Name,
                                    repository_name: Repository_Name,
                                    type: instance,
                                    name: "main"},

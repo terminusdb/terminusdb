@@ -80,13 +80,13 @@ system:organization_name
   rdfs:range xsd:string .
 
 system:organization_child
-  a owl:Objectroperty ;
+  a owl:ObjectProperty ;
   owl:subPropertyOf system:resource_includes ;
   rdfs:domain system:Organization ;
   rdfs:range system:Organization .
 
 system:organization_database
-  a owl:Objectroperty ;
+  a owl:ObjectProperty ;
   owl:subPropertyOf system:resource_includes ;
   rdfs:domain system:Organization ;
   rdfs:range system:Database .

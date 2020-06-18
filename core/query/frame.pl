@@ -320,15 +320,15 @@ maybe_comment(C,Database,[comment=Comment]) :-
     !.
 maybe_comment(_,_,[]).
 
-maybe_terminus_tag(C,Database,[terminus_tag=DC]) :-
-    terminus_tag(C,DC,Database),
+maybe_system_tag(C,Database,[system_tag=DC]) :-
+    system_tag(C,DC,Database),
     !.
-maybe_terminus_tag(_,_,[]).
+maybe_system_tag(_,_,[]).
 
 maybe_meta(C,Database,LCD) :-
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
-    maybe_terminus_tag(C,Database,DCOGTag),
+    maybe_system_tag(C,Database,DCOGTag),
     append(Label, Comment, LC),
     append(LC,DCOGTag,LCD).
 

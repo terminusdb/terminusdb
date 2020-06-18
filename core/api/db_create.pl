@@ -104,7 +104,7 @@ prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].
 
 local_repo_uri(Name, Uri) :-
-    atomic_list_concat(['system:///', Name, '/document/Local'], Uri).
+    atomic_list_concat(['terminusdb:///repository/', Name, '/data/Local'], Uri).
 
 /**
  * create_repo_graph(+Name,-Repo_Write_Builder)
@@ -149,18 +149,19 @@ finalise_system(Name) :-
     nb_commit(Builder,Final),
     nb_set_head(Graph,Final).
 
-create_db(Name, Label, Comment, Prefixes) :-
+create_db(Organization, Name, Label, Comment, Prefixes) :-
     text_to_string(Name, Name_String),
     % insert new db object into the terminus db
-    insert_db_object(Name, Label, Comment),
+    insert_db_object(Organization, Name, Label, Comment),
 
     % create repo graph - it has name as label
-    create_repo_graph(Name_String),
+    create_repo_graph(Organization, Name_String),
 
     % create ref layer with master branch
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor:
                                 database_descriptor{
+                                    organization_name: Organization,
                                     database_name: Name_String
                                 },
                                 repository_name: "local"
@@ -172,18 +173,18 @@ create_db(Name, Label, Comment, Prefixes) :-
 
 
 /*
- * try_create_db(DB,Label,Comment,Prefixes) is det.
+ * try_create_db(Organization,DB,Label,Comment,Prefixes) is det.
  *
  * Try to create a database and associate resources
  */
-try_create_db(DB,Label,Comment,Prefixes) :-
+try_create_db(Organization,DB,Label,Comment,Prefixes) :-
     % create the collection if it doesn't exist
     do_or_die(
         not(database_exists(DB)),
         error(database_already_exists(Label))),
 
     do_or_die(
-        create_db(DB, Label, Comment, Prefixes),
+        create_db(Organization, DB, Label, Comment, Prefixes),
         error(database_could_not_be_created(Label))).
 
 

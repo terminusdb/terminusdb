@@ -13,7 +13,7 @@
               subsumption_of/3,
               strict_subsumption_of/3,
               complement_of/3,
-              terminus_tag/3,
+              system_tag/3,
               document/2,
 
               union_of_list/3,
@@ -153,7 +153,7 @@ immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
 % This makes me nervous... [ Gavin ]
 immediate_class('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
-immediate_class('http://terminusdb.com/schema/terminus#Document', _).
+immediate_class('http://terminusdb.com/schema/system#Document', _).
 
 %% class(?X:uri_or_id, +Schema:database is nondet
 % class(+X:uri_or_id, +Schema:database is det
@@ -911,7 +911,7 @@ range(P,R,Database) :-
  * the places in which to "clip" the graph.
  */
 document(Class,Database) :-
-	subsumption_of(Class,'http://terminusdb.com/schema/terminus#Document', Database).
+	subsumption_of(Class,'http://terminusdb.com/schema/system#Document', Database).
 
 /**
  * any_range(?P,?R,+Database:database) is nondet.
@@ -1185,13 +1185,13 @@ comment(X,Y,Database) :-
     xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /**
- * terminus_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
+ * system_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
  *
  * Get the system:tag for X as Y.
  */
-terminus_tag(X,Y,Database) :-
+system_tag(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://terminusdb.com/schema/terminus#tag', Y).
+    xrdf(Schema,X, 'http://terminusdb.com/schema/system#tag', Y).
 
 class_has_label(X,Y,Database) :- class(X,Database), label(X,Y,Database).
 %class_hasNo_label(X,Database) :- class(X,Database), \+ label(X,_,Database).

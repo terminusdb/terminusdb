@@ -18,21 +18,14 @@ doc:server_access
   rdfs:label "server access capability"@en ;
   rdfs:comment "Server wide access Object"@en ;
   system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage_capabilities ;
-  system:capability_scope doc:server .
+  system:capability_scope doc:admin_organization .
 
-doc:organisation_access
-  a system:Capability ;
-  rdfs:label "server access capability"@en ;
-  rdfs:comment "Server wide access Object"@en ;
-  system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage_capabilities ;
-  system:capability_scope doc:admin_organisation .
-
-doc:admin_organisation
-  a system:Organisation ;
+doc:admin_organization
+  a system:Organization ;
   system:resource_includes doc:system ;
   system:resource_name "admin"^^xsd:string ;
-  rdf:label "admin organisation"@en ;
-  rdfs:comment "Admin organisation"@en .
+  rdfs:label "admin organization"@en ;
+  rdfs:comment "Admin organization"@en .
 
 doc:admin
   a system:User ;
