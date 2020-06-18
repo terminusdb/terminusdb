@@ -120,10 +120,10 @@ delete_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
 
 test(create_graph_on_empty_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo', 'test','a test'))),
+             create_db_without_schema("admin", "test"))),
       cleanup(teardown_temp_store(State))]
     ) :-
-    make_branch_descriptor("user", "foo", Descriptor),
+    make_branch_descriptor("admin", "test", Descriptor),
 
     create_graph(Descriptor,
                  commit_info{author:"test",message:"test"},
@@ -141,11 +141,11 @@ test(create_graph_on_empty_branch,
 
 test(delete_graph_on_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin","test"))),
       cleanup(teardown_temp_store(State))]
     )
 :-
-    make_branch_descriptor("user", "foo", Descriptor),
+    make_branch_descriptor("admin", "test", Descriptor),
 
     create_graph(Descriptor,
                  commit_info{author:"test",message:"test"},

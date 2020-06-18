@@ -38,18 +38,18 @@ add_user(Nick, Email, Pass, User_URI) :-
     create_context(system_descriptor{},
                    commit_info{
                        author: "add_user/4",
-                       message: "Non-existent"
-                   }, TerminusDB),
+                       message: "internal system operation"
+                   }, SystemDB),
 
-    (   agent_name_exists(TerminusDB, Nick)
+    (   agent_name_exists(SystemDB, Nick)
     ->  throw(error(user_already_exists(Nick)))
     ;   true),
 
     with_transaction(
-        TerminusDB,
+        SystemDB,
         (
             crypto_password_hash(Pass,Hash),
-            ask(TerminusDB,
+            ask(SystemDB,
                 (   idgen(doc:'User',[Nick^^xsd:string], User_URI),
                     idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
                     idgen(doc:'Access',["terminus"^^xsd:string, "create_database"^^xsd:string], Access_URI),
@@ -85,31 +85,31 @@ delete_user(User_URI) :-
 
 make_user_own_database(User_Name, Database_Name) :-
     create_context(system_descriptor{},
-                   commit_info{ author: "Terminus System",
-                                message: "Creating TerminusDB"},
-                   TerminusDB),
+                   commit_info{ author: "TerminusDB System",
+                                message: "internal server operation"},
+                   System),
     with_transaction(
-        TerminusDB,
+        System,
         (
-            username_user_id(TerminusDB, User_Name, User_ID),
-            user_id_auth_id(TerminusDB, User_ID, Auth_ID),
+            username_user_id(System, User_Name, User_ID),
+            user_id_auth_id(System, User_ID, Auth_ID),
             % writeq(User_ID),nl,
             % findall(DB-Name,
-            %         ask(TerminusDB,
+            %         ask(System,
             %             (   t(DB, rdf:type, system:'Database'),
             %                 t(DB, system:resource_name, Name^^(xsd:string))
             %             )),
             %         Names),
             % writeq(Names),
 
-            ask(TerminusDB,
+            ask(System,
                 (   t(DB_URI, rdf:type, system:'Database'),
                     t(DB_URI, system:resource_name, Database_Name^^(xsd:string))
                 )),
 
             % writeq(DB_URI),nl,
 
-            ask(TerminusDB,
+            ask(System,
                 (
                     idgen(doc:'Access', [
                               delete_database^^(xsd:string),
@@ -180,8 +180,8 @@ test(test_user_ownership, [
 
     make_user_own_database(Name, Database_Name),
 
-    open_descriptor(system_descriptor{}, TerminusDB),
-    once(user_id_auth_id(TerminusDB, User_URI, Auth_ID)),
+    open_descriptor(system_descriptor{}, System),
+    once(user_id_auth_id(System, User_URI, Auth_ID)),
     resolve_absolute_string_descriptor("Gavin/test", Descriptor),
 
     create_context(Descriptor, Context1),
@@ -191,7 +191,7 @@ test(test_user_ownership, [
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            system: TerminusDB,
+            system: System,
             update_guard : _Guard0,
             authorization : Auth_ID
         }, Context1, Context1_0),
@@ -210,7 +210,7 @@ test(test_user_ownership, [
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            system: TerminusDB,
+            system: System,
             update_guard : _Guard1,
             authorization : Auth_ID
         }, Context2, _Context2_0),

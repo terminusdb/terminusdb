@@ -197,8 +197,15 @@ test(create_db_and_check_master_branch, [
          ])
 :-
     Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
-    create_db(testdb, 'testdb', 'a test db', Prefixes),
-    Database_Descriptor = database_descriptor{ database_name: "testdb"},
-    Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" }.
+    create_db(admin, testdb, 'testdb', 'a test db', Prefixes),
+    Database_Descriptor = database_descriptor{
+                              organization_name: "admin",
+                              database_name: "testdb" },
+    Repo_Descriptor = repository_descriptor{
+                          database_descriptor: Database_Descriptor,
+                          repository_name: "local" },
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor: Repo_Descriptor,
+                            branch_name: "master" }.
+
 :- end_tests(database_creation).
