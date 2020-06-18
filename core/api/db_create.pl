@@ -1,6 +1,6 @@
 :- module(db_create, [
-              create_db/4,
-              try_create_db/4,
+              create_db/5,
+              try_create_db/5,
               create_ref_layer/2
           ]).
 

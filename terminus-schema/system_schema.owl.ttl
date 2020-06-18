@@ -290,6 +290,12 @@ system:Database
   a owl:Class ;
   rdfs:subClassOf system:Resource .
 
+system:SystemDatabase
+  rdfs:label "System Database"@en ;
+  rdfs:comment "A resource representing a system core database."@en ;
+  a owl:Class ;
+  rdfs:subClassOf system:Resource .
+
 system:resource_name
   rdfs:label "Resource Name"@en ;
   rdfs:comment "The resource name which is used as an internal local reference."@en ;

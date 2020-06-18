@@ -209,8 +209,8 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     (   Type = instance,
         Name = "main"
     ->  storage(Store),
-        database_name(Organization_Name,Database_Name,Composit)
-        safe_open_named_graph(Store, Database_Name, Graph),
+        organization_database_name(Organization_Name,Database_Name,Composite),
+        safe_open_named_graph(Store, Composite, Graph),
         ignore(head(Graph, Layer))
     ;   Type = schema,
         Name = "layer"
@@ -230,12 +230,14 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = commit_graph{ database_name: Database_Name,
+    Descriptor = commit_graph{ organization_name: Organization_Name,
+                               database_name: Database_Name,
                                repository_name: Repository_Name,
                                type: Type,
                                name: Name},
     !,
-    Repo_Descriptor = repo_graph{ database_name: Database_Name,
+    Repo_Descriptor = repo_graph{ organization_name: Organization_Name,
+                                  database_name: Database_Name,
                                   type: instance,
                                   name: "main"},
 
@@ -266,7 +268,8 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = branch_graph{ database_name: Database_Name,
+    Descriptor = branch_graph{ organization_name: Organization_Name,
+                               database_name: Database_Name,
                                repository_name: Repository_Name,
                                branch_name: Branch_Name,
                                type: Type,
@@ -274,7 +277,8 @@ open_read_write_obj(Descriptor,
     !,
     assertion(member(Type, [instance, schema, inference])),
 
-    Commit_Descriptor = commit_graph{ database_name : Database_Name,
+    Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
+                                      database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
@@ -292,13 +296,15 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = single_commit_graph{ database_name: Database_Name,
+    Descriptor = single_commit_graph{ organization_name: Organization_Name,
+                                      database_name: Database_Name,
                                       repository_name: Repository_Name,
                                       commit_id: Commit_Id,
                                       type: Type,
                                       name: Graph_Name },
     !,
-    Commit_Descriptor = commit_graph{ database_name : Database_Name,
+    Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
+                                      database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
@@ -536,6 +542,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     ),
 
     Prototype = branch_graph{
+                    organization_name: Repository_Descriptor.database_descriptor.organization_name,
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
                     branch_name: Branch_Name_String
@@ -613,6 +620,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     ),
 
     Prototype = single_commit_graph{
+                    organization_name: Repository_Descriptor.database_descriptor.organization_name,
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
                     commit_id: Commit_Id_String
@@ -723,19 +731,19 @@ filter_read_write_objects(Objects, Names, Filtered) :-
                                memberchk(Name, Names)), Objects, Filtered).
 
 
-make_branch_descriptor(Account, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
-    organization_database_name(Account, DB, DB_Name),
-    Database_Descriptor = database_descriptor{ database_name : DB_Name },
+make_branch_descriptor(Organization, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
+    Database_Descriptor = database_descriptor{ organization_name: Organization,
+                                               database_name : DB },
     Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
                                                    database_descriptor : Database_Descriptor},
     Branch_Descriptor = branch_descriptor{ branch_name : Branch_Name,
                                            repository_descriptor : Repository_Descriptor}.
 
-make_branch_descriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
-    make_branch_descriptor(Account, DB, Repo_Name, "master", Branch_Descriptor).
+make_branch_descriptor(Organization, DB, Repo_Name, Branch_Descriptor) :-
+    make_branch_descriptor(Organization, DB, Repo_Name, "master", Branch_Descriptor).
 
-make_branch_descriptor(Account, DB, Branch_Descriptor) :-
-    make_branch_descriptor(Account, DB, "local", "master", Branch_Descriptor).
+make_branch_descriptor(Organization, DB, Branch_Descriptor) :-
+    make_branch_descriptor(Organization, DB, "local", "master", Branch_Descriptor).
 
 /**
  * transactions_to_map(Context, Map) is det.
@@ -788,31 +796,37 @@ collection_descriptor_graph_filter_graph_descriptor(
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
+        organization_name: Organization,
         database_name : DB_Name
     },
     type_name_filter{ type : Type, names : [Name]},
-    repo_graph{ database_name : DB_Name,
+    repo_graph{ organization_name: Organization,
+                database_name : DB_Name,
                 type : Type,
                 name : Name }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
+        organization_name: Organization,
         database_name : DB_Name
     },
     type_filter{ types : [Type]},
-    repo_graph{ database_name : DB_Name,
+    repo_graph{ organization_name: Organization,
+                database_name : DB_Name,
                 type : Type,
                 name : "main" }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
         database_descriptor : database_descriptor{
+                                  organization_name: Organization,
                                   database_name : DB_Name
                               },
         repository_name : Repo_Name
     },
     type_name_filter{ type : Type, names : [Name]},
-    commit_graph{ database_name : DB_Name,
+    commit_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repo_Name,
                   type: Type,
                   name : Name}) :-
@@ -820,12 +834,14 @@ collection_descriptor_graph_filter_graph_descriptor(
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
         database_descriptor : database_descriptor{
+                                  organization_name: Organization,
                                   database_name : DB_Name
                               },
         repository_name : Repo_Name
     },
     type_filter{ types : [Type]},
-    commit_graph{ database_name : DB_Name,
+    commit_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repo_Name,
                   type: Type,
                   name : "main"}) :-
@@ -836,6 +852,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         repository_descriptor{
             database_descriptor :
             database_descriptor{
+                organization_name: Organization,
                 database_name : DB_Name
             },
             repository_name : Repository_Name
@@ -843,7 +860,8 @@ collection_descriptor_graph_filter_graph_descriptor(
         branch_name : Branch_Name
     },
     type_name_filter{ type : Type , names : [Name]},
-    branch_graph{ database_name : DB_Name,
+    branch_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
                   type: Type,
@@ -855,6 +873,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         repository_descriptor{
             database_descriptor :
             database_descriptor{
+                organization_name: Organization,
                 database_name : DB_Name
             },
             repository_name : Repository_Name
@@ -862,7 +881,8 @@ collection_descriptor_graph_filter_graph_descriptor(
         branch_name : Branch_Name
     },
     type_filter{ types : [Type] },
-    branch_graph{ database_name : DB_Name,
+    branch_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
                   type: Type,

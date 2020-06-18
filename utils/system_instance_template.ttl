@@ -36,7 +36,7 @@ doc:admin
   system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
 doc:system
-  a system:Database ;
-  rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
-  rdfs:label "Master Database"@en ;
+  a system:SystemDatabase ;
+  rdfs:comment "The system database contains the meta-data about databases, users and roles"@en ;
+  rdfs:label "System Database"@en ;
   system:resource_name "system"^^xsd:string .
