@@ -234,6 +234,7 @@ commit_validation_object(Validation_Object, []) :-
         instance_objects: [Instance_Object]
     } :< Validation_Object,
     database_descriptor{
+        organization_name: Organization_Name,
         database_name: Database_Name
     } = Descriptor,
     !,
@@ -243,7 +244,8 @@ commit_validation_object(Validation_Object, []) :-
     ->  storage(Store),
         % The label is the same as the same as the database_name
         % therefore we can just open it
-        safe_open_named_graph(Store, Database_Name, Graph),
+        organization_database_name(Organization_Name, Database_Name, Composite),
+        safe_open_named_graph(Store, Composite, Graph),
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
 commit_validation_object(Validation_Object, [Parent_Transaction]) :-
