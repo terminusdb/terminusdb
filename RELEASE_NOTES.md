@@ -7,7 +7,8 @@
 ## Changes
 
 + The `TERMINUSDB_SERVER_PUBLIC_URL` environment variable is now ignored. TerminusDB is now fully location-agnostic.
-+ Added `TERMINUSDB_SERVER_PACK_DIR` environment variable, determining where swi-prolog packages will be installed. This is used by quickstart.
++ Added `TERMINUSDB_SERVER_PACK_DIR` environment variable, determining where swi-prolog packages will be installed.
+  This was added to make it easier to offer alternative distributions of TerminusDB in the future.
 
 ## Bug fixes
 
