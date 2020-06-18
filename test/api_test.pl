@@ -66,7 +66,7 @@ test(run_bad_auth_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_db_create_test) :-
     % create DB
@@ -88,7 +88,7 @@ test(run_db_create_test) :-
                         },
             '@type':"system:APIUpdate",
             'system:base_uri' : "https://terminushub.com/",
-            'system:document' : _{'@id': DB_URI, '@type':"terminus:Database",
+            'system:document' : _{'@id': DB_URI, '@type':"system:Database",
                                     'rdfs:comment':_{'@language':"en", '@value':"dasd"},
                                     'rdfs:label':_{'@language':"en", '@value':"asdsda"},
                                     'system:allow_origin':_{'@type':"xsd:string", '@value':"*"},
@@ -108,7 +108,7 @@ test(run_db_create_test) :-
     curl_json(Args,Term),
 
     nl,json_write_dict(current_output,Term,[]),
-    Term = _{'system:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_schema_update_test) :-
     config:server(Server),
@@ -136,7 +136,7 @@ test(run_schema_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'system:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_schema_get_test) :-
     config:server(Server),
@@ -169,7 +169,7 @@ test(run_db_delete_test) :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    _{'system:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_get_filled_frame_test) :-
     config:server(Server),
@@ -227,7 +227,7 @@ test(run_doc_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_doc_update_get_test) :-
     config:server(Server),
@@ -296,7 +296,7 @@ test(run_doc_update_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'system:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_doc_update_update_get_test) :-
     config:server(Server),
@@ -331,7 +331,7 @@ test(run_db_delete_nonexistent_test) :-
     nl,json_write_dict(current_output,Term,[]),
 
     % This should not be a bare error
-    _{'system:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_doc_delete_test) :-
 
@@ -347,7 +347,7 @@ test(run_doc_delete_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_doc_get_missing_test) :-
     % create DB
@@ -361,7 +361,7 @@ test(run_doc_get_missing_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 /****************************************************************
  * Woql Tests
@@ -462,7 +462,7 @@ test(run_woql_empty_error_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_woql_syntax_error_test) :-
     config:server(Server),
@@ -678,7 +678,7 @@ test(run_woql_instantiation_test) :-
     % test here.
     _{
         'system:message' : _,
-        'system:status' :"terminus:failure"
+        'system:status' :"system:failure"
     } :< Term.
 
 test(run_woql_re_test) :-
@@ -832,7 +832,7 @@ test(run_bad_comment_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure",
+    _{'system:status':"system:failure",
       'system:witnesses': _W} :< Term.
 
 test(run_bad_property_update_test) :-
@@ -880,7 +880,7 @@ test(run_bad_property_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure",
+    _{'system:status':"system:failure",
       'system:witnesses': _W} :< Term.
 
 /*************************************
@@ -915,7 +915,7 @@ test(run_schema_datatypes_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'system:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_bad_doc_datatype_update_test) :-
     config:server(Server),
@@ -1003,7 +1003,7 @@ test(run_bad_doc_datatype_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:failure",
+    _{'system:status':"system:failure",
       'system:witnesses': W} :< Term,
 
     length(W,18).
@@ -1094,7 +1094,7 @@ test(run_good_doc_datatype_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status':"terminus:success"} :< Term.
+    _{'system:status':"system:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness!
 
 test(run_console) :-
@@ -1140,6 +1140,6 @@ test(run_message_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'system:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 :- end_tests(api_test).

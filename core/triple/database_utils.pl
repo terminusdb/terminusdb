@@ -66,7 +66,7 @@ database_exists(Askable, Name) :-
 database_finalized(Askable,Name) :-
     once(ask(Askable,
              (   t(Db_Uri, system:resource_name, Name^^xsd:string),
-                 t(Db_Uri, system:database_state, terminus:finalized)))).
+                 t(Db_Uri, system:database_state, system:finalized)))).
 
 /**
  * system_graph_layer(-Graph,-Layer) is det.

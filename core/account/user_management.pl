@@ -63,7 +63,7 @@ add_user(Nick, Email, Pass, User_URI) :-
                     insert(Capability_URI, system:access, Access_URI),
                     insert(Access_URI, rdf:type, system:'Access'),
                     insert(Access_URI, system:authority_scope, Server_URI),
-                    insert(Access_URI, system:action, terminus:create_database)
+                    insert(Access_URI, system:action, system:create_database)
                 )
                )
         ),
@@ -129,20 +129,20 @@ make_user_own_database(User_Name, Database_Name) :-
                               Database_Name^^(xsd:string)], Access_URI),
                     insert(Auth_ID, system:access, Access_URI),
                     insert(Access_URI, rdf:type, system:'Access'),
-                    insert(Access_URI, system:action, terminus:delete_database),
-                    insert(Access_URI, system:action, terminus:class_frame),
-                    insert(Access_URI, system:action, terminus:clone),
-                    insert(Access_URI, system:action, terminus:fetch),
-                    insert(Access_URI, system:action, terminus:push),
-                    insert(Access_URI, system:action, terminus:branch),
-                    insert(Access_URI, system:action, terminus:rebase),
-                    insert(Access_URI, system:action, terminus:meta_read_access),
-                    insert(Access_URI, system:action, terminus:commit_read_access),
-                    insert(Access_URI, system:action, terminus:instance_read_access),
-                    insert(Access_URI, system:action, terminus:instance_write_access),
-                    insert(Access_URI, system:action, terminus:schema_read_access),
-                    insert(Access_URI, system:action, terminus:schema_write_access),
-                    insert(Access_URI, system:action, terminus:manage),
+                    insert(Access_URI, system:action, system:delete_database),
+                    insert(Access_URI, system:action, system:class_frame),
+                    insert(Access_URI, system:action, system:clone),
+                    insert(Access_URI, system:action, system:fetch),
+                    insert(Access_URI, system:action, system:push),
+                    insert(Access_URI, system:action, system:branch),
+                    insert(Access_URI, system:action, system:rebase),
+                    insert(Access_URI, system:action, system:meta_read_access),
+                    insert(Access_URI, system:action, system:commit_read_access),
+                    insert(Access_URI, system:action, system:instance_read_access),
+                    insert(Access_URI, system:action, system:instance_write_access),
+                    insert(Access_URI, system:action, system:schema_read_access),
+                    insert(Access_URI, system:action, system:schema_write_access),
+                    insert(Access_URI, system:action, system:manage),
                     insert(Access_URI, system:authority_scope, DB_URI)
                 ))
         ),

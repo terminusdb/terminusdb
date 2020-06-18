@@ -382,13 +382,13 @@ report_instantiation_error(_Prog,context(Pred,Var),Ctx) :-
     get_varname(Var,B,Name),
     !,
     format(string(MSG), "The variable: ~q is unbound while being proceed in the AST operator ~q, but must be instantiated", [Name,Pred]),
-    throw(http_reply(method_not_allowed(_{'system:status' : 'terminus:failure',
+    throw(http_reply(method_not_allowed(_{'system:status' : 'system:failure',
                                           'system:message' : MSG}))).
 report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     memberchk(bindings=B,Ctx),
     guess_varnames(B,Names),
     format(string(MSG), "The variables: ~q are unbound, one of which was a problem while being proceed in the AST operator ~q, which but must be instantiated", [Names,Pred]),
-    throw(http_reply(method_not_allowed(_{'system:status' : 'terminus:failure',
+    throw(http_reply(method_not_allowed(_{'system:status' : 'system:failure',
                                           'system:message' : MSG}))).
 
 literal_string(Val^^_, Val).
@@ -2113,8 +2113,8 @@ test(order_by, []) :-
 test(path, []) :-
 
     % Pattern is:
-    % system:access , (  terminus:authority_scope
-    %                   ;  system:authority_scope, plus(terminus:resource_includes))
+    % system:access , (  system:authority_scope
+    %                   ;  system:authority_scope, plus(system:resource_includes))
     Pattern =
     _{'@type' : "PathSequence",
       path_first :
@@ -2376,10 +2376,10 @@ test(group_by, [
     [_{'Grouped': [[p,q],
                    [p,w],
                    [p,z]],
-       'Object':"system:unknown",'Predicate':"terminus:unknown",'Subject':x},
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
      _{'Grouped': [[p,w],
                    [p,z]],
-       'Object':"system:unknown",'Predicate':"terminus:unknown",'Subject':y}] = JSON.bindings.
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
 
 test(select, []) :-
 

@@ -827,7 +827,7 @@ json_to_woql_ast(JSON,_,Path) :-
     throw(http_reply(not_found(_{'system:message' : Msg,
                                  'vio:query' : JSON,
                                  'vio:path' : Director,
-                                 'system:status' : 'terminus:failure'}))).
+                                 'system:status' : 'system:failure'}))).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),

@@ -158,7 +158,7 @@ class_properties(Class, Database, PropertiesPrime) :-
         exclude({Schema,Database}/[X]>>(
                     xrdf(
                          Schema,
-                         X,system:tag,terminus:abstract)),
+                         X,system:tag,system:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
     ;   PropertiesPrime=DocumentProperties).
@@ -362,7 +362,7 @@ classes_below(Class,Database,BelowList) :-
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
                 xrdf(Schema,
-                     X,system:tag,terminus:abstract)),
+                     X,system:tag,system:abstract)),
             ClassesNoBottom,
             BelowList).
 
@@ -806,89 +806,89 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
 test(class_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
-    class_frame('http://terminusdb.com/schema/terminus#Agent',Database,Frame),
+    class_frame('http://terminusdb.com/schema/system#Agent',Database,Frame),
     % Not sure how stable this order is.
     Frame = [[type=objectProperty,
-              property='http://terminusdb.com/schema/terminus#authority',
-              domain='http://terminusdb.com/schema/terminus#Agent',
-              range='http://terminusdb.com/schema/terminus#Capability',
+              property='http://terminusdb.com/schema/system#authority',
+              domain='http://terminusdb.com/schema/system#Agent',
+              range='http://terminusdb.com/schema/system#Capability',
               restriction=true,
               frame=[type=document,
-                     class='http://terminusdb.com/schema/terminus#Capability',
+                     class='http://terminusdb.com/schema/system#Capability',
                      label="Capability"@en,
                      comment="A capability confers access to a database or server action"@en],
               label="Has Capability"@en,
               comment="A property that links an agent to a capability that they possess"@en],
              [type=datatypeProperty,
-              property='http://terminusdb.com/schema/terminus#agent_name',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              property='http://terminusdb.com/schema/system#agent_name',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent name"@en,
               comment="An name for API authentication"@en],
              [type=datatypeProperty,
-              property='http://terminusdb.com/schema/terminus#user_key_hash',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              property='http://terminusdb.com/schema/system#user_key_hash',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent Key"@en,
               comment="An agent key for API authentication"@en],
              [type=datatypeProperty,
               property='http://www.w3.org/2000/01/rdf-schema#label',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
               property='http://www.w3.org/2000/01/rdf-schema#comment',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,range='http://www.w3.org/2001/XMLSchema#string']].
 
 test(document_filled_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
-    document_filled_frame('system:///terminus/document/admin',Database,Frame),
+    document_filled_frame('system:///system/document/admin',Database,Frame),
     Frame = [[type=objectProperty,
-              domainValue='system:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#authority',
-              domain='http://terminusdb.com/schema/terminus#User',
-              range='http://terminusdb.com/schema/terminus#Capability',
+              domainValue='system:///system/document/admin',
+              property='http://terminusdb.com/schema/system#authority',
+              domain='http://terminusdb.com/schema/system#User',
+              range='http://terminusdb.com/schema/system#Capability',
               restriction=true,
               label="Has Capability"@en,
               comment="A property that links an agent to a capability that they possess"@en,
               frame=[type=document,
-                     class='http://terminusdb.com/schema/terminus#Capability',
+                     class='http://terminusdb.com/schema/system#Capability',
                      label="Capability"@en,
                      comment="A capability confers access to a database or server action"@en,
-                     domainValue='system:///terminus/document/access_all_areas']],
+                     domainValue='system:///system/document/access_all_areas']],
              [type=datatypeProperty,
-              domainValue='system:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#agent_name',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domainValue='system:///system/document/admin',
+              property='http://terminusdb.com/schema/system#agent_name',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent name"@en,
               comment="An name for API authentication"@en,
               rangeValue="admin"^^'http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
-              domainValue='system:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#user_key_hash',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domainValue='system:///system/document/admin',
+              property='http://terminusdb.com/schema/system#user_key_hash',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent Key"@en,
               comment="An agent key for API authentication"@en,
               rangeValue=_],
              [type=datatypeProperty,
-              domainValue='system:///terminus/document/admin',
+              domainValue='system:///system/document/admin',
               property='http://www.w3.org/2000/01/rdf-schema#label',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               rangeValue="Server Admin User"@en],
              [type=datatypeProperty,
-              domainValue='system:///terminus/document/admin',
+              domainValue='system:///system/document/admin',
               property='http://www.w3.org/2000/01/rdf-schema#comment',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               rangeValue="This is the server super user account"@en]].
@@ -1018,7 +1018,7 @@ document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
 class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     class_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='system:Frame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:Frame', 'system:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1028,7 +1028,7 @@ class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
 filled_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     document_filled_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='system:FilledFrame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:FilledFrame', 'system:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1212,7 +1212,7 @@ test(update_object, [])
 test(document_jsonld_depth, [])
 :-
     Descriptor = system_descriptor{},
-    User_ID = 'system:///terminus/document/admin',
+    User_ID = 'system:///system/document/admin',
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),

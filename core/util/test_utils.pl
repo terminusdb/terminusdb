@@ -173,7 +173,7 @@ curl_json(Args,JSON) :-
 
     catch(json_read_dict(Out, JSON),
           _,
-          JSON = _{'system:status' : 'terminus:failure'}),
+          JSON = _{'system:status' : 'system:failure'}),
 
     close(Out).
 

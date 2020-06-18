@@ -148,6 +148,21 @@ auth_action_scope(DB, Auth, Action, Resource_Name) :-
         )
        ).
 
+/*
+ * resource_user_path(Askable,Resource,User,Path) is nondet.
+ *
+ * resource_includes+
+ * Note: Get the full path to a resource.
+
+resource_user_path(Askable,Resource,User,Path) :-
+    askable_no_inference(Aksable,Context),
+    ask(Context,
+        (
+            t())).
+
+ */
+
+
 /**
  * assert_write_access(Graph_Descriptor,Context,Context) is det + error.
  *

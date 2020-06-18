@@ -48,7 +48,7 @@ system:license
   rdfs:label "License"@en ;
   rdfs:comment "The license governing the use of the resource"@en .
 
-system:authority
+system:role
   rdfs:label "Has Role"@en ;
   rdfs:comment "A property that links an agent has a role"@en ;
   a owl:ObjectProperty ;
@@ -66,30 +66,30 @@ system:User
   a owl:Class ;
   rdfs:subClassOf system:Agent .
 
-system:Organisation
-  rdfs:label "Organisation"@en ;
-  rdfs:comment "An organisation or team"@en ;
+system:Organization
+  rdfs:label "Organization"@en ;
+  rdfs:comment "An organization or team"@en ;
   a owl:Class ;
   rdfs:subClassOf system:Resource .
 
-system:organisation_child
-  a owl:Objectroperty ;
-  owl:subPropertyOf system:resource_includes ;
-  rdfs:domain system:Organisation ;
-  rdfs:range system:Organisation .
+system:organization_name
+  a owl:DatatypeProperty ;
+  rdfs:label "organization name"@en ;
+  rdfs:comment "The name of an organization"@en ;
+  rdfs:domain system:Organization ;
+  rdfs:range xsd:string .
 
-system:organisation_database
+system:organization_child
   a owl:Objectroperty ;
   owl:subPropertyOf system:resource_includes ;
-  rdfs:domain system:Organisation ;
+  rdfs:domain system:Organization ;
+  rdfs:range system:Organization .
+
+system:organization_database
+  a owl:Objectroperty ;
+  owl:subPropertyOf system:resource_includes ;
+  rdfs:domain system:Organization ;
   rdfs:range system:Database .
-
-system:organisation_member
-  a owl:ObjectProperty ;
-  rdfs:domain system:Organisation ;
-  rdfs:range system:User ;
-  rdfs:label "Organisation Member"@en ;
-  rdfs:comment "A member of an organisation or team"@en .
 
 system:user_identifier
   rdfs:label "User Identifier"@en ;

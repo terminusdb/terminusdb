@@ -4,7 +4,7 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix tcs: <http://terminusdb.com/schema/tcs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
 @prefix layer: <http://terminusdb.com/schema/layer#> .
 @prefix repository: <http://terminusdb.com/schema/repository#> .
 

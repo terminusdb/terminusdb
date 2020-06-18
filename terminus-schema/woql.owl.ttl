@@ -3,16 +3,16 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
 @prefix woql: <http://terminusdb.com/schema/woql#> .
 
 <http://terminusdb.com/schema/woql>
   a owl:Ontology ;
   rdfs:label "Terminus DB WOQL Query Syntax Schema"@en ;
   rdfs:comment "Schema describing all the structure of the WOQL query language"@en ;
-  terminus:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
-  terminus:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
-  terminus:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+  system:rights "Copyright Data Chemist Ltd. 2017-2020"@en ;
+  system:author "Gavin Mendel-Gleason"@en, "Kevin C. Feeney"@en ;
+  system:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
 woql:VariableNameRestriction
   a owl:Restriction ;
@@ -117,7 +117,7 @@ woql:Query
   a owl:Class ;
   rdfs:comment "A WOQL Query"@en ;
   rdfs:label "Query"@en ;
-  rdfs:subClassOf terminus:Document .
+  rdfs:subClassOf system:Document .
 
 woql:QueryWithSubQuery
   a owl:Class ;
@@ -477,7 +477,7 @@ woql:DeleteObject
 
 woql:GetOrPut
   a owl:Class ;
-  terminus:tag terminus:abstract ;
+  system:tag system:abstract ;
   rdfs:subClassOf woql:Query ;
   rdfs:label "Get or Put"@en ;
   rdfs:comment "Abstract class for Get or Put"@en .
@@ -1196,7 +1196,7 @@ woql:typecast_result
   rdfs:domain woql:Typecast ;
   rdfs:range woql:Value .
 
-terminus:Document
+system:Document
   a owl:Class ;
   rdfs:label "Document Class"@en ;
   rdfs:comment "Terminus Document Class included as it is a dependancy"@en .
@@ -1267,7 +1267,7 @@ woql:path_right
 
 woql:HasPathPattern ;
   a owl:Class ;
-  terminus:tag terminus:abstract ;
+  system:tag system:abstract ;
   rdfs:label "Has Pattern"@en ;
   rdfs:comment "Abstract mixin with a pattern"@en .
 

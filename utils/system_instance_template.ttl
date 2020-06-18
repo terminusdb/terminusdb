@@ -8,35 +8,42 @@
 @prefix doc: <terminusdb:///system/data/> .
 
 doc:admin_role
-    a system:Role ;
-    rdfs:comment "Role providing admin capabilities"@en ;
-    rdfs:label "Admin Role"@en ;
-    system:capability doc:server_access .
+  a system:Role ;
+  rdfs:comment "Role providing admin capabilities"@en ;
+  rdfs:label "Admin Role"@en ;
+  system:capability doc:server_access .
 
 doc:server_access
-    a system:Capability ;
-    rdfs:label "server access capability"@en ;
-    rdfs:comment "Server wide access Object"@en ;
-    system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage ;
-    system:capability_scope doc:server .
+  a system:Capability ;
+  rdfs:label "server access capability"@en ;
+  rdfs:comment "Server wide access Object"@en ;
+  system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage_capabilities ;
+  system:capability_scope doc:server .
+
+doc:organisation_access
+  a system:Capability ;
+  rdfs:label "server access capability"@en ;
+  rdfs:comment "Server wide access Object"@en ;
+  system:action system:create_database, system:delete_database, system:class_frame, system:clone, system:fetch, system:push, system:branch, system:rebase, system:instance_read_access, system:instance_write_access, system:schema_read_access, system:schema_write_access, system:inference_read_access, system:inference_write_access, system:meta_read_access, system:meta_write_access, system:commit_read_access, system:commit_write_access, system:manage_capabilities ;
+  system:capability_scope doc:admin_organisation .
+
+doc:admin_organisation
+  a system:Organisation ;
+  system:resource_includes doc:system ;
+  system:resource_name "admin"^^xsd:string ;
+  rdf:label "admin organisation"@en ;
+  rdfs:comment "Admin organisation"@en .
 
 doc:admin
-    a system:User ;
-    rdfs:comment "This is the server super user account"@en ;
-    rdfs:label "Server Admin User"@en ;
-    system:role doc:admin_role ;
-    system:agent_name "admin"^^xsd:string ;
-    system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+  a system:User ;
+  rdfs:comment "This is the server super user account"@en ;
+  rdfs:label "Server Admin User"@en ;
+  system:role doc:admin_role ;
+  system:agent_name "admin"^^xsd:string ;
+  system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
 
 doc:system
-    a system:Database ;
-    rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
-    rdfs:label "Master Database"@en ;
-    system:resource_name "system"^^xsd:string .
-
-doc:server
-    a system:Server ;
-    rdfs:comment "The current Database Server itself"@en ;
-    rdfs:label "The DB server"@en ;
-    system:resource_name "SERVER_NAME"^^xsd:string ;
-    system:resource_includes doc:system .
+  a system:Database ;
+  rdfs:comment "The master database contains the meta-data about databases, users and roles"@en ;
+  rdfs:label "Master Database"@en ;
+  system:resource_name "system"^^xsd:string .
