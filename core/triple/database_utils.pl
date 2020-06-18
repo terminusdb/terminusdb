@@ -7,7 +7,7 @@
               database_instance/2,
               database_inference/2,
               database_schema/2,
-              user_database_name/3
+              organization_database_name/3
           ]).
 
 /** <module> Database Utilities
@@ -128,10 +128,10 @@ error_on_pipe(Name) :-
     ;   true).
 
 /**
- * user_database_name(User,DB,Name) is det.
+ * organization_database_name(User,DB,Name) is det.
  *
  */
-user_database_name(User,DB,Name) :-
+organization_database_name(User,DB,Name) :-
     freeze(User,error_on_pipe(User)),
     freeze(DB,error_on_pipe(DB)),
     merge_separator_split(Name,'|',[User,DB]).

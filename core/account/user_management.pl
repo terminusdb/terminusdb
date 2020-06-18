@@ -174,7 +174,7 @@ test(test_user_ownership, [
 
     Name = "Gavin",
     add_user(Name, "gavin@terminusdb.com", "here.i.am", User_URI),
-    user_database_name(Name, 'test', Database_Name),
+    organization_database_name(Name, 'test', Database_Name),
 
     create_db_without_schema(Database_Name, 'test', 'a test'),
 

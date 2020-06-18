@@ -77,7 +77,7 @@ resolve_absolute_descriptor([User, Database, "_meta"], database_descriptor{datab
     freeze(Database_Name, atom_string(Database_Name_Atom, Database_Name)),
     freeze(Database_Name_Atom, atom_string(Database_Name_Atom, Database_Name)),
 
-    user_database_name(User_Atom, Database_Atom, Database_Name_Atom).
+    organization_database_name(User_Atom, Database_Atom, Database_Name_Atom).
 resolve_absolute_descriptor([User, Database, Repository, X], Descriptor) :-
     ground(X),
     X = '_commits',
@@ -346,7 +346,7 @@ descriptor_parent(Descriptor, some_label) :-
 descriptor_parent(database_descriptor{database_name: Database_Name},
                   user(User)) :-
     !,
-    user_database_name(User_Atom, _Database, Database_Name),
+    organization_database_name(User_Atom, _Database, Database_Name),
     atom_string(User_Atom, User).
 descriptor_parent(Descriptor, Parent) :-
     repository_descriptor{ database_descriptor: Parent } :< Descriptor,
@@ -365,7 +365,7 @@ descriptor_user(Database_Descriptor, User) :-
     is_dict(Database_Descriptor),
     database_descriptor{database_name: Database_Name} :< Database_Descriptor,
     !,
-    user_database_name(User_Atom, _Db, Database_Name),
+    organization_database_name(User_Atom, _Db, Database_Name),
     atom_string(User_Atom, User).
 descriptor_user(user(User), User) :- !.
 descriptor_user(Descriptor, User) :-
@@ -534,7 +534,7 @@ resolve_root_relative_descriptor(Descriptor) -->
 resolve_user_relative_descriptor(User, Descriptor) -->
     [ Db ],
     !,
-    { user_database_name(User, Db, Database_Name_Atom),
+    { organization_database_name(User, Db, Database_Name_Atom),
       atom_string(Database_Name_Atom, Database_Name) },
     resolve_relative_descriptor(database_descriptor{
                                     database_name: Database_Name
@@ -629,7 +629,7 @@ resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
 % so this resolution is limited to these types.
 resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "branch", Branch, Type, Name], Graph) :-
     !,
-    user_database_name(Account_ID, DB, DB_Name),
+    organization_database_name(Account_ID, DB, DB_Name),
     atom_string(DB_Name, DB_Name_Str),
     atom_string(Type_Atom, Type),
     Graph = branch_graph{ database_name : DB_Name_Str,
@@ -639,7 +639,7 @@ resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "branch", Branch, Type,
                           name : Name}.
 resolve_absolute_graph_descriptor([Account_ID, DB, Repo, "commit", RefID, Type, Name], Graph) :-
     !,
-    user_database_name(Account_ID, DB, DB_Name),
+    organization_database_name(Account_ID, DB, DB_Name),
     atom_string(DB_Name, DB_Name_Str),
     atom_string(Type_Atom, Type),
     Graph = single_commit_graph{ database_name : DB_Name_Str,
@@ -724,7 +724,7 @@ resolve_query_resource(URI, Branch_Descriptor) :-
     ;   re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)$', URI, Dict, []),
         Resource_Dict = Dict.put(_{repo : "local", branch : "master"})),
     !,
-    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+    organization_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
     % convenience predicate?
     Database_Descriptor = database_descriptor{
                               database_name : Database_Name
@@ -751,7 +751,7 @@ resolve_query_resource(URI, Repository_Descriptor) :-
     ->  Resource_Dict = Dict.put(_{repo : "local"})
     ),
     !,
-    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+    organization_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
 
     Database_Descriptor = database_descriptor{
                               database_name : Database_Name
@@ -767,7 +767,7 @@ resolve_query_resource(URI, Repository_Descriptor) :-
 resolve_query_resource(URI, Database_Descriptor) :-
     re_matchsub('^(?P<protocol>[^:]*)://(?P<server>[^/]*)/(?P<user>[^/]*)/(?P<database>[^/]*)/repositories$', URI, Resource_Dict, []),
 
-    user_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
+    organization_database_name(Resource_Dict.user,Resource_Dict.database,Database_Name),
 
     Database_Descriptor = database_descriptor{
                               database_name : Database_Name

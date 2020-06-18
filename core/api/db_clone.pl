@@ -19,7 +19,7 @@ clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
         clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
         exception(_),
 
-        (   user_database_name(Account, DB, DB_Name),
+        (   organization_database_name(Account, DB, DB_Name),
             catch(try_delete_db(DB_Name),
                   error(database_not_found(_)),
                   true))).
@@ -28,7 +28,7 @@ clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
 :- meta_predicate clone_(+,+,+,+,+,3,-).
 clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    user_database_name(Account, DB, DB_Name),
+    organization_database_name(Account, DB, DB_Name),
     try_create_db(DB_Name, Label, Comment, _{}),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),

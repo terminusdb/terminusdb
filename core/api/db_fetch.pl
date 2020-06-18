@@ -67,7 +67,7 @@ get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
 
 test(fetch_something,
      [setup((setup_temp_store(State),
-             user_database_name(admin,"test", Name),
+             organization_database_name(admin,"test", Name),
              (   database_exists(Name)
              ->  delete_db(Name)
              ;   true),
@@ -92,7 +92,7 @@ test(fetch_something,
 
     with_temp_store(
         (
-            user_database_name(admin, "test_local", Name2),
+            organization_database_name(admin, "test_local", Name2),
             create_db_without_schema(Name2, 'test local','a test'),
             resolve_absolute_string_descriptor(
                 "admin/test_local/_meta", Database_Descriptor),

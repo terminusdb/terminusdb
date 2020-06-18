@@ -263,7 +263,7 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
 
 
 create_db_with_test_schema(User, Db_Name) :-
-    user_database_name(User, Db_Name, Full_Name),
+    organization_database_name(User, Db_Name, Full_Name),
     Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},
 
@@ -284,7 +284,7 @@ create_db_with_test_schema(User, Db_Name) :-
     update_turtle_graph(Context, schema, "main", TTL).
 
 create_db_without_schema(User, Db_Name) :-
-    user_database_name(User, Db_Name, Full_Name),
+    organization_database_name(User, Db_Name, Full_Name),
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
     create_db(Full_Name, "test", "a test db", Prefixes).

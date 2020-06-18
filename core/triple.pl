@@ -18,7 +18,7 @@
               database_instance/2,
               database_inference/2,
               database_schema/2,
-              user_database_name/3,
+              organization_database_name/3,
 
               % iana.pl
               iana/3,

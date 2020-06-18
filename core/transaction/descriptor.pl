@@ -724,7 +724,7 @@ filter_read_write_objects(Objects, Names, Filtered) :-
 
 
 make_branch_descriptor(Account, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
-    user_database_name(Account, DB, DB_Name),
+    organization_database_name(Account, DB, DB_Name),
     Database_Descriptor = database_descriptor{ database_name : DB_Name },
     Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
                                                    database_descriptor : Database_Descriptor},

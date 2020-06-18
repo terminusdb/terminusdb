@@ -227,7 +227,7 @@ db_handler(post,Account,DB,R) :-
          _{ doc : _Doc, scm : _Scm} :< Prefixes),
         error(under_specified_prefixes(Database_Document))),
 
-    user_database_name(Account, DB, DB_Name),
+    organization_database_name(Account, DB, DB_Name),
 
     try_create_db(DB_Name, Label, Comment, Prefixes),
 
@@ -238,7 +238,7 @@ db_handler(delete,Account,DB,Request) :-
     open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
-    user_database_name(Account, DB, DB_Name),
+    organization_database_name(Account, DB, DB_Name),
     assert_auth_action_scope(Terminus_DB, Auth, system:delete_database, DB_Name),
 
     try_delete_db(DB_Name),
@@ -255,7 +255,7 @@ db_handler(delete,Account,DB,Request) :-
 :- use_module(library(http/http_open)).
 
 test(db_create, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         setup((organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true))),
@@ -276,7 +276,7 @@ test(db_create, [
 
 
 test(db_delete, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         setup((organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 create_db_without_schema(DB,'test','a test')))
      ]) :-
     config:server(Server),
@@ -289,11 +289,11 @@ test(db_delete, [
 
 test(db_auth_test, [
          setup((add_user('TERMINUS_QA','user@example.com','password',User_ID),
-                user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+                organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true))),
-         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         cleanup((organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                   (   database_exists(DB)
                   ->  delete_db(DB)
                   ;   true),
@@ -401,12 +401,12 @@ triples_handler(post,Path,R) :- % should this be put?
 :- use_module(library(http/http_open)).
 
 test(triples_update, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         setup((organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true),
                 create_db_without_schema(DB,'test','a test'))),
-         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
+         cleanup((organization_database_name('TERMINUS_QA', 'TEST_DB', DB),
                   delete_db(DB)))
 
      ])
@@ -455,12 +455,12 @@ test(triples_get, [])
 
 
 test(triples_post_get, [
-         setup((user_database_name('admin', 'Jumanji', DB),
+         setup((organization_database_name('admin', 'Jumanji', DB),
                 (   database_exists(DB)
                 ->  delete_db(DB)
                 ;   true),
                 create_db_without_schema(DB,'test','a test'))),
-         cleanup((user_database_name('admin', 'Jumanji', DB),
+         cleanup((organization_database_name('admin', 'Jumanji', DB),
                   delete_db(DB)))
      ])
 :-
@@ -847,12 +847,12 @@ test(named_get, [])
 
 test(branch_db, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -904,12 +904,12 @@ test(branch_db, [
 
 test(update_object, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -996,12 +996,12 @@ test(update_object, [
 
 test(delete_object, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name,'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1235,12 +1235,12 @@ rebase_handler(post, Path, R) :-
 
 test(rebase_divergent_history, [
          setup((config:server(Server),
-                user_database_name('TERMINUSQA',foo, Name),
+                organization_database_name('TERMINUSQA',foo, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name('TERMINUSQA',foo, Name),
+         cleanup((organization_database_name('TERMINUSQA',foo, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1357,7 +1357,7 @@ pack_handler(post,Path,R) :-
 
 test(pack_stuff, [
          % blocked('Blocked due to build problems - missing new store?'),
-         setup((user_database_name('_a_test_user_', foo, DB_Name),
+         setup((organization_database_name('_a_test_user_', foo, DB_Name),
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
                 ;   true),
@@ -1428,7 +1428,7 @@ test(pack_stuff, [
 
 test(pack_nothing, [
          % blocked('causing travis to die'),
-         setup((user_database_name('_a_test_user_', foo, DB_Name),
+         setup((organization_database_name('_a_test_user_', foo, DB_Name),
                 (   database_exists(DB_Name)
                 ->  delete_db(DB_Name)
                 ;   true),
@@ -1690,12 +1690,12 @@ branch_handler(post,Path,R) :-
 
 test(create_empty_branch, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1716,12 +1716,12 @@ test(create_empty_branch, [
 
 test(create_branch_from_local_without_prefixes, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1740,12 +1740,12 @@ test(create_branch_from_local_without_prefixes, [
 
 test(create_branch_from_local_with_prefixes, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1767,12 +1767,12 @@ test(create_branch_from_local_with_prefixes, [
 
 test(create_branch_that_already_exists_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1791,12 +1791,12 @@ test(create_branch_that_already_exists_error, [
 
 test(create_branch_from_nonexisting_origin_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1819,12 +1819,12 @@ test(create_branch_from_nonexisting_origin_error, [
 
 test(create_branch_from_commit_graph_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
+                organization_database_name(admin,test, Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
                 create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
+         cleanup((organization_database_name(admin,test, Name),
                   delete_db(Name)))
      ])
 :-
@@ -1921,7 +1921,7 @@ graph_handler(delete, Path, R) :-
 
 test(create_graph, [
          setup((config:server(Server),
-                user_database_name(admin,"test", Name),
+                organization_database_name(admin,"test", Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
@@ -1952,7 +1952,7 @@ test(create_graph, [
 
 test(delete_graph, [
          setup((config:server(Server),
-                user_database_name(admin,"test", Name),
+                organization_database_name(admin,"test", Name),
                 (   database_exists(Name)
                 ->  delete_db(Name)
                 ;   true),
