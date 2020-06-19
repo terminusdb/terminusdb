@@ -903,7 +903,7 @@ collection_descriptor_graph_filter_graph_descriptor(
 
 test(transactions_to_map,[
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema(admin,test))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -921,16 +921,16 @@ test(transactions_to_map,[
     maplist([Desc=_,Desc]>>true, Map, Descriptors),
     list_to_ord_set(Descriptors, Desc_Set),
     list_to_ord_set(
-        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"}},
-         branch_graph{branch_name:"master",database_name:'admin|test',name:"main",repository_name:"local",type:instance},
-         repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"},
-         commit_graph{database_name:'admin|test',name:"main",repository_name:"local",type:instance},
-         commit_graph{database_name:'admin|test',name:"layer",repository_name:"local",type:schema},
-         commit_graph{database_name:'admin|test',name:"ref",repository_name:"local",type:schema},
-         database_descriptor{database_name:'admin|test'},
-         repo_graph{database_name:'admin|test',name:"main",type:instance},
-         repo_graph{database_name:'admin|test',name:"layer",type:schema},
-         repo_graph{database_name:'admin|test',name:"repository",type:schema}], Expected_Set),
+        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin", database_name:"test"},repository_name:"local"}},
+         branch_graph{branch_name:"master",organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
+         repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin",database_name:"test"},repository_name:"local"},
+         commit_graph{organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
+         commit_graph{organization_name:"admin",database_name:"test",name:"layer",repository_name:"local",type:schema},
+         commit_graph{organization_name:"admin",database_name:"test",name:"ref",repository_name:"local",type:schema},
+         database_descriptor{organization_name:"admin",database_name:"test"},
+         repo_graph{organization_name:"admin",database_name:"test",name:"main",type:instance},
+         repo_graph{organization_name:"admin",database_name:"test",name:"layer",type:schema},
+         repo_graph{organization_name:"admin",database_name:"test",name:"repository",type:schema}], Expected_Set),
 
     ord_seteq(Desc_Set, Expected_Set).
 
@@ -942,9 +942,9 @@ test(terminus, [
     Descriptor = system_descriptor{},
     open_descriptor(Descriptor, Transaction),
     % check for things we know should exist in the instance, schema and inference
-    once(ask(Transaction, t(doc:terminus, rdf:type, system:'Database', "instance/main"))),
-    once(ask(Transaction, t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', "schema/main"))),
-    once(ask(Transaction, t(system:authority_scope, owl:propertyChainAxiom, _, "inference/main"))).
+    once(ask(Transaction, t(doc:system, rdf:type, system:'SystemDatabase', "instance/main"))),
+    once(ask(Transaction, t('http://terminusdb.com/schema/system', rdf:type, owl:'Ontology', "schema/main"))),
+    once(ask(Transaction, t(system:capability_scope, owl:propertyChainAxiom, _, "inference/main"))).
 
 test(label, [
          setup(setup_temp_store(State)),
@@ -981,71 +981,78 @@ test(id, [
 
 test(open_database_descriptor_as_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: testdb },
+    Descriptor = database_descriptor{ organization_name: admin,
+                                      database_name: testdb },
     open_descriptor(Descriptor, _Transaction).
 
 test(open_database_descriptor_as_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: "testdb" },
+    Descriptor = database_descriptor{ organization_name: "admin",
+                                      database_name: "testdb" },
     open_descriptor(Descriptor, _Transaction).
 
 test(open_nonexistent_database_descriptor, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin, testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: "nonexistent" },
+    Descriptor = database_descriptor{ organization_name: "admin",
+                                      database_name: "nonexistent" },
     \+ open_descriptor(Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: local },
 
     open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
 
     open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "nonexistent" },
 
     \+ open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_branch_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: master },
 
@@ -1053,11 +1060,12 @@ test(open_branch_descriptor_with_atom, [
 
 test(open_branch_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1065,12 +1073,13 @@ test(open_branch_descriptor_with_string, [
 
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State)),
          error(branch_does_not_exist(_))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
 
@@ -1078,11 +1087,12 @@ test(open_branch_descriptor_with_nonexistent, [
 
 test(open_commit_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema("admin", "testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1109,11 +1119,12 @@ test(open_commit_descriptor_with_atom, [
 
 test(open_commit_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1138,11 +1149,12 @@ test(open_commit_descriptor_with_string, [
 
 test(open_commit_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: "I do not exist" },
     catch(open_descriptor(Descriptor, _Transaction),

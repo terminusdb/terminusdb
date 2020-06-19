@@ -1,6 +1,5 @@
 :- module(account, [
               % capabilities.pl
-              user_key_auth/4,
               username_user_id/3,
               user_key_user_id/4,
               username_auth/3,

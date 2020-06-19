@@ -1,5 +1,4 @@
 :- module(capabilities,[
-              user_key_auth/4,
               username_user_id/3,
               user_key_user_id/4,
               username_auth/3,
@@ -102,9 +101,8 @@ get_user(Database, User_ID, User) :-
  * Give a capabilities JSON object corresponding to the capabilities
  * of the key supplied by searching the core permissions database.
  */
-user_key_auth(DB, Username, Key, Auth_ID) :-
-    user_key_user_id(DB, Username, Key, User_ID),
-    user_id_auth_id(DB, User_ID, Auth_ID).
+user_key_auth(DB, Username, Key, User_ID) :-
+    user_key_user_id(DB, Username, Key, User_ID).
 
 /**
  * username_auth(DB, Key,Auth) is det.
@@ -188,12 +186,6 @@ assert_write_access(Context) :-
     % This probably makes all super user checks redundant.
     !.
 assert_write_access(Context) :-
-    system_descriptor{} :< Context.default_collection,
-    !,
-    % This allows us to shortcut looking in the database,
-    % avoiding infinite regression
-    require_super_user(Context).
-assert_write_access(Context) :-
     database_descriptor{
         organization_name: Organization_Name,
         database_name: Database_Name
@@ -238,18 +230,6 @@ assert_write_access(Context) :-
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, Access, Scope_Iri).
 assert_write_access(Context) :-
-    id_descriptor{
-        id: _ID
-    } :< Context.default_collection,
-    !,
-    require_super_user(Context).
-assert_write_access(Context) :-
-    label_descriptor{
-        label: _Label
-    } :< Context.default_collection,
-    !,
-    require_super_user(Context).
-assert_write_access(Context) :-
     throw(error(write_access_malformed_context(Context))).
 
 /**
@@ -282,10 +262,6 @@ assert_read_access(Context) :-
     is_super_user(Context.authorization, Context.prefixes),
     % This probably makes all super user checks redundant.
     !.
-assert_read_access(Context) :-
-    system_descriptor{} :< Context.default_collection,
-    !,
-    require_super_user(Context).
 assert_read_access(Context) :-
     database_descriptor{
         organization_name: Organization_Name,
@@ -332,18 +308,6 @@ assert_read_access(Context) :-
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
                assert_auth_action_scope(DB, Auth, Access, Scope_Iri))).
-assert_read_access(Context) :-
-    id_descriptor{
-        id: _ID
-    } :< Context.default_collection,
-    !,
-    require_super_user(Context).
-assert_read_access(Context) :-
-    label_descriptor{
-        label: _Label
-    } :< Context.default_collection,
-    !,
-    require_super_user(Context).
 assert_read_access(Context) :-
     commit_descriptor{
         repository_descriptor:

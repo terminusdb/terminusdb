@@ -342,10 +342,8 @@ query_context_transaction_objects(Query_Context,Transaction_Objects) :-
 
 test(test_transaction_partition, [
          setup((setup_temp_store(State),
-                organization_database_name(admin,testdb1,Name1),
-                create_db_without_schema(Name1, 'test','a test'),
-                organization_database_name(admin,testdb2,Name2),
-                create_db_without_schema(Name2, 'test','a test'))),
+                create_db_without_schema(admin,testdb1),
+                create_db_without_schema(admin,testdb2))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -360,10 +358,8 @@ test(test_transaction_partition, [
 
 test(partial_transaction_commit, [
          setup((setup_temp_store(State),
-                organization_database_name(admin,testdb1,Name1),
-                create_db_without_schema(Name1, 'test','a test'),
-                organization_database_name(admin,testdb2,Name2),
-                create_db_without_schema(Name2, 'test','a test'))),
+                create_db_without_schema(admin,testdb1),
+                create_db_without_schema(admin,testdb2))),
          cleanup(teardown_temp_store(State))
      ])
 :-

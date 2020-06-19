@@ -854,9 +854,10 @@ test(insert_on_branch_descriptor, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema("Boo", 'test','a test'),
+    create_db_without_schema("admin", 'Boo'),
     % Insert
-    DB_Descriptor = database_descriptor{ database_name : "Boo" },
+    DB_Descriptor = database_descriptor{ organization_name: "admin",
+                                         database_name : "Boo" },
     Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,
                                              repository_name : "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor,
@@ -946,12 +947,12 @@ test(double_insert, [
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
@@ -973,12 +974,12 @@ test(cardinality_error,
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
@@ -999,11 +1000,11 @@ test(cardinality_error,
 
 test(cardinality_min_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
