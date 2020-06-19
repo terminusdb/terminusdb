@@ -2183,8 +2183,23 @@ test(path, []) :-
              },
 
     query_test_response(system_descriptor{}, Query, JSON),
-    [Res|_] = JSON.bindings,
-    writeq(Res).
+    [Res|_] = (JSON.bindings),
+    Res = _{'Edge':
+            _{'@type':"http://terminusdb.com/schema/woql#Edge",
+              'http://terminusdb.com/schema/woql#object':Test_User_Capability,
+              'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability',
+              'http://terminusdb.com/schema/woql#subject': Role_Founder},
+            'Edge_Object':Test_User_Capability,
+            'Object':Organization,
+            'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
+                      'http://terminusdb.com/schema/woql#object':Test_User_Capability,
+                      'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability',
+                      'http://terminusdb.com/schema/woql#subject':Role_Founder},
+                    _{'@type':"http://terminusdb.com/schema/woql#Edge",
+                      'http://terminusdb.com/schema/woql#object': Organization,
+                      'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability_scope',
+                      'http://terminusdb.com/schema/woql#subject': Test_User_Capability}],
+            'Subject':Role_Founder}.
 
 test(path_star, [
          setup((setup_temp_store(State),
