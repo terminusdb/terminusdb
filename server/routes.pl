@@ -1997,7 +1997,7 @@ cors_catch(Goal,Request) :-
           )
          ),
     !.
-cors_catch(_,_Request) :-
+cors_catch(_,Request) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'terminus:status' : 'terminus:failure',
