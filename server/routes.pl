@@ -214,7 +214,6 @@ db_handler(post,Organization,DB,R) :-
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
 
-
     do_or_die(organization_name_uri(Terminus_DB, Organization, Organization_Uri),
               error(unknown_organization(Organization))), % dubious
 
@@ -235,15 +234,18 @@ db_handler(post,Organization,DB,R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
-db_handler(delete,Account,DB,Request) :-
+db_handler(delete,Organization,DB,Request) :-
     /* DELETE: Delete database */
     open_descriptor(system_descriptor{}, Terminus_DB),
     authenticate(Terminus_DB, Request, Auth),
 
-    organization_database_name(Account, DB, DB_Name),
-    assert_auth_action_scope(Terminus_DB, Auth, system:delete_database, DB_Name),
+    do_or_die(organization_name_uri(Terminus_DB, Organization, Organization_Uri),
+              error(unknown_organization(Organization))), % dubious
 
-    try_delete_db(DB_Name),
+    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, Organization_Uri),
+    assert_auth_action_scope(Terminus_DB, Auth, system:delete_database, Organization_Uri),
+
+    try_delete_db(Organization, DB),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
@@ -277,8 +279,7 @@ test(db_create, [
 
 
 test(db_delete, [
-         setup((organization_database_name('admin', 'TEST_DB', DB),
-                create_db_without_schema(DB,'test','a test')))
+         setup((create_db_without_schema("admin", "TEST_DB")))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
@@ -420,7 +421,7 @@ test(triples_update, [
     * json_write_dict(current_output,Transaction_Metadata, []),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     config:server(Server),
     atomic_list_concat([Server, '/triples/admin/TEST_DB/local/branch/master/schema/main'], URI),
@@ -452,13 +453,11 @@ test(triples_get, [])
 
 
 test(triples_post_get, [
-         setup((organization_database_name('admin', 'Jumanji', DB),
-                (   database_exists(DB)
-                ->  delete_db(DB)
+         setup(((   database_exists("admin", "Jumanji")
+                ->  delete_db("admin", "Jumanji")
                 ;   true),
-                create_db_without_schema(DB,'test','a test'))),
-         cleanup((organization_database_name('admin', 'Jumanji', DB),
-                  delete_db(DB)))
+                create_db_without_schema("admin", "Jumanji"))),
+         cleanup(delete_db("admin", "Jumanji"))
      ])
 :-
 
@@ -1226,13 +1225,11 @@ rebase_handler(post, Path, R) :-
 
 test(rebase_divergent_history, [
          setup((config:server(Server),
-                organization_database_name('TERMINUSQA',foo, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("TERMINUSQA", "foo")
+                ->  delete_db("TERMINUSQA", "foo")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name('TERMINUSQA',foo, Name),
-                  delete_db(Name)))
+                create_db_without_schema("TERMINUSQA", "foo"))),
+         cleanup(delete_db("TERMINUSQA", "foo"))
      ])
 :-
 
@@ -1677,13 +1674,11 @@ branch_handler(post,Path,R) :-
 
 test(create_empty_branch, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1703,13 +1698,11 @@ test(create_empty_branch, [
 
 test(create_branch_from_local_without_prefixes, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1727,13 +1720,11 @@ test(create_branch_from_local_without_prefixes, [
 
 test(create_branch_from_local_with_prefixes, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") %dubious
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1754,13 +1745,11 @@ test(create_branch_from_local_with_prefixes, [
 
 test(create_branch_that_already_exists_error, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % dubious
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1778,13 +1767,11 @@ test(create_branch_that_already_exists_error, [
 
 test(create_branch_from_nonexisting_origin_error, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1806,13 +1793,11 @@ test(create_branch_from_nonexisting_origin_error, [
 
 test(create_branch_from_commit_graph_error, [
          setup((config:server(Server),
-                organization_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((organization_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1908,12 +1893,11 @@ graph_handler(delete, Path, R) :-
 
 test(create_graph, [
          setup((config:server(Server),
-                organization_database_name(admin,"test", Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup(delete_db(Name))
+                create_db_without_schema("admin", "test"))),
+         cleanup(delete_db("admin", "test"))
      ])
 :-
     Commit = commit_info{ author : 'The Graphinator',
@@ -1939,19 +1923,18 @@ test(create_graph, [
 
 test(delete_graph, [
          setup((config:server(Server),
-                organization_database_name(admin,"test", Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test")
+                ->  delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'),
-                resolve_absolute_string_descriptor('admin/test',Branch_Descriptor),
+                create_db_without_schema("admin", "test"),
+                resolve_absolute_string_descriptor("admin/test",Branch_Descriptor),
                 create_graph(Branch_Descriptor,
                              commit_info{ author : "test",
                                           message: "Generated by automated testing"},
                              schema,
                              "main",
                              _Transaction_Metadata))),
-         cleanup(delete_db(Name))
+         cleanup(delete_db("admin", "test"))
      ])
 :-
 
