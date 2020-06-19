@@ -178,7 +178,7 @@ create_db(Organization_Name,Database_Name, Label, Comment, Prefixes) :-
 try_create_db(Organization,DB,Label,Comment,Prefixes) :-
     % create the collection if it doesn't exist
     do_or_die(
-        not(database_exists(DB)),
+        not(database_exists(Organization, DB)),
         error(database_already_exists(Label))),
 
     do_or_die(

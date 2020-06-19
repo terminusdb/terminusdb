@@ -208,13 +208,17 @@ message_handler(post,R) :-
 db_handler(options,_Account,_DB,Request) :-
     write_cors_headers(Request),
     format('~n').
-db_handler(post,Account,DB,R) :-
+db_handler(post,Organization,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
     open_descriptor(system_descriptor{}, Terminus_DB),
     /* POST: Create database */
     authenticate(Terminus_DB, Request, Auth),
 
-    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, "terminus"),
+
+    do_or_die(organization_name_uri(Terminus_DB, Organization, Organization_Uri),
+              error(unknown_organization(Organization))), % dubious
+
+    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, Organization_Uri),
 
     get_payload(Database_Document,Request),
     do_or_die(
@@ -227,9 +231,7 @@ db_handler(post,Account,DB,R) :-
          _{ doc : _Doc, scm : _Scm} :< Prefixes),
         error(under_specified_prefixes(Database_Document))),
 
-    organization_database_name(Account, DB, DB_Name),
-
-    try_create_db(DB_Name, Label, Comment, Prefixes),
+    try_create_db(Organization, DB, Label, Comment, Prefixes),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
