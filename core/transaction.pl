@@ -101,7 +101,11 @@
               organization_database_name_uri/4,
               organization_name_uri/3,
               organization_name_exists/2,
-              database_finalized/3
+              database_finalized/3,
+              user_name_uri/3,
+              agent_name_uri/3,
+              agent_name_exists/2
+
           ]).
 
 :- use_module(transaction/database).

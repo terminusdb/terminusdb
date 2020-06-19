@@ -3,7 +3,8 @@
               add_user/4,
               agent_name_uri/3,
               agent_name_exists/2,
-              delete_user/1
+              delete_user/1,
+              delete_organization/1
           ]).
 
 :- use_module(core(util)).
@@ -19,16 +20,17 @@
  * but may later be exposed for a user API.
  */
 
-/*
- * agent_name_uri(Askable, Name, User_URI) is semidet.
- */
-agent_name_uri(Askable, Name, User_URI) :-
-    once(ask(Askable,
-             t(User_URI, system:agent_name, Name^^xsd:string)
-            )).
-
-agent_name_exists(Askable, Name) :-
-    agent_name_uri(Askable, Name, _).
+delete_organization(Name) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(
+        Context,
+        (   organization_name_uri(Context, Name, Organization_Uri),
+            ask(Context,
+                (   t(Organization_Uri, rdf:type, system:'Organization'),
+                    delete_object(Organization_Uri)
+                ))
+        ),
+        _).
 
 /*
  * add_user
@@ -94,14 +96,16 @@ add_user(Nick, Email, Pass, User_URI) :-
 /*
  * delete_user(+User_ID) is semidet.
  */
-delete_user(User_URI) :-
+delete_user(User_Name) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
         Context,
-        ask(Context,
-            (   t(User_URI, rdf:type, system:'User'),
-                delete_object(User_URI)
-            )),
+        (   user_name_uri(Context, User_Name, User_URI),
+            ask(Context,
+                (   t(User_URI, rdf:type, system:'User'),
+                    delete_object(User_URI)
+                ))
+        ),
         _).
 
 :- begin_tests(user_management).

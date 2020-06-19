@@ -110,9 +110,8 @@ user_key_auth(DB, Username, Key, User_ID) :-
  * Give a capabilities JSON object corresponding to the capabilities
  * of the username supplied by searching the core permissions database.
  */
-username_auth(DB, Username, Auth) :-
-    username_user_id(DB, Username, User_ID),
-    user_id_auth_id(DB, User_ID, Auth).
+username_auth(DB, Username, User_ID) :-
+    username_user_id(DB, Username, User_ID).
 
 /*
  * auth_action_scope(Auth,Action,Scope) is nondet.

@@ -17,7 +17,8 @@
               create_db_with_test_schema/2,
               create_db_without_schema/2,
               print_all_triples/1,
-              print_all_triples/2
+              print_all_triples/2,
+              delete_user_and_organization/1
           ]).
 
 /** <module> Test Utilities
@@ -63,6 +64,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(query)).
 :- use_module(core(api)).
+:- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
 
@@ -286,6 +288,12 @@ create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
     create_db(Organization, Db_Name, "test", "a test db", Prefixes).
+
+delete_user_and_organization(User_Name) :-
+    do_or_die(delete_user(User_Name),
+             error(user_doesnt_exist(User_Name))),
+    do_or_die(delete_organization(User_Name),
+             error(organization_doesnt_exist(User_Name))).
 
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,

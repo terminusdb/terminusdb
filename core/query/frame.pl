@@ -847,6 +847,7 @@ test(document_filled_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
     document_filled_frame('terminusdb:///system/data/admin',Database,Frame),
+    writeq(Frame),
     Frame = [[type=datatypeProperty,
               domainValue='terminusdb:///system/data/admin',
               property='http://terminusdb.com/schema/system#user_key_hash',
@@ -924,7 +925,11 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFT
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredQuad(G, Elt, Prop, V, Database),
-                 get_dict(descriptor,G,G_Desc),
+                 (   is_dict(G)
+                 ->  get_dict(descriptor,G,G_Desc)
+                 ;   G = inferred
+                 ->  G = G_Desc
+                 ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _))))),
                  (   document(V,Database)
                  ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
                  ;   realise_quads(V,Frame,Database,Below),
@@ -946,7 +951,11 @@ realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RD
     member(property=Prop, P),
     (   setof((G_Desc,Elt,Prop,V),
               V^(   inferredQuad(G, Elt, Prop, V, Database),
-                    get_dict(descriptor,G,G_Desc)
+                    (   is_dict(G)
+                    ->  get_dict(descriptor,G,G_Desc)
+                    ;   G = inferred
+                    ->  G = G_Desc
+                    ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))
                 ),
               Realisers_on_P)
     ->  realise_quads(Elt,Rest,Database,Realiser_Tail),

@@ -4,7 +4,10 @@
               organization_database_name_uri/4,
               organization_name_uri/3,
               organization_name_exists/2,
-              database_finalized/3
+              database_finalized/3,
+              user_name_uri/3,
+              agent_name_uri/3,
+              agent_name_exists/2
           ]).
 
 :- use_module(library(terminus_store)).
@@ -44,3 +47,18 @@ database_finalized(Askable,Organization,Database) :-
     once(ask(Askable,
              t(Db_Uri, system:database_state, system:finalized))).
 
+user_name_uri(Askable, User_Name, Uri) :-
+    once(ask(Askable,
+             (   t(Uri, system:agent_name, User_Name^^xsd:string),
+                 t(Uri, rdf:type, system:'User')))).
+
+/*
+ * agent_name_uri(Askable, Name, User_URI) is semidet.
+ */
+agent_name_uri(Askable, Name, User_URI) :-
+    once(ask(Askable,
+             t(User_URI, system:agent_name, Name^^xsd:string)
+            )).
+
+agent_name_exists(Askable, Name) :-
+    agent_name_uri(Askable, Name, _).

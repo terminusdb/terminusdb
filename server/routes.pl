@@ -290,14 +290,14 @@ test(db_delete, [
     _{'system:status' : "system:success"} = Delete_In.
 
 test(db_auth_test, [
-         setup((add_user('TERMINUS_QA','user@example.com','password',User_ID),
+         setup((add_user('TERMINUS_QA','user@example.com','password',_User_ID),
                 (   database_exists('TERMINUS_QA', 'TEST_DB')
                 ->  delete_db('TERMINUS_QA', 'TEST_DB')
                 ;   true))),
          cleanup(((   database_exists('TERMINUS_QA', 'TEST_DB')
                   ->  delete_db('TERMINUS_QA', 'TEST_DB')
                   ;   true),
-                  delete_user(User_ID)))
+                  delete_user_and_organization('TERMINUS_QA')))
      ]) :-
 
     config:server(Server),
@@ -1349,14 +1349,13 @@ test(pack_stuff, [
                 ->  delete_db('_a_test_user_',foo)
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
-                    delete_user(Old_User_ID)
+                ->  delete_user_and_organization('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',User_ID),
+                add_user('_a_test_user_','user@example.com','password',_User_ID),
                 create_db_without_schema('_a_test_user_',foo)
                )),
          cleanup((delete_db('_a_test_user_',foo),
-                  delete_user(User_ID)))
+                  delete_user_and_organization('_a_test_user_')))
      ]) :-
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
@@ -1418,14 +1417,13 @@ test(pack_nothing, [
                 ->  delete_db('_a_test_user_','foo')
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
-                    delete_user(Old_User_ID)
+                ->  delete_user_and_organization('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',User_ID),
+                add_user('_a_test_user_','user@example.com','password',_User_ID),
                 create_db_without_schema('_a_test_user_','foo')
                )),
          cleanup((delete_db('_a_test_user_','foo'),
-                  delete_user(User_ID)))
+                  delete_user_and_organization('_a_test_user_')))
      ]) :-
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
