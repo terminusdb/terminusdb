@@ -1482,9 +1482,9 @@ test(subsumption, [])
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'Parent':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#User'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#Document'}],
+                     json{'Parent':'http://terminusdb.com/schema/system#User'},
+                     json{'Parent':'http://terminusdb.com/schema/system#Agent'},
+                     json{'Parent':'http://terminusdb.com/schema/system#Document'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
@@ -1713,9 +1713,9 @@ test(isa, []) :-
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#User'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#Document'}],
+                     json{'IsA':'http://terminusdb.com/schema/system#User'},
+                     json{'IsA':'http://terminusdb.com/schema/system#Agent'},
+                     json{'IsA':'http://terminusdb.com/schema/system#Document'}],
                     Expected),
     ord_seteq(Bindings_Set, Expected).
 
@@ -1760,7 +1760,7 @@ test(exp, []) :-
 
 test(limit, [
          setup((setup_temp_store(State),
-                create_db_without_schema("admin", "test", 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))]) :-
 
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2124,12 +2124,12 @@ test(path, []) :-
       _{ '@type' : "PathOr",
          path_left :
          _{ '@type' : "PathPredicate",
-            path_predicate : _{ '@id' : "system:authority_scope"}},
+            path_predicate : _{ '@id' : "system:capability_scope"}},
          path_right :
          _{ '@type' : "PathSequence",
             path_first :
             _{ '@type' : "PathPredicate",
-               path_predicate : _{ '@id' : "system:authority_scope"}},
+               path_predicate : _{ '@id' : "system:capability_scope"}},
             path_second :
             _{ '@type' : "PathPlus",
                path_pattern :
@@ -2393,7 +2393,7 @@ test(select, []) :-
                                  }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-    [_{'Subject':'system:///terminus/document/access_all_areas'}] = JSON.bindings.
+    [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
 
 test(when, []) :-
 

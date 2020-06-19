@@ -133,11 +133,7 @@ compile_pattern(p(Pred), Compiled, Prefixes, Transaction_Object) :-
     xfy_list(';',Compiled,Predicates).
 compile_pattern((X,Y), (XC,YC), Prefixes, Transaction_Object) :-
     compile_pattern(X,XC,Prefixes,Transaction_Object),
-    compile_pattern(Y,YC,Prefixes,Transaction_Object),
-    % Only compose compatible edges
-    left_edges(XC,Left_Edges),
-    right_edges(YC,Right_Edges),
-    assert_compatible_edges(Left_Edges, Right_Edges, Transaction_Object).
+    compile_pattern(Y,YC,Prefixes,Transaction_Object).
 compile_pattern((X;Y), (XC;YC), Prefixes, Transaction_Object) :-
     compile_pattern(X,XC,Prefixes,Transaction_Object),
     compile_pattern(Y,YC,Prefixes,Transaction_Object).
@@ -175,18 +171,3 @@ left_edges((X;Y),Rs) :-
     left_edges(X,Ps),
     left_edges(Y,Qs),
     append(Ps,Qs,Rs).
-
-assert_compatible_edges(Left_Edges,Right_Edges,Database) :-
-    forall(
-        (   member(Left,Left_Edges),
-            member(Right,Right_Edges)
-        ),
-        (   range(Left,Range,Database),
-            domain(Right,Domain,Database),
-            (   subsumption_of(Range, Domain, Database)
-            ->  true
-            ;   format(atom(M),'Incompatible domain', []),
-                throw(error(M))
-            )
-        )
-    ).
