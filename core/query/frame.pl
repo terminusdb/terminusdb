@@ -847,7 +847,6 @@ test(document_filled_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
     document_filled_frame('terminusdb:///system/data/admin',Database,Frame),
-    writeq(Frame),
     Frame = [[type=datatypeProperty,
               domainValue='terminusdb:///system/data/admin',
               property='http://terminusdb.com/schema/system#user_key_hash',
@@ -1056,10 +1055,7 @@ object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
         realise_quads(URI,Frame,Database,Unsorted),
-        sort(Unsorted,Pre_Edges),
-        maplist({Database}/[(Graph_Descriptor,A,B,C),(G,A,B,C)]>>(
-                    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,[Database],G)
-                ), Pre_Edges, Edges)
+        sort(Unsorted,Edges)
     ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
@@ -1071,8 +1067,13 @@ object_edges(URI,Database,Edges) :-
  * Get the set of references to a given object.
  */
 object_references(URI,Database,Edges) :-
-    findall((G,Elt,Prop,URI),
-            inferredQuad(G,Elt, Prop, URI, Database),
+    findall((G_Desc,Elt,Prop,URI),
+            (   inferredQuad(G, Elt, Prop, URI, Database),
+                (   is_dict(G)
+                ->  get_dict(descriptor,G,G_Desc)
+                ;   G = inferred
+                ->  G = G_Desc
+                ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))),
             Edges).
 
 /*
@@ -1103,7 +1104,17 @@ delete_object(URI,Query_Context) :-
     object_references(URI_Ex,Database,References),
     union(Object_Edges,References,Edges),
     exclude([(inferred,_,_,_)]>>true, Edges, Non_Inferred_Edges),
-    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Non_Inferred_Edges).
+    Transaction_Objects = (Query_Context.transaction_objects),
+    delete_edges(Non_Inferred_Edges, Transaction_Objects).
+
+delete_edges([],_).
+delete_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
+    graph_descriptor_transaction_objects_read_write_object(
+        G_Desc,
+        Transaction_Objects,
+        G),
+    delete(G,X,Y,Z,_N),
+    delete_edges(Edges, Transaction_Objects).
 
 type_to_type_word(Type, Type_Word) :-
     pattern_string_split('#', Type, Segments),
