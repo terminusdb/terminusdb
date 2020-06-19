@@ -807,6 +807,7 @@ test(class_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
     class_frame('http://terminusdb.com/schema/system#Agent',Database,Frame),
+    writeq(Frame),nl,
     % Not sure how stable this order is.
     Frame = [[type=objectProperty,
               property='http://terminusdb.com/schema/system#authority',
