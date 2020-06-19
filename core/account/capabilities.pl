@@ -2,7 +2,6 @@
               user_key_auth/4,
               username_user_id/3,
               user_key_user_id/4,
-              user_id_auth_id/3,
               username_auth/3,
               get_user/3,
               auth_action_scope/4,
@@ -118,19 +117,6 @@ username_auth(DB, Username, Auth) :-
     user_id_auth_id(DB, User_ID, Auth).
 
 /*
- * user_id_auth_id(+DB, +User_ID, -Auth_id) is semidet.
- *
- * Sould return the auth object
- */
-user_id_auth_id(DB, User_ID, Auth_ID) :-
-    ask(DB,
-        (
-            t( User_ID , rdf:type , system:'User' ),
-            t( User_ID , system:authority, Auth_ID )
-        )
-       ).
-
-/*
  * auth_action_scope(Auth,Action,Scope) is nondet.
  *
  * Does Auth object have capability Action on scope Scope.
@@ -175,11 +161,14 @@ write_type_access(instance,system:instance_write_access).
 write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
 
+is_super_user(Auth,Prefixes) :-
+    super_user_authority(URI),
+    prefixed_to_uri(Auth, Prefixes, URI).
+
 require_super_user(Context) :-
     % This allows us to shortcut looking in the database,
     % avoiding infinite regression
-    super_user_authority(URI),
-    prefixed_to_uri(Context.authorization, Context.prefixes, URI),
+    is_super_user(Context.authorization, Context.prefixes),
     !.
 require_super_user(Context) :-
     throw(error(not_super_user(Context))).
@@ -194,6 +183,10 @@ require_super_user(Context) :-
 assert_write_access(Context, Context) :-
     assert_write_access(Context).
 
+assert_write_access(Context) :-
+    is_super_user(Context.authorization, Context.prefixes),
+    % This probably makes all super user checks redundant.
+    !.
 assert_write_access(Context) :-
     system_descriptor{} :< Context.default_collection,
     !,
@@ -285,6 +278,10 @@ filter_types(type_name_filter{type : Type, names : _}, [Type]).
 assert_read_access(Context, Context) :-
     assert_read_access(Context).
 
+assert_read_access(Context) :-
+    is_super_user(Context.authorization, Context.prefixes),
+    % This probably makes all super user checks redundant.
+    !.
 assert_read_access(Context) :-
     system_descriptor{} :< Context.default_collection,
     !,

@@ -18,6 +18,7 @@
               finalized_element_uri/1,
               deleting_element_uri/1,
               resource_includes_prop_uri/1,
+              organization_database_prop_uri/1,
               allow_origin_prop_uri/1,
 
               layer_class_uri/1,
@@ -91,6 +92,7 @@ database_state_prop_uri('http://terminusdb.com/schema/system#database_state').
 finalized_element_uri('http://terminusdb.com/schema/system#finalized').
 deleting_element_uri('http://terminusdb.com/schema/system#deleting').
 resource_includes_prop_uri('http://terminusdb.com/schema/system#resource_includes').
+organization_database_prop_uri('http://terminusdb.com/schema/system#organization_database').
 allow_origin_prop_uri('http://terminusdb.com/schema/system#allow_origin').
 
 %%% URIs from layer schema

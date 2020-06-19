@@ -1357,19 +1357,17 @@ pack_handler(post,Path,R) :-
 
 test(pack_stuff, [
          % blocked('Blocked due to build problems - missing new store?'),
-         setup((organization_database_name('_a_test_user_', foo, DB_Name),
-                (   database_exists(DB_Name)
-                ->  delete_db(DB_Name)
+         setup(((   database_exists('_a_test_user_',foo)
+                ->  delete_db('_a_test_user_',foo)
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
                 ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
                     delete_user(Old_User_ID)
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',User_ID),
-                create_db_without_schema(DB_Name,'foo','a test'),
-                make_user_own_database('_a_test_user_',DB_Name)
+                create_db_without_schema('_a_test_user_',foo)
                )),
-         cleanup((delete_db(DB_Name),
+         cleanup((delete_db('_a_test_user_',foo),
                   delete_user(User_ID)))
      ]) :-
 
@@ -1428,19 +1426,17 @@ test(pack_stuff, [
 
 test(pack_nothing, [
          % blocked('causing travis to die'),
-         setup((organization_database_name('_a_test_user_', foo, DB_Name),
-                (   database_exists(DB_Name)
-                ->  delete_db(DB_Name)
+         setup(((   database_exists('_a_test_user_','foo')
+                ->  delete_db('_a_test_user_','foo')
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
                 ->  agent_name_uri(system_descriptor{}, '_a_test_user_', Old_User_ID),
                     delete_user(Old_User_ID)
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',User_ID),
-                create_db_without_schema(DB_Name,'foo','a test'),
-                make_user_own_database('_a_test_user_',DB_Name)
+                create_db_without_schema('_a_test_user_','foo')
                )),
-         cleanup((delete_db(DB_Name),
+         cleanup((delete_db('_a_test_user_','foo'),
                   delete_user(User_ID)))
      ]) :-
 

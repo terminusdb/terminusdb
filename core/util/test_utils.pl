@@ -290,11 +290,11 @@ create_db_without_schema(Organization, Db_Name) :-
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema("user", "test"))),
+             create_db_with_test_schema("admin", "test"))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
-    resolve_absolute_string_descriptor("user/test", Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message:"this should never commit"}, Context),
 
     with_transaction(Context,

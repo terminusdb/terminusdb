@@ -3,7 +3,6 @@
               add_user/4,
               agent_name_uri/3,
               agent_name_exists/2,
-              make_user_own_database/2,
               delete_user/1
           ]).
 
@@ -69,6 +68,20 @@ add_user(Nick, Email, Pass, User_URI) :-
                     insert(Capability_URI, system:capability_scope, Organization_URI),
                     insert(Capability_URI, system:action, system:create_database),
                     insert(Capability_URI, system:action, system:manage_capabilities),
+                    insert(Capability_URI, system:action, system:delete_database),
+                    insert(Capability_URI, system:action, system:class_frame),
+                    insert(Capability_URI, system:action, system:clone),
+                    insert(Capability_URI, system:action, system:fetch),
+                    insert(Capability_URI, system:action, system:push),
+                    insert(Capability_URI, system:action, system:branch),
+                    insert(Capability_URI, system:action, system:rebase),
+                    insert(Capability_URI, system:action, system:meta_read_access),
+                    insert(Capability_URI, system:action, system:commit_read_access),
+                    insert(Capability_URI, system:action, system:instance_read_access),
+                    insert(Capability_URI, system:action, system:instance_write_access),
+                    insert(Capability_URI, system:action, system:schema_read_access),
+                    insert(Capability_URI, system:action, system:schema_write_access),
+                    insert(Capability_URI, system:action, system:manage_capabilities),
                     insert(Organization_URI, rdf:type, system:'Organization'),
                     insert(Organization_URI, system:organization_name, Nick^^xsd:string),
                     insert(doc:admin_organization, system:resource_includes, Organization_URI)
@@ -90,67 +103,6 @@ delete_user(User_URI) :-
                 delete_object(User_URI)
             )),
         _).
-
-make_user_own_database(User_Name, Database_Name) :-
-    create_context(system_descriptor{},
-                   commit_info{ author: "TerminusDB System",
-                                message: "internal server operation"},
-                   System),
-    with_transaction(
-        System,
-        (
-            username_user_id(System, User_Name, User_ID),
-            user_id_auth_id(System, User_ID, Auth_ID),
-
-            ask(System,
-                (   t(Org_Uri, rdf:type, system:'Organization'),
-                    t(Org_Uri, system:organization_name, User_Name^^(xsd:string)),
-                    t(Org_Uri, system:organization_database, DB_URI),
-                    t(DB_URI, rdf:type, system:'Database'),
-                    t(DB_URI, system:resource_name, Database_Name^^(xsd:string))
-                )),
-
-            % writeq(DB_URI),nl,
-
-            ask(System,
-                (
-                    idgen(doc:'Access', [
-                              delete_database^^(xsd:string),
-                              class_frame^^(xsd:string),
-                              clone^^(xsd:string),
-                              fetch^^(xsd:string),
-                              push^^(xsd:string),
-                              branch^^(xsd:string),
-                              rebase^^(xsd:string),
-                              meta_read_access^^(xsd:string),
-                              commit_read_access^^(xsd:string),
-                              instance_read_access^^(xsd:string),
-                              instance_write_access^^(xsd:string),
-                              schema_read_access^^(xsd:string),
-                              schema_write_access^^(xsd:string),
-                              manage^^(xsd:string),
-                              Database_Name^^(xsd:string)], Access_URI),
-                    insert(Auth_ID, system:access, Access_URI),
-                    insert(Access_URI, rdf:type, system:'Access'),
-                    insert(Access_URI, system:action, system:delete_database),
-                    insert(Access_URI, system:action, system:class_frame),
-                    insert(Access_URI, system:action, system:clone),
-                    insert(Access_URI, system:action, system:fetch),
-                    insert(Access_URI, system:action, system:push),
-                    insert(Access_URI, system:action, system:branch),
-                    insert(Access_URI, system:action, system:rebase),
-                    insert(Access_URI, system:action, system:meta_read_access),
-                    insert(Access_URI, system:action, system:commit_read_access),
-                    insert(Access_URI, system:action, system:instance_read_access),
-                    insert(Access_URI, system:action, system:instance_write_access),
-                    insert(Access_URI, system:action, system:schema_read_access),
-                    insert(Access_URI, system:action, system:schema_write_access),
-                    insert(Access_URI, system:action, system:manage),
-                    insert(Access_URI, system:authority_scope, DB_URI)
-                ))
-        ),
-        _Meta_Data
-    ).
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -180,10 +132,8 @@ test(test_user_ownership, [
 
     create_db_without_schema(Name, "test"),
 
-    make_user_own_database(Name, "test"),
-
     open_descriptor(system_descriptor{}, System),
-    once(user_id_auth_id(System, User_URI, Auth_ID)),
+
     resolve_absolute_string_descriptor("Gavin/test", Descriptor),
 
     create_context(Descriptor, Context1),
@@ -195,7 +145,7 @@ test(test_user_ownership, [
             files : Files,
             system: System,
             update_guard : _Guard0,
-            authorization : Auth_ID
+            authorization : User_URI
         }, Context1, Context1_0),
 
     with_transaction(
@@ -214,18 +164,10 @@ test(test_user_ownership, [
             files : Files,
             system: System,
             update_guard : _Guard1,
-            authorization : Auth_ID
+            authorization : User_URI
         }, Context2, _Context2_0),
-
 
     once(ask(Descriptor, t(a,b,c))).
 
-
-test(test_no_user_ownership, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    true.
 
 :- end_tests(user_management).

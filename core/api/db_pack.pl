@@ -123,14 +123,15 @@ unpack(Pack) :-
 
 test(context_repository_head_pack,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
 
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -144,7 +145,9 @@ test(context_repository_head_pack,
                      once(ask(Context1, insert(foo,bar,baz))),
                      _),
 
-    open_descriptor(database_descriptor{ database_name: 'user|foo' },
+    open_descriptor(database_descriptor{
+                        organization_name: "admin",
+                        database_name: "foo" },
                     Database_Transaction),
 
     repository_head(Database_Transaction, "local", Repo_Stage_1_Layer_ID),
