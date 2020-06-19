@@ -9,3 +9,12 @@
 
 system:capability_scope owl:propertyChainAxiom
     ( system:capability_scope system:resource_includes ) .
+
+system:organization_name
+  rdfs:subPropertyOf system:resource_name .
+
+system:organization_child
+  rdfs:subPropertyOf system:resource_includes .
+
+system:organization_database
+  rdfs:subPropertyOf system:resource_includes .

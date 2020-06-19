@@ -22,8 +22,8 @@ doc:server_access
 
 doc:admin_organization
   a system:Organization ;
-  system:resource_includes doc:system ;
-  system:resource_name "admin"^^xsd:string ;
+  system:organization_database doc:system ;
+  system:organization_name "admin"^^xsd:string ;
   rdfs:label "admin organization"@en ;
   rdfs:comment "Admin organization"@en .
 

@@ -1326,7 +1326,7 @@ pack_handler(post,Path,R) :-
     merge_dictionaries(
         query_context{
             authorization : Auth_ID,
-            terminus : Terminus
+            system : Terminus
         }, Pre_Context, Context),
 
     assert_read_access(Context),

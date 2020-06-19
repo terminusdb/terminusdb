@@ -36,6 +36,7 @@
 :- use_module(core(transaction)).
 
 :- use_module(library(terminus_store)).
+:- use_module(core(util/test_utils)).
 
 insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label, Comment, Db_Uri) :-
     database_class_uri(Database_Class_Uri),

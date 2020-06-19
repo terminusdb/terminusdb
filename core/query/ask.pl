@@ -213,7 +213,7 @@ create_context(Transaction_Object, Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
-        terminus : system_descriptor{},
+        system : system_descriptor{},
         update_guard : _Guard,
         files : [],
         bindings : [],

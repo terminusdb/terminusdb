@@ -74,6 +74,7 @@ system:Organization
 
 system:organization_name
   a owl:DatatypeProperty ;
+  rdfs:subPropertyOf system:resource_name ;
   rdfs:label "organization name"@en ;
   rdfs:comment "The name of an organization"@en ;
   rdfs:domain system:Organization ;
@@ -81,13 +82,13 @@ system:organization_name
 
 system:organization_child
   a owl:ObjectProperty ;
-  owl:subPropertyOf system:resource_includes ;
+  rdfs:subPropertyOf system:resource_includes ;
   rdfs:domain system:Organization ;
   rdfs:range system:Organization .
 
 system:organization_database
   a owl:ObjectProperty ;
-  owl:subPropertyOf system:resource_includes ;
+  rdfs:subPropertyOf system:resource_includes ;
   rdfs:domain system:Organization ;
   rdfs:range system:Database .
 

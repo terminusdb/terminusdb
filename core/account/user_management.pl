@@ -29,7 +29,7 @@ agent_name_uri(Askable, Name, User_URI) :-
             )).
 
 agent_name_exists(Askable, Name) :-
-    agent_name_uri(Askable, Name, _URI).
+    agent_name_uri(Askable, Name, _).
 
 /*
  * add_user
@@ -45,25 +45,33 @@ add_user(Nick, Email, Pass, User_URI) :-
     ->  throw(error(user_already_exists(Nick)))
     ;   true),
 
+    (   organization_name_exists(SystemDB, Nick)
+    ->  throw(error(organization_already_exists(Nick)))
+    ;   true),
+
     with_transaction(
         SystemDB,
         (
             crypto_password_hash(Pass,Hash),
             ask(SystemDB,
-                (   idgen(doc:'User',[Nick^^xsd:string], User_URI),
-                    idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
-                    idgen(doc:'Access',["terminus"^^xsd:string, "create_database"^^xsd:string], Access_URI),
-                    t(Server_URI, system:resource_name, "terminus"^^xsd:string),
-                    insert(User_URI,rdf:type, system:'User'),
-                    insert(User_URI,system:email, Email^^xsd:string),
-                    insert(User_URI,system:agent_name, Nick^^xsd:string),
-                    insert(User_URI,system:user_key_hash, Hash^^xsd:string),
-                    insert(User_URI,system:authority, Capability_URI),
+                (   random_idgen(doc:'User',[Nick^^xsd:string], User_URI),
+                    random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
+                    random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
+                    random_idgen(doc:'Organization',[Nick^^xsd:string], Organization_URI),
+                    insert(User_URI, rdf:type, system:'User'),
+                    insert(User_URI, system:user_identifier, Email^^xsd:string),
+                    insert(User_URI, system:agent_name, Nick^^xsd:string),
+                    insert(User_URI, system:user_key_hash, Hash^^xsd:string),
+                    insert(User_URI, system:role, Role_URI),
+                    insert(Role_URI, rdf:type, system:'Role'),
+                    insert(Role_URI, system:capability, Capability_URI),
                     insert(Capability_URI, rdf:type, system:'Capability'),
-                    insert(Capability_URI, system:access, Access_URI),
-                    insert(Access_URI, rdf:type, system:'Access'),
-                    insert(Access_URI, system:authority_scope, Server_URI),
-                    insert(Access_URI, system:action, system:create_database)
+                    insert(Capability_URI, system:capability_scope, Organization_URI),
+                    insert(Capability_URI, system:action, system:create_database),
+                    insert(Capability_URI, system:action, system:manage_capabilities),
+                    insert(Organization_URI, rdf:type, system:'Organization'),
+                    insert(Organization_URI, system:organization_name, Nick^^xsd:string),
+                    insert(doc:admin_organization, system:resource_includes, Organization_URI)
                 )
                )
         ),
@@ -93,17 +101,12 @@ make_user_own_database(User_Name, Database_Name) :-
         (
             username_user_id(System, User_Name, User_ID),
             user_id_auth_id(System, User_ID, Auth_ID),
-            % writeq(User_ID),nl,
-            % findall(DB-Name,
-            %         ask(System,
-            %             (   t(DB, rdf:type, system:'Database'),
-            %                 t(DB, system:resource_name, Name^^(xsd:string))
-            %             )),
-            %         Names),
-            % writeq(Names),
 
             ask(System,
-                (   t(DB_URI, rdf:type, system:'Database'),
+                (   t(Org_Uri, rdf:type, system:'Organization'),
+                    t(Org_Uri, system:organization_name, User_Name^^(xsd:string)),
+                    t(Org_Uri, system:organization_database, DB_URI),
+                    t(DB_URI, rdf:type, system:'Database'),
                     t(DB_URI, system:resource_name, Database_Name^^(xsd:string))
                 )),
 
@@ -164,7 +167,7 @@ test(add_user, [
     agent_name_uri(system_descriptor{}, "Gavin", URI),
 
     once(ask(system_descriptor{},
-             t(URI, system:email, "gavin@terminusdb.com"^^xsd:string))).
+             t(URI, system:user_identifier, "gavin@terminusdb.com"^^xsd:string))).
 
 
 test(test_user_ownership, [
@@ -174,11 +177,10 @@ test(test_user_ownership, [
 
     Name = "Gavin",
     add_user(Name, "gavin@terminusdb.com", "here.i.am", User_URI),
-    organization_database_name(Name, 'test', Database_Name),
 
-    create_db_without_schema(Database_Name, 'test', 'a test'),
+    create_db_without_schema(Name, "test"),
 
-    make_user_own_database(Name, Database_Name),
+    make_user_own_database(Name, "test"),
 
     open_descriptor(system_descriptor{}, System),
     once(user_id_auth_id(System, User_URI, Auth_ID)),

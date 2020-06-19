@@ -207,7 +207,7 @@ assert_write_access(Context) :-
     } :< Context.default_collection,
     !,
     Auth = (Context.authorization),
-    DB = (Context.terminus),
+    DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, system:meta_write_access, Scope_Iri).
 assert_write_access(Context) :-
@@ -220,8 +220,8 @@ assert_write_access(Context) :-
         repository_name : _Repo
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
+    Auth = (Context.authorization),
+    DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, system:commit_write_access, Scope_Iri).
 assert_write_access(Context) :-
@@ -238,9 +238,9 @@ assert_write_access(Context) :-
         branch_name : _Branch_Name
     }:< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    WG = Context.write_graph,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    WG = (Context.write_graph),
     write_type_access(WG.type,Access),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, Access, Scope_Iri).
@@ -295,8 +295,8 @@ assert_read_access(Context) :-
         database_name : Database_Name
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
+    Auth = (Context.authorization),
+    DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, system:meta_read_access, Scope_Iri).
 assert_read_access(Context) :-
@@ -309,8 +309,8 @@ assert_read_access(Context) :-
         repository_name : _Repo
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
+    Auth = (Context.authorization),
+    DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, system:commit_read_access, Scope_Iri).
 assert_read_access(Context) :-
@@ -327,9 +327,9 @@ assert_read_access(Context) :-
         branch_name : _Branch_Name
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    Filter = Context.filter,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    Filter = (Context.filter),
     filter_types(Filter,Types),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     forall(member(Type,Types),
@@ -361,9 +361,9 @@ assert_read_access(Context) :-
         commit_id : _ID
     } :< Context.default_collection,
     !,
-    Auth = Context.authorization,
-    DB = Context.terminus,
-    Filter = Context.filter,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    Filter = (Context.filter),
     filter_types(Filter,Types),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     forall(member(Type,Types),

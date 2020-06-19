@@ -3,6 +3,7 @@
               database_exists/3,
               organization_database_name_uri/4,
               organization_name_uri/3,
+              organization_name_exists/2,
               database_finalized/3
           ]).
 
@@ -31,9 +32,12 @@ organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
 
 organization_name_uri(Askable,Organization, Uri) :-
     once(ask(Askable,
-             (   t(Uri, system:resource_name, Organization^^xsd:string),
+             (   t(Uri, system:organization_name, Organization^^xsd:string),
                  t(Uri, rdf:type, system:'Organization')
              ))).
+
+organization_name_exists(Askable, Name) :-
+    organization_name_uri(Askable, Name, _).
 
 database_finalized(Askable,Organization,Database) :-
     organization_database_name_uri(Askable,Organization,Database,Db_Uri),
