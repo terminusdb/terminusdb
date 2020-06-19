@@ -80,12 +80,6 @@ opt_spec([[opt(help),
            default('localhost'),
            help('set the server name')],
 
-          [opt(public_url),
-           type(atom),
-           longflags([public_url]),
-           default(false),
-           help('set the public URL')],
-
           [opt(workers),
            type(integer),
            shortflags([w]),
@@ -150,17 +144,13 @@ run(Args) :-
         memberchk(server(Server), Opts),
         memberchk(port(Port), Opts),
         memberchk(protocol(Protocol), Opts),
-        memberchk(public_url(Public_URL), Opts),
-        (   Public_URL \= false
-        ->  PUBLIC_URL = Public_URL
-        ;   format(atom(PUBLIC_URL), '~s://~s:~d', [Protocol, Server, Port])
-        ),
+        format(atom(SERVER_URL), '~s://~s:~d', [Protocol, Server, Port]),
 
         initialize_registry,
         initialize_index(Key, Opts),
 
         (   memberchk(onlyconfig(false), Opts)
-        ->  initialize_database(PUBLIC_URL, Key),
+        ->  initialize_database(SERVER_URL, Key),
             format('Successfully initialised database!!!~n')
         ;   true
         ),

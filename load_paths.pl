@@ -1,13 +1,6 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
-add_pack_path :-
-    (   getenv('TERMINUS_SERVER_PACK_DIR', PackDir)
-    ->  attach_packs(PackDir)
-    ;   true).
-
-:- add_pack_path.
-
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
@@ -49,6 +42,14 @@ add_config_path :-
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
+
+add_pack_path :-
+    use_module(config(terminus_config)),
+    (   pack_dir(PackDir)
+    ->  attach_packs(PackDir)
+    ;   true).
+
+:- add_pack_path.
 
 add_test_path :-
     user:file_search_path(terminus_home, Dir),

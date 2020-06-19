@@ -13,7 +13,6 @@
               assert_write_access/1,
               assert_write_access/2,
               assert_write_access/3,
-              write_cors_headers/2,
               authorisation_object/3,
               user_object/3,
               super_user_authority/1,
@@ -411,35 +410,3 @@ check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
 
 check_descriptor_auth(Terminus, Descriptor, Action, Auth) :-
     check_descriptor_auth_(Descriptor, Action, Auth, Terminus).
-
-/*
- * write_cors_headers(Resource_Name) is det.
- *
- * Writes cors headers associated with Resource_URI
- */
-write_cors_headers(Resource_Name, DB) :-
-    % delete the object
-    findall(Origin,
-            ask(DB,
-                (   t(Internal_Resource_URI, terminus:resource_name, Resource_Name^^(xsd:string)),
-                    t(Internal_Resource_URI, terminus:allow_origin, Origin^^(xsd:string))
-                )),
-            Origins),
-    sort(Origins,Unique_Origins),
-    current_output(Out),
-    format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
-    format(Out,'Access-Control-Allow-Credentials: true\n',[]),
-    format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-    format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
-    format(Out,'Access-Control-Allow-Origin: ',[]),
-    write_domains(Unique_Origins, Out),
-    format(Out,'\n',[]).
-
-write_domains([], _).
-write_domains([Domain| Domains], Out) :-
-    write(Out, Domain),
-    (   Domains == []
-    ->  true
-    ;   write(' '),
-        write_domains(Domains, Out)
-    ).

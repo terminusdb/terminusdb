@@ -17,15 +17,16 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                          % our branch has a previous commit, so we have to find the common ancestor with their branch
                          % This common ancestor should be our own head, so we need to check for divergent history and error in that case.
                          ->  commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
-                             (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
-                             ->  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
-                                 most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path),
-                                 (   Our_Branch_Path = []
+                             (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
+                                 commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
+                                 most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
+                             ->  (   Our_Branch_Path = []
                                  ->  true
-                                 ;   throw(error(fast_forward(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path))))),
+                                 ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)))),
 
                                  Applied_Commit_Ids = Their_Branch_Path,
-                                 Next = copy_commit(Their_Commit_Id))
+                                 Next = copy_commit(Their_Commit_Id)
+                             ;   throw(error(no_common_history)))
                          ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
                              ->  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
                                  commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Applied_Commit_Ids),
@@ -160,7 +161,7 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema('user|foo','test','a test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(fast_forward(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id]))))
+      throws(error(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id])))
      ])
 :-
     resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
@@ -203,6 +204,101 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
+
+test(fast_forward_branch_from_empty_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(no_common_history))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+
+    % create single commit on master branch
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
+    with_transaction(Master_Context,
+                     ask(Master_Context,
+                         insert(a,b,c)),
+                     _),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
+
+test(fast_forward_branch_from_unrelated_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(no_common_history))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+
+    % create single commit on master branch
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
+    with_transaction(Master_Context,
+                     ask(Master_Context,
+                         insert(a,b,c)),
+                     _),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context),
+    with_transaction(Second_Context,
+                     ask(Second_Context,
+                         insert(d,e,f)),
+                     _),
+
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
+
+test(fast_forward_empty_branch_from_empty_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
+
+    Applied_Commit_Ids == [].
+
+test(fast_forward_nonempty_branch_from_equal_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('user|foo','test','a test'))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+    create_context(Master_Descriptor, _{author:"author",message:"message"}, Master_Context),
+    with_transaction(Master_Context,
+                     ask(Master_Context,
+                         insert(a,b,c)),
+                     _),
+
+    % create a branch off the master branch
+    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+
+    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+
+    % fast forward master with second
+    fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
+
+    Applied_Commit_Ids == [].
 
 test(fast_forward_branch_from_other_repo,
      [setup((setup_temp_store(State),

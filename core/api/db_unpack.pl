@@ -9,11 +9,11 @@
 :- use_module(db_pack).
 
 child_parent_linear_history(Child,Parent,Graph) :-
-    memberchk(Child-Parent, Graph),
+    memberchk(Child-some(Parent), Graph),
     !.
 child_parent_linear_history(Child,Parent,Graph) :-
-    memberchk(Child-Intermediate, Graph),
-    delete(Graph, Child-Intermediate, New_Graph),
+    memberchk(Child-some(Intermediate), Graph),
+    delete(Graph, Child-some(Intermediate), New_Graph),
     child_parent_linear_history(Intermediate,Parent,New_Graph).
 
 % error conditions:

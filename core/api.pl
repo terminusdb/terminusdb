@@ -49,7 +49,11 @@
               push/6,
 
               % db_unpack.pl
-              unpack/2
+              unpack/2,
+
+              % db_pull.pl
+              pull/6
+
           ]).
 
 :- use_module(api/init).
@@ -64,3 +68,4 @@
 :- use_module(api/db_clone).
 :- use_module(api/db_push).
 :- use_module(api/db_unpack).
+:- use_module(api/db_pull).

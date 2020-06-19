@@ -20,38 +20,29 @@ remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has
         error(fetch_remote_has_no_url(Repository_Descriptor))),
 
     create_context(Database_Descriptor, Database_Context),
-    (   repository_head(Database_Context,
-                        (Repository_Descriptor.repository_name),
-                        Repository_Head_Layer_Id)
-    ->  Repository_Head_Option = some(Repository_Head_Layer_Id)
-    ;   Repository_Head_Option = none),
+    with_transaction(
+        Database_Context,
+        (   
+            (   repository_head(Database_Context,
+                                (Repository_Descriptor.repository_name),
+                                Repository_Head_Layer_Id)
+            ->  Repository_Head_Option = some(Repository_Head_Layer_Id)
+            ;   Repository_Head_Option = none),
 
-    call(Fetch_Predicate, URL, Repository_Head_Option, Payload_Option),
-    (   some(Payload) = Payload_Option
-    ->  payload_repository_head_and_pack(Payload, Head, Pack),
-        New_Head_Layer_Id = Head,
-        unpack(Pack),
+            call(Fetch_Predicate, URL, Repository_Head_Option, Payload_Option),
+            (   some(Payload) = Payload_Option
+            ->  payload_repository_head_and_pack(Payload, Head, Pack),
+                New_Head_Layer_Id = Head,
+                unpack(Pack),
 
-        create_context(Database_Descriptor, Database_Context2),
-
-        with_transaction(
-            Database_Context2,
-            (   do_or_die(
-                    (   var(Repository_Head_Layer_Id)
-                    ->  true
-                    ;   repository_head(Database_Context2, (Repository_Descriptor.repository_name), Repository_Head_Layer_Id)),
-                    error(repository_head_moved(
-                              Repository_Descriptor,
-                              Repository_Head_Layer_Id))),
-
-                update_repository_head(Database_Context2,
+                update_repository_head(Database_Context,
                                        (Repository_Descriptor.repository_name),
-                                       Head)
-            ),_Meta_Data),
-        Head_Has_Updated = true
-    ;   Repository_Head_Option = some(New_Head_Layer_Id)
-    ->  Head_Has_Updated = false
-    ;   throw(error(unexpected_pack_missing(Repository_Descriptor)))).
+                                       Head),
+                Head_Has_Updated = true
+            ;   Repository_Head_Option = some(New_Head_Layer_Id)
+            ->  Head_Has_Updated = false
+            ;   throw(error(unexpected_pack_missing(Repository_Descriptor))))),
+        _Meta_Data).
 
 :- begin_tests(fetch_api).
 :- use_module(core(util/test_utils)).
