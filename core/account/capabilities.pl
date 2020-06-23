@@ -81,7 +81,8 @@ user_key_user_id(DB, Username, Key, User_ID) :-
             t(User_ID, rdf:type, system:'User'),
             t(User_ID, system:agent_name, Username^^xsd:string),
             t(User_ID, system:user_key_hash, Hash^^xsd:string)
-        )
+        ),
+        [compress_prefixes(false)]
        ),
     atom_string(Hash_Atom, Hash),
     crypto_password_hash(K, Hash_Atom).
@@ -368,17 +369,20 @@ user_object(DB, User_ID, User_Obj) :-
 
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,Terminus) :-
-    assert_auth_action_scope(Terminus,Auth,Action,"system").
-check_descriptor_auth_(database_descriptor{ database_name : Name }, Action, Auth, Terminus) :-
-    assert_auth_action_scope(Terminus,Auth,Action,Name).
+    assert_auth_action_scope(Terminus,Auth,Action,doc:system).
+check_descriptor_auth_(database_descriptor{ database_name : Database,
+                                            organization_name : Organization},
+                       Action, Auth, Terminus) :-
+    organization_database_name_uri(Terminus, Organization, Database, URI),
+    assert_auth_action_scope(Terminus,Auth,Action, URI).
 check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,
-                                                      repository_name : _ }, Action, Auth, Terminus) :-
+                                              repository_name : _ }, Action, Auth, Terminus) :-
     check_descriptor_auth_(DB, Action, Auth, Terminus).
 check_descriptor_auth_(branch_descriptor{ repository_descriptor : Repo,
-                                         branch_name : _ }, Action, Auth, Terminus) :-
+                                          branch_name : _ }, Action, Auth, Terminus) :-
     check_descriptor_auth_(Repo, Action, Auth, Terminus).
 check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
-                                                  commit_id : _ }, Action, Auth, Terminus) :-
+                                          commit_id : _ }, Action, Auth, Terminus) :-
     check_descriptor_auth_(Repo, Action, Auth, Terminus).
 
 check_descriptor_auth(Terminus, Descriptor, Action, Auth) :-

@@ -18,3 +18,6 @@ system:organization_child
 
 system:organization_database
   rdfs:subPropertyOf system:resource_includes .
+
+system:direct_capability_scope
+  rdfs:subPropertyOf system:capability_scope .

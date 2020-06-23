@@ -58,7 +58,8 @@ system:role
 system:Role
   rdfs:label "Role"@en ;
   rdfs:comment "A role is a collection of capabilities that can be allocated to any user"@en ;
-  a owl:Class .
+  a owl:Class ;
+  rdfs:subClassOf system:Document .
 
 system:User
   rdfs:label "User"@en ;
@@ -99,16 +100,18 @@ system:user_identifier
   rdfs:domain system:User ;
   rdfs:range xsd:string .
 
+system:CapabilityScopeRestriction
+  a owl:Restriction ;
+  rdfs:label "Capability Scope Restriction"@en ;
+  rdfs:comment "Exactly one capability scope per capability"@en ;
+  rdfs:onProperty system:capability_scope ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
 system:Capability
   a owl:Class ;
-  rdfs:subClassOf system:Document ;
+  rdfs:subClassOf system:Document, system:CapabilityScopeRestriction ;
   rdfs:label "Capability"@en ;
   rdfs:comment "A capability confers access to a database or server action"@en .
-
-system:Access
-  a owl:Class ;
-  rdfs:label "Access"@en ;
-  rdfs:comment "Access actions and scopes"@en .
 
 system:capability
   a owl:ObjectProperty ;
@@ -121,6 +124,14 @@ system:capability_scope
   a owl:ObjectProperty ;
   rdfs:label "Capability Scope"@en ;
   rdfs:comment "The scope of a capability - the resource that the capability applies to"@en ;
+  rdfs:domain system:Capability ;
+  rdfs:range system:Resource .
+
+system:direct_capability_scope
+  a owl:ObjectProperty ;
+  rdfs:subPropertOf system:capability_scope ;
+  rdfs:label "Direct Capability Scope"@en ;
+  rdfs:comment "The direct resource controlled by a capability - not a transitive property"@en ;
   rdfs:domain system:Capability ;
   rdfs:range system:Resource .
 

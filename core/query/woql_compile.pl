@@ -1988,6 +1988,42 @@ test(named_get_two, [])
       'Start_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                      '@value':"2011-01-01 00:01:29"}} :< Res.
 
+
+test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
+:-
+    terminus_path(Path),
+    atomic_list_concat([Path,'/terminus-schema/system_schema.owl.ttl'], File),
+    Query =
+    _{
+        '@type': "woql:Get",
+        'woql:as_vars': [
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 0},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "First"}},
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 1},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Second"}},
+        _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 2},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Third"}}],
+        'woql:query_resource':
+        _{ '@type': "woql:FileResource",
+           'woql:format' : _{'@type' : "woql:Format",
+                             'woql:format_type' : _{'@type' : "xsd:string",
+                                                    '@value' : "turtle"}},
+           'woql:file': _{'@type': "xsd:string",
+                          '@value': File }
+         }
+    },
+
+    query_test_response(system_descriptor{}, Query, _JSON).
+
 test(concat, [])
 :-
     Query =
@@ -2113,8 +2149,8 @@ test(order_by, []) :-
 test(path, []) :-
 
     % Pattern is:
-    % system:access , (  system:authority_scope
-    %                   ;  system:authority_scope, plus(system:resource_includes))
+    % system:role , (   system:capability_scope
+    %                ;  system:capability_scope, plus(system:resource_includes))
     Pattern =
     _{'@type' : "PathSequence",
       path_first :

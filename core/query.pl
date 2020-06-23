@@ -1,6 +1,7 @@
 :- module(query, [
               % ask.pl
               ask/2,
+              ask/3,
               ask_ast/3,
               create_context/2,
               create_context/3,

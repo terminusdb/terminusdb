@@ -52,10 +52,13 @@ delete_db_from_system(Organization,DB) :-
     create_context(system_descriptor{}, System),
     with_transaction(
         System,
-        (   organization_database_name_uri(System,Organization,DB,Db_Uri),
-            ask(System,
-                delete_object(Db_Uri))
-        ),
+        once((  organization_database_name_uri(System,Organization,DB,Db_Uri),
+                ignore(ask(System,
+                           (   t(Cap_Uri,system:direct_capability_scope,Db_Uri),
+                               delete_object(Cap_Uri)))),
+                ask(System,
+                    delete_object(Db_Uri))
+            )),
         _Meta_Data).
 
 /**

@@ -807,22 +807,14 @@ test(class_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
     class_frame('http://terminusdb.com/schema/system#Agent',Database,Frame),
+
     % Not sure how stable this order is.
     Frame = [[type=objectProperty,
               property='http://terminusdb.com/schema/system#role',
               domain='http://terminusdb.com/schema/system#Agent',
               range='http://terminusdb.com/schema/system#Role',
-              frame=[[type=objectProperty,
-                      property='http://terminusdb.com/schema/system#capability',
-                      domain='http://terminusdb.com/schema/system#Role',
-                      range='http://terminusdb.com/schema/system#Capability',
-                      restriction=true,
-                      frame=[type=document,
-                             class='http://terminusdb.com/schema/system#Capability',
-                             label="Capability"@en,
-                             comment="A capability confers access to a database or server action"@en],
-                      label="capability"@en,comment="associates a role with its capabilities"@en]],
               restriction=true,
+              frame=[type=document,class='http://terminusdb.com/schema/system#Role',label="Role"@en,comment="A role is a collection of capabilities that can be allocated to any user"@en],
               label="Has Role"@en,
               comment="A property that links an agent has a role"@en],
              [type=datatypeProperty,
@@ -847,6 +839,7 @@ test(document_filled_frame, [])
 :-
     open_descriptor(system_descriptor{}, Database),
     document_filled_frame('terminusdb:///system/data/admin',Database,Frame),
+
     Frame = [[type=datatypeProperty,
               domainValue='terminusdb:///system/data/admin',
               property='http://terminusdb.com/schema/system#user_key_hash',
@@ -864,18 +857,11 @@ test(document_filled_frame, [])
               restriction=true,
               label="Has Role"@en,
               comment="A property that links an agent has a role"@en,
-              frame=[[type=objectProperty,
-                      domainValue='terminusdb:///system/data/admin_role',
-                      property='http://terminusdb.com/schema/system#capability',
-                      domain='http://terminusdb.com/schema/system#Role',
-                      range='http://terminusdb.com/schema/system#Capability',
-                      restriction=true,label="capability"@en,
-                      comment="associates a role with its capabilities"@en,
-                      frame=[type=document,
-                             class='http://terminusdb.com/schema/system#Capability',
-                             label="Capability"@en,
-                             comment="A capability confers access to a database or server action"@en,
-                             domainValue='terminusdb:///system/data/server_access']]]],
+              frame=[type=document,
+                     class='http://terminusdb.com/schema/system#Role',
+                     label="Role"@en,
+                     comment="A role is a collection of capabilities that can be allocated to any user"@en,
+                     domainValue='terminusdb:///system/data/admin_role']],
              [type=datatypeProperty,
               domainValue='terminusdb:///system/data/admin',
               property='http://terminusdb.com/schema/system#agent_name',
@@ -1097,11 +1083,15 @@ object_instance_graph(JSON,Database,I) :-
  *
  */
 delete_object(URI,Query_Context) :-
-    Ctx = Query_Context.prefixes,
+    Ctx = (Query_Context.prefixes),
     query_default_collection(Query_Context, Database),
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
+
+    debug(terminus(frame(delete)),'~n[Delete] References: ~q~n', [References]),
+    debug(terminus(frame(delete)),'~n[Delete] Edges: ~q~n', [Object_Edges]),
+
     union(Object_Edges,References,Edges),
     exclude([(inferred,_,_,_)]>>true, Edges, Non_Inferred_Edges),
     Transaction_Objects = (Query_Context.transaction_objects),
@@ -1115,6 +1105,16 @@ delete_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
         G),
     delete(G,X,Y,Z,_N),
     delete_edges(Edges, Transaction_Objects).
+
+
+insert_edges([],_).
+insert_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
+    graph_descriptor_transaction_objects_read_write_object(
+        G_Desc,
+        Transaction_Objects,
+        G),
+    insert(G,X,Y,Z,_N),
+    insert_edges(Edges, Transaction_Objects).
 
 type_to_type_word(Type, Type_Word) :-
     pattern_string_split('#', Type, Segments),
@@ -1144,7 +1144,7 @@ update_object(Obj, Query_Context) :-
  * Does the actual updating using ID.
  */
 update_object(ID, Obj, Query_Context) :-
-    Prefixes = Query_Context.prefixes,
+    Prefixes = (Query_Context.prefixes),
     prefix_expand(ID,Prefixes,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
@@ -1154,15 +1154,15 @@ update_object(ID, Obj, Query_Context) :-
     query_default_collection(Query_Context, Database),
     object_edges(ID,Database,Old_Quads),
 
-    debug(terminus(frame(fill)),'~nNew: ~q~n', [New_Triples]),
-    debug(terminus(frame(fill)),'~nOld: ~q~n', [Old_Quads]),
+    debug(terminus(frame(update)),'~n[Update] New: ~q~n', [New_Triples]),
+    debug(terminus(frame(update)),'~n[Update] Old: ~q~n', [Old_Quads]),
 
     % Don't back out now.  both above should be det so we don't have to do this.
     !,
     query_default_write_graph(Query_Context, Write_Graph),
-
+    WG_Desc = (Write_Graph.descriptor),
     % don't insert any edge which already exists in any instance graph
-    convlist({Write_Graph,Old_Quads}/[(X,Y,Z),(Write_Graph,X,Y,Z)]>>(
+    convlist({WG_Desc,Old_Quads}/[(X,Y,Z),(WG_Desc,X,Y,Z)]>>(
                  \+ member((_G,X,Y,Z),Old_Quads)
              ),
              New_Triples,
@@ -1175,8 +1175,9 @@ update_object(ID, Obj, Query_Context) :-
              Old_Quads,
              Deletes),
 
-    maplist([(G,X,Y,Z)]>>insert(G,X,Y,Z,_N), Inserts),
-    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N), Deletes).
+    Transaction_Objects = (Query_Context.transaction_objects),
+    insert_edges(Inserts, Transaction_Objects),
+    delete_edges(Deletes, Transaction_Objects).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)
@@ -1198,7 +1199,10 @@ document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 
-test(update_object, [])
+test(update_object,
+     [setup((setup_temp_store(State))),
+      cleanup(teardown_temp_store(State))
+     ])
 :-
 
     Descriptor = system_descriptor{},
@@ -1247,7 +1251,10 @@ test(document_jsonld_depth, [])
     _{'@id':'doc:admin','@type':'system:User'} :< JSON_LD.
 
 
-test(delete_object, [])
+test(delete_object, [
+         setup((setup_temp_store(State))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
 
     Descriptor = system_descriptor{},
@@ -1268,10 +1275,10 @@ test(delete_object, [])
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
                  },
                  'system:agent_name': _{'@type':"xsd:string",
-                                          '@value':"test"
-                                         },
+                                        '@value':"test"
+                                       },
                  'system:role': _{'@id':"doc:admin_role",
-                                  '@type':"system:Capability"}
+                                  '@type':"system:Role"}
                 },
 
     update_object(Document, Query),

@@ -889,7 +889,7 @@ update_prefixes(Context, Prefixes) :-
     forall((   member(Key, Keys),
                get_dict(Key,Prefixes,URI)),
            ask(Context,
-               (   idgen('system://PrefixPair',[Key], Pair),
+               (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
                    insert(Pair, rdf:type, ref:'PrefixPair'),
                    insert(ref:default_prefixes, ref:prefix_pair, Pair),
                    insert(Pair, ref:prefix, Key^^xsd:string),
@@ -947,10 +947,10 @@ test(apply_single_addition,
     commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Repo_Descriptor, New_Commit_B_Uri, _, "commit b", _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            t(d,e,f),
-            addition(d,e,f))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 t(d,e,f),
+                 addition(d,e,f)))).
 
 test(apply_single_removal,
      [setup((setup_temp_store(State),
@@ -993,9 +993,10 @@ test(apply_single_removal,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            removal(d,e,f))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 removal(d,e,f)))).
+
 test(apply_existing_addition,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb1"),
@@ -1031,8 +1032,8 @@ test(apply_existing_addition,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c))).
+    once(ask(Descriptor1,
+             (   t(a,b,c)))).
             %not(addition(a,b,c)))). % since we're reusing the previous layer, rather than creating a new (empty) one, we're actually still seeing an addition. Is that a problem?
 
 test(apply_nonexisting_removal,
@@ -1075,9 +1076,9 @@ test(apply_nonexisting_removal,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            not(removal(d,e,f)))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 not(removal(d,e,f))))).
 
 :- end_tests(commit_application).
 

@@ -263,7 +263,6 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
 
     create_context(Transaction_Object, Commit_Info, Context).
 
-
 create_db_with_test_schema(Organization, Db_Name) :-
     Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},

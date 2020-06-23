@@ -44,7 +44,7 @@
 :- use_module(library(terminus_store)).
 
 
-descriptor_database_name(Descriptor, 'system:///terminus') :-
+descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
     !.
 descriptor_database_name(Descriptor, ID) :-
@@ -52,7 +52,8 @@ descriptor_database_name(Descriptor, ID) :-
 descriptor_database_name(Descriptor, Label) :-
     label_descriptor{ label : Label } = Descriptor.
 descriptor_database_name(Descriptor, Name) :-
-    database_descriptor{ database_name : Name } = Descriptor,
+    database_descriptor{ organization_name : _,
+                         database_name : Name } = Descriptor,
     !.
 descriptor_database_name(Descriptor, Name) :-
     repository_descriptor{ repository_name : _,

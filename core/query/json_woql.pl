@@ -481,7 +481,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#FileResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
-    ->  WOQL = file(File,JSON)
+    ->  json_to_woql_ast(File,WFile,['http://terminusdb.com/schema/woql#file'
+                                     |Path]),
+        WFile = File_String^^_,
+        WOQL = file(File_String,JSON)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PostResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON

@@ -67,7 +67,7 @@ add_user(Nick, Email, Pass, User_URI) :-
                     insert(Role_URI, rdf:type, system:'Role'),
                     insert(Role_URI, system:capability, Capability_URI),
                     insert(Capability_URI, rdf:type, system:'Capability'),
-                    insert(Capability_URI, system:capability_scope, Organization_URI),
+                    insert(Capability_URI, system:direct_capability_scope, Organization_URI),
                     insert(Capability_URI, system:action, system:create_database),
                     insert(Capability_URI, system:action, system:manage_capabilities),
                     insert(Capability_URI, system:action, system:delete_database),
@@ -87,7 +87,8 @@ add_user(Nick, Email, Pass, User_URI) :-
                     insert(Organization_URI, rdf:type, system:'Organization'),
                     insert(Organization_URI, system:organization_name, Nick^^xsd:string),
                     insert(doc:admin_organization, system:resource_includes, Organization_URI)
-                )
+                ),
+                [compress_prefixes(false)]
                )
         ),
         _Meta_Data

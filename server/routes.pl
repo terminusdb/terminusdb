@@ -210,14 +210,14 @@ db_handler(options,_Account,_DB,Request) :-
     format('~n').
 db_handler(post,Organization,DB,R) :-
     add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(system_descriptor{}, Terminus_DB),
+    open_descriptor(system_descriptor{}, System_DB),
     /* POST: Create database */
-    authenticate(Terminus_DB, Request, Auth),
+    authenticate(System_DB, Request, Auth),
 
-    do_or_die(organization_name_uri(Terminus_DB, Organization, Organization_Uri),
+    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
               error(unknown_organization(Organization))), % dubious
 
-    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, Organization_Uri),
+    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
 
     get_payload(Database_Document,Request),
     do_or_die(
@@ -236,14 +236,14 @@ db_handler(post,Organization,DB,R) :-
     reply_json(_{'system:status' : 'system:success'}).
 db_handler(delete,Organization,DB,Request) :-
     /* DELETE: Delete database */
-    open_descriptor(system_descriptor{}, Terminus_DB),
-    authenticate(Terminus_DB, Request, Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    authenticate(System_DB, Request, Auth),
 
-    do_or_die(organization_name_uri(Terminus_DB, Organization, Organization_Uri),
+    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
               error(unknown_organization(Organization))), % dubious
 
-    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, Organization_Uri),
-    assert_auth_action_scope(Terminus_DB, Auth, system:delete_database, Organization_Uri),
+    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
+    assert_auth_action_scope(System_DB, Auth, system:delete_database, Organization_Uri),
 
     try_delete_db(Organization, DB),
 
@@ -279,7 +279,10 @@ test(db_create, [
 
 
 test(db_delete, [
-         setup((create_db_without_schema("admin", "TEST_DB")))
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  delete_db('admin', 'TEST_DB')
+                ;   true),
+                create_db_without_schema("admin", "TEST_DB")))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
@@ -311,14 +314,7 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
-    _{'system:status' : "system:success"} = In,
-
-    user_object(system_descriptor{}, doc:admin, User_Obj),
-    Access = User_Obj.'system:authority'.'system:access',
-    Resources = Access.'system:authority_scope',
-    once(
-        (   memberchk(Database,Resources),
-            _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'system:resource_name')).
+    _{'system:status' : "system:success"} = In.
 
 :- end_tests(db_endpoint).
 
@@ -431,21 +427,20 @@ test(triples_update, [
                           turtle : TTL}),
               _In, [json_object(dict),
                     authorization(basic(admin, Key)),
-                    reply_header(Fields)]),
-    * writeq(Fields),
+                    reply_header(_Fields)]),
 
     findall(A-B-C,
             ask(Branch_Descriptor,
                 t(A, B, C, "schema/*")),
             Triples),
-    memberchk('http://terminusdb.com/schema/terminus'-(rdf:type)-(owl:'Ontology'), Triples).
+    memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
 test(triples_get, [])
 :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/triples/terminus/schema/main'], URI),
+    atomic_list_concat([Server, '/triples/_system/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
@@ -666,7 +661,7 @@ test(no_db, [])
       collection : _{'@type' : "xsd:string",
                      '@value' : "_system"},
       query :
-      _{'@type' : "Select",    %   { "select" : [ v1, v2, v3, Query ] }
+      _{'@type' : "Select",
         variable_list : [
             _{'@type' : "VariableListElement",
               index : _{'@type' : "xsd:integer",
@@ -710,8 +705,8 @@ test(no_db, [])
                                            subject : _{'@type' : "Variable",
                                                       variable_name : _{ '@type' : "xsd:string",
                                                                          '@value' : "Class"}},
-                                           predicate : "tcs:tag",
-                                           object : "tcs:abstract",
+                                           predicate : "system:tag",
+                                           object : "system:abstract",
                                            graph_filter : _{'@type' : "xsd:string",
                                                             '@value' : "schema/*"}}}},
                       _{'@type' : 'QueryListElement',
@@ -750,7 +745,7 @@ test(no_db, [])
                                             subject : _{'@type' : "Variable",
                                                         variable_name : _{ '@type' : "xsd:string",
                                                                            '@value' : "Class"}},
-                                            predicate : "tcs:tag",
+                                            predicate : "system:tag",
                                             object : _{'@type' : "Variable",
                                                        variable_name : _{ '@type' : "xsd:string",
                                                                           '@value' : "Abstract"}},
@@ -919,7 +914,7 @@ test(update_object, [
                  _Transaction_Metadata2),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     create_context(Branch_Descriptor, Database0),
     Database = Database0.put(commit_info, commit_info{
@@ -931,7 +926,7 @@ test(update_object, [
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
     _{'@context' : _{ doc: "http://terminusdb.com/admin/test/document/",
-                      scm: "http://terminusdb.com/schema/terminus#"},
+                      scm: "http://terminusdb.com/schema/system#"},
       '@type' : "UpdateObject",
       document : _{ '@type' : "scm:Database",
                     '@id' : 'doc:my_database',
@@ -969,21 +964,19 @@ test(update_object, [
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    Expected = [
-        _{'Object':_{'@type':"http://www.w3.org/2001/XMLSchema#string",
-                     '@value':"Steve"},
-          'Predicate':"http://terminusdb.com/schema/terminus#resource_name",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
-        _{'Object':"http://terminusdb.com/schema/terminus#finalized",
-          'Predicate':"http://terminusdb.com/schema/terminus#database_state",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
-        _{'Object':"http://terminusdb.com/schema/terminus#Database",
-          'Predicate':"http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"}],
-    Bindings = JSON1.bindings,
-    union(Expected, Bindings, Union),
-    intersection(Expected, Bindings, Intersection),
-    subtract(Union, Intersection, []).
+    Expected = [ _{'Object': _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+                               '@value':"Steve"},
+                   'Predicate':"http://terminusdb.com/schema/system#resource_name",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+                 _{'Object':"http://terminusdb.com/schema/system#finalized",
+                   'Predicate':"http://terminusdb.com/schema/system#database_state",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+                 _{'Object':"http://terminusdb.com/schema/system#Database",
+                   'Predicate':"http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"}],
+    forall( member(Elt, Expected),
+            member(Elt, (JSON1.bindings))
+          ).
 
 
 test(delete_object, [
@@ -1009,7 +1002,7 @@ test(delete_object, [
 
     % Create the schema
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     create_context(Branch_Descriptor, Database0),
     Database = Database0.put(commit_info, commit_info{
@@ -1032,7 +1025,7 @@ test(delete_object, [
                                                        author : "Author",
                                                        message : "Message"}),
     Prefixes = _{ doc: "http://terminusdb.com/admin/test/document/",
-                  scm: "http://terminusdb.com/schema/terminus#"},
+                  scm: "http://terminusdb.com/schema/system#"},
     context_extend_prefixes(Pre_Database2,Prefixes,Database1),
     with_transaction(Database1,
                      ask(Database1,
@@ -1077,7 +1070,7 @@ test(get_object, [])
 
     config:server(Server),
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/terminus'], URI),
+    atomic_list_concat([Server, '/woql/_system'], URI),
     http_post(URI,
               json(_{query : Query0}),
               JSON0,
@@ -1088,7 +1081,7 @@ test(get_object, [])
       '@type':"system:User",
       'system:user_key_hash':_,
       'system:agent_name': _,
-      'system:authority': _}
+      'system:role': _}
     :< Result.'Document'.
 
 :- end_tests(woql_endpoint).
@@ -1104,10 +1097,10 @@ clone_handler(options, _, _, Request) :-
 clone_handler(post, Account, DB, R) :-
     add_payload_to_request(R,Request), % this should be automatic.
 
-    open_descriptor(system_descriptor{}, Terminus_DB),
-    authenticate(Terminus_DB, Request, Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    authenticate(System_DB, Request, Auth),
 
-    assert_auth_action_scope(Terminus_DB, Auth, system:create_database, "terminus"),
+    assert_auth_action_scope(System_DB, Auth, system:create_database, "_system"),
 
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
@@ -1224,12 +1217,19 @@ rebase_handler(post, Path, R) :-
 :- use_module(library(http/http_open)).
 
 test(rebase_divergent_history, [
-         setup((config:server(Server),
-                (   database_exists("TERMINUSQA", "foo")
+         setup(((   database_exists("TERMINUSQA", "foo")
                 ->  delete_db("TERMINUSQA", "foo")
                 ;   true),
+                (   agent_name_exists(system_descriptor{}, "TERMINUSQA")
+                ->  delete_user("TERMINUSQA")
+                ;   true),
+                (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
+                ->  delete_organization("TERMINUSQA")
+                ;   true),
+                add_user("TERMINUSQA",'user@example.com','password',_User_ID),
                 create_db_without_schema("TERMINUSQA", "foo"))),
-         cleanup(delete_db("TERMINUSQA", "foo"))
+         cleanup((delete_db("TERMINUSQA", "foo"),
+                  delete_user_and_organization("TERMINUSQA")))
      ])
 :-
 
@@ -1265,12 +1265,11 @@ test(rebase_divergent_history, [
 
     config:server(Server),
     atomic_list_concat([Server, '/rebase/TERMINUSQA/foo'], URI),
-    admin_pass(Key),
     http_post(URI,
               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
                      author : "Gavsky"}),
               JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
+              [json_object(dict),authorization(basic('TERMINUSQA','password'))]),
 
     * json_write_dict(current_output, JSON, []),
 
@@ -1349,7 +1348,10 @@ test(pack_stuff, [
                 ->  delete_db('_a_test_user_',foo)
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user_and_organization('_a_test_user_')
+                ->  delete_user('_a_test_user_')
+                ;   true),
+                (   organization_name_exists(system_descriptor{},'_a_test_user_')
+                ->  delete_organization('_a_test_user_')
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',_User_ID),
                 create_db_without_schema('_a_test_user_',foo)
@@ -1417,7 +1419,10 @@ test(pack_nothing, [
                 ->  delete_db('_a_test_user_','foo')
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user_and_organization('_a_test_user_')
+                ->  delete_user('_a_test_user_')
+                ;   true),
+                (   organization_name_exists(system_descriptor{},'_a_test_user_')
+                ->  delete_organization('_a_test_user_')
                 ;   true),
                 add_user('_a_test_user_','user@example.com','password',_User_ID),
                 create_db_without_schema('_a_test_user_','foo')

@@ -43,7 +43,7 @@ insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label
     resource_name_property_uri(Database_Name_Property_Uri),
     xsd_string_type_uri(Xsd_String_Type_Uri),
     object_storage(Database_Name^^Xsd_String_Type_Uri, Name_Literal),
-    random_idgen('system:///terminus/data/Database', [Organization_Name, Database_Name], Db_Uri),
+    random_idgen('terminusdb:///system/data/Database', [Organization_Name, Database_Name], Db_Uri),
 
     write_instance(Builder,Db_Uri,Database_Name,Database_Class_Uri),
     nb_add_triple(Builder,

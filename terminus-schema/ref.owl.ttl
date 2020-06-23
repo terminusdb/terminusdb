@@ -16,20 +16,6 @@
   owl:imports <http://terminusdb.com/schema/layer> ;
   system:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
 
-ref:BranchBaseUriRestriction
-  a owl:Restriction ;
-  rdfs:comment "A branch has no more than one base URI"@en ;
-  rdfs:label "Branch base URI restriction"@en ;
-  owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
-  owl:onProperty ref:branch_base_uri .
-
-ref:branch_base_uri
-  a owl:DatatypeProperty ;
-  rdfs:comment "Base URI for the current repository"@en ;
-  rdfs:label "Base URI"@en ;
-  rdfs:domain ref:Branch ;
-  rdfs:range xsd:anyURI.
-
 ref:Branch
   a owl:Class ;
   rdfs:subClassOf ref:Ref, ref:BranchBaseUriRestriction;

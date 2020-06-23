@@ -1,5 +1,6 @@
 :- module(ask,[
               ask/2,
+              ask/3,
               ask_ast/3,
               create_context/2,
               create_context/3,
@@ -62,7 +63,7 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
  *
  * Pre term has free variables that need to be changed into woql variables witha binding
  */
-pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
+pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out) :-
     (   var(Pre_Term)
     ->  (   lookup_backwards(Pre_Term,V,Bindings_In)
         ->  Bindings_In = Bindings_Out,
@@ -71,14 +72,16 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
             Bindings_Out = [var_binding{ var_name : G,
                                          prolog_var: Pre_Term,
                                          woql_var : Woql_Var}|Bindings_In],
-            prefix_preterm(Ctx,Woql_Var,Pre_Term),
+            (   member(compress_prefixes(true), Options)
+            ->  prefix_preterm(Ctx,Woql_Var,Pre_Term)
+            ;   Pre_Term = Woql_Var),
             Term = v(G)
         )
     ;   is_dict(Pre_Term)
     ->  Term = Pre_Term,
         Bindings_In=Bindings_Out
     ;   Pre_Term =.. [F|Args],
-        mapm(pre_term_to_term_and_bindings(Ctx),Args,New_Args,Bindings_In,Bindings_Out),
+        mapm(pre_term_to_term_and_bindings(Ctx,Options),Args,New_Args,Bindings_In,Bindings_Out),
         Term =.. [F|New_Args]
     ).
 
@@ -279,14 +282,26 @@ context_to_parent_transaction(Context,Parent_Transaction) :-
  * it can't give anything back?
  */
 ask(Askable, Pre_Term) :-
+    ask(Askable, Pre_Term, [compress_prefixes(true)]).
+
+/*
+ * ask(+Transaction_Object, ?Pre_Term:Goal, +Options) is nondet.
+ *
+ * Ask with options
+ *
+ * Options include:
+ * - compress_prefixes(Bool): Compress prefixes for results.
+ */
+ask(Askable, Pre_Term, Options) :-
     create_context(Askable, Query_Context),
 
-    pre_term_to_term_and_bindings(Query_Context.prefixes,
+    pre_term_to_term_and_bindings(Query_Context.prefixes,Options,
                                   Pre_Term,Term,
                                   [],Bindings_Out),
     New_Query_Ctx = Query_Context.put(bindings,Bindings_Out),
 
     ask_ast(New_Query_Ctx, Term, _).
+
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
