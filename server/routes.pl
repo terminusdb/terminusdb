@@ -1965,12 +1965,13 @@ cors_catch(Goal,Request) :-
     catch(call(Goal, Request),
           E,
           (
+              write_cors_headers(Request),
               customise_exception(E)
           )
          ),
     !.
-cors_catch(_,_Request) :-
-    cors_enable,
+cors_catch(_,Request) :-
+    write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'system:status' : 'system:failure',
                  'system:message' :
