@@ -1,13 +1,9 @@
 :- module(database_utils,[
-              db_name_uri/2,
-              database_finalized/2,
-              database_exists/2,
-              database_exists/1,
-              terminus_graph_layer/2,
+              system_graph_layer/2,
               database_instance/2,
               database_inference/2,
               database_schema/2,
-              user_database_name/3
+              organization_database_name/3
           ]).
 
 /** <module> Database Utilities
@@ -37,7 +33,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(triplestore).
-:- use_module(terminus_bootstrap).
+:- use_module(constants).
 :- use_module(literals, [object_storage/2]).
 :- use_module(casting, [idgen/3]).
 
@@ -50,41 +46,16 @@
 
 :- use_module(library(pcre)).
 
-/*
- * db_name_uri(+Name,-Uri) is det.
- * db_name_uri(-Name,+Uri) is det.
- *
- * Make a fully qualified Uri from Name or vice-versa
- */
-db_name_uri(Name, Uri) :-
-    idgen('terminus:///terminus/document/Database', [Name], Uri).
-
-database_exists(Askable, Name) :-
-    once(ask(Askable,
-             t(_Db_Uri, terminus:resource_name, Name^^xsd:string))).
-
-database_finalized(Askable,Name) :-
-    once(ask(Askable,
-             (   t(Db_Uri, terminus:resource_name, Name^^xsd:string),
-                 t(Db_Uri, terminus:database_state, terminus:finalized)))).
-
 /**
- * terminus_graph_layer(-Graph,-Layer) is det.
+ * system_graph_layer(-Graph,-Layer) is det.
  *
  * Get the document graph for Terminus as a Layer
  */
-terminus_graph_layer(Graph,Layer) :-
+system_graph_layer(Graph,Layer) :-
     storage(Store),
-    terminus_instance_name(Instance_Name),
+    system_instance_name(Instance_Name),
     safe_open_named_graph(Store, Instance_Name, Graph),
     head(Graph, Layer).
-
-/*
- * database_name_exists(DB_URI) is semidet.
- *
- */
-database_exists(Name) :-
-    database_exists(terminus_descriptor{}, Name).
 
 query_default_write_descriptor(Query_Object, Write_Descriptor) :-
     convlist([Obj,Graph_Desc]>>(
@@ -128,10 +99,10 @@ error_on_pipe(Name) :-
     ;   true).
 
 /**
- * user_database_name(User,DB,Name) is det.
+ * organization_database_name(User,DB,Name) is det.
  *
  */
-user_database_name(User,DB,Name) :-
+organization_database_name(User,DB,Name) :-
     freeze(User,error_on_pipe(User)),
     freeze(DB,error_on_pipe(DB)),
     merge_separator_split(Name,'|',[User,DB]).

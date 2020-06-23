@@ -33,15 +33,15 @@
 
 :- begin_tests(transaction_test).
 
-test(terminus_descriptor_read_query_test) :-
-    Descriptor = terminus_descriptor{},
+test(system_descriptor_read_query_test) :-
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Terminus),
 
     once(ask(Terminus,
              (   t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', 'schema/*'),
-                 t(doc:admin, rdf:type, terminus:'User'),
-                 t(terminus:authority_scope, owl:propertyChainAxiom, _, 'inference/*')
+                 t(doc:admin, rdf:type, system:'User'),
+                 t(system:authority_scope, owl:propertyChainAxiom, _, 'inference/*')
              ))).
 
 test(create_db_test, [
@@ -49,7 +49,7 @@ test(create_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema('admin/Database', 'test','a test').
+    create_db_without_schema("admin", "Database", 'test','a test').
 
 
 test(delete_db_test, [
@@ -58,8 +58,8 @@ test(delete_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema('admin/Database', 'test','a test'),
-    delete_db('admin/Database').
+    create_db_without_schema("admin", "Database", 'test','a test'),
+    delete_db("admin", "Database").
 
 
 test(empty_db_test, [
@@ -67,9 +67,11 @@ test(empty_db_test, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Name = 'admin/Database',
-    create_db_without_schema(Name, 'test','a test'),
-    Descriptor = database_descriptor{ database_name : Name },
+    create_db_without_schema("admin", "Database", 'test','a test'),
+    Descriptor = database_descriptor{
+                     organization_name: "admin",
+                     database_name : "Database"
+                 },
     findall(t(X,P,Y),
             ask(Descriptor,
                 (   t(X, P, Y) )),

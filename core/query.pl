@@ -1,6 +1,7 @@
 :- module(query, [
               % ask.pl
               ask/2,
+              ask/3,
               ask_ast/3,
               create_context/2,
               create_context/3,
@@ -81,7 +82,6 @@
               resolve_absolute_string_descriptor/2,
               resolve_relative_string_descriptor/3,
               resolve_absolute_string_descriptor_and_graph/3,
-              resolve_query_resource/2,
               resolve_filter/2,
 
               % woql_compile.pl

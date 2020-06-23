@@ -56,7 +56,7 @@ test(run_connect_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'@type':"terminus:User"} :< Term.
+    _{'@type':"system:User"} :< Term.
 
 test(run_bad_auth_test) :-
     config:server(Server),
@@ -66,7 +66,7 @@ test(run_bad_auth_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_db_create_test) :-
     % create DB
@@ -84,18 +84,18 @@ test(run_db_create_test) :-
 
     Doc = _{'@context': _{
                             rdfs:"http://www.w3.org/2000/01/rdf-schema#",
-                            terminus:"http://terminusdb.com/schema/terminus#"
+                            system:"http://terminusdb.com/schema/terminus#"
                         },
-            '@type':"terminus:APIUpdate",
-            'terminus:base_uri' : "https://terminushub.com/",
-            'terminus:document' : _{'@id': DB_URI, '@type':"terminus:Database",
+            '@type':"system:APIUpdate",
+            'system:base_uri' : "https://terminushub.com/",
+            'system:document' : _{'@id': DB_URI, '@type':"system:Database",
                                     'rdfs:comment':_{'@language':"en", '@value':"dasd"},
                                     'rdfs:label':_{'@language':"en", '@value':"asdsda"},
-                                    'terminus:allow_origin':_{'@type':"xsd:string", '@value':"*"},
-                                    'terminus:instance':_{'@type':"xsd:string", '@value': Document},
-                                    'terminus:schema':_{'@type':"xsd:string", '@value': Schema}
+                                    'system:allow_origin':_{'@type':"xsd:string", '@value':"*"},
+                                    'system:instance':_{'@type':"xsd:string", '@value': Document},
+                                    'system:schema':_{'@type':"xsd:string", '@value': Schema}
                                    },
-            'terminus:user_key':"root"},
+            'system:user_key':"root"},
 
     with_output_to(
         string(Payload),
@@ -108,7 +108,7 @@ test(run_db_create_test) :-
     curl_json(Args,Term),
 
     nl,json_write_dict(current_output,Term,[]),
-    Term = _{'terminus:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_schema_update_test) :-
     config:server(Server),
@@ -121,8 +121,8 @@ test(run_schema_update_test) :-
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{
-              'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"}
+              'system:turtle': _{'@value': String, '@type' : "xsd:string"},
+              'system:schema' : _{'@value': URI, '@type' : "xsd:string"}
            },
 
     with_output_to(
@@ -136,7 +136,7 @@ test(run_schema_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'terminus:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_schema_get_test) :-
     config:server(Server),
@@ -159,7 +159,7 @@ test(run_doc_get_test) :-
     report_curl_command(Args),
     curl_json(Args,Term),
     json_write_dict(current_output,Term,[]),
-    _{'@type' : "terminus:User"} :< Term.
+    _{'@type' : "system:User"} :< Term.
 
 test(run_db_delete_test) :-
     config:server(Server),
@@ -169,7 +169,7 @@ test(run_db_delete_test) :-
     report_curl_command(Args),
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
-    _{'terminus:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_get_filled_frame_test) :-
     config:server(Server),
@@ -198,11 +198,11 @@ update_document(Doc) :-
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
                            scm: Scm_Base,
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:admin",
-              '@type':"terminus:User",
+              '@type':"system:User",
               'rdfs:comment':_{'@language':"en", '@value':"This is a fake super user"},
               'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
              }.
@@ -216,8 +216,8 @@ test(run_doc_update_test) :-
 
     with_output_to(
         string(Payload),
-        json_write(current_output, _{'@type':"terminus:APIUpdate",
-                                     'terminus:document' : Doc}, [])
+        json_write(current_output, _{'@type':"system:APIUpdate",
+                                     'system:document' : Doc}, [])
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
@@ -227,7 +227,7 @@ test(run_doc_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_doc_update_get_test) :-
     config:server(Server),
@@ -264,11 +264,11 @@ test_update_document(Doc) :-
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
                            scm: Scm_Base,
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:admin",
-              '@type':"terminus:User",
+              '@type':"system:User",
               'rdfs:comment':_{'@language':"en",
                                '@value':"This is a fake super user who has been changed"},
               'rdfs:label':_{'@language':"en",
@@ -285,8 +285,8 @@ test(run_doc_update_update_test) :-
 
     with_output_to(
         string(Payload),
-        json_write(current_output, _{'@type':"terminus:APIUpdate",
-                                     'terminus:document' : Doc}, [])
+        json_write(current_output, _{'@type':"system:APIUpdate",
+                                     'system:document' : Doc}, [])
     ),
 
     atomic_list_concat([Server,'/terminus_qa_test/document/admin'], URI),
@@ -296,7 +296,7 @@ test(run_doc_update_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'terminus:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_doc_update_update_get_test) :-
     config:server(Server),
@@ -331,7 +331,7 @@ test(run_db_delete_nonexistent_test) :-
     nl,json_write_dict(current_output,Term,[]),
 
     % This should not be a bare error
-    _{'terminus:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_doc_delete_test) :-
 
@@ -347,7 +347,7 @@ test(run_doc_delete_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 test(run_doc_get_missing_test) :-
     % create DB
@@ -361,7 +361,7 @@ test(run_doc_get_missing_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 /****************************************************************
  * Woql Tests
@@ -462,7 +462,7 @@ test(run_woql_empty_error_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure"} :< Term.
+    _{'system:status':"system:failure"} :< Term.
 
 test(run_woql_syntax_error_test) :-
     config:server(Server),
@@ -527,11 +527,11 @@ test(run_woql_update_test) :-
                               rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                               vio:"http://terminusdb.com/schema/vio#",
                               scm: Scm_Base,
-                              terminus:"http://terminusdb.com/schema/terminus#",
+                              system:"http://terminusdb.com/schema/terminus#",
                               xdd:"http://terminusdb.com/schema/xdd#",
                               xsd:"http://www.w3.org/2001/XMLSchema#"},
                  '@id':"doc:admin",
-                 '@type':"terminus:User",
+                 '@type':"system:User",
                  'rdfs:comment':_{'@language':"en", '@value':"A WOQL updated superuser"},
                  'rdfs:label':_{'@language':"en", '@value':"Server Admin User"}
                 },
@@ -677,8 +677,8 @@ test(run_woql_instantiation_test) :-
 
     % test here.
     _{
-        'terminus:message' : _,
-        'terminus:status' :"terminus:failure"
+        'system:message' : _,
+        'system:status' :"system:failure"
     } :< Term.
 
 test(run_woql_re_test) :-
@@ -759,7 +759,7 @@ test(run_woql_file_upload ) :-
     ),
 
 
-    atomic_list_concat(['terminus:query=',Payload,';type=application/json'], Q),
+    atomic_list_concat(['system:query=',Payload,';type=application/json'], Q),
 
     atomic_list_concat(['my_json_file=@"test/simple.json"'], Upload),
 
@@ -796,8 +796,8 @@ test(run_bad_comment_update_test) :-
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
 
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:document' :
+    Doc = _{'@type':"system:APIUpdate",
+            'system:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc: Doc_Base,
@@ -807,11 +807,11 @@ test(run_bad_comment_update_test) :-
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
                            scm: Scm_Base,
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:bad_admin",
-              '@type':"terminus:User",
+              '@type':"system:User",
               'rdfs:comment':_{'@type':"xsd:integer",
                                '@value': 3},
               'rdfs:label':_{'@language':"en",
@@ -832,8 +832,8 @@ test(run_bad_comment_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure",
-      'terminus:witnesses': _W} :< Term.
+    _{'system:status':"system:failure",
+      'system:witnesses': _W} :< Term.
 
 test(run_bad_property_update_test) :-
     % create DB
@@ -843,8 +843,8 @@ test(run_bad_property_update_test) :-
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
 
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:document' :
+    Doc = _{'@type':"system:APIUpdate",
+            'system:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc: Doc_Base,
@@ -854,12 +854,12 @@ test(run_bad_property_update_test) :-
                            rdfs:"http://www.w3.org/2000/01/rdf-schema#",
                            vio:"http://terminusdb.com/schema/vio#",
                            scm: Scm_Base,
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:bad_admin",
-              '@type':"terminus:User",
-              'terminus:shmerminus':_{'@id' : 'doc:berminus'},
+              '@type':"system:User",
+              'system:shmerminus':_{'@id' : 'doc:berminus'},
               'rdfs:comment':_{'@language':"en",
                                '@value': "doinky doink"},
               'rdfs:label':_{'@language':"en",
@@ -880,8 +880,8 @@ test(run_bad_property_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure",
-      'terminus:witnesses': _W} :< Term.
+    _{'system:status':"system:failure",
+      'system:witnesses': _W} :< Term.
 
 /*************************************
  * Datatypes schema instance checking.
@@ -900,8 +900,8 @@ test(run_schema_datatypes_update_test) :-
 
     read_file_to_string(TTL_File, String, []),
     Doc = _{
-              'terminus:turtle': _{'@value': String, '@type' : "xsd:string"},
-              'terminus:schema' : _{'@value': URI, '@type' : "xsd:string"}
+              'system:turtle': _{'@value': String, '@type' : "xsd:string"},
+              'system:schema' : _{'@value': URI, '@type' : "xsd:string"}
            },
 
     with_output_to(
@@ -915,7 +915,7 @@ test(run_schema_datatypes_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    Term = _{'terminus:status' : "terminus:success"}.
+    Term = _{'system:status' : "system:success"}.
 
 test(run_bad_doc_datatype_update_test) :-
     config:server(Server),
@@ -924,8 +924,8 @@ test(run_bad_doc_datatype_update_test) :-
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
 
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:document' :
+    Doc = _{'@type':"system:APIUpdate",
+            'system:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc:Doc_Base,
@@ -936,7 +936,7 @@ test(run_bad_doc_datatype_update_test) :-
                            vio:"http://terminusdb.com/schema/vio#",
                            scm:Scm_Base,
                            datatypes:"http://terminusdb.com/schema/datatypes#",
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:bad_data",
@@ -1003,8 +1003,8 @@ test(run_bad_doc_datatype_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:failure",
-      'terminus:witnesses': W} :< Term,
+    _{'system:status':"system:failure",
+      'system:witnesses': W} :< Term,
 
     length(W,18).
 
@@ -1015,8 +1015,8 @@ test(run_good_doc_datatype_update_test) :-
     interpolate([Server,'/terminus_qa_test/document/'], Doc_Base),
     interpolate([Server,'/terminus_qa_test/schema/'], Scm_Base),
 
-    Doc = _{'@type':"terminus:APIUpdate",
-            'terminus:document' :
+    Doc = _{'@type':"system:APIUpdate",
+            'system:document' :
             _{'@context':_{tcs:"http://terminusdb.com/schema/tcs#",
                            tbs:"http://terminusdb.com/schema/tbs#",
                            doc:Doc_Base,
@@ -1027,7 +1027,7 @@ test(run_good_doc_datatype_update_test) :-
                            vio:"http://terminusdb.com/schema/vio#",
                            scm:Scm_Base,
                            datatypes:"http://terminusdb.com/schema/datatypes#",
-                           terminus:"http://terminusdb.com/schema/terminus#",
+                           system:"http://terminusdb.com/schema/terminus#",
                            xdd:"http://terminusdb.com/schema/xdd#",
                            xsd:"http://www.w3.org/2001/XMLSchema#"},
               '@id':"doc:bad_data",
@@ -1094,7 +1094,7 @@ test(run_good_doc_datatype_update_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status':"terminus:success"} :< Term.
+    _{'system:status':"system:success"} :< Term.
     % need to check witnesses but we throw an error at insert leaving only witness!
 
 test(run_console) :-
@@ -1117,7 +1117,7 @@ test(run_db_metadata_test, [blocked("Blocked for some reason")] ) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{ '@type' : "terminus:DatabaseMetadata"} :< Term.
+    _{ '@type' : "system:DatabaseMetadata"} :< Term.
 
 test(run_message_test) :-
     config:server(Server),
@@ -1125,8 +1125,8 @@ test(run_message_test) :-
 
     atomic_list_concat([Server,'/message'], URI),
 
-    Message = _{'@type':"terminus:APIUpdate",
-                'terminus:message' : _{some : "Payload"}
+    Message = _{'@type':"system:APIUpdate",
+                'system:message' : _{some : "Payload"}
                },
 
     with_output_to(
@@ -1140,6 +1140,6 @@ test(run_message_test) :-
     curl_json(Args,Term),
     nl,json_write_dict(current_output,Term,[]),
 
-    _{'terminus:status' : "terminus:success"} :< Term.
+    _{'system:status' : "system:success"} :< Term.
 
 :- end_tests(api_test).

@@ -30,22 +30,26 @@
  *                    | id_graph{ layer_id : atom,
                                   type: atom,
                                   name: string } % for debugging
- *                    | terminus_graph{ type : atom,
- *                                      name : atom }
- *                    | repo_graph { database_name : atom,
+ *                    | system_graph{ type : atom,
+ *                                    name : atom }
+ *                    | repo_graph { organization_name: string,
+ *                                   database_name : string,
  *                                   type : atom,
- *                                   name : atom }
- *                    | commit_graph{ database_name : atom,
- *                                    repository_name : atom,
+ *                                   name : string }
+ *                    | commit_graph{ organization_name: string,
+ *                                    database_name : string,
+ *                                    repository_name : string,
  *                                    type : atom,
- *                                    name : atom }
- *                    | branch_graph{ database_name : atom,
- *                                    repository_name : atom,
- *                                    branch_name : atom,
+ *                                    name : string }
+ *                    | branch_graph{ organization_name: string,
+ *                                    database_name : string,
+ *                                    repository_name : string,
+ *                                    branch_name : string,
  *                                    type : atom, % {instance, schema, inference}
- *                                    name : atom }
- *                    | single_commit_graph{ database_name: atom,
- *                                           repository_name: atom,
+ *                                    name : string }
+ *                    | single_commit_graph{ organization_Name: string,
+ *                                           database_name: string,
+ *                                           repository_name: string,
  *                                           commit_id: string,
  *                                           type: atom,
  *                                           name: string }
@@ -59,10 +63,11 @@
  *
  * A ref_graph is a layer id that can be resolved to a graph.
  *
- * collection_descriptor --> terminus_descriptor{}
+ * collection_descriptor --> system_descriptor{}
  *                         | label_descriptor{ label: string }
  *                         | id_descriptor{ id : string } % only for querying!
- *                         | database_descriptor{ database_name : string }
+ *                         | database_descriptor{ organization_name : string,
+ *                                                database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
  *                                                  repository_name : string }
  *                         | branch_descriptor{ repository_descriptor: repository_descriptor,
@@ -71,7 +76,7 @@
  *                                              commit_id : string} % the base of the commit
  *
  *
- * terminus_descriptor: refers to the core database with user and database management.
+ * system_descriptor: refers to the core database with user and database management.
  * This database refers to the various database descriptors which can be opened "by name"
  * using the label mechanism.
  *
@@ -161,17 +166,17 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, Map) :-
     memberchk(Descriptor=Read_Write_Obj, Map),
     !.
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
-    Descriptor = terminus_graph{ type: Type, name: Name},
+    Descriptor = system_graph{ type: Type, name: Name},
     !,
     (   Type = instance,
         Name = "main"
-    ->  terminus_instance_name(Graph_Name)
+    ->  system_instance_name(Graph_Name)
     ;   Type = schema,
         Name = "main"
-    ->  terminus_schema_name(Graph_Name)
+    ->  system_schema_name(Graph_Name)
     ;   Type = inference,
         Name = "main",
-        terminus_inference_name(Graph_Name)),
+        system_inference_name(Graph_Name)),
 
     storage(Store),
     safe_open_named_graph(Store, Graph_Name, Graph),
@@ -196,14 +201,16 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     store_id_layer(Store, Layer_Id, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
-    Descriptor = repo_graph{ database_name: Database_Name,
+    Descriptor = repo_graph{ organization_name : Organization_Name,
+                             database_name: Database_Name,
                              type : Type,
                              name : Name},
     !,
     (   Type = instance,
         Name = "main"
     ->  storage(Store),
-        safe_open_named_graph(Store, Database_Name, Graph),
+        organization_database_name(Organization_Name,Database_Name,Composite),
+        safe_open_named_graph(Store, Composite, Graph),
         ignore(head(Graph, Layer))
     ;   Type = schema,
         Name = "layer"
@@ -223,12 +230,14 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = commit_graph{ database_name: Database_Name,
+    Descriptor = commit_graph{ organization_name: Organization_Name,
+                               database_name: Database_Name,
                                repository_name: Repository_Name,
                                type: Type,
                                name: Name},
     !,
-    Repo_Descriptor = repo_graph{ database_name: Database_Name,
+    Repo_Descriptor = repo_graph{ organization_name: Organization_Name,
+                                  database_name: Database_Name,
                                   type: instance,
                                   name: "main"},
 
@@ -259,7 +268,8 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = branch_graph{ database_name: Database_Name,
+    Descriptor = branch_graph{ organization_name: Organization_Name,
+                               database_name: Database_Name,
                                repository_name: Repository_Name,
                                branch_name: Branch_Name,
                                type: Type,
@@ -267,7 +277,8 @@ open_read_write_obj(Descriptor,
     !,
     assertion(member(Type, [instance, schema, inference])),
 
-    Commit_Descriptor = commit_graph{ database_name : Database_Name,
+    Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
+                                      database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
@@ -285,13 +296,15 @@ open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
                     [Descriptor=Read_Write_Obj|New_Map]) :-
-    Descriptor = single_commit_graph{ database_name: Database_Name,
+    Descriptor = single_commit_graph{ organization_name: Organization_Name,
+                                      database_name: Database_Name,
                                       repository_name: Repository_Name,
                                       commit_id: Commit_Id,
                                       type: Type,
                                       name: Graph_Name },
     !,
-    Commit_Descriptor = commit_graph{ database_name : Database_Name,
+    Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
+                                      database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
@@ -371,20 +384,20 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
                              schema_objects : [],
                              inference_objects : []
                          }.
-open_descriptor(terminus_descriptor{}, _Commit_Info, Transaction_Object, Map,
-                 [terminus_descriptor{}=Transaction_Object|Map_3]) :-
+open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
+                 [system_descriptor{}=Transaction_Object|Map_3]) :-
     !,
 
-    Instance_Graph = terminus_graph{ type: instance, name: "main"},
-    Schema_Graph = terminus_graph{ type: schema, name: "main"},
-    Inference_Graph = terminus_graph{ type: inference, name: "main"},
+    Instance_Graph = system_graph{ type: instance, name: "main"},
+    Schema_Graph = system_graph{ type: schema, name: "main"},
+    Inference_Graph = system_graph{ type: inference, name: "main"},
 
     open_read_write_obj(Schema_Graph, Schema_Object, Map, Map_1),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
     open_read_write_obj(Inference_Graph, Inference_Object, Map_2, Map_3),
 
     Transaction_Object = transaction_object{
-                             descriptor : terminus_descriptor{},
+                             descriptor : system_descriptor{},
                              instance_objects : [Instance_Object],
                              schema_objects : [Schema_Object],
                              inference_objects : [Inference_Object]
@@ -421,20 +434,24 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_3]) :-
     database_descriptor{
+        organization_name: Organization_Name,
         database_name: Database_Name
     } = Descriptor,
     !,
 
-    Layer_Ontology_Graph = repo_graph{ database_name: Database_Name,
+    Layer_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                       database_name: Database_Name,
                                        type: schema,
                                        name: "layer" },
-    Repository_Ontology_Graph = repo_graph{ database_name : Database_Name,
+    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                            database_name : Database_Name,
                                             type: schema,
                                             name: "repository" },
 
     open_read_write_obj(Layer_Ontology_Graph, Layer_Ontology_Object, Map, Map_1),
     open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map_1, Map_2),
-    Instance_Graph = repo_graph{ database_name: Database_Name,
+    Instance_Graph = repo_graph{ organization_name: Organization_Name,
+                                 database_name: Database_Name,
                                  type: instance,
                                  name: "main" },
     open_read_write_obj(Instance_Graph, Instance_Object, Map_2, Map_3),
@@ -454,17 +471,24 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     !,
     open_descriptor(Database_Descriptor, _, Database_Transaction_Object, Map, Map_1),
 
-    Database_Name = Database_Descriptor.database_name,
-    Layer_Ontology_Graph = commit_graph{ database_name: Database_Name,
+    database_descriptor{
+        database_name : Database_Name,
+        organization_name : Organization_Name
+    } :< Database_Descriptor,
+
+    Layer_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
+                                         database_name: Database_Name,
                                          repository_name: Repository_Name,
                                          type: schema,
                                          name: "layer" },
-    Ref_Ontology_Graph = commit_graph{ database_name : Database_Name,
+    Ref_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
+                                       database_name : Database_Name,
                                        repository_name: Repository_Name,
                                        type: schema,
                                        name: "ref" },
 
-    Instance_Graph = commit_graph{ database_name: Database_Name,
+    Instance_Graph = commit_graph{ organization_name: Organization_Name,
+                                   database_name: Database_Name,
                                    repository_name: Repository_Name,
                                    type: instance,
                                    name: "main"},
@@ -522,6 +546,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     ),
 
     Prototype = branch_graph{
+                    organization_name: Repository_Descriptor.database_descriptor.organization_name,
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
                     branch_name: Branch_Name_String
@@ -599,6 +624,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     ),
 
     Prototype = single_commit_graph{
+                    organization_name: Repository_Descriptor.database_descriptor.organization_name,
                     database_name : Repository_Descriptor.database_descriptor.database_name,
                     repository_name : Repository_Descriptor.repository_name,
                     commit_id: Commit_Id_String
@@ -709,19 +735,19 @@ filter_read_write_objects(Objects, Names, Filtered) :-
                                memberchk(Name, Names)), Objects, Filtered).
 
 
-make_branch_descriptor(Account, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
-    user_database_name(Account, DB, DB_Name),
-    Database_Descriptor = database_descriptor{ database_name : DB_Name },
+make_branch_descriptor(Organization, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
+    Database_Descriptor = database_descriptor{ organization_name: Organization,
+                                               database_name : DB },
     Repository_Descriptor = repository_descriptor{ repository_name : Repo_Name,
                                                    database_descriptor : Database_Descriptor},
     Branch_Descriptor = branch_descriptor{ branch_name : Branch_Name,
                                            repository_descriptor : Repository_Descriptor}.
 
-make_branch_descriptor(Account, DB, Repo_Name, Branch_Descriptor) :-
-    make_branch_descriptor(Account, DB, Repo_Name, "master", Branch_Descriptor).
+make_branch_descriptor(Organization, DB, Repo_Name, Branch_Descriptor) :-
+    make_branch_descriptor(Organization, DB, Repo_Name, "master", Branch_Descriptor).
 
-make_branch_descriptor(Account, DB, Branch_Descriptor) :-
-    make_branch_descriptor(Account, DB, "local", "master", Branch_Descriptor).
+make_branch_descriptor(Organization, DB, Branch_Descriptor) :-
+    make_branch_descriptor(Organization, DB, "local", "master", Branch_Descriptor).
 
 /**
  * transactions_to_map(Context, Map) is det.
@@ -760,45 +786,51 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
  *
  */
 collection_descriptor_graph_filter_graph_descriptor(
-    terminus_descriptor{},
+    system_descriptor{},
     type_name_filter{ type : Type,
                       names : [Name]},
-    terminus_graph{ type: Type,
+    system_graph{ type: Type,
                     name : Name}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
-    terminus_descriptor{},
+    system_descriptor{},
     type_filter{ types : [Type] },
-    terminus_graph{ type: Type,
+    system_graph{ type: Type,
                     name : "main"}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
+        organization_name: Organization,
         database_name : DB_Name
     },
     type_name_filter{ type : Type, names : [Name]},
-    repo_graph{ database_name : DB_Name,
+    repo_graph{ organization_name: Organization,
+                database_name : DB_Name,
                 type : Type,
                 name : Name }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
+        organization_name: Organization,
         database_name : DB_Name
     },
     type_filter{ types : [Type]},
-    repo_graph{ database_name : DB_Name,
+    repo_graph{ organization_name: Organization,
+                database_name : DB_Name,
                 type : Type,
                 name : "main" }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
         database_descriptor : database_descriptor{
+                                  organization_name: Organization,
                                   database_name : DB_Name
                               },
         repository_name : Repo_Name
     },
     type_name_filter{ type : Type, names : [Name]},
-    commit_graph{ database_name : DB_Name,
+    commit_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repo_Name,
                   type: Type,
                   name : Name}) :-
@@ -806,12 +838,14 @@ collection_descriptor_graph_filter_graph_descriptor(
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
         database_descriptor : database_descriptor{
+                                  organization_name: Organization,
                                   database_name : DB_Name
                               },
         repository_name : Repo_Name
     },
     type_filter{ types : [Type]},
-    commit_graph{ database_name : DB_Name,
+    commit_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repo_Name,
                   type: Type,
                   name : "main"}) :-
@@ -822,6 +856,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         repository_descriptor{
             database_descriptor :
             database_descriptor{
+                organization_name: Organization,
                 database_name : DB_Name
             },
             repository_name : Repository_Name
@@ -829,7 +864,8 @@ collection_descriptor_graph_filter_graph_descriptor(
         branch_name : Branch_Name
     },
     type_name_filter{ type : Type , names : [Name]},
-    branch_graph{ database_name : DB_Name,
+    branch_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
                   type: Type,
@@ -841,6 +877,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         repository_descriptor{
             database_descriptor :
             database_descriptor{
+                organization_name: Organization,
                 database_name : DB_Name
             },
             repository_name : Repository_Name
@@ -848,7 +885,8 @@ collection_descriptor_graph_filter_graph_descriptor(
         branch_name : Branch_Name
     },
     type_filter{ types : [Type] },
-    branch_graph{ database_name : DB_Name,
+    branch_graph{ organization_name: Organization,
+                  database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
                   type: Type,
@@ -865,7 +903,7 @@ collection_descriptor_graph_filter_graph_descriptor(
 
 test(transactions_to_map,[
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema(admin,test))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -883,16 +921,16 @@ test(transactions_to_map,[
     maplist([Desc=_,Desc]>>true, Map, Descriptors),
     list_to_ord_set(Descriptors, Desc_Set),
     list_to_ord_set(
-        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"}},
-         branch_graph{branch_name:"master",database_name:'admin|test',name:"main",repository_name:"local",type:instance},
-         repository_descriptor{database_descriptor:database_descriptor{database_name:'admin|test'},repository_name:"local"},
-         commit_graph{database_name:'admin|test',name:"main",repository_name:"local",type:instance},
-         commit_graph{database_name:'admin|test',name:"layer",repository_name:"local",type:schema},
-         commit_graph{database_name:'admin|test',name:"ref",repository_name:"local",type:schema},
-         database_descriptor{database_name:'admin|test'},
-         repo_graph{database_name:'admin|test',name:"main",type:instance},
-         repo_graph{database_name:'admin|test',name:"layer",type:schema},
-         repo_graph{database_name:'admin|test',name:"repository",type:schema}], Expected_Set),
+        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin", database_name:"test"},repository_name:"local"}},
+         branch_graph{branch_name:"master",organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
+         repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin",database_name:"test"},repository_name:"local"},
+         commit_graph{organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
+         commit_graph{organization_name:"admin",database_name:"test",name:"layer",repository_name:"local",type:schema},
+         commit_graph{organization_name:"admin",database_name:"test",name:"ref",repository_name:"local",type:schema},
+         database_descriptor{organization_name:"admin",database_name:"test"},
+         repo_graph{organization_name:"admin",database_name:"test",name:"main",type:instance},
+         repo_graph{organization_name:"admin",database_name:"test",name:"layer",type:schema},
+         repo_graph{organization_name:"admin",database_name:"test",name:"repository",type:schema}], Expected_Set),
 
     ord_seteq(Desc_Set, Expected_Set).
 
@@ -901,12 +939,12 @@ test(terminus, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
     open_descriptor(Descriptor, Transaction),
     % check for things we know should exist in the instance, schema and inference
-    once(ask(Transaction, t(doc:terminus, rdf:type, terminus:'Database', "instance/main"))),
-    once(ask(Transaction, t('http://terminusdb.com/schema/terminus', rdf:type, owl:'Ontology', "schema/main"))),
-    once(ask(Transaction, t(terminus:authority_scope, owl:propertyChainAxiom, _, "inference/main"))).
+    once(ask(Transaction, t(doc:system, rdf:type, system:'SystemDatabase', "instance/main"))),
+    once(ask(Transaction, t('http://terminusdb.com/schema/system', rdf:type, owl:'Ontology', "schema/main"))),
+    once(ask(Transaction, t(system:capability_scope, owl:propertyChainAxiom, _, "inference/main"))).
 
 test(label, [
          setup(setup_temp_store(State)),
@@ -943,71 +981,78 @@ test(id, [
 
 test(open_database_descriptor_as_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: testdb },
+    Descriptor = database_descriptor{ organization_name: admin,
+                                      database_name: testdb },
     open_descriptor(Descriptor, _Transaction).
 
 test(open_database_descriptor_as_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: "testdb" },
+    Descriptor = database_descriptor{ organization_name: "admin",
+                                      database_name: "testdb" },
     open_descriptor(Descriptor, _Transaction).
 
 test(open_nonexistent_database_descriptor, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin, testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Descriptor = database_descriptor{ database_name: "nonexistent" },
+    Descriptor = database_descriptor{ organization_name: "admin",
+                                      database_name: "nonexistent" },
     \+ open_descriptor(Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: local },
 
     open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
 
     open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_repository_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "nonexistent" },
 
     \+ open_descriptor(Repo_Descriptor, _Transaction).
 
 test(open_branch_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: master },
 
@@ -1015,11 +1060,12 @@ test(open_branch_descriptor_with_atom, [
 
 test(open_branch_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1027,12 +1073,13 @@ test(open_branch_descriptor_with_string, [
 
 test(open_branch_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State)),
          error(branch_does_not_exist(_))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "nonexistent" },
 
@@ -1040,11 +1087,12 @@ test(open_branch_descriptor_with_nonexistent, [
 
 test(open_commit_descriptor_with_atom, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema("admin", "testdb"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1071,11 +1119,12 @@ test(open_commit_descriptor_with_atom, [
 
 test(open_commit_descriptor_with_string, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
 
@@ -1100,11 +1149,12 @@ test(open_commit_descriptor_with_string, [
 
 test(open_commit_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
-                create_db_without_schema(testdb, 'test','a test'))),
+                create_db_without_schema(admin,testdb))),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Database_Descriptor = database_descriptor{ database_name: "testdb" },
+    Database_Descriptor = database_descriptor{ organization_name: "admin",
+                                               database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: "I do not exist" },
     catch(open_descriptor(Descriptor, _Transaction),

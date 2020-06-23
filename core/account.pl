@@ -1,10 +1,8 @@
 :- module(account, [
               % capabilities.pl
-              user_key_auth/4,
               username_user_id/3,
               user_key_user_id/4,
               username_auth/3,
-              user_id_auth_id/3,
               get_user/3,
               auth_action_scope/4,
               assert_auth_action_scope/4,
@@ -23,8 +21,8 @@
               add_user/4,
               agent_name_uri/3,
               agent_name_exists/2,
-              make_user_own_database/2,
-              delete_user/1
+              delete_user/1,
+              delete_organization/1
           ]).
 
 :- use_module(account/capabilities).

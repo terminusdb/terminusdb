@@ -44,15 +44,16 @@
 :- use_module(library(terminus_store)).
 
 
-descriptor_database_name(Descriptor, 'terminus:///terminus') :-
-    terminus_descriptor{} = Descriptor,
+descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
+    system_descriptor{} = Descriptor,
     !.
 descriptor_database_name(Descriptor, ID) :-
     id_descriptor{ id : ID } = Descriptor.
 descriptor_database_name(Descriptor, Label) :-
     label_descriptor{ label : Label } = Descriptor.
 descriptor_database_name(Descriptor, Name) :-
-    database_descriptor{ database_name : Name } = Descriptor,
+    database_descriptor{ organization_name : _,
+                         database_name : Name } = Descriptor,
     !.
 descriptor_database_name(Descriptor, Name) :-
     repository_descriptor{ repository_name : _,
@@ -272,7 +273,7 @@ validation_inserts_deletes(Validation, Inserts, Deletes) :-
     (   Descriptor = branch_descriptor{ branch_name : _,
                                         repository_descriptor : _}
     ->  true
-    ;   Descriptor = terminus_descriptor{}),
+    ;   Descriptor = system_descriptor{}),
     !,
     foldl([Graph,(I0,D0),(I1,D1)]>>(
               graph_inserts_deletes(Graph, I, D),
@@ -342,10 +343,8 @@ query_context_transaction_objects(Query_Context,Transaction_Objects) :-
 
 test(test_transaction_partition, [
          setup((setup_temp_store(State),
-                user_database_name(admin,testdb1,Name1),
-                create_db_without_schema(Name1, 'test','a test'),
-                user_database_name(admin,testdb2,Name2),
-                create_db_without_schema(Name2, 'test','a test'))),
+                create_db_without_schema(admin,testdb1),
+                create_db_without_schema(admin,testdb2))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -360,10 +359,8 @@ test(test_transaction_partition, [
 
 test(partial_transaction_commit, [
          setup((setup_temp_store(State),
-                user_database_name(admin,testdb1,Name1),
-                create_db_without_schema(Name1, 'test','a test'),
-                user_database_name(admin,testdb2,Name2),
-                create_db_without_schema(Name2, 'test','a test'))),
+                create_db_without_schema(admin,testdb1),
+                create_db_without_schema(admin,testdb2))),
          cleanup(teardown_temp_store(State))
      ])
 :-

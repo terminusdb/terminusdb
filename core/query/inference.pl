@@ -39,12 +39,15 @@
  *
  * Run a property axiom chain PropList from X to Y.
  */
-%:- table runChain/4.
+
+% NOTE: (dubious)
+% We stratefy property chain inference - never using it inside ourselves.
+% This is probably incorrect, but it terminates
 runChain(X,[P],Y,Database) :-
-    inferredEdge(X,P,Y,Database).
+    inferred_quad_unchained(_,X,P,Y,Database).
 runChain(X,[P|PropList],Z,Database) :-
-    database_instance(Database,I),
-    xrdf(I,X,P,Y),
+    % database_instance(Database,I),
+    inferred_quad_unchained(_,X,P,Y,Database), % xrdf(I,X,P,Y),
     runChain(Y,PropList,Z,Database).
 
 /**
@@ -71,32 +74,36 @@ inferredTransitiveEdge(X,OP,Z,Database) :-
  * we will punt on that for now.
  */
 inferredQuad(G,X,OP,Y,Database) :-
-    % No inference
-    database_instance(Database,Instance),
-    database_inference(Database,[]),
-    !,
-    xquad(Instance,G,X,OP,Y).
-inferredQuad(G,X,OP,Y,Database) :-
     % Base case for inference
-    database_instance(Database,Instance),
-    xquad(Instance,G,X,OP,Y).
-inferredQuad(inferred,X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),
-    inferredTransitiveEdge(X,OP,Y,Database).
-inferredQuad(inferred,X,OP,Y,Database) :-
-    database_inference(Database,Inference),
-    xrdf(Inference,OP,owl:'inverseOf',P),
-    inferredEdge(Y,P,X,Database).
+    inferred_quad_unchained(G,X,OP,Y,Database).
 inferredQuad(inferred,X,OP,Y,Database) :-
     database_inference(Database,Inference),
     xrdf(Inference,OP,owl:propertyChainAxiom,ListObj),
     collect(Database,Inference,ListObj,PropList),
     runChain(X,PropList,Y,Database).
-inferredQuad(inferred,X,OP,Y,Database) :-
+
+inferred_quad_unchained(G,X,OP,Y,Database) :-
+    % No inference
+    database_instance(Database,Instance),
+    database_inference(Database,[]),
+    !,
+    xquad(Instance,G,X,OP,Y).
+inferred_quad_unchained(G,X,OP,Y,Database) :-
+    % Base case for inference
+    database_instance(Database,Instance),
+    xquad(Instance,G,X,OP,Y).
+inferred_quad_unchained(inferred,X,OP,Y,Database) :-
     database_inference(Database,Inference),
     xrdf(Inference,SOP,rdfs:subPropertyOf,OP),
     inferredEdge(X,SOP,Y,Database).
+inferred_quad_unchained(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,OP,rdf:type,owl:'TransitiveProperty'),
+    inferredTransitiveEdge(X,OP,Y,Database).
+inferred_quad_unchained(inferred,X,OP,Y,Database) :-
+    database_inference(Database,Inference),
+    xrdf(Inference,OP,owl:'inverseOf',P),
+    inferredEdge(Y,P,X,Database).
 
 /**
  * inferredEdge(?X,?OP,?Y,+Database:database) is nondet.

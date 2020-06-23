@@ -181,12 +181,12 @@ commit_validation_object(Validation_Object, []) :-
         schema_objects: [Schema_Object],
         inference_objects: [Inference_Object]
     } :< Validation_Object,
-    terminus_descriptor{
+    system_descriptor{
     } = Descriptor,
     !,
-    terminus_instance_name(Instance_Label),
-    terminus_inference_name(Inference_Label),
-    terminus_schema_name(Schema_Label),
+    system_instance_name(Instance_Label),
+    system_inference_name(Inference_Label),
+    system_schema_name(Schema_Label),
     storage(Store),
     (   validation_object_changed(Instance_Object)
     ->  safe_open_named_graph(Store, Instance_Label, Instance_Graph),
@@ -234,6 +234,7 @@ commit_validation_object(Validation_Object, []) :-
         instance_objects: [Instance_Object]
     } :< Validation_Object,
     database_descriptor{
+        organization_name: Organization_Name,
         database_name: Database_Name
     } = Descriptor,
     !,
@@ -243,7 +244,8 @@ commit_validation_object(Validation_Object, []) :-
     ->  storage(Store),
         % The label is the same as the same as the database_name
         % therefore we can just open it
-        safe_open_named_graph(Store, Database_Name, Graph),
+        organization_database_name(Organization_Name, Database_Name, Composite),
+        safe_open_named_graph(Store, Composite, Graph),
         nb_set_head(Graph, Instance_Object.read)
     ;   true).
 commit_validation_object(Validation_Object, [Parent_Transaction]) :-
@@ -336,7 +338,7 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
 
-descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, terminus_descriptor]).
+descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 
 :- table descriptor_type_order/3.
 descriptor_type_order(Operator, Left, Right) :-
@@ -852,9 +854,10 @@ test(insert_on_branch_descriptor, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_db_without_schema("Boo", 'test','a test'),
+    create_db_without_schema("admin", 'Boo'),
     % Insert
-    DB_Descriptor = database_descriptor{ database_name : "Boo" },
+    DB_Descriptor = database_descriptor{ organization_name: "admin",
+                                         database_name : "Boo" },
     Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,
                                              repository_name : "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor,
@@ -888,12 +891,12 @@ test(insert_on_label_descriptor, [
 
     once(ask(Descriptor, t(foo,bar,baz))).
 
-test(insert_schema_terminus_descriptor, [
+test(insert_schema_system_descriptor, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_context(terminus_descriptor{}, Context),
+    create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
                      once(ask(Context, insert(foo,bar,baz,"schema/main"))),
@@ -901,7 +904,7 @@ test(insert_schema_terminus_descriptor, [
 
     Meta_Data.inserts = 1,
 
-    once(ask(terminus_descriptor{},
+    once(ask(system_descriptor{},
              t(foo,bar,baz,"schema/main"))).
 
 
@@ -910,23 +913,23 @@ test(double_insert, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    create_context(terminus_descriptor{}, Context),
+    create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
                      once(ask(Context, insert(foo,bar,baz,"schema/main"))),
                      Meta_Data),
 
 
-    open_descriptor(terminus_descriptor{}, Trans),
+    open_descriptor(system_descriptor{}, Trans),
     [Schema] = Trans.schema_objects,
     layer_to_id(Schema.read, ID1),
 
     Meta_Data.inserts = 1,
-    create_context(terminus_descriptor{}, Context2),
+    create_context(system_descriptor{}, Context2),
     with_transaction(Context2,
                      once(ask(Context2, insert(foo,bar,baz,"schema/main"))),
                      _),
-    open_descriptor(terminus_descriptor{}, Trans2),
+    open_descriptor(system_descriptor{}, Trans2),
     [Schema2] = Trans2.schema_objects,
     layer_to_id(Schema2.read, ID2),
     ID1 = ID2.
@@ -944,12 +947,12 @@ test(double_insert, [
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
@@ -971,12 +974,12 @@ test(cardinality_error,
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
@@ -997,11 +1000,11 @@ test(cardinality_error,
 
 test(cardinality_min_error,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State))])
 :-
 
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),

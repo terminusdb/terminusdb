@@ -10,15 +10,11 @@
               random_idgen/3,
 
               % database_utils.pl
-              db_name_uri/2,
-              database_finalized/2,
-              database_exists/1,
-              database_exists/2,
-              terminus_graph_layer/2,
+              system_graph_layer/2,
               database_instance/2,
               database_inference/2,
               database_schema/2,
-              user_database_name/3,
+              organization_database_name/3,
 
               % iana.pl
               iana/3,
@@ -35,10 +31,10 @@
               % temp_graph.pl
               extend_database_with_temp_graph/6,
 
-              % terminus_bootstrap.pl
-              terminus_instance_name/1,
-              terminus_schema_name/1,
-              terminus_inference_name/1,
+              % constants.pl
+              system_instance_name/1,
+              system_schema_name/1,
+              system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
@@ -55,6 +51,7 @@
               finalized_element_uri/1,
               deleting_element_uri/1,
               resource_includes_prop_uri/1,
+              organization_database_prop_uri/1,
               allow_origin_prop_uri/1,
 
               layer_class_uri/1,
@@ -75,12 +72,10 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              repo_name_uri/4,
-
-              terminus_server_uri/1,
+              admin_organization_uri/1,
+              super_user_authority/1,
 
               % triplestore
-              destroy_graph/2,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
@@ -115,7 +110,7 @@
 :- use_module(triple/iana).
 :- use_module(triple/literals).
 :- use_module(triple/temp_graph).
-:- use_module(triple/terminus_bootstrap).
+:- use_module(triple/constants).
 :- use_module(triple/triplestore).
 :- use_module(triple/turtle_utils).
 :- use_module(triple/upgrade_db).

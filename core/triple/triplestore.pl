@@ -1,5 +1,4 @@
 :- module(triplestore, [
-              destroy_graph/2,
               safe_create_named_graph/3,
               safe_open_named_graph/3,
               xrdf/4,
@@ -59,20 +58,6 @@
  *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-/**
- * destroy_graph(+DBID,+GID:graph_identifier) is det.
- *
- * Completely remove a graph from disk.
- *
- * currently this is a noop - we can worry about collection
- * later.
- */
-destroy_graph(_DBID,GID) :-
-    db_path(Path),
-    www_form_encode(GID,Safe_GID),
-    interpolate([Path,Safe_GID,'.label'],Label),
-    delete_file(Label).
 
 /**
  * checkpoint(+Collection_Id,+Database_Id:graph_identifier) is det.
@@ -227,8 +212,8 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
  * UUU - do some transactional stuff here as with schema.
  */
 import_graph(_File, _DB_ID, _Graph_ID) :-
-    throw(error(_{'terminus:status' : 'terminus:error',
-                  'terminus:message' : "import_graph/3 is unimplemented"})).
+    throw(error(_{'system:status' : 'system:error',
+                  'system:message' : "import_graph/3 is unimplemented"})).
 
 /**
  * insert(+G:read_write_obj,+X,+Y,+Z,-Changed) is det.

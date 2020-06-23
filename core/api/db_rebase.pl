@@ -202,10 +202,10 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
 :- use_module(db_branch).
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin", "foo"))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
     with_transaction(Master_Context,
                      ask(Master_Context,
@@ -213,7 +213,7 @@ test(rebase_fast_forward,
                     _),
 
     branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
     with_transaction(Second_Context1,
@@ -260,10 +260,10 @@ test(rebase_fast_forward,
 
 test(rebase_divergent_history,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin", "foo"))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
     with_transaction(Master_Context1,
                      ask(Master_Context1,
@@ -271,7 +271,7 @@ test(rebase_divergent_history,
                     _),
 
     branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("user/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
     with_transaction(Second_Context1,
@@ -334,12 +334,12 @@ test(rebase_divergent_history,
 
 test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema('user','test'))),
+             create_db_with_test_schema("admin","test"))),
       cleanup(teardown_temp_store(State)),
       throws(error(rebase(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id])))
      ])
 :-
-    resolve_absolute_string_descriptor("user/test", Master_Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
 
@@ -360,7 +360,7 @@ test(rebase_conflicting_history_errors,
 
     Repository_Descriptor = (Master_Descriptor.repository_descriptor),
     branch_create(Repository_Descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("user/test/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor("admin/test/local/branch/second", Second_Descriptor),
 
     % create a commit on the master branch, diverging history
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context3_),
