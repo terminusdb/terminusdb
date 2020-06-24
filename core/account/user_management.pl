@@ -7,8 +7,13 @@
               delete_user/1,
               delete_user/2,
               delete_organization/1,
+              delete_organization/2,
               update_user/2,
-              update_user/3
+              update_user/3,
+              update_organization/2,
+              update_organization/3,
+              add_organization/2,
+              add_organization/3
           ]).
 
 :- use_module(core(util)).
@@ -28,13 +33,52 @@ delete_organization(Name) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
         Context,
-        (   organization_name_uri(Context, Name, Organization_Uri),
-            ask(Context,
-                (   t(Organization_Uri, rdf:type, system:'Organization'),
-                    delete_object(Organization_Uri)
-                ))
-        ),
+        delete_organization(Context,Name),
         _).
+
+delete_organization(Context,Name) :-
+    organization_name_uri(Context, Name, Organization_Uri),
+    ask(Context,
+        (   t(Organization_Uri, rdf:type, system:'Organization'),
+            delete_object(Organization_Uri)
+        )).
+
+add_organization(Name, Organization_URI) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(Context,
+                     add_organization(Context, Name, Organization_URI),
+                     _).
+
+add_organization(Context, Name, Organization_URI) :-
+
+    (   organization_name_exists(Context, Name)
+    ->  throw(error(organization_already_exists(Name)))
+    ;   true),
+
+    ask(Context,
+        (
+            random_idgen(doc:'Organization',[Name^^xsd:string], Organization_URI),
+            insert(Organization_URI, rdf:type, system:'Organization'),
+            insert(Organization_URI, system:organization_name, Name^^xsd:string),
+            insert(doc:admin_organization, system:resource_includes, Organization_URI)
+        ),
+       [compress_prefixes(false)]).
+
+update_organization(Name, New_Name) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(
+        Context,
+        update_organization(Context,Name,New_Name),
+        _).
+
+update_organization(Context, Name, New_Name) :-
+    ask(Context,
+        (   t(Organization_URI, system:organization_name, Name^^xsd:string),
+            delete(Organization_URI, system:organization_name, Name^^xsd:string),
+            insert(Organization_URI, system:organization_name, New_Name^^xsd:string)
+        ),
+       [compress_prefixes(false)]).
+
 
 add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
@@ -42,7 +86,9 @@ add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
                        author: "add_user/4",
                        message: "internal system operation"
                    }, SystemDB),
-    add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI).
+    with_transaction(SystemDB,
+                     add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI),
+                     _).
 
 add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
 
@@ -50,59 +96,46 @@ add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
     ->  throw(error(user_already_exists(Nick)))
     ;   true),
 
-    (   organization_name_exists(SystemDB, Nick)
-    ->  throw(error(organization_already_exists(Nick)))
-    ;   true),
-
-    with_transaction(
-        SystemDB,
-        (
-            ask(SystemDB,
-                (   random_idgen(doc:'User',[Nick^^xsd:string], User_URI),
-                    random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
-                    random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
-                    random_idgen(doc:'Organization',[Nick^^xsd:string], Organization_URI),
-                    insert(User_URI, rdf:type, system:'User'),
-                    insert(User_URI, rdfs:comment, Comment@en),
-                    insert(User_URI, system:agent_name, Nick^^xsd:string),
-                    insert(User_URI, system:user_identifier, Email^^xsd:string),
-                    insert(User_URI, system:role, Role_URI),
-                    insert(Role_URI, rdf:type, system:'Role'),
-                    insert(Role_URI, system:capability, Capability_URI),
-                    insert(Capability_URI, rdf:type, system:'Capability'),
-                    insert(Capability_URI, system:direct_capability_scope, Organization_URI),
-                    insert(Capability_URI, system:action, system:create_database),
-                    insert(Capability_URI, system:action, system:manage_capabilities),
-                    insert(Capability_URI, system:action, system:delete_database),
-                    insert(Capability_URI, system:action, system:class_frame),
-                    insert(Capability_URI, system:action, system:clone),
-                    insert(Capability_URI, system:action, system:fetch),
-                    insert(Capability_URI, system:action, system:push),
-                    insert(Capability_URI, system:action, system:branch),
-                    insert(Capability_URI, system:action, system:rebase),
-                    insert(Capability_URI, system:action, system:meta_read_access),
-                    insert(Capability_URI, system:action, system:commit_read_access),
-                    insert(Capability_URI, system:action, system:instance_read_access),
-                    insert(Capability_URI, system:action, system:instance_write_access),
-                    insert(Capability_URI, system:action, system:schema_read_access),
-                    insert(Capability_URI, system:action, system:schema_write_access),
-                    insert(Capability_URI, system:action, system:manage_capabilities),
-                    insert(Organization_URI, rdf:type, system:'Organization'),
-                    insert(Organization_URI, system:organization_name, Nick^^xsd:string),
-                    insert(doc:admin_organization, system:resource_includes, Organization_URI)
-                ),
-                [compress_prefixes(false)]
-               ),
-
-            (   Pass_Opt = some(Pass)
-            ->  crypto_password_hash(Pass,Hash),
-                ask(SystemDB,
-                    insert(User_URI, system:user_key_hash, Hash^^xsd:string)
-                   )
-            ;   true)
+    add_organization(SystemDB, Nick, Organization_URI),
+    ask(SystemDB,
+        (   random_idgen(doc:'User',[Nick^^xsd:string], User_URI),
+            random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
+            random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
+            insert(User_URI, rdf:type, system:'User'),
+            insert(User_URI, rdfs:comment, Comment@en),
+            insert(User_URI, system:agent_name, Nick^^xsd:string),
+            insert(User_URI, system:user_identifier, Email^^xsd:string),
+            insert(User_URI, system:role, Role_URI),
+            insert(Role_URI, rdf:type, system:'Role'),
+            insert(Role_URI, system:capability, Capability_URI),
+            insert(Capability_URI, rdf:type, system:'Capability'),
+            insert(Capability_URI, system:direct_capability_scope, Organization_URI),
+            insert(Capability_URI, system:action, system:create_database),
+            insert(Capability_URI, system:action, system:manage_capabilities),
+            insert(Capability_URI, system:action, system:delete_database),
+            insert(Capability_URI, system:action, system:class_frame),
+            insert(Capability_URI, system:action, system:clone),
+            insert(Capability_URI, system:action, system:fetch),
+            insert(Capability_URI, system:action, system:push),
+            insert(Capability_URI, system:action, system:branch),
+            insert(Capability_URI, system:action, system:rebase),
+            insert(Capability_URI, system:action, system:meta_read_access),
+            insert(Capability_URI, system:action, system:commit_read_access),
+            insert(Capability_URI, system:action, system:instance_read_access),
+            insert(Capability_URI, system:action, system:instance_write_access),
+            insert(Capability_URI, system:action, system:schema_read_access),
+            insert(Capability_URI, system:action, system:schema_write_access),
+            insert(Capability_URI, system:action, system:manage_capabilities)
         ),
-        _Meta_Data
-    ).
+        [compress_prefixes(false)]
+       ),
+
+    (   Pass_Opt = some(Pass)
+    ->  crypto_password_hash(Pass,Hash),
+        ask(SystemDB,
+            insert(User_URI, system:user_key_hash, Hash^^xsd:string)
+           )
+    ;   true).
 
 update_user(Name, Document) :-
     create_context(system_descriptor{},
@@ -110,43 +143,42 @@ update_user(Name, Document) :-
                        author: "update_user/2",
                        message: "internal system operation"
                    }, SystemDB),
-    update_user(SystemDB, Name, Document).
-
-update_user(SystemDB, Name, Document) :-
     with_transaction(
         SystemDB,
-        (   agent_name_uri(SystemDB, Name, User_Uri),
-
-            (   get_dict(user_identifier, Document, Identifier)
-            ->  ask(SystemDB,
-                    (   t(User_Uri, system:user_identifier, Old_ID^^xsd:string),
-                        delete(User_Uri, system:user_identifier, Old_ID^^xsd:string),
-                        insert(User_Uri, system:user_identifier, Identifier^^xsd:string)))
-            ;   true),
-
-            (   get_dict(agent_name, Document, Agent_Name)
-            ->  ask(SystemDB,
-                    (   t(User_Uri, system:agent_name, Old_Name^^xsd:string),
-                        delete(User_Uri, system:agent_name, Old_Name^^xsd:string),
-                        insert(User_Uri, system:agent_name, Agent_Name^^xsd:string)))
-            ;   true),
-
-            (   get_dict(comment, Document, Comment)
-            ->  ask(SystemDB,
-                    (   t(User_Uri, rdfs:comment, Old_Comment@en),
-                        delete(User_Uri, rdfs:comment, Old_Comment@en),
-                        insert(User_Uri, rdfs:comment, Comment@en)))
-            ;   true),
-
-            (   get_dict(password, Document, Password)
-            ->  crypto_password_hash(Password,Hash),
-                ask(SystemDB,
-                    (   t(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
-                        delete(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
-                        insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
-            ;   true)
-        ),
+        update_user(SystemDB, Name, Document),
         _).
+
+update_user(SystemDB, Name, Document) :-
+    agent_name_uri(SystemDB, Name, User_Uri),
+
+    (   get_dict(user_identifier, Document, Identifier)
+    ->  ask(SystemDB,
+            (   t(User_Uri, system:user_identifier, Old_ID^^xsd:string),
+                delete(User_Uri, system:user_identifier, Old_ID^^xsd:string),
+                insert(User_Uri, system:user_identifier, Identifier^^xsd:string)))
+    ;   true),
+
+    (   get_dict(agent_name, Document, Agent_Name)
+    ->  ask(SystemDB,
+            (   t(User_Uri, system:agent_name, Old_Name^^xsd:string),
+                delete(User_Uri, system:agent_name, Old_Name^^xsd:string),
+                insert(User_Uri, system:agent_name, Agent_Name^^xsd:string)))
+    ;   true),
+
+    (   get_dict(comment, Document, Comment)
+    ->  ask(SystemDB,
+            (   t(User_Uri, rdfs:comment, Old_Comment@en),
+                delete(User_Uri, rdfs:comment, Old_Comment@en),
+                insert(User_Uri, rdfs:comment, Comment@en)))
+    ;   true),
+
+    (   get_dict(password, Document, Password)
+    ->  crypto_password_hash(Password,Hash),
+        ask(SystemDB,
+            (   t(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
+                delete(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
+                insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
+    ;   true).
 
 
 /*
@@ -154,19 +186,27 @@ update_user(SystemDB, Name, Document) :-
  */
 delete_user(User_Name) :-
     create_context(system_descriptor{}, Context),
-    delete_user(Context, User_Name).
-
-delete_user(Context, User_Name) :-
     with_transaction(
         Context,
-        (   user_name_uri(Context, User_Name, User_URI),
-            ask(Context,
-                (   t(User_URI, rdf:type, system:'User'),
-                    delete_object(User_URI)
-                ))
-        ),
+        delete_user(Context, User_Name),
         _).
 
+delete_user(Context, User_Name) :-
+    user_name_uri(Context, User_Name, User_URI),
+    ask(Context,
+        (   t(User_URI, rdf:type, system:'User'),
+            delete_object(User_URI)
+        )).
+
+
+add_role(Context, User, Organization, Resource_Name, Action) :-
+    user_name_uri(Context, User, User_ID),
+    organization_name_uri(Context, Organization, Organization_ID),
+    organization_database_name_uri(Context, Organization, Resource_Name, Resource_ID),
+    ask(Context,
+        (   t(User_ID, system:role, Role),
+            insert(Capability_Uri, system:action, Action)
+        )).
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -180,13 +220,14 @@ test(add_user, [
 
     add_user("Gavin", "gavin@terminusdb.com", "here.i.am",  some('password'), URI),
 
+    writeq(here),nl,
     agent_name_uri(system_descriptor{}, "Gavin", URI),
 
     once(ask(system_descriptor{},
              t(URI, system:user_identifier, "gavin@terminusdb.com"^^xsd:string))).
 
 
-test(test_user_ownership, [
+test(user_ownership, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
@@ -233,7 +274,7 @@ test(test_user_ownership, [
 
     once(ask(Descriptor, t(a,b,c))).
 
-test(test_user_update, [
+test(user_update, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
@@ -267,6 +308,36 @@ test(test_user_update, [
     atom_string(Hash_Atom, Hash),
     crypto_password_hash(Password, Hash_Atom).
 
+test(organization_creation, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    add_organization("testing_organization", _),
+
+    organization_name_exists(system_descriptor{}, "testing_organization").
+
+test(organization_update, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    add_organization("testing_organization", _),
+
+    update_organization("testing_organization", "new_organization"),
+
+    organization_name_exists(system_descriptor{}, "new_organization").
+
+test(organization_delete, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    add_organization("testing_organization", _),
+
+    delete_organization("testing_organization"),
+
+    \+ organization_name_exists(system_descriptor{}, "testing_organization").
 
 
 :- end_tests(user_management).

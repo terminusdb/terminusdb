@@ -26,8 +26,13 @@
               delete_user/1,
               delete_user/2,
               delete_organization/1,
+              delete_organization/2,
               update_user/2,
-              update_user/3
+              update_user/3,
+              update_organization/2,
+              update_organization/3,
+              add_organization/2,
+              add_organization/3
           ]).
 
 :- use_module(account/capabilities).

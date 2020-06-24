@@ -293,7 +293,14 @@ test(db_delete, [
     _{'system:status' : "system:success"} = Delete_In.
 
 test(db_auth_test, [
-         setup((add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID),
+         setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
+                ->  delete_organization('TERMINUS_QA')
+                ;   true
+                ),
+                (   agent_name_exists(system_descriptor{}, 'TERMINUS_QA')
+                ->  delete_user('TERMINUS_QA')
+                ;   add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID)
+                ),
                 (   database_exists('TERMINUS_QA', 'TEST_DB')
                 ->  delete_db('TERMINUS_QA', 'TEST_DB')
                 ;   true))),
@@ -1979,8 +1986,9 @@ user_handler(post, Name, R) :-
     create_context(SystemDB, commit_info{ author: "user_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
-
-    update_user(Ctx, Name, Document),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
@@ -1997,8 +2005,9 @@ user_handler(delete, Name, R) :-
     create_context(SystemDB, commit_info{ author: "user_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
-
-    delete_user(Ctx, Name),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Name),
+                     _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
@@ -2029,7 +2038,9 @@ user_handler(post, R) :-
     create_context(SystemDB, commit_info{ author: "user_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
-    add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option),
+    with_transaction(Ctx,
+                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option),
+                     _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
@@ -2051,13 +2062,15 @@ user_handler(delete, R) :-
     create_context(SystemDB, commit_info{ author: "user_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
-    delete_user(Ctx, Agent_Name),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Agent_Name),
+                     _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(user), cors_catch(organization_handler(Method)),
+:- http_handler(root(organization), cors_catch(organization_handler(Method)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2066,28 +2079,158 @@ user_handler(delete, R) :-
                  prefix,
                  methods([options,post,delete])]).
 
-organization_handler(_, _) :-
-    throw(error(unimplemented(organization_handler/2))).
+organization_handler(options, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+organization_handler(post, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(organization_creation_requires_superuser)),
 
-organization_handler(_, _, _) :-
-    throw(error(unimplemented(organization_handler/3))).
+    get_payload(Document, Request),
+
+    do_or_die(_{ organization_name : Name } :< Document,
+              error(malformed_organization_document(Document))
+             ),
+
+    create_context(SystemDB, commit_info{ author: "organization_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     add_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+organization_handler(delete, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    is_super_user(Auth_ID, _{}),
+    %
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(delete_organization_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    do_or_die(_{ organization_name : Name },
+              error(malformed_organization_deletion_document(Document))
+             ),
+
+    create_context(SystemDB, commit_info{ author: "organization_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     delete_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+
+organization_handler(options, _Name, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+organization_handler(post, Name, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(organization_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    create_context(SystemDB, commit_info{ author: "organization_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+organization_handler(delete, Name, R) :-
+    add_payload_to_request(R,Request),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    is_super_user(Auth_ID, _{}),
+    %
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(delete_organization_requires_superuser)),
+
+    create_context(SystemDB, commit_info{ author: "organization_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     delete_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(user), cors_catch(role_handler(Method)),
-                [method(Method),
-                 prefix,
-                 methods([options,post,delete])]).
-:- http_handler(root(user/Name), cors_catch(role_handler(Method,Name)),
+:- http_handler(root(role), cors_catch(role_handler(Method)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
 
-role_handler(_, _) :-
-    throw(error(unimplemented(role_handler/2))).
+/* 
 
-role_handler(_, _, _) :-
-    throw(error(unimplemented(role_handler/3))).
+- **Get User Roles(agent_name, resource_id)**
+
+    Returns an array of user roles
+
+    If agent_name is omitted and resource_id is not, all users who have a role for that resource (requesting user must have manage permission for the resource)
+
+    If resource_id is omitted and agent_name is not, all roles for that agent_name are returned (requesting user must have manage permission for all resources returned)
+
+    If both are omitted, all users and resource roles for which the requesting user has manage permission
+*/
+
+role_handler(options, _Name, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+role_handler(post, Name, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(role_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    create_context(SystemDB, commit_info{ author: "role_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+role_handler(delete, Name, R) :-
+    add_payload_to_request(R,Request),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    is_super_user(Auth_ID, _{}),
+    %
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(delete_role_requires_superuser)),
+
+    create_context(SystemDB, commit_info{ author: "role_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
 
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
