@@ -293,7 +293,7 @@ test(db_delete, [
     _{'system:status' : "system:success"} = Delete_In.
 
 test(db_auth_test, [
-         setup((add_user('TERMINUS_QA','user@example.com','password',_User_ID),
+         setup((add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID),
                 (   database_exists('TERMINUS_QA', 'TEST_DB')
                 ->  delete_db('TERMINUS_QA', 'TEST_DB')
                 ;   true))),
@@ -1226,7 +1226,7 @@ test(rebase_divergent_history, [
                 (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
                 ->  delete_organization("TERMINUSQA")
                 ;   true),
-                add_user("TERMINUSQA",'user@example.com','password',_User_ID),
+                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema("TERMINUSQA", "foo"))),
          cleanup((delete_db("TERMINUSQA", "foo"),
                   delete_user_and_organization("TERMINUSQA")))
@@ -1353,7 +1353,7 @@ test(pack_stuff, [
                 (   organization_name_exists(system_descriptor{},'_a_test_user_')
                 ->  delete_organization('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',_User_ID),
+                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema('_a_test_user_',foo)
                )),
          cleanup((delete_db('_a_test_user_',foo),
@@ -1424,7 +1424,7 @@ test(pack_nothing, [
                 (   organization_name_exists(system_descriptor{},'_a_test_user_')
                 ->  delete_organization('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',_User_ID),
+                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema('_a_test_user_','foo')
                )),
          cleanup((delete_db('_a_test_user_','foo'),
@@ -1953,6 +1953,142 @@ test(delete_graph, [
               authorization(basic(admin,Key))]).
 
 :- end_tests(graph_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(user), cors_catch(user_handler(Method)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(root(user/Name), cors_catch(user_handler(Method,Name)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+
+user_handler(options, _Name, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+user_handler(post, Name, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(user_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    create_context(SystemDB, commit_info{ author: "user_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+
+    update_user(Ctx, Name, Document),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+user_handler(delete, Name, R) :-
+    add_payload_to_request(R,Request),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    is_super_user(Auth_ID, _{}),
+    %
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(delete_user_requires_superuser)),
+
+    create_context(SystemDB, commit_info{ author: "user_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+
+    delete_user(Ctx, Name),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+
+
+user_handler(options, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+user_handler(post, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(user_creation_requires_superuser)),
+
+    get_payload(Document, Request),
+
+    do_or_die(_{ user_identifier : Identifier,
+                 agent_name : Agent_Name,
+                 comment : Comment
+               } :< Document,
+              error(malformed_user_document(Document))
+             ),
+    (   _{ password : Password } :< Document
+    ->  Password_Option = some(Password)
+    ;   Password_Option = none),
+
+    create_context(SystemDB, commit_info{ author: "user_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+user_handler(delete, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    is_super_user(Auth_ID, _{}),
+    %
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(delete_user_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    do_or_die(_{ user_identifier : Agent_Name },
+              error(malformed_user_deletion_document(Document))
+             ),
+
+    create_context(SystemDB, commit_info{ author: "user_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    delete_user(Ctx, Agent_Name),
+
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
+
+%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(user), cors_catch(organization_handler(Method)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(root(user/Name), cors_catch(organization_handler(Method,Name)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+
+organization_handler(_, _) :-
+    throw(error(unimplemented(organization_handler/2))).
+
+organization_handler(_, _, _) :-
+    throw(error(unimplemented(organization_handler/3))).
+
+
+%%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(user), cors_catch(role_handler(Method)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(root(user/Name), cors_catch(role_handler(Method,Name)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+
+role_handler(_, _) :-
+    throw(error(unimplemented(role_handler/2))).
+
+role_handler(_, _, _) :-
+    throw(error(unimplemented(role_handler/3))).
+
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 

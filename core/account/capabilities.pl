@@ -14,7 +14,8 @@
               authorisation_object/3,
               user_object/3,
               super_user_authority/1,
-              check_descriptor_auth/4
+              check_descriptor_auth/4,
+              is_super_user/2
           ]).
 
 /** <module> Capabilities
