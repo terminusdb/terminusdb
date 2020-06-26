@@ -73,10 +73,8 @@ main(Argv) :-
     initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    (   memberchk('only-test', Argv)
-    ->  run_tests
-    ;   terminus_server(Argv),
-        run(Argv)).
+    terminus_server(Argv),
+    run(Argv).
 
 run([test]) :-
   run_tests.
