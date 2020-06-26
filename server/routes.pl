@@ -91,12 +91,17 @@ http:location(root, '/', []).
 connect_handler(options,Request) :-
     write_cors_headers(Request),
     format('~n').
-connect_handler(get,Request) :-
-    connection_authorised_user(Request, User_ID),
-    open_descriptor(system_descriptor{}, DB),
-    user_object(DB, User_ID, User_Obj),
+connect_handler(get,R) :-
+    add_payload_to_request(R,Request), % this should be automatic.
+
+    open_descriptor(system_descriptor{}, System_DB),
+    authenticate(System_DB, Request, Auth_ID),
+
+    user_object(System_DB, Auth_ID, User_Obj),
+    User_Obj2 = (User_Obj.put('system:user_key_hash', "")),
+
     write_cors_headers(Request),
-    reply_json(User_Obj).
+    reply_json(User_Obj2).
 
 :- begin_tests(connect_handler).
 :- use_module(core(util/test_utils)).
@@ -2171,14 +2176,13 @@ organization_handler(delete, Name, R) :-
     reply_json(_{'system:status' : "system:success"}).
 
 
-
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(role), cors_catch(role_handler(Method)),
+:- http_handler(root(get_role), cors_catch(get_role_handler(Method)),
                 [method(Method),
                  prefix,
-                 methods([options,post,delete])]).
+                 methods([options,post])]).
 
-/* 
+/*
 
 - **Get User Roles(agent_name, resource_id)**
 
@@ -2190,6 +2194,35 @@ organization_handler(delete, Name, R) :-
 
     If both are omitted, all users and resource roles for which the requesting user has manage permission
 */
+
+get_role_handler(options, _Request) :-
+    throw(error(not_implemented)).
+get_role_handler(_,_) :-
+    throw(error(not_implemented)).
+
+%%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(role), cors_catch(role_handler(Method)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+
+
+role_handler(options, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+role_handler(post, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    do_or_die(is_super_user(Auth_ID, _{}),
+              error(role_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    get_role(SystemDB, Auth_ID, Document, Response),
+
+    write_cors_headers(Request),
+    reply_json(Response).
 
 role_handler(options, _Name, Request) :-
     write_cors_headers(Request),
@@ -2207,7 +2240,7 @@ role_handler(post, Name, R) :-
                                           message: "internal system operation"
                                         }, Ctx),
     with_transaction(Ctx,
-                     update_user(Ctx, Name, Document),
+                     update_role(SystemDB, Name, Document),
                      _),
 
     write_cors_headers(Request),
@@ -2226,7 +2259,7 @@ role_handler(delete, Name, R) :-
                                           message: "internal system operation"
                                         }, Ctx),
     with_transaction(Ctx,
-                     delete_user(Ctx, Name),
+                     delete_role(Ctx, Name),
                      _),
 
     write_cors_headers(Request),

@@ -364,7 +364,7 @@ authorisation_object(DB, Auth_ID, Auth_Obj) :-
 user_object(DB, User_ID, User_Obj) :-
     once(ask(DB,
              (  t(User_ID, rdf:type, system:'User'), % Some action to look at...
-                read_object(User_ID, 3, User_Obj)
+                read_object(User_ID, 4, User_Obj)
              )
             )).
 

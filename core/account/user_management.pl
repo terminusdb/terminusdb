@@ -198,7 +198,6 @@ delete_user(Context, User_Name) :-
             delete_object(User_URI)
         )).
 
-
 add_role(Context, User, Organization, Resource_Name, Action) :-
     user_name_uri(Context, User, User_ID),
     organization_name_uri(Context, Organization, Organization_ID),
@@ -207,6 +206,27 @@ add_role(Context, User, Organization, Resource_Name, Action) :-
         (   t(User_ID, system:role, Role),
             insert(Capability_Uri, system:action, Action)
         )).
+
+
+get_role(Askable, Auth_ID, Document, Response) :-
+    (   get_dict(agent_name, Document, Agent)
+    ->  Agent_Var = Agent^^xsd:string
+    ;   Agent_Var = v('Agent')),
+
+    (   get_dict(resource_name, Document, Resource)
+    ->  Resource_Var = Resource^^xsd:string
+    ;   Resource_Var = v('Resource')),
+
+    create_context(Askable, Query_Context),
+    Query = ((v('Auth_ID') = Auth_ID),
+             t(v('Auth_ID'), system:agent_name, Agent_Var),
+             t(v('Auth_ID'), system:role, v('Role_ID')),
+             t(v('Role_ID'), system:capability, v('Capability_ID')),
+             t(v('Capability_ID'), system:capability_scope, v('Resource_ID')),
+             t(v('Resource_ID'), system:resource_name, Resource_Var),
+             t(v('Capability_ID'), system:action, system:manage_capabilities)),
+
+    run_context_ast_jsonld_response(Query_Context,Query,Response).
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -339,5 +359,19 @@ test(organization_delete, [
 
     \+ organization_name_exists(system_descriptor{}, "testing_organization").
 
+
+test(get_roles, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document = _{},
+    get_role(system_descriptor{}, doc:admin, Document, Response),
+    Bindings = (Response.bindings),
+    forall((member(Binding_Set, Bindings),
+            (Name = Binding_Set.'Resource'.'@value')
+           ),
+           member(Name, ["admin", "_system"])
+          ).
 
 :- end_tests(user_management).
