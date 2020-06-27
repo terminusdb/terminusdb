@@ -199,12 +199,17 @@ delete_user(Context, User_Name) :-
         )).
 
 add_role(Context, User, Organization, Resource_Name, Action) :-
-    user_name_uri(Context, User, User_ID),
-    organization_name_uri(Context, Organization, Organization_ID),
-    organization_database_name_uri(Context, Organization, Resource_Name, Resource_ID),
+    user_name_uri(Context, User, User_URI),
+    organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
     ask(Context,
-        (   t(User_ID, system:role, Role),
-            insert(Capability_Uri, system:action, Action)
+        (   random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
+            random_idgen(doc:'Capability',[User^^xsd:string], Capability_URI),
+            insert(User_URI, system:role, Role_URI),
+            insert(Role_URI, rdf:type, system:'Role'),
+            insert(Role_URI, system:capability, Capability_URI),
+            insert(Capability_URI, system:direct_capability_scope, Resource_URI),
+            insert(Capability_URI, rdf:type, system:'Capability'),
+            insert(Capability_URI, system:action, Action)
         )).
 
 
@@ -220,11 +225,16 @@ get_role(Askable, Auth_ID, Document, Response) :-
     create_context(Askable, Query_Context),
     Query = ((v('Auth_ID') = Auth_ID),
              t(v('Auth_ID'), system:agent_name, Agent_Var),
-             t(v('Auth_ID'), system:role, v('Role_ID')),
+             t(v('Auth_ID'), system:role, v('Control_Role_ID')),
+             t(v('Control_Role_ID'), system:capability, v('Control_Capability_ID')),
+             t(v('Control_Capability_ID'), system:capability_scope, v('Resource_ID')),
+             t(v('Control_Capability_ID'), system:action, system:manage_capabilities),
+             t(v('Resource_ID'), system:resource_name, Resource_Var),
+             t(v('Capability_ID'), system:capability_scope, v('Resource_ID')),
              t(v('Role_ID'), system:capability, v('Capability_ID')),
              t(v('Capability_ID'), system:capability_scope, v('Resource_ID')),
-             t(v('Resource_ID'), system:resource_name, Resource_Var),
-             t(v('Capability_ID'), system:action, system:manage_capabilities)),
+             t(v('Capability_ID'), system:action, v('Action_ID'))
+            ),
 
     run_context_ast_jsonld_response(Query_Context,Query,Response).
 
@@ -368,10 +378,21 @@ test(get_roles, [
     Document = _{},
     get_role(system_descriptor{}, doc:admin, Document, Response),
     Bindings = (Response.bindings),
+
     forall((member(Binding_Set, Bindings),
             (Name = Binding_Set.'Resource'.'@value')
            ),
            member(Name, ["admin", "_system"])
           ).
+
+test(update_roles, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document = _{},
+    update_role(system_descriptor{}, doc:admin, Document, _Response),
+
+    true.
 
 :- end_tests(user_management).
