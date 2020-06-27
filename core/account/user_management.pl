@@ -386,6 +386,7 @@ test(get_roles, [
           ).
 
 test(update_roles, [
+         blocked('update role not ready'),
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
