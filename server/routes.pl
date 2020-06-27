@@ -2224,42 +2224,29 @@ role_handler(post, R) :-
     write_cors_headers(Request),
     reply_json(Response).
 
-role_handler(options, _Name, Request) :-
+role_handler(options, _, Request) :-
     write_cors_headers(Request),
     format('~n').
-role_handler(post, Name, R) :-
+role_handler(post, User, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     do_or_die(is_super_user(Auth_ID, _{}),
               error(role_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     create_context(SystemDB, commit_info{ author: "role_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
+
+    do_or_die(_{ resource_name : Resource_Name,
+                 organization : Organization,
+                 actions : Actions
+               } :< Document,
+              error(bad_api_document)),
+
     with_transaction(Ctx,
-                     update_role(SystemDB, Name, Document),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
-role_handler(delete, Name, R) :-
-    add_payload_to_request(R,Request),
-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    is_super_user(Auth_ID, _{}),
-    %
-    do_or_die(is_super_user(Auth_ID, _{}),
-              error(delete_role_requires_superuser)),
-
-    create_context(SystemDB, commit_info{ author: "role_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
-    with_transaction(Ctx,
-                     delete_role(Ctx, Name),
+                     update_role(SystemDB, User, Organization, Resource_Name, Actions),
                      _),
 
     write_cors_headers(Request),

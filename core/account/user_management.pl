@@ -13,7 +13,12 @@
               update_organization/2,
               update_organization/3,
               add_organization/2,
-              add_organization/3
+              add_organization/3,
+
+              add_role/5,
+              update_role/5,
+              get_role/4,
+              exists_role/4
           ]).
 
 :- use_module(core(util)).
@@ -198,19 +203,34 @@ delete_user(Context, User_Name) :-
             delete_object(User_URI)
         )).
 
-add_role(Context, User, Organization, Resource_Name, Action) :-
+exists_role(Askable, User, Organization, Resource_Name) :-
+    user_name_uri(Askable, User, User_URI),
+    organization_database_name_uri(Askable, Organization, Resource_Name, Resource_URI),
+    once(
+        ask(Askable,
+            (   t(User_URI, system:role, Role_URI),
+                t(Role_URI, rdf:type, system:'Role'),
+                t(Role_URI, system:capability, Capability_URI),
+                t(Capability_URI, system:direct_capability_scope, Resource_URI)
+            ))).
+
+add_role(Context, User, Organization, Resource_Name, Actions) :-
     user_name_uri(Context, User, User_URI),
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
-    ask(Context,
-        (   random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
-            random_idgen(doc:'Capability',[User^^xsd:string], Capability_URI),
-            insert(User_URI, system:role, Role_URI),
-            insert(Role_URI, rdf:type, system:'Role'),
-            insert(Role_URI, system:capability, Capability_URI),
-            insert(Capability_URI, system:direct_capability_scope, Resource_URI),
-            insert(Capability_URI, rdf:type, system:'Capability'),
-            insert(Capability_URI, system:action, Action)
-        )).
+
+    forall(
+        ask(Context,
+            (   random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
+                random_idgen(doc:'Capability',[User^^xsd:string], Capability_URI),
+                insert(User_URI, system:role, Role_URI),
+                insert(Role_URI, rdf:type, system:'Role'),
+                insert(Role_URI, system:capability, Capability_URI),
+                insert(Capability_URI, system:direct_capability_scope, Resource_URI),
+                insert(Capability_URI, rdf:type, system:'Capability'),
+                member(Action, Actions),
+                insert(Capability_URI, system:action, Action)
+            )),
+        true).
 
 
 get_role(Askable, Auth_ID, Document, Response) :-
@@ -237,6 +257,35 @@ get_role(Askable, Auth_ID, Document, Response) :-
             ),
 
     run_context_ast_jsonld_response(Query_Context,Query,Response).
+
+update_role(Context, User, Organization, Resource_Name, Actions) :-
+    exists_role(Context, User, Organization, Resource_Name),
+    !,
+
+    user_name_uri(Context, User, User_URI),
+    organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
+
+    forall(ask(Context,
+               (   t(User_URI, system:role, Role_URI),
+                   t(Role_URI, system:capability, Capability_URI),
+                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
+                   t(Capability_URI, rdf:type, system:'Capability'),
+                   t(Capability_URI, system:action, Action),
+                   delete(Capability_URI, system:action, Action)
+               )),
+           true),
+
+    forall(ask(Context,
+               (   t(User_URI, system:role, Role_URI),
+                   t(Role_URI, system:capability, Capability_URI),
+                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
+                   t(Capability_URI, rdf:type, system:'Capability'),
+                   member(Action, Actions),
+                   insert(Capability_URI, system:action, Action)
+               )),
+           true).
+update_role(Context, User, Organization, Resource_Name, Actions) :-
+    add_role(Context, User, Organization, Resource_Name, Actions).
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -385,15 +434,79 @@ test(get_roles, [
            member(Name, ["admin", "_system"])
           ).
 
-test(update_roles, [
-         blocked('update role not ready'),
+test(add_role, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Document = _{},
-    update_role(system_descriptor{}, doc:admin, Document, _Response),
 
-    true.
+    create_db_without_schema("admin", "flurp"),
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
+
+    with_transaction(
+        Context,
+        add_role(Context,
+                 "admin",
+                 "admin",
+                 "flurp",
+                 [system:inference_write_access]
+                ),
+        _),
+
+    Document =
+    _{  agent_name : "admin"
+    },
+    get_role(system_descriptor{}, doc:admin, Document, Response),
+    Bindings = (Response.bindings),
+    once((member(Elt,Bindings),
+          Elt.'Resource'.'@value' = "flurp",
+          Elt.'Action_ID' = 'http://terminusdb.com/schema/system#inference_write_access')).
+
+
+test(update_role, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+
+    create_db_without_schema("admin", "flurp"),
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
+
+    with_transaction(
+        Context,
+        add_role(Context,
+                 "admin",
+                 "admin",
+                 "flurp",
+                 [system:inference_write_access]
+                ),
+        _),
+
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
+
+    with_transaction(
+        Context2,
+        update_role(Context2,
+                    "admin",
+                    "admin",
+                    "flurp",
+                    [system:inference_read_access]
+                   ),
+        _),
+
+    Document =
+    _{  agent_name : "admin"
+    },
+
+    get_role(system_descriptor{}, doc:admin, Document, Response),
+    Bindings = (Response.bindings),
+    once((member(Elt,Bindings),
+          (Elt.'Resource'.'@value') = "flurp",
+          (Elt.'Action_ID') = 'http://terminusdb.com/schema/system#inference_read_access')),
+
+    \+ once((member(Elt,Bindings),
+             (Elt.'Resource'.'@value') = "flurp",
+             (Elt.'Action_ID') = 'http://terminusdb.com/schema/system#inference_write_access')).
+
 
 :- end_tests(user_management).

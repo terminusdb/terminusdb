@@ -1099,10 +1099,9 @@ compile_wf(length(L,N),Length) -->
     resolve(L,LE),
     resolve(N,NE),
     { marshall_args(length(LE,NE), Length) }.
-compile_wf(member(X,Y),Member) -->
+compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(X,XE),
-    resolve(Y,YE),
-    { marshall_args(member(XE,YE), Member) }.
+    resolve(Y,YE).
 compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),

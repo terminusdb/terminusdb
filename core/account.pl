@@ -32,7 +32,12 @@
               update_organization/2,
               update_organization/3,
               add_organization/2,
-              add_organization/3
+              add_organization/3,
+              add_role/5,
+              update_role/5,
+              get_role/4,
+              exists_role/4
+
           ]).
 
 :- use_module(account/capabilities).
