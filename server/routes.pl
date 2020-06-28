@@ -230,10 +230,11 @@ db_handler(post,Organization,DB,R) :-
             label : Label } :< Database_Document),
         error(bad_api_document(Database_Document))),
 
-    do_or_die(
-        (_{ prefixes : Prefixes } :< Database_Document,
-         _{ doc : _Doc, scm : _Scm} :< Prefixes),
-        error(under_specified_prefixes(Database_Document))),
+    (   _{ prefixes : Prefixes } :< Database_Document,
+        _{ doc : _Doc, scm : _Scm} :< Prefixes
+    ->  true
+    ;   Prefixes = _{ doc : "terminusdb:///data/",
+                      scm : "terminusdb:///schema#" }),
 
     try_create_db(Organization, DB, Label, Comment, Prefixes),
 

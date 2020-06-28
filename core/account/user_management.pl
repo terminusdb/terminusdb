@@ -154,7 +154,9 @@ update_user(Name, Document) :-
         _).
 
 update_user(SystemDB, Name, Document) :-
+    % Agent already exists so update
     agent_name_uri(SystemDB, Name, User_Uri),
+    !,
 
     (   get_dict(user_identifier, Document, Identifier)
     ->  ask(SystemDB,
@@ -184,7 +186,12 @@ update_user(SystemDB, Name, Document) :-
                 delete(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
                 insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
     ;   true).
-
+update_user(SystemDB, Name, Document) :-
+    _{ user_identifier : ID,
+       agent_name : Name,
+       comment : Comment,
+       password : Pass } :< Document,
+    add_user(SystemDB, Name, ID, Comment, Pass, _).
 
 /*
  * delete_user(+User_ID) is semidet.
