@@ -2061,7 +2061,7 @@ user_handler(delete, R) :-
     %
     get_payload(Document, Request),
 
-    do_or_die(_{ user_identifier : Agent_Name },
+    do_or_die(_{ agent_name : Agent_Name },
               error(malformed_user_deletion_document(Document))
              ),
 
@@ -2080,7 +2080,7 @@ user_handler(delete, R) :-
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(user/Name), cors_catch(organization_handler(Method,Name)),
+:- http_handler(root(organization/Name), cors_catch(organization_handler(Method,Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2150,8 +2150,11 @@ organization_handler(post, Name, R) :-
     create_context(SystemDB, commit_info{ author: "organization_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
+    do_or_die(_{ organization_name : New_Name } :< Document,
+              error(malformed_api_document(Document), _)),
+
     with_transaction(Ctx,
-                     update_user(Ctx, Name, Document),
+                     update_organization(Ctx, Name, New_Name),
                      _),
 
     write_cors_headers(Request),
