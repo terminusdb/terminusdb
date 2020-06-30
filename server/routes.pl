@@ -2178,34 +2178,43 @@ organization_handler(delete, Name, R) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(get_role), cors_catch(get_role_handler(Method)),
+:- http_handler(root(update_role), cors_catch(update_role_handler(Method)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-/*
+update_role_handler(options, Request) :-
+    write_cors_headers(Request),
+    format('~n').
+update_role_handler(post, R) :-
+    add_payload_to_request(R,Request),
+    open_descriptor(system_descriptor{}, SystemDB),
+    authenticate(SystemDB, Request, Auth_ID),
+    get_payload(Document, Request),
 
-- **Get User Roles(agent_name, resource_id)**
+    create_context(SystemDB, commit_info{ author: "role_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
 
-    Returns an array of user roles
+    do_or_die(_{ database_name : Database_Name,
+                 agent_names : Agents,
+                 organization_name : Organization,
+                 actions : Actions
+               } :< Document,
+              error(bad_api_document)),
 
-    If agent_name is omitted and resource_id is not, all users who have a role for that resource (requesting user must have manage permission for the resource)
+    with_transaction(Ctx,
+                     update_role(SystemDB, Auth_ID, Agents, Organization, Database_Name, Actions),
+                     _),
 
-    If resource_id is omitted and agent_name is not, all roles for that agent_name are returned (requesting user must have manage permission for all resources returned)
-
-    If both are omitted, all users and resource roles for which the requesting user has manage permission
-*/
-
-get_role_handler(options, _Request) :-
-    throw(error(not_implemented)).
-get_role_handler(_,_) :-
-    throw(error(not_implemented)).
+    write_cors_headers(Request),
+    reply_json(_{'system:status' : "system:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(role), cors_catch(role_handler(Method)),
                 [method(Method),
                  prefix,
-                 methods([options,post,delete])]).
+                 methods([options,post])]).
 
 
 role_handler(options, Request) :-
@@ -2221,33 +2230,6 @@ role_handler(post, R) :-
 
     write_cors_headers(Request),
     reply_json(Response).
-
-role_handler(options, _, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-role_handler(post, User, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    get_payload(Document, Request),
-
-    create_context(SystemDB, commit_info{ author: "role_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
-
-    do_or_die(_{ resource_name : Resource_Name,
-                 organization : Organization,
-                 actions : Actions
-               } :< Document,
-              error(bad_api_document)),
-
-    with_transaction(Ctx,
-                     update_role(SystemDB, Auth_ID, User, Organization, Resource_Name, Actions),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
-
 
 %%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 

@@ -108,7 +108,7 @@ add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
 add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
 
     (   agent_name_exists(SystemDB, Nick)
-    ->  throw(error(user_already_exists(Nick)))
+    ->  throw(error(user_already_exists(Nick), _))
     ;   true),
 
     add_organization(SystemDB, Nick, Organization_URI),
@@ -236,7 +236,7 @@ add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
 
     do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name))),
+              error(no_manage_capability(Organization,Resource_Name), _)),
 
     forall(
         ask(Context,
@@ -292,18 +292,23 @@ get_role(Askable, Auth_ID, Document, Response) :-
 
     run_context_ast_jsonld_response(Query_Context,Query,Response).
 
-update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
+update_role(Context, Auth_ID, Users, Organization, Resource_Name, Actions) :-
     exists_role(Context, User, Organization, Resource_Name),
     !,
 
-    user_name_uri(Context, User, User_URI),
+    findall(User_URI,
+            (   member(User, Users),
+                user_name_uri(Context, User, User_URI)),
+            User_URIs),
+
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
 
     do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name))),
+              error(no_manage_capability(Organization,Resource_Name), _)),
 
     forall(ask(Context,
-               (   t(User_URI, system:role, Role_URI),
+               (   member(User_URI, User_URIs),
+                   t(User_URI, system:role, Role_URI),
                    t(Role_URI, system:capability, Capability_URI),
                    t(Capability_URI, system:direct_capability_scope, Resource_URI),
                    t(Capability_URI, rdf:type, system:'Capability'),
@@ -313,7 +318,8 @@ update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
            true),
 
     forall(ask(Context,
-               (   t(User_URI, system:role, Role_URI),
+               (   member(User_URI, User_URIs),
+                   t(User_URI, system:role, Role_URI),
                    t(Role_URI, system:capability, Capability_URI),
                    t(Capability_URI, system:direct_capability_scope, Resource_URI),
                    t(Capability_URI, rdf:type, system:'Capability'),
@@ -321,8 +327,9 @@ update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
                    insert(Capability_URI, system:action, Action)
                )),
            true).
-update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
-    add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions).
+update_role(Context, Auth_ID, Users, Organization, Resource_Name, Actions) :-
+    forall(member(User, Users),
+           add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions)).
 
 delete_role(Context, Auth_ID, User, Organization, Resource_Name) :-
     exists_role(Context, User, Organization, Resource_Name),
@@ -332,7 +339,7 @@ delete_role(Context, Auth_ID, User, Organization, Resource_Name) :-
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
 
     do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name))),
+              error(no_manage_capability(Organization,Resource_Name), _)),
 
     forall(ask(Context,
                (
@@ -559,7 +566,7 @@ test(update_role, [
         Context2,
         update_role(Context2,
                     doc:admin,
-                    "admin",
+                    ["admin"],
                     "admin",
                     "flurp",
                     [system:inference_read_access]
@@ -582,6 +589,55 @@ test(update_role, [
         (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
         (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
         (Cap.'system:action'.'@id') = 'system:inference_write_access').
+
+
+test(add_role_no_capability, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State)),
+         error(no_manage_capability("admin","flurp"), _)
+     ]) :-
+
+    Name = "Gavin",
+    add_user(Name, "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+
+    create_db_without_schema("admin", "flurp"),
+    create_context(system_descriptor{},
+                   commit_info{ message : "http://foo", author : "bar"},
+                   Context),
+
+    with_transaction(
+        Context,
+        add_role(Context,
+                 User_URI,
+                 "admin",
+                 "admin",
+                 "flurp",
+                 [system:inference_write_access]
+                ),
+        _).
+
+test(update_role_no_capability, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State)),
+         error(no_manage_capability("Kevin","flurp"),_)
+     ]) :-
+
+    add_user("Kevin", "kevin@terminusdb.com", "here.i.am", some('password'), _Kevin_URI),
+    add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), Gavin_URI),
+
+    create_db_without_schema("Kevin", "flurp"),
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
+
+    with_transaction(
+        Context,
+        update_role(Context,
+                 Gavin_URI,
+                 ["Kevin"],
+                 "Kevin",
+                 "flurp",
+                 [system:inference_write_access]
+                ),
+        _).
 
 
 :- end_tests(user_management).
