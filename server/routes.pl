@@ -1951,7 +1951,7 @@ user_handler(post, Request) :-
                                           message: "internal system operation"
                                         }, Ctx),
     with_transaction(Ctx,
-                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option),
+                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option, _),
                      _),
 
     write_cors_headers(Request),
