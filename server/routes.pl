@@ -80,7 +80,7 @@
 http:location(root, '/', []).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_catch(connect_handler(Method)),
+:- http_handler(root(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -88,12 +88,7 @@ http:location(root, '/', []).
  * connect_handler(+Method,+Request:http_request) is det.
  */
 /* NOTE: Need to return list of databases and access rights */
-connect_handler(options,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-connect_handler(get,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-
+connect_handler(get,Request) :-
     open_descriptor(system_descriptor{}, System_DB),
     authenticate(System_DB, Request, Auth_ID),
 
@@ -139,16 +134,13 @@ test(connection_result_dbs, [])
 
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(console/_Path), cors_catch(console_handler(Method)),
+:- http_handler(root(console/_Path), cors_handler(Method, console_handler),
                 [method(Method),
                  methods([options,get])]).
 
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(options,Request) :-
-    write_cors_headers(Request),
-    nl.
 console_handler(get,Request) :-
     config:index_path(Index_Path),
     write_cors_headers(Request),
@@ -164,31 +156,14 @@ test(console_route) :-
 :- end_tests(console_route).
 
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(message), cors_catch(message_handler(Method)),
+:- http_handler(root(message), cors_handler(Method, message_handler),
                 [method(Method),
                  methods([options,get,post])]).
 
 /*
  * message_handler(+Method,+Request) is det.
  */
-message_handler(options,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-message_handler(get,Request) :-
-    try_get_param('system:message',Request,Message),
-
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Message, [])
-    ),
-
-    http_log('~N[Message] ~s~n',[Payload]),
-
-    write_cors_headers(Request),
-
-    reply_json(_{'system:status' : 'system:success'}).
-message_handler(post,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
+message_handler(_Method,Request) :-
     try_get_param('system:message',Request,Message),
 
     with_output_to(
@@ -203,18 +178,14 @@ message_handler(post,R) :-
     reply_json(_{'system:status' : 'system:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db/Account/DB), cors_catch(db_handler(Method, Account, DB)),
+:- http_handler(root(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
                  methods([options,post,delete])]).
 
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
-db_handler(options,_Account,_DB,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-db_handler(post,Organization,DB,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
+db_handler(post, Organization, DB, Request) :-
     open_descriptor(system_descriptor{}, System_DB),
     /* POST: Create database */
     authenticate(System_DB, Request, Auth),
@@ -333,7 +304,7 @@ test(db_auth_test, [
 
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(triples/Path), cors_catch(triples_handler(Method,Path)),
+:- http_handler(root(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -344,9 +315,6 @@ test(db_auth_test, [
  *
  * Get or update a schema.
  */
-triples_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    nl. % send headers
 triples_handler(get,Path,Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
@@ -369,8 +337,7 @@ triples_handler(get,Path,Request) :-
 
     write_cors_headers(Request),
     reply_json(String).
-triples_handler(post,Path,R) :- % should this be put?
-    add_payload_to_request(R,Request), % this should be automatic.
+triples_handler(post,Path,Request) :- % should this be put?
     open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus,Request,Auth),
@@ -503,7 +470,7 @@ layer:LayerIdRestriction a owl:Restriction.",
 :- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(frame/Path), cors_catch(frame_handler(Method,Path)),
+:- http_handler(root(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -513,11 +480,7 @@ layer:LayerIdRestriction a owl:Restriction.",
  *
  * Establishes frame responses
  */
-frame_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-frame_handler(post, Path, R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
+frame_handler(post, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     /* Read Document */
     authenticate(Terminus, Request, Auth),
@@ -576,11 +539,11 @@ test(get_filled_frame, [])
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(root(woql), cors_catch(woql_handler(Method)),
+:- http_handler(root(woql), cors_handler(Method, woql_handler),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Path), cors_catch(woql_handler(Method,Path)),
+:- http_handler(root(woql/Path), cors_handler(Method, woql_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -594,11 +557,7 @@ test(get_filled_frame, [])
  * NOTE: This is not obtaining appropriate cors response data
  * from terminus database on spartacus.
  */
-woql_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-woql_handler(post, R) :-
-    add_payload_to_request(R,Request),
+woql_handler(post, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -609,12 +568,7 @@ woql_handler(post, R) :-
     write_cors_headers(Request),
     reply_json_dict(JSON).
 
-woql_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-
-woql_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
+woql_handler(post, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -1100,16 +1054,11 @@ test(get_object, [])
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone/Account/DB), cors_catch(clone_handler(Method, Account, DB)),
+:- http_handler(root(clone/Account/DB), cors_handler(Method, clone_handler(Account, DB)),
                 [method(Method),
                  methods([options,post])]).
 
-clone_handler(options, _, _, Request) :-
-    write_cors_headers(Request),
-    nl.
-clone_handler(post, Account, DB, R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-
+clone_handler(post, Account, DB, Request) :-
     open_descriptor(system_descriptor{}, System_DB),
     authenticate(System_DB, Request, Auth),
 
@@ -1134,14 +1083,11 @@ clone_handler(post, Account, DB, R) :-
         _{'system:status' : 'system:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/Path), cors_catch(fetch_handler(Method,Path)),
+:- http_handler(root(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
 fetch_handler(post,Path,Request) :-
     request_remote_authorization(Request, Authorization),
     % Calls pack on remote
@@ -1181,17 +1127,13 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
+:- http_handler(root(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
 
-rebase_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-rebase_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
+rebase_handler(post, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -1304,13 +1246,13 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pack/Path), cors_catch(pack_handler(Method,Path)),
+:- http_handler(root(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
-pack_handler(post,Path,R) :-
+pack_handler(post,Path,Request) :-
     open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, R, Auth_ID),
+    authenticate(Terminus, Request, Auth_ID),
 
     atomic_list_concat([Path, '/local/_commits'], Repository_Path),
     resolve_absolute_string_descriptor(Repository_Path,
@@ -1331,7 +1273,6 @@ pack_handler(post,Path,R) :-
 
     assert_read_access(Context),
 
-    add_payload_to_request(R,Request),
     get_payload(Document,Request),
 
     (   _{ repository_head : Layer_ID } :< Document
@@ -1461,18 +1402,13 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(unpack/Path), cors_catch(unpack_handler(Method,Path)),
+:- http_handler(root(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
-unpack_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-unpack_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
-
+unpack_handler(post, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, R, Auth_ID),
+    authenticate(Terminus, Request, Auth_ID),
 
     string_concat(Path, "/local/_commits", Full_Path),
     do_or_die(
@@ -1529,17 +1465,12 @@ unpack_handler(post, Path, R) :-
 :- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
+:- http_handler(root(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-% NOTE: We do this everytime - it should be handled automagically.
-push_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-push_handler(post,Path,R) :-
-    add_payload_to_request(R,Request),
+push_handler(post,Path,Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Auth_ID),
 
@@ -1604,17 +1535,12 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
+:- http_handler(root(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-% NOTE: We do this everytime - it should be handled automagically.
-pull_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    nl.
-pull_handler(post,Path,R) :-
-    add_payload_to_request(R,Request),
+pull_handler(post,Path,Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, Local_Auth),
 
@@ -1655,22 +1581,18 @@ pull_handler(post,Path,R) :-
                  'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
+:- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-branch_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    nl.
-branch_handler(post,Path,R) :-
+branch_handler(post,Path,Request) :-
     resolve_absolute_string_descriptor(Path, Branch_Descriptor),
     branch_descriptor{
         repository_descriptor: Destination_Descriptor,
         branch_name: Branch_Name
     } :< Branch_Descriptor,
 
-    add_payload_to_request(R,Request),
     get_payload(Document, Request),
 
     (   get_dict(origin, Document, Origin_Path)
@@ -1838,26 +1760,21 @@ test(create_branch_from_commit_graph_error, [
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(prefixes/Path), cors_catch(prefix_handler(Method,Path)),
+:- http_handler(root(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-prefix_handler(options, _Path, _R) :-
-
+prefix_handler(post, _Path, _Request) :-
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(graph/Path), cors_catch(graph_handler(Method,Path)),
+:- http_handler(root(graph/Path), cors_handler(Method, graph_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
 
-graph_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-graph_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
+graph_handler(post, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -1878,8 +1795,7 @@ graph_handler(post, Path, R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-graph_handler(delete, Path, R) :-
-    add_payload_to_request(R,Request),
+graph_handler(delete, Path, Request) :-
     open_descriptor(system_descriptor{}, Terminus),
     authenticate(Terminus, Request, _Auth_ID),
     % No descriptor to work with until the query sets one up
@@ -1968,20 +1884,16 @@ test(delete_graph, [
 :- end_tests(graph_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(user), cors_catch(user_handler(Method)),
+:- http_handler(root(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(user/Name), cors_catch(user_handler(Method,Name)),
+:- http_handler(root(user/Name), cors_handler(Method, user_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
 
-user_handler(options, _Name, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-user_handler(post, Name, R) :-
-    add_payload_to_request(R,Request),
+user_handler(post, Name, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     do_or_die(is_super_user(Auth_ID, _{}),
@@ -1998,9 +1910,7 @@ user_handler(post, Name, R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-user_handler(delete, Name, R) :-
-    add_payload_to_request(R,Request),
-
+user_handler(delete, Name, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     is_super_user(Auth_ID, _{}),
@@ -2019,11 +1929,7 @@ user_handler(delete, Name, R) :-
     reply_json(_{'system:status' : "system:success"}).
 
 
-user_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-user_handler(post, R) :-
-    add_payload_to_request(R,Request),
+user_handler(post, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     do_or_die(is_super_user(Auth_ID, _{}),
@@ -2050,8 +1956,7 @@ user_handler(post, R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-user_handler(delete, R) :-
-    add_payload_to_request(R,Request),
+user_handler(delete, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     is_super_user(Auth_ID, _{}),
@@ -2076,20 +1981,16 @@ user_handler(delete, R) :-
     reply_json(_{'system:status' : "system:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(organization), cors_catch(organization_handler(Method)),
+:- http_handler(root(organization), cors_handler(Method, organization_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(organization/Name), cors_catch(organization_handler(Method,Name)),
+:- http_handler(root(organization/Name), cors_handler(Method, organization_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
 
-organization_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-organization_handler(post, R) :-
-    add_payload_to_request(R,Request),
+organization_handler(post, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     do_or_die(is_super_user(Auth_ID, _{}),
@@ -2110,8 +2011,7 @@ organization_handler(post, R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-organization_handler(delete, R) :-
-    add_payload_to_request(R,Request),
+organization_handler(delete, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     is_super_user(Auth_ID, _{}),
@@ -2135,11 +2035,7 @@ organization_handler(delete, R) :-
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
 
-organization_handler(options, _Name, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-organization_handler(post, Name, R) :-
-    add_payload_to_request(R,Request),
+organization_handler(post, Name, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     do_or_die(is_super_user(Auth_ID, _{}),
@@ -2159,9 +2055,7 @@ organization_handler(post, Name, R) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-organization_handler(delete, Name, R) :-
-    add_payload_to_request(R,Request),
-
+organization_handler(delete, Name, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     is_super_user(Auth_ID, _{}),
@@ -2181,16 +2075,12 @@ organization_handler(delete, Name, R) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(update_role), cors_catch(update_role_handler(Method)),
+:- http_handler(root(update_role), cors_handler(Method, update_role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-update_role_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-update_role_handler(post, R) :-
-    add_payload_to_request(R,Request),
+update_role_handler(post, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     get_payload(Document, Request),
@@ -2214,17 +2104,12 @@ update_role_handler(post, R) :-
     reply_json(_{'system:status' : "system:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(role), cors_catch(role_handler(Method)),
+:- http_handler(root(role), cors_handler(Method, role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-
-role_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-role_handler(post, R) :-
-    add_payload_to_request(R,Request),
+role_handler(post, Request) :-
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
     get_payload(Document, Request),
@@ -2234,15 +2119,28 @@ role_handler(post, R) :-
     write_cors_headers(Request),
     reply_json(Response).
 
-%%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 
-% We want to use cors whenever we're throwing an error.
-%:- set_setting(http:cors, [*]).
+%%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
+:- meta_predicate cors_handler(+,2,?).
+cors_handler(options, _Goal, Request) :-
+    !,
+    write_cors_headers(Request),
+    format('~n').
+cors_handler(Method, Goal, R) :-
+    (   memberchk(Method, [post, put, delete])
+    ->  add_payload_to_request(R,Request)
+    ;   Request = R),
+    cors_catch(Method, Goal, Request).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(1,?).
-cors_catch(Goal,Request) :-
-    catch(call(Goal, Request),
+:- meta_predicate cors_catch(+,2,?).
+cors_catch(Method, Goal, Request) :-
+    strip_module(Goal, Module, PlainGoal),
+    PlainGoal =.. [Head|Args],
+    NewArgs = [Method|Args],
+    NewPlainGoal =.. [Head|NewArgs],
+    NewGoal = Module:NewPlainGoal,
+    catch(call(NewGoal, Request),
           E,
           (
               write_cors_headers(Request),
