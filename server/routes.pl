@@ -88,11 +88,8 @@ http:location(root, '/', []).
  * connect_handler(+Method,+Request:http_request) is det.
  */
 /* NOTE: Need to return list of databases and access rights */
-connect_handler(get,Request) :-
-    open_descriptor(system_descriptor{}, System_DB),
-    authenticate(System_DB, Request, Auth_ID),
-
-    user_object(System_DB, Auth_ID, User_Obj),
+connect_handler(get, Request, System_DB, Auth) :-
+    user_object(System_DB, Auth, User_Obj),
     User_Obj2 = (User_Obj.put('system:user_key_hash', "")),
 
     write_cors_headers(Request),
@@ -141,7 +138,7 @@ test(connection_result_dbs, [])
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(get,Request) :-
+console_handler(get,Request, _System_DB, _Auth) :-
     config:index_path(Index_Path),
     write_cors_headers(Request),
     throw(http_reply(file('text/html', Index_Path))).
@@ -163,7 +160,7 @@ test(console_route) :-
 /*
  * message_handler(+Method,+Request) is det.
  */
-message_handler(_Method,Request) :-
+message_handler(_Method, Request, _System_DB, _Auth) :-
     try_get_param('system:message',Request,Message),
 
     with_output_to(
@@ -185,11 +182,8 @@ message_handler(_Method,Request) :-
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
-db_handler(post, Organization, DB, Request) :-
-    open_descriptor(system_descriptor{}, System_DB),
+db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
-    authenticate(System_DB, Request, Auth),
-
     do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
               error(unknown_organization(Organization))), % dubious
 
@@ -211,11 +205,8 @@ db_handler(post, Organization, DB, Request) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
-db_handler(delete,Organization,DB,Request) :-
+db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
-    open_descriptor(system_descriptor{}, System_DB),
-    authenticate(System_DB, Request, Auth),
-
     do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
               error(unknown_organization(Organization))), % dubious
 
@@ -315,17 +306,13 @@ test(db_auth_test, [
  *
  * Get or update a schema.
  */
-triples_handler(get,Path,Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    /* Read Document */
-    authenticate(Terminus,Request,Auth),
-
+triples_handler(get,Path,Request, System_DB, Auth) :-
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
     create_context(Descriptor, Pre_Context),
 
     merge_dictionaries(
         query_context{
-            system: Terminus,
+            system: System_DB,
             authorization : Auth,
             filter: type_name_filter{ type: Graph.type,
                                       names: [Graph.name] }
@@ -337,10 +324,8 @@ triples_handler(get,Path,Request) :-
 
     write_cors_headers(Request),
     reply_json(String).
-triples_handler(post,Path,Request) :- % should this be put?
-    open_descriptor(system_descriptor{}, Terminus),
+triples_handler(post,Path,Request, System_DB, Auth) :- % should this be put?
     /* Read Document */
-    authenticate(Terminus,Request,Auth),
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
 
     get_payload(Triples_Document,Request),
@@ -354,7 +339,7 @@ triples_handler(post,Path,Request) :- % should this be put?
     merge_dictionaries(
         query_context{
             commit_info : Commit_Info,
-            system: Terminus,
+            system: System_DB,
             authorization : Auth,
             write_graph : Graph
         }, Pre_Context, Context),
@@ -480,14 +465,13 @@ layer:LayerIdRestriction a owl:Restriction.",
  *
  * Establishes frame responses
  */
-frame_handler(post, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
+frame_handler(post, Path, Request, System_DB, Auth) :-
     /* Read Document */
-    authenticate(Terminus, Request, Auth),
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Context0),
     merge_dictionaries(
         query_context{
+            system: System_DB,
             authorization: Auth
         },
         Context0,Database),
@@ -557,31 +541,27 @@ test(get_filled_frame, [])
  * NOTE: This is not obtaining appropriate cors response data
  * from terminus database on spartacus.
  */
-woql_handler(post, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+woql_handler(post, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
     empty_context(Context),
 
-    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
+    woql_run_context(Request, System_DB, Auth, Context, JSON),
 
     write_cors_headers(Request),
     reply_json_dict(JSON).
 
-woql_handler(post, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+woql_handler(post, Path, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Context),
 
-    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
+    woql_run_context(Request, System_DB, Auth, Context, JSON),
 
     write_cors_headers(Request),
 
     reply_json_dict(JSON).
 
-woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
+woql_run_context(Request, System_DB, Auth_ID, Context, JSON) :-
 
     try_get_param('query',Request,Query),
 
@@ -600,7 +580,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            system: Terminus,
+            system: System_DB,
             update_guard : _Guard,
             authorization : Auth_ID
         }, Context0, Final_Context),
@@ -1058,10 +1038,7 @@ test(get_object, [])
                 [method(Method),
                  methods([options,post])]).
 
-clone_handler(post, Account, DB, Request) :-
-    open_descriptor(system_descriptor{}, System_DB),
-    authenticate(System_DB, Request, Auth),
-
+clone_handler(post, Account, DB, Request, System_DB, Auth) :-
     assert_auth_action_scope(System_DB, Auth, system:create_database, "_system"),
 
     request_remote_authorization(Request, Authorization),
@@ -1088,11 +1065,12 @@ clone_handler(post, Account, DB, Request) :-
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(post,Path,Request) :-
+fetch_handler(post,Path,Request, _System_DB, _Auth) :-
     request_remote_authorization(Request, Authorization),
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
+    % DUBIOUS is authorization happening here?
     remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
                  New_Head_Layer_Id, Head_Has_Updated),
 
@@ -1133,27 +1111,24 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
                  methods([options,post])]).
 
 
-rebase_handler(post, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+rebase_handler(post, Path, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
-
     resolve_absolute_string_descriptor(Path, Our_Descriptor),
-    check_descriptor_auth(Terminus, Our_Descriptor, system:rebase, Auth_ID),
+    check_descriptor_auth(System_DB, Our_Descriptor, system:rebase, Auth),
 
     get_payload(Document, Request),
     (   get_dict(rebase_from, Document, Their_Path)
     ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
     ;   throw(error(rebase_from_missing))),
-    check_descriptor_auth(Terminus, Their_Descriptor, system:instance_read_access, Auth_ID),
-    check_descriptor_auth(Terminus, Their_Descriptor, system:schema_read_access, Auth_ID),
+    check_descriptor_auth(System_DB, Their_Descriptor, system:instance_read_access, Auth),
+    check_descriptor_auth(System_DB, Their_Descriptor, system:schema_read_access, Auth),
 
     (   get_dict(author, Document, Author)
     ->  true
     ;   throw(error(rebase_author_missing))),
 
     Strategy_Map = [],
-    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
     Incomplete_Reply = _{ 'system:status' : "system:success",
                           forwarded_commits : Forwarded_Commits,
@@ -1250,10 +1225,7 @@ test(rebase_divergent_history, [
                 [method(Method),
                  methods([options,post])]).
 
-pack_handler(post,Path,Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
-
+pack_handler(post,Path,Request, System_DB, Auth) :-
     atomic_list_concat([Path, '/local/_commits'], Repository_Path),
     resolve_absolute_string_descriptor(Repository_Path,
                                        Repository_Descriptor),
@@ -1267,8 +1239,8 @@ pack_handler(post,Path,Request) :-
 
     merge_dictionaries(
         query_context{
-            authorization : Auth_ID,
-            system : Terminus
+            authorization : Auth,
+            system : System_DB
         }, Pre_Context, Context),
 
     assert_read_access(Context),
@@ -1406,10 +1378,7 @@ test(pack_nothing, [
                 [method(Method),
                  methods([options,post])]).
 
-unpack_handler(post, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
-
+unpack_handler(post, Path, Request, System_DB, Auth) :-
     string_concat(Path, "/local/_commits", Full_Path),
     do_or_die(
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
@@ -1420,9 +1389,9 @@ unpack_handler(post, Path, Request) :-
                     },
                    400)),
 
-    check_descriptor_auth(Terminus, Repository_Descriptor,
+    check_descriptor_auth(System_DB, Repository_Descriptor,
                           system:commit_write_access,
-                          Auth_ID),
+                          Auth),
 
     get_payload(Payload, Request),
 
@@ -1470,10 +1439,7 @@ unpack_handler(post, Path, Request) :-
                  prefix,
                  methods([options,post])]).
 
-push_handler(post,Path,Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
-
+push_handler(post,Path,Request, _System_DB, Auth) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     do_or_die(
@@ -1491,7 +1457,7 @@ push_handler(post,Path,Request) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth,
          authorized_push(Authorization),Result),
 
     (   Result = none
@@ -1540,10 +1506,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                  prefix,
                  methods([options,post])]).
 
-pull_handler(post,Path,Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Local_Auth),
-
+pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     get_payload(Document, Request),
@@ -1586,7 +1549,7 @@ pull_handler(post,Path,Request) :-
                  prefix,
                  methods([options,post])]).
 
-branch_handler(post,Path,Request) :-
+branch_handler(post,Path,Request, _System_DB, _Auth) :-
     resolve_absolute_string_descriptor(Path, Branch_Descriptor),
     branch_descriptor{
         repository_descriptor: Destination_Descriptor,
@@ -1599,6 +1562,7 @@ branch_handler(post,Path,Request) :-
     ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
     ;   Origin_Descriptor = empty),
 
+    % DUBIOUS are we even doing authentication here?
     branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
     write_cors_headers(Request),
@@ -1765,7 +1729,7 @@ test(create_branch_from_commit_graph_error, [
                  prefix,
                  methods([options,post])]).
 
-prefix_handler(post, _Path, _Request) :-
+prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1774,9 +1738,7 @@ prefix_handler(post, _Path, _Request) :-
                  prefix,
                  methods([options,post,delete])]).
 
-graph_handler(post, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+graph_handler(post, Path, Request, _System_Db, _Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
 
@@ -1787,6 +1749,7 @@ graph_handler(post, Path, Request) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
+    % DUBIOUS authentication??
     create_graph(Descriptor,
                  Commit_Info,
                  Graph.type,
@@ -1795,9 +1758,7 @@ graph_handler(post, Path, Request) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-graph_handler(delete, Path, Request) :-
-    open_descriptor(system_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+graph_handler(delete, Path, Request, _System_DB, _Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
     get_payload(Document, Request),
@@ -1807,6 +1768,7 @@ graph_handler(delete, Path, Request) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
+    % DUBIOUS authentication?
     delete_graph(Descriptor,
                  Commit_Info,
                  Graph.type,
@@ -1893,34 +1855,28 @@ test(delete_graph, [
                  prefix,
                  methods([options,post,delete])]).
 
-user_handler(post, Name, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
+user_handler(post, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(user_update_requires_superuser)),
     %
     get_payload(Document, Request),
 
-    create_context(SystemDB, commit_info{ author: "user_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      update_user(Ctx, Name, Document),
                      _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-user_handler(delete, Name, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    is_super_user(Auth_ID, _{}),
-    %
-    do_or_die(is_super_user(Auth_ID, _{}),
+user_handler(delete, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(delete_user_requires_superuser)),
 
-    create_context(SystemDB, commit_info{ author: "user_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      delete_user(Ctx, Name),
                      _),
@@ -1929,10 +1885,8 @@ user_handler(delete, Name, Request) :-
     reply_json(_{'system:status' : "system:success"}).
 
 
-user_handler(post, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
+user_handler(post, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(user_creation_requires_superuser)),
 
     get_payload(Document, Request),
@@ -1947,21 +1901,17 @@ user_handler(post, Request) :-
     ->  Password_Option = some(Password)
     ;   Password_Option = none),
 
-    create_context(SystemDB, commit_info{ author: "user_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option, _),
                      _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-user_handler(delete, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    is_super_user(Auth_ID, _{}),
-    %
-    do_or_die(is_super_user(Auth_ID, _{}),
+user_handler(delete, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(delete_user_requires_superuser)),
     %
     get_payload(Document, Request),
@@ -1970,9 +1920,9 @@ user_handler(delete, Request) :-
               error(malformed_user_deletion_document(Document))
              ),
 
-    create_context(SystemDB, commit_info{ author: "user_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      delete_user(Ctx, Agent_Name),
                      _),
@@ -1990,10 +1940,8 @@ user_handler(delete, Request) :-
                  prefix,
                  methods([options,post,delete])]).
 
-organization_handler(post, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
+organization_handler(post, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(organization_creation_requires_superuser)),
 
     get_payload(Document, Request),
@@ -2002,21 +1950,17 @@ organization_handler(post, Request) :-
               error(malformed_organization_document(Document))
              ),
 
-    create_context(SystemDB, commit_info{ author: "organization_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      add_organization(Ctx, Name),
                      _),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-organization_handler(delete, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    is_super_user(Auth_ID, _{}),
-    %
-    do_or_die(is_super_user(Auth_ID, _{}),
+organization_handler(delete, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(delete_organization_requires_superuser)),
     %
     get_payload(Document, Request),
@@ -2025,9 +1969,9 @@ organization_handler(delete, Request) :-
               error(malformed_organization_deletion_document(Document))
              ),
 
-    create_context(SystemDB, commit_info{ author: "organization_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     with_transaction(Ctx,
                      delete_organization(Ctx, Name),
                      _),
@@ -2035,17 +1979,15 @@ organization_handler(delete, Request) :-
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
 
-organization_handler(post, Name, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
+organization_handler(post, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(organization_update_requires_superuser)),
     %
     get_payload(Document, Request),
 
-    create_context(SystemDB, commit_info{ author: "organization_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
     do_or_die(_{ organization_name : New_Name } :< Document,
               error(malformed_api_document(Document), _)),
 
@@ -2055,15 +1997,11 @@ organization_handler(post, Name, Request) :-
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : "system:success"}).
-organization_handler(delete, Name, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
-    is_super_user(Auth_ID, _{}),
-    %
-    do_or_die(is_super_user(Auth_ID, _{}),
+organization_handler(delete, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
               error(delete_organization_requires_superuser)),
 
-    create_context(SystemDB, commit_info{ author: "organization_handler/2",
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
                                           message: "internal system operation"
                                         }, Ctx),
     with_transaction(Ctx,
@@ -2080,14 +2018,12 @@ organization_handler(delete, Name, Request) :-
                  prefix,
                  methods([options,post])]).
 
-update_role_handler(post, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
+update_role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    create_context(SystemDB, commit_info{ author: "role_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
+    create_context(System_DB, commit_info{ author: "role_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
 
     do_or_die(_{ database_name : Database_Name,
                  agent_names : Agents,
@@ -2097,7 +2033,7 @@ update_role_handler(post, Request) :-
               error(bad_api_document)),
 
     with_transaction(Ctx,
-                     update_role(SystemDB, Auth_ID, Agents, Organization, Database_Name, Actions),
+                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
                      _),
 
     write_cors_headers(Request),
@@ -2109,12 +2045,10 @@ update_role_handler(post, Request) :-
                  prefix,
                  methods([options,post])]).
 
-role_handler(post, Request) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    authenticate(SystemDB, Request, Auth_ID),
+role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    get_role(SystemDB, Auth_ID, Document, Response),
+    get_role(System_DB, Auth, Document, Response),
 
     write_cors_headers(Request),
     reply_json(Response).
@@ -2130,17 +2064,29 @@ cors_handler(Method, Goal, R) :-
     (   memberchk(Method, [post, put, delete])
     ->  add_payload_to_request(R,Request)
     ;   Request = R),
-    cors_catch(Method, Goal, Request).
+
+    open_descriptor(system_descriptor{}, System_Database),
+    catch((   authenticate(System_Database, Request, Auth),
+              cors_catch(Method, Goal, Request, System_Database, Auth)),
+              
+          error(authentication_incorrect),
+
+          (   write_cors_headers(Request),
+              
+              reply_json(_{'system:status' : 'system:failure',
+                           'system:message' : 'Incorrect authentication information'
+                          },
+                         [status(401)]))).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(+,2,?).
-cors_catch(Method, Goal, Request) :-
+cors_catch(Method, Goal, Request, System_Database, Auth) :-
     strip_module(Goal, Module, PlainGoal),
     PlainGoal =.. [Head|Args],
     NewArgs = [Method|Args],
     NewPlainGoal =.. [Head|NewArgs],
     NewGoal = Module:NewPlainGoal,
-    catch(call(NewGoal, Request),
+    catch(call(NewGoal, Request, System_Database, Auth),
           E,
           (
               write_cors_headers(Request),
@@ -2162,6 +2108,28 @@ customise_exception(reply_json(M,Status)) :-
                [status(Status)]).
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
+customise_exception(error(authentication_incorrect)) :-
+    reply_json(_{'system:status' : 'system:failure',
+                 'system:message' : 'Incorrect authentication information'
+                },
+               [status(401)]).
+customise_exception(error(not_authenticated)) :-
+    reply_json(_{'system:status' : 'system:failure',
+                 'system:message' : 'No authentication supplied'
+                },
+               [status(401)]).
+customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
+    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
+           [Scope,Action,Auth]),
+    reply_json(_{'system:status' : 'system:failure',
+                 'system:message' : Msg,
+                 'auth' : Auth,
+                 'action' : Action,
+                 'scope' : Scope
+                },
+               [status(403)]).
+
+%% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
     reply_json(_{'system:status' : 'system:failure',
@@ -2226,12 +2194,6 @@ customise_exception(error(unknown_deletion_error(Doc_ID))) :-
                  'system:message' : MSG,
                  'system:object' : Doc_ID},
                [status(400)]).
-customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
-    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
-           [Scope,Action,Auth]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg},
-               [status(403)]).
 customise_exception(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
@@ -2378,40 +2340,18 @@ fetch_jwt_data(Request, Username) :-
  *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message.
  */
-authenticate(DB, Request, Auth) :-
+authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
-    (   user_key_user_id(DB, Username, KS, Auth)
-    ->  true
-    ;   throw(http_reply(authorize(_{'system:status' : 'system:failure',
-                                     'system:message' : 'Not a valid key'})))).
-authenticate(DB, Request, Auth) :-
+    do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
+              error(authentication_incorrect)).
+authenticate(System_Askable, Request, Auth) :-
     % Try JWT if no http keys
     fetch_jwt_data(Request, Username),
     !,
-    (   username_auth(DB, Username, Auth)
-    ->  true
-    ;   throw(http_reply(authorize(_{'system:status' : 'system:failure',
-                                     'system:message' : 'Not a valid key'})))).
-authenticate(_, _, _) :-
-    throw(http_reply(method_not_allowed(_{'system:status' : 'system:failure',
-                                          'system:message' : "No authentication supplied",
-                                          'system:object' : 'authenticate'}))).
-
-connection_authorised_user(Request, User_ID) :-
-    open_descriptor(system_descriptor{}, DB),
-    fetch_authorization_data(Request, Username, KS),
-    !,
-    (   user_key_user_id(DB, Username, KS, User_ID)
-    ->  true
-    ;   throw(http_reply(authorize(_{'system:status' : 'system:failure',
-                                     'system:message' : 'Not a valid key',
-                                     'system:object' : KS})))).
-connection_authorised_user(Request, User_ID) :-
-    open_descriptor(system_descriptor{}, DB),
-    fetch_jwt_data(Request, Username),
-    username_user_id(DB, Username, User_ID).
-
+    do_or_die(username_auth(System_Askable, Username, Auth),
+              error(authentication_incorrect)).
+authenticate(_, _, system:anonymous).
 
 /*
  * write_cors_headers(Request) is det.
