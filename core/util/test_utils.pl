@@ -286,7 +286,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
 create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    create_db(Organization, Db_Name, "test", "a test db", Prefixes).
+    try_create_db(Organization, Db_Name, "test", "a test db", Prefixes).
 
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),

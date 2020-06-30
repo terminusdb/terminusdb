@@ -15,8 +15,8 @@
               add_organization/2,
               add_organization/3,
 
-              add_role/5,
-              update_role/5,
+              add_role/6,
+              update_role/6,
               get_role/4,
               exists_role/4
           ]).
@@ -68,6 +68,16 @@ add_organization(Context, Name, Organization_URI) :-
             insert(doc:admin_organization, system:resource_includes, Organization_URI)
         ),
        [compress_prefixes(false)]).
+
+user_managed_resource(Askable, User_Uri, Resource_Uri) :-
+    ask(Askable,
+        (   t(User_Uri, system:role, Role_Uri),
+            t(Role_Uri, rdf:type, system:'Role'),
+            t(Role_Uri, system:capability, Capability_Uri),
+            t(Capability_Uri, system:capability_scope, Resource_Uri),
+            t(Capability_Uri, rdf:type, system:'Capability'),
+            t(Capability_Uri, system:action, system:manage_capabilities)
+        )).
 
 update_organization(Name, New_Name) :-
     create_context(system_descriptor{}, Context),
@@ -221,9 +231,12 @@ exists_role(Askable, User, Organization, Resource_Name) :-
                 t(Capability_URI, system:direct_capability_scope, Resource_URI)
             ))).
 
-add_role(Context, User, Organization, Resource_Name, Actions) :-
+add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
     user_name_uri(Context, User, User_URI),
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
+
+    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
+              error(no_manage_capability(Organization,Resource_Name))),
 
     forall(
         ask(Context,
@@ -245,32 +258,49 @@ get_role(Askable, Auth_ID, Document, Response) :-
     ->  Agent_Var = Agent^^xsd:string
     ;   Agent_Var = v('Agent')),
 
-    (   get_dict(resource_name, Document, Resource)
-    ->  Resource_Var = Resource^^xsd:string
-    ;   Resource_Var = v('Resource')),
+    (   get_dict(database_name, Document, Database_Name)
+    ->  Database_Name_Var = Database_Name^^xsd:string
+    ;   Database_Name_Var = v('Database_Name')),
+
+    (   get_dict(organization_name, Document, Organization_Name)
+    ->  Organization_Var = Organization_Name^^xsd:string
+    ;   Organization_Var = v('Organization')),
 
     create_context(Askable, Query_Context),
-    Query = ((v('Auth_ID') = Auth_ID),
-             t(v('Auth_ID'), system:agent_name, Agent_Var),
-             t(v('Auth_ID'), system:role, v('Control_Role_ID')),
-             t(v('Control_Role_ID'), system:capability, v('Control_Capability_ID')),
-             t(v('Control_Capability_ID'), system:capability_scope, v('Resource_ID')),
-             t(v('Control_Capability_ID'), system:action, system:manage_capabilities),
-             t(v('Resource_ID'), system:resource_name, Resource_Var),
-             t(v('Capability_ID'), system:capability_scope, v('Resource_ID')),
-             t(v('Role_ID'), system:capability, v('Capability_ID')),
-             t(v('Capability_ID'), system:capability_scope, v('Resource_ID')),
-             t(v('Capability_ID'), system:action, v('Action_ID'))
-            ),
+
+    Query = (select(
+                 [v('Owner_Role_Obj'),
+                  v('Control_Role_ID'),
+                  v('Database_ID'),
+                  v('Agent'),
+                  v('Organization')],
+                 (   (v('Auth_ID') = (Auth_ID)),
+                     t(v('Auth_ID'), system:role, v('Control_Role_ID')),
+                     t(v('Control_Role_ID'), system:capability, v('Control_Capability_ID')),
+                     t(v('Control_Capability_ID'), system:capability_scope, v('Organization_ID')),
+                     t(v('Control_Capability_ID'), system:action, system:manage_capabilities),
+                     t(v('Organization_ID'), system:organization_name, Organization_Var),
+                     t(v('Organization_ID'), system:resource_includes, v('Database_ID')),
+                     t(v('Database_ID'), rdf:type, system:'Database'),
+                     t(v('Database_ID'), system:resource_name, Database_Name_Var),
+                     t(v('Capability_ID'), system:capability_scope, v('Database_ID')),
+                     t(v('Owner_Role_ID'), system:capability, v('Capability_ID')),
+                     t(v('Owner_ID'), system:role, v('Owner_Role_ID')),
+                     t(v('Owner_ID'), system:agent_name, Agent_Var),
+                     read_object(v('Owner_Role_ID'), 3, v('Owner_Role_Obj'))
+                 ))),
 
     run_context_ast_jsonld_response(Query_Context,Query,Response).
 
-update_role(Context, User, Organization, Resource_Name, Actions) :-
+update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
     exists_role(Context, User, Organization, Resource_Name),
     !,
 
     user_name_uri(Context, User, User_URI),
     organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
+
+    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
+              error(no_manage_capability(Organization,Resource_Name))),
 
     forall(ask(Context,
                (   t(User_URI, system:role, Role_URI),
@@ -291,8 +321,35 @@ update_role(Context, User, Organization, Resource_Name, Actions) :-
                    insert(Capability_URI, system:action, Action)
                )),
            true).
-update_role(Context, User, Organization, Resource_Name, Actions) :-
-    add_role(Context, User, Organization, Resource_Name, Actions).
+update_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
+    add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions).
+
+delete_role(Context, Auth_ID, User, Organization, Resource_Name) :-
+    exists_role(Context, User, Organization, Resource_Name),
+    !,
+
+    user_name_uri(Context, User, User_URI),
+    organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI),
+
+    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
+              error(no_manage_capability(Organization,Resource_Name))),
+
+    forall(ask(Context,
+               (
+                   t(User_URI, system:role, Role_URI),
+                   t(Role_URI, system:capability, Capability_URI),
+                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
+                   t(Capability_URI, rdf:type, system:'Capability'),
+                   t(Capability_URI, system:action, Action),
+
+                   delete(Role_URI, system:capability, Capability_URI),
+                   delete(Capability_URI, system:direct_capability_scope, Resource_URI),
+                   delete(Capability_URI, rdf:type, system:'Capability'),
+                   delete(Capability_URI, system:action, Action),
+                   delete(Capability_URI, system:action, Action)
+               )),
+           true).
+
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -306,7 +363,6 @@ test(add_user, [
 
     add_user("Gavin", "gavin@terminusdb.com", "here.i.am",  some('password'), URI),
 
-    writeq(here),nl,
     agent_name_uri(system_descriptor{}, "Gavin", URI),
 
     once(ask(system_descriptor{},
@@ -432,13 +488,18 @@ test(get_roles, [
      ]) :-
 
     Document = _{},
-    get_role(system_descriptor{}, doc:admin, Document, Response),
+    Name = "Gavin",
+    add_user(Name, "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+
+    create_db_without_schema(Name, "test"),
+
+    get_role(system_descriptor{}, User_URI, Document, Response),
     Bindings = (Response.bindings),
 
     forall((member(Binding_Set, Bindings),
-            (Name = Binding_Set.'Resource'.'@value')
+            (Name = Binding_Set.'Organization'.'@value')
            ),
-           member(Name, ["admin", "_system"])
+           member(Name, ["Gavin"])
           ).
 
 test(add_role, [
@@ -453,6 +514,7 @@ test(add_role, [
     with_transaction(
         Context,
         add_role(Context,
+                 doc:admin,
                  "admin",
                  "admin",
                  "flurp",
@@ -466,8 +528,9 @@ test(add_role, [
     get_role(system_descriptor{}, doc:admin, Document, Response),
     Bindings = (Response.bindings),
     once((member(Elt,Bindings),
-          Elt.'Resource'.'@value' = "flurp",
-          Elt.'Action_ID' = 'http://terminusdb.com/schema/system#inference_write_access')).
+          (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
+          (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
+          (Cap.'system:action'.'@id') = 'system:inference_write_access')).
 
 
 test(update_role, [
@@ -482,6 +545,7 @@ test(update_role, [
     with_transaction(
         Context,
         add_role(Context,
+                 doc:admin,
                  "admin",
                  "admin",
                  "flurp",
@@ -494,6 +558,7 @@ test(update_role, [
     with_transaction(
         Context2,
         update_role(Context2,
+                    doc:admin,
                     "admin",
                     "admin",
                     "flurp",
@@ -507,13 +572,16 @@ test(update_role, [
 
     get_role(system_descriptor{}, doc:admin, Document, Response),
     Bindings = (Response.bindings),
-    once((member(Elt,Bindings),
-          (Elt.'Resource'.'@value') = "flurp",
-          (Elt.'Action_ID') = 'http://terminusdb.com/schema/system#inference_read_access')),
 
-    \+ once((member(Elt,Bindings),
-             (Elt.'Resource'.'@value') = "flurp",
-             (Elt.'Action_ID') = 'http://terminusdb.com/schema/system#inference_write_access')).
+    once((member(Elt,Bindings),
+          (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
+          (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
+          (Cap.'system:action'.'@id') = 'system:inference_read_access')),
+
+    \+ (member(Elt,Bindings),
+        (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
+        (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
+        (Cap.'system:action'.'@id') = 'system:inference_write_access').
 
 
 :- end_tests(user_management).

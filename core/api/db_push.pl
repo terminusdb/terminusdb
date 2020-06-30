@@ -23,7 +23,7 @@
 % -- remote authorization failed
 % - communication error while talking to the remote
 
-:- meta_predicate push(+, +, +, +, 3, -).
+:- meta_predicate push(+, +, +, +, 2, -).
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
      Push_Predicate, Result) :-
     do_or_die(

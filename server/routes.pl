@@ -2215,9 +2215,6 @@ role_handler(post, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
-              error(role_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     get_role(SystemDB, Auth_ID, Document, Response),
@@ -2232,8 +2229,6 @@ role_handler(post, User, R) :-
     add_payload_to_request(R,Request),
     open_descriptor(system_descriptor{}, SystemDB),
     authenticate(SystemDB, Request, Auth_ID),
-    do_or_die(is_super_user(Auth_ID, _{}),
-              error(role_update_requires_superuser)),
     get_payload(Document, Request),
 
     create_context(SystemDB, commit_info{ author: "role_handler/2",
@@ -2247,7 +2242,7 @@ role_handler(post, User, R) :-
               error(bad_api_document)),
 
     with_transaction(Ctx,
-                     update_role(SystemDB, User, Organization, Resource_Name, Actions),
+                     update_role(SystemDB, Auth_ID, User, Organization, Resource_Name, Actions),
                      _),
 
     write_cors_headers(Request),

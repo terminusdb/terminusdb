@@ -7,7 +7,7 @@
 :- use_module(db_fast_forward).
 :- use_module(core(transaction)).
 
-:- meta_predicate pull(+, +, +, +, 4, -).
+:- meta_predicate pull(+, +, +, +, 3, -).
 pull(Our_Branch_Descriptor,_Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
      status{ fetch_status : Head_Has_Updated,
              branch_status : Branch_Status
