@@ -2472,7 +2472,7 @@ fetch_jwt_data(Request, Username) :-
     atom_string(TokenAtom, Token),
     jwt_decode(TokenAtom, Payload, []),
     atom_json_dict(Payload, PayloadDict, []),
-    UsernameString = PayloadDict.get('https://terminusdb.com/nickname'),
+    UsernameString = PayloadDict.get('http://terminusdb.com/schema/system#agent_name'),
     atom_string(Username, UsernameString).
 
 /*
