@@ -19,7 +19,13 @@ clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_
         clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
         exception(_),
 
-        (   catch(try_delete_db(Account,DB),
+        (   * open_descriptor(system_descriptor{}, System_DB2), % reopen to delete
+            % todo - this may actually not be correct
+            % what if you try to clone and it fails for any other reason?
+            % for example, what if things fail due to an authentication error?
+            % or cause the database already exists?
+            % We should not just be deleting databases cause a clone fails.
+            * catch(delete_db(System_DB2, Auth, Account,DB),
                   error(database_not_found(_)),
                   true))).
 

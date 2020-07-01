@@ -337,7 +337,7 @@ print_all_triples(Askable, Selector) :-
 
 cleanup_user_database(User, Database) :-
    (   database_exists(User, Database)
-   ->  delete_db(User, Database)
+   ->  force_delete_db(User, Database)
    ;   true),
    (   agent_name_exists(system_descriptor{}, User)
    ->  delete_user(User)

@@ -1,6 +1,5 @@
 :- module(db_delete,[
-              try_delete_db/2,
-              delete_db/2,
+              delete_db/4,
               force_delete_db/2
           ]).
 
@@ -32,21 +31,15 @@
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
 
-begin_deleting_db_from_system(Organization,DB_Name) :-
-    create_context(system_descriptor{}, System),
-    with_transaction(
-        System,
-        (   do_or_die(database_finalized(System,Organization,DB_Name),
-                      error(database_not_finalized(Organization,DB_Name))),
-            organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
-            ask(System,
-                (   delete(Db_Uri, system:database_state, system:finalized, "instance/main"),
-                    insert(Db_Uri, system:database_state, system:deleting, "instance/main")))
-        ),
-        _Meta_Data).
+begin_deleting_db_from_system(System, Organization,DB_Name) :-
+    organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
+    ask(System,
+        (   delete(Db_Uri, system:database_state, system:finalized, "instance/main"),
+            insert(Db_Uri, system:database_state, system:deleting, "instance/main"))).
 
 delete_db_from_system(Organization,DB) :-
     create_context(system_descriptor{}, System),
@@ -66,18 +59,29 @@ delete_db_from_system(Organization,DB) :-
  *
  * Deletes a database if it exists, fails if it doesn't.
  */
-delete_db(Organization,DB_Name) :-
-    create_context(system_descriptor{}, System),
-    (   database_exists(System,Organization,DB_Name)
-    <>  throw(database_does_not_exist(Organization,DB_Name))),
-    % Do something here? User may need to know what went wrong
+delete_db(System, Auth, Organization,DB_Name) :-
+    create_context(System, System_Context),
+    with_transaction(
+        System_Context,
+        (
+            do_or_die(organization_name_uri(System_Context, Organization, Organization_Uri),
+                      error(unknown_organization(Organization))),
 
-    do_or_die(
-        database_finalized(System,Organization,DB_Name),
-        error(database_not_finalized(Organization,DB_Name),
-              context(delete_db/2))),
+            assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, system:delete_database, Organization_Uri),
 
-    begin_deleting_db_from_system(Organization,DB_Name),
+            do_or_die(database_exists(System_Context,Organization,DB_Name),
+                      error(database_does_not_exist(Organization,DB_Name))),
+            % Do something here? User may need to know what went wrong
+
+            do_or_die(
+                database_finalized(System_Context,Organization,DB_Name),
+                error(database_not_finalized(Organization,DB_Name),
+                      context(delete_db/2))),
+
+            begin_deleting_db_from_system(System_Context, Organization,DB_Name)
+        ),
+        _),
 
     delete_database_label(Organization,DB_Name),
 
@@ -102,13 +106,3 @@ force_delete_db(Organization,DB) :-
         delete_database_label(Organization,DB),
         error(database_files_do_not_exist(_,_), _),
         true).
-
-/*
- * try_delete_db(DB_URI) is det.
- *
- * Attempt to delete a database given its URI
- */
-try_delete_db(Organization,DB) :-
-    do_or_die(
-        delete_db(Organization,DB),
-        error(database_cannot_be_deleted(Organization,DB))).
