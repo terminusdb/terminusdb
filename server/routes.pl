@@ -2356,7 +2356,7 @@ authenticate(System_Askable, Request, Auth) :-
     !,
     do_or_die(username_auth(System_Askable, Username, Auth),
               error(authentication_incorrect)).
-authenticate(_, _, system:anonymous).
+authenticate(_, _, doc:anonymous).
 
 /*
  * write_cors_headers(Request) is det.

@@ -13,6 +13,11 @@ doc:admin_role
   rdfs:label "Admin Role"@en ;
   system:capability doc:server_access .
 
+doc:anonymous_role
+  a system:Role ;
+  rdfs:comment "Role providing public access capabilities"@en ;
+  rdfs:label "Anonymous Role"@en .
+
 doc:server_access
   a system:Capability ;
   rdfs:label "server access capability"@en ;
@@ -34,6 +39,13 @@ doc:admin
   system:role doc:admin_role ;
   system:agent_name "admin"^^xsd:string ;
   system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+
+doc:anonymous
+  a system:User ;
+  rdfs:comment "This is the anonymous account"@en ;
+  rdfs:label "Anonymous User"@en ;
+  system:role doc:anonymous_role ;
+  system:agent_name "anonymous"^^xsd:string .
 
 doc:system
   a system:SystemDatabase ;
