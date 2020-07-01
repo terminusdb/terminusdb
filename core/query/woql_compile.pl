@@ -1167,6 +1167,8 @@ compile_wf(triple_count(Path,Count),Goal) -->
                     unliterally(Numerical_Count,CountE))
         )
     }.
+compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Arguments)) -->
+    [].
 compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
