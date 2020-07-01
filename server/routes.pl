@@ -197,10 +197,8 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
                       scm : "terminusdb:///schema#" }),
 
     catch_with_backtrace(
-        (create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
-
-         write_cors_headers(Request),
-         reply_json(_{'system:status' : 'system:success'})),
+        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
+            cors_reply_json(Request, _{'system:status' : 'system:success'})),
 
         Error,
 
@@ -208,16 +206,14 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
                   Error)).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
-    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
-              error(unknown_organization(Organization))), % dubious
+    catch_with_backtrace(
+        (   delete_db(System_DB, Auth, Organization, DB),
+            cors_reply_json(Request, _{'system:status' : 'system:success'})),
 
-    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
-    assert_auth_action_scope(System_DB, Auth, system:delete_database, Organization_Uri),
+        Error,
 
-    try_delete_db(Organization, DB),
-
-    write_cors_headers(Request),
-    reply_json(_{'system:status' : 'system:success'}).
+        do_or_die(delete_db_error_handler(Error, Request),
+                  Error)).
 
 create_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
@@ -236,7 +232,30 @@ create_db_error_handler(error(database_in_inconsistent_state), Request) :-
                       'system:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
                     [status(500)]).
 
-                    
+delete_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_does_not_exist(Organization,Database)), Request) :-
+    format(string(Msg), "Database ~s/~s does not exist.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_not_finalized(Organization,Database)), Request) :-
+    format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)), Request) :-
+    format(string(Msg), "Database files for ~s/~s were missing unexpectedly.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(500)]).
 
 :- begin_tests(db_endpoint).
 
@@ -247,9 +266,9 @@ create_db_error_handler(error(database_in_inconsistent_state), Request) :-
 
 test(db_create, [
          setup(((   database_exists('admin', 'TEST_DB')
-                ->  delete_db('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
                 ;   true))),
-         cleanup(delete_db('admin', 'TEST_DB'))
+         cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
@@ -266,11 +285,11 @@ test(db_create, [
 
 test(db_create_existing_errors, [
          setup(((   database_exists('admin', 'TEST_DB')
-                ->  delete_db('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
                 ;   true),
                 create_db_without_schema("admin", "TEST_DB")
                )),
-         cleanup(delete_db('admin', 'TEST_DB'))
+         cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
     atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
@@ -340,7 +359,7 @@ test(db_create_unauthorized_errors, [
 
 test(db_delete, [
          setup(((   database_exists('admin', 'TEST_DB')
-                ->  delete_db('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
                 ;   true),
                 create_db_without_schema("admin", "TEST_DB")))
      ]) :-
@@ -352,6 +371,40 @@ test(db_delete, [
 
     _{'system:status' : "system:success"} = Delete_In.
 
+test(db_delete_unknown_organization_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    admin_pass(Key),
+    http_delete(URI,
+                Result,
+                [json_object(dict),
+                 authorization(basic(admin, Key)),
+                 status_code(Status)]),
+
+    Status = 400,
+
+    % TODO this test is actually equivalent to the one below.
+    % We need to differentiate these errors better, but I don't want to validate the exact error message.
+    % We need codes!
+    _{'system:status' : "system:failure"} :< Result.
+
+test(db_delete_nonexistent_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    http_delete(URI,
+                Result,
+                [json_object(dict),
+                 authorization(basic(admin, Key)),
+                 status_code(Status)]),
+
+    Status = 400,
+
+    _{'system:status' : "system:failure"} :< Result.
+    
+
 test(db_auth_test, [
          setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
                 ->  delete_organization('TERMINUS_QA')
@@ -362,10 +415,10 @@ test(db_auth_test, [
                 ;   add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID)
                 ),
                 (   database_exists('TERMINUS_QA', 'TEST_DB')
-                ->  delete_db('TERMINUS_QA', 'TEST_DB')
+                ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
                 ;   true))),
          cleanup(((   database_exists('TERMINUS_QA', 'TEST_DB')
-                  ->  delete_db('TERMINUS_QA', 'TEST_DB')
+                  ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
                   ;   true),
                   delete_user_and_organization('TERMINUS_QA')))
      ]) :-
@@ -455,10 +508,10 @@ triples_handler(post,Path,Request, System_DB, Auth) :- % should this be put?
 
 test(triples_update, [
          setup(((   database_exists(admin, 'TEST_DB')
-                ->  delete_db(admin, 'TEST_DB')
+                ->  force_delete_db(admin, 'TEST_DB')
                 ;   true),
                 create_db_without_schema(admin, 'TEST_DB'))),
-         cleanup((delete_db(admin, 'TEST_DB')))
+         cleanup((force_delete_db(admin, 'TEST_DB')))
 
      ])
 :-
@@ -506,10 +559,10 @@ test(triples_get, [])
 
 test(triples_post_get, [
          setup(((   database_exists("admin", "Jumanji")
-                ->  delete_db("admin", "Jumanji")
+                ->  force_delete_db("admin", "Jumanji")
                 ;   true),
                 create_db_without_schema("admin", "Jumanji"))),
-         cleanup(delete_db("admin", "Jumanji"))
+         cleanup(force_delete_db("admin", "Jumanji"))
      ])
 :-
 
@@ -878,10 +931,10 @@ test(named_get, [])
 test(branch_db, [
          setup((config:server(Server),
                 (   database_exists(admin,test)
-                ->  delete_db(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
                 create_db_without_schema(admin,test))),
-         cleanup((delete_db(admin,test)))
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
     atomic_list_concat([Server, '/woql/admin/test'], URI),
@@ -933,10 +986,10 @@ test(branch_db, [
 test(update_object, [
          setup((config:server(Server),
                 (   database_exists(admin,test)
-                ->  delete_db(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
                 create_db_without_schema(admin,test))),
-         cleanup((delete_db(admin,test)))
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
     config:server(Server),
@@ -1021,10 +1074,10 @@ test(update_object, [
 test(delete_object, [
          setup((config:server(Server),
                 (   database_exists(admin,test)
-                ->  delete_db(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
                 create_db_without_schema(admin,test))),
-         cleanup((delete_db(admin,test)))
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
 
@@ -1290,7 +1343,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
 
 test(rebase_divergent_history, [
          setup(((   database_exists("TERMINUSQA", "foo")
-                ->  delete_db("TERMINUSQA", "foo")
+                ->  force_delete_db("TERMINUSQA", "foo")
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, "TERMINUSQA")
                 ->  delete_user("TERMINUSQA")
@@ -1300,7 +1353,7 @@ test(rebase_divergent_history, [
                 ;   true),
                 add_user("TERMINUSQA",'user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema("TERMINUSQA", "foo"))),
-         cleanup((delete_db("TERMINUSQA", "foo"),
+         cleanup((force_delete_db("TERMINUSQA", "foo"),
                   delete_user_and_organization("TERMINUSQA")))
      ])
 :-
@@ -1413,7 +1466,7 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 test(pack_stuff, [
          % blocked('Blocked due to build problems - missing new store?'),
          setup(((   database_exists('_a_test_user_',foo)
-                ->  delete_db('_a_test_user_',foo)
+                ->  force_delete_db('_a_test_user_',foo)
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
                 ->  delete_user('_a_test_user_')
@@ -1424,7 +1477,7 @@ test(pack_stuff, [
                 add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema('_a_test_user_',foo)
                )),
-         cleanup((delete_db('_a_test_user_',foo),
+         cleanup((force_delete_db('_a_test_user_',foo),
                   delete_user_and_organization('_a_test_user_')))
      ]) :-
 
@@ -1484,7 +1537,7 @@ test(pack_stuff, [
 test(pack_nothing, [
          % blocked('causing travis to die'),
          setup(((   database_exists('_a_test_user_','foo')
-                ->  delete_db('_a_test_user_','foo')
+                ->  force_delete_db('_a_test_user_','foo')
                 ;   true),
                 (   agent_name_exists(system_descriptor{}, '_a_test_user_')
                 ->  delete_user('_a_test_user_')
@@ -1495,7 +1548,7 @@ test(pack_nothing, [
                 add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
                 create_db_without_schema('_a_test_user_','foo')
                )),
-         cleanup((delete_db('_a_test_user_','foo'),
+         cleanup((force_delete_db('_a_test_user_','foo'),
                   delete_user_and_organization('_a_test_user_')))
      ]) :-
 
@@ -1719,10 +1772,10 @@ branch_handler(post,Path,Request, _System_DB, _Auth) :-
 test(create_empty_branch, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % very dubious database name
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1743,10 +1796,10 @@ test(create_empty_branch, [
 test(create_branch_from_local_without_prefixes, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % very dubious database name
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1765,10 +1818,10 @@ test(create_branch_from_local_without_prefixes, [
 test(create_branch_from_local_with_prefixes, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") %dubious
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1790,10 +1843,10 @@ test(create_branch_from_local_with_prefixes, [
 test(create_branch_that_already_exists_error, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % dubious
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1812,10 +1865,10 @@ test(create_branch_that_already_exists_error, [
 test(create_branch_from_nonexisting_origin_error, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % very dubious database name
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1838,10 +1891,10 @@ test(create_branch_from_nonexisting_origin_error, [
 test(create_branch_from_commit_graph_error, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % very dubious database name
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1930,10 +1983,10 @@ graph_handler(delete, Path, Request, _System_DB, _Auth) :-
 test(create_graph, [
          setup((config:server(Server),
                 (   database_exists("admin", "test") % very dubious database name
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     Commit = commit_info{ author : 'The Graphinator',
@@ -1960,7 +2013,7 @@ test(create_graph, [
 test(delete_graph, [
          setup((config:server(Server),
                 (   database_exists("admin", "test")
-                ->  delete_db("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"),
                 resolve_absolute_string_descriptor("admin/test",Branch_Descriptor),
@@ -1970,7 +2023,7 @@ test(delete_graph, [
                              schema,
                              "main",
                              _Transaction_Metadata))),
-         cleanup(delete_db("admin", "test"))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
 

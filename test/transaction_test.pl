@@ -59,7 +59,7 @@ test(delete_db_test, [
      ])
 :-
     create_db_without_schema("admin", "Database", 'test','a test'),
-    delete_db("admin", "Database").
+    force_delete_db("admin", "Database").
 
 
 test(empty_db_test, [

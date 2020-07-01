@@ -68,7 +68,7 @@ get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
 test(fetch_something,
      [setup((setup_temp_store(State),
              (   database_exists(admin,test)
-             ->  delete_db(admin,test)
+             ->  force_delete_db(admin,test)
              ;   true),
              create_db_without_schema(admin,test),
              resolve_absolute_string_descriptor('admin/test',Branch_Descriptor)

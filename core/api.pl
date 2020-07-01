@@ -1,7 +1,6 @@
 :- module(api, [
               % db_delete.pl
-              delete_db/2,
-              try_delete_db/2,
+              delete_db/4,
               force_delete_db/2,
 
               % db_create.pl
