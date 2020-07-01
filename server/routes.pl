@@ -196,10 +196,16 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
-    create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
+    catch_with_backtrace(
+        (create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
 
-    write_cors_headers(Request),
-    reply_json(_{'system:status' : 'system:success'}).
+         write_cors_headers(Request),
+         reply_json(_{'system:status' : 'system:success'})),
+
+        Error,
+
+        do_or_die(create_db_error_handler(Error, Request),
+                  Error)).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
     do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
@@ -213,6 +219,24 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
 
+create_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+create_db_error_handler(error(database_already_exists(_)), Request) :-
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : 'Database already exists.'},
+                    [status(400)]).
+create_db_error_handler(error(database_in_inconsistent_state), Request) :-
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    [status(500)]).
+
+                    
 
 :- begin_tests(db_endpoint).
 
@@ -240,6 +264,79 @@ test(db_create, [
                    authorization(basic(admin, Key))]),
     _{'system:status' : "system:success"} = In.
 
+test(db_create_existing_errors, [
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  delete_db('admin', 'TEST_DB')
+                ;   true),
+                create_db_without_schema("admin", "TEST_DB")
+               )),
+         cleanup(delete_db('admin', 'TEST_DB'))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, Key)),
+                       status_code(Status)]),
+    Status = 400,
+    _{'system:status' : "system:failure"} :< Result.
+
+test(db_create_in_unknown_organization_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, Key)),
+                       status_code(Status)]),
+    Status = 400,
+    _{'system:status' : "system:failure"} :< Result.
+
+test(db_create_unauthenticated_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, "THIS_IS_NOT_THE_CORRECT_PASSWORD")),
+                       status_code(Status)]),
+    Status = 401,
+    _{'system:status' : "system:failure"} :< Result.
+
+test(db_create_unauthorized_errors, [
+         setup(add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID)),
+         cleanup(delete_user_and_organization("TERMINUSQA"))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic("TERMINUSQA", "password")),
+                       status_code(Status)]),
+    Status = 403,
+    _{'system:status' : "system:failure"} :< Result.
 
 test(db_delete, [
          setup(((   database_exists('admin', 'TEST_DB')
@@ -2415,6 +2512,14 @@ write_cors_headers(Request) :-
         format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
         format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
     ;   true).
+
+cors_reply_json(Request, JSON) :-
+    write_cors_headers(Request),
+    reply_json(JSON).
+
+cors_reply_json(Request, JSON, Options) :-
+    write_cors_headers(Request),
+    reply_json(JSON, Options).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
