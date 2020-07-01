@@ -1034,12 +1034,14 @@ test(get_object, [])
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone/Account/DB), cors_handler(Method, clone_handler(Account, DB)),
+:- http_handler(root(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
-clone_handler(post, Account, DB, Request, System_DB, Auth) :-
-    assert_auth_action_scope(System_DB, Auth, system:create_database, "_system"),
+clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
+    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
+              error(unknown_organization(Organization))), % dubious
+    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
 
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
@@ -1053,7 +1055,7 @@ clone_handler(post, Account, DB, Request, System_DB, Auth) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
-    clone(Account,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+    clone(Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
 
     write_cors_headers(Request),
     reply_json_dict(
