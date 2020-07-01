@@ -1034,7 +1034,7 @@ test(update_object, [
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
 
-    Graph = "admin/test/branch/master/schema/main",
+    Graph = "admin/test/local/branch/master/schema/main",
     super_user_authority(Auth),
     graph_load(system_descriptor{}, Auth, Graph,
                commit_info{
@@ -1124,7 +1124,7 @@ test(delete_object, [
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
 
-    Graph = "admin/test/branch/master/schema/main",
+    Graph = "admin/test/local/branch/master/schema/main",
     super_user_authority(Auth),
     graph_load(system_descriptor{}, Auth, Graph,
                commit_info{
