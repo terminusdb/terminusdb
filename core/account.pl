@@ -21,8 +21,6 @@
               % user_management.pl
               add_user/5,
               add_user/6,
-              agent_name_uri/3,
-              agent_name_exists/2,
               delete_user/1,
               delete_user/2,
               delete_organization/1,

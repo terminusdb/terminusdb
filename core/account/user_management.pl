@@ -2,8 +2,6 @@
           [
               add_user/5,
               add_user/6,
-              agent_name_uri/3,
-              agent_name_exists/2,
               delete_user/1,
               delete_user/2,
               delete_organization/1,
@@ -378,7 +376,8 @@ test(add_user, [
 
 test(user_ownership, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
+         cleanup((* print_all_triples(system_descriptor{}),
+                  teardown_temp_store(State)))
      ]) :-
 
     Name = "Gavin",

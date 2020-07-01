@@ -1,5 +1,5 @@
 :- module(db_clone, [
-              clone/7
+              clone/9
           ]).
 
 
@@ -12,11 +12,11 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 
-:- meta_predicate clone(+,+,+,+,+,3,-).
-clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone(+,+,+,+,+,+,+,3,-).
+clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
         exception(_),
 
         (   catch(try_delete_db(Account,DB),
@@ -24,11 +24,10 @@ clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
                   true))).
 
 
-:- meta_predicate clone_(+,+,+,+,+,3,-).
-clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone_(+,+,+,+,+,+,+,3,-).
+clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-
-    try_create_db(Account, DB, Label, Comment, _{}),
+    create_db(System_DB, Auth, Account, DB, Label, Comment, _{}),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),

@@ -123,6 +123,7 @@ username_auth(DB, Username, User_ID) :-
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(DB, Auth, Action, Scope_Iri) :-
+    ground(Auth),
     ask(DB,
         (
             t(Auth, system:role, Role),

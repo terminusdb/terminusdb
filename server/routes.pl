@@ -184,11 +184,6 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
  */
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
-    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
-              error(unknown_organization(Organization))), % dubious
-
-    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
-
     get_payload(Database_Document,Request),
     do_or_die(
         (_{ comment : Comment,
@@ -201,7 +196,7 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
-    try_create_db(Organization, DB, Label, Comment, Prefixes),
+    create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
 
     write_cors_headers(Request),
     reply_json(_{'system:status' : 'system:success'}).
@@ -1039,10 +1034,6 @@ test(get_object, [])
                  methods([options,post])]).
 
 clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
-    do_or_die(organization_name_uri(System_DB, Organization, Organization_Uri),
-              error(unknown_organization(Organization))), % dubious
-    assert_auth_action_scope(System_DB, Auth, system:create_database, Organization_Uri),
-
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
 
@@ -1055,11 +1046,63 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
-    clone(Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+    clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
 
     write_cors_headers(Request),
     reply_json_dict(
         _{'system:status' : 'system:success'}).
+
+:- begin_tests(clone_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(clone_local, [
+         setup((cleanup_user_database("TERMINUSQA1", "foo"),
+                cleanup_user_database("TERMINUSQA2", "bar"),
+
+                add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+                add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+                create_db_without_schema("TERMINUSQA1", "foo"))),
+         cleanup((cleanup_user_database("TERMINUSQA1", "foo"),
+                  cleanup_user_database("TERMINUSQA2", "bar")))
+     ])
+:-
+    resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+    create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+    with_transaction(Foo_Context,
+                     ask(Foo_Context,
+                         insert(a,b,c)),
+                     _),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+                     
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'system:status' : "system:success"
+    } :< JSON,
+
+    resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+    once(ask(Bar_Descriptor,
+             t(a,b,c))),
+
+    true.
+
+:- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(fetch/Path), cors_handler(Method, fetch_handler(Path)),

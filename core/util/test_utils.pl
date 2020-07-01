@@ -18,7 +18,8 @@
               create_db_without_schema/2,
               print_all_triples/1,
               print_all_triples/2,
-              delete_user_and_organization/1
+              delete_user_and_organization/1,
+              cleanup_user_database/2
           ]).
 
 /** <module> Test Utilities
@@ -267,7 +268,9 @@ create_db_with_test_schema(Organization, Db_Name) :-
     Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},
 
-    create_db(Organization, Db_Name, "test", "a test db", Prefixes),
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes),
     resolve_absolute_descriptor([Organization, Db_Name], Branch_Descriptor),
 
     create_graph(Branch_Descriptor,
@@ -286,7 +289,9 @@ create_db_with_test_schema(Organization, Db_Name) :-
 create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    try_create_db(Organization, Db_Name, "test", "a test db", Prefixes).
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes).
 
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),
@@ -324,3 +329,14 @@ print_all_triples(Askable, Selector) :-
             Triples),
     forall(member(Triple,Triples),
            (   writeq(Triple), nl)).
+
+cleanup_user_database(User, Database) :-
+   (   database_exists(User, Database)
+   ->  delete_db(User, Database)
+   ;   true),
+   (   agent_name_exists(system_descriptor{}, User)
+   ->  delete_user(User)
+   ;   true),
+   (   organization_name_exists(system_descriptor{}, User)
+   ->  delete_organization(User)
+   ;   true).

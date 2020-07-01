@@ -1,6 +1,5 @@
 :- module(db_create, [
-              create_db/5,
-              try_create_db/5,
+              create_db/7,
               create_ref_layer/2
           ]).
 
@@ -34,66 +33,23 @@
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
-insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label, Comment, Db_Uri) :-
-    database_class_uri(Database_Class_Uri),
-    resource_name_property_uri(Database_Name_Property_Uri),
-    xsd_string_type_uri(Xsd_String_Type_Uri),
-    object_storage(Database_Name^^Xsd_String_Type_Uri, Name_Literal),
-    random_idgen('terminusdb:///system/data/Database', [Organization_Name, Database_Name], Db_Uri),
+insert_db_object(System_Transaction, Organization_Name, Database_Name, Label, Comment, DB_Uri) :-
+    ask(System_Transaction,
+        (
+            t(Organization_Uri, system:organization_name, Organization_Name^^xsd:string),
+            random_idgen(doc:'Database', [Organization_Name^^xsd:string, Database_Name^^xsd:string], DB_Uri),
+            insert(DB_Uri, rdf:type, system:'Database'),
+            insert(DB_Uri, system:resource_name, Database_Name^^xsd:string),
+            insert(DB_Uri, rdfs:label, Label@en),
+            insert(DB_Uri, rdfs:comment, Comment@en),
 
-    write_instance(Builder,Db_Uri,Database_Name,Database_Class_Uri),
-    nb_add_triple(Builder,
-                  Db_Uri,
-                  Database_Name_Property_Uri,
-                  Name_Literal),
-
-    label_prop_uri(Label_Prop),
-    object_storage(Label@en, Label_Literal),
-
-    nb_add_triple(Builder,
-                  Db_Uri,
-                  Label_Prop,
-                  Label_Literal),
-
-    comment_prop_uri(Comment_Prop),
-    object_storage(Comment@en, Comment_Literal),
-
-    nb_add_triple(Builder,
-                  Db_Uri,
-                  Comment_Prop,
-                  Comment_Literal),
-
-    do_or_die(organization_name_uri(Layer, Organization_Name, Organization_Uri),
-              error(organization_does_not_exist(Organization_Name), context(insert_db_object_triples/7, _))),
-
-    organization_database_prop_uri(Organization_Database_Prop),
-    % Add the resource scope to server
-    nb_add_triple(Builder,
-                  Organization_Uri,
-                  Organization_Database_Prop,
-                  node(Db_Uri)).
-
-insert_db_object(Organization_Name, Database_Name, Label, Comment, Db_Uri) :-
-    % todo we should probably retry if this fails cause others may be moving the terminus db
-    storage(Store),
-    system_instance_name(Instance_Name),
-    safe_open_named_graph(Store, Instance_Name, Graph),
-    head(Graph, Layer),
-
-    (   database_exists(Layer, Organization_Name, Database_Name)
-    ->  throw(error(database_exists(Organization_Name,Database_Name),
-                    context(insert_db_object/1,
-                            'database already exists')))
-    ;   true),
-
-    open_write(Layer, Builder),
-    insert_db_object_triples(Layer, Builder, Organization_Name, Database_Name, Label, Comment,Db_Uri),
-    nb_commit(Builder, New_Layer),
-    nb_set_head(Graph, New_Layer).
+            insert(Organization_Uri, system:organization_database, DB_Uri)
+        )).
 
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->
@@ -106,7 +62,7 @@ local_repo_uri(Name, Uri) :-
  * create_repo_graph(+Organization,+Name)
  */
 create_repo_graph(Organization,Database) :-
-    storage(Store),
+    triple_store(Store),
     organization_database_name(Organization,Database,Name),
     safe_create_named_graph(Store,Name,_Graph),
     Descriptor = database_descriptor{ organization_name : Organization,
@@ -115,13 +71,6 @@ create_repo_graph(Organization,Database) :-
     with_transaction(Context,
                      insert_local_repository(Context, "local", _),
                      _).
-
-write_instance(Builder,URI,Label,Class) :-
-    rdf_type_uri(Rdf_Type_Uri),
-    label_prop_uri(Label_Prop),
-    object_storage(Label@en, Label_Literal),
-    nb_add_triple(Builder,URI,Rdf_Type_Uri,node(Class)),
-    nb_add_triple(Builder,URI,Label_Prop,Label_Literal).
 
 create_ref_layer(Descriptor,Prefixes) :-
     create_context(Descriptor, Context),
@@ -132,27 +81,45 @@ create_ref_layer(Descriptor,Prefixes) :-
         ),
         _).
 
-finalize_system(Db_Uri) :-
-    storage(Store),
-    system_instance_name(Instance_Name),
-    safe_open_named_graph(Store, Instance_Name, Graph),
-    head(Graph, Layer),
-    open_write(Layer, Builder),
-    finalized_element_uri(Finalized),
-    database_state_prop_uri(State_Prop),
+finalize_system(DB_Uri) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(
+        Context,
+        (   ask(Context, (
+                    t(DB_Uri, rdf:type, system:'Database'),
+                    not(t(DB_Uri, system:database_state, _))
+                ))
+        ->  ask(Context,
+                insert(DB_Uri, system:database_state, system:finalized))
+        ;   throw(error(database_in_inconsistent_state))),
+        _).
 
-    % Tell terminus that we are actually finalized
-    nb_add_triple(Builder,Db_Uri,State_Prop,node(Finalized)),
-    nb_commit(Builder,Final),
-    nb_set_head(Graph,Final).
+create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Prefixes) :-
+    % Run the initial checks and insertion of db object in system graph inside of a transaction.
+    % If anything fails, everything is retried, including the auth checks.
+    create_context(System_DB, System_Context),
+    with_transaction(
+        System_Context,
+        (   
+            % don't create if already exists
+            do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
+                      error(unknown_organization(Organization_Name))),
+            assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
 
-create_db(Organization_Name,Database_Name, Label, Comment, Prefixes) :-
-    text_to_string(Organization_Name, Organization_Name_String),
-    text_to_string(Database_Name, Database_Name_String),
-    % insert new db object into the terminus db
-    insert_db_object(Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri),
+            do_or_die(
+                not(database_exists(Organization_Name, Database_Name)),
+                error(database_already_exists(Label))),
+
+            text_to_string(Organization_Name, Organization_Name_String),
+            text_to_string(Database_Name, Database_Name_String),
+
+            % insert new db object into the terminus db
+            insert_db_object(System_Context, Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri)
+        ),
+        _),
 
     % create repo graph - it has name as label
+    % This is outside of the transaction because it has side-effects that cannot be rolled back.
     create_repo_graph(Organization_Name_String, Database_Name_String),
 
     % create ref layer with master branch
@@ -167,24 +134,8 @@ create_db(Organization_Name,Database_Name, Label, Comment, Prefixes) :-
     create_ref_layer(Repository_Descriptor,Prefixes),
 
     % update system with finalized
+    % This reopens system graph internally, as it was advanced
     finalize_system(Db_Uri).
-
-
-/*
- * try_create_db(Organization,DB,Label,Comment,Prefixes) is det.
- *
- * Try to create a database and associate resources
- */
-try_create_db(Organization,DB,Label,Comment,Prefixes) :-
-    % create the collection if it doesn't exist
-    do_or_die(
-        not(database_exists(Organization, DB)),
-        error(database_already_exists(Label))),
-
-    do_or_die(
-        create_db(Organization, DB, Label, Comment, Prefixes),
-        error(database_could_not_be_created(Label))).
-
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).
@@ -199,7 +150,8 @@ test(create_db_and_check_master_branch, [
          ])
 :-
     Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
-    create_db(admin, testdb, 'testdb', 'a test db', Prefixes),
+    open_descriptor(system_descriptor{}, System),
+    create_db(System, doc:admin, admin, testdb, 'testdb', 'a test db', Prefixes),
     Database_Descriptor = database_descriptor{
                               organization_name: "admin",
                               database_name: "testdb" },

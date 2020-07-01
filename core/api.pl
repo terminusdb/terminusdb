@@ -5,8 +5,7 @@
               force_delete_db/2,
 
               % db_create.pl
-              create_db/5,
-              try_create_db/5,
+              create_db/7,
               create_ref_layer/2,
 
               % init.pl
@@ -42,7 +41,7 @@
               remote_fetch/4,
 
               % db_clone.pl
-              clone/7,
+              clone/9,
 
               % db_push.pl
               push/6,
