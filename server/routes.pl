@@ -236,7 +236,6 @@ create_db_error_handler(error(database_in_inconsistent_state), Request) :-
                       'system:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
                     [status(500)]).
 
-                    
 
 :- begin_tests(db_endpoint).
 
@@ -399,51 +398,48 @@ test(db_auth_test, [
  * Get or update a schema.
  */
 triples_handler(get,Path,Request, System_DB, Auth) :-
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-    create_context(Descriptor, Pre_Context),
-
-    merge_dictionaries(
-        query_context{
-            system: System_DB,
-            authorization : Auth,
-            filter: type_name_filter{ type: Graph.type,
-                                      names: [Graph.name] }
-        }, Pre_Context, Context),
-
-    assert_read_access(Context),
-
-    dump_turtle_graph(Context, Graph.type, Graph.name, String),
-
-    write_cors_headers(Request),
-    reply_json(String).
-triples_handler(post,Path,Request, System_DB, Auth) :- % should this be put?
-    /* Read Document */
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-
+    (   get_param('format', Request, Format)
+    ->  true
+    ;   Format = "turtle"
+    ),
+    catch_with_backtrace(
+        (   graph_dump(System_DB, Auth, Path, Format, String),
+            cors_reply_json(Request, String)),
+        Error,
+        do_or_die(triples_error_handler(Error, Request),
+                  Error)).
+triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     (   _{ turtle : TTL,
            commit_info : Commit_Info } :< Triples_Document
     ->  true
     ;   throw(error(bad_api_document(Triples_Document)))),
 
-    create_context(Descriptor, Pre_Context),
+    catch_with_backtrace(
+        (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
+            cors_reply_json(Request, _{'system:status' : "system:success"})),
+        Error,
+        do_or_die(triples_error_handler(Error, Request),
+                  Error)).
 
-    merge_dictionaries(
-        query_context{
-            commit_info : Commit_Info,
-            system: System_DB,
-            authorization : Auth,
-            write_graph : Graph
-        }, Pre_Context, Context),
-
-    assert_write_access(Context),
-
-    % check access rights
-    % assert_auth_action_scope(Terminus,Auth,system:update_schema,DB_Name),
-    update_turtle_graph(Context,Graph.type,Graph.name,TTL),
-
-    write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+triples_error_handler(error(unknown_format(Format), _), Request) :-
+    format(string(Msg), "Unrecognized format: ~q", [Format]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
+    format(string(Msg), "Invalid graph descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
+triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
+    format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
+    cors_reply_json(Request,
+                    _{'system:status' : 'system:failure',
+                      'system:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(triples_endpoint).
@@ -543,6 +539,34 @@ layer:LayerIdRestriction a owl:Restriction.",
 
     once(sub_string(Result, _Before, _Length, _After,
                     "layer:LayerIdRestriction\n  a owl:Restriction")).
+
+
+test(get_invalid_descriptor, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/triples/nonsense'], URI),
+    admin_pass(Key),
+
+    http_get(URI, In, [json_object(dict),
+                        authorization(basic(admin, Key)),
+                        status_code(Code)]),
+    _{'system:message':_Msg,
+      'system:status':"system:failure"} :< In,
+    Code = 400.
+
+
+test(get_bad_descriptor, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/triples/admin/fdsa'], URI),
+    admin_pass(Key),
+
+    http_get(URI, In, [json_object(dict),
+                        authorization(basic(admin, Key)),
+                        status_code(Code)]),
+    _{'system:message':_,
+      'system:status':"system:failure"} :< In,
+    Code = 400.
 
 :- end_tests(triples_endpoint).
 
@@ -955,12 +979,14 @@ test(update_object, [
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    create_context(Branch_Descriptor, Database0),
-    Database = Database0.put(commit_info, commit_info{
-                                              author : "Steve",
-                                              message : "Yeah I did it"
-                                          }),
-    update_turtle_graph(Database,schema,"main",TTL),
+
+    Graph = "admin/test/branch/master/schema/main",
+    super_user_authority(Auth),
+    graph_load(system_descriptor{}, Auth, Graph,
+               commit_info{
+                   author : "Steve",
+                   message : "Yeah I did it"},
+               "turtle", TTL),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1043,12 +1069,14 @@ test(delete_object, [
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    create_context(Branch_Descriptor, Database0),
-    Database = Database0.put(commit_info, commit_info{
-                                              author : "Steve",
-                                              message : "Yeah I did it"
-                                          }),
-    update_turtle_graph(Database,schema,"main",TTL),
+
+    Graph = "admin/test/branch/master/schema/main",
+    super_user_authority(Auth),
+    graph_load(system_descriptor{}, Auth, Graph,
+               commit_info{
+                   author : "Steve",
+                   message : "Yeah I did it"},
+               "turtle", TTL),
 
     % Create the object
     Doc = _{ '@type' : "scm:Database",
@@ -2221,7 +2249,7 @@ cors_handler(Method, Goal, R) :-
                          [status(401)]))).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(+,2,?).
+:- meta_predicate cors_catch(+,3,?,?,?).
 cors_catch(Method, Goal, Request, System_Database, Auth) :-
     strip_module(Goal, Module, PlainGoal),
     PlainGoal =.. [Head|Args],

@@ -1,7 +1,7 @@
 :- module(turtle_utils,[
               graph_to_turtle/3,
-              update_turtle_graph/4,
-              dump_turtle_graph/4
+              update_turtle_graph/2,
+              dump_turtle_graph/2
           ]).
 
 /** <module> Turtle utilities
@@ -36,38 +36,34 @@
 :- use_module(library(semweb/turtle)).
 
 /*
- * update_turtle_graph(+DB,+Type,+Name,+TTL) is det.
+ * update_turtle_graph(+Context,+TTL) is det.
  *
  */
-update_turtle_graph(Database,Type,Name,TTL) :-
-    (   member(Transaction,Database.transaction_objects),
-        Filter = type_name_filter{ type : Type, names : [Name]},
-        filter_transaction_object_read_write_objects(Filter, Transaction, [Graph])
+update_turtle_graph(Context,TTL) :-
+    (   graph_descriptor_transaction_objects_read_write_object(Context.write_graph, Context.transaction_objects, Graph)
     ->  true
-    ;   format(atom(M), 'No such schema named ~s', [Name]),
-        throw(error(schema_error(_{'@type' : "vio:SchemaDoesNotExist",
-                                   'vio:message' : M})))),
+    ;   throw(error(unknown_graph(Context.write_graph), _))),
 
     coerce_literal_string(TTL, TTLS),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        turtle_transaction(Database, Graph, TTLStream,_),
+        turtle_transaction(Context, Graph, TTLStream,_),
         close(TTLStream)
     ).
 
 /*
- * dump_turtle_graph(+DB,+Type,+Name,-String) is semidet.
+ * dump_turtle_graph(+Context,-String) is semidet.
  *
  */
-dump_turtle_graph(Database,Type,Name,String) :-
-    Graph_Filter = type_name_filter{ type: Type, names : [Name]},
-    [Transaction_Object] = Database.transaction_objects,
+dump_turtle_graph(Context,String) :-
+    Graph_Filter = (Context.filter),
+    [Transaction_Object] = (Context.transaction_objects),
     filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Graph]),
 
     with_output_to(
         string(String),
         (   current_output(Stream),
-            dict_pairs(Database.prefixes, _, Pairs),
+            dict_pairs(Context.prefixes, _, Pairs),
             graph_to_turtle(Pairs, Graph, Stream)
         )
     ).

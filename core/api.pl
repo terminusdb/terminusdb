@@ -50,8 +50,13 @@
               unpack/2,
 
               % db_pull.pl
-              pull/6
+              pull/6,
 
+              % graph_load.pl
+              graph_load/6,
+
+              % graph_dump.pl
+              graph_dump/5
           ]).
 
 :- use_module(api/init).
@@ -67,3 +72,5 @@
 :- use_module(api/db_push).
 :- use_module(api/db_unpack).
 :- use_module(api/db_pull).
+:- use_module(api/graph_load).
+:- use_module(api/graph_dump).

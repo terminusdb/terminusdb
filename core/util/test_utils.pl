@@ -280,11 +280,16 @@ create_db_with_test_schema(Organization, Db_Name) :-
                  "main",
                  _),
 
-    create_context(Branch_Descriptor, commit_info{author: "test", message: "add test schema"}, Context),
     terminus_path(Path),
     interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    update_turtle_graph(Context, schema, "main", TTL).
+
+    atomic_list_concat([Organization, '/', Db_Name,
+                        'local/branch/master/schema/main'],
+                       Graph),
+    super_user_authority(Auth),
+    Commit_Info = commit_info{author: "test", message: "add test schema"},
+    graph_load(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
 
 create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',

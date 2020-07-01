@@ -4,6 +4,7 @@
               ask_ast/3,
               create_context/2,
               create_context/3,
+              askable_settings_context/3,
               context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
               context_extend_prefixes/3,
@@ -234,6 +235,10 @@ create_context(Descriptor, Context) :-
 create_context(Askable, Commit_Info, Context) :-
     create_context(Askable, Context_Without_Commit),
     Context = Context_Without_Commit.put(commit_info, Commit_Info).
+
+askable_settings_context(Askable, Settings, Context) :-
+    create_context(Askable, Context_Without_Settings),
+    Context = (Context_Without_Settings.put(Settings)).
 
 /**
  * descriptor_capabilities_context(Askable, Capabilities, Context) is det.
