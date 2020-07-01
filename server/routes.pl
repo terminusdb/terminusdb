@@ -2121,11 +2121,14 @@ customise_exception(error(not_authenticated)) :-
 customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
+    term_string(Auth, Auth_String),
+    term_string(Action, Action_String),
+    term_string(Scope, Scope_String),
     reply_json(_{'system:status' : 'system:failure',
                  'system:message' : Msg,
-                 'auth' : Auth,
-                 'action' : Action,
-                 'scope' : Scope
+                 'auth' : Auth_String,
+                 'action' : Action_String,
+                 'scope' : Scope_String
                 },
                [status(403)]).
 
