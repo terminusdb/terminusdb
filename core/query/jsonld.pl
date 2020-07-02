@@ -205,8 +205,7 @@ prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   format(atom(M), 'Key has unknown prefix: ~q', [K]),
-            throw(syntax_error(M)))
+        ;   throw(error(key_has_unknown_prefix(K), _)))
     ;   has_at(K)
     ->  K = Key
     ;   (   get_dict('@base', Context, Base)

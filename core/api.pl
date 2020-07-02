@@ -55,7 +55,11 @@
               graph_load/6,
 
               % graph_dump.pl
-              graph_dump/5
+              graph_dump/5,
+
+              % api_frame.pl
+              api_class_frame/5,
+              api_filled_frame/5
           ]).
 
 :- use_module(api/init).
@@ -73,3 +77,4 @@
 :- use_module(api/db_pull).
 :- use_module(api/graph_load).
 :- use_module(api/graph_dump).
+:- use_module(api/api_frame).

@@ -636,27 +636,80 @@ test(get_bad_descriptor, [])
  * Establishes frame responses
  */
 frame_handler(post, Path, Request, System_DB, Auth) :-
-    /* Read Document */
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    create_context(Descriptor, Context0),
-    merge_dictionaries(
-        query_context{
-            system: System_DB,
-            authorization: Auth
-        },
-        Context0,Database),
-
-    assert_read_access(Database),
     get_payload(Doc,Request),
 
     (   get_dict(class,Doc,Class_URI)
-    ->  try_class_frame(Class_URI,Database,Frame)
+    ->  catch_with_backtrace(
+            api_class_frame(System_DB, Auth, Path, Class_URI, Frame),
+            E,
+            do_or_die(frame_error_handler(E, Request),
+                      throw(E)))
     ;   get_dict(instance,Doc,Instance_URI)
-    ->  try_filled_frame(Instance_URI,Database,Frame)
+    ->  catch_with_backtrace(
+            api_filled_frame(System_DB, Auth, Path, Instance_URI, Frame),
+            E,
+            do_or_die(frame_error_handler(E, Request),
+                      throw(E)))
     ),
 
     write_cors_headers(Request),
     reply_json(Frame).
+
+frame_error_handler(error(instance_uri_has_unknown_prefix(K),_), Request) :-
+    format(string(Msg), "Instance uri has unknown prefix: ~q", [K]),
+    term_string(K, Key),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:InstanceUriHasUnknownPrefix',
+                                       'api:instance_uri' : Key},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+frame_error_handler(error(could_not_create_class_frame(Class),_), Request) :-
+    format(string(Msg), "Could not create class frame for class: ~q", [Class]),
+    term_string(Class, Class_String),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrame',
+                                       'api:class' : Class_String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(could_not_create_filled_class_frame(Instance),_), Request) :-
+    format(string(Msg), "Could not create filled class frame for instance: ~q", [Instance]),
+    term_string(Instance, Instance_String),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:CouldNotCreateFilledClassFrame',
+                                       'api:instance' : Instance_String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptorString',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    % ERROR NOTE: Doesn't work
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvedDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 :- begin_tests(frame_endpoint).
 :- use_module(core(util/test_utils)).
@@ -2750,19 +2803,3 @@ collect_posted_files(Request,Files) :-
     !,
     include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
 collect_posted_files(_Request,[]).
-
-/*
- * try_class_frame(Class,Database,Frame) is det.
- */
-try_class_frame(Class,Database,Frame) :-
-    prefix_expand(Class, Database.prefixes, ClassEx),
-    class_frame_jsonld(Database,ClassEx,Frame)
-    <>  throw(error(could_not_create_class_frame(Class))).
-
-/*
- * try_class_frame(Class,Database,Frame) is det.
- */
-try_filled_frame(Instance,Database,Frame) :-
-    prefix_expand(Instance, Database.prefixes, InstanceEx),
-    filled_frame_jsonld(Database,InstanceEx,Frame)
-    <> throw(could_not_create_filled_class_frame(Instance)).
