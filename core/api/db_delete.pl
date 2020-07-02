@@ -65,13 +65,13 @@ delete_db(System, Auth, Organization,DB_Name) :-
         System_Context,
         (
             do_or_die(organization_name_uri(System_Context, Organization, Organization_Uri),
-                      error(unknown_organization(Organization))),
+                      error(unknown_organization(Organization), _)),
 
             assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
             assert_auth_action_scope(System_Context, Auth, system:delete_database, Organization_Uri),
 
             do_or_die(database_exists(System_Context,Organization,DB_Name),
-                      error(database_does_not_exist(Organization,DB_Name))),
+                      error(database_does_not_exist(Organization,DB_Name), _)),
             % Do something here? User may need to know what went wrong
 
             do_or_die(

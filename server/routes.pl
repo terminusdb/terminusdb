@@ -217,7 +217,7 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
         do_or_die(delete_db_error_handler(Error, Request),
                   Error)).
 
-create_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
+create_db_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbCreateErrorResponse',
@@ -253,21 +253,21 @@ delete_db_error_handler(error(unknown_organization(Organization_Name),_), Reques
                                       'api:organization_name' : Organization_Name},
                       'api:message' : Msg},
                     [status(400)]).
-delete_db_error_handler(error(database_does_not_exist(Organization,Database)), Request) :-
+delete_db_error_handler(error(database_does_not_exist(Organization,Database), _), Request) :-
     format(string(Msg), "Database ~s/~s does not exist.", [Organization, Database]),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
                       'api:message' : Msg},
                     [status(400)]).
-delete_db_error_handler(error(database_not_finalized(Organization,Database)), Request) :-
+delete_db_error_handler(error(database_not_finalized(Organization,Database), _), Request) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
                       'api:message' : Msg},
                     [status(400)]).
-delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)), Request) :-
+delete_db_error_handler(error(database_files_do_not_exist(Organization,Database), _), Request) :-
     format(string(Msg), "Database files for ~s/~s were missing unexpectedly.", [Organization, Database]),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
@@ -299,7 +299,7 @@ test(db_create, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-    _{'api:status' : "api:success"} = In.
+    _{'api:status' : "api:success"} :< In.
 
 test(db_create_existing_errors, [
          setup(((   database_exists('admin', 'TEST_DB')
@@ -387,7 +387,7 @@ test(db_delete, [
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
 
-    _{'api:status' : "api:success"} = Delete_In.
+    _{'api:status' : "api:success"} :< Delete_In.
 
 test(db_delete_unknown_organization_errors, [
      ]) :-
@@ -421,7 +421,7 @@ test(db_delete_nonexistent_errors, [
     Status = 400,
 
     _{'api:status' : "api:failure"} :< Result.
-    
+
 
 test(db_auth_test, [
          setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
@@ -452,7 +452,7 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
-    _{'api:status' : "api:success"} = In.
+    _{'api:status' : "api:success"} :< In.
 
 :- end_tests(db_endpoint).
 

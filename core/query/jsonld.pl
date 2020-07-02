@@ -8,7 +8,8 @@
               jsonld_triples/3,
               jsonld_id/2,
               jsonld_type/2,
-              get_key_document/4
+              get_key_document/4,
+              compress_dict_uri/3
           ]).
 
 /** <module> JSON-LD
@@ -276,6 +277,10 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
         compress_uri(URI, Prefix, Expanded, Folded_URI)
     ->  true
     ;   URI = Folded_URI).
+
+compress_dict_uri(URI, Dict, Folded_URI) :-
+    dict_pairs(Dict, _, Pairs),
+    compress_pairs_uri(URI, Pairs, Folded_URI).
 
 is_at(Key) :-
     sub_string(Key,0,1,_,"@").

@@ -23,4 +23,6 @@ graph_dump(System_DB, Auth, Path, Format, String) :-
     % We can extend formats here..
     (   Format = "turtle"
     ->  dump_turtle_graph(Context,String)
+    ;   Format = "md"
+    ->  dump_md(Context,String)
     ;   throw(error(unknown_format(Format), _))).

@@ -108,7 +108,7 @@ create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Pref
 
             do_or_die(
                 not(database_exists(Organization_Name, Database_Name)),
-                error(database_already_exists(Organization_Name, Database_Name))),
+                error(database_already_exists(Organization_Name, Database_Name),_)),
 
             text_to_string(Organization_Name, Organization_Name_String),
             text_to_string(Database_Name, Database_Name_String),

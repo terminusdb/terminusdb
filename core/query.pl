@@ -67,6 +67,7 @@
               jsonld_triples/3,
               jsonld_id/2,
               get_key_document/4,
+              compress_dict_uri/3,
 
               % json_woql.pl
               woql_context/1,

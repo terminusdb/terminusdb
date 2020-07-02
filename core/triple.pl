@@ -97,7 +97,8 @@
               graph_to_turtle/3,
               update_turtle_graph/2,
               dump_turtle_graph/2,
-
+              dump_md/2,
+              
               % upgrade_db.pl
               get_db_version/1,
               set_db_version/1,
