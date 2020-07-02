@@ -666,6 +666,17 @@ frame_error_handler(error(instance_uri_has_unknown_prefix(K),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(400)]).
+frame_error_handler(error(class_uri_has_unknown_prefix(K),_), Request) :-
+    format(string(Msg), "Class uri has unknown prefix: ~q", [K]),
+    term_string(K, Key),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'system:failure',
+                      'api:error' : _{ '@type' : 'api:ClassUriHasUnknownPrefix',
+                                       'api:class_uri' : Key},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 frame_error_handler(error(could_not_create_class_frame(Class),_), Request) :-
     format(string(Msg), "Could not create class frame for class: ~q", [Class]),
     term_string(Class, Class_String),
@@ -673,7 +684,7 @@ frame_error_handler(error(could_not_create_class_frame(Class),_), Request) :-
                     _{'@type' : 'api:FrameErrorResponse',
                       'api:status' : 'system:failure',
                       'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrame',
-                                       'api:class' : Class_String},
+                                       'api:class_uri' : Class_String},
                       'api:message' : Msg
                      },
                     [status(404)]).
@@ -684,7 +695,7 @@ frame_error_handler(error(could_not_create_filled_class_frame(Instance),_), Requ
                     _{'@type' : 'api:FrameErrorResponse',
                       'api:status' : 'system:failure',
                       'api:error' : _{ '@type' : 'api:CouldNotCreateFilledClassFrame',
-                                       'api:instance' : Instance_String},
+                                       'api:instance_uri' : Instance_String},
                       'api:message' : Msg
                      },
                     [status(404)]).
@@ -693,19 +704,20 @@ frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
                       'api:status' : 'system:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptorString',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
 frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     % ERROR NOTE: Doesn't work
-    resolve_absolute_string_descriptor(Path, Descriptor),
+    resolve_absolute_descriptor(Path_List, Descriptor),
+    merge_separator_split(Path, '/', Path_List),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
                       'api:status' : 'system:failure',
-                      'api:error' : _{ '@type' : 'api:UnresolvedDescriptor',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
@@ -741,6 +753,37 @@ test(get_filled_frame, [])
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
     _{'@type':"system:FilledFrame"} :< JSON.
+
+
+test(bad_path_filled_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/garbage'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ instance : "doc:admin"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key)),
+                     status_code(Status)]),
+    \+ Status = 200,
+    JSON.'api:error'.'@type' = "api:BadAbsoluteDescriptor".
+
+
+test(unresolvable_path_filled_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/believable/garbage'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ instance : "doc:admin"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key)),
+                     status_code(Status)]),
+
+    \+ Status = 200,
+    JSON.'api:error'.'@type' = "api:UnresolvableAbsoluteDescriptor".
 
 :- end_tests(frame_endpoint).
 
