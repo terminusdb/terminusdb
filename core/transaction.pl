@@ -93,7 +93,19 @@
               insert_remote_repository/5,
 
               update_repository_head/3,
-              update_repository_remote_url/3
+              update_repository_remote_url/3,
+
+              % system_entity.pl
+              database_exists/2,
+              database_exists/3,
+              organization_database_name_uri/4,
+              organization_name_uri/3,
+              organization_name_exists/2,
+              database_finalized/3,
+              user_name_uri/3,
+              agent_name_uri/3,
+              agent_name_exists/2
+
           ]).
 
 :- use_module(transaction/database).
@@ -102,3 +114,4 @@
 :- use_module(transaction/layer_entity).
 :- use_module(transaction/ref_entity).
 :- use_module(transaction/repo_entity).
+:- use_module(transaction/system_entity).

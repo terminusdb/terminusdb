@@ -39,7 +39,7 @@ json_transform_binding_set(_Context, Binding, JSON) :-
                 get_dict(var_name, Record, Var_Name),
                 get_dict(woql_var, Record, Prolog_Var),
                 (   var(Prolog_Var)
-                ->  Term = "terminus:unknown"
+                ->  Term = "system:unknown"
                 ;   term_jsonld(Prolog_Var, Term))),
             Binding,
             Data),

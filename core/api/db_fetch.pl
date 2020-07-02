@@ -67,11 +67,10 @@ get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
 
 test(fetch_something,
      [setup((setup_temp_store(State),
-             user_database_name(admin,"test", Name),
-             (   database_exists(Name)
-             ->  delete_db(Name)
+             (   database_exists(admin,test)
+             ->  force_delete_db(admin,test)
              ;   true),
-             create_db_without_schema(Name, 'test','a test'),
+             create_db_without_schema(admin,test),
              resolve_absolute_string_descriptor('admin/test',Branch_Descriptor)
              )),
       cleanup(teardown_temp_store(State))
@@ -92,8 +91,7 @@ test(fetch_something,
 
     with_temp_store(
         (
-            user_database_name(admin, "test_local", Name2),
-            create_db_without_schema(Name2, 'test local','a test'),
+            create_db_without_schema(admin,test_local),
             resolve_absolute_string_descriptor(
                 "admin/test_local/_meta", Database_Descriptor),
             create_context(Database_Descriptor, Database_Context),
@@ -125,6 +123,6 @@ test(fetch_something,
             once(ask(Remote_Master_Transaction,
                      t(a,b,c)))
         )),
-    
+
     true.
 :- end_tests(fetch_api).

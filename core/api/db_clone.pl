@@ -1,5 +1,5 @@
 :- module(db_clone, [
-              clone/7
+              clone/9
           ]).
 
 
@@ -12,24 +12,28 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 
-:- meta_predicate clone(+,+,+,+,+,3,-).
-clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone(+,+,+,+,+,+,+,3,-).
+clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
         exception(_),
 
-        (   user_database_name(Account, DB, DB_Name),
-            catch(try_delete_db(DB_Name),
+        (   * open_descriptor(system_descriptor{}, System_DB2), % reopen to delete
+            % todo - this may actually not be correct
+            % what if you try to clone and it fails for any other reason?
+            % for example, what if things fail due to an authentication error?
+            % or cause the database already exists?
+            % We should not just be deleting databases cause a clone fails.
+            * catch(delete_db(System_DB2, Auth, Account,DB),
                   error(database_not_found(_)),
                   true))).
 
 
-:- meta_predicate clone_(+,+,+,+,+,3,-).
-clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone_(+,+,+,+,+,+,+,3,-).
+clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    user_database_name(Account, DB, DB_Name),
-    try_create_db(DB_Name, Label, Comment, _{}),
+    create_db(System_DB, Auth, Account, DB, Label, Comment, _{}),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),

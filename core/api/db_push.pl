@@ -23,7 +23,7 @@
 % -- remote authorization failed
 % - communication error while talking to the remote
 
-:- meta_predicate push(+, +, +, +, 3, -).
+:- meta_predicate push(+, +, +, +, 2, -).
 push(Branch_Descriptor, Remote_Name, Remote_Branch, _Auth_ID,
      Push_Predicate, Result) :-
     do_or_die(
@@ -140,10 +140,10 @@ test_pusher(Expected, _Remote_URL, Payload) :-
 
 test(push_on_empty,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -175,17 +175,17 @@ test(push_on_empty,
 
     push(Descriptor, "remote", "master", Auth, test_pusher(Expected_Layer_Id), _Result),
 
-    resolve_absolute_string_descriptor("user/foo/remote/branch/master", Remote_Branch),
+    resolve_absolute_string_descriptor("admin/foo/remote/branch/master", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
     sort(Triples, [a-b-c,c-d-e]).
 
 
 test(push_twice,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -231,16 +231,16 @@ test(push_twice,
 
     push(Descriptor, "remote", "master", Auth, test_pusher(_Expected_Layer_Id_2), _Result_2),
 
-    resolve_absolute_string_descriptor("user/foo/remote/branch/master", Remote_Branch),
+    resolve_absolute_string_descriptor("admin/foo/remote/branch/master", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
     sort(Triples, [a-b-c,c-d-e,h-i-j,k-l-m]).
 
 test(push_empty_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -262,13 +262,13 @@ test(push_empty_branch,
 
 test(push_new_nonmaster_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     branch_create(Repository_Descriptor, empty, "work", _),
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -290,10 +290,10 @@ test(push_new_nonmaster_branch,
 
 test(push_new_nonmaster_branch_with_content,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     branch_create(Repository_Descriptor, empty, "work", _),
 
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
@@ -304,7 +304,7 @@ test(push_new_nonmaster_branch_with_content,
                          insert(a,b,c)),
                      _),
 
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -328,14 +328,14 @@ test(push_new_nonmaster_branch_with_content,
 
 test(push_without_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       error(branch_does_not_exist(_))])
 :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
 
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -355,14 +355,14 @@ test(push_without_branch,
 
 test(push_without_repository,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       error(no_repository_with_name(_,_))])
 :-
-        resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+        resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     branch_create(Repository_Descriptor, empty, "work", _),
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -376,11 +376,11 @@ test(push_without_repository,
 
 test(push_local,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       error(push_attempted_on_non_remote(_,_))])
 :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     branch_create(Repository_Descriptor, empty, "work", _),
 
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
@@ -391,7 +391,7 @@ test(push_local,
                          insert(a,b,c)),
                      _),
 
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -415,11 +415,11 @@ test(push_local,
 
 test(push_headless_remote,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       error(push_has_no_repository_head(_))])
 :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
     branch_create(Repository_Descriptor, empty, "work", _),
 
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
@@ -430,7 +430,7 @@ test(push_headless_remote,
                          insert(a,b,c)),
                      _),
 
-    resolve_absolute_string_descriptor("user/foo", Descriptor),
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
     Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
 
@@ -453,7 +453,7 @@ erroring_push_predicate(Error, _Remote_Url, _Payload) :-
     throw(Error).
 
 generic_setup_for_error_conditions(Branch_Descriptor, Auth) :-
-    resolve_absolute_string_descriptor("user/foo/local/_commits", Repository_Descriptor),
+    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
 
     resolve_relative_descriptor(Repository_Descriptor, ["branch", "master"], Branch_Descriptor),
 
@@ -475,11 +475,11 @@ generic_setup_for_error_conditions(Branch_Descriptor, Auth) :-
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth).
-    
+
 
 test(remote_diverged,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       throws(error(remote_unpack_failed(history_diverged)))])
 :-
@@ -489,7 +489,7 @@ test(remote_diverged,
 
 test(remote_does_not_exist,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       throws(error(remote_unpack_failed(remote_unknown)))])
 :-
@@ -499,7 +499,7 @@ test(remote_does_not_exist,
 
 test(remote_authorization_failed,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       throws(error(remote_unpack_failed(authorization_failure(_))))])
 :-
@@ -509,7 +509,7 @@ test(remote_authorization_failed,
 
 test(remote_communication_failed,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       throws(error(remote_unpack_failed(communication_failure(_))))])
 :-
@@ -519,7 +519,7 @@ test(remote_communication_failed,
 
 test(remote_gave_unknown_error,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
       throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full)))))])
 :-

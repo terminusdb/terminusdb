@@ -1,0 +1,45 @@
+:- module(api_frame, [api_class_frame/5, api_filled_frame/5]).
+:- use_module(core(util)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+
+
+api_class_frame(System_DB, Auth, Path, Class_Uri, Frame) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    do_or_die(
+        askable_context(Descriptor, System_DB, Auth, Context),
+        error(unresolvable_collection(Descriptor),_)),
+
+    assert_read_access(Context),
+
+    catch(
+        prefix_expand(Class_Uri, Context.prefixes, ClassEx),
+        error(key_has_unknown_prefix(K), _),
+        throw(error(class_uri_has_unknown_prefix(K),_))),
+
+    do_or_die(class_frame_jsonld(Context,ClassEx,Frame),
+              error(could_not_create_class_frame(Class_Uri))).
+
+api_filled_frame(System_DB, Auth, Path, Instance_Uri, Filled_Frame) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    do_or_die(
+        askable_context(Descriptor, System_DB, Auth, Context),
+        error(unresolvable_collection(Descriptor),_)),
+
+    assert_read_access(Context),
+
+    catch(
+        prefix_expand(Instance_Uri, Context.prefixes, InstanceEx),
+        error(key_has_unknown_prefix(K),_),
+        throw(error(instance_uri_has_unknown_prefix(K),_))),
+
+    do_or_die(
+        filled_frame_jsonld(Context,InstanceEx,Filled_Frame),
+        error(could_not_create_filled_class_frame(Instance_Uri),_)).

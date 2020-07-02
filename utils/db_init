@@ -14,7 +14,7 @@
 :- use_module(config(terminus_config)).
 :- use_module(core(triple/literals)).
 :- use_module(core(triple/triplestore)).
-:- use_module(core(triple/terminus_bootstrap)).
+:- use_module(core(triple/constants)).
 :- use_module(core(api/init)).
 
 :- use_module(library(filesex)).

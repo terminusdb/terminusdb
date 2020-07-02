@@ -1,7 +1,7 @@
-:- module(terminus_bootstrap,[
-              terminus_instance_name/1,
-              terminus_schema_name/1,
-              terminus_inference_name/1,
+:- module(constants,[
+              system_instance_name/1,
+              system_schema_name/1,
+              system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
@@ -18,6 +18,7 @@
               finalized_element_uri/1,
               deleting_element_uri/1,
               resource_includes_prop_uri/1,
+              organization_database_prop_uri/1,
               allow_origin_prop_uri/1,
 
               layer_class_uri/1,
@@ -38,12 +39,11 @@
               repository_remote_url_prop_uri/1,
               repo_type_document_prefix/2,
 
-              repo_name_uri/4,
-
-              terminus_server_uri/1
+              admin_organization_uri/1,
+              super_user_authority/1
           ]).
 
-/** <module> Terminus Bootstrap
+/** <module> Constants
  *
  * Terminus bootstrap implements hard coded constants
  *
@@ -66,11 +66,11 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-terminus_instance_name('terminus:///terminus/document').
+system_instance_name('terminusdb:///system/data').
 
-terminus_schema_name('terminus:///terminus/schema').
+system_schema_name('terminusdb:///system/schema').
 
-terminus_inference_name('terminus:///terminus/inference').
+system_inference_name('terminusdb:///system/inference').
 
 layer_ontology('http://terminusdb.com/schema/layer').
 
@@ -85,14 +85,15 @@ xsd_any_uri_type_uri('http://www.w3.org/2001/XMLSchema#anyURI').
 label_prop_uri('http://www.w3.org/2000/01/rdf-schema#label').
 comment_prop_uri('http://www.w3.org/2000/01/rdf-schema#comment').
 
-%%% URIs from terminus schema
-database_class_uri('http://terminusdb.com/schema/terminus#Database').
-resource_name_property_uri('http://terminusdb.com/schema/terminus#resource_name').
-database_state_prop_uri('http://terminusdb.com/schema/terminus#database_state').
-finalized_element_uri('http://terminusdb.com/schema/terminus#finalized').
-deleting_element_uri('http://terminusdb.com/schema/terminus#deleting').
-resource_includes_prop_uri('http://terminusdb.com/schema/terminus#resource_includes').
-allow_origin_prop_uri('http://terminusdb.com/schema/terminus#allow_origin').
+%%% URIs from system schema
+database_class_uri('http://terminusdb.com/schema/system#Database').
+resource_name_property_uri('http://terminusdb.com/schema/system#resource_name').
+database_state_prop_uri('http://terminusdb.com/schema/system#database_state').
+finalized_element_uri('http://terminusdb.com/schema/system#finalized').
+deleting_element_uri('http://terminusdb.com/schema/system#deleting').
+resource_includes_prop_uri('http://terminusdb.com/schema/system#resource_includes').
+organization_database_prop_uri('http://terminusdb.com/schema/system#organization_database').
+allow_origin_prop_uri('http://terminusdb.com/schema/system#allow_origin').
 
 %%% URIs from layer schema
 layer_class_uri('http://terminusdb.com/schema/layer#Layer').
@@ -108,10 +109,6 @@ repository_remote_url_prop_uri('http://terminusdb.com/schema/repository#remote_u
 repo_type_document_prefix(local, 'Local_').
 repo_type_document_prefix(remote, 'Remote_').
 
-repo_name_uri(Db_Name, Repo_Name, Repo_Type, Uri) :-
-    repo_type_document_prefix(Repo_Type, Repo_Type_Prefix),
-    atomic_list_concat(['terminus:///', Db_Name, '/document/', Repo_Type_Prefix, Repo_Name], Uri).
-
 %%% URIs from ref schema
 branch_class_uri('http://terminusdb.com/schema/ref#Branch').
 ref_commit_prop_uri('http://terminusdb.com/schema/ref#ref_commit').
@@ -121,4 +118,5 @@ ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri')
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
-terminus_server_uri('terminus:///terminus/document/server').
+admin_organization_uri('terminusdb:///system/data/admin_organization').
+super_user_authority('terminusdb:///system/data/admin').

@@ -80,7 +80,7 @@
 http:location(root, '/', []).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_catch(connect_handler(Method)),
+:- http_handler(root(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -88,15 +88,12 @@ http:location(root, '/', []).
  * connect_handler(+Method,+Request:http_request) is det.
  */
 /* NOTE: Need to return list of databases and access rights */
-connect_handler(options,Request) :-
+connect_handler(get, Request, System_DB, Auth) :-
+    user_object(System_DB, Auth, User_Obj),
+    User_Obj2 = (User_Obj.put('system:user_key_hash', "")),
+
     write_cors_headers(Request),
-    format('~n').
-connect_handler(get,Request) :-
-    connection_authorised_user(Request, User_ID),
-    open_descriptor(terminus_descriptor{}, DB),
-    user_object(DB, User_ID, User_Obj),
-    write_cors_headers(Request),
-    reply_json(User_Obj).
+    reply_json(User_Obj2).
 
 :- begin_tests(connect_handler).
 :- use_module(core(util/test_utils)).
@@ -127,32 +124,24 @@ test(connection_result_dbs, [])
     * json_write_dict(current_output, Result, []),
 
     _{ '@id' : "doc:admin",
-       '@type':"terminus:User"
+       '@type':"system:User"
      } :< Result.
 
 :- end_tests(connect_handler).
 
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(console/_Path), cors_catch(console_handler(Method)),
+:- http_handler(root(console/_Path), cors_handler(Method, console_handler),
                 [method(Method),
                  methods([options,get])]).
 
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(options,Request) :-
-    write_cors_headers(Request),
-    nl.
-console_handler(get,Request) :-
+console_handler(get,Request, _System_DB, _Auth) :-
     config:index_path(Index_Path),
     write_cors_headers(Request),
-    throw(http_reply(file("text/html", Index_Path))).
-
-%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(message), cors_catch(message_handler(Method)),
-                [method(Method),
-                 methods([options,get,post])]).
+    throw(http_reply(file('text/html', Index_Path))).
 
 :- begin_tests(console_route).
 
@@ -163,14 +152,16 @@ test(console_route) :-
 
 :- end_tests(console_route).
 
+%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(message), cors_handler(Method, message_handler),
+                [method(Method),
+                 methods([options,get,post])]).
+
 /*
  * message_handler(+Method,+Request) is det.
  */
-message_handler(options,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-message_handler(get,Request) :-
-    try_get_param('terminus:message',Request,Message),
+message_handler(_Method, Request, _System_DB, _Auth) :-
+    try_get_param('api:message',Request,Message),
 
     with_output_to(
         string(Payload),
@@ -181,71 +172,108 @@ message_handler(get,Request) :-
 
     write_cors_headers(Request),
 
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-message_handler(post,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-    try_get_param('terminus:message',Request,Message),
-
-    with_output_to(
-        string(Payload),
-        json_write(current_output, Message, [])
-    ),
-
-    http_log('~N[Message] ~s~n',[Payload]),
-
-    write_cors_headers(Request),
-
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+    reply_json(_{'api:status' : 'api:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db/Account/DB), cors_catch(db_handler(Method, Account, DB)),
+:- http_handler(root(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
                  methods([options,post,delete])]).
 
 /**
  * db_handler(Method:atom,DB:atom,Request:http_request) is det.
  */
-db_handler(options,_Account,_DB,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-db_handler(post,Account,DB,R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
+db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
-    authenticate(Terminus_DB, Request, Auth),
-
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
-
     get_payload(Database_Document,Request),
     do_or_die(
         (_{ comment : Comment,
             label : Label } :< Database_Document),
         error(bad_api_document(Database_Document))),
 
-    do_or_die(
-        (_{ prefixes : Prefixes } :< Database_Document,
-         _{ doc : _Doc, scm : _Scm} :< Prefixes),
-        error(under_specified_prefixes(Database_Document))),
+    (   _{ prefixes : Prefixes } :< Database_Document,
+        _{ doc : _Doc, scm : _Scm} :< Prefixes
+    ->  true
+    ;   Prefixes = _{ doc : "terminusdb:///data/",
+                      scm : "terminusdb:///schema#" }),
 
-    user_database_name(Account, DB, DB_Name),
+    catch_with_backtrace(
+        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
+            cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
+                                       'api:status' : 'api:success'})),
 
-    try_create_db(DB_Name, Label, Comment, Prefixes),
+        Error,
 
-    write_cors_headers(Request),
-    reply_json(_{'terminus:status' : 'terminus:success'}).
-db_handler(delete,Account,DB,Request) :-
+        do_or_die(create_db_error_handler(Error, Request),
+                  Error)).
+db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
-    authenticate(Terminus_DB, Request, Auth),
+    catch_with_backtrace(
+        (   delete_db(System_DB, Auth, Organization, DB),
+            cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
+                                       'api:status' : 'api:success'})),
 
-    user_database_name(Account, DB, DB_Name),
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:delete_database, DB_Name),
+        Error,
 
-    try_delete_db(DB_Name),
+        do_or_die(delete_db_error_handler(Error, Request),
+                  Error)).
 
-    write_cors_headers(Request),
-    reply_json(_{'terminus:status' : 'terminus:success'}).
+create_db_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
+                    [status(400)]).
+create_db_error_handler(error(database_already_exists(Organization_Name, Database_Name),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseAlreadyExists',
+                                      'api:database_name' : Database_Name,
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : 'Database already exists.'},
+                    [status(400)]).
+create_db_error_handler(error(database_in_inconsistent_state,_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
 
+                      'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    [status(500)]).
+
+delete_db_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_does_not_exist(Organization,Database), _), Request) :-
+    format(string(Msg), "Database ~s/~s does not exist.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_not_finalized(Organization,Database), _), Request) :-
+    format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(400)]).
+delete_db_error_handler(error(database_files_do_not_exist(Organization,Database), _), Request) :-
+    format(string(Msg), "Database files for ~s/~s were missing unexpectedly.", [Organization, Database]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(500)]).
 
 :- begin_tests(db_endpoint).
 
@@ -255,14 +283,13 @@ db_handler(delete,Account,DB,Request) :-
 :- use_module(library(http/http_open)).
 
 test(db_create, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                (   database_exists(DB)
-                ->  delete_db(DB)
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
                 ;   true))),
-         cleanup(delete_db(DB))
+         cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -272,32 +299,146 @@ test(db_create, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-    _{'terminus:status' : "terminus:success"} = In.
+    _{'api:status' : "api:success"} :< In.
 
-
-test(db_delete, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                create_db_without_schema(DB,'test','a test')))
+test(db_create_existing_errors, [
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
+                ;   true),
+                create_db_without_schema("admin", "TEST_DB")
+               )),
+         cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, Key)),
+                       status_code(Status)]),
+    Status = 400,
+    _{'api:status' : "api:failure"} :< Result.
+
+test(db_create_in_unknown_organization_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, Key)),
+                       status_code(Status)]),
+    Status = 400,
+    _{'api:status' : "api:failure"} :< Result.
+
+test(db_create_unauthenticated_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic(admin, "THIS_IS_NOT_THE_CORRECT_PASSWORD")),
+                       status_code(Status)]),
+    Status = 401,
+    _{'api:status' : "api:failure"} :< Result.
+
+test(db_create_unauthorized_errors, [
+         setup(add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID)),
+         cleanup(delete_user_and_organization("TERMINUSQA"))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                           scm : "https://terminushub.com/schema"},
+             comment : "A quality assurance test",
+             label : "A label"
+           },
+    http_post(URI, json(Doc),
+              Result, [json_object(dict),
+                       authorization(basic("TERMINUSQA", "password")),
+                       status_code(Status)]),
+    Status = 403,
+    _{'api:status' : "api:failure"} :< Result.
+
+test(db_delete, [
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
+                ;   true),
+                create_db_without_schema("admin", "TEST_DB")))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
 
-    _{'terminus:status' : "terminus:success"} = Delete_In.
+    _{'api:status' : "api:success"} :< Delete_In.
+
+test(db_delete_unknown_organization_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    admin_pass(Key),
+    http_delete(URI,
+                Result,
+                [json_object(dict),
+                 authorization(basic(admin, Key)),
+                 status_code(Status)]),
+
+    Status = 400,
+
+    % TODO this test is actually equivalent to the one below.
+    % We need to differentiate these errors better, but I don't want to validate the exact error message.
+    % We need codes!
+    _{'api:status' : "api:failure"} :< Result.
+
+test(db_delete_nonexistent_errors, [
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    http_delete(URI,
+                Result,
+                [json_object(dict),
+                 authorization(basic(admin, Key)),
+                 status_code(Status)]),
+
+    Status = 400,
+
+    _{'api:status' : "api:failure"} :< Result.
+
 
 test(db_auth_test, [
-         setup((add_user('TERMINUS_QA','user@example.com','password',User_ID),
-                user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                (   database_exists(DB)
-                ->  delete_db(DB)
+         setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
+                ->  delete_organization('TERMINUS_QA')
+                ;   true
+                ),
+                (   agent_name_exists(system_descriptor{}, 'TERMINUS_QA')
+                ->  delete_user('TERMINUS_QA')
+                ;   add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID)
+                ),
+                (   database_exists('TERMINUS_QA', 'TEST_DB')
+                ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
                 ;   true))),
-         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                  (   database_exists(DB)
-                  ->  delete_db(DB)
+         cleanup(((   database_exists('TERMINUS_QA', 'TEST_DB')
+                  ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
                   ;   true),
-                  delete_user(User_ID)))
+                  delete_user_and_organization('TERMINUS_QA')))
      ]) :-
 
     config:server(Server),
@@ -311,20 +452,13 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
-    _{'terminus:status' : "terminus:success"} = In,
-
-    user_object(terminus_descriptor{}, doc:admin, User_Obj),
-    Access = User_Obj.'terminus:authority'.'terminus:access',
-    Resources = Access.'terminus:authority_scope',
-    once(
-        (   memberchk(Database,Resources),
-            _{ '@value' :  "TERMINUS_QA|TEST_DB" } :< Database.'terminus:resource_name')).
+    _{'api:status' : "api:success"} :< In.
 
 :- end_tests(db_endpoint).
 
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(triples/Path), cors_catch(triples_handler(Method,Path)),
+:- http_handler(root(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -335,62 +469,49 @@ test(db_auth_test, [
  *
  * Get or update a schema.
  */
-triples_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    nl. % send headers
-triples_handler(get,Path,Request) :-
-    open_descriptor(terminus_descriptor{}, Terminus),
-    /* Read Document */
-    authenticate(Terminus,Request,Auth),
-
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-    create_context(Descriptor, Pre_Context),
-
-    merge_dictionaries(
-        query_context{
-            terminus: Terminus,
-            authorization : Auth,
-            filter: type_name_filter{ type: Graph.type,
-                                      names: [Graph.name] }
-        }, Pre_Context, Context),
-
-    assert_read_access(Context),
-
-    dump_turtle_graph(Context, Graph.type, Graph.name, String),
-
-    write_cors_headers(Request),
-    reply_json(String).
-triples_handler(post,Path,R) :- % should this be put?
-    add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus),
-    /* Read Document */
-    authenticate(Terminus,Request,Auth),
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-
+triples_handler(get,Path,Request, System_DB, Auth) :-
+    (   get_param('format', Request, Format)
+    ->  true
+    ;   Format = "turtle"
+    ),
+    catch_with_backtrace(
+        (   graph_dump(System_DB, Auth, Path, Format, String),
+            cors_reply_json(Request, String)),
+        Error,
+        do_or_die(triples_error_handler(Error, Request),
+                  Error)).
+triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     (   _{ turtle : TTL,
            commit_info : Commit_Info } :< Triples_Document
     ->  true
     ;   throw(error(bad_api_document(Triples_Document)))),
 
-    create_context(Descriptor, Pre_Context),
+    catch_with_backtrace(
+        (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
+            cors_reply_json(Request, _{'api:status' : "api:success"})),
+        Error,
+        do_or_die(triples_error_handler(Error, Request),
+                  Error)).
 
-    merge_dictionaries(
-        query_context{
-            commit_info : Commit_Info,
-            terminus: Terminus,
-            authorization : Auth,
-            write_graph : Graph
-        }, Pre_Context, Context),
-
-    assert_write_access(Context),
-
-    % check access rights
-    % assert_auth_action_scope(Terminus,Auth,terminus:update_schema,DB_Name),
-    update_turtle_graph(Context,Graph.type,Graph.name,TTL),
-
-    write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+triples_error_handler(error(unknown_format(Format), _), Request) :-
+    format(string(Msg), "Unrecognized format: ~q", [Format]),
+    cors_reply_json(Request,
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(400)]).
+triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
+    format(string(Msg), "Invalid graph descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(400)]).
+triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
+    format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
+    cors_reply_json(Request,
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(triples_endpoint).
@@ -401,19 +522,17 @@ triples_handler(post,Path,R) :- % should this be put?
 :- use_module(library(http/http_open)).
 
 test(triples_update, [
-         setup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                (   database_exists(DB)
-                ->  delete_db(DB)
+         setup(((   database_exists(admin, 'TEST_DB')
+                ->  force_delete_db(admin, 'TEST_DB')
                 ;   true),
-                create_db_without_schema(DB,'test','a test'))),
-         cleanup((user_database_name('TERMINUS_QA', 'TEST_DB', DB),
-                  delete_db(DB)))
+                create_db_without_schema(admin, 'TEST_DB'))),
+         cleanup((force_delete_db(admin, 'TEST_DB')))
 
      ])
 :-
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
-    make_branch_descriptor('TERMINUS_QA', 'TEST_DB', Branch_Descriptor),
+    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
     create_graph(Branch_Descriptor,
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
@@ -423,31 +542,30 @@ test(triples_update, [
     * json_write_dict(current_output,Transaction_Metadata, []),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     config:server(Server),
-    atomic_list_concat([Server, '/triples/TERMINUS_QA/TEST_DB/local/branch/master/schema/main'], URI),
+    atomic_list_concat([Server, '/triples/admin/TEST_DB/local/branch/master/schema/main'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
                           turtle : TTL}),
               _In, [json_object(dict),
                     authorization(basic(admin, Key)),
-                    reply_header(Fields)]),
-    * writeq(Fields),
+                    reply_header(_Fields)]),
 
     findall(A-B-C,
             ask(Branch_Descriptor,
                 t(A, B, C, "schema/*")),
             Triples),
-    memberchk('http://terminusdb.com/schema/terminus'-(rdf:type)-(owl:'Ontology'), Triples).
+    memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
 test(triples_get, [])
 :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/triples/terminus/schema/main'], URI),
+    atomic_list_concat([Server, '/triples/_system/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
@@ -455,13 +573,11 @@ test(triples_get, [])
 
 
 test(triples_post_get, [
-         setup((user_database_name('admin', 'Jumanji', DB),
-                (   database_exists(DB)
-                ->  delete_db(DB)
+         setup(((   database_exists("admin", "Jumanji")
+                ->  force_delete_db("admin", "Jumanji")
                 ;   true),
-                create_db_without_schema(DB,'test','a test'))),
-         cleanup((user_database_name('admin', 'Jumanji', DB),
-                  delete_db(DB)))
+                create_db_without_schema("admin", "Jumanji"))),
+         cleanup(force_delete_db("admin", "Jumanji"))
      ])
 :-
 
@@ -496,10 +612,38 @@ layer:LayerIdRestriction a owl:Restriction.",
     once(sub_string(Result, _Before, _Length, _After,
                     "layer:LayerIdRestriction\n  a owl:Restriction")).
 
+
+test(get_invalid_descriptor, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/triples/nonsense'], URI),
+    admin_pass(Key),
+
+    http_get(URI, In, [json_object(dict),
+                        authorization(basic(admin, Key)),
+                        status_code(Code)]),
+    _{'api:message':_Msg,
+      'api:status':"api:failure"} :< In,
+    Code = 400.
+
+
+test(get_bad_descriptor, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/triples/admin/fdsa'], URI),
+    admin_pass(Key),
+
+    http_get(URI, In, [json_object(dict),
+                        authorization(basic(admin, Key)),
+                        status_code(Code)]),
+    _{'api:message':_,
+      'api:status':"api:failure"} :< In,
+    Code = 400.
+
 :- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(frame/Path), cors_catch(frame_handler(Method,Path)),
+:- http_handler(root(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -509,33 +653,93 @@ layer:LayerIdRestriction a owl:Restriction.",
  *
  * Establishes frame responses
  */
-frame_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    format('~n').
-frame_handler(post, Path, R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-    open_descriptor(terminus_descriptor{}, Terminus),
-    /* Read Document */
-    authenticate(Terminus, Request, Auth),
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    create_context(Descriptor, Context0),
-    merge_dictionaries(
-        query_context{
-            authorization: Auth
-        },
-        Context0,Database),
-
-    assert_read_access(Database),
+frame_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Doc,Request),
 
     (   get_dict(class,Doc,Class_URI)
-    ->  try_class_frame(Class_URI,Database,Frame)
+    ->  catch_with_backtrace(
+            api_class_frame(System_DB, Auth, Path, Class_URI, Frame),
+            E,
+            do_or_die(frame_error_handler(E, Request),
+                      throw(E)))
     ;   get_dict(instance,Doc,Instance_URI)
-    ->  try_filled_frame(Instance_URI,Database,Frame)
+    ->  catch_with_backtrace(
+            api_filled_frame(System_DB, Auth, Path, Instance_URI, Frame),
+            E,
+            do_or_die(frame_error_handler(E, Request),
+                      throw(E)))
     ),
 
     write_cors_headers(Request),
     reply_json(Frame).
+
+frame_error_handler(error(instance_uri_has_unknown_prefix(K),_), Request) :-
+    format(string(Msg), "Instance uri has unknown prefix: ~q", [K]),
+    term_string(K, Key),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:InstanceUriHasUnknownPrefix',
+                                       'api:instance_uri' : Key},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+frame_error_handler(error(class_uri_has_unknown_prefix(K),_), Request) :-
+    format(string(Msg), "Class uri has unknown prefix: ~q", [K]),
+    term_string(K, Key),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:ClassUriHasUnknownPrefix',
+                                       'api:class_uri' : Key},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+frame_error_handler(error(could_not_create_class_frame(Class),_), Request) :-
+    format(string(Msg), "Could not create class frame for class: ~q", [Class]),
+    term_string(Class, Class_String),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrame',
+                                       'api:class_uri' : Class_String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(could_not_create_filled_class_frame(Instance),_), Request) :-
+    format(string(Msg), "Could not create filled class frame for instance: ~q", [Instance]),
+    term_string(Instance, Instance_String),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:CouldNotCreateFilledClassFrame',
+                                       'api:instance_uri' : Instance_String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    % ERROR NOTE: Doesn't work
+    resolve_absolute_descriptor(Path_List, Descriptor),
+    merge_separator_split(Path, '/', Path_List),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FrameErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 :- begin_tests(frame_endpoint).
 :- use_module(core(util/test_utils)).
@@ -546,37 +750,68 @@ frame_handler(post, Path, R) :-
 test(get_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/terminus'], URI),
+    atomic_list_concat([Server, '/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{ class : "terminus:Agent"
+              json(_{ class : "system:Agent"
                     }),
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
-    _{'@type':"terminus:Frame"} :< JSON.
+    _{'@type':"system:Frame"} :< JSON.
 
 
 test(get_filled_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/terminus'], URI),
+    atomic_list_concat([Server, '/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
                     }),
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
-    _{'@type':"terminus:FilledFrame"} :< JSON.
+    _{'@type':"system:FilledFrame"} :< JSON.
+
+
+test(bad_path_filled_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/garbage'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ instance : "doc:admin"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key)),
+                     status_code(Status)]),
+    \+ Status = 200,
+    JSON.'api:error'.'@type' = "api:BadAbsoluteDescriptor".
+
+
+test(unresolvable_path_filled_frame, [])
+:-
+    config:server(Server),
+    atomic_list_concat([Server, '/frame/believable/garbage'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ instance : "doc:admin"
+                    }),
+              JSON, [json_object(dict),
+                     authorization(basic(admin, Key)),
+                     status_code(Status)]),
+
+    \+ Status = 200,
+    JSON.'api:error'.'@type' = "api:UnresolvableAbsoluteDescriptor".
 
 :- end_tests(frame_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(root(woql), cors_catch(woql_handler(Method)),
+:- http_handler(root(woql), cors_handler(Method, woql_handler),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Path), cors_catch(woql_handler(Method,Path)),
+:- http_handler(root(woql/Path), cors_handler(Method, woql_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -590,40 +825,27 @@ test(get_filled_frame, [])
  * NOTE: This is not obtaining appropriate cors response data
  * from terminus database on spartacus.
  */
-woql_handler(options, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-woql_handler(post, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+woql_handler(post, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
     empty_context(Context),
 
-    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
+    woql_run_context(Request, System_DB, Auth, Context, JSON),
 
     write_cors_headers(Request),
     reply_json_dict(JSON).
 
-woql_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-
-woql_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+woql_handler(post, Path, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Context),
 
-    woql_run_context(Request, Terminus, Auth_ID, Context, JSON),
+    woql_run_context(Request, System_DB, Auth, Context, JSON),
 
     write_cors_headers(Request),
 
     reply_json_dict(JSON).
 
-woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
+woql_run_context(Request, System_DB, Auth_ID, Context, JSON) :-
 
     try_get_param('query',Request,Query),
 
@@ -642,7 +864,7 @@ woql_run_context(Request, Terminus, Auth_ID, Context, JSON) :-
         query_context{
             commit_info : Commit_Info,
             files : Files,
-            terminus: Terminus,
+            system: System_DB,
             update_guard : _Guard,
             authorization : Auth_ID
         }, Context0, Final_Context),
@@ -668,9 +890,9 @@ test(no_db, [])
     Query =
     _{'@type' : "Using",
       collection : _{'@type' : "xsd:string",
-                     '@value' : "terminus"},
+                     '@value' : "_system"},
       query :
-      _{'@type' : "Select",    %   { "select" : [ v1, v2, v3, Query ] }
+      _{'@type' : "Select",
         variable_list : [
             _{'@type' : "VariableListElement",
               index : _{'@type' : "xsd:integer",
@@ -714,8 +936,8 @@ test(no_db, [])
                                            subject : _{'@type' : "Variable",
                                                       variable_name : _{ '@type' : "xsd:string",
                                                                          '@value' : "Class"}},
-                                           predicate : "tcs:tag",
-                                           object : "tcs:abstract",
+                                           predicate : "system:tag",
+                                           object : "system:abstract",
                                            graph_filter : _{'@type' : "xsd:string",
                                                             '@value' : "schema/*"}}}},
                       _{'@type' : 'QueryListElement',
@@ -754,7 +976,7 @@ test(no_db, [])
                                             subject : _{'@type' : "Variable",
                                                         variable_name : _{ '@type' : "xsd:string",
                                                                            '@value' : "Class"}},
-                                            predicate : "tcs:tag",
+                                            predicate : "system:tag",
                                             object : _{'@type' : "Variable",
                                                        variable_name : _{ '@type' : "xsd:string",
                                                                           '@value' : "Abstract"}},
@@ -847,13 +1069,11 @@ test(named_get, [])
 
 test(branch_db, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema(admin,test))),
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
     atomic_list_concat([Server, '/woql/admin/test'], URI),
@@ -904,13 +1124,11 @@ test(branch_db, [
 
 test(update_object, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema(admin,test))),
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
     config:server(Server),
@@ -927,19 +1145,21 @@ test(update_object, [
                  _Transaction_Metadata2),
 
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    create_context(Branch_Descriptor, Database0),
-    Database = Database0.put(commit_info, commit_info{
-                                              author : "Steve",
-                                              message : "Yeah I did it"
-                                          }),
-    update_turtle_graph(Database,schema,"main",TTL),
+
+    Graph = "admin/test/local/branch/master/schema/main",
+    super_user_authority(Auth),
+    graph_load(system_descriptor{}, Auth, Graph,
+               commit_info{
+                   author : "Steve",
+                   message : "Yeah I did it"},
+               "turtle", TTL),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
     _{'@context' : _{ doc: "http://terminusdb.com/admin/test/document/",
-                      scm: "http://terminusdb.com/schema/terminus#"},
+                      scm: "http://terminusdb.com/schema/system#"},
       '@type' : "UpdateObject",
       document : _{ '@type' : "scm:Database",
                     '@id' : 'doc:my_database',
@@ -977,32 +1197,28 @@ test(update_object, [
               JSON1,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    Expected = [
-        _{'Object':_{'@type':"http://www.w3.org/2001/XMLSchema#string",
-                     '@value':"Steve"},
-          'Predicate':"http://terminusdb.com/schema/terminus#resource_name",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
-        _{'Object':"http://terminusdb.com/schema/terminus#finalized",
-          'Predicate':"http://terminusdb.com/schema/terminus#database_state",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"},
-        _{'Object':"http://terminusdb.com/schema/terminus#Database",
-          'Predicate':"http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          'Subject':"http://terminusdb.com/admin/test/document/my_database"}],
-    Bindings = JSON1.bindings,
-    union(Expected, Bindings, Union),
-    intersection(Expected, Bindings, Intersection),
-    subtract(Union, Intersection, []).
+    Expected = [ _{'Object': _{'@type':"http://www.w3.org/2001/XMLSchema#string",
+                               '@value':"Steve"},
+                   'Predicate':"http://terminusdb.com/schema/system#resource_name",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+                 _{'Object':"http://terminusdb.com/schema/system#finalized",
+                   'Predicate':"http://terminusdb.com/schema/system#database_state",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"},
+                 _{'Object':"http://terminusdb.com/schema/system#Database",
+                   'Predicate':"http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                   'Subject':"http://terminusdb.com/admin/test/document/my_database"}],
+    forall( member(Elt, Expected),
+            member(Elt, (JSON1.bindings))
+          ).
 
 
 test(delete_object, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists(admin,test)
+                ->  force_delete_db(admin,test)
                 ;   true),
-                create_db_without_schema(Name,'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema(admin,test))),
+         cleanup((force_delete_db(admin,test)))
      ])
 :-
 
@@ -1019,14 +1235,16 @@ test(delete_object, [
 
     % Create the schema
     terminus_path(Path),
-    interpolate([Path, '/terminus-schema/terminus_schema.owl.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    create_context(Branch_Descriptor, Database0),
-    Database = Database0.put(commit_info, commit_info{
-                                              author : "Steve",
-                                              message : "Yeah I did it"
-                                          }),
-    update_turtle_graph(Database,schema,"main",TTL),
+
+    Graph = "admin/test/local/branch/master/schema/main",
+    super_user_authority(Auth),
+    graph_load(system_descriptor{}, Auth, Graph,
+               commit_info{
+                   author : "Steve",
+                   message : "Yeah I did it"},
+               "turtle", TTL),
 
     % Create the object
     Doc = _{ '@type' : "scm:Database",
@@ -1042,7 +1260,7 @@ test(delete_object, [
                                                        author : "Author",
                                                        message : "Message"}),
     Prefixes = _{ doc: "http://terminusdb.com/admin/test/document/",
-                  scm: "http://terminusdb.com/schema/terminus#"},
+                  scm: "http://terminusdb.com/schema/system#"},
     context_extend_prefixes(Pre_Database2,Prefixes,Database1),
     with_transaction(Database1,
                      ask(Database1,
@@ -1087,7 +1305,7 @@ test(get_object, [])
 
     config:server(Server),
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/terminus'], URI),
+    atomic_list_concat([Server, '/woql/_system'], URI),
     http_post(URI,
               json(_{query : Query0}),
               JSON0,
@@ -1095,30 +1313,20 @@ test(get_object, [])
     [Result] = JSON0.bindings,
 
     _{'@id':"doc:admin",
-      '@type':"terminus:User",
-      'terminus:agent_key_hash':_,
-      'terminus:agent_name': _,
-      'terminus:authority': _}
+      '@type':"system:User",
+      'system:user_key_hash':_,
+      'system:agent_name': _,
+      'system:role': _}
     :< Result.'Document'.
 
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone/Account/DB), cors_catch(clone_handler(Method, Account, DB)),
+:- http_handler(root(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
-clone_handler(options, _, _, Request) :-
-    write_cors_headers(Request),
-    nl.
-clone_handler(post, Account, DB, R) :-
-    add_payload_to_request(R,Request), % this should be automatic.
-
-    open_descriptor(terminus_descriptor{}, Terminus_DB),
-    authenticate(Terminus_DB, Request, Auth),
-
-    assert_auth_action_scope(Terminus_DB, Auth, terminus:create_database, "terminus"),
-
+clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
     request_remote_authorization(Request, Authorization),
     get_payload(Database_Document,Request),
 
@@ -1131,32 +1339,82 @@ clone_handler(post, Account, DB, R) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
-    clone(Account,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+    clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
 
     write_cors_headers(Request),
     reply_json_dict(
-        _{'terminus:status' : 'terminus:success'}).
+        _{'api:status' : 'api:success'}).
+
+:- begin_tests(clone_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(clone_local, [
+         setup((cleanup_user_database("TERMINUSQA1", "foo"),
+                cleanup_user_database("TERMINUSQA2", "bar"),
+
+                add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+                add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+                create_db_without_schema("TERMINUSQA1", "foo"))),
+         cleanup((cleanup_user_database("TERMINUSQA1", "foo"),
+                  cleanup_user_database("TERMINUSQA2", "bar")))
+     ])
+:-
+    resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+    create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+    with_transaction(Foo_Context,
+                     ask(Foo_Context,
+                         insert(a,b,c)),
+                     _),
+
+    config:server(Server),
+    atomic_list_concat([Server, '/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+                     
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'api:status' : "api:success"
+    } :< JSON,
+
+    resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+    once(ask(Bar_Descriptor,
+             t(a,b,c))),
+
+    true.
+
+:- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/Path), cors_catch(fetch_handler(Method,Path)),
+:- http_handler(root(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-fetch_handler(post,Path,Request) :-
+fetch_handler(post,Path,Request, _System_DB, _Auth) :-
     request_remote_authorization(Request, Authorization),
     % Calls pack on remote
     resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
+    % DUBIOUS is authorization happening here?
     remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
                  New_Head_Layer_Id, Head_Has_Updated),
 
     write_cors_headers(Request),
     reply_json_dict(
-            _{'terminus:status' : 'terminus:success',
+            _{'api:status' : 'api:success',
               'head_has_changed' : Head_Has_Updated,
               'head' : New_Head_Layer_Id}).
 
@@ -1185,39 +1443,32 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(rebase/Path), cors_catch(rebase_handler(Method,Path)),
+:- http_handler(root(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
 
-rebase_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-rebase_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
+rebase_handler(post, Path, Request, System_DB, Auth) :-
     % No descriptor to work with until the query sets one up
-
     resolve_absolute_string_descriptor(Path, Our_Descriptor),
-    check_descriptor_auth(Terminus, Our_Descriptor, terminus:rebase, Auth_ID),
+    check_descriptor_auth(System_DB, Our_Descriptor, system:rebase, Auth),
 
     get_payload(Document, Request),
     (   get_dict(rebase_from, Document, Their_Path)
     ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
     ;   throw(error(rebase_from_missing))),
-    check_descriptor_auth(Terminus, Their_Descriptor, terminus:instance_read_access, Auth_ID),
-    check_descriptor_auth(Terminus, Their_Descriptor, terminus:schema_read_access, Auth_ID),
+    check_descriptor_auth(System_DB, Their_Descriptor, system:instance_read_access, Auth),
+    check_descriptor_auth(System_DB, Their_Descriptor, system:schema_read_access, Auth),
 
     (   get_dict(author, Document, Author)
     ->  true
     ;   throw(error(rebase_author_missing))),
 
     Strategy_Map = [],
-    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth_ID, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    Incomplete_Reply = _{ 'terminus:status' : "terminus:success",
+    Incomplete_Reply = _{ 'api:status' : "api:success",
                           forwarded_commits : Forwarded_Commits,
                           reports: Reports
                         },
@@ -1234,14 +1485,19 @@ rebase_handler(post, Path, R) :-
 :- use_module(library(http/http_open)).
 
 test(rebase_divergent_history, [
-         setup((config:server(Server),
-                user_database_name('TERMINUSQA',foo, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+         setup(((   database_exists("TERMINUSQA", "foo")
+                ->  force_delete_db("TERMINUSQA", "foo")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name('TERMINUSQA',foo, Name),
-                  delete_db(Name)))
+                (   agent_name_exists(system_descriptor{}, "TERMINUSQA")
+                ->  delete_user("TERMINUSQA")
+                ;   true),
+                (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
+                ->  delete_organization("TERMINUSQA")
+                ;   true),
+                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),_User_ID),
+                create_db_without_schema("TERMINUSQA", "foo"))),
+         cleanup((force_delete_db("TERMINUSQA", "foo"),
+                  delete_user_and_organization("TERMINUSQA")))
      ])
 :-
 
@@ -1277,12 +1533,11 @@ test(rebase_divergent_history, [
 
     config:server(Server),
     atomic_list_concat([Server, '/rebase/TERMINUSQA/foo'], URI),
-    admin_pass(Key),
     http_post(URI,
               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
                      author : "Gavsky"}),
               JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
+              [json_object(dict),authorization(basic('TERMINUSQA','password'))]),
 
     * json_write_dict(current_output, JSON, []),
 
@@ -1290,7 +1545,7 @@ test(rebase_divergent_history, [
         forwarded_commits : [_Thing, _Another_Thing ],
         common_commit_id : _Common_Something,
         reports: _Reports,
-        'terminus:status' : "terminus:success"
+        'api:status' : "api:success"
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
@@ -1304,14 +1559,11 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pack/Path), cors_catch(pack_handler(Method,Path)),
+:- http_handler(root(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
-pack_handler(post,Path,R) :-
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, R, Auth_ID),
-
+pack_handler(post,Path,Request, System_DB, Auth) :-
     atomic_list_concat([Path, '/local/_commits'], Repository_Path),
     resolve_absolute_string_descriptor(Repository_Path,
                                        Repository_Descriptor),
@@ -1325,13 +1577,12 @@ pack_handler(post,Path,R) :-
 
     merge_dictionaries(
         query_context{
-            authorization : Auth_ID,
-            terminus : Terminus
+            authorization : Auth,
+            system : System_DB
         }, Pre_Context, Context),
 
     assert_read_access(Context),
 
-    add_payload_to_request(R,Request),
     get_payload(Document,Request),
 
     (   _{ repository_head : Layer_ID } :< Document
@@ -1357,20 +1608,20 @@ pack_handler(post,Path,R) :-
 
 test(pack_stuff, [
          % blocked('Blocked due to build problems - missing new store?'),
-         setup((user_database_name('_a_test_user_', foo, DB_Name),
-                (   database_exists(DB_Name)
-                ->  delete_db(DB_Name)
+         setup(((   database_exists('_a_test_user_',foo)
+                ->  force_delete_db('_a_test_user_',foo)
                 ;   true),
-                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
-                    delete_user(Old_User_ID)
+                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
+                ->  delete_user('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',User_ID),
-                create_db_without_schema(DB_Name,'foo','a test'),
-                make_user_own_database('_a_test_user_',DB_Name)
+                (   organization_name_exists(system_descriptor{},'_a_test_user_')
+                ->  delete_organization('_a_test_user_')
+                ;   true),
+                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+                create_db_without_schema('_a_test_user_',foo)
                )),
-         cleanup((delete_db(DB_Name),
-                  delete_user(User_ID)))
+         cleanup((force_delete_db('_a_test_user_',foo),
+                  delete_user_and_organization('_a_test_user_')))
      ]) :-
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
@@ -1428,20 +1679,20 @@ test(pack_stuff, [
 
 test(pack_nothing, [
          % blocked('causing travis to die'),
-         setup((user_database_name('_a_test_user_', foo, DB_Name),
-                (   database_exists(DB_Name)
-                ->  delete_db(DB_Name)
+         setup(((   database_exists('_a_test_user_','foo')
+                ->  force_delete_db('_a_test_user_','foo')
                 ;   true),
-                (   agent_name_exists(terminus_descriptor{}, '_a_test_user_')
-                ->  agent_name_uri(terminus_descriptor{}, '_a_test_user_', Old_User_ID),
-                    delete_user(Old_User_ID)
+                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
+                ->  delete_user('_a_test_user_')
                 ;   true),
-                add_user('_a_test_user_','user@example.com','password',User_ID),
-                create_db_without_schema(DB_Name,'foo','a test'),
-                make_user_own_database('_a_test_user_',DB_Name)
+                (   organization_name_exists(system_descriptor{},'_a_test_user_')
+                ->  delete_organization('_a_test_user_')
+                ;   true),
+                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+                create_db_without_schema('_a_test_user_','foo')
                )),
-         cleanup((delete_db(DB_Name),
-                  delete_user(User_ID)))
+         cleanup((force_delete_db('_a_test_user_','foo'),
+                  delete_user_and_organization('_a_test_user_')))
      ]) :-
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
@@ -1461,60 +1712,52 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(unpack/Path), cors_catch(unpack_handler(Method,Path)),
+:- http_handler(root(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
-unpack_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-unpack_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
-
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, R, Auth_ID),
-
+unpack_handler(post, Path, Request, System_DB, Auth) :-
     string_concat(Path, "/local/_commits", Full_Path),
     do_or_die(
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
             (repository_descriptor{} :< Repository_Descriptor)),
         reply_json(_{'@type' : "vio:UnpackPathInvalid",
-                           'terminus:status' : "terminus:failure",
-                           'terminus:message' : "The path to the database to unpack to was invalid"
+                     'api:status' : "api:failure",
+                     'api:message' : "The path to the database to unpack to was invalid"
                     },
                    400)),
 
-    check_descriptor_auth(Terminus, Repository_Descriptor,
-                          terminus:commit_write_access,
-                          Auth_ID),
+    check_descriptor_auth(System_DB, Repository_Descriptor,
+                          system:commit_write_access,
+                          Auth),
 
     get_payload(Payload, Request),
 
     catch(
         (   unpack(Repository_Descriptor, Payload),
-            Json_Reply = _{'terminus:status' : "terminus:success"},
+            Json_Reply = _{'api:status' : "api:success"},
             Status = 200
         ),
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
             ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "Not a linear history"
+                               'api:status' : "api:failure",
+                               'api:message' : "Not a linear history"
                               },
                 Status = 400
             ;   Inner_E = unknown_layer_reference(Layer_Id)
             ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "A layer in the pack has an unknown parent",
+                               'api:status' : "api:failure",
+                               'api:message' : "A layer in the pack has an unknown parent",
                                'layer_id' : _{'@type': "xsd:string",
                                               '@value' : Layer_Id}
                               },
                 Status = 400
             ;   Inner_E = database_not_found(_)
             ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
-                               'terminus:status' : "terminus:failure",
-                               'terminus:message' : "The database to unpack to has not be found"
+                               'api:status' : "api:failure",
+                               'api:message' : "The database to unpack to has not be found"
                               },
                 Status = 400
             ;   throw(E))
@@ -1529,20 +1772,12 @@ unpack_handler(post, Path, R) :-
 :- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/Path), cors_catch(push_handler(Method,Path)),
+:- http_handler(root(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-% NOTE: We do this everytime - it should be handled automagically.
-push_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-push_handler(post,Path,R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Auth_ID),
-
+push_handler(post,Path,Request, _System_DB, Auth) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     do_or_die(
@@ -1560,15 +1795,15 @@ push_handler(post,Path,R) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth_ID,
+    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth,
          authorized_push(Authorization),Result),
 
     (   Result = none
     ->  write_cors_headers(Request),
-        reply_json(_{'terminus:status' : "terminus:success"})
+        reply_json(_{'api:status' : "api:success"})
     ;   Result = some(Head_ID)
     ->  write_cors_headers(Request),
-        reply_json(_{'terminus:status' : "terminus:success",
+        reply_json(_{'api:status' : "api:success",
                      'head' : Head_ID})
     ;   throw(error(internal_server_error))).
 
@@ -1604,20 +1839,12 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pull/Path), cors_catch(pull_handler(Method,Path)),
+:- http_handler(root(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-% NOTE: We do this everytime - it should be handled automagically.
-pull_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    nl.
-pull_handler(post,Path,R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, Local_Auth),
-
+pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     get_payload(Document, Request),
@@ -1639,48 +1866,45 @@ pull_handler(post,Path,R) :-
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_valid_local_branch(_)
-            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
-                                   'terminus:message' : "Not a valid local branch"},
+            ->  throw(reply_json(_{'api:status' : "api:failure",
+                                   'api:message' : "Not a valid local branch"},
                                  400))
             ;   Inner_E = not_a_valid_remote_branch(_)
-            ->  throw(reply_json(_{'terminus:status' : "terminus:failure",
-                                   'terminus:message' : "Not a valid remote branch"},
+            ->  throw(reply_json(_{'api:status' : "api:failure",
+                                   'api:message' : "Not a valid remote branch"},
                                  400))
             ;   throw(E))
         ;   throw(E))
     ),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success",
+    reply_json(_{'api:status' : "api:success",
                  'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/Path), cors_catch(branch_handler(Method,Path)),
+:- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-branch_handler(options,_Path,Request) :-
-    write_cors_headers(Request),
-    nl.
-branch_handler(post,Path,R) :-
+branch_handler(post,Path,Request, _System_DB, _Auth) :-
     resolve_absolute_string_descriptor(Path, Branch_Descriptor),
     branch_descriptor{
         repository_descriptor: Destination_Descriptor,
         branch_name: Branch_Name
     } :< Branch_Descriptor,
 
-    add_payload_to_request(R,Request),
     get_payload(Document, Request),
 
     (   get_dict(origin, Document, Origin_Path)
     ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
     ;   Origin_Descriptor = empty),
 
+    % DUBIOUS are we even doing authentication here?
     branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 :- begin_tests(branch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1690,13 +1914,11 @@ branch_handler(post,Path,R) :-
 
 test(create_empty_branch, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1716,13 +1938,11 @@ test(create_empty_branch, [
 
 test(create_branch_from_local_without_prefixes, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1740,13 +1960,11 @@ test(create_branch_from_local_without_prefixes, [
 
 test(create_branch_from_local_with_prefixes, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") %dubious
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1767,13 +1985,11 @@ test(create_branch_from_local_with_prefixes, [
 
 test(create_branch_that_already_exists_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % dubious
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1791,13 +2007,11 @@ test(create_branch_that_already_exists_error, [
 
 test(create_branch_from_nonexisting_origin_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1819,13 +2033,11 @@ test(create_branch_from_nonexisting_origin_error, [
 
 test(create_branch_from_commit_graph_error, [
          setup((config:server(Server),
-                user_database_name(admin,test, Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup((user_database_name(admin,test, Name),
-                  delete_db(Name)))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     config:server(Server),
@@ -1850,28 +2062,21 @@ test(create_branch_from_commit_graph_error, [
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(prefixes/Path), cors_catch(prefix_handler(Method,Path)),
+:- http_handler(root(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
-prefix_handler(options, _Path, _R) :-
-
+prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(graph/Path), cors_catch(graph_handler(Method,Path)),
+:- http_handler(root(graph/Path), cors_handler(Method, graph_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
 
-graph_handler(options, _Path, Request) :-
-    write_cors_headers(Request),
-    format('~n').
-graph_handler(post, Path, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+graph_handler(post, Path, Request, _System_Db, _Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
 
@@ -1882,6 +2087,7 @@ graph_handler(post, Path, R) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
+    % DUBIOUS authentication??
     create_graph(Descriptor,
                  Commit_Info,
                  Graph.type,
@@ -1889,11 +2095,8 @@ graph_handler(post, Path, R) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
-graph_handler(delete, Path, R) :-
-    add_payload_to_request(R,Request),
-    open_descriptor(terminus_descriptor{}, Terminus),
-    authenticate(Terminus, Request, _Auth_ID),
+    reply_json(_{'api:status' : "api:success"}).
+graph_handler(delete, Path, Request, _System_DB, _Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
     get_payload(Document, Request),
@@ -1903,6 +2106,7 @@ graph_handler(delete, Path, R) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
+    % DUBIOUS authentication?
     delete_graph(Descriptor,
                  Commit_Info,
                  Graph.type,
@@ -1910,7 +2114,7 @@ graph_handler(delete, Path, R) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'terminus:status' : "terminus:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 
 :- begin_tests(graph_endpoint).
@@ -1921,12 +2125,11 @@ graph_handler(delete, Path, R) :-
 
 test(create_graph, [
          setup((config:server(Server),
-                user_database_name(admin,"test", Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test") % very dubious database name
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'))),
-         cleanup(delete_db(Name))
+                create_db_without_schema("admin", "test"))),
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
     Commit = commit_info{ author : 'The Graphinator',
@@ -1952,19 +2155,18 @@ test(create_graph, [
 
 test(delete_graph, [
          setup((config:server(Server),
-                user_database_name(admin,"test", Name),
-                (   database_exists(Name)
-                ->  delete_db(Name)
+                (   database_exists("admin", "test")
+                ->  force_delete_db("admin", "test")
                 ;   true),
-                create_db_without_schema(Name, 'test','a test'),
-                resolve_absolute_string_descriptor('admin/test',Branch_Descriptor),
+                create_db_without_schema("admin", "test"),
+                resolve_absolute_string_descriptor("admin/test",Branch_Descriptor),
                 create_graph(Branch_Descriptor,
                              commit_info{ author : "test",
                                           message: "Generated by automated testing"},
                              schema,
                              "main",
                              _Transaction_Metadata))),
-         cleanup(delete_db(Name))
+         cleanup(force_delete_db("admin", "test"))
      ])
 :-
 
@@ -1981,15 +2183,248 @@ test(delete_graph, [
 
 :- end_tests(graph_endpoint).
 
-%%%%%%%%%%%%%%%%%%%% JSON Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(user), cors_handler(Method, user_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(root(user/Name), cors_handler(Method, user_handler(Name)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
 
-% We want to use cors whenever we're throwing an error.
-%:- set_setting(http:cors, [*]).
+user_handler(post, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+user_handler(delete, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(delete_user_requires_superuser)),
+
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+
+
+user_handler(post, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_creation_requires_superuser)),
+
+    get_payload(Document, Request),
+
+    do_or_die(_{ user_identifier : Identifier,
+                 agent_name : Agent_Name,
+                 comment : Comment
+               } :< Document,
+              error(malformed_user_document(Document))
+             ),
+    (   _{ password : Password } :< Document
+    ->  Password_Option = some(Password)
+    ;   Password_Option = none),
+
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option, _),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+user_handler(delete, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(delete_user_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    do_or_die(_{ agent_name : Agent_Name },
+              error(malformed_user_deletion_document(Document))
+             ),
+
+    create_context(System_DB, commit_info{ author: "user_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Agent_Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+
+%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(organization), cors_handler(Method, organization_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(root(organization/Name), cors_handler(Method, organization_handler(Name)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+
+organization_handler(post, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(organization_creation_requires_superuser)),
+
+    get_payload(Document, Request),
+
+    do_or_die(_{ organization_name : Name } :< Document,
+              error(malformed_organization_document(Document))
+             ),
+
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     add_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+organization_handler(delete, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(delete_organization_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    do_or_die(_{ organization_name : Name },
+              error(malformed_organization_deletion_document(Document))
+             ),
+
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    with_transaction(Ctx,
+                     delete_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+
+organization_handler(post, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(organization_update_requires_superuser)),
+    %
+    get_payload(Document, Request),
+
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+    do_or_die(_{ organization_name : New_Name } :< Document,
+              error(malformed_api_document(Document), _)),
+
+    with_transaction(Ctx,
+                     update_organization(Ctx, Name, New_Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+organization_handler(delete, Name, Request, System_DB, Auth) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(delete_organization_requires_superuser)),
+
+    create_context(System_DB, commit_info{ author: "organization_handler/2",
+                                          message: "internal system operation"
+                                        }, Ctx),
+    with_transaction(Ctx,
+                     delete_organization(Ctx, Name),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+
+
+%%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(update_role), cors_handler(Method, update_role_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+update_role_handler(post, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+
+    create_context(System_DB, commit_info{ author: "role_handler/2",
+                                           message: "internal system operation"
+                                         }, Ctx),
+
+    do_or_die(_{ database_name : Database_Name,
+                 agent_names : Agents,
+                 organization_name : Organization,
+                 actions : Actions
+               } :< Document,
+              error(bad_api_document)),
+
+    with_transaction(Ctx,
+                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+                     _),
+
+    write_cors_headers(Request),
+    reply_json(_{'api:status' : "api:success"}).
+
+%%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(role), cors_handler(Method, role_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+role_handler(post, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+
+    get_role(System_DB, Auth, Document, Response),
+
+    write_cors_headers(Request),
+    reply_json(Response).
+
+
+%%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
+:- meta_predicate cors_handler(+,2,?).
+cors_handler(options, _Goal, Request) :-
+    !,
+    write_cors_headers(Request),
+    format('~n').
+cors_handler(Method, Goal, R) :-
+    (   memberchk(Method, [post, put, delete])
+    ->  add_payload_to_request(R,Request)
+    ;   Request = R),
+
+    open_descriptor(system_descriptor{}, System_Database),
+    catch((   authenticate(System_Database, Request, Auth),
+              cors_catch(Method, Goal, Request, System_Database, Auth)),
+
+          error(authentication_incorrect),
+
+          (   write_cors_headers(Request),
+
+              reply_json(_{'api:status' : 'api:failure',
+                           'api:message' : 'Incorrect authentication information'
+                          },
+                         [status(401)]))).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(1,?).
-cors_catch(Goal,Request) :-
-    catch(call(Goal, Request),
+:- meta_predicate cors_catch(+,3,?,?,?).
+cors_catch(Method, Goal, Request, System_Database, Auth) :-
+    strip_module(Goal, Module, PlainGoal),
+    PlainGoal =.. [Head|Args],
+    NewArgs = [Method|Args],
+    NewPlainGoal =.. [Head|NewArgs],
+    NewGoal = Module:NewPlainGoal,
+    catch(call(NewGoal, Request, System_Database, Auth),
           E,
           (
               write_cors_headers(Request),
@@ -2000,8 +2435,8 @@ cors_catch(Goal,Request) :-
 cors_catch(_,Request) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' :
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' :
                  _{'@type' : 'xsd:string',
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
@@ -2011,38 +2446,63 @@ customise_exception(reply_json(M,Status)) :-
                [status(Status)]).
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
+customise_exception(error(authentication_incorrect)) :-
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'Incorrect authentication information'
+                },
+               [status(401)]).
+customise_exception(error(not_authenticated)) :-
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'No authentication supplied'
+                },
+               [status(401)]).
+customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
+    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
+           [Scope,Action,Auth]),
+    term_string(Auth, Auth_String),
+    term_string(Action, Action_String),
+    term_string(Scope, Scope_String),
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg,
+                 'auth' : Auth_String,
+                 'action' : Action_String,
+                 'scope' : Scope_String
+                },
+               [status(403)]).
+
+%% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(syntax_error(M),_)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(woql_syntax_error(JSON,Path,Element))) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',
-                 'terminus:message' : Message,
+                 'api:message' : Message,
                  'vio:path' : Director,
                  'vio:query' : JSON},
                [status(400)]).
 customise_exception(error(syntax_error(M))) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:message' : M,
                                            'vio:type' : TA,
                                            'vio:literal' : OA}]},
@@ -2059,136 +2519,130 @@ customise_exception(http_reply(authorize(JSON))) :-
 customise_exception(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
 customise_exception(time_limit_exceeded) :-
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : 'Connection timed out'
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'Connection timed out'
                },
                [status(408)]).
 customise_exception(error(unqualified_resource_id(Doc_ID))) :-
     format(atom(MSG), 'Document resource ~s could not be expanded', [Doc_ID]),
-    reply_json(_{'terminus:status' : 'terminus_failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Doc_ID},
+    reply_json(_{'api:status' : 'terminus_failure',
+                 'api:message' : MSG,
+                 'system:object' : Doc_ID},
                [status(400)]).
 customise_exception(error(unknown_deletion_error(Doc_ID))) :-
     format(atom(MSG), 'unqualfied deletion error for id ~s', [Doc_ID]),
-    reply_json(_{'terminus:status' : 'terminus_failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Doc_ID},
+    reply_json(_{'api:status' : 'terminus_failure',
+                 'api:message' : MSG,
+                 'system:object' : Doc_ID},
                [status(400)]).
-customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
-    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
-           [Scope,Action,Auth]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
-               [status(403)]).
 customise_exception(error(schema_check_failure(Witnesses))) :-
     reply_json(Witnesses,
                [status(405)]).
 customise_exception(error(database_not_found(DB))) :-
     format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
-    reply_json(_{'terminus:message' : MSG,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'api:message' : MSG,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(database_does_not_exist(DB))) :-
     format(atom(M), 'Database does not exist with the name ~q', [DB]),
-    reply_json(_{'terminus:message' : M,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'api:message' : M,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
-    reply_json(_{'terminus:message' : M,
-                 'terminus:status' : 'terminus:failure'},
+    reply_json(_{'api:message' : M,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:document' : Document},
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:object' : DB,
-                 'terminus:message' : MSG,
-                 'terminus:method' : 'terminus:create_database'},
+    reply_json(_{'api:status' : 'api:failure',
+                 'system:object' : DB,
+                 'api:message' : MSG,
+                 'system:method' : 'system:create_database'},
                [status(409)]).
 customise_exception(error(database_could_not_be_created(DB))) :-
     format(atom(MSG), 'Database ~s could not be created', [DB]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:method' : 'terminus:create_database'},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:method' : 'system:create_database'},
                [status(409)]).
 customise_exception(error(could_not_create_class_frame(Class))) :-
     format(atom(MSG), 'Class Frame could not be generated for class ~s', [Class]),
-    reply_json(_{ 'terminus:message' : MSG,
-                  'terminus:status' : 'terminus:failure',
-                  'terminus:class' : Class},
+    reply_json(_{ 'api:message' : MSG,
+                  'api:status' : 'api:failure',
+                  'system:class' : Class},
                [status(400)]).
 customise_exception(error(could_not_create_filled_class_frame(Instance))) :-
     format(atom(MSG), 'Class Frame could not be generated for instance ~s', [Instance]),
-    reply_json(_{ 'terminus:message' : MSG,
-                  'terminus:status' : 'terminus:failure',
-                  'terminus:instance' : Instance},
+    reply_json(_{ 'api:message' : MSG,
+                  'api:status' : 'api:failure',
+                  'system:instance' : Instance},
                [status(400)]).
 customise_exception(error(maformed_json(Atom))) :-
     format(atom(MSG), 'Malformed JSON Object ~q', [MSG]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Atom},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:object' : Atom},
                [status(400)]).
 customise_exception(error(no_document_for_key(Key))) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:key' : Key},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:key' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key_in_document(Key,Document))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Document]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:key' : Key,
-                 'terminus:object' : Document},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:key' : Key,
+                 'system:object' : Document},
                [status(400)]).
 customise_exception(error(no_parameter_key_form_method(Key,Method))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Method]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Key},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:object' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key(Key))) :-
     format(atom(MSG), 'No parameter key ~q', [Key]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : MSG,
-                 'terminus:object' : Key},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
+                 'system:object' : Key},
                [status(400)]).
 customise_exception(error(branch_already_exists(Branch_Name))) :-
     format(string(Msg), "branch ~w already exists", [Branch_Name]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_branch_does_not_exist(Branch_Name))) :-
     format(string(Msg), "origin branch ~w does not exist", [Branch_Name]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_commit_does_not_exist(Commit_Id))) :-
     format(string(Msg), "origin commit ~w does not exist", [Commit_Id]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_cannot_be_branched(Descriptor))) :-
     format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : EM},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : EM},
                [status(500)]).
 customise_exception(error(E, CTX)) :-
     http_log('~N[Exception] ~q~n',[error(E,CTX)]),
     format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
-    reply_json(_{'terminus:status' : 'terminus:failure',
-                 'terminus:message' : EM},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : EM},
                [status(500)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
@@ -2219,7 +2673,7 @@ fetch_jwt_data(Request, Username) :-
     atom_string(TokenAtom, Token),
     jwt_decode(TokenAtom, Payload, []),
     atom_json_dict(Payload, PayloadDict, []),
-    UsernameString = PayloadDict.get('https://terminusdb.com/nickname'),
+    UsernameString = PayloadDict.get('http://terminusdb.com/schema/system#agent_name'),
     atom_string(Username, UsernameString).
 
 /*
@@ -2227,40 +2681,18 @@ fetch_jwt_data(Request, Username) :-
  *
  * This should either bind the Auth_Obj or throw an http_status_reply/4 message.
  */
-authenticate(DB, Request, Auth) :-
+authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
-    (   user_key_auth(DB, Username, KS, Auth)
-    ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key'})))).
-authenticate(DB, Request, Auth) :-
+    do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
+              error(authentication_incorrect)).
+authenticate(System_Askable, Request, Auth) :-
     % Try JWT if no http keys
     fetch_jwt_data(Request, Username),
     !,
-    (   username_auth(DB, Username, Auth)
-    ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key'})))).
-authenticate(_, _, _) :-
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : "No authentication supplied",
-                                          'terminus:object' : 'authenticate'}))).
-
-connection_authorised_user(Request, User_ID) :-
-    open_descriptor(terminus_descriptor{}, DB),
-    fetch_authorization_data(Request, Username, KS),
-    !,
-    (   user_key_user_id(DB, Username, KS, User_ID)
-    ->  true
-    ;   throw(http_reply(authorize(_{'terminus:status' : 'terminus:failure',
-                                     'terminus:message' : 'Not a valid key',
-                                     'terminus:object' : KS})))).
-connection_authorised_user(Request, User_ID) :-
-    open_descriptor(terminus_descriptor{}, DB),
-    fetch_jwt_data(Request, Username),
-    username_user_id(DB, Username, User_ID).
-
+    do_or_die(username_auth(System_Askable, Username, Auth),
+              error(authentication_incorrect)).
+authenticate(_, _, doc:anonymous).
 
 /*
  * write_cors_headers(Request) is det.
@@ -2276,6 +2708,14 @@ write_cors_headers(Request) :-
         format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
         format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
     ;   true).
+
+cors_reply_json(Request, JSON) :-
+    write_cors_headers(Request),
+    reply_json(JSON).
+
+cors_reply_json(Request, JSON, Options) :-
+    write_cors_headers(Request),
+    reply_json(JSON, Options).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -2424,19 +2864,3 @@ collect_posted_files(Request,Files) :-
     !,
     include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
 collect_posted_files(_Request,[]).
-
-/*
- * try_class_frame(Class,Database,Frame) is det.
- */
-try_class_frame(Class,Database,Frame) :-
-    prefix_expand(Class, Database.prefixes, ClassEx),
-    class_frame_jsonld(Database,ClassEx,Frame)
-    <>  throw(error(could_not_create_class_frame(Class))).
-
-/*
- * try_class_frame(Class,Database,Frame) is det.
- */
-try_filled_frame(Instance,Database,Frame) :-
-    prefix_expand(Instance, Database.prefixes, InstanceEx),
-    filled_frame_jsonld(Database,InstanceEx,Frame)
-    <> throw(could_not_create_filled_class_frame(Instance)).

@@ -119,13 +119,14 @@ branch_create(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_
 
 test(create_branch_from_nothing,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin","foo"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -136,13 +137,14 @@ test(create_branch_from_nothing,
 
 test(create_branch_from_local_branch_with_commits,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin","foo"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -168,14 +170,15 @@ test(create_branch_from_local_branch_with_commits,
 
 test(create_branch_from_remote_branch,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'),
-             create_db_without_schema('user|bar','test','a test'))),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     Origin_Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -195,7 +198,8 @@ test(create_branch_from_remote_branch,
 
     Destination_Repository_Descriptor = repository_descriptor{
                                             database_descriptor: database_descriptor{
-                                                                     database_name: 'user|bar'
+                                                                     organization_name: "admin",
+                                                                     database_name: "bar"
                                                                  },
                                             repository_name: "local"
                                         },
@@ -217,13 +221,14 @@ test(create_branch_from_remote_branch,
 
 test(create_branch_from_local_commit,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'))),
+             create_db_without_schema("admin","foo"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -265,14 +270,15 @@ test(create_branch_from_local_commit,
 
 test(create_branch_from_remote_commit,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|foo','test','a test'),
-             create_db_without_schema('user|bar','test','a test'))),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     Origin_Repository_Descriptor = repository_descriptor{
                                 database_descriptor: database_descriptor{
-                                                         database_name: 'user|foo'
+                                                         organization_name: "admin",
+                                                         database_name: "foo"
                                                      },
                                 repository_name: "local"
                             },
@@ -292,7 +298,8 @@ test(create_branch_from_remote_commit,
 
     Destination_Repository_Descriptor = repository_descriptor{
                                             database_descriptor: database_descriptor{
-                                                                     database_name: 'user|bar'
+                                                                     organization_name: "admin",
+                                                                     database_name: "bar"
                                                                  },
                                             repository_name: "local"
                                         },

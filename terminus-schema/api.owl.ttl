@@ -1,0 +1,148 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
+@prefix api: <http://terminusdb.com/schema/api#> .
+
+<http://terminusdb.com/schema/api>
+  a owl:Ontology ;
+  rdfs:label "TerminusDB API Schema"@en ;
+  rdfs:comment "Schema describing the TerminusDB API."@en ;
+  system:rights "Copyright TerminusDB Ltd. 2017-2020"@en ;
+  system:author "Gavin Mendel-Gleason"@en, "Matthijs van Otterdijk"@en;
+  system:license <https://creativecommons.org/licenses/by-sa/2.0/>, <https://www.gnu.org/licenses/gpl-3.0.en.html> .
+
+api:Response
+  a owl:Class ;
+  rdfs:subClassOf system:Document .
+
+api:Status
+  a owl:Class ;
+  owl:oneOf ( api:success, api:failure ) .
+
+api:success a api:Status .
+api:failure a api:Status .
+
+api:status
+  a owl:ObjectProperty ;
+  rdfs:domain api:Response ;
+  rdfs:range api:Status .
+
+api:ResultResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:MessageResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:message
+  a owl:DatatypeProperty ;
+  rdfs:domain api:MessageResponse ;
+  rdfs:range xsd:string .
+
+api:ErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:MessageResponse.
+
+api:Error
+  a owl:Class ;
+  rdfs:subClassOf system:Document .
+
+api:error
+  a owl:ObjectProperty ;
+  rdfs:domain api:ErrorResponse ;
+  rdfs:range api:Error .
+
+api:FrameErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithAbsoluteDescriptor ;
+  a owl:Class .
+
+api:absolute_descriptor ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithAbsoluteDescriptor ;
+  rdfs:range xsd:string .
+
+api:BadAbsoluteDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:UnresolvableAbsoluteDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:WithClassUri
+  a owl:Class .
+
+api:class_uri
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithClassUri ;
+  rdfs:range xsd:string .
+
+api:CouldNotCreateClassFrame
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithClassUri .
+
+api:WithInstanceUri
+  a owl:Class .
+
+api:instance_uri
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithInstanceUri ;
+  rdfs:range xsd:string .
+
+api:CouldNotCreateFilledClassFrame
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithInstanceUri .
+
+api:InstanceUriHasUnknownPrefix
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithInstanceUri .
+
+api:ClassUriHasUnknownPrefix
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithClassUri .
+
+api:DbCreateResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ResultResponse .
+
+api:DbDeleteResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ResultResponse .
+
+api:DbCreateErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithOrganizationName ;
+  a owl:Class .
+
+api:organization_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithOrganizationName ;
+  rdfs:range xsd:string .
+
+api:UnknownOrganization
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName .
+
+api:WithDatabaseName ;
+  a owl:Class .
+
+api:organization_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithDatabaseName ;
+  rdfs:range xsd:string .
+
+api:DatabaseAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseInInconsistentState
+  a owl:Class ;
+  rdsf:subClassOf api:Error .

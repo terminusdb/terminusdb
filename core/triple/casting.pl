@@ -109,7 +109,7 @@ maybe_promote(N,N^^'http://www.w3.org/2001/XMLSchema#decimal') :-
  */
 typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
-    ->  format(atom(M), 'Variable unbound in typcast to ~q', [Type]),
+    ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
         throw(error(M))
     ;   maybe_promote(Val,Promoted),
         (   Promoted = Bare_Literal^^Source_Type

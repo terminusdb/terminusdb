@@ -1,13 +1,10 @@
 :- module(api, [
               % db_delete.pl
-              delete_db/1,
-              try_delete_db/1,
-              force_delete_db/1,
+              delete_db/4,
+              force_delete_db/2,
 
               % db_create.pl
-              create_db/4,
-              try_delete_db/1,
-              try_create_db/4,
+              create_db/7,
               create_ref_layer/2,
 
               % init.pl
@@ -43,7 +40,7 @@
               remote_fetch/4,
 
               % db_clone.pl
-              clone/7,
+              clone/9,
 
               % db_push.pl
               push/6,
@@ -52,8 +49,17 @@
               unpack/2,
 
               % db_pull.pl
-              pull/6
+              pull/6,
 
+              % graph_load.pl
+              graph_load/6,
+
+              % graph_dump.pl
+              graph_dump/5,
+
+              % api_frame.pl
+              api_class_frame/5,
+              api_filled_frame/5
           ]).
 
 :- use_module(api/init).
@@ -69,3 +75,6 @@
 :- use_module(api/db_push).
 :- use_module(api/db_unpack).
 :- use_module(api/db_pull).
+:- use_module(api/graph_load).
+:- use_module(api/graph_dump).
+:- use_module(api/api_frame).

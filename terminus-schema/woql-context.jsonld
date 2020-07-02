@@ -8,7 +8,7 @@
   "owl" : "http://www.w3.org/2002/07/owl#",
   "xsd" : "http://www.w3.org/2001/XMLSchema#",
   "v" : "http://terminusdb.com/schema/woql/variable/",
-  "terminus" : "http://terminusdb.com/schema/terminus#",
+  "system" : "http://terminusdb.com/schema/system#",
   "query_list" : {"@type" : "@id"},
   "query" : {"@type" : "@id"},
   "variable_list" : {"@type" : "@id"},

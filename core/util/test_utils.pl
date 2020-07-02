@@ -15,9 +15,11 @@
               repo_schema_context_from_label_descriptor/2,
               repo_schema_context_from_label_descriptor/3,
               create_db_with_test_schema/2,
-              create_db_without_schema/3,
+              create_db_without_schema/2,
               print_all_triples/1,
-              print_all_triples/2
+              print_all_triples/2,
+              delete_user_and_organization/1,
+              cleanup_user_database/2
           ]).
 
 /** <module> Test Utilities
@@ -63,6 +65,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(query)).
 :- use_module(core(api)).
+:- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
 
@@ -173,7 +176,7 @@ curl_json(Args,JSON) :-
 
     catch(json_read_dict(Out, JSON),
           _,
-          JSON = _{'terminus:status' : 'terminus:failure'}),
+          JSON = _{'system:status' : 'system:failure'}),
 
     close(Out).
 
@@ -261,14 +264,14 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
 
     create_context(Transaction_Object, Commit_Info, Context).
 
-
-create_db_with_test_schema(User, Db_Name) :-
-    user_database_name(User, Db_Name, Full_Name),
-    Prefixes = _{ doc  : 'terminus://worldOnt/document/',
+create_db_with_test_schema(Organization, Db_Name) :-
+    Prefixes = _{ doc  : 'system://worldOnt/document/',
                   scm : 'http://example.com/data/worldOntology#'},
 
-    create_db(Full_Name, "test", "a test db", Prefixes),
-    resolve_absolute_descriptor([User, Db_Name], Branch_Descriptor),
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes),
+    resolve_absolute_descriptor([Organization, Db_Name], Branch_Descriptor),
 
     create_graph(Branch_Descriptor,
                  commit_info{ author : "test",
@@ -277,31 +280,38 @@ create_db_with_test_schema(User, Db_Name) :-
                  "main",
                  _),
 
-    create_context(Branch_Descriptor, commit_info{author: "test", message: "add test schema"}, Context),
     terminus_path(Path),
     interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    update_turtle_graph(Context, schema, "main", TTL).
 
-create_db_without_schema(User, Db_Name) :-
-    user_database_name(User, Db_Name, Full_Name),
+    atomic_list_concat([Organization, '/', Db_Name,
+                        '/local/branch/master/schema/main'],
+                       Graph),
+    super_user_authority(Auth),
+    Commit_Info = commit_info{author: "test", message: "add test schema"},
+    graph_load(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
+
+create_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document',
                   scm : 'http://somewhere.for.now/schema' },
-    create_db(Full_Name, "test", "a test db", Prefixes).
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes).
 
-create_db_without_schema(DB_ID, DB_Name, Comment) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document',
-                  scm : 'http://somewhere.for.now/schema' },
-    create_db(DB_ID, DB_Name, Comment, Prefixes).
+delete_user_and_organization(User_Name) :-
+    do_or_die(delete_user(User_Name),
+             error(user_doesnt_exist(User_Name))),
+    do_or_die(delete_organization(User_Name),
+             error(organization_doesnt_exist(User_Name))).
 
 :- begin_tests(db_test_schema_util).
 test(create_db_and_insert_invalid_data,
      [setup((setup_temp_store(State),
-             create_db_with_test_schema("user", "test"))),
+             create_db_with_test_schema("admin", "test"))),
       cleanup(teardown_temp_store(State)),
       throws(error(schema_check_failure(_)))])
 :-
-    resolve_absolute_string_descriptor("user/test", Descriptor),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message:"this should never commit"}, Context),
 
     with_transaction(Context,
@@ -324,3 +334,14 @@ print_all_triples(Askable, Selector) :-
             Triples),
     forall(member(Triple,Triples),
            (   writeq(Triple), nl)).
+
+cleanup_user_database(User, Database) :-
+   (   database_exists(User, Database)
+   ->  force_delete_db(User, Database)
+   ;   true),
+   (   agent_name_exists(system_descriptor{}, User)
+   ->  delete_user(User)
+   ;   true),
+   (   organization_name_exists(system_descriptor{}, User)
+   ->  delete_organization(User)
+   ;   true).

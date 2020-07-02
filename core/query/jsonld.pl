@@ -8,7 +8,8 @@
               jsonld_triples/3,
               jsonld_id/2,
               jsonld_type/2,
-              get_key_document/4
+              get_key_document/4,
+              compress_dict_uri/3
           ]).
 
 /** <module> JSON-LD
@@ -205,8 +206,7 @@ prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   format(atom(M), 'Key has unknown prefix: ~q', [K]),
-            throw(syntax_error(M)))
+        ;   throw(error(key_has_unknown_prefix(K), _)))
     ;   has_at(K)
     ->  K = Key
     ;   (   get_dict('@base', Context, Base)
@@ -277,6 +277,10 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
         compress_uri(URI, Prefix, Expanded, Folded_URI)
     ->  true
     ;   URI = Folded_URI).
+
+compress_dict_uri(URI, Dict, Folded_URI) :-
+    dict_pairs(Dict, _, Pairs),
+    compress_pairs_uri(URI, Pairs, Folded_URI).
 
 is_at(Key) :-
     sub_string(Key,0,1,_,"@").

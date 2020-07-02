@@ -481,7 +481,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#FileResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
-    ->  WOQL = file(File,JSON)
+    ->  json_to_woql_ast(File,WFile,['http://terminusdb.com/schema/woql#file'
+                                     |Path]),
+        WFile = File_String^^_,
+        WOQL = file(File_String,JSON)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PostResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
@@ -824,10 +827,10 @@ json_to_woql_ast(JSON,WOQL,_Path) :-
 json_to_woql_ast(JSON,_,Path) :-
     format(atom(Msg), 'Un-parsable Query: ~q', [JSON]),
     reverse(Path, Director),
-    throw(http_reply(not_found(_{'terminus:message' : Msg,
+    throw(http_reply(not_found(_{'system:message' : Msg,
                                  'vio:query' : JSON,
                                  'vio:path' : Director,
-                                 'terminus:status' : 'terminus:failure'}))).
+                                 'system:status' : 'system:failure'}))).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),

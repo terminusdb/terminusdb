@@ -39,15 +39,15 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 example_registry_path(Path) :-
     once(expand_file_search_path(template('example_registry.pl'), Path)).
 
-template_terminus_instance_ttl(Path) :-
-    once(expand_file_search_path(template('terminus_instance_template.ttl'), Path)).
+template_system_instance_ttl(Path) :-
+    once(expand_file_search_path(template('system_instance_template.ttl'), Path)).
 
 
-terminus_inference_ttl(Path) :-
-    once(expand_file_search_path(ontology('terminus_inference.owl.ttl'), Path)).
+system_inference_ttl(Path) :-
+    once(expand_file_search_path(ontology('system_inference.owl.ttl'), Path)).
 
-terminus_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('terminus_schema.owl.ttl'), Path)).
+system_schema_ttl(Path) :-
+    once(expand_file_search_path(ontology('system_schema.owl.ttl'), Path)).
 
 repository_schema_ttl(Path) :-
     once(expand_file_search_path(ontology('repository.owl.ttl'), Path)).
@@ -150,14 +150,14 @@ initialize_server_version(DB_Path) :-
     close(FileStream).
 
 initialize_database_with_store(Public_URL, Key, Store) :-
-    template_terminus_instance_ttl(Example_Instance_TTL),
+    template_system_instance_ttl(Example_Instance_TTL),
 
-    terminus_inference_ttl(Terminus_Inference_TTL),
-    terminus_schema_ttl(Terminus_Schema_TTL),
+    system_inference_ttl(System_Inference_TTL),
+    system_schema_ttl(System_Schema_TTL),
 
-    ref_schema_ttl(Terminus_Ref_TTL),
-    layer_schema_ttl(Terminus_Layer_TTL),
-    repository_schema_ttl(Terminus_Repository_TTL),
+    ref_schema_ttl(System_Ref_TTL),
+    layer_schema_ttl(System_Layer_TTL),
+    repository_schema_ttl(System_Repository_TTL),
 
 
     instance_path(Instance_TTL_Path),
@@ -169,23 +169,23 @@ initialize_database_with_store(Public_URL, Key, Store) :-
     replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
     replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
 
-    terminus_instance_name(Instance_Name),
+    system_instance_name(Instance_Name),
     create_graph_from_turtle(Store,Instance_Name,Instance_TTL_Path),
 
-    terminus_schema_name(Schema_Name),
-    create_graph_from_turtle(Store,Schema_Name,Terminus_Schema_TTL),
+    system_schema_name(Schema_Name),
+    create_graph_from_turtle(Store,Schema_Name,System_Schema_TTL),
 
-    terminus_inference_name(Inference_Name),
-    create_graph_from_turtle(Store,Inference_Name,Terminus_Inference_TTL),
+    system_inference_name(Inference_Name),
+    create_graph_from_turtle(Store,Inference_Name,System_Inference_TTL),
 
     layer_ontology(Layer_Name),
-    create_graph_from_turtle(Store,Layer_Name,Terminus_Layer_TTL),
+    create_graph_from_turtle(Store,Layer_Name,System_Layer_TTL),
 
     ref_ontology(Ref_Name),
-    create_graph_from_turtle(Store,Ref_Name,Terminus_Ref_TTL),
+    create_graph_from_turtle(Store,Ref_Name,System_Ref_TTL),
 
     repository_ontology(Repository_Name),
-    create_graph_from_turtle(Store,Repository_Name,Terminus_Repository_TTL).
+    create_graph_from_turtle(Store,Repository_Name,System_Repository_TTL).
 
 
 initialize_index(Key, Opts) :-
