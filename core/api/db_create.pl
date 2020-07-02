@@ -100,15 +100,15 @@ create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Pref
     create_context(System_DB, System_Context),
     with_transaction(
         System_Context,
-        (   
+        (
             % don't create if already exists
             do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
-                      error(unknown_organization(Organization_Name))),
+                      error(unknown_organization(Organization_Name),_)),
             assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
 
             do_or_die(
                 not(database_exists(Organization_Name, Database_Name)),
-                error(database_already_exists(Label))),
+                error(database_already_exists(Organization_Name, Database_Name))),
 
             text_to_string(Organization_Name, Organization_Name_String),
             text_to_string(Database_Name, Database_Name_String),

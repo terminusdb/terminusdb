@@ -161,7 +161,7 @@ test(console_route) :-
  * message_handler(+Method,+Request) is det.
  */
 message_handler(_Method, Request, _System_DB, _Auth) :-
-    try_get_param('system:message',Request,Message),
+    try_get_param('api:message',Request,Message),
 
     with_output_to(
         string(Payload),
@@ -172,7 +172,7 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
 
     write_cors_headers(Request),
 
-    reply_json(_{'system:status' : 'system:success'}).
+    reply_json(_{'api:status' : 'api:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
@@ -198,7 +198,8 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
-            cors_reply_json(Request, _{'system:status' : 'system:success'})),
+            cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
+                                       'api:status' : 'api:success'})),
 
         Error,
 
@@ -208,7 +209,8 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
     catch_with_backtrace(
         (   delete_db(System_DB, Auth, Organization, DB),
-            cors_reply_json(Request, _{'system:status' : 'system:success'})),
+            cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
+                                       'api:status' : 'api:success'})),
 
         Error,
 
@@ -218,43 +220,59 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
 create_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
                     [status(400)]).
-create_db_error_handler(error(database_already_exists(_)), Request) :-
+create_db_error_handler(error(database_already_exists(Organization_Name, Database_Name),_), Request) :-
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : 'Database already exists.'},
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseAlreadyExists',
+                                      'api:database_name' : Database_Name,
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : 'Database already exists.'},
                     [status(400)]).
-create_db_error_handler(error(database_in_inconsistent_state), Request) :-
+create_db_error_handler(error(database_in_inconsistent_state,_), Request) :-
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    _{'@type' : 'api:DbCreateErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
+
+                      'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
                     [status(500)]).
 
-delete_db_error_handler(error(unknown_organization(Organization_Name)), Request) :-
+delete_db_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_does_not_exist(Organization,Database)), Request) :-
     format(string(Msg), "Database ~s/~s does not exist.", [Organization, Database]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_not_finalized(Organization,Database)), Request) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)), Request) :-
     format(string(Msg), "Database files for ~s/~s were missing unexpectedly.", [Organization, Database]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'@type' : 'api:DbDeleteErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(500)]).
 
 :- begin_tests(db_endpoint).
@@ -281,7 +299,7 @@ test(db_create, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
-    _{'system:status' : "system:success"} = In.
+    _{'api:status' : "api:success"} = In.
 
 test(db_create_existing_errors, [
          setup(((   database_exists('admin', 'TEST_DB')
@@ -304,7 +322,7 @@ test(db_create_existing_errors, [
                        authorization(basic(admin, Key)),
                        status_code(Status)]),
     Status = 400,
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_in_unknown_organization_errors, [
      ]) :-
@@ -321,7 +339,7 @@ test(db_create_in_unknown_organization_errors, [
                        authorization(basic(admin, Key)),
                        status_code(Status)]),
     Status = 400,
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthenticated_errors, [
      ]) :-
@@ -337,7 +355,7 @@ test(db_create_unauthenticated_errors, [
                        authorization(basic(admin, "THIS_IS_NOT_THE_CORRECT_PASSWORD")),
                        status_code(Status)]),
     Status = 401,
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthorized_errors, [
          setup(add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID)),
@@ -355,7 +373,7 @@ test(db_create_unauthorized_errors, [
                        authorization(basic("TERMINUSQA", "password")),
                        status_code(Status)]),
     Status = 403,
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete, [
          setup(((   database_exists('admin', 'TEST_DB')
@@ -369,7 +387,7 @@ test(db_delete, [
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
 
-    _{'system:status' : "system:success"} = Delete_In.
+    _{'api:status' : "api:success"} = Delete_In.
 
 test(db_delete_unknown_organization_errors, [
      ]) :-
@@ -387,7 +405,7 @@ test(db_delete_unknown_organization_errors, [
     % TODO this test is actually equivalent to the one below.
     % We need to differentiate these errors better, but I don't want to validate the exact error message.
     % We need codes!
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete_nonexistent_errors, [
      ]) :-
@@ -402,7 +420,7 @@ test(db_delete_nonexistent_errors, [
 
     Status = 400,
 
-    _{'system:status' : "system:failure"} :< Result.
+    _{'api:status' : "api:failure"} :< Result.
     
 
 test(db_auth_test, [
@@ -434,7 +452,7 @@ test(db_auth_test, [
     http_post(URI, json(Doc),
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
-    _{'system:status' : "system:success"} = In.
+    _{'api:status' : "api:success"} = In.
 
 :- end_tests(db_endpoint).
 
@@ -471,7 +489,7 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
-            cors_reply_json(Request, _{'system:status' : "system:success"})),
+            cors_reply_json(Request, _{'api:status' : "api:success"})),
         Error,
         do_or_die(triples_error_handler(Error, Request),
                   Error)).
@@ -479,20 +497,20 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 triples_error_handler(error(unknown_format(Format), _), Request) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
     format(string(Msg), "Invalid graph descriptor: ~q", [Path]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
     format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
     cors_reply_json(Request,
-                    _{'system:status' : 'system:failure',
-                      'system:message' : Msg},
+                    _{'api:status' : 'api:failure',
+                      'api:message' : Msg},
                     [status(400)]).
 
 
@@ -604,8 +622,8 @@ test(get_invalid_descriptor, [])
     http_get(URI, In, [json_object(dict),
                         authorization(basic(admin, Key)),
                         status_code(Code)]),
-    _{'system:message':_Msg,
-      'system:status':"system:failure"} :< In,
+    _{'api:message':_Msg,
+      'api:status':"api:failure"} :< In,
     Code = 400.
 
 
@@ -618,8 +636,8 @@ test(get_bad_descriptor, [])
     http_get(URI, In, [json_object(dict),
                         authorization(basic(admin, Key)),
                         status_code(Code)]),
-    _{'system:message':_,
-      'system:status':"system:failure"} :< In,
+    _{'api:message':_,
+      'api:status':"api:failure"} :< In,
     Code = 400.
 
 :- end_tests(triples_endpoint).
@@ -660,7 +678,7 @@ frame_error_handler(error(instance_uri_has_unknown_prefix(K),_), Request) :-
     term_string(K, Key),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:InstanceUriHasUnknownPrefix',
                                        'api:instance_uri' : Key},
                       'api:message' : Msg
@@ -671,7 +689,7 @@ frame_error_handler(error(class_uri_has_unknown_prefix(K),_), Request) :-
     term_string(K, Key),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:ClassUriHasUnknownPrefix',
                                        'api:class_uri' : Key},
                       'api:message' : Msg
@@ -682,7 +700,7 @@ frame_error_handler(error(could_not_create_class_frame(Class),_), Request) :-
     term_string(Class, Class_String),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrame',
                                        'api:class_uri' : Class_String},
                       'api:message' : Msg
@@ -693,7 +711,7 @@ frame_error_handler(error(could_not_create_filled_class_frame(Instance),_), Requ
     term_string(Instance, Instance_String),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:CouldNotCreateFilledClassFrame',
                                        'api:instance_uri' : Instance_String},
                       'api:message' : Msg
@@ -703,7 +721,7 @@ frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
@@ -716,7 +734,7 @@ frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
-                      'api:status' : 'system:failure',
+                      'api:status' : 'api:failure',
                       'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
@@ -1325,7 +1343,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
     write_cors_headers(Request),
     reply_json_dict(
-        _{'system:status' : 'system:success'}).
+        _{'api:status' : 'api:success'}).
 
 :- begin_tests(clone_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1368,7 +1386,7 @@ test(clone_local, [
     * json_write_dict(current_output, JSON, []),
 
     _{
-        'system:status' : "system:success"
+        'api:status' : "api:success"
     } :< JSON,
 
     resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
@@ -1396,7 +1414,7 @@ fetch_handler(post,Path,Request, _System_DB, _Auth) :-
 
     write_cors_headers(Request),
     reply_json_dict(
-            _{'system:status' : 'system:success',
+            _{'api:status' : 'api:success',
               'head_has_changed' : Head_Has_Updated,
               'head' : New_Head_Layer_Id}).
 
@@ -1450,7 +1468,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
     Strategy_Map = [],
     rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    Incomplete_Reply = _{ 'system:status' : "system:success",
+    Incomplete_Reply = _{ 'api:status' : "api:success",
                           forwarded_commits : Forwarded_Commits,
                           reports: Reports
                         },
@@ -1527,7 +1545,7 @@ test(rebase_divergent_history, [
         forwarded_commits : [_Thing, _Another_Thing ],
         common_commit_id : _Common_Something,
         reports: _Reports,
-        'system:status' : "system:success"
+        'api:status' : "api:success"
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
@@ -1704,8 +1722,8 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
         (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
             (repository_descriptor{} :< Repository_Descriptor)),
         reply_json(_{'@type' : "vio:UnpackPathInvalid",
-                           'system:status' : "system:failure",
-                           'system:message' : "The path to the database to unpack to was invalid"
+                     'api:status' : "api:failure",
+                     'api:message' : "The path to the database to unpack to was invalid"
                     },
                    400)),
 
@@ -1717,29 +1735,29 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 
     catch(
         (   unpack(Repository_Descriptor, Payload),
-            Json_Reply = _{'system:status' : "system:success"},
+            Json_Reply = _{'api:status' : "api:success"},
             Status = 200
         ),
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
             ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
-                               'system:status' : "system:failure",
-                               'system:message' : "Not a linear history"
+                               'api:status' : "api:failure",
+                               'api:message' : "Not a linear history"
                               },
                 Status = 400
             ;   Inner_E = unknown_layer_reference(Layer_Id)
             ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
-                               'system:status' : "system:failure",
-                               'system:message' : "A layer in the pack has an unknown parent",
+                               'api:status' : "api:failure",
+                               'api:message' : "A layer in the pack has an unknown parent",
                                'layer_id' : _{'@type': "xsd:string",
                                               '@value' : Layer_Id}
                               },
                 Status = 400
             ;   Inner_E = database_not_found(_)
             ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
-                               'system:status' : "system:failure",
-                               'system:message' : "The database to unpack to has not be found"
+                               'api:status' : "api:failure",
+                               'api:message' : "The database to unpack to has not be found"
                               },
                 Status = 400
             ;   throw(E))
@@ -1782,10 +1800,10 @@ push_handler(post,Path,Request, _System_DB, Auth) :-
 
     (   Result = none
     ->  write_cors_headers(Request),
-        reply_json(_{'system:status' : "system:success"})
+        reply_json(_{'api:status' : "api:success"})
     ;   Result = some(Head_ID)
     ->  write_cors_headers(Request),
-        reply_json(_{'system:status' : "system:success",
+        reply_json(_{'api:status' : "api:success",
                      'head' : Head_ID})
     ;   throw(error(internal_server_error))).
 
@@ -1848,19 +1866,19 @@ pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
         E,
         (   E = error(Inner_E)
         ->  (   Inner_E = not_a_valid_local_branch(_)
-            ->  throw(reply_json(_{'system:status' : "system:failure",
-                                   'system:message' : "Not a valid local branch"},
+            ->  throw(reply_json(_{'api:status' : "api:failure",
+                                   'api:message' : "Not a valid local branch"},
                                  400))
             ;   Inner_E = not_a_valid_remote_branch(_)
-            ->  throw(reply_json(_{'system:status' : "system:failure",
-                                   'system:message' : "Not a valid remote branch"},
+            ->  throw(reply_json(_{'api:status' : "api:failure",
+                                   'api:message' : "Not a valid remote branch"},
                                  400))
             ;   throw(E))
         ;   throw(E))
     ),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success",
+    reply_json(_{'api:status' : "api:success",
                  'report' : Result}).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1886,7 +1904,7 @@ branch_handler(post,Path,Request, _System_DB, _Auth) :-
     branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 :- begin_tests(branch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -2077,7 +2095,7 @@ graph_handler(post, Path, Request, _System_Db, _Auth) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 graph_handler(delete, Path, Request, _System_DB, _Auth) :-
     % No descriptor to work with until the query sets one up
     resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
@@ -2096,7 +2114,7 @@ graph_handler(delete, Path, Request, _System_DB, _Auth) :-
                  _Transaction_Metadata2),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 
 :- begin_tests(graph_endpoint).
@@ -2189,7 +2207,7 @@ user_handler(post, Name, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 user_handler(delete, Name, Request, System_DB, Auth) :-
     do_or_die(is_super_user(Auth, _{}),
               error(delete_user_requires_superuser)),
@@ -2202,7 +2220,7 @@ user_handler(delete, Name, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 
 user_handler(post, Request, System_DB, Auth) :-
@@ -2229,7 +2247,7 @@ user_handler(post, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 user_handler(delete, Request, System_DB, Auth) :-
     do_or_die(is_super_user(Auth, _{}),
               error(delete_user_requires_superuser)),
@@ -2248,7 +2266,7 @@ user_handler(delete, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(organization), cors_handler(Method, organization_handler),
@@ -2278,7 +2296,7 @@ organization_handler(post, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 organization_handler(delete, Request, System_DB, Auth) :-
     do_or_die(is_super_user(Auth, _{}),
               error(delete_organization_requires_superuser)),
@@ -2297,7 +2315,7 @@ organization_handler(delete, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 organization_handler(post, Name, Request, System_DB, Auth) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -2316,7 +2334,7 @@ organization_handler(post, Name, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 organization_handler(delete, Name, Request, System_DB, Auth) :-
     do_or_die(is_super_user(Auth, _{}),
               error(delete_organization_requires_superuser)),
@@ -2329,7 +2347,7 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2357,7 +2375,7 @@ update_role_handler(post, Request, System_DB, Auth) :-
                      _),
 
     write_cors_headers(Request),
-    reply_json(_{'system:status' : "system:success"}).
+    reply_json(_{'api:status' : "api:success"}).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(role), cors_handler(Method, role_handler),
@@ -2388,13 +2406,13 @@ cors_handler(Method, Goal, R) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((   authenticate(System_Database, Request, Auth),
               cors_catch(Method, Goal, Request, System_Database, Auth)),
-              
+
           error(authentication_incorrect),
 
           (   write_cors_headers(Request),
-              
-              reply_json(_{'system:status' : 'system:failure',
-                           'system:message' : 'Incorrect authentication information'
+
+              reply_json(_{'api:status' : 'api:failure',
+                           'api:message' : 'Incorrect authentication information'
                           },
                          [status(401)]))).
 
@@ -2417,8 +2435,8 @@ cors_catch(Method, Goal, Request, System_Database, Auth) :-
 cors_catch(_,Request) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' :
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' :
                  _{'@type' : 'xsd:string',
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
@@ -2429,13 +2447,13 @@ customise_exception(reply_json(M,Status)) :-
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
 customise_exception(error(authentication_incorrect)) :-
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : 'Incorrect authentication information'
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'Incorrect authentication information'
                 },
                [status(401)]).
 customise_exception(error(not_authenticated)) :-
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : 'No authentication supplied'
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'No authentication supplied'
                 },
                [status(401)]).
 customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
@@ -2444,8 +2462,8 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
     term_string(Auth, Auth_String),
     term_string(Action, Action_String),
     term_string(Scope, Scope_String),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg,
                  'auth' : Auth_String,
                  'action' : Action_String,
                  'scope' : Scope_String
@@ -2455,13 +2473,13 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
 %% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
 customise_exception(error(syntax_error(M),_)) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
@@ -2469,13 +2487,13 @@ customise_exception(error(woql_syntax_error(JSON,Path,Element))) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',
-                 'system:message' : Message,
+                 'api:message' : Message,
                  'vio:path' : Director,
                  'vio:query' : JSON},
                [status(400)]).
 customise_exception(error(syntax_error(M))) :-
     format(atom(OM), '~q', [M]),
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
@@ -2483,7 +2501,7 @@ customise_exception(error(type_error(T,O),C)) :-
     format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:message' : M,
                                            'vio:type' : TA,
@@ -2501,20 +2519,20 @@ customise_exception(http_reply(authorize(JSON))) :-
 customise_exception(http_reply(not_acceptable(JSON))) :-
     reply_json(JSON,[status(406)]).
 customise_exception(time_limit_exceeded) :-
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : 'Connection timed out'
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : 'Connection timed out'
                },
                [status(408)]).
 customise_exception(error(unqualified_resource_id(Doc_ID))) :-
     format(atom(MSG), 'Document resource ~s could not be expanded', [Doc_ID]),
-    reply_json(_{'system:status' : 'terminus_failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'terminus_failure',
+                 'api:message' : MSG,
                  'system:object' : Doc_ID},
                [status(400)]).
 customise_exception(error(unknown_deletion_error(Doc_ID))) :-
     format(atom(MSG), 'unqualfied deletion error for id ~s', [Doc_ID]),
-    reply_json(_{'system:status' : 'terminus_failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'terminus_failure',
+                 'api:message' : MSG,
                  'system:object' : Doc_ID},
                [status(400)]).
 customise_exception(error(schema_check_failure(Witnesses))) :-
@@ -2522,109 +2540,109 @@ customise_exception(error(schema_check_failure(Witnesses))) :-
                [status(405)]).
 customise_exception(error(database_not_found(DB))) :-
     format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
-    reply_json(_{'system:message' : MSG,
-                 'system:status' : 'system:failure'},
+    reply_json(_{'api:message' : MSG,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(database_does_not_exist(DB))) :-
     format(atom(M), 'Database does not exist with the name ~q', [DB]),
-    reply_json(_{'system:message' : M,
-                 'system:status' : 'system:failure'},
+    reply_json(_{'api:message' : M,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
-    reply_json(_{'system:message' : M,
-                 'system:status' : 'system:failure'},
+    reply_json(_{'api:message' : M,
+                 'api:status' : 'api:failure'},
                [status(400)]).
 customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),
-    reply_json(_{'system:status' : 'system:failure',
+    reply_json(_{'api:status' : 'api:failure',
                  'system:object' : DB,
-                 'system:message' : MSG,
+                 'api:message' : MSG,
                  'system:method' : 'system:create_database'},
                [status(409)]).
 customise_exception(error(database_could_not_be_created(DB))) :-
     format(atom(MSG), 'Database ~s could not be created', [DB]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:method' : 'system:create_database'},
                [status(409)]).
 customise_exception(error(could_not_create_class_frame(Class))) :-
     format(atom(MSG), 'Class Frame could not be generated for class ~s', [Class]),
-    reply_json(_{ 'system:message' : MSG,
-                  'system:status' : 'system:failure',
+    reply_json(_{ 'api:message' : MSG,
+                  'api:status' : 'api:failure',
                   'system:class' : Class},
                [status(400)]).
 customise_exception(error(could_not_create_filled_class_frame(Instance))) :-
     format(atom(MSG), 'Class Frame could not be generated for instance ~s', [Instance]),
-    reply_json(_{ 'system:message' : MSG,
-                  'system:status' : 'system:failure',
+    reply_json(_{ 'api:message' : MSG,
+                  'api:status' : 'api:failure',
                   'system:instance' : Instance},
                [status(400)]).
 customise_exception(error(maformed_json(Atom))) :-
     format(atom(MSG), 'Malformed JSON Object ~q', [MSG]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:object' : Atom},
                [status(400)]).
 customise_exception(error(no_document_for_key(Key))) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:key' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key_in_document(Key,Document))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Document]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:key' : Key,
                  'system:object' : Document},
                [status(400)]).
 customise_exception(error(no_parameter_key_form_method(Key,Method))) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Method]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:object' : Key},
                [status(400)]).
 customise_exception(error(no_parameter_key(Key))) :-
     format(atom(MSG), 'No parameter key ~q', [Key]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : MSG,
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : MSG,
                  'system:object' : Key},
                [status(400)]).
 customise_exception(error(branch_already_exists(Branch_Name))) :-
     format(string(Msg), "branch ~w already exists", [Branch_Name]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_branch_does_not_exist(Branch_Name))) :-
     format(string(Msg), "origin branch ~w does not exist", [Branch_Name]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_commit_does_not_exist(Commit_Id))) :-
     format(string(Msg), "origin commit ~w does not exist", [Commit_Id]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(origin_cannot_be_branched(Descriptor))) :-
     format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : Msg},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : Msg},
                [status(400)]).
 customise_exception(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : EM},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : EM},
                [status(500)]).
 customise_exception(error(E, CTX)) :-
     http_log('~N[Exception] ~q~n',[error(E,CTX)]),
     format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
-    reply_json(_{'system:status' : 'system:failure',
-                 'system:message' : EM},
+    reply_json(_{'api:status' : 'api:failure',
+                 'api:message' : EM},
                [status(500)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).

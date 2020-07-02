@@ -107,3 +107,42 @@ api:ClassUriHasUnknownPrefix
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithClassUri .
 
+api:DbCreateResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ResultResponse .
+
+api:DbDeleteResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ResultResponse .
+
+api:DbCreateErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithOrganizationName ;
+  a owl:Class .
+
+api:organization_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithOrganizationName ;
+  rdfs:range xsd:string .
+
+api:UnknownOrganization
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName .
+
+api:WithDatabaseName ;
+  a owl:Class .
+
+api:organization_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithDatabaseName ;
+  rdfs:range xsd:string .
+
+api:DatabaseAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseInInconsistentState
+  a owl:Class ;
+  rdsf:subClassOf api:Error .
