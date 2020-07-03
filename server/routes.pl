@@ -2533,7 +2533,7 @@ customise_exception(error(syntax_error(M),_)) :-
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
-customise_exception(error(woql_syntax_error(JSON,Path,Element))) :-
+customise_exception(error(woql_syntax_error(JSON,Path,Element)),_) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',

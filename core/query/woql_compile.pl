@@ -937,7 +937,8 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
     compile_wf(Query,Compiled_Query),
     {
 
-        (   File_Spec = file(CSV_Path,Options)
+        (   File_Spec = file(CSV_Path,_Options),
+            Options = []
         ;   File_Spec = file(CSV_Path),
             Options = []),
 
@@ -2945,5 +2946,139 @@ test(ast_when_test, [
             Triples),
 
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
+
+
+test(get_put, []) :-
+
+    Query = _{ '@type': "woql:Put",
+               'woql:as_vars':
+               [ _{ '@type': "woql:NamedAsVar",
+                    'woql:identifier': _{ '@type': "xsd:string",
+                                          '@value': "v:Start_Station"
+                                        },
+                    'woql:variable_name': _{ '@type': "xsd:string",
+                                             '@value': "End_Station"
+                                           }
+                  }
+               ],
+               'woql:query': _{ '@type': "woql:Get",
+                                'woql:as_vars':
+                                [ _{ '@type': "woql:NamedAsVar",
+                                     'woql:identifier': _{ '@type': "xsd:string",
+                                                           '@value': "Start station"                                                          },
+                                     'woql:variable_name': _{
+                                                               '@type': "xsd:string",
+                                                               '@value': "Start_Station"
+                                                           }
+                                   },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Station"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Duration"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Duration"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Bike number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Bike"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Member type"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Member_Type"
+                                                            }
+                                  }
+                                ],
+                                'woql:query_resource': _{
+                                                           '@type': "woql:RemoteResource",
+                                                           'woql:remote_uri': _{
+                                                                                  '@type': "xsd:anyURI",
+                                                                                  '@value': "https://terminusdb.com/t/data/bike_tutorial.csv"
+                                                                              }
+                                                       }
+                              },
+               'woql:query_resource': _{ '@type': "woql:FileResource",
+                                         'woql:file':
+                                         _{ '@type': "xsd:anyURI",
+                                            '@value': "/tmp/test.csv"
+                                          }
+                                       }
+             },
+
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, _JSON),
+    exists_file('/tmp/test.csv').
+
 
 :- end_tests(woql).
