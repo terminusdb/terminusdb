@@ -143,6 +143,58 @@ api:DatabaseAlreadyExists
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
 
+api:DatabaseDoesNotExist
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseNotFinalized
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseFilesDoNotExist
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
 api:DatabaseInInconsistentState
   a owl:Class ;
   rdsf:subClassOf api:Error .
+
+api:TriplesLoadResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:TriplesErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithFormat
+  a owl:Class .
+
+api:format
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithFormat ;
+  rdfs:range xsd:string .
+
+api:TriplesUnknownFormat
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithFormat .
+
+api:WithAbsoluteGraphDescriptor ;
+  a owl:Class .
+
+api:absolute_graph_descriptor ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithAbsoluteGraphDescriptor ;
+  rdfs:range xsd:string .
+
+api:BadAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
+
+api:UnresolvableAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
+
+api:WoqlErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .

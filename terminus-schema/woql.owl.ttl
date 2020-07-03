@@ -460,7 +460,7 @@ woql:document_uri
   a owl:ObjectProperty ;
   rdfs:label "Document uri"@en ;
   rdfs:comment "The Document uri of the document to be retrieved"@en ;
-  rdfs:domain woql:Document ;
+  rdfs:domain system:Document ;
   rfds:range owl:Thing .
 
 woql:UpdateObject

@@ -274,6 +274,9 @@ delete_db_error_handler(error(database_does_not_exist(Organization,Database), _)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExists',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
                       'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_not_finalized(Organization,Database), _), Request) :-
@@ -281,6 +284,10 @@ delete_db_error_handler(error(database_not_finalized(Organization,Database), _),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseNotFinalized',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
+
                       'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_files_do_not_exist(Organization,Database), _), Request) :-
@@ -288,6 +295,9 @@ delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseFilesDoNotExist',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
                       'api:message' : Msg},
                     [status(500)]).
 
@@ -505,7 +515,8 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
-            cors_reply_json(Request, _{'api:status' : "api:success"})),
+            cors_reply_json(Request, _{'@type' : 'api:TriplesLoadResponse',
+                                       'api:status' : "api:success"})),
         Error,
         do_or_die(triples_error_handler(Error, Request),
                   Error)).
@@ -513,19 +524,30 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 triples_error_handler(error(unknown_format(Format), _), Request) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:TriplesUnknownFormat',
+                                      'api:format' : Format},
                       'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
     format(string(Msg), "Invalid graph descriptor: ~q", [Path]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:BadAbsoluteGraphDescriptor',
+                                      'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
+    resolve_absolute_graph_descriptor(Path_List, Graph_Descriptor),
+    merge_separator_split(Path, '/', Path_List),
     format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnresolvableAbsoluteGraphDescriptor',
+                                      'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
 
@@ -842,54 +864,66 @@ test(unresolvable_path_filled_frame, [])
  * from terminus database on spartacus.
  */
 woql_handler(post, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    empty_context(Context),
-
-    woql_run_context(Request, System_DB, Auth, Context, JSON),
-
-    write_cors_headers(Request),
-    reply_json_dict(JSON).
-
-woql_handler(post, Path, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    create_context(Descriptor, Context),
-
-    woql_run_context(Request, System_DB, Auth, Context, JSON),
-
-    write_cors_headers(Request),
-
-    reply_json_dict(JSON).
-
-woql_run_context(Request, System_DB, Auth_ID, Context, JSON) :-
-
     try_get_param('query',Request,Query),
 
     (   get_param('commit_info', Request, Commit_Info)
     ->  true
     ;   Commit_Info = _{}
     ),
-
-    woql_context(Prefixes),
-
-    context_extend_prefixes(Context,Prefixes,Context0),
-
     collect_posted_files(Request,Files),
 
-    merge_dictionaries(
-        query_context{
-            commit_info : Commit_Info,
-            files : Files,
-            system: System_DB,
-            update_guard : _Guard,
-            authorization : Auth_ID
-        }, Context0, Final_Context),
+    catch_with_backtrace(
+        (   woql_query_json(System_DB, Auth, none, Query, Commit_Info, Files, JSON),
+            write_cors_headers(Request),
+            reply_json_dict(JSON)
+        ),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  throw(E))).
 
-    * http_log('~N[Request] ~q~n', [Request]),
+woql_handler(post, Path, Request, System_DB, Auth) :-
+    try_get_param('query',Request,Query),
 
-    json_woql(Query, Context0.prefixes, AST),
+    (   get_param('commit_info', Request, Commit_Info)
+    ->  true
+    ;   Commit_Info = _{}
+    ),
+    collect_posted_files(Request,Files),
 
-    run_context_ast_jsonld_response(Final_Context,AST,JSON).
+    catch_with_backtrace(
+        (   woql_query_json(System_DB, Auth, some(Path), Query, Commit_Info, Files, JSON),
+            write_cors_headers(Request),
+            reply_json_dict(JSON)
+        ),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  throw(E))).
+
+
+woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    % ERROR NOTE: Doesn't work
+    resolve_absolute_descriptor(Path_List, Descriptor),
+    merge_separator_split(Path, '/', Path_List),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+
 
 
 % woql_handler Unit Tests

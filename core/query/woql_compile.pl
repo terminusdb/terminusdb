@@ -173,6 +173,7 @@ empty_context(Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : _{},
         write_graph : empty,
+        update_guard : _,
         bindings : [],
         selected : [],
         files : [],

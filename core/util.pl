@@ -70,6 +70,7 @@
               command/1,
               coerce_literal_string/2,
               coerce_atom/2,
+              coerce_string/2,
               xfy_list/3,
               yfx_list/3,
               snoc/3,

@@ -36,6 +36,7 @@
               command/1,
               coerce_literal_string/2,
               coerce_atom/2,
+              coerce_string/2,
               xfy_list/3,
               yfx_list/3,
               snoc/3,
@@ -630,6 +631,7 @@ coerce_string(Atom_Or_String, String) :-
     ->  atom_string(Atom_Or_String, String)
     ;   string(Atom_Or_String)
     ->  Atom_Or_String = String
+    ;   atom_string(String, Atom_Or_String)
     ).
 
 /*
