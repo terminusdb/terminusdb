@@ -911,7 +911,6 @@ woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
-    % ERROR NOTE: Doesn't work
     resolve_absolute_descriptor(Path_List, Descriptor),
     merge_separator_split(Path, '/', Path_List),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
@@ -1389,11 +1388,28 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
-    clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+    catch_with_backtrace(
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+            write_cors_headers(Request),
+            reply_json_dict(
+                _{'@type' : 'api:CloneResponse',
+                  'api:status' : 'api:success'})
+        ),
+        E,
+        do_or_die(clone_error_handler(E,Request),
+                  throw(E))).
 
-    write_cors_headers(Request),
-    reply_json_dict(
-        _{'api:status' : 'api:success'}).
+clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
+    term_string(Payload),
+    format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RemoteConnectionError'},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+
 
 :- begin_tests(clone_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1428,7 +1444,7 @@ test(clone_local, [
               json(_{comment: "hai hello",
                      label: "bar",
                      remote_url: Remote_URL}),
-                     
+
               JSON,
               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
                request_header('Authorization-Remote'=Authorization_Remote)]),
@@ -1489,7 +1505,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ->  Payload_Option = some(Payload)
     ;   Status = 204
     ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload)))).
+    ;   throw(error(remote_connection_error(Payload),_))).
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%

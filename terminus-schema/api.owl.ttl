@@ -198,3 +198,15 @@ api:UnresolvableAbsoluteGraphDescriptor
 api:WoqlErrorResponse
   a owl:Class ;
   rdfs:subClassOf api:ErrorResponse .
+
+api:CloneResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:CloneErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:RemoteConnectionError
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
