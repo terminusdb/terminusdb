@@ -8,7 +8,7 @@ RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config
 FROM terminusdb/terminus_store_prolog:v0.10.1
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
-COPY --from=0 /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
+COPY --from=0 /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/
 RUN cp /usr/share/swi-prolog/pack/jwt_io/jwt_io.so . \
         && apt-get update && apt-get install -y --no-install-recommends libjwt0 \
         && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
