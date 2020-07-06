@@ -1,5 +1,5 @@
 :- module(db_rebase, [
-              rebase_on_branch/8,
+              rebase_on_branch/9,
               cycle_context/4
           ]).
 :- use_module(library(terminus_store)).
@@ -46,9 +46,10 @@ apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author
     true.
 apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, Auth_Object, [Their_Commit_Id|Their_Commit_Ids], [Strategy|Strategies], Final_Commit_Uri, Return_Context, [Report|Reports]) :-
     Report = report{
-                 origin_commit: Their_Commit_Id,
-                 applied: Applied_Commit_Ids,
-                 type: Commit_Application_Type
+                 '@type' : "api:RebaseResponse",
+                 'api:origin_commit': Their_Commit_Id,
+                 'api:applied': Applied_Commit_Ids,
+                 'api:commit_type': Commit_Application_Type
              },
     % apply the commit
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri), % we are renaming, Commit_Uri -> Their_Commit_Uri
@@ -80,7 +81,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
     ->  (   Strategy = error
         ->  Our_Repo_Context3 = Our_Repo_Context2,
             New_Commit_Uri2 = New_Commit_Uri,
-            Commit_Application_Type = valid,
+            Commit_Application_Type = 'api:valid_commit',
             Applied_Commit_Ids = [New_Commit_Id]
         ;   Strategy = continue
         ->  throw(error(apply_commit(continue_on_valid_commit(Their_Commit_Id))))
@@ -92,7 +93,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
         ->  invalidate_commit(Our_Repo_Context2, New_Commit_Id),
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
             New_Commit_Uri2 = New_Commit_Uri,
-            Commit_Application_Type = invalid,
+            Commit_Application_Type = 'api:invalid_commit',
             Applied_Commit_Ids = [New_Commit_Id]
         ;   Strategy = fixup(Message, Woql)
         ->  create_context(Our_Commit_Transaction, Our_Commit_Fixup_Context_Without_Auth),
@@ -129,7 +130,21 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     ;   Strategy = error),
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
-rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Object, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_Path, Reports) :-
+rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
+        error(invalid_target_absolute_path(Our_Branch_Path),_)),
+
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:rebase, Auth),
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Their_Branch_Path, Their_Branch_Descriptor),
+        error(invalid_source_absolute_path(Their_Branch_Path),_)),
+
+    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:instance_read_access, Auth),
+    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:schema_read_access, Auth),
+
     Our_Repo_Descriptor = Our_Branch_Descriptor.repository_descriptor,
     Their_Repo_Descriptor = Their_Branch_Descriptor.repository_descriptor,
     create_context(Our_Repo_Descriptor, Our_Repo_Context),
@@ -141,11 +156,11 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
 
-    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
+    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History)
     ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
     ;   Optional_Common_Commit_Id = none,
-        commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_Path),
-        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_Path)),
+        commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
+        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)),
 
     % copy commits from their repo into ours, ensuring we got the latest
     copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
@@ -154,9 +169,9 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
     % take their commit uri as the top on which we're gonna apply_commit_chain
     % list of commits to apply is ours since common
 
-    create_strategies(Our_Branch_Path, Strategy_Map, Strategies),
+    create_strategies(Our_Branch_History, Strategy_Map, Strategies),
 
-    (   Our_Branch_Path = []
+    (   Our_Branch_History = []
     % yay we're done! All commits are known to us, no need to do a thing
     ->  Semifinal_Context = Our_Repo_Context2,
         Final_Commit_Uri = Their_Commit_Uri
@@ -165,14 +180,14 @@ rebase_on_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Author, Auth_Ob
                                Their_Repo_Context,
                                Their_Commit_Uri,
                                Author,
-                               Auth_Object,
-                               Our_Branch_Path,
+                               Auth,
+                               Our_Branch_History,
                                Strategies,
                                Final_Commit_Uri,
                                Semifinal_Context,
                                Reports),
             error(apply_commit(Error)),
-            throw(error(rebase(Error,Our_Branch_Path)))
+            throw(error(rebase(Error,Our_Branch_History)))
         )
     ),
 
@@ -316,9 +331,10 @@ test(rebase_divergent_history,
     commit_id_uri(Repo_Descriptor, New_Commit_D_Id, New_Commit_D_Uri),
 
     [Commit_B_Id, Commit_C_Id] = Their_Commit_Ids,
-    [_{origin_commit: Old_Commit_D_Id,
-       applied: [New_Commit_D_Id],
-       type: valid}] = Reports,
+    [_{'@type' : 'api:RebaseReport',
+       'api:origin_commit': Old_Commit_D_Id,
+       'api:applied' : [New_Commit_D_Id],
+       'api:commit_type': 'api:valid_commit'}] = Reports,
 
     findall(t(S,P,O),
             ask(Master_Descriptor,

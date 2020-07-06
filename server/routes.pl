@@ -540,8 +540,7 @@ triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
                       'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
-    resolve_absolute_graph_descriptor(Path_List, Graph_Descriptor),
-    merge_separator_split(Path, '/', Path_List),
+    resolve_absolute_string_graph_descriptor(Path, Graph_Descriptor),
     format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
     cors_reply_json(Request,
                     _{'@type' : 'api:TriplesErrorResponse',
@@ -699,13 +698,13 @@ frame_handler(post, Path, Request, System_DB, Auth) :-
             api_class_frame(System_DB, Auth, Path, Class_URI, Frame),
             E,
             do_or_die(frame_error_handler(E, Request),
-                      throw(E)))
+                      E))
     ;   get_dict(instance,Doc,Instance_URI)
     ->  catch_with_backtrace(
             api_filled_frame(System_DB, Auth, Path, Instance_URI, Frame),
             E,
             do_or_die(frame_error_handler(E, Request),
-                      throw(E)))
+                      E))
     ),
 
     write_cors_headers(Request),
@@ -766,9 +765,7 @@ frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
-    % ERROR NOTE: Doesn't work
-    resolve_absolute_descriptor(Path_List, Descriptor),
-    merge_separator_split(Path, '/', Path_List),
+    resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
@@ -879,7 +876,7 @@ woql_handler(post, Request, System_DB, Auth) :-
         ),
         E,
         do_or_die(woql_error_handler(E, Request),
-                  throw(E))).
+                  E)).
 
 woql_handler(post, Path, Request, System_DB, Auth) :-
     try_get_param('query',Request,Query),
@@ -897,7 +894,7 @@ woql_handler(post, Path, Request, System_DB, Auth) :-
         ),
         E,
         do_or_die(woql_error_handler(E, Request),
-                  throw(E))).
+                  E)).
 
 
 woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
@@ -911,8 +908,7 @@ woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
-    resolve_absolute_descriptor(Path_List, Descriptor),
-    merge_separator_split(Path, '/', Path_List),
+    resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:WoqlErrorResponse',
@@ -932,6 +928,20 @@ woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+
+test(db_not_there, []) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/woql/admin/blagblagblagblagblag'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{'query' : ""}),
+              JSON,
+              [status_code(Code), json_object(dict),authorization(basic(admin,Key))]),
+    Code = 404,
+    _{'@type' : "api:WoqlErrorResponse",
+      'api:error' :
+      _{'@type' : "api:UnresolvableAbsoluteDescriptor",
+        'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/master"}} :< JSON.
 
 test(no_db, [])
 :-
@@ -1397,7 +1407,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         ),
         E,
         do_or_die(clone_error_handler(E,Request),
-                  throw(E))).
+                  E)).
 
 clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
     format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
@@ -1482,7 +1492,7 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
                   'api:head' : New_Head_Layer_Id})),
         E,
         do_or_die(fetch_error_handler(E,Request),
-                  error(E))).
+                  E)).
 
 fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
@@ -1495,8 +1505,7 @@ fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 fetch_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
-    resolve_absolute_descriptor(Path_List, Descriptor),
-    merge_separator_split(Path, '/', Path_List),
+    resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FetchErrorResponse',
@@ -1539,33 +1548,33 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 rebase_handler(post, Path, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor(Path, Our_Descriptor),
-    check_descriptor_auth(System_DB, Our_Descriptor, system:rebase, Auth),
 
     get_payload(Document, Request),
     (   get_dict(rebase_from, Document, Their_Path)
-    ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
+    ->  true
     ;   throw(error(rebase_from_missing))),
-    check_descriptor_auth(System_DB, Their_Descriptor, system:instance_read_access, Auth),
-    check_descriptor_auth(System_DB, Their_Descriptor, system:schema_read_access, Auth),
 
     (   get_dict(author, Document, Author)
     ->  true
     ;   throw(error(rebase_author_missing))),
 
-    Strategy_Map = [],
-    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+    catch_with_backtrace(
+        (   Strategy_Map = [],
+            rebase_on_branch(System_DB, Auth, Our_Descriptor,Their_Descriptor, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    Incomplete_Reply = _{ 'api:status' : "api:success",
-                          forwarded_commits : Forwarded_Commits,
-                          reports: Reports
-                        },
-    (   Common_Commit_ID_Option = some(Common_Commit_ID)
-    ->  Reply = (Incomplete_Reply.put(common_commit_id, Common_Commit_ID))
-    ;   Reply = Incomplete_Reply),
-    
-    reply_json_dict(Reply).
+            Incomplete_Reply = _{ '@type' : "api:RebaseResponse",
+                                  'api:status' : "api:success",
+                                  'api:forwarded_commits' : Forwarded_Commits,
+                                  'api:reports': Reports
+                                },
+            (   Common_Commit_ID_Option = some(Common_Commit_ID)
+            ->  Reply = (Incomplete_Reply.put(common_commit_id, Common_Commit_ID))
+            ;   Reply = Incomplete_Reply),
+            reply_json_dict(Reply)),
+        E,
+        do_or_die(rebase_error_handler(E,Request),
+                  E)
+    ).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).

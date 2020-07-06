@@ -235,4 +235,76 @@ api:FetchErrorResponse
   a owl:Class ;
   rdfs:subClassOf api:ErrorResponse .
 
+api:WithForwardedCommits
+  a owl:Class .
+
+api:forwarded_commits
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithForwardedCommits ;
+  rdfs:range xsd:string .
+
+api:WithReports
+  a owl:Class .
+
+api:reports
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithReports ;
+  rdfs:range api:RebaseReport .
+
+api:WithApplied
+  a owl:Class .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithApplied ;
+  rdfs:range xsd:string .
+
+api:WithCommitType
+  a owl:Class .
+
+api:commit_type
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithCommitType ;
+  rdfs:range api:CommitType .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithCommitType ;
+  rdfs:range api:CommitType .
+
+api:CommitType
+  a owl:Class ;
+  owl:oneOf ( api:valid_commit api:invalid_commit ) .
+
+api:valid_commit a api:CommitType .
+api:invalid_commit a api:CommitType .
+
+api:WithOriginCommit
+  a owl:Class .
+
+api:origin_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithOriginCommit ;
+  rdfs:range xsd:string .
+
+api:WithApplied
+  a owl:Class .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithApplied ;
+  rdfs:range xsd:string .
+
+api:RebaseReport
+  a owl:Class
+  rdfs:subClassOf api:WithOriginCommit, api:WithApplied, api:WithCommitType .
+
+api:RebaseResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReports .
+
+api:FetchErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
 

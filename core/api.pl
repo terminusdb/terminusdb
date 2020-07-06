@@ -23,7 +23,7 @@
               branch_create/4,
 
               % db_rebase.pl
-              rebase_on_branch/8,
+              rebase_on_branch/9,
               cycle_context/4,
 
               % db_fast_forward.pl
