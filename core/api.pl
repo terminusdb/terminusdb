@@ -37,7 +37,7 @@
               layer_layerids/2,
 
               % db_fetch.pl
-              remote_fetch/4,
+              remote_fetch/6,
 
               % db_clone.pl
               clone/9,
@@ -49,7 +49,7 @@
               unpack/2,
 
               % db_pull.pl
-              pull/6,
+              pull/7,
 
               % graph_load.pl
               graph_load/6,

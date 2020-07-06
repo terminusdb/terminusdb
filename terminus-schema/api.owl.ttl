@@ -210,3 +210,29 @@ api:CloneErrorResponse
 api:RemoteConnectionError
   a owl:Class ;
   rdfs:subClassOf api:Error .
+
+api:WithHead
+  a owl:Class .
+
+api:head
+  a owql:DatatypeProperty ;
+  rdfs:domain api:WithHead ;
+  rdfs:range xsd:string .
+
+api:WithHeadHasChanged
+  a owl:Class .
+
+api:head_has_changed
+  a owql:DatatypeProperty ;
+  rdfs:domain api:WithHeadHasChanged ;
+  rdfs:range xsd:boolean .
+
+api:FetchResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithHeadHasChanged, api:WithHead .
+
+api:FetchErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+

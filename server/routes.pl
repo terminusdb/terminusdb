@@ -1400,7 +1400,6 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
                   throw(E))).
 
 clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
-    term_string(Payload),
     format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
     cors_reply_json(Request,
                     _{'@type' : 'api:CloneErrorResponse',
@@ -1469,20 +1468,44 @@ test(clone_local, [
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(post,Path,Request, _System_DB, _Auth) :-
+fetch_handler(post,Path,Request, System_DB, Auth) :-
     request_remote_authorization(Request, Authorization),
-    % Calls pack on remote
-    resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
-    % DUBIOUS is authorization happening here?
-    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
-                 New_Head_Layer_Id, Head_Has_Updated),
+    catch_with_backtrace(
+        (   remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
+                         New_Head_Layer_Id, Head_Has_Updated),
+            write_cors_headers(Request),
+            reply_json_dict(
+                _{'@type' : 'api:FetchRequest',
+                  'api:status' : 'api:success',
+                  'api:head_has_changed' : Head_Has_Updated,
+                  'api:head' : New_Head_Layer_Id})),
+        E,
+        do_or_die(fetch_error_handler(E,Request),
+                  error(E))).
 
-    write_cors_headers(Request),
-    reply_json_dict(
-            _{'api:status' : 'api:success',
-              'head_has_changed' : Head_Has_Updated,
-              'head' : New_Head_Layer_Id}).
+fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+fetch_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    resolve_absolute_descriptor(Path_List, Descriptor),
+    merge_separator_split(Path, '/', Path_List),
+    format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
@@ -1910,9 +1933,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                  prefix,
                  methods([options,post])]).
 
-pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-
+pull_handler(post,Path,Request, System_DB, Local_Auth) :-
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
@@ -1926,7 +1947,7 @@ pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
         error(no_remote_authorization)),
 
     catch(
-        pull(Branch_Descriptor, Local_Auth, Remote_Name, Remote_Branch_Name,
+        pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
              authorized_fetch(Remote_Auth),
              Result),
         E,
@@ -2549,7 +2570,7 @@ customise_exception(error(syntax_error(M),_)) :-
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
-customise_exception(error(woql_syntax_error(JSON,Path,Element)),_) :-
+customise_exception(error(woql_syntax_error(JSON,Path,Element),_)) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',

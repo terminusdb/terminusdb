@@ -1,5 +1,5 @@
 :- module(db_pull, [
-              pull/6
+              pull/7
           ]).
 
 :- use_module(core(util)).
@@ -7,12 +7,17 @@
 :- use_module(db_fast_forward).
 :- use_module(core(transaction)).
 
-:- meta_predicate pull(+, +, +, +, 3, -).
-pull(Our_Branch_Descriptor,_Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Predicate,
+:- meta_predicate pull(+, +, +, +, +, 3, -).
+pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fetch_Predicate,
      status{ fetch_status : Head_Has_Updated,
              branch_status : Branch_Status
            }) :-
 
+    do_or_die(
+        resolve_absolute_string_descriptor(Our_Branch_Path,Our_Branch_Descriptor),
+        error(invalid_absolute_path(Our_Branch_Path),_)),
+
+    % Dubious: Where is the local auth check?
     do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
                open_descriptor(Our_Branch_Descriptor, _)),
               error(not_a_valid_local_branch(Our_Branch_Descriptor))),
@@ -28,7 +33,7 @@ pull(Our_Branch_Descriptor,_Local_Auth,Remote_Name, Remote_Branch_Name, Fetch_Pr
               error(not_a_valid_remote_branch(Their_Branch_Descriptor))),
 
     % 1. fetch
-    remote_fetch(Their_Repository_Descriptor, Fetch_Predicate,
+    remote_fetch(System_DB, Local_Auth, Their_Repository_Descriptor, Fetch_Predicate,
                  _New_Head_Layer_Id, Head_Has_Updated),
 
     % 2. try fast forward - alert front end if impossible.
