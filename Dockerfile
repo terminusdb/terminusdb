@@ -1,5 +1,5 @@
 FROM terminusdb/terminus_store_prolog:v0.10.1
-WORKDIR /usr/lib/swipl/pack
+WORKDIR /usr/share/swi-prolog/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
         && git clone https://github.com/terminusdb/jwt_io.git \
