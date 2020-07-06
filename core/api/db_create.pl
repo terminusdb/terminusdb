@@ -1,6 +1,8 @@
 :- module(db_create, [
+              create_db_unfinalized/8,
               create_db/7,
-              create_ref_layer/2
+              create_ref_layer/2,
+              finalize_db/1
           ]).
 
 /** <module> Implementation of database graph management
@@ -81,7 +83,7 @@ create_ref_layer(Descriptor,Prefixes) :-
         ),
         _).
 
-finalize_system(DB_Uri) :-
+finalize_db(DB_Uri) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
         Context,
@@ -94,7 +96,7 @@ finalize_system(DB_Uri) :-
         ;   throw(error(database_in_inconsistent_state))),
         _).
 
-create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Prefixes) :-
+create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),
@@ -131,11 +133,15 @@ create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Pref
                                 },
                                 repository_name: "local"
                             },
-    create_ref_layer(Repository_Descriptor,Prefixes),
+    create_ref_layer(Repository_Descriptor,Prefixes).
+
+
+create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Prefixes) :-
+    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Prefixes, Db_Uri),
 
     % update system with finalized
     % This reopens system graph internally, as it was advanced
-    finalize_system(Db_Uri).
+    finalize_db(Db_Uri).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).

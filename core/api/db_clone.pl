@@ -17,23 +17,19 @@ clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_
     setup_call_catcher_cleanup(
         true,
         clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
-        exception(_),
+        exception(E),
 
-        (   * open_descriptor(system_descriptor{}, System_DB2), % reopen to delete
-            % todo - this may actually not be correct
-            % what if you try to clone and it fails for any other reason?
-            % for example, what if things fail due to an authentication error?
-            % or cause the database already exists?
-            % We should not just be deleting databases cause a clone fails.
-            * catch(delete_db(System_DB2, Auth, Account,DB),
-                  error(database_not_found(_)),
-                  true))).
+        (   clone_cleanup_required(E)
+        ->  force_delete_db(Account, DB)
+        ;   true)).
 
+clone_cleanup_required(remote_pack_failed(_)).
+clone_cleanup_required(remote_pack_unpexected_failure(_)).
 
 :- meta_predicate clone_(+,+,+,+,+,+,+,3,-).
 clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    create_db(System_DB, Auth, Account, DB, Label, Comment, _{}),
+    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, _{}, Db_Uri),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),
@@ -68,4 +64,8 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta
 
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
+
+    finalize_db(Db_Uri),
+
     Meta_Data = _{ applied_commits : Applied_Commits }.
+
