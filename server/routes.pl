@@ -1560,7 +1560,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   Strategy_Map = [],
-            rebase_on_branch(System_DB, Auth, Our_Descriptor,Their_Descriptor, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+            rebase_on_branch(System_DB, Auth, Path, Their_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
             Incomplete_Reply = _{ '@type' : "api:RebaseResponse",
                                   'api:status' : "api:success",
@@ -1568,7 +1568,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
                                   'api:reports': Reports
                                 },
             (   Common_Commit_ID_Option = some(Common_Commit_ID)
-            ->  Reply = (Incomplete_Reply.put(common_commit_id, Common_Commit_ID))
+            ->  Reply = (Incomplete_Reply.put('api:common_commit_id', Common_Commit_ID))
             ;   Reply = Incomplete_Reply),
             reply_json_dict(Reply)),
         E,
@@ -1639,10 +1639,10 @@ test(rebase_divergent_history, [
 
     * json_write_dict(current_output, JSON, []),
 
-    _{
-        forwarded_commits : [_Thing, _Another_Thing ],
-        common_commit_id : _Common_Something,
-        reports: _Reports,
+    _{  '@type' : "api:RebaseResponse",
+        'api:forwarded_commits' : [_Thing, _Another_Thing ],
+        'api:common_commit_id' : _Common_Something,
+        'api:reports' : _Reports,
         'api:status' : "api:success"
     } :< JSON,
 
