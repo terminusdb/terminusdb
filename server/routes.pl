@@ -2503,10 +2503,10 @@ cors_handler(Method, Goal, R) :-
     catch((   authenticate(System_Database, Request, Auth),
               cors_catch(Method, Goal, Request, System_Database, Auth)),
 
-          error(authentication_incorrect),
+          error(authentication_incorrect(Reason),_),
 
           (   write_cors_headers(Request),
-
+              http_log("~NAuthenication Incorrect for reason: ~q~n", [Reason]),
               reply_json(_{'api:status' : 'api:failure',
                            'api:message' : 'Incorrect authentication information'
                           },
@@ -2542,16 +2542,6 @@ customise_exception(reply_json(M,Status)) :-
                [status(Status)]).
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
-customise_exception(error(authentication_incorrect)) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'api:message' : 'Incorrect authentication information'
-                },
-               [status(401)]).
-customise_exception(error(not_authenticated)) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'api:message' : 'No authentication supplied'
-                },
-               [status(401)]).
 customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
@@ -2769,15 +2759,14 @@ fetch_jwt_data(Request, Username) :-
     atom_string(TokenAtom, Token),
 
     do_or_die(jwt_decode(TokenAtom, Payload, []),
-              error(authentication_incorrect)),
+              error(authentication_incorrect(jwt_decode_failed(TokenAtom)))),
 
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
             % replace with dict key get (or whatever it is called)
             get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
-        malformed_jwt_payload(Payload)).
-
+        error(malformed_jwt_payload(Payload))).
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -2788,13 +2777,13 @@ authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
     do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
-              error(authentication_incorrect)).
+              error(authentication_incorrect(basic_auth(Username)),_)).
 authenticate(System_Askable, Request, Auth) :-
     % Try JWT if no http keys
     fetch_jwt_data(Request, Username),
     !,
     do_or_die(username_auth(System_Askable, Username, Auth),
-              error(authentication_incorrect)).
+              error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
 authenticate(_, _, doc:anonymous).
 
 /*
