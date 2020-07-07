@@ -2825,7 +2825,7 @@ fetch_jwt_data(Token, Username) :-
     atom_string(TokenAtom, Token),
 
     do_or_die(jwt_decode(TokenAtom, Payload, []),
-              error(authentication_incorrect(jwt_decode_failed(TokenAtom)))),
+              error(authentication_incorrect(jwt_decode_failed(TokenAtom)), _)),
 
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
