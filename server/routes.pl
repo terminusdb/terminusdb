@@ -60,12 +60,9 @@
 :- use_module(library(http/http_authenticate)).
 
 % Conditional loading of the JWT IO library...
-% TODO: There must be a cleaner way to do this
-:- (   config:jwt_public_key_path(JWTPubKeyPath),
-       JWTPubKeyPath = ''
-   ->  true
-   ;   use_module(library(jwt_io))).
-
+:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
+:- use_module(library(jwt_io)).
+:- endif.
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -2574,8 +2571,10 @@ cors_handler(Method, Goal, R) :-
           error(authentication_incorrect(Reason),_),
 
           (   write_cors_headers(Request),
-              http_log("~NAuthenication Incorrect for reason: ~q~n", [Reason]),
-              reply_json(_{'api:status' : 'api:failure',
+              http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+              reply_json(_{'@type' : 'api:ErrorResponse',
+                           'api:status' : 'api:failure',
+                           'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
                           },
                          [status(401)]))).
@@ -2816,14 +2815,13 @@ fetch_authorization_data(Request, Username, KS) :-
     http_authorization_data(Text, basic(Username, Key)),
     coerce_literal_string(Key, KS).
 
+:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
 /*
  *  fetch_jwt_data(+Request, -Username) is semi-determinate.
  *
  *  Fetches the HTTP JWT data
  */
-fetch_jwt_data(Request, Username) :-
-    memberchk(authorization(Text), Request),
-    pattern_string_split(" ", Text, ["Bearer", Token]),
+fetch_jwt_data(Token, Username) :-
     atom_string(TokenAtom, Token),
 
     do_or_die(jwt_decode(TokenAtom, Payload, []),
@@ -2835,6 +2833,11 @@ fetch_jwt_data(Request, Username) :-
             get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
         error(malformed_jwt_payload(Payload))).
+:- else.
+fetch_jwt_data(_Token, _Username) :-
+    throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
+:- endif.
+
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -2847,9 +2850,11 @@ authenticate(System_Askable, Request, Auth) :-
     do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
               error(authentication_incorrect(basic_auth(Username)),_)).
 authenticate(System_Askable, Request, Auth) :-
-    % Try JWT if no http keys
-    fetch_jwt_data(Request, Username),
+    memberchk(authorization(Text), Request),
+    pattern_string_split(" ", Text, ["Bearer", Token]),
     !,
+    % Try JWT if no http keys
+    fetch_jwt_data(Token, Username),
     do_or_die(username_auth(System_Askable, Username, Auth),
               error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
 authenticate(_, _, doc:anonymous).
