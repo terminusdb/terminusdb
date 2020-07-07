@@ -127,10 +127,6 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
         organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
         error(origin_database_does_not_exist(Organization_Name, Database_Name),_)),
 
-    findall(Scope,
-            auth_action_scope(System_DB, Auth, system:branch, Scope),
-            Scopes),
-    http_log("~nAction Scopes: ~q~n", [Scopes]),
     assert_auth_action_scope(System_DB, Auth, system:branch, Scope_Iri),
 
     % ensure that we're putting this branch into a local repository

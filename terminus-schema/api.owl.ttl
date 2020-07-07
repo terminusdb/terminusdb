@@ -471,3 +471,51 @@ api:branch_name
 api:NotBranchableError
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:CreateGraphErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:BadAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteGraphDescriptor .
+
+api:WithAbsoluteGraphDescriptor ;
+  a owl:Class .
+
+api:absolute_graph_descriptor ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithAbsoluteGraphDescriptor ;
+  rdfs:range xsd:string .
+
+api:BadGraphType
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithGraphTYpe .
+
+api:WithGraphType ;
+  a owl:Class .
+
+api:graph_type ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithGraphType ;
+  rdfs:range xsd:string .
+
+api:BranchAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor ;
+
+api:withGraphName
+  a owl:Class .
+
+api:graph_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithGraphName ;
+  rdfs:range xsd:string .
+
+api:CreateGraphResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:DeleteGraphResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .

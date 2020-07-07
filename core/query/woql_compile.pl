@@ -2249,10 +2249,11 @@ test(path_star, [
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,
@@ -2300,10 +2301,11 @@ test(complex_path, [
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,

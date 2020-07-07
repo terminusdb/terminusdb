@@ -272,12 +272,13 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes),
     resolve_absolute_descriptor([Organization, Db_Name], Branch_Descriptor),
-
-    create_graph(Branch_Descriptor,
+    resolve_absolute_string_descriptor(Base,Branch_Descriptor),
+    string_concat(Base,"/schema/main",Graph_Path),
+    create_graph(system_descriptor{},
+                 Admin,
+                 Graph_Path,
                  commit_info{ author : "test",
                               message: "Create an empty schema graph"},
-                 schema,
-                 "main",
                  _),
 
     terminus_path(Path),
