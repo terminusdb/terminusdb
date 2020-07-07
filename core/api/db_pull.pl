@@ -37,31 +37,15 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                  _New_Head_Layer_Id, Head_Has_Updated),
 
     % 2. try fast forward - alert front end if impossible.
-    catch(
-        (   fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
-            Branch_Status = branch_status{
-                                status: Inner_Status
-                            },
-            (   Applied_Commit_Ids = []
-            ->  Inner_Status = "branch_unchanged"
-            ;   Inner_Status = "branch_fast_forwarded"
-            )
-        ),
-        E,
-        (   E = error(Inner_E)
-        ->  (   Inner_E = divergent_history(Common_Commit)
-            ->  Branch_Status = branch_status{
-                                    status : "history_diverged",
-                                    common_commit : Common_Commit
-                                }
-            ;   Inner_E = no_common_history
-            ->  Branch_Status = branch_status{
-                                    status : "no_common_history"
-                                }
-            ;   throw(E)
-            )
-        ;   throw(E))).
-
+    fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
+    Branch_Status = branch_status{
+                        '@type' : "api:PullReport",
+                        'api:pull_status': Inner_Status
+                    },
+    (   Applied_Commit_Ids = []
+    ->  Inner_Status = "api:pull_unchanged"
+    ;   Inner_Status = "api:pull_fast_forwarded"
+    ).
 
 
 

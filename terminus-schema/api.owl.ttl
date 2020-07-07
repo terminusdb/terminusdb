@@ -243,12 +243,12 @@ api:forwarded_commits
   rdfs:domain api:WithForwardedCommits ;
   rdfs:range xsd:string .
 
-api:WithReports
+api:WithRebaseReport
   a owl:Class .
 
-api:reports
+api:rebase_report
   a owl:ObjectProperty ;
-  rdfs:domain api:WithReports ;
+  rdfs:domain api:WithRebaseReport ;
   rdfs:range api:RebaseReport .
 
 api:WithApplied
@@ -301,7 +301,7 @@ api:RebaseReport
 
 api:RebaseResponse
   a owl:Class ;
-  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReports .
+  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReport .
 
 api:RebaseErrorResponse
   a owl:Class ;
@@ -370,3 +370,68 @@ api:layer_reference
   a owl:ObjectProperty ;
   rdfs:domain api:WithLayerReference ;
   rdfs:range vio:Violation .
+
+api:PushResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:PushNewHeadResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithHead .
+
+api:PushErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithPullReport
+  a owl:Class .
+
+api:pull_report
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithPullReport ;
+  rdfs:range api:PullReport .
+
+api:PullResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithPullReport .
+
+api:PullReport
+  a owl:Class ,
+  rdfs:subClassOf api:WithPullStatus .
+
+api:WithPullStatus
+  a owl:Class .
+
+api:pull_status
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithPullStatus ;
+  rdfs:range api:PullStatus .
+
+api:PullStatus
+  a owl:Class
+  owl:oneOf (
+    api:pull_unchanged
+    api:pull_fast_forwarded ) .
+
+api:pull_unchanged a api:PullStatus .
+api:pull_fast_forwarded a api:PullStatus .
+
+api:WithCommonCommit ;
+  a owl:Class .
+
+api:common_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithCommonCommit ;
+  rdfs:range xsd:string .
+
+api:HistoryDivergedError
+  a owl:Class ,
+  rdfs:subClassOf api:Error , api:WithCommonCommit .
+
+api:NoCommonHistoryError
+  a owl:Class ,
+  rdfs:subClassOf api:Error .
+
+api:IncorrectAuthenticationError
+  a owl:Class ,
+  rdfs:subClassOf api:Error .

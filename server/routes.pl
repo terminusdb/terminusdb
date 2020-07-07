@@ -1557,7 +1557,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
             Incomplete_Reply = _{ '@type' : "api:RebaseResponse",
                                   'api:status' : "api:success",
                                   'api:forwarded_commits' : Forwarded_Commits,
-                                  'api:reports': Reports
+                                  'api:rebase_report': Reports
                                 },
             (   Common_Commit_ID_Option = some(Common_Commit_ID)
             ->  Reply = (Incomplete_Reply.put('api:common_commit_id', Common_Commit_ID))
@@ -1677,7 +1677,7 @@ test(rebase_divergent_history, [
     _{  '@type' : "api:RebaseResponse",
         'api:forwarded_commits' : [_Thing, _Another_Thing ],
         'api:common_commit_id' : _Common_Something,
-        'api:reports' : _Reports,
+        'api:rebase_report' : _Reports,
         'api:status' : "api:success"
     } :< JSON,
 
@@ -1958,17 +1958,46 @@ push_handler(post,Path,Request, System_DB, Auth) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    push(System_DB, Auth, Branch_Descriptor,Remote_Name,Remote_Branch,
-         authorized_push(Authorization),Result),
+    catch_with_backtrace(
+        (   push(System_DB, Auth, Branch_Descriptor,Remote_Name,Remote_Branch,
+                 authorized_push(Authorization),Result),
+            (   Result = none
+            ->  Response = _{'@type' : "api:PushResponse",
+                             'api:status' : "api:success"}
+            ;   Result = some(Head_ID)
+            ->  Response = _{'@type' : "api:PushNewHeadResponse",
+                             'api:head' : Head_ID,
+                             'api:status' : "api:success"}
+            ;   throw(error(internal_server_error,_))),
+            cors_reply_json(Request,
+                            Result,
+                            [status(200)])),
+        E,
+        do_or_die(push_error_handler(E,Request),
+                  E)).
 
-    (   Result = none
-    ->  write_cors_headers(Request),
-        reply_json(_{'api:status' : "api:success"})
-    ;   Result = some(Head_ID)
-    ->  write_cors_headers(Request),
-        reply_json(_{'api:status' : "api:success",
-                     'head' : Head_ID})
-    ;   throw(error(internal_server_error))).
+push_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PushErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
@@ -2020,27 +2049,61 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
         request_remote_authorization(Request, Remote_Auth),
         error(no_remote_authorization)),
 
-    catch(
-        pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
-             authorized_fetch(Remote_Auth),
-             Result),
+    catch_with_backtrace(
+        (   pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
+                 authorized_fetch(Remote_Auth),
+                 Result),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:PullResponse',
+                              'api:status' : "api:success",
+                              'api:pull_report' : Result},
+                            [status(200)])),
         E,
-        (   E = error(Inner_E)
-        ->  (   Inner_E = not_a_valid_local_branch(_)
-            ->  throw(reply_json(_{'api:status' : "api:failure",
-                                   'api:message' : "Not a valid local branch"},
-                                 400))
-            ;   Inner_E = not_a_valid_remote_branch(_)
-            ->  throw(reply_json(_{'api:status' : "api:failure",
-                                   'api:message' : "Not a valid remote branch"},
-                                 400))
-            ;   throw(E))
-        ;   throw(E))
-    ),
+        do_or_die(
+            pull_error_handler(E,Request),
+            E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success",
-                 'report' : Result}).
+pull_error_handler(error(not_a_valid_local_branch(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The local branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+pull_error_handler(error(not_a_valid_remote_branch(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+pull_error_handler(error(divergent_history(Common_Commit), _), Request) :-
+    format(string(Msg), "History diverges from commit ~q", [Common_Commit]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:HistoryDivergedError',
+                                       'api:common_commit' : Common_Commit
+                                     }},
+                    [status(400)]).
+pull_error_handler(error(no_common_history, _), Request) :-
+    format(string(Msg), "There is no common history between branches", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
+                                     }},
+                    [status(400)]).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),

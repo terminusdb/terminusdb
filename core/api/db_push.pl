@@ -29,11 +29,11 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
 
     do_or_die(
         resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-        error(invalid_absolute_descriptor(Branch_Descriptor))),
+        error(invalid_absolute_descriptor(Branch_Descriptor),_)),
 
     do_or_die(
         open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscore
-        error(branch_does_not_exist_in_push(Branch_Descriptor))),
+        error(unresolvable_absolute_descriptor(Branch_Descriptor),_)),
 
     Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
     Database_Descriptor = (Repository_Descriptor.database_descriptor),

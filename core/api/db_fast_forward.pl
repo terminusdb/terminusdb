@@ -22,11 +22,11 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                                  most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
                              ->  (   Our_Branch_Path = []
                                  ->  true
-                                 ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)))),
+                                 ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path), _))),
 
                                  Applied_Commit_Ids = Their_Branch_Path,
                                  Next = copy_commit(Their_Commit_Id)
-                             ;   throw(error(no_common_history)))
+                             ;   throw(error(no_common_history,_)))
                          ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
                              ->  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
                                  commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Applied_Commit_Ids),
@@ -161,7 +161,7 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id])))
+      throws(error(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id]), _))
      ])
 :-
     resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
@@ -209,7 +209,7 @@ test(fast_forward_branch_from_empty_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(no_common_history))
+      throws(error(no_common_history, _))
      ])
 :-
     resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
@@ -233,7 +233,7 @@ test(fast_forward_branch_from_unrelated_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(no_common_history))
+      throws(error(no_common_history, _))
      ])
 :-
     resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
