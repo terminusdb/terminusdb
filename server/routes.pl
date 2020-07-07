@@ -66,11 +66,6 @@
    ->  true
    ;   use_module(library(jwt_io))).
 
-% Suppress warnings
-% TODO improve this
-:- dynamic jwt_decode/3.
-
-
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
