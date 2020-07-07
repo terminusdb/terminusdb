@@ -47,7 +47,7 @@
               push/7,
 
               % db_unpack.pl
-              unpack/2,
+              unpack/4,
 
               % db_pull.pl
               pull/7,

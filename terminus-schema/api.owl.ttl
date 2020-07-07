@@ -320,7 +320,7 @@ api:WithWitness
 
 api:witness
   a owl:ObjectProperty ;
-  rdfs:domain api:WithTheirCommit ;
+  rdfs:domain api:WithWitness ;
   rdfs:range vio:Violation .
 
 api:RebaseFixupError
@@ -347,3 +347,26 @@ api:NotARepositoryDescriptorError
   a owl:Class ;
   rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 
+api:UnpackResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:UnpackErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NotALinearHistory
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:UnknownLayerReference
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithLayerReference .
+
+api:WithLayerReference
+  a owl:Class .
+
+api:layer_reference
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithLayerReference ;
+  rdfs:range vio:Violation .

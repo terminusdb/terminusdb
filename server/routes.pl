@@ -1876,56 +1876,68 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
-    string_concat(Path, "/local/_commits", Full_Path),
-    do_or_die(
-        (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
-            (repository_descriptor{} :< Repository_Descriptor)),
-        reply_json(_{'@type' : "vio:UnpackPathInvalid",
-                     'api:status' : "api:failure",
-                     'api:message' : "The path to the database to unpack to was invalid"
-                    },
-                   400)),
-
-    check_descriptor_auth(System_DB, Repository_Descriptor,
-                          system:commit_write_access,
-                          Auth),
-
     get_payload(Payload, Request),
 
-    catch(
-        (   unpack(Repository_Descriptor, Payload),
-            Json_Reply = _{'api:status' : "api:success"},
-            Status = 200
+    catch_with_backtrace(
+        (   unpack(System_DB, Auth, Path, Payload),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:UnpackResponse',
+                              'api:status' : "api:success"},
+                            [status(200)])
         ),
         E,
-        (   E = error(Inner_E)
-        ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
-            ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
-                               'api:status' : "api:failure",
-                               'api:message' : "Not a linear history"
-                              },
-                Status = 400
-            ;   Inner_E = unknown_layer_reference(Layer_Id)
-            ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
-                               'api:status' : "api:failure",
-                               'api:message' : "A layer in the pack has an unknown parent",
-                               'layer_id' : _{'@type': "xsd:string",
-                                              '@value' : Layer_Id}
-                              },
-                Status = 400
-            ;   Inner_E = database_not_found(_)
-            ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
-                               'api:status' : "api:failure",
-                               'api:message' : "The database to unpack to has not be found"
-                              },
-                Status = 400
-            ;   throw(E))
-        ;   throw(E))
-    ),
+        do_or_die(
+            unpack_error_handler(E, Request),
+            E)).
 
-    write_cors_headers(Request),
-    reply_json(Json_Reply,
-               [status(Status)]).
+unpack_error_handler(error(not_a_linear_history_in_unpack(_History),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:error' : _{'@type' : "api:NotALinearHistory"},
+                      'api:message' : "Not a linear history"
+                     },
+                    [status(400)]).
+unpack_error_handler(error(unknown_layer_reference(Layer_Id),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : "A layer in the pack has an unknown parent",
+                      'api:error' : _{ '@type' : "api:UnknownLayerReference",
+                                       'api:layer_reference' : Layer_Id}},
+                    [status(400)]).
+unpack_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The database to unpack to has not been found at absolute path ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+unpack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor is not a repository descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:UnpackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotARepositoryDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:UnpackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 :- begin_tests(unpack_endpoint).
 :- end_tests(unpack_endpoint).
