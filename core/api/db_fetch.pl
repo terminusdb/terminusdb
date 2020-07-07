@@ -68,10 +68,10 @@ get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
     pattern_string_split('/pack/', URL, [_, Database_String]),
     string_concat(Database_String, "/local/_commits", Repository_String),
     resolve_absolute_string_descriptor(Repository_String, Repository_Descriptor),
-
+    super_user_authority(Auth),
     with_triple_store(Store,
-                      (   create_context(Repository_Descriptor, Repository_Context),
-                          repository_context__previous_head_option__payload(
+                      (   askable_context(Repository_Descriptor, system_descriptor{}, Auth, Repository_Context),
+                          pack_from_context(
                               Repository_Context,
                               Repository_Head_Option,
                               Payload_Option))).

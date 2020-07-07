@@ -296,15 +296,54 @@ api:applied
   rdfs:range xsd:string .
 
 api:RebaseReport
-  a owl:Class
+  a owl:Class ;
   rdfs:subClassOf api:WithOriginCommit, api:WithApplied, api:WithCommitType .
 
 api:RebaseResponse
   a owl:Class ;
   rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReports .
 
-api:FetchErrorResponse
+api:RebaseErrorResponse
   a owl:Class ;
   rdfs:subClassOf api:ErrorResponse .
 
+api:WithTheirCommit
+  a owl:Class .
+
+api:their_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithTheirCommit ;
+  rdfs:range xsd:string .
+
+api:WithWitness
+  a owl:Class .
+
+api:witness
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithTheirCommit ;
+  rdfs:range vio:Violation .
+
+api:RebaseFixupError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+
+api:RebaseSchemaValidationError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+
+api:RebaseContinueOnValidCommit
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit .
+
+api:RebaseFixupOnValidCommit
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit .
+
+api:PackErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NotARepositoryDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 

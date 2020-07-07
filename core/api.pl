@@ -30,10 +30,11 @@
               % fast_forward_branch/4
 
               % db_pack.pl
-              repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
+              pack/5,
+              pack_from_context/3,
               layer_layerids/2,
 
               % db_fetch.pl
@@ -43,7 +44,7 @@
               clone/9,
 
               % db_push.pl
-              push/6,
+              push/7,
 
               % db_unpack.pl
               unpack/2,

@@ -147,10 +147,16 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:instance_read_access, Auth),
     check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:schema_read_access, Auth),
 
-    Our_Repo_Descriptor = Our_Branch_Descriptor.repository_descriptor,
-    Their_Repo_Descriptor = Their_Branch_Descriptor.repository_descriptor,
-    create_context(Our_Repo_Descriptor, Our_Repo_Context),
-    create_context(Their_Repo_Descriptor, Their_Repo_Context),
+    Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
+    Their_Repo_Descriptor = (Their_Branch_Descriptor.repository_descriptor),
+
+    do_or_die(
+        create_context(Our_Repo_Descriptor, Our_Repo_Context),
+        error(unresolvable_target_descriptor(Our_Repo_Descriptor))),
+
+    do_or_die(
+        create_context(Their_Repo_Descriptor, Their_Repo_Context),
+        error(unresolvable_source_descriptor(Their_Repo_Descriptor))),
 
     branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
     branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),

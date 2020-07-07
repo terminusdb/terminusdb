@@ -1576,6 +1576,49 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
                   E)
     ).
 
+rebase_error_hander(error(invalid_target_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(invalid_source_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following rebase source absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(rebase(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseSchemaValidationError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -1662,25 +1705,6 @@ test(rebase_divergent_history, [
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
-    atomic_list_concat([Path, '/local/_commits'], Repository_Path),
-    resolve_absolute_string_descriptor(Repository_Path,
-                                       Repository_Descriptor),
-
-    do_or_die(
-        (repository_descriptor{} :< Repository_Descriptor),
-        error(not_a_repository_descriptor(Repository_Descriptor))),
-
-    do_or_die(create_context(Repository_Descriptor, Pre_Context),
-              error(unknown_repository_descriptor(Repository_Descriptor))),
-
-    merge_dictionaries(
-        query_context{
-            authorization : Auth,
-            system : System_DB
-        }, Pre_Context, Context),
-
-    assert_read_access(Context),
-
     get_payload(Document,Request),
 
     (   _{ repository_head : Layer_ID } :< Document
@@ -1689,12 +1713,49 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
     ->  Repo_Head_Option = none
     ;   throw(error(bad_api_document(Document)))),
 
-    repository_context__previous_head_option__payload(
-        Context, Repo_Head_Option, Payload_Option),
+    catch_with_backtrace(
+        (   pack(System_DB, Auth,
+                 Path, Repo_Head_Option, Payload_Option),
 
-    (   Payload_Option = some(Payload)
-    ->  throw(http_reply(bytes('application/octets',Payload)))
-    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
+            (   Payload_Option = some(Payload)
+            ->  throw(http_reply(bytes('application/octets',Payload)))
+            ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)])))),
+        E,
+        do_or_die(pack_error_handler(E,Request),
+                  E)).
+
+pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+pack_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+pack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor is not a repository descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotARepositoryDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -1875,7 +1936,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
                  prefix,
                  methods([options,post])]).
 
-push_handler(post,Path,Request, _System_DB, Auth) :-
+push_handler(post,Path,Request, System_DB, Auth) :-
     resolve_absolute_string_descriptor(Path,Branch_Descriptor),
 
     do_or_die(
@@ -1893,7 +1954,7 @@ push_handler(post,Path,Request, _System_DB, Auth) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth,
+    push(System_DB, Auth, Branch_Descriptor,Remote_Name,Remote_Branch,
          authorized_push(Authorization),Result),
 
     (   Result = none
