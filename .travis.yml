@@ -4,7 +4,7 @@ services:
 language: shell
 
 env:
-  - TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey TERMINUSDB_HTTPS_ENABLED=false
+  - DOCKERENVS=-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false
 
 stages:
   - build
@@ -22,26 +22,26 @@ jobs:
     - stage: build
     - script:
         - docker build -t terminusdb/terminusdb-server:latest .
-        - docker run -e TERMINUSDB_HTTPS_ENABLED=false -it terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker run $DOCKERENVS -it terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
 
     - stage: deploy
       script:
         - docker build -t terminusdb/terminusdb-server:latest .
-        - docker run -e TERMINUSDB_HTTPS_ENABLED=false -it terminusdb/terminusdb-server bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker run $DOCKERENVS -it terminusdb/terminusdb-server bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminusdb-server:latest
 
     - stage: deploy_dev
       script:
         - docker build -t terminusdb/terminusdb-server:dev .
-        - docker run -e TERMINUSDB_HTTPS_ENABLED=false -it terminusdb/terminusdb-server:dev bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker run $DOCKERENVS -it terminusdb/terminusdb-server:dev bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminusdb-server:dev
 
     - stage: deploy_canary
       script:
         - docker build -t terminusdb/terminusdb-server:canary .
-        - docker run -e TERMINUSDB_HTTPS_ENABLED=false -it terminusdb/terminusdb-server:canary bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker run $DOCKERENVS -it terminusdb/terminusdb-server:canary bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - bash .ci/trigger_canary.sh
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminusdb-server:canary
@@ -49,6 +49,6 @@ jobs:
     - stage: deploy_tag
       script:
         - docker build -t "terminusdb/terminusdb-server:$TRAVIS_TAG" .
-        - docker run -e TERMINUSDB_HTTPS_ENABLED=false -it "terminusdb/terminusdb-server:$TRAVIS_TAG" bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        - docker run $DOCKERENVS -it "terminusdb/terminusdb-server:$TRAVIS_TAG" bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push "terminusdb/terminusdb-server:$TRAVIS_TAG"
