@@ -148,17 +148,8 @@ test(context_repository_head_pack,
      ]
     ) :-
 
-    Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -177,9 +168,11 @@ test(context_repository_head_pack,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    branch_create(Repository_Descriptor, Origin_Branch_Descriptor, "moo", _),
-
+    Destination_Path = "admin/foo/local/branch/moo",
     super_user_authority(Auth),
+
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+
     pack(system_descriptor{}, Auth,
         "admin/foo",
         some(Repo_Stage_1_Layer_ID),

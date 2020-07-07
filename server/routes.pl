@@ -1627,22 +1627,24 @@ test(rebase_divergent_history, [
                 (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
                 ->  delete_organization("TERMINUSQA")
                 ;   true),
-                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),_User_ID),
+                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
                 create_db_without_schema("TERMINUSQA", "foo"))),
          cleanup((force_delete_db("TERMINUSQA", "foo"),
                   delete_user_and_organization("TERMINUSQA")))
      ])
 :-
 
-    resolve_absolute_string_descriptor("TERMINUSQA/foo", Master_Descriptor),
+    Master_Path = "TERMINUSQA/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
     with_transaction(Master_Context1,
                      ask(Master_Context1,
                          insert(a,b,c)),
                     _),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("TERMINUSQA/foo/local/branch/second", Second_Descriptor),
+    Second_Path = "TERMINUSQA/foo/local/branch/second",
+    branch_create(system_descriptor{}, User_ID, Second_Path, some(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
     with_transaction(Second_Context1,
@@ -2111,24 +2113,107 @@ pull_error_handler(error(no_common_history, _), Request) :-
                  prefix,
                  methods([options,post])]).
 
-branch_handler(post,Path,Request, _System_DB, _Auth) :-
-    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
-    branch_descriptor{
-        repository_descriptor: Destination_Descriptor,
-        branch_name: Branch_Name
-    } :< Branch_Descriptor,
-
+branch_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     (   get_dict(origin, Document, Origin_Path)
-    ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
-    ;   Origin_Descriptor = empty),
+    ->  Origin_Option = some(Origin_Path)
+    ;   Origin_Option = none),
 
     % DUBIOUS are we even doing authentication here?
-    branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
+    catch_with_backtrace(
+        (   branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:BranchResponse',
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(branch_error_handler(E, Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+branch_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-   format(string(Msg), "The following branch target absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:BranchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteTargetDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+branch_error_handler(error(invalid_source_absolute_path(Path),_), Request) :-   format(string(Msg), "The following branch source absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:BranchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteSourceDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+branch_error_handler(error(target_not_a_branch_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The target is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotATargetBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(source_not_a_valid_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The source path ~s is not a valid descriptor for branching", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotASourceBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(source_database_does_not_exist(Org,DB), _), Request) :-
+    format(string(Msg), "The source database '~s/~s' does not exist", [Org, DB]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:DatabaseDoesNotExist",
+                                       'api:database_name' : DB,
+                                       'api:organization_name' : Org}
+                     },
+                    [status(400)]).
+branch_error_handler(error(repository_is_not_local(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Attempt to branch from remote repository", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotLocalRepositoryError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(branch_already_exists(Branch_Name), _), Request) :-
+    format(string(Msg), "Branch ~s already exists", [Branch_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:BranchExistsError",
+                                       'api:branch_name' : Branch_Name}
+                     },
+                    [status(400)]).
+branch_error_handler(error(origin_cannot_be_branched(Origin_Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Origin_Descriptor),
+    format(string(Msg), "Origin is not a branchable path ~s", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotBranchableError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
 
 :- begin_tests(branch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -2268,15 +2353,16 @@ test(create_branch_from_commit_graph_error, [
     atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{origin:'/admin/test/local/_commits',
+              json(_{origin:'admin/test/local/_commits',
                      prefixes : _{ doc : "https://terminushub.com/document",
                                    scm : "https://terminushub.com/schema"}}),
               JSON,
               [json_object(dict),
                authorization(basic(admin,Key)),
                status_code(Status_Code)]),
-    Status_Code = 400,
+
     * json_write_dict(current_output, JSON, []),
+    Status_Code = 400,
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 

@@ -270,8 +270,11 @@ test(push_new_nonmaster_branch,
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-    branch_create(Repository_Descriptor, empty, "work", _),
+
+    Destination_Path = "admin/foo/local/branch/work",
+
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -298,10 +301,12 @@ test(push_new_nonmaster_branch_with_content,
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State))])
 :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-    branch_create(Repository_Descriptor, empty, "work", _),
 
-    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+    Destination_Path = "admin/foo/local/branch/work",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+
+    resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -311,7 +316,8 @@ test(push_new_nonmaster_branch_with_content,
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
-    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
 
     resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
 
@@ -324,7 +330,7 @@ test(push_new_nonmaster_branch_with_content,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
@@ -362,8 +368,9 @@ test(push_without_repository,
       cleanup(teardown_temp_store(State)),
       error(no_repository_with_name(_,_))])
 :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-    branch_create(Repository_Descriptor, empty, "work", _),
+    Destination_Path = "admin/foo/local/branch/work",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -383,10 +390,11 @@ test(push_local,
       cleanup(teardown_temp_store(State)),
       error(push_attempted_on_non_remote(_,_))])
 :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-    branch_create(Repository_Descriptor, empty, "work", _),
+    Destination_Path = "admin/foo/local/branch/work",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
-    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -396,7 +404,8 @@ test(push_local,
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
-    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+    Repository_Descriptor =(Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
 
     resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
 
@@ -409,7 +418,7 @@ test(push_local,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
@@ -422,10 +431,11 @@ test(push_headless_remote,
       cleanup(teardown_temp_store(State)),
       error(push_has_no_repository_head(_))])
 :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-    branch_create(Repository_Descriptor, empty, "work", _),
+    Destination_Path = "admin/foo/local/branch/work",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
-    resolve_relative_descriptor(Repository_Descriptor, ["branch", "work"], Work_Branch_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -435,7 +445,8 @@ test(push_headless_remote,
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
-    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
 
     resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
 
@@ -445,7 +456,7 @@ test(push_headless_remote,
                      _),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),

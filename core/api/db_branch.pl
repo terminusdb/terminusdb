@@ -1,7 +1,8 @@
-:- module(db_branch, [branch_create/4]).
+:- module(db_branch, [branch_create/5]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(account)).
 
 branch_create_(Repository_Descriptor, empty, New_Branch_Name, Branch_Uri) :-
     !,
@@ -94,21 +95,58 @@ branch_create_(Destination_Repository_Descriptor, Commit_Descriptor, New_Branch_
                      _).
 
 /* create a branch in the given repository. Origin is the thing we wish to create a branch out of. it can be any kind of branch descriptor or commit descriptor. branch name is the name of the new branch. options contain a branch default prefix thingie. */
-branch_create(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_Uri) :-
+branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Destination_Descriptor),
+        error(invalid_target_absolute_descriptor(Path),_)),
+
+    do_or_die(
+        (branch_descriptor{
+             branch_name : New_Branch_Name,
+             repository_descriptor : Repository_Descriptor
+         } :< Destination_Descriptor),
+        error(target_not_a_branch_descriptor(Destination_Descriptor),_)),
+
+    (   Origin_Option = some(Origin_Path)
+    ->  do_or_die(
+            resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor),
+            error(invalid_source_absolute_descriptor(Origin_Path),_)),
+
+        do_or_die(
+            (   get_dict(repository_descriptor, Origin_Descriptor, Origin_Repository_Descriptor),
+                get_dict(database_descriptor, Origin_Repository_Descriptor, Origin_Database_Descriptor),
+                get_dict(database_name, Origin_Database_Descriptor, Database_Name),
+                get_dict(organization_name, Origin_Database_Descriptor, Organization_Name)),
+            error(source_not_a_valid_descriptor(Origin_Descriptor),_))
+    ;   Origin_Option = none
+    ->  Origin_Descriptor = empty
+    ;   throw(error(bad_origin_path_option(Origin_Option),_))),
+
+    do_or_die(
+        organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
+        error(origin_database_does_not_exist(Organization_Name, Database_Name),_)),
+
+    findall(Scope,
+            auth_action_scope(System_DB, Auth, system:branch, Scope),
+            Scopes),
+    http_log("~nAction Scopes: ~q~n", [Scopes]),
+    assert_auth_action_scope(System_DB, Auth, system:branch, Scope_Iri),
+
     % ensure that we're putting this branch into a local repository
-    (   repository_type(Repository_Descriptor.database_descriptor,
+    do_or_die(
+        repository_type(Repository_Descriptor.database_descriptor,
                         Repository_Descriptor.repository_name,
-                        local)
-    ->  true
-    ;   throw(error(repository_is_not_local(Repository_Descriptor)))),
+                        local),
+        error(repository_is_not_local(Repository_Descriptor),_)),
 
-    (   has_branch(Repository_Descriptor, New_Branch_Name)
-    ->  throw(error(branch_already_exists(New_Branch_Name)))
-    ;   true),
+    do_or_die(
+        (\+ has_branch(Repository_Descriptor, New_Branch_Name)),
+        error(branch_already_exists(New_Branch_Name),_)),
 
-    (   branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_Uri)
-    ->  true
-    ;   throw(error(origin_cannot_be_branched(Origin_Descriptor)))).
+    do_or_die(
+        branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_Uri),
+        error(origin_cannot_be_branched(Origin_Descriptor),_)).
 
 :- begin_tests(branch_api).
 :- use_module(core(util/test_utils)).
@@ -123,14 +161,13 @@ test(create_branch_from_nothing,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    branch_create(Repository_Descriptor, empty, "moo", _),
+
+    Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Path, none, _),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Repository_Descriptor = (Descriptor.repository_descriptor),
 
     has_branch(Repository_Descriptor, "moo"),
     \+ branch_head_commit(Repository_Descriptor, "moo", _).
@@ -141,17 +178,10 @@ test(create_branch_from_local_branch_with_commits,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+
+    Origin_Branch_Path = "admin/foo/local/branch/master",
+    resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -162,7 +192,9 @@ test(create_branch_from_local_branch_with_commits,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    branch_create(Repository_Descriptor, Origin_Branch_Descriptor, "moo", _),
+    super_user_authority(Auth),
+    Destination_Path = "admin/foo/local/branch/moo",
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Branch_Path),_),
 
     has_branch(Repository_Descriptor, "moo"),
     branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
@@ -175,17 +207,9 @@ test(create_branch_from_remote_branch,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Origin_Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+    Origin_Path = "admin/foo/local/branch/master",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
+    Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -196,15 +220,12 @@ test(create_branch_from_remote_branch,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    Destination_Repository_Descriptor = repository_descriptor{
-                                            database_descriptor: database_descriptor{
-                                                                     organization_name: "admin",
-                                                                     database_name: "bar"
-                                                                 },
-                                            repository_name: "local"
-                                        },
-    branch_create(Destination_Repository_Descriptor, Origin_Branch_Descriptor, "moo", _),
+    Destination_Path = "admin/bar/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
+    resolve_absolute_string_descriptor(Destination_Path, Destination_Descriptor),
+    Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
     has_branch(Destination_Repository_Descriptor, "moo"),
     branch_head_commit(Origin_Repository_Descriptor, "master", Commit_Uri),
     create_context(Origin_Repository_Descriptor, Origin_Context),
@@ -225,17 +246,9 @@ test(create_branch_from_local_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+    Origin_Path = "admin/foo/local/branch/master",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
+    Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -253,8 +266,11 @@ test(create_branch_from_local_commit,
                             repository_descriptor: Repository_Descriptor,
                             commit_id: Commit_Id
                         },
+    resolve_absolute_string_descriptor(Commit_Path, Commit_Descriptor),
 
-    branch_create(Repository_Descriptor, Commit_Descriptor, "moo", _),
+    Destination_Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Commit_Path), _),
 
     has_branch(Repository_Descriptor, "moo"),
     branch_head_commit(Repository_Descriptor, "moo", Commit_Uri),
@@ -275,17 +291,9 @@ test(create_branch_from_remote_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Origin_Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+    Origin_Path = "admin/foo/local/branch/master",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
+    Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -296,14 +304,6 @@ test(create_branch_from_remote_commit,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    Destination_Repository_Descriptor = repository_descriptor{
-                                            database_descriptor: database_descriptor{
-                                                                     organization_name: "admin",
-                                                                     database_name: "bar"
-                                                                 },
-                                            repository_name: "local"
-                                        },
-
     branch_head_commit(Origin_Repository_Descriptor, "master", Commit_Uri),
     commit_id_uri(Origin_Repository_Descriptor, Commit_Id, Commit_Uri),
 
@@ -311,8 +311,14 @@ test(create_branch_from_remote_commit,
                             repository_descriptor: Origin_Repository_Descriptor,
                             commit_id: Commit_Id
                         },
+    resolve_absolute_string_descriptor(Commit_Path, Commit_Descriptor),
+    Destination_Path = "admin/bar/local/branch/moo",
 
-    branch_create(Destination_Repository_Descriptor, Commit_Descriptor, "moo", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Commit_Path), _),
+
+    resolve_absolute_string_descriptor(Destination_Path, Destination_Descriptor),
+    Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
 
     has_branch(Destination_Repository_Descriptor, "moo"),
 

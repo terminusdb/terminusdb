@@ -435,3 +435,39 @@ api:NoCommonHistoryError
 api:IncorrectAuthenticationError
   a owl:Class ,
   rdfs:subClassOf api:Error .
+
+api:BadAbsoluteSourceDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:BadAbsoluteDescriptor .
+
+api:BadAbsoluteTargetDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:BadAbsoluteDescriptor .
+
+api:NotABranchDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+
+api:NotATargetBranchDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:NotABranchDescriptorError.
+
+api:NotAValidSourceDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:WithAbsoluteDescriptor .
+
+api:NotLocalRepositoryError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:WithBranchName
+  a owl:Class .
+
+api:branch_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithBranchName ;
+  rdfs:range xsd:string .
+
+api:NotBranchableError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .

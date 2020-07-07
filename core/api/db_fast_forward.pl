@@ -57,12 +57,15 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    Destination_Path = "admin/foo/local/branch/second",
 
     % create a branch off the master branch (which should result in an empty branch)
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
@@ -78,12 +81,15 @@ test(fast_forward_empty_branch_from_same_repo,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    Destination_Path = "admin/foo/local/branch/second",
 
     % create a branch off the master branch (which should result in an empty branch)
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % create two commits on the new branch
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit a"}, Second_Context_1),
@@ -116,7 +122,11 @@ test(fast_forward_nonempty_branch_from_same_repo,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+
+    Origin_Path = "admin/foo",
+    Destination_Path = "admin/foo/local/branch/second",
+
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
 
     % create single commit on master branch
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
@@ -126,9 +136,10 @@ test(fast_forward_nonempty_branch_from_same_repo,
                      _),
 
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % create two commits on the new branch
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_1),
@@ -164,7 +175,8 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
       throws(error(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id]), _))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
 
     % create single commit on master branch
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
@@ -173,10 +185,13 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
                          insert(a,b,c)),
                      _),
 
-    % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    Destination_Path = "admin/foo/local/branch/second",
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    % create a branch off the master branch
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % create commit on original branch
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context_2),
@@ -212,7 +227,8 @@ test(fast_forward_branch_from_empty_branch,
       throws(error(no_common_history, _))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
 
     % create single commit on master branch
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
@@ -221,10 +237,13 @@ test(fast_forward_branch_from_empty_branch,
                          insert(a,b,c)),
                      _),
 
-    % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+    Destination_Path = "admin/foo/local/branch/second",
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    % create a branch off the master branch
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
@@ -236,7 +255,8 @@ test(fast_forward_branch_from_unrelated_branch,
       throws(error(no_common_history, _))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
 
     % create single commit on master branch
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
@@ -245,10 +265,12 @@ test(fast_forward_branch_from_unrelated_branch,
                          insert(a,b,c)),
                      _),
 
+    Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context),
     with_transaction(Second_Context,
                      ask(Second_Context,
@@ -265,12 +287,15 @@ test(fast_forward_empty_branch_from_empty_branch,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
 
+    Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, empty, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
@@ -283,17 +308,20 @@ test(fast_forward_nonempty_branch_from_equal_branch,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
     create_context(Master_Descriptor, _{author:"author",message:"message"}, Master_Context),
     with_transaction(Master_Context,
                      ask(Master_Context,
                          insert(a,b,c)),
                      _),
 
+    Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    resolve_absolute_string_descriptor("admin/foo/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
@@ -307,7 +335,9 @@ test(fast_forward_branch_from_other_repo,
       cleanup(teardown_temp_store(State))
      ])
 :-
-    resolve_absolute_string_descriptor("admin/foo", Foo_Descriptor),
+
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Foo_Descriptor),
 
     % create single commit on master branch
     create_context(Foo_Descriptor, commit_info{author:"test",message:"commit a"}, Foo_Context),
@@ -316,10 +346,12 @@ test(fast_forward_branch_from_other_repo,
                          insert(a,b,c)),
                      _),
 
+    Destination_Path = "admin/bar/local/branch/second",
     % create a branch off the master branch
-    resolve_absolute_string_descriptor("admin/bar/local/branch/second", Bar_Descriptor),
-    branch_create(Bar_Descriptor.repository_descriptor, Foo_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
+    resolve_absolute_string_descriptor(Destination_Path, Bar_Descriptor),
 
     % create two commits on the new branch
     create_context(Bar_Descriptor, commit_info{author:"test",message:"commit b"}, Bar_Context_1),

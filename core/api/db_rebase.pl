@@ -237,7 +237,9 @@ test(rebase_fast_forward,
                     _),
 
     Second_Path = "admin/foo/local/branch/second",
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -296,9 +298,9 @@ test(rebase_divergent_history,
                      ask(Master_Context1,
                          insert(a,b,c)),
                     _),
-
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
     Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -390,8 +392,10 @@ test(rebase_conflicting_history_errors,
     format(string(City_Uri_String), "~w", [City_Uri]),
 
     Repository_Descriptor = (Master_Descriptor.repository_descriptor),
-    branch_create(Repository_Descriptor, Master_Descriptor, "second", _),
+
     Second_Path = "admin/test/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     % create a commit on the master branch, diverging history
