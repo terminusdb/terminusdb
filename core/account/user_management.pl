@@ -4,10 +4,12 @@
               add_user/6,
               delete_user/1,
               delete_user/2,
+              delete_user_transaction/3,
               delete_organization/1,
               delete_organization/2,
               update_user/2,
               update_user/3,
+              update_user_transaction/4,
               update_organization/2,
               update_organization/3,
               add_organization/2,
@@ -92,7 +94,6 @@ update_organization(Context, Name, New_Name) :-
         ),
        [compress_prefixes(false)]).
 
-
 add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
                    commit_info{
@@ -150,6 +151,22 @@ add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
            )
     ;   true).
 
+update_user_transaction(SystemDB, Auth, Name, Document) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_update_requires_superuser)),
+
+    Commit_Info = commit_info{ author: "user_handler/2",
+                               message: "internal system operation"
+                             },
+
+    askable_context(SystemDB, SystemDB, Auth, Commit_Info, Ctx),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
+    !.
+update_user_transaction(_SystemDB, _Auth, Name, Document) :-
+    throw(error(user_update_failed_without_error(Name,Document),_)).
+
 update_user(Name, Document) :-
     create_context(system_descriptor{},
                    commit_info{
@@ -195,11 +212,33 @@ update_user(SystemDB, Name, Document) :-
                 insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
     ;   true).
 update_user(SystemDB, Name, Document) :-
-    _{ user_identifier : ID,
-       agent_name : Name,
-       comment : Comment,
-       password : Pass } :< Document,
-    add_user(SystemDB, Name, ID, Comment, Pass, _).
+    do_or_die((_{ user_identifier : ID,
+                  agent_name : Name,
+                  comment : Comment} :< Document),
+              error(malformed_add_user_document(Document))),
+
+    (   _{ password : Password } :< Document
+    ->  Password_Option = some(Password)
+    ;   Password_Option = none),
+
+    add_user(SystemDB, Name, ID, Comment, Password_Option, _).
+
+delete_user_transaction(SystemDB, Auth, Name) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_update_requires_superuser)),
+
+    Commit_Info = commit_info{ author: "delete_user_transaction/3",
+                               message: "internal system operation"
+                             },
+
+    askable_context(SystemDB, SystemDB, Auth, Commit_Info, Ctx),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Name),
+                     _),
+    !.
+delete_user_transaction(_SystemDB, _Auth, Name) :-
+    throw(error(user_delete_failed_without_error(Name),_)).
+
 
 /*
  * delete_user(+User_ID) is semidet.

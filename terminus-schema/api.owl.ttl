@@ -519,3 +519,32 @@ api:CreateGraphResponse
 api:DeleteGraphResponse
   a owl:Class ;
   rdfs:subClassOf api:Response .
+
+api:UserUpdateErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UserUpdateFailedWithoutError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithUserName .
+
+api:WithUserName
+  a owl:Class .
+
+api:user_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithUserName ;
+  rdfs:range xsd:string .
+
+api:UserDeleteErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UserDeleteFailedWithoutError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithUserName .
+
+api:MalformedAddUserDocument
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+

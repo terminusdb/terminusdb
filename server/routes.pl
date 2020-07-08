@@ -2130,7 +2130,8 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
         do_or_die(branch_error_handler(E, Request),
                   E)).
 
-branch_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-   format(string(Msg), "The following branch target absolute resource descriptor string is invalid: ~q", [Path]),
+branch_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following branch target absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:BranchErrorResponse',
                       'api:status' : 'api:failure',
@@ -2572,79 +2573,91 @@ test(delete_graph, [
                  methods([options,post,delete])]).
 
 user_handler(post, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(user_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     update_user(Ctx, Name, Document),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_user_transaction(System_DB, Auth, Name, Document),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_update_error_handler(E,Request),
+                  E)).
 user_handler(delete, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_user_requires_superuser)),
-
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_user(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
-
+    catch_with_backtrace(
+        (   delete_user_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_delete_error_handler(E,Request),
+                  E)).
 
 user_handler(post, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(user_creation_requires_superuser)),
-
     get_payload(Document, Request),
 
-    do_or_die(_{ user_identifier : Identifier,
-                 agent_name : Agent_Name,
-                 comment : Comment
-               } :< Document,
-              error(malformed_user_document(Document))
+    do_or_die(_{ agent_name : Agent_Name } :< Document,
+              error(malformed_update_user_document(Document))
              ),
-    (   _{ password : Password } :< Document
-    ->  Password_Option = some(Password)
-    ;   Password_Option = none),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option, _),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_user_transaction(System_DB, Auth, Agent_Name, Document),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_user_error_handler(E,Request),
+                  E)).
 user_handler(delete, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_user_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     do_or_die(_{ agent_name : Agent_Name },
               error(malformed_user_deletion_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_user(Ctx, Agent_Name),
-                     _),
+    catch_with_backtrace(
+        (   delete_user_transaction(System_DB, Auth, Agent_Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_delete_error_handler(E,Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+user_update_error_handler(error(user_update_failed_without_error(Name,Document),_),Request) :-
+    atom_json_dict(Atom, Document,[]),
+    format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserUpdateErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UserUpdateFailedWithoutError",
+                                       'api:user_name' : Name}
+                     },
+                    [status(500)]).
+user_update_error_handler(error(malformed_add_user_document(Document),_),Request) :-
+    atom_json_dict(Atom, Document,[]),
+    format(string(Msg), "An update to a user which does not already exist was attempted with the incomplete document ~q", [Atom]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserUpdateErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:MalformedAddUserDocument"}
+                     },
+                    [status(400)]).
+
+user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Request) :-
+    format(string(Msg), "Delete of user ~q failed without an error", [Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserDeleteErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UserDeleteFailedWithoutError",
+                                       'api:user_name' : Name}
+                     },
+                    [status(500)]).
+
+
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(organization), cors_handler(Method, organization_handler),
