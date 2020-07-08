@@ -204,8 +204,16 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
+    (   _{ public : Public } :< Database_Document
+    ->  true
+    ;   Public = false),
+
+    (   _{ schema : Schema } :< Database_Document
+    ->  true
+    ;   Schema = false),
+
     catch_with_backtrace(
-        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
+        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes),
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
                                        'api:status' : 'api:success'})),
 
@@ -1390,8 +1398,12 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
+    (   _{ public : Public } :< Database_Document
+    ->  true
+    ;   Public = false),
+
     catch_with_backtrace(
-        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',

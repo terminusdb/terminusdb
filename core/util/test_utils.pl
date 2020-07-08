@@ -270,16 +270,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
 
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
-    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes),
-    resolve_absolute_descriptor([Organization, Db_Name], Branch_Descriptor),
-    resolve_absolute_string_descriptor(Base,Branch_Descriptor),
-    string_concat(Base,"/schema/main",Graph_Path),
-    create_graph(system_descriptor{},
-                 Admin,
-                 Graph_Path,
-                 commit_info{ author : "test",
-                              message: "Create an empty schema graph"},
-                 _),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
     terminus_path(Path),
     interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
@@ -297,7 +288,7 @@ create_db_without_schema(Organization, Db_Name) :-
                   scm : 'http://somewhere.for.now/schema' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
-    create_db(System, Admin, Organization, Db_Name, "test", "a test db", Prefixes).
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
 
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),

@@ -1,5 +1,5 @@
 :- module(db_clone, [
-              clone/9
+              clone/10
           ]).
 
 
@@ -12,11 +12,11 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 
-:- meta_predicate clone(+,+,+,+,+,+,+,3,-).
-clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone(+,+,+,+,+,+,+,+,3,-).
+clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data),
         exception(E),
 
         (   clone_cleanup_required(E)
@@ -26,10 +26,10 @@ clone(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_
 clone_cleanup_required(remote_pack_failed(_)).
 clone_cleanup_required(remote_pack_unpexected_failure(_)).
 
-:- meta_predicate clone_(+,+,+,+,+,+,+,3,-).
-clone_(System_DB, Auth, Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone_(+,+,+,+,+,+,+,+,3,-).
+clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, _{}, Db_Uri),
+    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, Public, _{}, Db_Uri),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),
