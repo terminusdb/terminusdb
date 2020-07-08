@@ -29,7 +29,9 @@ run_context_ast_jsonld_response(Context, AST, JSON) :-
         ),
         Meta_Data
     ),
-    Binding_JSON = _{'bindings' : Binding_Set},
+    Binding_JSON = _{'@type' : 'api:WoqlResponse',
+                     'api:status' : 'api:success',
+                     'bindings' : Binding_Set},
     put_dict(Meta_Data, Binding_JSON, JSON).
 
 json_transform_binding_set(_Context, Binding, JSON) :-

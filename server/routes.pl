@@ -2670,76 +2670,99 @@ user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Reques
                  methods([options,post,delete])]).
 
 organization_handler(post, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(organization_creation_requires_superuser)),
-
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : Name } :< Document,
               error(malformed_organization_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     add_organization(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   add_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:AddOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(add_organization_error_handler(E, Request),
+                  E)).
 organization_handler(delete, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_organization_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : Name },
               error(malformed_organization_deletion_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_organization(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(delete_organization_error_handler(E, Request),
+                  E)).
 
 organization_handler(post, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(organization_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
     do_or_die(_{ organization_name : New_Name } :< Document,
               error(malformed_api_document(Document), _)),
 
-    with_transaction(Ctx,
-                     update_organization(Ctx, Name, New_Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_organization_transaction(System_DB, Auth, Name, New_Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_organization_error_handler(E, Request),
+                  E)).
 organization_handler(delete, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_organization_requires_superuser)),
+    catch_with_backtrace(
+        (   delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(delete_organization_error_handler(E, Request),
+                  E)).
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
-    with_transaction(Ctx,
-                     delete_organization(Ctx, Name),
-                     _),
+add_organization_error_handler(error(organization_already_exists(Name),_), Request) :-
+    format(string(Msg), "The organization ~q already exists", [Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:AddOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:OrganizationAlreadyExists",
+                                       'api:organization_name' : Name}
+                     },
+                    [status(400)]).
+add_organization_error_handler(error(organization_creation_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization creation requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:AddOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+update_organization_error_handler(error(organization_update_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization update requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UpdateOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
+delete_organization_error_handler(error(delete_organization_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization deletion requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:DeleteOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(update_role), cors_handler(Method, update_role_handler),
@@ -2750,10 +2773,6 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
 update_role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "role_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-
     do_or_die(_{ database_name : Database_Name,
                  agent_names : Agents,
                  organization_name : Organization,
@@ -2761,12 +2780,27 @@ update_role_handler(post, Request, System_DB, Auth) :-
                } :< Document,
               error(bad_api_document)),
 
-    with_transaction(Ctx,
-                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
-                     _),
+    catch_with_backtrace(
+        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateRoleResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_role_error_handler(E, Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+update_role_error_handler(error(no_manage_capability(Organization,Resource_Name), _), Request) :-
+    format(string(Msg), "The organization ~q has no manage capability over the resource ~q", [Organization, Resource_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UpdateRoleErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NoManageCapability",
+                                       'api:organization_name' : Organization,
+                                       'api:resource_name' : Resource_Name}
+                     },
+                    [status(401)]).
+
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(role), cors_handler(Method, role_handler),
@@ -2777,11 +2811,13 @@ update_role_handler(post, Request, System_DB, Auth) :-
 role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    get_role(System_DB, Auth, Document, Response),
-
-    write_cors_headers(Request),
-    reply_json(Response).
-
+    catch_with_backtrace(
+        (   get_role(System_DB, Auth, Document, Response),
+            cors_reply_json(Request,
+                            Response)),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  E)).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).

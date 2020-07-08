@@ -195,6 +195,45 @@ api:UnresolvableAbsoluteGraphDescriptor
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
 
+api:WithBindings
+  a owl:Class .
+
+api:Binding
+  a owl:Class .
+
+api:bindings
+  a owl:ObjectProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range api:Binding .
+
+api:WithTransactionRetryCount
+  a owl:Class .
+
+api:transaction_retry_count
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WithInserts
+  a owl:Class .
+
+api:inserts
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WithDeletes
+  a owl:Class .
+
+api:deletes
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WoqlResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithBindings, api:WithTransactionRetryCount , api:WithInserts, api:WithDeletes .
+
 api:WoqlErrorResponse
   a owl:Class ;
   rdfs:subClassOf api:ErrorResponse .
@@ -547,4 +586,52 @@ api:UserDeleteFailedWithoutError
 api:MalformedAddUserDocument
   a owl:Class ;
   rdfs:subClassOf api:Error .
+
+api:AddOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:UpdateOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:DeleteOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:AddOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:DeleteOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UpdateOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:OrganizationAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName .
+
+api:RequiresSuperuserAuthority
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:UpdateRoleErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NoManageCapability
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName, api:WithResourceName .
+
+api:WithResourceName
+  a owl:Class .
+
+api:resource_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithResourceName ;
+  rdfs:range xsd:string .
 
