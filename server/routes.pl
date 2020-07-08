@@ -2896,7 +2896,7 @@ cors_catch(_,Request) :-
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
 
-customise_exception(reply_json(M,Status)) :-p
+customise_exception(reply_json(M,Status)) :-
     reply_json(M,
                [status(Status)]).
 customise_exception(reply_json(M)) :-
