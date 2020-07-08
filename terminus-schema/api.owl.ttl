@@ -635,3 +635,14 @@ api:resource_name
   rdfs:domain api:WithResourceName ;
   rdfs:range xsd:string .
 
+api:RemoteAuthorizationFailure
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse, api:withResponse .
+
+api:WithResponse
+  a owl:Class .
+
+api:response
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithResponse ;
+  rdfs:range api:Response .

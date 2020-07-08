@@ -1535,6 +1535,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               json(Document),
               Payload,
               [request_header('Authorization'=Authorization),
+               json_object(dict),
                status_code(Status)]),
 
     (   Status = 200
@@ -2011,6 +2012,18 @@ push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Reque
                                        'api:absolute_descriptor' : Path}
                      },
                     [status(400)]).
+push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
+    (   get_dict('api:message', Reason, Inner_Msg)
+    ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])
+    ;   format(string(Msg), "Remote authorization failed with malformed response", [])),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PushErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RemoteAuthorizationFailure",
+                                       'api:response' : Reason}
+                     },
+                    [status(401)]).
 
 
 remote_unpack_url(URL, Pack_URL) :-
@@ -2025,6 +2038,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     bytes('application/octets',Payload),
                     Result,
                     [request_header('Authorization'=Authorization),
+                     json_object(dict),
                      status_code(Status_Code)]),
           E,
           throw(error(communication_failure(E)))),
@@ -2034,14 +2048,14 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   400 = Status_Code,
         Result :< _{'@type': Vio_Type}
     ->  (   Vio_Type = "vio:NotALinearHistory"
-        ->  throw(error(history_diverged))
+        ->  throw(error(history_diverged,_))
         ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
-        ->  throw(error(remote_unknown))
-        ;   throw(error(unknown_status_code(Status_Code, Result)))
+        ->  throw(error(remote_unknown,_))
+        ;   throw(error(unknown_status_code(Status_Code, Result),_))
         )
     ;   403 = Status_Code
-    ->  throw(error(authorization_failure(Result)))
-    ;   throw(error(unknown_status_code))
+    ->  throw(error(remote_authorization_failure(Result),_))
+    ;   throw(error(unknown_status_code,_))
     ).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2882,7 +2896,7 @@ cors_catch(_,Request) :-
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
 
-customise_exception(reply_json(M,Status)) :-
+customise_exception(reply_json(M,Status)) :-p
     reply_json(M,
                [status(Status)]).
 customise_exception(reply_json(M)) :-
