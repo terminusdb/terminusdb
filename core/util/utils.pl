@@ -253,14 +253,12 @@ pad(T,C,L,A2) :-
     (   interpolate([C],S),
         string_length(S,1)
     ->  true
-    ;   format(atom(M), 'Not a single character in pad: ~q', [pad(A,C,L,A2)]),
-        throw(syntax_error(M))),
+    ;   throw(error(pad_not_length_one(C),_))),
 	atom_chars(A,AtomList),
 	length(AtomList, L1),
 	L2 is L - L1,
     (   L2 < 0
-    ->  format(atom(M), 'Bad pad length ~q for ~q', [L,T]),
-        throw(error(M))
+    ->  throw(error(bad_pad_length(L)))
     ;   true),
 	repeat_term(S,L2,List),
 	append(List,AtomList,TotalList),

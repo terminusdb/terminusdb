@@ -918,7 +918,17 @@ woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
-
+woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
+    term_string(Term,String),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [String]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                                       'api:error_term' : String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 
 % woql_handler Unit Tests

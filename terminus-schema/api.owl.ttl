@@ -646,3 +646,15 @@ api:response
   a owl:ObjectProperty ;
   rdfs:domain api:WithResponse ;
   rdfs:range api:Response .
+
+api:WOQLSyntaxError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithErrorTerm .
+
+api:WithErrorTerm
+  a owl:Class .
+
+api:error_term
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .

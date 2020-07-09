@@ -178,8 +178,7 @@ context_prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   format(atom(M), 'Key has unkown prefix: ~q', [K]),
-            throw(syntax_error(M)))
+        ;   throw(error(key_has_unknown_prefix(K)), _))
     %   Keyword
     ;   has_at(K)
     ->  K = Key
@@ -460,8 +459,7 @@ jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
         ->  true
         ;   get_dict('@type', Expanded, '@id')
         ->  (   \+ atom(Val)
-            ->  format(atom(Msg),'Not a well formed JSON id: ~q~n', [Val]),
-                throw(syntax_error(Msg))),
+            ->  throw(error(malformed_jsonld_id(Val),_))),
             (   get_dict('@id', Expanded, Type)
             ->  Expanded_Value = _{'@id' : Val,
                                    '@type' : Type}
