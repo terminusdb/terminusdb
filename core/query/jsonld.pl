@@ -178,7 +178,7 @@ context_prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   throw(error(key_has_unknown_prefix(K)), _))
+        ;   throw(error(key_has_unknown_prefix(K),_)))
     %   Keyword
     ;   has_at(K)
     ->  K = Key

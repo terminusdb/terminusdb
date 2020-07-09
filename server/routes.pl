@@ -1966,12 +1966,6 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                  methods([options,post])]).
 
 push_handler(post,Path,Request, System_DB, Auth) :-
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-
-    do_or_die(
-        (branch_descriptor{} :< Branch_Descriptor),
-        error(push_requires_branch_descriptor(Branch_Descriptor))),
-
     get_payload(Document, Request),
 
     do_or_die(
@@ -1984,7 +1978,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
         error(no_remote_authorization)),
 
     catch_with_backtrace(
-        (   push(System_DB, Auth, Branch_Descriptor,Remote_Name,Remote_Branch,
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
                  authorized_push(Authorization),Result),
             (   Result = none
             ->  Response = _{'@type' : "api:PushResponse",
