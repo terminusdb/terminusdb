@@ -85,6 +85,8 @@
               resolve_relative_descriptor/3,
               resolve_absolute_string_descriptor/2,
               resolve_relative_string_descriptor/3,
+              resolve_absolute_graph_descriptor/2,
+              resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
               resolve_filter/2,
 

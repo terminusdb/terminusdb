@@ -5,6 +5,8 @@
               resolve_relative_descriptor/3,
               resolve_absolute_string_descriptor/2,
               resolve_relative_string_descriptor/3,
+              resolve_absolute_graph_descriptor/2,
+              resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
               resolve_filter/2
           ]).
@@ -622,6 +624,11 @@ resolve_relative_descriptor(Context, Path, Descriptor) :-
     resolve_relative_descriptor(Context, Descriptor, Path, []).
 
 resolve_absolute_string_descriptor(String, Descriptor) :-
+    var(String),
+    !,
+    resolve_absolute_descriptor(Path_List, Descriptor),
+    merge_separator_split(String, '/', Path_List).
+resolve_absolute_string_descriptor(String, Descriptor) :-
     pattern_string_split('/', String, Path_Unfiltered),
     exclude('='(""), Path_Unfiltered, Path),
     resolve_absolute_descriptor(Path, Descriptor).
@@ -639,34 +646,43 @@ resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
     resolve_absolute_descriptor(Descriptor_Path, Descriptor),
     resolve_absolute_graph_descriptor(Path, Graph).
 
+resolve_absolute_string_graph_descriptor(String, Graph_Descriptor) :-
+    var(String),
+    !,
+    resolve_absolute_graph_descriptor(Graph_List, Graph_Descriptor),
+    pattern_string_split('/', String, Graph_List).
+resolve_absolute_string_graph_descriptor(String, Graph_Descriptor) :-
+    pattern_string_split('/', String, Graph_List),
+    resolve_absolute_graph_descriptor(Graph_List, Graph_Descriptor).
+
 % Note: Currently we only have instance/schema/inference updates for normal and terminus graphs.
 % so this resolution is limited to these types.
 resolve_absolute_graph_descriptor([Organization, DB, Repo, "branch", Branch, Type, Name], Graph) :-
     !,
-    atom_string(Organization, Organization_Str),
-    atom_string(DB, DB_Str),
-    atom_string(Type_Atom, Type),
     Graph = branch_graph{ organization_name: Organization_Str,
                           database_name : DB_Str,
                           repository_name : Repo,
                           branch_name : Branch,
                           type : Type_Atom,
-                          name : Name}.
+                          name : Name},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str),
+    atom_string(Type_Atom, Type).
 resolve_absolute_graph_descriptor([Organization, DB, Repo, "commit", RefID, Type, Name], Graph) :-
     !,
-    atom_string(Organization, Organization_Str),
-    atom_string(DB, DB_Str),
-    atom_string(Type_Atom, Type),
     Graph = single_commit_graph{ organization_name: Organization_Str,
                                  database_name : DB_Str,
                                  repository_name : Repo,
                                  commit_id : RefID,
                                  type : Type_Atom,
-                                 name : Name}.
+                                 name : Name},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str),
+    atom_string(Type_Atom, Type).
 resolve_absolute_graph_descriptor(["_system", Type, Name], Graph) :-
-    atom_string(Type_Atom, Type),
     Graph = system_graph{ type : Type_Atom,
-                          name : Name }.
+                          name : Name },
+    atom_string(Type_Atom, Type).
 
 %%
 % resolve_filter(Filter_String,Filter) is det.

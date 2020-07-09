@@ -1,6 +1,8 @@
 :- module(db_create, [
-              create_db/7,
-              create_ref_layer/2
+              create_db_unfinalized/9,
+              create_db/9,
+              create_ref_layer/2,
+              finalize_db/1
           ]).
 
 /** <module> Implementation of database graph management
@@ -34,6 +36,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(api/db_graph)).
 
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
@@ -81,7 +84,7 @@ create_ref_layer(Descriptor,Prefixes) :-
         ),
         _).
 
-finalize_system(DB_Uri) :-
+finalize_db(DB_Uri) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
         Context,
@@ -94,7 +97,23 @@ finalize_system(DB_Uri) :-
         ;   throw(error(database_in_inconsistent_state))),
         _).
 
-create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Prefixes) :-
+make_db_public(System_Context,DB_Uri) :-
+    ask(System_Context,
+        (   random_idgen(doc:'Capability', ["anonymous"^^xsd:string], Capability_Uri),
+            insert(doc:anonymous_role, system:capability, Capability_Uri),
+            insert(Capability_Uri, rdf:type, system:'Capability'),
+            insert(Capability_Uri, system:capability_scope, DB_Uri),
+            insert(Capability_Uri, system:action, system:class_frame),
+            insert(Capability_Uri, system:action, system:clone),
+            insert(Capability_Uri, system:action, system:fetch),
+            insert(Capability_Uri, system:action, system:branch),
+            insert(Capability_Uri, system:action, system:instance_read_access),
+            insert(Capability_Uri, system:action, system:schema_read_access),
+            insert(Capability_Uri, system:action, system:inference_read_access),
+            insert(Capability_Uri, system:action, system:commit_read_access),
+            insert(Capability_Uri, system:action, system:meta_read_access))).
+
+create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),
@@ -114,7 +133,11 @@ create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Pref
             text_to_string(Database_Name, Database_Name_String),
 
             % insert new db object into the terminus db
-            insert_db_object(System_Context, Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri)
+            insert_db_object(System_Context, Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri),
+
+            (   Public = true
+            ->  make_db_public(System_Context, Db_Uri)
+            ;   true)
         ),
         _),
 
@@ -131,11 +154,24 @@ create_db(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Pref
                                 },
                                 repository_name: "local"
                             },
-    create_ref_layer(Repository_Descriptor,Prefixes),
+    create_ref_layer(Repository_Descriptor,Prefixes).
 
+default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
+    atomic_list_concat([Organization_Name, '/', Database_Name, '/',
+                        "local/branch/master/schema/main"], Graph_Path).
+
+create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
+    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri),
+    % Create schema graph
+    (   Schema = true
+    ->  default_schema_path(Organization_Name, Database_Name, Graph_Path),
+        Commit_Info = _{ author : "TerminusDB",
+                         message : "internal system operation" },
+        create_graph(system_descriptor{}, Auth, Graph_Path, Commit_Info, _)
+    ;   true),
     % update system with finalized
     % This reopens system graph internally, as it was advanced
-    finalize_system(Db_Uri).
+    finalize_db(Db_Uri).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).
@@ -151,7 +187,7 @@ test(create_db_and_check_master_branch, [
 :-
     Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
     open_descriptor(system_descriptor{}, System),
-    create_db(System, doc:admin, admin, testdb, 'testdb', 'a test db', Prefixes),
+    create_db(System, doc:admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
     Database_Descriptor = database_descriptor{
                               organization_name: "admin",
                               database_name: "testdb" },

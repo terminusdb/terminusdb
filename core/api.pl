@@ -4,7 +4,7 @@
               force_delete_db/2,
 
               % db_create.pl
-              create_db/7,
+              create_db/9,
               create_ref_layer/2,
 
               % init.pl
@@ -20,36 +20,37 @@
               delete_graph/5,
 
               % db_branch.pl
-              branch_create/4,
+              branch_create/5,
 
               % db_rebase.pl
-              rebase_on_branch/8,
+              rebase_on_branch/9,
               cycle_context/4,
 
               % db_fast_forward.pl
               % fast_forward_branch/4
 
               % db_pack.pl
-              repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
               unpack/1,
+              pack/5,
+              pack_from_context/3,
               layer_layerids/2,
 
               % db_fetch.pl
-              remote_fetch/4,
+              remote_fetch/6,
 
               % db_clone.pl
-              clone/9,
+              clone/10,
 
               % db_push.pl
-              push/6,
+              push/7,
 
               % db_unpack.pl
-              unpack/2,
+              unpack/4,
 
               % db_pull.pl
-              pull/6,
+              pull/7,
 
               % graph_load.pl
               graph_load/6,
@@ -59,7 +60,10 @@
 
               % api_frame.pl
               api_class_frame/5,
-              api_filled_frame/5
+              api_filled_frame/5,
+
+              % api_woql.pl
+              woql_query_json/7
           ]).
 
 :- use_module(api/init).
@@ -78,3 +82,4 @@
 :- use_module(api/graph_load).
 :- use_module(api/graph_dump).
 :- use_module(api/api_frame).
+:- use_module(api/api_woql).

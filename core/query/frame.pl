@@ -803,7 +803,7 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 
-test(class_frame, [])
+test(class_frame, [blocked('not using frames yet')])
 :-
     open_descriptor(system_descriptor{}, Database),
     class_frame('http://terminusdb.com/schema/system#Agent',Database,Frame),
@@ -835,7 +835,7 @@ test(class_frame, [])
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string']].
 
-test(document_filled_frame, [])
+test(document_filled_frame, [blocked('not using frames yet')])
 :-
     open_descriptor(system_descriptor{}, Database),
     document_filled_frame('terminusdb:///system/data/admin',Database,Frame),

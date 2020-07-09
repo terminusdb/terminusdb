@@ -60,16 +60,9 @@
 :- use_module(library(http/http_authenticate)).
 
 % Conditional loading of the JWT IO library...
-% TODO: There must be a cleaner way to do this
-:- (   config:jwt_public_key_path(JWTPubKeyPath),
-       JWTPubKeyPath = ''
-   ->  true
-   ;   use_module(library(jwt_io))).
-
-% Suppress warnings
-:- dynamic jwt_decode/3.
-
-
+:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
+:- use_module(library(jwt_io)).
+:- endif.
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -95,6 +88,31 @@ connect_handler(get, Request, System_DB, Auth) :-
     write_cors_headers(Request),
     reply_json(User_Obj2).
 
+:- begin_tests(jwt_auth, [
+                   condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", testkey))
+               ]
+               ).
+/*
+ * Tests assume that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
+ * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
+ */
+test(connection_authorized_user_jwt, [
+     ]) :-
+    config:server(Server),
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
+    http_get(Server, _, [authorization(bearer(Bearer))]).
+
+test(connection_unauthorized_user_jwt, [
+     ]) :-
+    config:server(Server),
+    % mangled the payload so it should not validate
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodW0000000000aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
+    http_get(Server, _, [authorization(bearer(Bearer)), status_code(Status)]),
+
+    Status = 401.
+
+:- end_tests(jwt_auth).
+
 :- begin_tests(connect_handler).
 :- use_module(core(util/test_utils)).
 
@@ -104,16 +122,6 @@ test(connection_authorised_user_http_basic, [
     admin_pass(Key),
     http_get(Server, _, [authorization(basic(admin, Key))]).
 
-/*
- * Test assumes that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
- * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
- */
-test(connection_authorised_user_jwt, [
-         condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", _))
-     ]) :-
-    config:server(Server),
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaHR0cHM6Ly90ZXJtaW51c2RiLmNvbS9uaWNrbmFtZSI6ImFkbWluIiwiaWF0IjoxNTE2MjM5MDIyfQ.ZHqEzJViUkP41NuyWGY97uyzrXvBsuOvOjIz00VgP9H3NHfnbO_h51nqbjt3UqBeKJ7U0wGUMTePuhXCGsAPoI9rLRSK9NzlFKGde-wTs4lAhDpp6rGhmVzVcJAYtJg8RbTGlJ78SFK6SSTpi2sXOMgVeu8fZwGnnp7ZJjP1mtJdEreDEwlZYqgy21BltmuzQ08qC70R-jRFHY2IeVBarcbqJgxjjb3BrNA5fByMD4ESOBVJlmCg8PzaI4hEdW-lSsQK8XWWYTnndB8IFdD3GYIwMovsT9dVZ4m3HrGGywGSP7TxDquvvK9ollA2JV2tLMsbk_Nqo-s7fhBbH9xjsA',
-    http_get(Server, _, [authorization(bearer(Bearer))]).
 
 test(connection_result_dbs, [])
 :-
@@ -196,8 +204,16 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
+    (   _{ public : Public } :< Database_Document
+    ->  true
+    ;   Public = false),
+
+    (   _{ schema : Schema } :< Database_Document
+    ->  true
+    ;   Schema = false),
+
     catch_with_backtrace(
-        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Prefixes),
+        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes),
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
                                        'api:status' : 'api:success'})),
 
@@ -258,6 +274,9 @@ delete_db_error_handler(error(database_does_not_exist(Organization,Database), _)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExists',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
                       'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_not_finalized(Organization,Database), _), Request) :-
@@ -265,6 +284,10 @@ delete_db_error_handler(error(database_not_finalized(Organization,Database), _),
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseNotFinalized',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
+
                       'api:message' : Msg},
                     [status(400)]).
 delete_db_error_handler(error(database_files_do_not_exist(Organization,Database), _), Request) :-
@@ -272,6 +295,9 @@ delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseFilesDoNotExist',
+                                      'api:database_name' : Database,
+                                      'api:organization_name' : Organization},
                       'api:message' : Msg},
                     [status(500)]).
 
@@ -489,7 +515,8 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
-            cors_reply_json(Request, _{'api:status' : "api:success"})),
+            cors_reply_json(Request, _{'@type' : 'api:TriplesLoadResponse',
+                                       'api:status' : "api:success"})),
         Error,
         do_or_die(triples_error_handler(Error, Request),
                   Error)).
@@ -497,19 +524,29 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 triples_error_handler(error(unknown_format(Format), _), Request) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:TriplesUnknownFormat',
+                                      'api:format' : Format},
                       'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
     format(string(Msg), "Invalid graph descriptor: ~q", [Path]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:BadAbsoluteGraphDescriptor',
+                                      'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
 triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
+    resolve_absolute_string_graph_descriptor(Path, Graph_Descriptor),
     format(string(Msg), "Invalid graph descriptor (this graph may not exist): ~q", [Graph_Descriptor]),
     cors_reply_json(Request,
-                    _{'api:status' : 'api:failure',
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnresolvableAbsoluteGraphDescriptor',
+                                      'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
 
@@ -533,11 +570,12 @@ test(triples_update, [
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
     make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
-    create_graph(Branch_Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/TEST_DB/local/branch/master/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
-                 schema,
-                 "main",
                  Transaction_Metadata),
     * json_write_dict(current_output,Transaction_Metadata, []),
 
@@ -581,13 +619,12 @@ test(triples_post_get, [
      ])
 :-
 
-    resolve_absolute_string_descriptor('admin/Jumanji',Branch_Descriptor),
-
-    create_graph(Branch_Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/Jumanji/local/branch/master/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
-                 schema,
-                 "main",
                  _Transaction_Metadata),
 
     TTL = "
@@ -661,13 +698,13 @@ frame_handler(post, Path, Request, System_DB, Auth) :-
             api_class_frame(System_DB, Auth, Path, Class_URI, Frame),
             E,
             do_or_die(frame_error_handler(E, Request),
-                      throw(E)))
+                      E))
     ;   get_dict(instance,Doc,Instance_URI)
     ->  catch_with_backtrace(
             api_filled_frame(System_DB, Auth, Path, Instance_URI, Frame),
             E,
             do_or_die(frame_error_handler(E, Request),
-                      throw(E)))
+                      E))
     ),
 
     write_cors_headers(Request),
@@ -728,9 +765,7 @@ frame_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
-    % ERROR NOTE: Doesn't work
-    resolve_absolute_descriptor(Path_List, Descriptor),
-    merge_separator_split(Path, '/', Path_List),
+    resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:FrameErrorResponse',
@@ -826,54 +861,74 @@ test(unresolvable_path_filled_frame, [])
  * from terminus database on spartacus.
  */
 woql_handler(post, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    empty_context(Context),
-
-    woql_run_context(Request, System_DB, Auth, Context, JSON),
-
-    write_cors_headers(Request),
-    reply_json_dict(JSON).
-
-woql_handler(post, Path, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    create_context(Descriptor, Context),
-
-    woql_run_context(Request, System_DB, Auth, Context, JSON),
-
-    write_cors_headers(Request),
-
-    reply_json_dict(JSON).
-
-woql_run_context(Request, System_DB, Auth_ID, Context, JSON) :-
-
     try_get_param('query',Request,Query),
 
     (   get_param('commit_info', Request, Commit_Info)
     ->  true
     ;   Commit_Info = _{}
     ),
-
-    woql_context(Prefixes),
-
-    context_extend_prefixes(Context,Prefixes,Context0),
-
     collect_posted_files(Request,Files),
 
-    merge_dictionaries(
-        query_context{
-            commit_info : Commit_Info,
-            files : Files,
-            system: System_DB,
-            update_guard : _Guard,
-            authorization : Auth_ID
-        }, Context0, Final_Context),
+    catch_with_backtrace(
+        (   woql_query_json(System_DB, Auth, none, Query, Commit_Info, Files, JSON),
+            write_cors_headers(Request),
+            reply_json_dict(JSON)
+        ),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  E)).
 
-    * http_log('~N[Request] ~q~n', [Request]),
+woql_handler(post, Path, Request, System_DB, Auth) :-
+    try_get_param('query',Request,Query),
 
-    json_woql(Query, Context0.prefixes, AST),
+    (   get_param('commit_info', Request, Commit_Info)
+    ->  true
+    ;   Commit_Info = _{}
+    ),
+    collect_posted_files(Request,Files),
 
-    run_context_ast_jsonld_response(Final_Context,AST,JSON).
+    catch_with_backtrace(
+        (   woql_query_json(System_DB, Auth, some(Path), Query, Commit_Info, Files, JSON),
+            write_cors_headers(Request),
+            reply_json_dict(JSON)
+        ),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  E)).
+
+
+woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
+    term_string(Term,String),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [String]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                                       'api:error_term' : String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 
 % woql_handler Unit Tests
@@ -883,6 +938,20 @@ woql_run_context(Request, System_DB, Auth_ID, Context, JSON) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+
+test(db_not_there, []) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/woql/admin/blagblagblagblagblag'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{'query' : ""}),
+              JSON,
+              [status_code(Code), json_object(dict),authorization(basic(admin,Key))]),
+    Code = 404,
+    _{'@type' : "api:WoqlErrorResponse",
+      'api:error' :
+      _{'@type' : "api:UnresolvableAbsoluteDescriptor",
+        'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/master"}} :< JSON.
 
 test(no_db, [])
 :-
@@ -1135,13 +1204,13 @@ test(update_object, [
     atomic_list_concat([Server, '/woql/admin/test'], URI),
 
     % First make a schema against which we can have an object
-    make_branch_descriptor("admin","test",Branch_Descriptor),
 
-    create_graph(Branch_Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
-                 schema,
-                 "main",
                  _Transaction_Metadata2),
 
     terminus_path(Path),
@@ -1225,12 +1294,12 @@ test(delete_object, [
     make_branch_descriptor("admin","test",Branch_Descriptor),
 
     % First make a schema graph
-
-    create_graph(Branch_Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
-                 schema,
-                 "main",
                  _Transaction_Metadata2),
 
     % Create the schema
@@ -1339,11 +1408,31 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (_{ remote_url : Remote_URL } :< Database_Document),
         error(no_remote_specified(Database_Document))),
 
-    clone(System_DB, Auth, Organization,DB,Label,Comment,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+    (   _{ public : Public } :< Database_Document
+    ->  true
+    ;   Public = false),
 
-    write_cors_headers(Request),
-    reply_json_dict(
-        _{'api:status' : 'api:success'}).
+    catch_with_backtrace(
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+            write_cors_headers(Request),
+            reply_json_dict(
+                _{'@type' : 'api:CloneResponse',
+                  'api:status' : 'api:success'})
+        ),
+        E,
+        do_or_die(clone_error_handler(E,Request),
+                  E)).
+
+clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
+    format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RemoteConnectionError'},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+
 
 :- begin_tests(clone_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1378,7 +1467,7 @@ test(clone_local, [
               json(_{comment: "hai hello",
                      label: "bar",
                      remote_url: Remote_URL}),
-                     
+
               JSON,
               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
                request_header('Authorization-Remote'=Authorization_Remote)]),
@@ -1403,20 +1492,43 @@ test(clone_local, [
                  prefix,
                  methods([options,post])]).
 
-fetch_handler(post,Path,Request, _System_DB, _Auth) :-
+fetch_handler(post,Path,Request, System_DB, Auth) :-
     request_remote_authorization(Request, Authorization),
-    % Calls pack on remote
-    resolve_absolute_string_descriptor(Path,Repository_Descriptor),
 
-    % DUBIOUS is authorization happening here?
-    remote_fetch(Repository_Descriptor, authorized_fetch(Authorization),
-                 New_Head_Layer_Id, Head_Has_Updated),
+    catch_with_backtrace(
+        (   remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
+                         New_Head_Layer_Id, Head_Has_Updated),
+            write_cors_headers(Request),
+            reply_json_dict(
+                _{'@type' : 'api:FetchRequest',
+                  'api:status' : 'api:success',
+                  'api:head_has_changed' : Head_Has_Updated,
+                  'api:head' : New_Head_Layer_Id})),
+        E,
+        do_or_die(fetch_error_handler(E,Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json_dict(
-            _{'api:status' : 'api:success',
-              'head_has_changed' : Head_Has_Updated,
-              'head' : New_Head_Layer_Id}).
+fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+fetch_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
@@ -1433,13 +1545,14 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               json(Document),
               Payload,
               [request_header('Authorization'=Authorization),
+               json_object(dict),
                status_code(Status)]),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
     ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload)))).
+    ;   throw(error(remote_connection_error(Payload),_))).
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1450,33 +1563,76 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 rebase_handler(post, Path, Request, System_DB, Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor(Path, Our_Descriptor),
-    check_descriptor_auth(System_DB, Our_Descriptor, system:rebase, Auth),
 
     get_payload(Document, Request),
     (   get_dict(rebase_from, Document, Their_Path)
-    ->  resolve_absolute_string_descriptor(Their_Path, Their_Descriptor)
+    ->  true
     ;   throw(error(rebase_from_missing))),
-    check_descriptor_auth(System_DB, Their_Descriptor, system:instance_read_access, Auth),
-    check_descriptor_auth(System_DB, Their_Descriptor, system:schema_read_access, Auth),
 
     (   get_dict(author, Document, Author)
     ->  true
     ;   throw(error(rebase_author_missing))),
 
-    Strategy_Map = [],
-    rebase_on_branch(Our_Descriptor,Their_Descriptor, Author, Auth, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
+    catch_with_backtrace(
+        (   Strategy_Map = [],
+            rebase_on_branch(System_DB, Auth, Path, Their_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports),
 
-    Incomplete_Reply = _{ 'api:status' : "api:success",
-                          forwarded_commits : Forwarded_Commits,
-                          reports: Reports
-                        },
-    (   Common_Commit_ID_Option = some(Common_Commit_ID)
-    ->  Reply = (Incomplete_Reply.put(common_commit_id, Common_Commit_ID))
-    ;   Reply = Incomplete_Reply),
-    
-    reply_json_dict(Reply).
+            Incomplete_Reply = _{ '@type' : "api:RebaseResponse",
+                                  'api:status' : "api:success",
+                                  'api:forwarded_commits' : Forwarded_Commits,
+                                  'api:rebase_report': Reports
+                                },
+            (   Common_Commit_ID_Option = some(Common_Commit_ID)
+            ->  Reply = (Incomplete_Reply.put('api:common_commit_id', Common_Commit_ID))
+            ;   Reply = Incomplete_Reply),
+            reply_json_dict(Reply)),
+        E,
+        do_or_die(rebase_error_handler(E,Request),
+                  E)
+    ).
+
+rebase_error_hander(error(invalid_target_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(invalid_source_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following rebase source absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(rebase(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseSchemaValidationError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1494,22 +1650,24 @@ test(rebase_divergent_history, [
                 (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
                 ->  delete_organization("TERMINUSQA")
                 ;   true),
-                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),_User_ID),
+                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
                 create_db_without_schema("TERMINUSQA", "foo"))),
          cleanup((force_delete_db("TERMINUSQA", "foo"),
                   delete_user_and_organization("TERMINUSQA")))
      ])
 :-
 
-    resolve_absolute_string_descriptor("TERMINUSQA/foo", Master_Descriptor),
+    Master_Path = "TERMINUSQA/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
     with_transaction(Master_Context1,
                      ask(Master_Context1,
                          insert(a,b,c)),
                     _),
 
-    branch_create(Master_Descriptor.repository_descriptor, Master_Descriptor, "second", _),
-    resolve_absolute_string_descriptor("TERMINUSQA/foo/local/branch/second", Second_Descriptor),
+    Second_Path = "TERMINUSQA/foo/local/branch/second",
+    branch_create(system_descriptor{}, User_ID, Second_Path, some(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
     with_transaction(Second_Context1,
@@ -1541,10 +1699,10 @@ test(rebase_divergent_history, [
 
     * json_write_dict(current_output, JSON, []),
 
-    _{
-        forwarded_commits : [_Thing, _Another_Thing ],
-        common_commit_id : _Common_Something,
-        reports: _Reports,
+    _{  '@type' : "api:RebaseResponse",
+        'api:forwarded_commits' : [_Thing, _Another_Thing ],
+        'api:common_commit_id' : _Common_Something,
+        'api:rebase_report' : _Reports,
         'api:status' : "api:success"
     } :< JSON,
 
@@ -1564,25 +1722,6 @@ test(rebase_divergent_history, [
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
-    atomic_list_concat([Path, '/local/_commits'], Repository_Path),
-    resolve_absolute_string_descriptor(Repository_Path,
-                                       Repository_Descriptor),
-
-    do_or_die(
-        (repository_descriptor{} :< Repository_Descriptor),
-        error(not_a_repository_descriptor(Repository_Descriptor))),
-
-    do_or_die(create_context(Repository_Descriptor, Pre_Context),
-              error(unknown_repository_descriptor(Repository_Descriptor))),
-
-    merge_dictionaries(
-        query_context{
-            authorization : Auth,
-            system : System_DB
-        }, Pre_Context, Context),
-
-    assert_read_access(Context),
-
     get_payload(Document,Request),
 
     (   _{ repository_head : Layer_ID } :< Document
@@ -1591,12 +1730,49 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
     ->  Repo_Head_Option = none
     ;   throw(error(bad_api_document(Document)))),
 
-    repository_context__previous_head_option__payload(
-        Context, Repo_Head_Option, Payload_Option),
+    catch_with_backtrace(
+        (   pack(System_DB, Auth,
+                 Path, Repo_Head_Option, Payload_Option),
 
-    (   Payload_Option = some(Payload)
-    ->  throw(http_reply(bytes('application/octets',Payload)))
-    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
+            (   Payload_Option = some(Payload)
+            ->  throw(http_reply(bytes('application/octets',Payload)))
+            ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)])))),
+        E,
+        do_or_die(pack_error_handler(E,Request),
+                  E)).
+
+pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+pack_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+pack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor is not a repository descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotARepositoryDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -1717,56 +1893,68 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
-    string_concat(Path, "/local/_commits", Full_Path),
-    do_or_die(
-        (   resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
-            (repository_descriptor{} :< Repository_Descriptor)),
-        reply_json(_{'@type' : "vio:UnpackPathInvalid",
-                     'api:status' : "api:failure",
-                     'api:message' : "The path to the database to unpack to was invalid"
-                    },
-                   400)),
-
-    check_descriptor_auth(System_DB, Repository_Descriptor,
-                          system:commit_write_access,
-                          Auth),
-
     get_payload(Payload, Request),
 
-    catch(
-        (   unpack(Repository_Descriptor, Payload),
-            Json_Reply = _{'api:status' : "api:success"},
-            Status = 200
+    catch_with_backtrace(
+        (   unpack(System_DB, Auth, Path, Payload),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:UnpackResponse',
+                              'api:status' : "api:success"},
+                            [status(200)])
         ),
         E,
-        (   E = error(Inner_E)
-        ->  (   Inner_E = not_a_linear_history_in_unpack(_History)
-            ->  Json_Reply = _{'@type' : "vio:NotALinearHistory",
-                               'api:status' : "api:failure",
-                               'api:message' : "Not a linear history"
-                              },
-                Status = 400
-            ;   Inner_E = unknown_layer_reference(Layer_Id)
-            ->  Json_Reply = _{'@type' : "vio:UnknownLayerReferenceInPack",
-                               'api:status' : "api:failure",
-                               'api:message' : "A layer in the pack has an unknown parent",
-                               'layer_id' : _{'@type': "xsd:string",
-                                              '@value' : Layer_Id}
-                              },
-                Status = 400
-            ;   Inner_E = database_not_found(_)
-            ->  Json_Reply = _{'@type' : "vio:UnpackDestinationDatabaseNotFound",
-                               'api:status' : "api:failure",
-                               'api:message' : "The database to unpack to has not be found"
-                              },
-                Status = 400
-            ;   throw(E))
-        ;   throw(E))
-    ),
+        do_or_die(
+            unpack_error_handler(E, Request),
+            E)).
 
-    write_cors_headers(Request),
-    reply_json(Json_Reply,
-               [status(Status)]).
+unpack_error_handler(error(not_a_linear_history_in_unpack(_History),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:error' : _{'@type' : "api:NotALinearHistory"},
+                      'api:message' : "Not a linear history"
+                     },
+                    [status(400)]).
+unpack_error_handler(error(unknown_layer_reference(Layer_Id),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : "A layer in the pack has an unknown parent",
+                      'api:error' : _{ '@type' : "api:UnknownLayerReference",
+                                       'api:layer_reference' : Layer_Id}},
+                    [status(400)]).
+unpack_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The database to unpack to has not been found at absolute path ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UnpackErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+unpack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor is not a repository descriptor: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:UnpackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotARepositoryDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:UnpackErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 :- begin_tests(unpack_endpoint).
 :- end_tests(unpack_endpoint).
@@ -1777,13 +1965,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
                  prefix,
                  methods([options,post])]).
 
-push_handler(post,Path,Request, _System_DB, Auth) :-
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-
-    do_or_die(
-        (branch_descriptor{} :< Branch_Descriptor),
-        error(push_requires_branch_descriptor(Branch_Descriptor))),
-
+push_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     do_or_die(
@@ -1795,17 +1977,58 @@ push_handler(post,Path,Request, _System_DB, Auth) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
-    push(Branch_Descriptor,Remote_Name,Remote_Branch,Auth,
-         authorized_push(Authorization),Result),
+    catch_with_backtrace(
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+                 authorized_push(Authorization),Result),
+            (   Result = none
+            ->  Response = _{'@type' : "api:PushResponse",
+                             'api:status' : "api:success"}
+            ;   Result = some(Head_ID)
+            ->  Response = _{'@type' : "api:PushNewHeadResponse",
+                             'api:head' : Head_ID,
+                             'api:status' : "api:success"}
+            ;   throw(error(internal_server_error,_))),
+            cors_reply_json(Request,
+                            Result,
+                            [status(200)])),
+        E,
+        do_or_die(push_error_handler(E,Request),
+                  E)).
 
-    (   Result = none
-    ->  write_cors_headers(Request),
-        reply_json(_{'api:status' : "api:success"})
-    ;   Result = some(Head_ID)
-    ->  write_cors_headers(Request),
-        reply_json(_{'api:status' : "api:success",
-                     'head' : Head_ID})
-    ;   throw(error(internal_server_error))).
+push_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PushErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
+    (   get_dict('api:message', Reason, Inner_Msg)
+    ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])
+    ;   format(string(Msg), "Remote authorization failed with malformed response", [])),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PushErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RemoteAuthorizationFailure",
+                                       'api:response' : Reason}
+                     },
+                    [status(401)]).
+
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
@@ -1819,6 +2042,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     bytes('application/octets',Payload),
                     Result,
                     [request_header('Authorization'=Authorization),
+                     json_object(dict),
                      status_code(Status_Code)]),
           E,
           throw(error(communication_failure(E)))),
@@ -1828,14 +2052,14 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   400 = Status_Code,
         Result :< _{'@type': Vio_Type}
     ->  (   Vio_Type = "vio:NotALinearHistory"
-        ->  throw(error(history_diverged))
+        ->  throw(error(history_diverged,_))
         ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
-        ->  throw(error(remote_unknown))
-        ;   throw(error(unknown_status_code(Status_Code, Result)))
+        ->  throw(error(remote_unknown,_))
+        ;   throw(error(unknown_status_code(Status_Code, Result),_))
         )
     ;   403 = Status_Code
-    ->  throw(error(authorization_failure(Result)))
-    ;   throw(error(unknown_status_code))
+    ->  throw(error(remote_authorization_failure(Result),_))
+    ;   throw(error(unknown_status_code,_))
     ).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1844,9 +2068,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                  prefix,
                  methods([options,post])]).
 
-pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
-    resolve_absolute_string_descriptor(Path,Branch_Descriptor),
-
+pull_handler(post,Path,Request, System_DB, Local_Auth) :-
     get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
@@ -1859,27 +2081,61 @@ pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
         request_remote_authorization(Request, Remote_Auth),
         error(no_remote_authorization)),
 
-    catch(
-        pull(Branch_Descriptor, Local_Auth, Remote_Name, Remote_Branch_Name,
-             authorized_fetch(Remote_Auth),
-             Result),
+    catch_with_backtrace(
+        (   pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
+                 authorized_fetch(Remote_Auth),
+                 Result),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:PullResponse',
+                              'api:status' : "api:success",
+                              'api:pull_report' : Result},
+                            [status(200)])),
         E,
-        (   E = error(Inner_E)
-        ->  (   Inner_E = not_a_valid_local_branch(_)
-            ->  throw(reply_json(_{'api:status' : "api:failure",
-                                   'api:message' : "Not a valid local branch"},
-                                 400))
-            ;   Inner_E = not_a_valid_remote_branch(_)
-            ->  throw(reply_json(_{'api:status' : "api:failure",
-                                   'api:message' : "Not a valid remote branch"},
-                                 400))
-            ;   throw(E))
-        ;   throw(E))
-    ),
+        do_or_die(
+            pull_error_handler(E,Request),
+            E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success",
-                 'report' : Result}).
+pull_error_handler(error(not_a_valid_local_branch(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The local branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+pull_error_handler(error(not_a_valid_remote_branch(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote branch described by the path ~q does not exist", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+pull_error_handler(error(divergent_history(Common_Commit), _), Request) :-
+    format(string(Msg), "History diverges from commit ~q", [Common_Commit]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:HistoryDivergedError',
+                                       'api:common_commit' : Common_Commit
+                                     }},
+                    [status(400)]).
+pull_error_handler(error(no_common_history, _), Request) :-
+    format(string(Msg), "There is no common history between branches", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:PullErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
+                                     }},
+                    [status(400)]).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),
@@ -1887,24 +2143,109 @@ pull_handler(post,Path,Request, _System_DB, Local_Auth) :-
                  prefix,
                  methods([options,post])]).
 
-branch_handler(post,Path,Request, _System_DB, _Auth) :-
-    resolve_absolute_string_descriptor(Path, Branch_Descriptor),
-    branch_descriptor{
-        repository_descriptor: Destination_Descriptor,
-        branch_name: Branch_Name
-    } :< Branch_Descriptor,
-
+branch_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     (   get_dict(origin, Document, Origin_Path)
-    ->  resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
-    ;   Origin_Descriptor = empty),
+    ->  Origin_Option = some(Origin_Path)
+    ;   Origin_Option = none),
 
     % DUBIOUS are we even doing authentication here?
-    branch_create(Destination_Descriptor, Origin_Descriptor, Branch_Name, _Branch_Uri),
+    catch_with_backtrace(
+        (   branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:BranchResponse',
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(branch_error_handler(E, Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+branch_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following branch target absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:BranchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteTargetDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+branch_error_handler(error(invalid_source_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following branch source absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:BranchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteSourceDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+branch_error_handler(error(target_not_a_branch_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The target ~q is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotATargetBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(source_not_a_valid_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The source path ~q is not a valid descriptor for branching", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotASourceBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(source_database_does_not_exist(Org,DB), _), Request) :-
+    format(string(Msg), "The source database '~s/~s' does not exist", [Org, DB]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:DatabaseDoesNotExist",
+                                       'api:database_name' : DB,
+                                       'api:organization_name' : Org}
+                     },
+                    [status(400)]).
+branch_error_handler(error(repository_is_not_local(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Attempt to branch from remote repository", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotLocalRepositoryError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+branch_error_handler(error(branch_already_exists(Branch_Name), _), Request) :-
+    format(string(Msg), "Branch ~s already exists", [Branch_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:BranchExistsError",
+                                       'api:branch_name' : Branch_Name}
+                     },
+                    [status(400)]).
+branch_error_handler(error(origin_cannot_be_branched(Origin_Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Origin_Descriptor),
+    format(string(Msg), "Origin is not a branchable path ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:BranchErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotBranchableError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
 
 :- begin_tests(branch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -2044,15 +2385,16 @@ test(create_branch_from_commit_graph_error, [
     atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{origin:'/admin/test/local/_commits',
+              json(_{origin:'admin/test/local/_commits',
                      prefixes : _{ doc : "https://terminushub.com/document",
                                    scm : "https://terminushub.com/schema"}}),
               JSON,
               [json_object(dict),
                authorization(basic(admin,Key)),
                status_code(Status_Code)]),
-    Status_Code = 400,
+
     * json_write_dict(current_output, JSON, []),
+    Status_Code = 400,
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
@@ -2076,10 +2418,7 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
                  prefix,
                  methods([options,post,delete])]).
 
-graph_handler(post, Path, Request, _System_Db, _Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
-
+graph_handler(post, Path, Request, System_Db, Auth) :-
     get_payload(Document, Request),
 
     (   _{ commit_info : Commit_Info } :< Document
@@ -2088,17 +2427,19 @@ graph_handler(post, Path, Request, _System_Db, _Auth) :-
     ),
 
     % DUBIOUS authentication??
-    create_graph(Descriptor,
-                 Commit_Info,
-                 Graph.type,
-                 Graph.name,
-                 _Transaction_Metadata2),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
-graph_handler(delete, Path, Request, _System_DB, _Auth) :-
-    % No descriptor to work with until the query sets one up
-    resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
+    catch_with_backtrace(
+        (create_graph(System_Db, Auth,
+                      Path,
+                      Commit_Info,
+                      _Transaction_Metadata2),
+         cors_reply_json(Request,
+                         _{'@type' : "api:CreateGraphResponse",
+                           'api:status' : "api:success"},
+                         [status(200)])),
+        E,
+        do_or_die(graph_error_handler(E, 'api:CreateGraphErrorResponse', Request),
+                  E)).
+graph_handler(delete, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     (   _{ commit_info : Commit_Info } :< Document
@@ -2106,16 +2447,84 @@ graph_handler(delete, Path, Request, _System_DB, _Auth) :-
     ;   Commit_Info = _{} % Probably need to error here...
     ),
 
-    % DUBIOUS authentication?
-    delete_graph(Descriptor,
-                 Commit_Info,
-                 Graph.type,
-                 Graph.name,
-                 _Transaction_Metadata2),
+    catch_with_backtrace(
+        (delete_graph(System_DB,Auth,
+                      Path,
+                      Commit_Info,
+                      _Transaction_Metadata2),
+         cors_reply_json(Request,
+                         _{'@type' : "api:DeleteGraphResponse",
+                           'api:status' : "api:success"},
+                         [status(200)])),
+        E,
+        do_or_die(graph_error_handler(E, 'api:DeleteGraphErrorResponse', Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
-
+graph_error_handler(error(invalid_absolute_graph_descriptor(Path),_), Type, Request) :-
+    format(string(Msg), "The following absolute graph descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteGraphDescriptor',
+                                       'api:absolute_graph_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+graph_error_handler(error(bad_graph_type(Graph_Type),_), Type, Request) :-
+    format(string(Msg), "Not a valid graph type: ~q", [Graph_Type]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadGraphType',
+                                       'api:graph_type' : Graph_Type},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+graph_error_handler(error(not_a_branch_descriptor(Descriptor),_), Type, Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+graph_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Type, Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~q can not be resolve to a resource", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+graph_error_handler(error(branch_does_not_exist(Descriptor), _), Type, Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+graph_error_handler(error(graph_already_exists(Descriptor,Graph_Name), _), Type, Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch ~q already has a graph named ~q", [Path, Graph_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : Type,
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:BranchAlreadyExists",
+                                       'api:graph_name' : Graph_Name,
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
 
 :- begin_tests(graph_endpoint).
 :- use_module(core(util/test_utils)).
@@ -2159,12 +2568,12 @@ test(delete_graph, [
                 ->  force_delete_db("admin", "test")
                 ;   true),
                 create_db_without_schema("admin", "test"),
-                resolve_absolute_string_descriptor("admin/test",Branch_Descriptor),
-                create_graph(Branch_Descriptor,
+                super_user_authority(Auth),
+                create_graph(system_descriptor{},
+                             Auth,
+                             "admin/test/local/branch/master/schema/main",
                              commit_info{ author : "test",
                                           message: "Generated by automated testing"},
-                             schema,
-                             "main",
                              _Transaction_Metadata))),
          cleanup(force_delete_db("admin", "test"))
      ])
@@ -2194,79 +2603,91 @@ test(delete_graph, [
                  methods([options,post,delete])]).
 
 user_handler(post, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(user_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     update_user(Ctx, Name, Document),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_user_transaction(System_DB, Auth, Name, Document),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_update_error_handler(E,Request),
+                  E)).
 user_handler(delete, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_user_requires_superuser)),
-
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_user(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
-
+    catch_with_backtrace(
+        (   delete_user_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_delete_error_handler(E,Request),
+                  E)).
 
 user_handler(post, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(user_creation_requires_superuser)),
-
     get_payload(Document, Request),
 
-    do_or_die(_{ user_identifier : Identifier,
-                 agent_name : Agent_Name,
-                 comment : Comment
-               } :< Document,
-              error(malformed_user_document(Document))
+    do_or_die(_{ agent_name : Agent_Name } :< Document,
+              error(malformed_update_user_document(Document))
              ),
-    (   _{ password : Password } :< Document
-    ->  Password_Option = some(Password)
-    ;   Password_Option = none),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     add_user(Ctx, Agent_Name, Identifier, Comment, Password_Option, _),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_user_transaction(System_DB, Auth, Agent_Name, Document),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_user_error_handler(E,Request),
+                  E)).
 user_handler(delete, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_user_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     do_or_die(_{ agent_name : Agent_Name },
               error(malformed_user_deletion_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "user_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_user(Ctx, Agent_Name),
-                     _),
+    catch_with_backtrace(
+        (   delete_user_transaction(System_DB, Auth, Agent_Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteUserResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(user_delete_error_handler(E,Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+user_update_error_handler(error(user_update_failed_without_error(Name,Document),_),Request) :-
+    atom_json_dict(Atom, Document,[]),
+    format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserUpdateErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UserUpdateFailedWithoutError",
+                                       'api:user_name' : Name}
+                     },
+                    [status(500)]).
+user_update_error_handler(error(malformed_add_user_document(Document),_),Request) :-
+    atom_json_dict(Atom, Document,[]),
+    format(string(Msg), "An update to a user which does not already exist was attempted with the incomplete document ~q", [Atom]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserUpdateErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:MalformedAddUserDocument"}
+                     },
+                    [status(400)]).
+
+user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Request) :-
+    format(string(Msg), "Delete of user ~q failed without an error", [Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UserDeleteErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UserDeleteFailedWithoutError",
+                                       'api:user_name' : Name}
+                     },
+                    [status(500)]).
+
+
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(organization), cors_handler(Method, organization_handler),
@@ -2279,76 +2700,99 @@ user_handler(delete, Request, System_DB, Auth) :-
                  methods([options,post,delete])]).
 
 organization_handler(post, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(organization_creation_requires_superuser)),
-
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : Name } :< Document,
               error(malformed_organization_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     add_organization(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   add_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:AddOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(add_organization_error_handler(E, Request),
+                  E)).
 organization_handler(delete, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_organization_requires_superuser)),
-    %
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : Name },
               error(malformed_organization_deletion_document(Document))
              ),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-    with_transaction(Ctx,
-                     delete_organization(Ctx, Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(delete_organization_error_handler(E, Request),
+                  E)).
 
 organization_handler(post, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(organization_update_requires_superuser)),
-    %
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
     do_or_die(_{ organization_name : New_Name } :< Document,
               error(malformed_api_document(Document), _)),
 
-    with_transaction(Ctx,
-                     update_organization(Ctx, Name, New_Name),
-                     _),
-
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+    catch_with_backtrace(
+        (   update_organization_transaction(System_DB, Auth, Name, New_Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_organization_error_handler(E, Request),
+                  E)).
 organization_handler(delete, Name, Request, System_DB, Auth) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(delete_organization_requires_superuser)),
+    catch_with_backtrace(
+        (   delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(delete_organization_error_handler(E, Request),
+                  E)).
 
-    create_context(System_DB, commit_info{ author: "organization_handler/2",
-                                          message: "internal system operation"
-                                        }, Ctx),
-    with_transaction(Ctx,
-                     delete_organization(Ctx, Name),
-                     _),
+add_organization_error_handler(error(organization_already_exists(Name),_), Request) :-
+    format(string(Msg), "The organization ~q already exists", [Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:AddOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:OrganizationAlreadyExists",
+                                       'api:organization_name' : Name}
+                     },
+                    [status(400)]).
+add_organization_error_handler(error(organization_creation_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization creation requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:AddOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+update_organization_error_handler(error(organization_update_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization update requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UpdateOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
+delete_organization_error_handler(error(delete_organization_requires_superuser,_), Request) :-
+    format(string(Msg), "Organization deletion requires super user authority", []),
+    cors_reply_json(Request,
+                    _{'@type' : "api:DeleteOrganizationErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
+                     },
+                    [status(401)]).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(update_role), cors_handler(Method, update_role_handler),
@@ -2359,10 +2803,6 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
 update_role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    create_context(System_DB, commit_info{ author: "role_handler/2",
-                                           message: "internal system operation"
-                                         }, Ctx),
-
     do_or_die(_{ database_name : Database_Name,
                  agent_names : Agents,
                  organization_name : Organization,
@@ -2370,12 +2810,27 @@ update_role_handler(post, Request, System_DB, Auth) :-
                } :< Document,
               error(bad_api_document)),
 
-    with_transaction(Ctx,
-                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
-                     _),
+    catch_with_backtrace(
+        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+            cors_reply_json(Request,
+                            _{'@type' : "api:UpdateRoleResponse",
+                              'api:status' : "api:success"})),
+        E,
+        do_or_die(update_role_error_handler(E, Request),
+                  E)).
 
-    write_cors_headers(Request),
-    reply_json(_{'api:status' : "api:success"}).
+update_role_error_handler(error(no_manage_capability(Organization,Resource_Name), _), Request) :-
+    format(string(Msg), "The organization ~q has no manage capability over the resource ~q", [Organization, Resource_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:UpdateRoleErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NoManageCapability",
+                                       'api:organization_name' : Organization,
+                                       'api:resource_name' : Resource_Name}
+                     },
+                    [status(401)]).
+
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(role), cors_handler(Method, role_handler),
@@ -2386,11 +2841,13 @@ update_role_handler(post, Request, System_DB, Auth) :-
 role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    get_role(System_DB, Auth, Document, Response),
-
-    write_cors_headers(Request),
-    reply_json(Response).
-
+    catch_with_backtrace(
+        (   get_role(System_DB, Auth, Document, Response),
+            cors_reply_json(Request,
+                            Response)),
+        E,
+        do_or_die(woql_error_handler(E, Request),
+                  E)).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
@@ -2407,11 +2864,13 @@ cors_handler(Method, Goal, R) :-
     catch((   authenticate(System_Database, Request, Auth),
               cors_catch(Method, Goal, Request, System_Database, Auth)),
 
-          error(authentication_incorrect),
+          error(authentication_incorrect(Reason),_),
 
           (   write_cors_headers(Request),
-
-              reply_json(_{'api:status' : 'api:failure',
+              http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+              reply_json(_{'@type' : 'api:ErrorResponse',
+                           'api:status' : 'api:failure',
+                           'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
                           },
                          [status(401)]))).
@@ -2446,16 +2905,6 @@ customise_exception(reply_json(M,Status)) :-
                [status(Status)]).
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
-customise_exception(error(authentication_incorrect)) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'api:message' : 'Incorrect authentication information'
-                },
-               [status(401)]).
-customise_exception(error(not_authenticated)) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'api:message' : 'No authentication supplied'
-                },
-               [status(401)]).
 customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
@@ -2483,7 +2932,7 @@ customise_exception(error(syntax_error(M),_)) :-
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
-customise_exception(error(woql_syntax_error(JSON,Path,Element))) :-
+customise_exception(error(woql_syntax_error(JSON,Path,Element),_)) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
     reply_json(_{'@type' : 'vio:WOQLSyntaxError',
@@ -2662,19 +3111,29 @@ fetch_authorization_data(Request, Username, KS) :-
     http_authorization_data(Text, basic(Username, Key)),
     coerce_literal_string(Key, KS).
 
+:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
 /*
  *  fetch_jwt_data(+Request, -Username) is semi-determinate.
  *
  *  Fetches the HTTP JWT data
  */
-fetch_jwt_data(Request, Username) :-
-    memberchk(authorization(Text), Request),
-    pattern_string_split(" ", Text, ["Bearer", Token]),
+fetch_jwt_data(Token, Username) :-
     atom_string(TokenAtom, Token),
-    jwt_decode(TokenAtom, Payload, []),
-    atom_json_dict(Payload, PayloadDict, []),
-    UsernameString = PayloadDict.get('http://terminusdb.com/schema/system#agent_name'),
-    atom_string(Username, UsernameString).
+
+    do_or_die(jwt_decode(TokenAtom, Payload, []),
+              error(authentication_incorrect(jwt_decode_failed(TokenAtom)), _)),
+
+    do_or_die(
+        (   atom_json_dict(Payload, PayloadDict, []),
+            % replace with dict key get (or whatever it is called)
+            get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
+            atom_string(Username, UsernameString)),
+        error(malformed_jwt_payload(Payload))).
+:- else.
+fetch_jwt_data(_Token, _Username) :-
+    throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
+:- endif.
+
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -2685,13 +3144,15 @@ authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
     do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
-              error(authentication_incorrect)).
+              error(authentication_incorrect(basic_auth(Username)),_)).
 authenticate(System_Askable, Request, Auth) :-
-    % Try JWT if no http keys
-    fetch_jwt_data(Request, Username),
+    memberchk(authorization(Text), Request),
+    pattern_string_split(" ", Text, ["Bearer", Token]),
     !,
+    % Try JWT if no http keys
+    fetch_jwt_data(Token, Username),
     do_or_die(username_auth(System_Askable, Username, Auth),
-              error(authentication_incorrect)).
+              error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
 authenticate(_, _, doc:anonymous).
 
 /*

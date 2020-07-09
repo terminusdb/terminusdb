@@ -2,21 +2,37 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(core(account)).
 
-create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction_Metadata) :-
-    memberchk(Graph_Type, [instance, schema, inference]),
-    branch_descriptor{repository_descriptor:Repo_Descriptor, branch_name: Branch_Name} :< Branch_Descriptor,
+create_graph(System_DB, Auth, Path, Commit_Info, Transaction_Metadata) :-
 
-    (   create_context(Repo_Descriptor, Commit_Info, Context)
-    ->  true
-    ;   throw(error(cannot_open_context(Repo_Descriptor)))),
+    do_or_die(
+        resolve_absolute_string_descriptor_and_graph(Path, Branch_Descriptor, Graph),
+        error(invalid_absolute_graph_descriptor(Path),_)),
+
+    Graph_Type = (Graph.type),
+    Graph_Name = (Graph.name),
+
+    do_or_die(
+        memberchk(Graph_Type, [instance, schema, inference]),
+        error(bad_graph_type(Graph_Type),_)),
+
+    do_or_die(
+        (branch_descriptor{repository_descriptor:Repo_Descriptor, branch_name: Branch_Name} :< Branch_Descriptor),
+        error(not_a_branch_descriptor(Branch_Descriptor),_)),
+
+    do_or_die(
+        askable_context(Repo_Descriptor, System_DB, Auth, Commit_Info, Context),
+        error(unresolvable_absolute_descriptor(Repo_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Repo_Descriptor,
+                          system:commit_write_access, Auth),
 
     with_transaction(
         Context,
         (   % does this branch exist? if not, error
-            (   has_branch(Context, Branch_Name)
-            ->  true
-            ;   throw(error(branch_does_not_exist(Branch_Descriptor)))),
+            do_or_die(has_branch(Context, Branch_Name),
+                      error(branch_does_not_exist(Branch_Descriptor))),
 
             % does this branch already have a commit?
             (   branch_head_commit(Context, Branch_Name, Commit_Uri)
@@ -29,9 +45,8 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
             ;   Graphs = ["instance"-"main"-_]),
 
             % does the graph exist already? if so, error
-            (   memberchk(Graph_Type-Graph_Name-_, Graphs)
-            ->  throw(error(graph_already_exists(Branch_Descriptor, Graph_Name)))
-            ;   true),
+            do_or_die((\+memberchk(Graph_Type-Graph_Name-_, Graphs)),
+                      error(graph_already_exists(Branch_Descriptor, Graph_Name))),
 
             % now that we know we're in a good position, create a new commit
             insert_commit_object_on_branch(Context,
@@ -59,20 +74,34 @@ create_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction
         ),
         Transaction_Metadata).
 
-delete_graph(Branch_Descriptor, Commit_Info, Graph_Type, Graph_Name, Transaction_Metadata) :-
-    memberchk(Graph_Type, [instance, schema, inference]),
-    branch_descriptor{repository_descriptor:Repo_Descriptor, branch_name: Branch_Name} :< Branch_Descriptor,
+delete_graph(System_DB, Auth, Path, Commit_Info, Transaction_Metadata) :-
+    do_or_die(
+        resolve_absolute_string_descriptor_and_graph(Path, Branch_Descriptor, Graph),
+        error(invalid_absolute_graph_descriptor(Path),_)),
 
-    (   create_context(Repo_Descriptor, Commit_Info, Context)
-    ->  true
-    ;   throw(error(cannot_open_context(Repo_Descriptor)))),
+    Graph_Type = (Graph.type),
+    Graph_Name = (Graph.name),
+
+    do_or_die(
+        memberchk(Graph_Type, [instance, schema, inference]),
+        error(bad_graph_type(Graph_Type),_)),
+
+    do_or_die(
+        (branch_descriptor{repository_descriptor:Repo_Descriptor, branch_name: Branch_Name} :< Branch_Descriptor),
+        error(not_a_branch_descriptor(Branch_Descriptor),_)),
+
+    do_or_die(
+        askable_context(Repo_Descriptor, System_DB, Auth, Commit_Info, Context),
+        error(unresolvable_absolute_descriptor(Repo_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Repo_Descriptor,
+                          system:commit_write_access, Auth),
 
     with_transaction(
         Context,
         (   % does this branch exist? if not, error
-            (   has_branch(Context, Branch_Name)
-            ->  true
-            ;   throw(error(branch_does_not_exist(Branch_Descriptor)))),
+            do_or_die(has_branch(Context, Branch_Name),
+                      error(branch_does_not_exist(Branch_Descriptor))),
 
             % does this branch already have a commit?
             (   branch_head_commit(Context, Branch_Name, Commit_Uri)
@@ -125,10 +154,11 @@ test(create_graph_on_empty_branch,
     ) :-
     make_branch_descriptor("admin", "test", Descriptor),
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  commit_info{author:"test",message:"test"},
-                 schema,
-                 "main",
                  _),
 
     open_descriptor(Descriptor, Transaction),
@@ -147,16 +177,17 @@ test(delete_graph_on_branch,
 :-
     make_branch_descriptor("admin", "test", Descriptor),
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  commit_info{author:"test",message:"test"},
-                 schema,
-                 "main",
                  _),
 
-    delete_graph(Descriptor,
+    delete_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  commit_info{author:"test",message:"test"},
-                 schema,
-                 "main",
                  _),
 
     open_descriptor(Descriptor, Transaction),

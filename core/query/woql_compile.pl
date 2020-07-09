@@ -173,6 +173,7 @@ empty_context(Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : _{},
         write_graph : empty,
+        update_guard : _,
         bindings : [],
         selected : [],
         files : [],
@@ -234,8 +235,7 @@ resolve_prefix(Pre,Suf,URI) -->
     {
         (   Full_Prefix = Prefixes.get(Pre)
         ->  true
-        ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
-            throw(error(syntax_error(M))))
+        ;   throw(error(woql_syntax_error(unresolvable_prefix(Pre,Suf)),_)))
     },
     (   {v(Var_Name) = Suf}
     ->  view(bindings, Bindings),
@@ -446,13 +446,9 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
                ->  (   Type = none
                    ->  Value = Xe
                    ;   typecast(Value,Type,[],Xe))
-               ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
-                   throw(error(syntax_error(Msg),
-                               context(indexing_as_list/5,_)))
+               ;   throw(error(woql_syntax_error(get_header_does_not_match_values(Header, Values, N, Idx)),_))
                )
-           ;   format(string(Msg),"No such indexed name in get: ~q with header: ~q and values: ~q giving",[N,Header,Values]),
-               throw(error(syntax_error(Msg),
-                           context(indexing_as_list/5,_)))
+           ;   throw(error(woql_syntax_error(get_has_no_such_index(Header,Values,N)), _))
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
 
@@ -461,9 +457,7 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     lookup(V,Xe,Bindings),
     Term = (   nth0(N,Values,Xe)
            ->  true
-           ;   format(string(Msg),"No such index in get: ~q for values: ~q",[N,Values]),
-               throw(error(syntax_error(Msg),
-                           context(indexing_position_list/5,_)))
+           ;   throw(error(woql_syntax_error(no_such_index(Values,N)),_))
            ),
     M is N+1,
     indexing_position_list(Rest,M,Values,Bindings,Result).
@@ -571,10 +565,12 @@ csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
     ),
     !.
 csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
-    format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
-           [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
-    throw(error(syntax_error(M),
-                context(csv_term/7,Path))).
+    throw(
+        error(
+            woql_syntax_error(
+                unknown_csv_processing_errors(Path,Has_Header,Header,
+                                              Values,Indexing_Term,Prog,Options)),
+            _)).
 
 json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
     setup_call_cleanup(
@@ -839,7 +835,7 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
         (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,New_Transaction_Object)
         ->  true
-        ;   throw(error(syntax_error('Unable to compile pattern', Pattern)))),
+        ;   throw(error(woql_syntax_error(bad_path_pattern(Pattern)),_))),
         Goal = (
             calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
             % Don't bind PathE until we're done with the full query (for constraints)
@@ -936,7 +932,8 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
     compile_wf(Query,Compiled_Query),
     {
 
-        (   File_Spec = file(CSV_Path,Options)
+        (   File_Spec = file(CSV_Path,_Options),
+            Options = []
         ;   File_Spec = file(CSV_Path),
             Options = []),
 
@@ -1027,9 +1024,7 @@ compile_wf(into(G,S),Goal) -->
         resolve_filter(G,Filter),
         (   Filter = type_name_filter{ type : _Type, name : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
-        ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
-            throw(error(syntax_error(M),
-                        context(compile_wf//2, into/2)))
+        ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
         )
     },
     update(write_graph,OG,Graph_Descriptor),
@@ -1172,11 +1167,7 @@ compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Argument
 compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
-    {
-        format(atom(M), 'Unable to compile AST query ~q', [Q]),
-        throw(error(syntax_error(M),
-                    context(compile_wf//1,Q)))
-    }.
+    { throw(error(woql_syntax_error(badly_formed_ast(Q)),_)) }.
 
 debug_wf(Lit) -->
     { debug(terminus(woql_compile(compile_wf)), '~w', [Lit]) },
@@ -1359,8 +1350,7 @@ ensure_filter_resolves_to_graph_descriptor(G, Collection_Descriptor, Graph_Descr
                                                         Graph_Descriptor),
     !.
 ensure_filter_resolves_to_graph_descriptor(G, _Collection_Descriptor, _Graph_Descriptor) :-
-    format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
-    throw(error(syntax_error(M), _)).
+    throw(error(woql_syntax_error(filter_does_not_resolve_to_unique_graph(G)), _)).
 
 /* NOTE: Should this go in resolve_query_resource.pl? */
 filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
@@ -2247,10 +2237,11 @@ test(path_star, [
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,
@@ -2298,10 +2289,11 @@ test(complex_path, [
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,
@@ -2944,5 +2936,139 @@ test(ast_when_test, [
             Triples),
 
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
+
+
+test(get_put, []) :-
+
+    Query = _{ '@type': "woql:Put",
+               'woql:as_vars':
+               [ _{ '@type': "woql:NamedAsVar",
+                    'woql:identifier': _{ '@type': "xsd:string",
+                                          '@value': "v:Start_Station"
+                                        },
+                    'woql:variable_name': _{ '@type': "xsd:string",
+                                             '@value': "End_Station"
+                                           }
+                  }
+               ],
+               'woql:query': _{ '@type': "woql:Get",
+                                'woql:as_vars':
+                                [ _{ '@type': "woql:NamedAsVar",
+                                     'woql:identifier': _{ '@type': "xsd:string",
+                                                           '@value': "Start station"                                                          },
+                                     'woql:variable_name': _{
+                                                               '@type': "xsd:string",
+                                                               '@value': "Start_Station"
+                                                           }
+                                   },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Station"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Duration"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Duration"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Bike number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Bike"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Member type"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Member_Type"
+                                                            }
+                                  }
+                                ],
+                                'woql:query_resource': _{
+                                                           '@type': "woql:RemoteResource",
+                                                           'woql:remote_uri': _{
+                                                                                  '@type': "xsd:anyURI",
+                                                                                  '@value': "https://terminusdb.com/t/data/bike_tutorial.csv"
+                                                                              }
+                                                       }
+                              },
+               'woql:query_resource': _{ '@type': "woql:FileResource",
+                                         'woql:file':
+                                         _{ '@type': "xsd:anyURI",
+                                            '@value': "/tmp/test.csv"
+                                          }
+                                       }
+             },
+
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, _JSON),
+    exists_file('/tmp/test.csv').
+
 
 :- end_tests(woql).

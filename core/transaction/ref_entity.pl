@@ -1118,7 +1118,9 @@ test(common_ancestor_after_branch_and_some_commits,
              create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]) :-
-    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+
+    Origin_Path = "admin/testdb",
+    resolve_absolute_string_descriptor(Origin_Path, Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,
                      ask(Commit_A_Context,
@@ -1130,7 +1132,9 @@ test(common_ancestor_after_branch_and_some_commits,
                          insert(d,e,f)),
                      _),
 
-    branch_create(Descriptor.repository_descriptor, Descriptor, "second", _),
+    super_user_authority(Auth),
+    Destination_Path = "admin/testdb/local/branch/second",
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
     create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
     with_transaction(Commit_C_Context,

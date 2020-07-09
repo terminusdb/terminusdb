@@ -1,7 +1,8 @@
 :- module(db_pack, [
-              repository_context__previous_head_option__payload/3,
               payload_repository_head_and_pack/3,
               repository_head_layerid/2,
+              pack/5,
+              pack_from_context/3,
               unpack/1,
               layer_layerids/2
           ]).
@@ -11,6 +12,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
+:- use_module(core(account)).
 
 payload_repository_head_and_pack(Data, Head, Pack) :-
     ground(Head),
@@ -35,7 +37,25 @@ repository_context__previous_head_option__current_repository_head__pack(Reposito
         pack_export(Store,Layer_Ids,Pack),
         Pack_Option = some(Pack)).
 
-repository_context__previous_head_option__payload(Repository_Context, Repo_Head_Option, Payload_Option) :-
+pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option) :-
+    atomic_list_concat([Path, '/local/_commits'], Repository_Path),
+    do_or_die(
+        resolve_absolute_string_descriptor(Repository_Path,
+                                           Repository_Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    do_or_die(
+        (repository_descriptor{} :< Repository_Descriptor),
+        error(not_a_repository_descriptor(Repository_Descriptor),_)),
+
+    do_or_die(askable_context(Repository_Descriptor, System_DB, Auth, Repository_Context),
+              error(unresolvable_collection(Repository_Descriptor),_)),
+
+    pack_from_context(Repository_Context, Repo_Head_Option, Payload_Option).
+
+pack_from_context(Repository_Context, Repo_Head_Option, Payload_Option) :-
+    assert_read_access(Repository_Context),
+
     repository_context__previous_head_option__current_repository_head__pack(Repository_Context, Repo_Head_Option, Current_Repository_Head, Pack_Option),
     (   some(Pack) = Pack_Option
     ->  payload_repository_head_and_pack(Payload, Current_Repository_Head, Pack),
@@ -128,17 +148,8 @@ test(context_repository_head_pack,
      ]
     ) :-
 
-    Repository_Descriptor = repository_descriptor{
-                                database_descriptor: database_descriptor{
-                                                         organization_name: "admin",
-                                                         database_name: "foo"
-                                                     },
-                                repository_name: "local"
-                            },
-    Origin_Branch_Descriptor = branch_descriptor{
-                                   repository_descriptor: Repository_Descriptor,
-                                   branch_name: "master"
-                               },
+    Origin_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
 
     create_context(Origin_Branch_Descriptor, commit_info{author:"test", message:"first commit"}, Context1),
     with_transaction(Context1,
@@ -157,12 +168,13 @@ test(context_repository_head_pack,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    branch_create(Repository_Descriptor, Origin_Branch_Descriptor, "moo", _),
+    Destination_Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
 
-    create_context(Repository_Descriptor, Repository_Context),
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
-    repository_context__previous_head_option__payload(
-        Repository_Context,
+    pack(system_descriptor{}, Auth,
+        "admin/foo",
         some(Repo_Stage_1_Layer_ID),
         Payload_Option),
 

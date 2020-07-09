@@ -143,6 +143,518 @@ api:DatabaseAlreadyExists
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
 
+api:DatabaseDoesNotExist
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseNotFinalized
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
+api:DatabaseFilesDoNotExist
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+
 api:DatabaseInInconsistentState
   a owl:Class ;
   rdsf:subClassOf api:Error .
+
+api:TriplesLoadResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:TriplesErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithFormat
+  a owl:Class .
+
+api:format
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithFormat ;
+  rdfs:range xsd:string .
+
+api:TriplesUnknownFormat
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithFormat .
+
+api:WithAbsoluteGraphDescriptor ;
+  a owl:Class .
+
+api:absolute_graph_descriptor ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithAbsoluteGraphDescriptor ;
+  rdfs:range xsd:string .
+
+api:BadAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
+
+api:UnresolvableAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
+
+api:WithBindings
+  a owl:Class .
+
+api:Binding
+  a owl:Class .
+
+api:bindings
+  a owl:ObjectProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range api:Binding .
+
+api:WithTransactionRetryCount
+  a owl:Class .
+
+api:transaction_retry_count
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WithInserts
+  a owl:Class .
+
+api:inserts
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WithDeletes
+  a owl:Class .
+
+api:deletes
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WoqlResponse ;
+  rdfs:range xsd:nonNegativeInteger .
+
+api:WoqlResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithBindings, api:WithTransactionRetryCount , api:WithInserts, api:WithDeletes .
+
+api:WoqlErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:CloneResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:CloneErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:RemoteConnectionError
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:WithHead
+  a owl:Class .
+
+api:head
+  a owql:DatatypeProperty ;
+  rdfs:domain api:WithHead ;
+  rdfs:range xsd:string .
+
+api:WithHeadHasChanged
+  a owl:Class .
+
+api:head_has_changed
+  a owql:DatatypeProperty ;
+  rdfs:domain api:WithHeadHasChanged ;
+  rdfs:range xsd:boolean .
+
+api:FetchResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithHeadHasChanged, api:WithHead .
+
+api:FetchErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithForwardedCommits
+  a owl:Class .
+
+api:forwarded_commits
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithForwardedCommits ;
+  rdfs:range xsd:string .
+
+api:WithRebaseReport
+  a owl:Class .
+
+api:rebase_report
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithRebaseReport ;
+  rdfs:range api:RebaseReport .
+
+api:WithApplied
+  a owl:Class .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithApplied ;
+  rdfs:range xsd:string .
+
+api:WithCommitType
+  a owl:Class .
+
+api:commit_type
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithCommitType ;
+  rdfs:range api:CommitType .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithCommitType ;
+  rdfs:range api:CommitType .
+
+api:CommitType
+  a owl:Class ;
+  owl:oneOf ( api:valid_commit api:invalid_commit ) .
+
+api:valid_commit a api:CommitType .
+api:invalid_commit a api:CommitType .
+
+api:WithOriginCommit
+  a owl:Class .
+
+api:origin_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithOriginCommit ;
+  rdfs:range xsd:string .
+
+api:WithApplied
+  a owl:Class .
+
+api:applied
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithApplied ;
+  rdfs:range xsd:string .
+
+api:RebaseReport
+  a owl:Class ;
+  rdfs:subClassOf api:WithOriginCommit, api:WithApplied, api:WithCommitType .
+
+api:RebaseResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReport .
+
+api:RebaseErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithTheirCommit
+  a owl:Class .
+
+api:their_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithTheirCommit ;
+  rdfs:range xsd:string .
+
+api:WithWitness
+  a owl:Class .
+
+api:witness
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithWitness ;
+  rdfs:range vio:Violation .
+
+api:RebaseFixupError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+
+api:RebaseSchemaValidationError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+
+api:RebaseContinueOnValidCommit
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit .
+
+api:RebaseFixupOnValidCommit
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithTheirCommit .
+
+api:PackErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NotARepositoryDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+
+api:UnpackResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:UnpackErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NotALinearHistory
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:UnknownLayerReference
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithLayerReference .
+
+api:WithLayerReference
+  a owl:Class .
+
+api:layer_reference
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithLayerReference ;
+  rdfs:range vio:Violation .
+
+api:PushResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:PushNewHeadResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithHead .
+
+api:PushErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithPullReport
+  a owl:Class .
+
+api:pull_report
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithPullReport ;
+  rdfs:range api:PullReport .
+
+api:PullResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response , api:WithPullReport .
+
+api:PullReport
+  a owl:Class ,
+  rdfs:subClassOf api:WithPullStatus .
+
+api:WithPullStatus
+  a owl:Class .
+
+api:pull_status
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithPullStatus ;
+  rdfs:range api:PullStatus .
+
+api:PullStatus
+  a owl:Class
+  owl:oneOf (
+    api:pull_unchanged
+    api:pull_fast_forwarded ) .
+
+api:pull_unchanged a api:PullStatus .
+api:pull_fast_forwarded a api:PullStatus .
+
+api:WithCommonCommit ;
+  a owl:Class .
+
+api:common_commit
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithCommonCommit ;
+  rdfs:range xsd:string .
+
+api:HistoryDivergedError
+  a owl:Class ,
+  rdfs:subClassOf api:Error , api:WithCommonCommit .
+
+api:NoCommonHistoryError
+  a owl:Class ,
+  rdfs:subClassOf api:Error .
+
+api:IncorrectAuthenticationError
+  a owl:Class ,
+  rdfs:subClassOf api:Error .
+
+api:BadAbsoluteSourceDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:BadAbsoluteDescriptor .
+
+api:BadAbsoluteTargetDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:BadAbsoluteDescriptor .
+
+api:NotABranchDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+
+api:NotATargetBranchDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:NotABranchDescriptorError.
+
+api:NotAValidSourceDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:WithAbsoluteDescriptor .
+
+api:NotLocalRepositoryError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:WithBranchName
+  a owl:Class .
+
+api:branch_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithBranchName ;
+  rdfs:range xsd:string .
+
+api:NotBranchableError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:CreateGraphErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:BadAbsoluteGraphDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteGraphDescriptor .
+
+api:WithAbsoluteGraphDescriptor ;
+  a owl:Class .
+
+api:absolute_graph_descriptor ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithAbsoluteGraphDescriptor ;
+  rdfs:range xsd:string .
+
+api:BadGraphType
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithGraphTYpe .
+
+api:WithGraphType ;
+  a owl:Class .
+
+api:graph_type ;
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithGraphType ;
+  rdfs:range xsd:string .
+
+api:BranchAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor ;
+
+api:withGraphName
+  a owl:Class .
+
+api:graph_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithGraphName ;
+  rdfs:range xsd:string .
+
+api:CreateGraphResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:DeleteGraphResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:UserUpdateErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UserUpdateFailedWithoutError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithUserName .
+
+api:WithUserName
+  a owl:Class .
+
+api:user_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithUserName ;
+  rdfs:range xsd:string .
+
+api:UserDeleteErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UserDeleteFailedWithoutError
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithUserName .
+
+api:MalformedAddUserDocument
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:AddOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:UpdateOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:DeleteOrganizationResponse
+  a owl:Class ;
+  rdfs:subClassOf api:Response .
+
+api:AddOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:DeleteOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:UpdateOrganizationErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:OrganizationAlreadyExists
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName .
+
+api:RequiresSuperuserAuthority
+  a owl:Class ;
+  rdfs:subClassOf api:Error .
+
+api:UpdateRoleErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NoManageCapability
+  a owl:Class ;
+  rdfs:subClassOf api:Error, api:WithOrganizationName, api:WithResourceName .
+
+api:WithResourceName
+  a owl:Class .
+
+api:resource_name
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithResourceName ;
+  rdfs:range xsd:string .
+
+api:RemoteAuthorizationFailure
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse, api:withResponse .
+
+api:WithResponse
+  a owl:Class .
+
+api:response
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithResponse ;
+  rdfs:range api:Response .
+
+api:WOQLSyntaxError
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithErrorTerm .
+
+api:WithErrorTerm
+  a owl:Class .
+
+api:error_term
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .

@@ -94,8 +94,7 @@ database_schema(Transaction_Object, Schemas) :-
 
 error_on_pipe(Name) :-
     (   re_match('\\|', Name)
-    ->  throw(error(syntax_error('This name has a pipe!',
-                                 Name)))
+    ->  throw(error(ceci_n_est_pas_une_pipe(Name),_))
     ;   true).
 
 /**

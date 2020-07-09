@@ -4,17 +4,24 @@
               add_user/6,
               delete_user/1,
               delete_user/2,
+              delete_user_transaction/3,
               delete_organization/1,
               delete_organization/2,
+              delete_organization_transaction/3,
               update_user/2,
               update_user/3,
+              update_user_transaction/4,
               update_organization/2,
               update_organization/3,
+              update_organization_transaction/4,
               add_organization/2,
               add_organization/3,
+              add_organization_transaction/3,
 
               add_role/6,
               update_role/6,
+              update_role_transaction/6,
+
               get_role/4,
               exists_role/4
           ]).
@@ -32,6 +39,19 @@
  * but may later be exposed for a user API.
  */
 
+delete_organization_transaction(System_DB, Auth, Name) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(delete_organization_requires_superuser,_)),
+
+    Commit_Info = commit_info{ author: "delete_organization_transaction/3",
+                               message: "internal system operation"
+                             },
+    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
+
+    with_transaction(Ctx,
+                     delete_organization(Ctx, Name),
+                     _).
+
 delete_organization(Name) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
@@ -46,6 +66,19 @@ delete_organization(Context,Name) :-
             delete_object(Organization_Uri)
         )).
 
+add_organization_transaction(System_DB, Auth, Name) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(organization_creation_requires_superuser,_)),
+
+    Commit_Info = commit_info{ author: "add_organization_transaction/3",
+                               message: "internal system operation"
+                             },
+    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
+
+    with_transaction(Ctx,
+                     add_organization(Ctx, Name),
+                     _).
+
 add_organization(Name, Organization_URI) :-
     create_context(system_descriptor{}, Context),
     with_transaction(Context,
@@ -55,7 +88,7 @@ add_organization(Name, Organization_URI) :-
 add_organization(Context, Name, Organization_URI) :-
 
     (   organization_name_exists(Context, Name)
-    ->  throw(error(organization_already_exists(Name)))
+    ->  throw(error(organization_already_exists(Name),_))
     ;   true),
 
     ask(Context,
@@ -77,6 +110,19 @@ user_managed_resource(Askable, User_Uri, Resource_Uri) :-
             t(Capability_Uri, system:action, system:manage_capabilities)
         )).
 
+update_organization_transaction(System_DB, Auth, Name, New_Name) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(organization_update_requires_superuser,_)),
+
+    Commit_Info = commit_info{ author: "update_organization_transaction/4",
+                               message: "internal system operation"
+                             },
+    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
+
+    with_transaction(Ctx,
+                     update_organization(Ctx, Name, New_Name),
+                     _).
+
 update_organization(Name, New_Name) :-
     create_context(system_descriptor{}, Context),
     with_transaction(
@@ -91,7 +137,6 @@ update_organization(Context, Name, New_Name) :-
             insert(Organization_URI, system:organization_name, New_Name^^xsd:string)
         ),
        [compress_prefixes(false)]).
-
 
 add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
@@ -150,6 +195,22 @@ add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
            )
     ;   true).
 
+update_user_transaction(SystemDB, Auth, Name, Document) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_update_requires_superuser,_)),
+
+    Commit_Info = commit_info{ author: "user_handler/2",
+                               message: "internal system operation"
+                             },
+
+    askable_context(SystemDB, SystemDB, Auth, Commit_Info, Ctx),
+    with_transaction(Ctx,
+                     update_user(Ctx, Name, Document),
+                     _),
+    !.
+update_user_transaction(_SystemDB, _Auth, Name, Document) :-
+    throw(error(user_update_failed_without_error(Name,Document),_)).
+
 update_user(Name, Document) :-
     create_context(system_descriptor{},
                    commit_info{
@@ -195,11 +256,33 @@ update_user(SystemDB, Name, Document) :-
                 insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
     ;   true).
 update_user(SystemDB, Name, Document) :-
-    _{ user_identifier : ID,
-       agent_name : Name,
-       comment : Comment,
-       password : Pass } :< Document,
-    add_user(SystemDB, Name, ID, Comment, Pass, _).
+    do_or_die((_{ user_identifier : ID,
+                  agent_name : Name,
+                  comment : Comment} :< Document),
+              error(malformed_add_user_document(Document),_)),
+
+    (   _{ password : Password } :< Document
+    ->  Password_Option = some(Password)
+    ;   Password_Option = none),
+
+    add_user(SystemDB, Name, ID, Comment, Password_Option, _).
+
+delete_user_transaction(SystemDB, Auth, Name) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(user_update_requires_superuser,_)),
+
+    Commit_Info = commit_info{ author: "delete_user_transaction/3",
+                               message: "internal system operation"
+                             },
+
+    askable_context(SystemDB, SystemDB, Auth, Commit_Info, Ctx),
+    with_transaction(Ctx,
+                     delete_user(Ctx, Name),
+                     _),
+    !.
+delete_user_transaction(_SystemDB, _Auth, Name) :-
+    throw(error(user_delete_failed_without_error(Name),_)).
+
 
 /*
  * delete_user(+User_ID) is semidet.
@@ -289,6 +372,17 @@ get_role(Askable, Auth_ID, Document, Response) :-
                  ))),
 
     run_context_ast_jsonld_response(Query_Context,Query,Response).
+
+update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions) :-
+    Commit_Info = commit_info{ author: "add_organization_transaction/3",
+                               message: "internal system operation"
+                             },
+    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
+
+    with_transaction(Ctx,
+                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+                     _).
+
 
 update_role(Context, Auth_ID, Users, Organization, Resource_Name, Actions) :-
     exists_role(Context, User, Organization, Resource_Name),
