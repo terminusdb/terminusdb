@@ -196,11 +196,17 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     do_or_die(
         (_{ comment : Comment,
             label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
+        error(bad_api_document(Database_Document,[comment,label]),_)),
 
-    (   _{ prefixes : Prefixes } :< Database_Document,
-        _{ doc : _Doc, scm : _Scm} :< Prefixes
-    ->  true
+    (   _{ prefixes : Input_Prefixes } :< Database_Document
+    ->  (   _{ doc : Doc} :< Input_Prefixes
+        ->  true
+        ;   Doc = "terminusdb:///data/"),
+        (   _{ scm : Scm} :< Input_Prefixes
+        ->  true
+        ;   Doc = "terminusdb:///schema#"),
+        Prefixes = Input_Prefixes.put(_{ doc : Doc,
+                                         scm : Scm })
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
@@ -508,10 +514,9 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
                   Error)).
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
-    (   _{ turtle : TTL,
-           commit_info : Commit_Info } :< Triples_Document
-    ->  true
-    ;   throw(error(bad_api_document(Triples_Document)))),
+    do_or_die(_{ turtle : TTL,
+                 commit_info : Commit_Info } :< Triples_Document,
+              error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
 
     catch_with_backtrace(
         (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
@@ -1401,12 +1406,9 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
     do_or_die(
         (_{ comment : Comment,
-            label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
-
-    do_or_die(
-        (_{ remote_url : Remote_URL } :< Database_Document),
-        error(no_remote_specified(Database_Document))),
+            label : Label,
+            remote_url: Remote_URL} :< Database_Document),
+        error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
     ->  true
@@ -1790,9 +1792,7 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 
     (   _{ repository_head : Layer_ID } :< Document
     ->  Repo_Head_Option = some(Layer_ID)
-    ;   _{} :< Document
-    ->  Repo_Head_Option = none
-    ;   throw(error(bad_api_document(Document)))),
+    ;   Repo_Head_Option = none),
 
     catch_with_backtrace(
         (   pack(System_DB, Auth,
@@ -2035,7 +2035,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     do_or_die(
         _{ remote : Remote_Name,
            remote_branch : Remote_Branch } :< Document,
-        error(push_has_no_remote(Document))),
+        error(bad_api_document(Document,[remote,remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Authorization),
@@ -2150,7 +2150,7 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
         _{ remote : Remote_Name,
            remote_branch : Remote_Branch_Name
          } :< Document,
-        error(pull_has_no_remote(Document))),
+        error(bad_api_document(Document, [remote, remote_branch]))),
 
     do_or_die(
         request_remote_authorization(Request, Remote_Auth),
@@ -2496,12 +2496,9 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
 graph_handler(post, Path, Request, System_Db, Auth) :-
     get_payload(Document, Request),
 
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document, [commit_info]), _)),
 
-    % DUBIOUS authentication??
     catch_with_backtrace(
         (create_graph(System_Db, Auth,
                       Path,
@@ -2517,10 +2514,8 @@ graph_handler(post, Path, Request, System_Db, Auth) :-
 graph_handler(delete, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
         (delete_graph(System_DB,Auth,
@@ -2809,7 +2804,7 @@ organization_handler(post, Name, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : New_Name } :< Document,
-              error(malformed_api_document(Document), _)),
+              error(bad_api_document(Document,[organization_name]), _)),
 
     catch_with_backtrace(
         (   update_organization_transaction(System_DB, Auth, Name, New_Name),
@@ -2883,7 +2878,7 @@ update_role_handler(post, Request, System_DB, Auth) :-
                  organization_name : Organization,
                  actions : Actions
                } :< Document,
-              error(bad_api_document)),
+              error(bad_api_document(Document, [database_name, agent_names, organization_name, actions]), _)),
 
     catch_with_backtrace(
         (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
@@ -2993,6 +2988,14 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
                  'scope' : Scope_String
                 },
                [status(403)]).
+customise_exception(error(bad_api_document(Document,Expected),_)) :-
+    reply_json(_{'@type' : 'api:BadAPIDocumentErrorResponse',
+                 'api:status' : 'api:failure',
+                 'api:error' : _{'@type' : 'api:RequiredFieldsMissing',
+                                 'api:expected' : Expected,
+                                 'api:document' : Document},
+                 'api:message' : Msg},
+               [status(400)]).
 
 %% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
@@ -3076,10 +3079,6 @@ customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
     reply_json(_{'api:message' : M,
                  'api:status' : 'api:failure'},
-               [status(400)]).
-customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),

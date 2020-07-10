@@ -649,7 +649,7 @@ api:resource_name
 
 api:RemoteAuthorizationFailure
   a owl:Class ;
-  rdfs:subClassOf api:ErrorResponse, api:withResponse .
+  rdfs:subClassOf api:ErrorResponse, api:WithResponse .
 
 api:WithResponse
   a owl:Class .
@@ -670,3 +670,30 @@ api:error_term
   a owl:DatatypeProperty ;
   rdfs:domain api:WOQLSyntaxError ;
   rdfs:range xsd:string .
+
+api:BadAPIDocumentErrorResponse
+  a owl:Class ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:RequiredFieldsMissing
+  a owl:Class ;
+  rdfs:subClassOf api:Error , api:WithDocument, api:WithExpected.
+
+api:WithExpected
+  a owl:Class .
+
+api:expected
+  a owl:DatatypeProperty ;
+  rdfs:domain api:WithExpected ;
+  rdfs:range xsd:string .
+
+api:WithDocument
+  a owl:Class .
+
+api:document
+  a owl:ObjectProperty ;
+  rdfs:domain api:WithDocument ;
+  rdsf:range api:APIDocument .
+
+api:APIDocument
+  a owl:Class .
