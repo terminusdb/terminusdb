@@ -333,6 +333,24 @@ test(db_create, [
                    authorization(basic(admin, Key))]),
     _{'api:status' : "api:success"} :< In.
 
+test(db_create_bad_api_document, [
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
+                ;   true)))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ label : "A label" },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              In, [json_object(dict),
+                   status_code(Code),
+                   authorization(basic(admin, Key))]),
+    400 = Code,
+    _{'@type' : "api:BadAPIDocumentErrorResponse",
+      'api:error' : Error} :< In,
+    _{'@type' : "api:RequiredFieldsMissing"} :< Error.
+
 test(db_create_existing_errors, [
          setup(((   database_exists('admin', 'TEST_DB')
                 ->  force_delete_db('admin', 'TEST_DB')
@@ -2989,6 +3007,7 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
                 },
                [status(403)]).
 customise_exception(error(bad_api_document(Document,Expected),_)) :-
+    format(string(Msg), "The input API document was missing required fields: ~q", [Expected]),
     reply_json(_{'@type' : 'api:BadAPIDocumentErrorResponse',
                  'api:status' : 'api:failure',
                  'api:error' : _{'@type' : 'api:RequiredFieldsMissing',

@@ -6,6 +6,7 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 :- use_module(core(transaction)).
+:- use_module(core(account)).
 
 :- meta_predicate pull(+, +, +, +, +, 3, -).
 pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fetch_Predicate,
