@@ -335,6 +335,9 @@ add_role(Context, Auth_ID, User, Organization, Resource_Name, Actions) :-
 
 
 get_role(Askable, Auth_ID, Document, Response) :-
+    do_or_die(_{} :< Document,
+              error(malformed_api_document(Document), _)),
+
     (   get_dict(agent_name, Document, Agent)
     ->  Agent_Var = Agent^^xsd:string
     ;   Agent_Var = v('Agent')),
