@@ -2045,7 +2045,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                      json_object(dict),
                      status_code(Status_Code)]),
           E,
-          throw(error(communication_failure(E)))),
+          throw(error(communication_failure(E),_))),
 
     (   200 = Status_Code
     ->  true
