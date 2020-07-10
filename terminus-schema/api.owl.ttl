@@ -75,6 +75,14 @@ api:UnresolvableAbsoluteDescriptor
   a owl:Class ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
+api:UnresolvableTargetAbsoluteDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:UnresolvableAbsoluteDescriptor .
+
+api:UnresolvableSourceAbsoluteDescriptor
+  a owl:Class ;
+  rdfs:subClassOf api:UnresolvableAbsoluteDescriptor .
+
 api:WithClassUri
   a owl:Class .
 
@@ -488,6 +496,10 @@ api:NotABranchDescriptorError
   rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 
 api:NotATargetBranchDescriptorError
+  a owl:Class ;
+  rdfs:subClassOf api:NotABranchDescriptorError.
+
+api:NotASourceBranchDescriptorError
   a owl:Class ;
   rdfs:subClassOf api:NotABranchDescriptorError.
 

@@ -9,6 +9,7 @@
 :- use_module(db_pack).
 :- use_module(db_rebase).
 :- use_module(db_create).
+:- use_module(core(account)).
 
 % error conditions:
 % - branch to push does not exist
@@ -29,7 +30,13 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
 
     do_or_die(
         resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-        error(invalid_absolute_descriptor(Branch_Descriptor),_)),
+        error(invalid_absolute_path(Branch),_)),
+
+    do_or_die(
+        (branch_descriptor{} :< Branch_Descriptor),
+        error(push_requires_branch(Branch_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, (Branch_Descriptor.repository_descriptor), system:push, Auth),
 
     do_or_die(
         open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscore

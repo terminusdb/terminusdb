@@ -1591,38 +1591,91 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
                   E)
     ).
 
-rebase_error_hander(error(invalid_target_absolute_path(Path),_), Request) :-
+rebase_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteTargetDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
-rebase_error_hander(error(invalid_source_absolute_path(Path),_), Request) :-
+                    [status(400)]).
+rebase_error_handler(error(invalid_source_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase source absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteSourceDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_target_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase target absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotATargetBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_source_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase source absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotASourceBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(unresolvable_target_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following target descriptor could not be resolved to a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableTargetAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
-    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+rebase_error_handler(error(unresolvable_source_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following source descriptor could not be resolved to a branch: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
-                                       'api:their_commit' : Their_Commit_Id,
-                                       'api:witness' : Fixup_Witnesses},
+                      'api:error' : _{ '@type' : 'api:UnresolvableSourceAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+rebase_error_handler(error(rebase_commit_application_failed(continue_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'continue' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseContinueOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'fixup' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
     format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
@@ -1632,7 +1685,18 @@ rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_
                                        'api:witness' : Fixup_Witnesses},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1750,7 +1814,7 @@ pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
 pack_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
@@ -2004,7 +2068,18 @@ push_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+push_error_handler(error(push_requires_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotABranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The branch described by the path ~q does not exist", [Path]),
@@ -2015,7 +2090,7 @@ push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Reque
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
-                    [status(400)]).
+                    [status(404)]).
 push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
     (   get_dict('api:message', Reason, Inner_Msg)
     ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])

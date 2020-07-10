@@ -17,13 +17,16 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
         resolve_absolute_string_descriptor(Our_Branch_Path,Our_Branch_Descriptor),
         error(invalid_absolute_path(Our_Branch_Path),_)),
 
-    % Dubious: Where is the local auth check?
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:schema_write_access, Local_Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:instance_write_access, Local_Auth),
+
     do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
                open_descriptor(Our_Branch_Descriptor, _)),
               error(not_a_valid_local_branch(Our_Branch_Descriptor))),
 
     Our_Repository_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repository_Descriptor = (Our_Repository_Descriptor.put(_{ repository_name : Remote_Name })),
+
     Their_Branch_Descriptor = branch_descriptor{
                                   branch_name : Remote_Branch_Name,
                                   repository_descriptor : Their_Repository_Descriptor

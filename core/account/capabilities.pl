@@ -370,22 +370,24 @@ user_object(DB, User_ID, User_Obj) :-
             )).
 
 
-check_descriptor_auth_(system_descriptor{},Action,Auth,Terminus) :-
-    assert_auth_action_scope(Terminus,Auth,Action,doc:system).
+check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
+    assert_auth_action_scope(System_DB,Auth,Action,doc:system).
 check_descriptor_auth_(database_descriptor{ database_name : Database,
                                             organization_name : Organization},
-                       Action, Auth, Terminus) :-
-    organization_database_name_uri(Terminus, Organization, Database, URI),
-    assert_auth_action_scope(Terminus,Auth,Action, URI).
-check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,
-                                              repository_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(DB, Action, Auth, Terminus).
-check_descriptor_auth_(branch_descriptor{ repository_descriptor : Repo,
-                                          branch_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(Repo, Action, Auth, Terminus).
-check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
-                                          commit_id : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(Repo, Action, Auth, Terminus).
+                       Action, Auth, System_DB) :-
+    do_or_die(organization_database_name_uri(System_DB, Organization, Database, URI),
+              error(database_does_not_exist(Organization, Database),_)),
 
-check_descriptor_auth(Terminus, Descriptor, Action, Auth) :-
-    check_descriptor_auth_(Descriptor, Action, Auth, Terminus).
+    assert_auth_action_scope(System_DB,Auth,Action, URI).
+check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,
+                                              repository_name : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(DB, Action, Auth, System_DB).
+check_descriptor_auth_(branch_descriptor{ repository_descriptor : Repo,
+                                          branch_name : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(Repo, Action, Auth, System_DB).
+check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
+                                          commit_id : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(Repo, Action, Auth, System_DB).
+
+check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
+    check_descriptor_auth_(Descriptor, Action, Auth, System_DB).
