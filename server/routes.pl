@@ -1364,7 +1364,7 @@ test(delete_object, [
     _{'@context' : _{ doc: "http://terminusdb.com/admin/test/document/",
                       scm: "http://terminusdb.com/schema/terminus#"},
       '@type' : "DeleteObject",
-      document : 'doc:my_database'},
+      document_uri : 'doc:my_database'},
 
     Commit_Info = commit_info{
                       author : "Steve",

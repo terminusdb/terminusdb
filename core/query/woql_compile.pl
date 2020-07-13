@@ -859,8 +859,10 @@ compile_wf(when(A,B),(ProgA,ProgB)) --> % forall(ProgA, ProgB)
     compile_wf(A,ProgA),
     compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
+    visible_vars(Visible),
     compile_wf(P, Prog),
-    restrict(VL).
+    { union(Visible,VL,Restricted) },
+    restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
     { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection) },
@@ -1317,6 +1319,12 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     }.
 compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
     resolve(Exp,ExpE).
+
+visible_vars(VL) -->
+    view(bindings, Bindings),
+    { maplist([Record,v(Name)]>>get_dict(var_name, Record, Name),
+              Bindings,
+              VL) }.
 
 restrict(VL) -->
     update(bindings,B0,B1),
@@ -2479,6 +2487,117 @@ test(select, []) :-
 
     query_test_response(system_descriptor{}, Query, JSON),
     [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
+
+
+test(double_select, []) :-
+
+    Query = _{ '@type': "woql:Using",
+               'woql:collection': _{ '@type': "xsd:string",
+                                     '@value': "_system" },
+               'woql:query':
+               _{ '@type': "woql:And",
+                  'woql:query_list':
+                  [_{'@type': "woql:QueryListElement",
+                     'woql:index':
+                     _{ '@type': "xsd:nonNegativeInteger",
+                        '@value': 0 },
+                     'woql:query':
+                     _{ '@type': "woql:Select",
+                        'woql:variable_list': [
+                            _{ '@type': "woql:VariableListElement",
+                               'woql:variable_name':
+                               _{ '@value': "X",
+                                  '@type': "xsd:string"
+                                },
+                               'woql:index':
+                               _{ '@type': "xsd:nonNegativeInteger",
+                                  '@value': 0}
+                             }
+                        ],
+                        'woql:query':
+                        _{ '@type': "woql:Triple",
+                           'woql:subject':
+                           _{ '@type': "woql:Variable",
+                              'woql:variable_name':
+                              _{ '@value': "X",
+                                 '@type': "xsd:string"
+                               }
+                            },
+                           'woql:predicate':
+                           _{ '@type': "woql:Variable",
+                              'woql:variable_name':
+                              _{ '@value': "P",
+                                 '@type': "xsd:string"
+                               }
+                            },
+                           'woql:object':
+                           _{ '@type': "woql:Datatype",
+                              'woql:datatype':
+                              _{ '@type': "xsd:string",
+                                 '@value': "admin"
+                               }
+                            }
+                         }
+                      }
+                    },
+                   _{ '@type': "woql:QueryListElement",
+                      'woql:index':
+                      _{ '@type': "xsd:nonNegativeInteger",
+                         '@value': 1
+                       },
+                      'woql:query':
+                      _{ '@type': "woql:Select",
+                         'woql:variable_list': [
+                             _{ '@type': "woql:VariableListElement",
+                                'woql:variable_name':
+                                _{ '@value': "Y",
+                                   '@type': "xsd:string"
+                                 },
+                                'woql:index':
+                                _{ '@type': "xsd:nonNegativeInteger",
+                                   '@value': 0
+                                 }
+                              }
+                         ],
+                         'woql:query':
+                         _{
+                             '@type': "woql:Triple",
+                             'woql:subject':
+                             _{ '@type': "woql:Variable",
+                                'woql:variable_name':
+                                _{ '@value': "Y",
+                                   '@type': "xsd:string"
+                                 }
+                              },
+                             'woql:predicate':
+                             _{ '@type': "woql:Variable",
+                                'woql:variable_name':
+                                _{ '@value': "P",
+                                   '@type': "xsd:string"
+                                 }
+                              },
+                             'woql:object':
+                             _{ '@type': "woql:Datatype",
+                                'woql:datatype':
+                                _{ '@type': "xsd:string",
+                                   '@value': "admin"
+                                 }
+                              }
+                         }
+                       }
+                    }
+                  ]
+                }
+             },
+
+    query_test_response(system_descriptor{}, Query, JSON),
+
+    forall(
+        member(Elt,JSON.bindings),
+        (   get_dict('X',Elt, _),
+            get_dict('Y',Elt, _))
+    ).
+
 
 test(when, []) :-
 
