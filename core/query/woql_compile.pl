@@ -2137,6 +2137,47 @@ test(order_by, []) :-
                      _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':20}}].
 
+test(order_by_desc, []) :-
+
+    Query = _{'@type' : "OrderBy",
+              variable_ordering : [_{ '@type' : "VariableOrdering",
+                                      index : _{'@type' : "xsd:integer",
+                                                '@value' : 0},
+                                      ascending : _{'@type' : "xsd:boolean",
+                                                    '@value' : false},
+                                      variable : _{'@type' : "Variable",
+                                                   variable_name : _{ '@type' : "xsd:string",
+                                                                      '@value' : "X"}}}],
+              query : _{ '@type' : 'Or',
+                         query_list :
+                         [_{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 10}}},
+                          _{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 20}}}]}},
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':20}},
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':10}}].
+
+
 test(path, []) :-
 
     % Pattern is:

@@ -277,12 +277,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                     Doc), _)),
         WOQL = update_object(Doc)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteObject',
-          'http://terminusdb.com/schema/woql#document' : Doc
+          'http://terminusdb.com/schema/woql#document_uri' : Doc
          } :< JSON
     ->  do_or_die(
-            (_{'@id' : ID} :< Doc),
+            (   _{'@id' : ID} :< Doc
+            ->  true
+            ;   json_to_woql_ast(Doc,ID,['http://terminusdb.com/schema/woql#document_uri'|Path])),
             error(woql_syntax_error(JSON,
-                                    ['@id'|Path],
+                                    ['http://terminusdb.com/schema/woql#document_uri'|Path],
                                     Doc), _)),
         WOQL = delete_object(ID)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#AddTriple',
