@@ -155,6 +155,8 @@ storage_literal(X1^^T1,X3^^T2) :-
     storage_value(X1,X2),
     (   T2 = 'http://www.w3.org/2001/XMLSchema#dateTime'
     ->  date_string(X3,X2)
+    ;   T2 = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ->  number_string(X3,X2)
     ;   X2 = X3).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),

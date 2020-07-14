@@ -3230,5 +3230,4 @@ test(get_put, []) :-
     query_test_response(Descriptor, Query, _JSON),
     exists_file('/tmp/test.csv').
 
-
 :- end_tests(woql).
