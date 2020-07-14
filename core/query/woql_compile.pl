@@ -2591,7 +2591,6 @@ test(double_select, []) :-
              },
 
     query_test_response(system_descriptor{}, Query, JSON),
-
     forall(
         member(Elt,JSON.bindings),
         (   get_dict('X',Elt, _),
