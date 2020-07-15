@@ -204,7 +204,7 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
         ;   Doc = "terminusdb:///data/"),
         (   _{ scm : Scm} :< Input_Prefixes
         ->  true
-        ;   Doc = "terminusdb:///schema#"),
+        ;   Scm = "terminusdb:///schema#"),
         Prefixes = Input_Prefixes.put(_{ doc : Doc,
                                          scm : Scm })
     ;   Prefixes = _{ doc : "terminusdb:///data/",

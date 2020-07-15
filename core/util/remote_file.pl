@@ -41,7 +41,7 @@ copy_remote(Remote, Name, File, Options) :-
         ->  true
             % or try with no pass..
         ;   http_open(Remote, In, []))
-    ->  tmp_file_stream(text, File, Stream),
+    ->  tmp_file_stream(binary, File, Stream),
         copy_stream_data(In, Stream),
         close(Stream)
     ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
