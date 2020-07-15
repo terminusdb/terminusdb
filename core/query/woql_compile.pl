@@ -3229,4 +3229,44 @@ test(get_put, []) :-
     query_test_response(Descriptor, Query, _JSON),
     exists_file('/tmp/test.csv').
 
+test(idgen, []) :-
+    Atom = '{
+  "@type": "woql:IDGenerator",
+  "woql:base": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "woql:Node",
+      "woql:node": "doc:Journey"
+    }
+  },
+  "woql:key_list": {
+    "@type": "woql:Array",
+    "woql:array_element": [
+      {
+        "@type": "woql:ArrayElement",
+        "woql:datatype": {
+          "@type": "xsd:string",
+          "@value": "test"
+        },
+        "woql:index": {
+          "@type": "xsd:nonNegativeInteger`",
+          "@value": 0
+        }
+      }
+    ]
+  },
+  "woql:uri": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Journey_ID",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
+
 :- end_tests(woql).

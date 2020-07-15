@@ -1390,7 +1390,8 @@ test(get_object, [])
 :-
     Query0 =
     _{'@type' : "ReadObject",
-      document_uri : 'doc:admin',
+      document_uri : _{ '@type' : "woql:Node",
+                        'woql:node' : "doc:admin"},
       document : _{'@type' : "Variable",
                    variable_name : _{ '@type' : "xsd:string",
                                       '@value' : "Document"}}},
@@ -1402,7 +1403,7 @@ test(get_object, [])
               json(_{query : Query0}),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
-    [Result] = JSON0.bindings,
+    [Result] = (JSON0.bindings),
 
     _{'@id':"doc:admin",
       '@type':"system:User",
