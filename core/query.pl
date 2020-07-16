@@ -1,9 +1,13 @@
 :- module(query, [
               % ask.pl
               ask/2,
+              ask/3,
               ask_ast/3,
               create_context/2,
               create_context/3,
+              askable_context/4,
+              askable_context/5,
+              askable_settings_context/3,
               context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
               context_extend_prefixes/3,
@@ -63,6 +67,7 @@
               jsonld_triples/3,
               jsonld_id/2,
               get_key_document/4,
+              compress_dict_uri/3,
 
               % json_woql.pl
               woql_context/1,
@@ -80,8 +85,9 @@
               resolve_relative_descriptor/3,
               resolve_absolute_string_descriptor/2,
               resolve_relative_string_descriptor/3,
+              resolve_absolute_graph_descriptor/2,
+              resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
-              resolve_query_resource/2,
               resolve_filter/2,
 
               % woql_compile.pl

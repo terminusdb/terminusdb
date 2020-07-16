@@ -8,7 +8,8 @@
               jsonld_triples/3,
               jsonld_id/2,
               jsonld_type/2,
-              get_key_document/4
+              get_key_document/4,
+              compress_dict_uri/3
           ]).
 
 /** <module> JSON-LD
@@ -177,8 +178,7 @@ context_prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   format(atom(M), 'Key has unkown prefix: ~q', [K]),
-            throw(syntax_error(M)))
+        ;   throw(error(key_has_unknown_prefix(K),_)))
     %   Keyword
     ;   has_at(K)
     ->  K = Key
@@ -205,8 +205,7 @@ prefix_expand(K,Context,Key) :-
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
-        ;   format(atom(M), 'Key has unknown prefix: ~q', [K]),
-            throw(syntax_error(M)))
+        ;   throw(error(key_has_unknown_prefix(K), _)))
     ;   has_at(K)
     ->  K = Key
     ;   (   get_dict('@base', Context, Base)
@@ -277,6 +276,10 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
         compress_uri(URI, Prefix, Expanded, Folded_URI)
     ->  true
     ;   URI = Folded_URI).
+
+compress_dict_uri(URI, Dict, Folded_URI) :-
+    dict_pairs(Dict, _, Pairs),
+    compress_pairs_uri(URI, Pairs, Folded_URI).
 
 is_at(Key) :-
     sub_string(Key,0,1,_,"@").
@@ -456,8 +459,7 @@ jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
         ->  true
         ;   get_dict('@type', Expanded, '@id')
         ->  (   \+ atom(Val)
-            ->  format(atom(Msg),'Not a well formed JSON id: ~q~n', [Val]),
-                throw(syntax_error(Msg))),
+            ->  throw(error(malformed_jsonld_id(Val),_))),
             (   get_dict('@id', Expanded, Type)
             ->  Expanded_Value = _{'@id' : Val,
                                    '@type' : Type}

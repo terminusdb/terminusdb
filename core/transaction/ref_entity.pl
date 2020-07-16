@@ -547,25 +547,17 @@ test(copy_base_commit,
                      copy_commits(Context1_2, Context2, "commit_id"),
                      _),
 
-    prefixed_to_uri(Commit_Uri, Context1_1.prefixes, Commit_Uri_Unprefixed),
-    prefixed_to_uri(Graph1_Uri, Context1_1.prefixes, Graph1_Uri_Unprefixed),
-    prefixed_to_uri(Graph2_Uri, Context1_1.prefixes, Graph2_Uri_Unprefixed),
-    prefixed_to_uri(Graph3_Uri, Context1_1.prefixes, Graph3_Uri_Unprefixed),
-    prefixed_to_uri(Layer1_Uri, Context1_1.prefixes, Layer1_Uri_Unprefixed),
-    prefixed_to_uri(Layer2_Uri, Context1_1.prefixes, Layer2_Uri_Unprefixed),
-    prefixed_to_uri(Layer3_Uri, Context1_1.prefixes, Layer3_Uri_Unprefixed),
-
-    commit_id_uri(Descriptor2, "commit_id", Commit_Uri_Unprefixed),
+    commit_id_uri(Descriptor2, "commit_id", Commit_Uri),
 
     findall(Type-Name-Graph_Uri-Layer_Uri-Layer_Id,
-            (   graph_for_commit(Descriptor2, Commit_Uri_Unprefixed, Type, Name, Graph_Uri),
+            (   graph_for_commit(Descriptor2, Commit_Uri, Type, Name, Graph_Uri),
                 layer_uri_for_graph(Descriptor2, Graph_Uri, Layer_Uri),
                 layer_id_uri(Descriptor2, Layer_Id, Layer_Uri)),
             Graphs),
     Expected = [
-        instance-"graph_1"-Graph1_Uri_Unprefixed-Layer1_Uri_Unprefixed-Layer1_Id,
-        instance-"graph_2"-Graph2_Uri_Unprefixed-Layer2_Uri_Unprefixed-Layer2_Id,
-        schema-"graph_3"-Graph3_Uri_Unprefixed-Layer3_Uri_Unprefixed-Layer3_Id
+        instance-"graph_1"-Graph1_Uri-Layer1_Uri-Layer1_Id,
+        instance-"graph_2"-Graph2_Uri-Layer2_Uri-Layer2_Id,
+        schema-"graph_3"-Graph3_Uri-Layer3_Uri-Layer3_Id
     ],
 
     list_to_ord_set(Graphs, Graph_Set),
@@ -625,12 +617,9 @@ test(copy_child_commit_with_no_shared_ancestors,
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
 
-    prefixed_to_uri(Commit1_Uri, Context1_1.prefixes, Commit1_Uri_Unprefixed),
-    prefixed_to_uri(Commit2_Uri, Context1_1.prefixes, Commit2_Uri_Unprefixed),
-    prefixed_to_uri(Commit3_Uri, Context1_1.prefixes, Commit3_Uri_Unprefixed),
-    Expected = ["commit1_id"-Commit1_Uri_Unprefixed,
-                "commit2_id"-Commit2_Uri_Unprefixed,
-                "commit3_id"-Commit3_Uri_Unprefixed],
+    Expected = ["commit1_id"-Commit1_Uri,
+                "commit2_id"-Commit2_Uri,
+                "commit3_id"-Commit3_Uri],
     Expected = Commits.
 
 test(copy_child_commit_with_some_shared_ancestors,
@@ -691,12 +680,9 @@ test(copy_child_commit_with_some_shared_ancestors,
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
 
-    prefixed_to_uri(Commit1_Uri, Context1_1.prefixes, Commit1_Uri_Unprefixed),
-    prefixed_to_uri(Commit2_Uri, Context1_1.prefixes, Commit2_Uri_Unprefixed),
-    prefixed_to_uri(Commit3_Uri, Context1_1.prefixes, Commit3_Uri_Unprefixed),
-    Expected = ["commit1_id"-Commit1_Uri_Unprefixed,
-                "commit2_id"-Commit2_Uri_Unprefixed,
-                "commit3_id"-Commit3_Uri_Unprefixed],
+    Expected = ["commit1_id"-Commit1_Uri,
+                "commit2_id"-Commit2_Uri,
+                "commit3_id"-Commit3_Uri],
     Expected = Commits.
 
 test(copy_child_commit_that_already_exists,
@@ -757,12 +743,9 @@ test(copy_child_commit_that_already_exists,
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
 
-    prefixed_to_uri(Commit1_Uri, Context1_1.prefixes, Commit1_Uri_Unprefixed),
-    prefixed_to_uri(Commit2_Uri, Context1_1.prefixes, Commit2_Uri_Unprefixed),
-    prefixed_to_uri(Commit3_Uri, Context1_1.prefixes, Commit3_Uri_Unprefixed),
-    Expected = ["commit1_id"-Commit1_Uri_Unprefixed,
-                "commit2_id"-Commit2_Uri_Unprefixed,
-                "commit3_id"-Commit3_Uri_Unprefixed],
+    Expected = ["commit1_id"-Commit1_Uri,
+                "commit2_id"-Commit2_Uri,
+                "commit3_id"-Commit3_Uri],
     Expected = Commits.
 
 
@@ -906,7 +889,7 @@ update_prefixes(Context, Prefixes) :-
     forall((   member(Key, Keys),
                get_dict(Key,Prefixes,URI)),
            ask(Context,
-               (   idgen('terminus://PrefixPair',[Key], Pair),
+               (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
                    insert(Pair, rdf:type, ref:'PrefixPair'),
                    insert(ref:default_prefixes, ref:prefix_pair, Pair),
                    insert(Pair, ref:prefix, Key^^xsd:string),
@@ -926,16 +909,16 @@ copy_prefixes(Repo_From_Askable, Repo_To_Context) :-
 :- use_module(database).
 test(apply_single_addition,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb1', "label", "comment"),
-             create_db_without_schema('user|testdb2', "label", "comment")
+             create_db_without_schema("admin", "testdb1"),
+             create_db_without_schema("admin", "testdb2")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
 
-    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
-    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+    resolve_absolute_string_descriptor("admin/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor2),
 
     create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
     with_transaction(Context1,
@@ -964,23 +947,23 @@ test(apply_single_addition,
     commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Repo_Descriptor, New_Commit_B_Uri, _, "commit b", _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            t(d,e,f),
-            addition(d,e,f))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 t(d,e,f),
+                 addition(d,e,f)))).
 
 test(apply_single_removal,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb1', "label", "comment"),
-             create_db_without_schema('user|testdb2', "label", "comment")
+             create_db_without_schema("admin", "testdb1"),
+             create_db_without_schema("admin", "testdb2")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
 
-    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
-    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+    resolve_absolute_string_descriptor("admin/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor2),
 
     create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
     with_transaction(Context1,
@@ -1010,21 +993,22 @@ test(apply_single_removal,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            removal(d,e,f))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 removal(d,e,f)))).
+
 test(apply_existing_addition,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb1', "label", "comment"),
-             create_db_without_schema('user|testdb2', "label", "comment")
+             create_db_without_schema("admin", "testdb1"),
+             create_db_without_schema("admin", "testdb2")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
 
-    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
-    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+    resolve_absolute_string_descriptor("admin/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor2),
 
     create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
     with_transaction(Context1,
@@ -1048,22 +1032,22 @@ test(apply_existing_addition,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c))).
+    once(ask(Descriptor1,
+             (   t(a,b,c)))).
             %not(addition(a,b,c)))). % since we're reusing the previous layer, rather than creating a new (empty) one, we're actually still seeing an addition. Is that a problem?
 
 test(apply_nonexisting_removal,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb1', "label", "comment"),
-             create_db_without_schema('user|testdb2', "label", "comment")
+             create_db_without_schema("admin", "testdb1"),
+             create_db_without_schema("admin", "testdb2")
             )),
       cleanup(teardown_temp_store(State))]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
 
-    resolve_absolute_string_descriptor("user/testdb1", Descriptor1),
-    resolve_absolute_string_descriptor("user/testdb2", Descriptor2),
+    resolve_absolute_string_descriptor("admin/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor2),
 
     create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
     with_transaction(Context1,
@@ -1092,9 +1076,9 @@ test(apply_nonexisting_removal,
                                             _New_Commit_Uri),
                      _),
 
-    ask(Descriptor1,
-        (   t(a,b,c),
-            not(removal(d,e,f)))).
+    once(ask(Descriptor1,
+             (   t(a,b,c),
+                 not(removal(d,e,f))))).
 
 :- end_tests(commit_application).
 
@@ -1131,10 +1115,12 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
 :- use_module(database).
 test(common_ancestor_after_branch_and_some_commits,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb', "label", "comment")
+             create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]) :-
-    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+
+    Origin_Path = "admin/testdb",
+    resolve_absolute_string_descriptor(Origin_Path, Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,
                      ask(Commit_A_Context,
@@ -1146,7 +1132,9 @@ test(common_ancestor_after_branch_and_some_commits,
                          insert(d,e,f)),
                      _),
 
-    branch_create(Descriptor.repository_descriptor, Descriptor, "second", _),
+    super_user_authority(Auth),
+    Destination_Path = "admin/testdb/local/branch/second",
+    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
 
     create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
     with_transaction(Commit_C_Context,
@@ -1159,7 +1147,7 @@ test(common_ancestor_after_branch_and_some_commits,
                          insert(k,l,m)),
                      _),
 
-    resolve_absolute_string_descriptor("user/testdb/local/branch/second", Second_Descriptor),
+    resolve_absolute_string_descriptor("admin/testdb/local/branch/second", Second_Descriptor),
     create_context(Second_Descriptor, commit_info{author:"test",message: "commit e"}, Commit_E_Context),
     with_transaction(Commit_E_Context,
                      ask(Commit_E_Context,
@@ -1232,10 +1220,10 @@ commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
 :- use_module(database).
 test(commit_history_ids,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb', "label", "comment")
+             create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]) :-
-    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,
                      ask(Commit_A_Context,
@@ -1260,10 +1248,10 @@ test(commit_history_ids,
     true.
 test(commit_history_uris,
      [setup((setup_temp_store(State),
-             create_db_without_schema('user|testdb', "label", "comment")
+             create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]) :-
-    resolve_absolute_string_descriptor("user/testdb", Descriptor),
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,
                      ask(Commit_A_Context,

@@ -1,5 +1,5 @@
 :- module(db_clone, [
-              clone/7
+              clone/10
           ]).
 
 
@@ -12,24 +12,24 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 
-:- meta_predicate clone(+,+,+,+,+,3,-).
-clone(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone(+,+,+,+,+,+,+,+,3,-).
+clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data),
-        exception(_),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data),
+        exception(E),
 
-        (   user_database_name(Account, DB, DB_Name),
-            catch(try_delete_db(DB_Name),
-                  error(database_not_found(_)),
-                  true))).
+        (   clone_cleanup_required(E)
+        ->  force_delete_db(Account, DB)
+        ;   true)).
 
+clone_cleanup_required(remote_pack_failed(_)).
+clone_cleanup_required(remote_pack_unpexected_failure(_)).
 
-:- meta_predicate clone_(+,+,+,+,+,3,-).
-clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
+:- meta_predicate clone_(+,+,+,+,+,+,+,+,3,-).
+clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    user_database_name(Account, DB, DB_Name),
-    try_create_db(DB_Name, Label, Comment, _{}),
+    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, Public, _{}, Db_Uri),
 
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),
@@ -45,10 +45,12 @@ clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
         _Meta_Data),
 
     resolve_absolute_descriptor([Account,DB,"local","_commits"], To_Descriptor),
-    resolve_absolute_descriptor([Account,DB,"origin","_commits"], From_Descriptor),
+    From_Path_List = [Account,DB,"origin","_commits"],
+    resolve_absolute_descriptor(From_Path_List, From_Descriptor),
+    merge_separator_split(From_Path, '/', From_Path_List),
 
     % Fetch remote
-    remote_fetch(From_Descriptor, Fetch_Predicate, _New_Head, _Has_Updated),
+    remote_fetch(System_DB, Auth, From_Path, Fetch_Predicate, _New_Head, _Has_Updated),
 
     create_context(To_Descriptor, To_Context),
     with_transaction(
@@ -62,4 +64,8 @@ clone_(Account,DB,Label,Comment,Remote_URL,Fetch_Predicate,Meta_Data) :-
 
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
+
+    finalize_db(Db_Uri),
+
     Meta_Data = _{ applied_commits : Applied_Commits }.
+

@@ -173,6 +173,7 @@ empty_context(Context) :-
         filter : type_filter{ types : [instance] },
         prefixes : _{},
         write_graph : empty,
+        update_guard : _,
         bindings : [],
         selected : [],
         files : [],
@@ -234,8 +235,7 @@ resolve_prefix(Pre,Suf,URI) -->
     {
         (   Full_Prefix = Prefixes.get(Pre)
         ->  true
-        ;   format(atom(M), 'Unresolvable prefix ~q', [Pre:Suf]),
-            throw(error(syntax_error(M))))
+        ;   throw(error(woql_syntax_error(unresolvable_prefix(Pre,Suf)),_)))
     },
     (   {v(Var_Name) = Suf}
     ->  view(bindings, Bindings),
@@ -382,14 +382,14 @@ report_instantiation_error(_Prog,context(Pred,Var),Ctx) :-
     get_varname(Var,B,Name),
     !,
     format(string(MSG), "The variable: ~q is unbound while being proceed in the AST operator ~q, but must be instantiated", [Name,Pred]),
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : MSG}))).
+    throw(http_reply(method_not_allowed(_{'system:status' : 'system:failure',
+                                          'system:message' : MSG}))).
 report_instantiation_error(_Prog,context(Pred,_),Ctx) :-
     memberchk(bindings=B,Ctx),
     guess_varnames(B,Names),
     format(string(MSG), "The variables: ~q are unbound, one of which was a problem while being proceed in the AST operator ~q, which but must be instantiated", [Names,Pred]),
-    throw(http_reply(method_not_allowed(_{'terminus:status' : 'terminus:failure',
-                                          'terminus:message' : MSG}))).
+    throw(http_reply(method_not_allowed(_{'system:status' : 'system:failure',
+                                          'system:message' : MSG}))).
 
 literal_string(Val^^_, Val).
 literal_string(Val@_, Val).
@@ -446,13 +446,9 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
                ->  (   Type = none
                    ->  Value = Xe
                    ;   typecast(Value,Type,[],Xe))
-               ;   format(string(Msg),"Too few values in get: ~q with header: ~q and values: ~q giving index: ~q creating prolog: ~q",[N,Header,Values,Idx, nth1(Idx,Values,Value)]),
-                   throw(error(syntax_error(Msg),
-                               context(indexing_as_list/5,_)))
+               ;   throw(error(woql_syntax_error(get_header_does_not_match_values(Header, Values, N, Idx)),_))
                )
-           ;   format(string(Msg),"No such indexed name in get: ~q with header: ~q and values: ~q giving",[N,Header,Values]),
-               throw(error(syntax_error(Msg),
-                           context(indexing_as_list/5,_)))
+           ;   throw(error(woql_syntax_error(get_has_no_such_index(Header,Values,N)), _))
            ),
     indexing_as_list(Rest,Header,Values,Bindings,Result).
 
@@ -461,9 +457,7 @@ indexing_position_list([v(V)|Rest],N,Values,Bindings,[Term|Result]) :-
     lookup(V,Xe,Bindings),
     Term = (   nth0(N,Values,Xe)
            ->  true
-           ;   format(string(Msg),"No such index in get: ~q for values: ~q",[N,Values]),
-               throw(error(syntax_error(Msg),
-                           context(indexing_position_list/5,_)))
+           ;   throw(error(woql_syntax_error(no_such_index(Values,N)),_))
            ),
     M is N+1,
     indexing_position_list(Rest,M,Values,Bindings,Result).
@@ -571,10 +565,12 @@ csv_term(Path,false,_,Values,Indexing_Term,Prog,Options) :-
     ),
     !.
 csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options) :-
-    format(atom(M),'Unknown csv processing options for "get" processing: ~q~n',
-           [csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,Options)]),
-    throw(error(syntax_error(M),
-                context(csv_term/7,Path))).
+    throw(
+        error(
+            woql_syntax_error(
+                unknown_csv_processing_errors(Path,Has_Header,Header,
+                                              Values,Indexing_Term,Prog,Options)),
+            _)).
 
 json_term(Path,Header,Values,Indexing_Term,Prog,_New_Options) :-
     setup_call_cleanup(
@@ -839,7 +835,7 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
         (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,New_Transaction_Object)
         ->  true
-        ;   throw(error(syntax_error('Unable to compile pattern', Pattern)))),
+        ;   throw(error(woql_syntax_error(bad_path_pattern(Pattern)),_))),
         Goal = (
             calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
             % Don't bind PathE until we're done with the full query (for constraints)
@@ -936,7 +932,8 @@ compile_wf(put(Spec,Query,File_Spec), Prog) -->
     compile_wf(Query,Compiled_Query),
     {
 
-        (   File_Spec = file(CSV_Path,Options)
+        (   File_Spec = file(CSV_Path,_Options),
+            Options = []
         ;   File_Spec = file(CSV_Path),
             Options = []),
 
@@ -1027,9 +1024,7 @@ compile_wf(into(G,S),Goal) -->
         resolve_filter(G,Filter),
         (   Filter = type_name_filter{ type : _Type, name : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
-        ;   format(atom(M), 'Unresolvable write filter: ~q', [G]),
-            throw(error(syntax_error(M),
-                        context(compile_wf//2, into/2)))
+        ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
         )
     },
     update(write_graph,OG,Graph_Descriptor),
@@ -1099,10 +1094,9 @@ compile_wf(length(L,N),Length) -->
     resolve(L,LE),
     resolve(N,NE),
     { marshall_args(length(LE,NE), Length) }.
-compile_wf(member(X,Y),Member) -->
+compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(X,XE),
-    resolve(Y,YE),
-    { marshall_args(member(XE,YE), Member) }.
+    resolve(Y,YE).
 compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),
@@ -1168,14 +1162,12 @@ compile_wf(triple_count(Path,Count),Goal) -->
                     unliterally(Numerical_Count,CountE))
         )
     }.
+compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Arguments)) -->
+    [].
 compile_wf(true,true) -->
     [].
 compile_wf(Q,_) -->
-    {
-        format(atom(M), 'Unable to compile AST query ~q', [Q]),
-        throw(error(syntax_error(M),
-                    context(compile_wf//1,Q)))
-    }.
+    { throw(error(woql_syntax_error(badly_formed_ast(Q)),_)) }.
 
 debug_wf(Lit) -->
     { debug(terminus(woql_compile(compile_wf)), '~w', [Lit]) },
@@ -1358,8 +1350,7 @@ ensure_filter_resolves_to_graph_descriptor(G, Collection_Descriptor, Graph_Descr
                                                         Graph_Descriptor),
     !.
 ensure_filter_resolves_to_graph_descriptor(G, _Collection_Descriptor, _Graph_Descriptor) :-
-    format(atom(M), 'You must resolve to a single graph to insert. Graph Descriptor: ~q', G),
-    throw(error(syntax_error(M), _)).
+    throw(error(woql_syntax_error(filter_does_not_resolve_to_unique_graph(G)), _)).
 
 /* NOTE: Should this go in resolve_query_resource.pl? */
 filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transaction_Object, Read_Write_Objects) :-
@@ -1471,20 +1462,20 @@ test(subsumption, [])
 :-
     Query = _{'@type' : "Subsumption",
               child : _{ '@type' : "Node",
-                         node : "terminus:User"},
+                         node : "system:User"},
               parent : _{'@type' : "Variable",
                          'variable_name' :
                          _{'@type' : "xsd:string",
                            '@value' : "Parent"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     % Tag the dicts so we can sort them
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'Parent':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#User'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'Parent':'http://terminusdb.com/schema/terminus#Document'}],
+                     json{'Parent':'http://terminusdb.com/schema/system#User'},
+                     json{'Parent':'http://terminusdb.com/schema/system#Agent'},
+                     json{'Parent':'http://terminusdb.com/schema/system#Document'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
@@ -1510,7 +1501,7 @@ test(substring, [])
                             _{'@type' : "xsd:string",
                               '@value' : "Substring"}}
              },
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':2},
       'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
@@ -1529,7 +1520,7 @@ test(typecast_string_integer, [])
                                   _{'@type' : "xsd:string",
                                     '@value' : "Casted"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                  '@value':202}} :< Res.
@@ -1550,7 +1541,7 @@ test(eval, [])
                          _{'@type' : "xsd:string",
                            '@value' : "Sum"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -1558,7 +1549,7 @@ test(eval, [])
 
 test(add_triple, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema(admin,test))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1576,7 +1567,7 @@ test(add_triple, [
 
 test(add_quad, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -1606,7 +1597,7 @@ test(upper, []) :-
                         _{'@type' : "xsd:string",
                           '@value' : "Upcased"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Upcased':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                   '@value': "AAAA"}} :< Res.
@@ -1636,7 +1627,7 @@ test(unique, []) :-
                       _{'@type' : "xsd:string",
                         '@value' : "URI"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
 
@@ -1653,7 +1644,7 @@ test(split, []) :-
                              _{'@type' : "xsd:string",
                                '@value' : "Split"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Split': [_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"you"},
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"should"},
@@ -1694,7 +1685,7 @@ test(join, []) :-
                        _{'@type' : "xsd:string",
                          '@value' : "Join"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
@@ -1709,13 +1700,13 @@ test(isa, []) :-
                           _{'@type' : "xsd:string",
                             '@value' : "IsA"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#User'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#Agent'},
-                     json{'IsA':'http://terminusdb.com/schema/terminus#Document'}],
+                     json{'IsA':'http://terminusdb.com/schema/system#User'},
+                     json{'IsA':'http://terminusdb.com/schema/system#Agent'},
+                     json{'IsA':'http://terminusdb.com/schema/system#Document'}],
                     Expected),
     ord_seteq(Bindings_Set, Expected).
 
@@ -1732,7 +1723,7 @@ test(like, []) :-
                                   _{'@type' : "xsd:string",
                                     '@value' : "Similarity"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                      '@value':1.0}} :< Res.
@@ -1753,14 +1744,14 @@ test(exp, []) :-
                          _{'@type' : "xsd:string",
                            '@value' : "Exp"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
 
 test(limit, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))]) :-
 
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -1822,7 +1813,7 @@ test(indexed_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res|_] = JSON.bindings,
     % Should this really be without a header?
     _{'First':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"Duration"},
@@ -1875,7 +1866,7 @@ test(named_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [First|_] = JSON.bindings,
 
     _{'Bike_Number': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -1966,7 +1957,7 @@ test(named_get_two, [])
          }
     },
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
 
     [Res|_] = JSON.bindings,
     _{'Bike':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -1987,6 +1978,42 @@ test(named_get_two, [])
                         '@value':"5th & F St NW"},
       'Start_Time':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                      '@value':"2011-01-01 00:01:29"}} :< Res.
+
+
+test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
+:-
+    terminus_path(Path),
+    atomic_list_concat([Path,'/terminus-schema/system_schema.owl.ttl'], File),
+    Query =
+    _{
+        '@type': "woql:Get",
+        'woql:as_vars': [
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 0},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "First"}},
+          _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 1},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Second"}},
+        _{'@type' : 'IndexedAsVar',
+            index : _{ '@type' : "xsd:integer",
+                       '@value' : 2},
+            variable_name : _{ '@type' : "xsd:string",
+                               '@value' : "Third"}}],
+        'woql:query_resource':
+        _{ '@type': "woql:FileResource",
+           'woql:format' : _{'@type' : "woql:Format",
+                             'woql:format_type' : _{'@type' : "xsd:string",
+                                                    '@value' : "turtle"}},
+           'woql:file': _{'@type': "xsd:string",
+                          '@value': File }
+         }
+    },
+
+    query_test_response(system_descriptor{}, Query, _JSON).
 
 test(concat, [])
 :-
@@ -2011,7 +2038,7 @@ test(concat, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Concatenated" }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Concatenated':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                        '@value':"FirstSecond"}} :< Res.
@@ -2039,7 +2066,7 @@ test(sum, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Sum" }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value': 3}} :< Res.
@@ -2064,7 +2091,7 @@ test(length, [])
                           variable_name : _{ '@type' : "xsd:string",
                                              '@value'  : "Length"}}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                  '@value': 2}} :< Res.
@@ -2104,7 +2131,7 @@ test(order_by, []) :-
                                        right : _{'@type' : "xsd:string",
                                                  '@value' : 20}}}]}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':10}},
                      _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2113,28 +2140,28 @@ test(order_by, []) :-
 test(path, []) :-
 
     % Pattern is:
-    % terminus:access , (  terminus:authority_scope
-    %                   ;  terminus:authority_scope, plus(terminus:resource_includes))
+    % system:role , (   system:capability_scope
+    %                ;  system:capability_scope, plus(system:resource_includes))
     Pattern =
     _{'@type' : "PathSequence",
       path_first :
       _{ '@type' : "PathPredicate",
-         path_predicate : _{ '@id' : "terminus:access"}},
+         path_predicate : _{ '@id' : "system:capability"}},
       path_second :
       _{ '@type' : "PathOr",
          path_left :
          _{ '@type' : "PathPredicate",
-            path_predicate : _{ '@id' : "terminus:authority_scope"}},
+            path_predicate : _{ '@id' : "system:capability_scope"}},
          path_right :
          _{ '@type' : "PathSequence",
             path_first :
             _{ '@type' : "PathPredicate",
-               path_predicate : _{ '@id' : "terminus:authority_scope"}},
+               path_predicate : _{ '@id' : "system:capability_scope"}},
             path_second :
             _{ '@type' : "PathPlus",
                path_pattern :
                _{ '@type' : "PathPredicate",
-                  path_predicate : _{ '@id' : "terminus:resource_includes"}}}}}},
+                  path_predicate : _{ '@id' : "system:resource_includes"}}}}}},
 
     Query = _{'@type' : "And",
               query_list :
@@ -2182,38 +2209,39 @@ test(path, []) :-
               ]
              },
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
-    [Res|_] = JSON.bindings,
-    _{'Edge':_{'@type':"http://terminusdb.com/schema/woql#Edge",
-               'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
-               'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
-               'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
-      'Edge_Object':'terminus:///terminus/document/server_access',
-      'Object':'terminus:///terminus/document/server',
-      'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server_access',
-                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#access',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/access_all_areas'},
-              _{'@type':"http://terminusdb.com/schema/woql#Edge",
-                'http://terminusdb.com/schema/woql#object':'terminus:///terminus/document/server',
-                'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/terminus#authority_scope',
-                'http://terminusdb.com/schema/woql#subject':'terminus:///terminus/document/server_access'}],
-      'Subject':'terminus:///terminus/document/access_all_areas'} :< Res.
-
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Res|_] = (JSON.bindings),
+    Res = _{'Edge':
+            _{'@type':"http://terminusdb.com/schema/woql#Edge",
+              'http://terminusdb.com/schema/woql#object':Test_User_Capability,
+              'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability',
+              'http://terminusdb.com/schema/woql#subject': Role_Founder},
+            'Edge_Object':Test_User_Capability,
+            'Object':Organization,
+            'Path':[_{'@type':"http://terminusdb.com/schema/woql#Edge",
+                      'http://terminusdb.com/schema/woql#object':Test_User_Capability,
+                      'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability',
+                      'http://terminusdb.com/schema/woql#subject':Role_Founder},
+                    _{'@type':"http://terminusdb.com/schema/woql#Edge",
+                      'http://terminusdb.com/schema/woql#object': Organization,
+                      'http://terminusdb.com/schema/woql#predicate':'http://terminusdb.com/schema/system#capability_scope',
+                      'http://terminusdb.com/schema/woql#subject': Test_User_Capability}],
+            'Subject':Role_Founder}.
 
 test(path_star, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,
@@ -2254,17 +2282,18 @@ test(path_star, [
 
 test(complex_path, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
     make_branch_descriptor('admin', 'test', Descriptor),
     Commit_Info = commit_info{ author : "me",
                                message : "Graph creation"},
 
-    create_graph(Descriptor,
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/master/schema/main",
                  Commit_Info,
-                 schema,
-                 main,
                  _Transaction_Metadata2),
 
     create_context(Descriptor,
@@ -2320,7 +2349,7 @@ test(complex_path, [
 
 test(group_by, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -2376,10 +2405,10 @@ test(group_by, [
     [_{'Grouped': [[p,q],
                    [p,w],
                    [p,z]],
-       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':x},
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
      _{'Grouped': [[p,w],
                    [p,z]],
-       'Object':"terminus:unknown",'Predicate':"terminus:unknown",'Subject':y}] = JSON.bindings.
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
 
 test(select, []) :-
 
@@ -2407,8 +2436,8 @@ test(select, []) :-
                                                 '@value' : "Object"}}
                                  }}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
-    [_{'Subject':'terminus:///terminus/document/access_all_areas'}] = JSON.bindings.
+    query_test_response(system_descriptor{}, Query, JSON),
+    [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
 
 test(when, []) :-
 
@@ -2416,13 +2445,13 @@ test(when, []) :-
               query : _{'@type' : "True"},
               consequent : _{'@type' : "True"}},
 
-    query_test_response(terminus_descriptor{}, Query, JSON),
+    query_test_response(system_descriptor{}, Query, JSON),
     [_{}] = JSON.bindings.
 
 
 test(transaction_semantics_after, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2450,7 +2479,7 @@ test(transaction_semantics_after, [
 
 test(transaction_semantics_disjunct, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2479,7 +2508,7 @@ test(transaction_semantics_disjunct, [
 
 test(transaction_semantics_conditional, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2509,7 +2538,7 @@ test(transaction_semantics_conditional, [
 
 test(disjunction_equality, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]
     ) :-
@@ -2545,7 +2574,7 @@ test(metadata_branch, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
@@ -2578,7 +2607,7 @@ test(metadata_graph, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]
@@ -2611,7 +2640,7 @@ test(metadata_triple_count_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2646,7 +2675,7 @@ test(metadata_triple_count_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2682,7 +2711,7 @@ test(metadata_size_commits_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup((metadata:unset_current_db_path,
                   teardown_temp_store(State)))
      ]) :-
@@ -2716,7 +2745,7 @@ test(metadata_size_commits_json, [
 
 test(ast_disjunction_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -2747,7 +2776,7 @@ test(ast_disjunction_test, [
 
 test(json_disjunction_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -2881,7 +2910,7 @@ test(json_disjunction_test, [
 
 test(ast_when_test, [
          setup((setup_temp_store(State),
-                create_db_without_schema('admin|test', 'test','a test'))),
+                create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -2907,5 +2936,139 @@ test(ast_when_test, [
             Triples),
 
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
+
+
+test(get_put, []) :-
+
+    Query = _{ '@type': "woql:Put",
+               'woql:as_vars':
+               [ _{ '@type': "woql:NamedAsVar",
+                    'woql:identifier': _{ '@type': "xsd:string",
+                                          '@value': "v:Start_Station"
+                                        },
+                    'woql:variable_name': _{ '@type': "xsd:string",
+                                             '@value': "End_Station"
+                                           }
+                  }
+               ],
+               'woql:query': _{ '@type': "woql:Get",
+                                'woql:as_vars':
+                                [ _{ '@type': "woql:NamedAsVar",
+                                     'woql:identifier': _{ '@type': "xsd:string",
+                                                           '@value': "Start station"                                                          },
+                                     'woql:variable_name': _{
+                                                               '@type': "xsd:string",
+                                                               '@value': "Start_Station"
+                                                           }
+                                   },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Station"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End date"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_Time"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Duration"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Duration"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Start station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Start_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "End station number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "End_ID"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Bike number"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Bike"
+                                                            }
+                                  },
+                                  _{
+                                      '@type': "woql:NamedAsVar",
+                                      'woql:identifier': _{
+                                                             '@type': "xsd:string",
+                                                             '@value': "Member type"
+                                                         },
+                                      'woql:variable_name': _{
+                                                                '@type': "xsd:string",
+                                                                '@value': "Member_Type"
+                                                            }
+                                  }
+                                ],
+                                'woql:query_resource': _{
+                                                           '@type': "woql:RemoteResource",
+                                                           'woql:remote_uri': _{
+                                                                                  '@type': "xsd:anyURI",
+                                                                                  '@value': "https://terminusdb.com/t/data/bike_tutorial.csv"
+                                                                              }
+                                                       }
+                              },
+               'woql:query_resource': _{ '@type': "woql:FileResource",
+                                         'woql:file':
+                                         _{ '@type': "xsd:anyURI",
+                                            '@value': "/tmp/test.csv"
+                                          }
+                                       }
+             },
+
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, _JSON),
+    exists_file('/tmp/test.csv').
+
 
 :- end_tests(woql).

@@ -1,28 +1,39 @@
 :- module(db_fetch, [
-              remote_fetch/4
+              remote_fetch/6
           ]).
 
 
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(account)).
 :- use_module(core(transaction)).
 :- use_module(db_pack).
 
-:- meta_predicate remote_fetch(+, 3, -, -).
-remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
+% Dubious! Why no auth?
+:- meta_predicate remote_fetch(+, +, +, 3, -, -).
+remote_fetch(_System_DB, _Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Repository_Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
     do_or_die(
         (repository_descriptor{} :< Repository_Descriptor),
-        error(fetch_requires_repository(Repository_Descriptor))),
+        error(fetch_requires_repository(Repository_Descriptor),_)),
 
     Database_Descriptor = (Repository_Descriptor.database_descriptor),
+
+    do_or_die(
+        create_context(Database_Descriptor, Database_Context),
+        error(unresolvable_collection(Database_Descriptor),_)),
+
     do_or_die(
         repository_remote_url(Database_Descriptor, Repository_Descriptor.repository_name, URL),
-        error(fetch_remote_has_no_url(Repository_Descriptor))),
+        error(fetch_remote_has_no_url(Repository_Descriptor), _)),
 
-    create_context(Database_Descriptor, Database_Context),
     with_transaction(
         Database_Context,
-        (   
+        (
             (   repository_head(Database_Context,
                                 (Repository_Descriptor.repository_name),
                                 Repository_Head_Layer_Id)
@@ -41,7 +52,7 @@ remote_fetch(Repository_Descriptor, Fetch_Predicate, New_Head_Layer_Id, Head_Has
                 Head_Has_Updated = true
             ;   Repository_Head_Option = some(New_Head_Layer_Id)
             ->  Head_Has_Updated = false
-            ;   throw(error(unexpected_pack_missing(Repository_Descriptor))))),
+            ;   throw(error(unexpected_pack_missing(Repository_Descriptor),_)))),
         _Meta_Data).
 
 :- begin_tests(fetch_api).
@@ -57,21 +68,20 @@ get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
     pattern_string_split('/pack/', URL, [_, Database_String]),
     string_concat(Database_String, "/local/_commits", Repository_String),
     resolve_absolute_string_descriptor(Repository_String, Repository_Descriptor),
-
+    super_user_authority(Auth),
     with_triple_store(Store,
-                      (   create_context(Repository_Descriptor, Repository_Context),
-                          repository_context__previous_head_option__payload(
+                      (   askable_context(Repository_Descriptor, system_descriptor{}, Auth, Repository_Context),
+                          pack_from_context(
                               Repository_Context,
                               Repository_Head_Option,
                               Payload_Option))).
 
 test(fetch_something,
      [setup((setup_temp_store(State),
-             user_database_name(admin,"test", Name),
-             (   database_exists(Name)
-             ->  delete_db(Name)
+             (   database_exists(admin,test)
+             ->  force_delete_db(admin,test)
              ;   true),
-             create_db_without_schema(Name, 'test','a test'),
+             create_db_without_schema(admin,test),
              resolve_absolute_string_descriptor('admin/test',Branch_Descriptor)
              )),
       cleanup(teardown_temp_store(State))
@@ -92,8 +102,7 @@ test(fetch_something,
 
     with_temp_store(
         (
-            user_database_name(admin, "test_local", Name2),
-            create_db_without_schema(Name2, 'test local','a test'),
+            create_db_without_schema(admin,test_local),
             resolve_absolute_string_descriptor(
                 "admin/test_local/_meta", Database_Descriptor),
             create_context(Database_Descriptor, Database_Context),
@@ -110,9 +119,10 @@ test(fetch_something,
                                         ),
                 _),
 
-            resolve_absolute_string_descriptor("admin/test_local/terminus_remote/_commits", Remote_Repository_Descriptor),
-
-            remote_fetch(Remote_Repository_Descriptor,
+            Remote_Repository = "admin/test_local/terminus_remote/_commits",
+            super_user_authority(Auth),
+            remote_fetch(system_descriptor{}, Auth,
+                         Remote_Repository,
                          get_pack_from_store(Old_Store),
                          Remote_Repository_Layer_Id,
                          Head_Has_Updated),
@@ -125,6 +135,6 @@ test(fetch_something,
             once(ask(Remote_Master_Transaction,
                      t(a,b,c)))
         )),
-    
+
     true.
 :- end_tests(fetch_api).

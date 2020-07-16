@@ -158,7 +158,7 @@ class_properties(Class, Database, PropertiesPrime) :-
         exclude({Schema,Database}/[X]>>(
                     xrdf(
                          Schema,
-                         X,terminus:tag,terminus:abstract)),
+                         X,system:tag,system:abstract)),
                 PropertiesWithAbstract,
                 PropertiesPrime)
     ;   PropertiesPrime=DocumentProperties).
@@ -320,15 +320,15 @@ maybe_comment(C,Database,[comment=Comment]) :-
     !.
 maybe_comment(_,_,[]).
 
-maybe_terminus_tag(C,Database,[terminus_tag=DC]) :-
-    terminus_tag(C,DC,Database),
+maybe_system_tag(C,Database,[system_tag=DC]) :-
+    system_tag(C,DC,Database),
     !.
-maybe_terminus_tag(_,_,[]).
+maybe_system_tag(_,_,[]).
 
 maybe_meta(C,Database,LCD) :-
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
-    maybe_terminus_tag(C,Database,DCOGTag),
+    maybe_system_tag(C,Database,DCOGTag),
     append(Label, Comment, LC),
     append(LC,DCOGTag,LCD).
 
@@ -362,7 +362,7 @@ classes_below(Class,Database,BelowList) :-
     database_schema(Database,Schema),
     exclude({Database, Schema}/[X]>>(
                 xrdf(Schema,
-                     X,terminus:tag,terminus:abstract)),
+                     X,system:tag,system:abstract)),
             ClassesNoBottom,
             BelowList).
 
@@ -803,96 +803,88 @@ realise_frame(Elt, Frame, Database, Depth, New_Realiser) :-
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 
-test(class_frame, [])
+test(class_frame, [blocked('not using frames yet')])
 :-
-    open_descriptor(terminus_descriptor{}, Database),
-    class_frame('http://terminusdb.com/schema/terminus#Agent',Database,Frame),
+    open_descriptor(system_descriptor{}, Database),
+    class_frame('http://terminusdb.com/schema/system#Agent',Database,Frame),
+
     % Not sure how stable this order is.
     Frame = [[type=objectProperty,
-              property='http://terminusdb.com/schema/terminus#authority',
-              domain='http://terminusdb.com/schema/terminus#Agent',
-              range='http://terminusdb.com/schema/terminus#Capability',
+              property='http://terminusdb.com/schema/system#role',
+              domain='http://terminusdb.com/schema/system#Agent',
+              range='http://terminusdb.com/schema/system#Role',
               restriction=true,
-              frame=[type=document,
-                     class='http://terminusdb.com/schema/terminus#Capability',
-                     label="Capability"@en,
-                     comment="A capability confers access to a database or server action"@en],
-              label="Has Capability"@en,
-              comment="A property that links an agent to a capability that they possess"@en],
+              frame=[type=document,class='http://terminusdb.com/schema/system#Role',label="Role"@en,comment="A role is a collection of capabilities that can be allocated to any user"@en],
+              label="Has Role"@en,
+              comment="A property that links an agent has a role"@en],
              [type=datatypeProperty,
-              property='http://terminusdb.com/schema/terminus#agent_name',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              property='http://terminusdb.com/schema/system#agent_name',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent name"@en,
               comment="An name for API authentication"@en],
              [type=datatypeProperty,
-              property='http://terminusdb.com/schema/terminus#agent_key_hash',
-              domain='http://terminusdb.com/schema/terminus#Agent',
-              restriction=true,
-              range='http://www.w3.org/2001/XMLSchema#string',
-              label="Agent Key"@en,
-              comment="An agent key for API authentication"@en],
-             [type=datatypeProperty,
               property='http://www.w3.org/2000/01/rdf-schema#label',
-              domain='http://terminusdb.com/schema/terminus#Agent',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
               property='http://www.w3.org/2000/01/rdf-schema#comment',
-              domain='http://terminusdb.com/schema/terminus#Agent',
-              restriction=true,range='http://www.w3.org/2001/XMLSchema#string']].
-
-test(document_filled_frame, [])
-:-
-    open_descriptor(terminus_descriptor{}, Database),
-    document_filled_frame('terminus:///terminus/document/admin',Database,Frame),
-    Frame = [[type=objectProperty,
-              domainValue='terminus:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#authority',
-              domain='http://terminusdb.com/schema/terminus#User',
-              range='http://terminusdb.com/schema/terminus#Capability',
+              domain='http://terminusdb.com/schema/system#Agent',
               restriction=true,
-              label="Has Capability"@en,
-              comment="A property that links an agent to a capability that they possess"@en,
+              range='http://www.w3.org/2001/XMLSchema#string']].
+
+test(document_filled_frame, [blocked('not using frames yet')])
+:-
+    open_descriptor(system_descriptor{}, Database),
+    document_filled_frame('terminusdb:///system/data/admin',Database,Frame),
+
+    Frame = [[type=datatypeProperty,
+              domainValue='terminusdb:///system/data/admin',
+              property='http://terminusdb.com/schema/system#user_key_hash',
+              domain='http://terminusdb.com/schema/system#User',
+              restriction=true,
+              range='http://www.w3.org/2001/XMLSchema#string',
+              label="User Key"@en,
+              comment="A user key for API authentication"@en,
+              rangeValue=_],
+             [type=objectProperty,
+              domainValue='terminusdb:///system/data/admin',
+              property='http://terminusdb.com/schema/system#role',
+              domain='http://terminusdb.com/schema/system#User',
+              range='http://terminusdb.com/schema/system#Role',
+              restriction=true,
+              label="Has Role"@en,
+              comment="A property that links an agent has a role"@en,
               frame=[type=document,
-                     class='http://terminusdb.com/schema/terminus#Capability',
-                     label="Capability"@en,
-                     comment="A capability confers access to a database or server action"@en,
-                     domainValue='terminus:///terminus/document/access_all_areas']],
+                     class='http://terminusdb.com/schema/system#Role',
+                     label="Role"@en,
+                     comment="A role is a collection of capabilities that can be allocated to any user"@en,
+                     domainValue='terminusdb:///system/data/admin_role']],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#agent_name',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domainValue='terminusdb:///system/data/admin',
+              property='http://terminusdb.com/schema/system#agent_name',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               label="Agent name"@en,
               comment="An name for API authentication"@en,
               rangeValue="admin"^^'http://www.w3.org/2001/XMLSchema#string'],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
-              property='http://terminusdb.com/schema/terminus#agent_key_hash',
-              domain='http://terminusdb.com/schema/terminus#User',
-              restriction=true,
-              range='http://www.w3.org/2001/XMLSchema#string',
-              label="Agent Key"@en,
-              comment="An agent key for API authentication"@en,
-              rangeValue=_],
-             [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='terminusdb:///system/data/admin',
               property='http://www.w3.org/2000/01/rdf-schema#label',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               rangeValue="Server Admin User"@en],
              [type=datatypeProperty,
-              domainValue='terminus:///terminus/document/admin',
+              domainValue='terminusdb:///system/data/admin',
               property='http://www.w3.org/2000/01/rdf-schema#comment',
-              domain='http://terminusdb.com/schema/terminus#User',
+              domain='http://terminusdb.com/schema/system#User',
               restriction=true,
               range='http://www.w3.org/2001/XMLSchema#string',
               rangeValue="This is the server super user account"@en]].
-
 
 :- end_tests(frame).
 
@@ -918,7 +910,11 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFT
     select(frame=Frame,P,_FrameLessP),
     (   setof(New_Realiser,
               V^(inferredQuad(G, Elt, Prop, V, Database),
-                 get_dict(descriptor,G,G_Desc),
+                 (   is_dict(G)
+                 ->  get_dict(descriptor,G,G_Desc)
+                 ;   G = inferred
+                 ->  G = G_Desc
+                 ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _))))),
                  (   document(V,Database)
                  ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
                  ;   realise_quads(V,Frame,Database,Below),
@@ -940,7 +936,11 @@ realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RD
     member(property=Prop, P),
     (   setof((G_Desc,Elt,Prop,V),
               V^(   inferredQuad(G, Elt, Prop, V, Database),
-                    get_dict(descriptor,G,G_Desc)
+                    (   is_dict(G)
+                    ->  get_dict(descriptor,G,G_Desc)
+                    ;   G = inferred
+                    ->  G = G_Desc
+                    ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))
                 ),
               Realisers_on_P)
     ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
@@ -1018,7 +1018,7 @@ document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
 class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     class_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='terminus:Frame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:Frame', 'system:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1028,7 +1028,7 @@ class_frame_jsonld(Query_Context,Class,JSON_Frame) :-
 filled_frame_jsonld(Query_Context,Class,JSON_Frame) :-
     query_default_collection(Query_Context, Collection),
     document_filled_frame(Class,Collection,Frame),
-    term_jsonld(['@type'='terminus:FilledFrame', 'terminus:properties'=Frame],JSON_LD),
+    term_jsonld(['@type'='system:FilledFrame', 'system:properties'=Frame],JSON_LD),
     compress(JSON_LD, Query_Context.prefixes, JSON_Frame).
 
 /*
@@ -1041,10 +1041,7 @@ object_edges(URI,Database,Edges) :-
     (   most_specific_type(URI,Class,Database),
         class_frame(Class,Database,Frame),
         realise_quads(URI,Frame,Database,Unsorted),
-        sort(Unsorted,Pre_Edges),
-        maplist({Database}/[(Graph_Descriptor,A,B,C),(G,A,B,C)]>>(
-                    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,[Database],G)
-                ), Pre_Edges, Edges)
+        sort(Unsorted,Edges)
     ->  true
     % There is no type in the database, so it doesn't exist...
     ;   Edges=[]).
@@ -1056,8 +1053,13 @@ object_edges(URI,Database,Edges) :-
  * Get the set of references to a given object.
  */
 object_references(URI,Database,Edges) :-
-    findall((G,Elt,Prop,URI),
-            inferredQuad(G,Elt, Prop, URI, Database),
+    findall((G_Desc,Elt,Prop,URI),
+            (   inferredQuad(G, Elt, Prop, URI, Database),
+                (   is_dict(G)
+                ->  get_dict(descriptor,G,G_Desc)
+                ;   G = inferred
+                ->  G = G_Desc
+                ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))),
             Edges).
 
 /*
@@ -1081,14 +1083,38 @@ object_instance_graph(JSON,Database,I) :-
  *
  */
 delete_object(URI,Query_Context) :-
-    Ctx = Query_Context.prefixes,
+    Ctx = (Query_Context.prefixes),
     query_default_collection(Query_Context, Database),
     prefix_expand(URI,Ctx,URI_Ex),
     object_edges(URI_Ex,Database,Object_Edges),
     object_references(URI_Ex,Database,References),
+
+    debug(terminus(frame(delete)),'~n[Delete] References: ~q~n', [References]),
+    debug(terminus(frame(delete)),'~n[Delete] Edges: ~q~n', [Object_Edges]),
+
     union(Object_Edges,References,Edges),
     exclude([(inferred,_,_,_)]>>true, Edges, Non_Inferred_Edges),
-    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N),Non_Inferred_Edges).
+    Transaction_Objects = (Query_Context.transaction_objects),
+    delete_edges(Non_Inferred_Edges, Transaction_Objects).
+
+delete_edges([],_).
+delete_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
+    graph_descriptor_transaction_objects_read_write_object(
+        G_Desc,
+        Transaction_Objects,
+        G),
+    delete(G,X,Y,Z,_N),
+    delete_edges(Edges, Transaction_Objects).
+
+
+insert_edges([],_).
+insert_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
+    graph_descriptor_transaction_objects_read_write_object(
+        G_Desc,
+        Transaction_Objects,
+        G),
+    insert(G,X,Y,Z,_N),
+    insert_edges(Edges, Transaction_Objects).
 
 type_to_type_word(Type, Type_Word) :-
     pattern_string_split('#', Type, Segments),
@@ -1118,7 +1144,7 @@ update_object(Obj, Query_Context) :-
  * Does the actual updating using ID.
  */
 update_object(ID, Obj, Query_Context) :-
-    Prefixes = Query_Context.prefixes,
+    Prefixes = (Query_Context.prefixes),
     prefix_expand(ID,Prefixes,ID_Ex),
 
     put_dict('@id', Obj, ID_Ex, New_Obj),
@@ -1128,15 +1154,15 @@ update_object(ID, Obj, Query_Context) :-
     query_default_collection(Query_Context, Database),
     object_edges(ID,Database,Old_Quads),
 
-    debug(terminus(frame(fill)),'~nNew: ~q~n', [New_Triples]),
-    debug(terminus(frame(fill)),'~nOld: ~q~n', [Old_Quads]),
+    debug(terminus(frame(update)),'~n[Update] New: ~q~n', [New_Triples]),
+    debug(terminus(frame(update)),'~n[Update] Old: ~q~n', [Old_Quads]),
 
     % Don't back out now.  both above should be det so we don't have to do this.
     !,
     query_default_write_graph(Query_Context, Write_Graph),
-
+    WG_Desc = (Write_Graph.descriptor),
     % don't insert any edge which already exists in any instance graph
-    convlist({Write_Graph,Old_Quads}/[(X,Y,Z),(Write_Graph,X,Y,Z)]>>(
+    convlist({WG_Desc,Old_Quads}/[(X,Y,Z),(WG_Desc,X,Y,Z)]>>(
                  \+ member((_G,X,Y,Z),Old_Quads)
              ),
              New_Triples,
@@ -1149,8 +1175,9 @@ update_object(ID, Obj, Query_Context) :-
              Old_Quads,
              Deletes),
 
-    maplist([(G,X,Y,Z)]>>insert(G,X,Y,Z,_N), Inserts),
-    maplist([(G,X,Y,Z)]>>delete(G,X,Y,Z,_N), Deletes).
+    Transaction_Objects = (Query_Context.transaction_objects),
+    insert_edges(Inserts, Transaction_Objects),
+    delete_edges(Deletes, Transaction_Objects).
 
 /*
  * document_filled_class_frame_jsonld(+Document:uri,+Ctx:any,+Database:database,-FilleFrame_JSON)
@@ -1172,31 +1199,34 @@ document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 
-test(update_object, [])
+test(update_object,
+     [setup((setup_temp_store(State))),
+      cleanup(teardown_temp_store(State))
+     ])
 :-
 
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),
 
     Document = _{'@context': Query.prefixes,
                  '@id' : "doc:new_user",
-                 '@type' : "terminus:User",
+                 '@type' : "system:User",
                  'rdfs:comment': _{'@language': "en",
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:agent_key_hash':
+                 'system:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
                  },
-                 'terminus:agent_name': _{'@type':"xsd:string",
-                                          '@value':"test"
+                 'system:agent_name': _{'@type':"xsd:string",
+                                        '@value':"test"
                                          },
-                 'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:Capability"}
+                 'system:role': _{'@id':"doc:admin_role",
+                                  '@type':"system:Role"}
                 },
 
     update_object(Document, Query),
@@ -1211,41 +1241,44 @@ test(update_object, [])
 
 test(document_jsonld_depth, [])
 :-
-    Descriptor = terminus_descriptor{},
-    User_ID = 'terminus:///terminus/document/admin',
+    Descriptor = system_descriptor{},
+    User_ID = 'terminusdb:///system/data/admin',
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),
     document_jsonld(Query, User_ID, 1, JSON_LD),
     % TODO: Why are these atoms? Inconsistent!
-    _{'@id':'doc:admin','@type':'terminus:User'} :< JSON_LD.
+    _{'@id':'doc:admin','@type':'system:User'} :< JSON_LD.
 
 
-test(delete_object, [])
+test(delete_object, [
+         setup((setup_temp_store(State))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
 
-    Descriptor = terminus_descriptor{},
+    Descriptor = system_descriptor{},
 
     open_descriptor(Descriptor, Transaction),
     create_context(Transaction, Query),
 
     Document = _{'@context': Query.prefixes,
                  '@id' : "doc:new_user",
-                 '@type' : "terminus:User",
+                 '@type' : "system:User",
                  'rdfs:comment': _{'@language': "en",
                                    '@value': "This is a test user."},
                  'rdfs:label': _{'@language':"en",
                                  '@value':"Test User"},
-                 'terminus:agent_key_hash':
+                 'system:user_key_hash':
                  _{'@type':"xsd:string",
                    % key = 'test'
                    '@value': "$pbkdf2-sha512$t=131072$hM+ItUnA7Xmvc+Wbk9Bl4Q$3FSf1OfkofmGltr+yiN65d58Ab0guGpW1jeVbpVF8c6pc9mT3UDUTx0TXjEBFDOtjE9lm2wMLttGXD9aDekECA"
                  },
-                 'terminus:agent_name': _{'@type':"xsd:string",
-                                          '@value':"test"
-                                         },
-                 'terminus:authority': _{'@id':"doc:access_all_areas",
-                                         '@type':"terminus:Capability"}
+                 'system:agent_name': _{'@type':"xsd:string",
+                                        '@value':"test"
+                                       },
+                 'system:role': _{'@id':"doc:admin_role",
+                                  '@type':"system:Role"}
                 },
 
     update_object(Document, Query),

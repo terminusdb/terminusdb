@@ -1,8 +1,12 @@
 :- module(ask,[
               ask/2,
+              ask/3,
               ask_ast/3,
               create_context/2,
               create_context/3,
+              askable_context/4,
+              askable_context/5,
+              askable_settings_context/3,
               context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
               context_extend_prefixes/3,
@@ -62,7 +66,7 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
  *
  * Pre term has free variables that need to be changed into woql variables witha binding
  */
-pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
+pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out) :-
     (   var(Pre_Term)
     ->  (   lookup_backwards(Pre_Term,V,Bindings_In)
         ->  Bindings_In = Bindings_Out,
@@ -71,46 +75,41 @@ pre_term_to_term_and_bindings(Ctx,Pre_Term,Term,Bindings_In,Bindings_Out) :-
             Bindings_Out = [var_binding{ var_name : G,
                                          prolog_var: Pre_Term,
                                          woql_var : Woql_Var}|Bindings_In],
-            prefix_preterm(Ctx,Woql_Var,Pre_Term),
+            (   member(compress_prefixes(true), Options)
+            ->  prefix_preterm(Ctx,Woql_Var,Pre_Term)
+            ;   Pre_Term = Woql_Var),
             Term = v(G)
         )
     ;   is_dict(Pre_Term)
     ->  Term = Pre_Term,
         Bindings_In=Bindings_Out
     ;   Pre_Term =.. [F|Args],
-        mapm(pre_term_to_term_and_bindings(Ctx),Args,New_Args,Bindings_In,Bindings_Out),
+        mapm(pre_term_to_term_and_bindings(Ctx,Options),Args,New_Args,Bindings_In,Bindings_Out),
         Term =.. [F|New_Args]
     ).
 
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    terminus_descriptor{} :< Descriptor,
+    system_descriptor{} :< Descriptor,
     !,
-    Prefixes = _{doc: 'terminus:///terminus/document/'}.
+    Prefixes = _{doc: 'terminusdb:///system/data/'}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     id_descriptor{} :< Descriptor,
     !,
     Prefixes = _{}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    label_descriptor{label: Label} :< Descriptor,
+    label_descriptor{} :< Descriptor,
     !,
-    atomic_list_concat(['terminus:///',Label,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminusdb:///data/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    database_descriptor{
-        database_name: Name
-    } :< Descriptor,
+    database_descriptor{} :< Descriptor,
     !,
-    atomic_list_concat(['terminus:///',Name,'/document/'], Doc_Prefix),
+    atomic_list_concat(['terminusdb:///repository/data/'], Doc_Prefix),
     Prefixes = _{doc: Doc_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    repository_descriptor{
-        database_descriptor: Database_Descriptor
-    } :< Descriptor,
+    repository_descriptor{} :< Descriptor,
     !,
-    database_descriptor{
-        database_name: Database_Name
-    } :< Database_Descriptor,
-    atomic_list_concat(['terminus:///', Database_Name, '/commits/document/'], Commit_Document_Prefix),
+    atomic_list_concat(['terminusdb:///commits/data/'], Commit_Document_Prefix),
     Prefixes = _{doc : Commit_Document_Prefix}.
 collection_descriptor_prefixes_(Descriptor, Prefixes) :-
     % Note: possible race condition.
@@ -134,17 +133,19 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
     collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
     merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
-collection_descriptor_default_write_graph(terminus_descriptor{}, Graph_Descriptor) :-
+collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
     !,
-    Graph_Descriptor = terminus_graph{
+    Graph_Descriptor = system_graph{
                            type : instance,
                            name : "main"
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
-    database_descriptor{ database_name : Name } = Descriptor,
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database } = Descriptor,
     !,
     Graph_Descriptor = repo_graph{
-                           database_name : Name,
+                           organization_name : Organization,
+                           database_name : Database,
                            type : instance,
                            name : "main"
                        }.
@@ -154,8 +155,10 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
         repository_name : Repository_Name
     } = Descriptor,
     !,
-    database_descriptor{ database_name : Database_Name } = Database_Descriptor,
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database_Name } = Database_Descriptor,
     Graph_Descriptor = commit_graph{
+                           organization_name : Organization,
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            type : instance,
@@ -171,10 +174,12 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
         repository_name : Repository_Name
     } :< Repository_Descriptor,
     database_descriptor{
+        organization_name : Organization,
         database_name : Database_Name
     } :< Database_Descriptor,
 
     Graph_Descriptor = branch_graph{
+                           organization_name : Organization,
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            branch_name : Branch_Name,
@@ -205,16 +210,16 @@ create_context(Transaction_Object, Context) :-
     collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
-    % Note: should we be using terminus_descriptor{} below? or open it?
-
+    % Note: should we be using system_descriptor{} below? or open it?
+    super_user_authority(Super_User),
     Context = query_context{
-        authorization : 'terminus:///terminus/document/access_all_areas',
+        authorization : Super_User,
         transaction_objects : [Transaction_Object],
         default_collection : Descriptor,
         filter : type_filter{ types : [instance] },
         prefixes : Prefixes,
         write_graph : Graph_Descriptor,
-        terminus : terminus_descriptor{},
+        system : system_descriptor{},
         update_guard : _Guard,
         files : [],
         bindings : [],
@@ -231,7 +236,27 @@ create_context(Descriptor, Context) :-
  */
 create_context(Askable, Commit_Info, Context) :-
     create_context(Askable, Context_Without_Commit),
-    Context = Context_Without_Commit.put(commit_info, Commit_Info).
+    Context = (Context_Without_Commit.put(commit_info, Commit_Info)).
+
+/*
+ * askable_context/N
+ *
+ * Create a context from an askable with system/auth and optional commit_info
+ */
+askable_context(Askable, System_DB, Auth, Context) :-
+    create_context(Askable, Context_Without_Commit),
+    Context = (Context_Without_Commit.put(_{ authorization : Auth,
+                                             system: System_DB })).
+
+askable_context(Askable, System_DB, Auth, Commit_Info, Context) :-
+    create_context(Askable, Context_Without_Commit),
+    Context = (Context_Without_Commit.put(_{ authorization: Auth,
+                                             system: System_DB,
+                                             commit_info: Commit_Info})).
+
+askable_settings_context(Askable, Settings, Context) :-
+    create_context(Askable, Context_Without_Settings),
+    Context = (Context_Without_Settings.put(Settings)).
 
 /**
  * descriptor_capabilities_context(Askable, Capabilities, Context) is det.
@@ -280,14 +305,26 @@ context_to_parent_transaction(Context,Parent_Transaction) :-
  * it can't give anything back?
  */
 ask(Askable, Pre_Term) :-
+    ask(Askable, Pre_Term, [compress_prefixes(true)]).
+
+/*
+ * ask(+Transaction_Object, ?Pre_Term:Goal, +Options) is nondet.
+ *
+ * Ask with options
+ *
+ * Options include:
+ * - compress_prefixes(Bool): Compress prefixes for results.
+ */
+ask(Askable, Pre_Term, Options) :-
     create_context(Askable, Query_Context),
 
-    pre_term_to_term_and_bindings(Query_Context.prefixes,
+    pre_term_to_term_and_bindings(Query_Context.prefixes,Options,
                                   Pre_Term,Term,
                                   [],Bindings_Out),
     New_Query_Ctx = Query_Context.put(bindings,Bindings_Out),
 
     ask_ast(New_Query_Ctx, Term, _).
+
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
@@ -321,4 +358,3 @@ query_default_write_graph(Query_Context, Write_Graph) :-
     graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
                                                            Transaction_Objects,
                                                            Write_Graph).
-

@@ -102,7 +102,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WOQL_Resource = Resource_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#resource'|Path],
-                                    Resource))),
+                                    Resource), _)),
         WOQL = triple_count(Resource_String,WOQL_Count)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Size',
           'http://terminusdb.com/schema/woql#resource' : Resource,
@@ -118,7 +118,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WOQL_Resource = Resource_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#resource'|Path],
-                                    Resource))),
+                                    Resource), _)),
         WOQL = size(Resource_String,WOQL_Size)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Select',
           'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
@@ -160,7 +160,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WC = Collection_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#collection'|Path],
-                                    Collection))),
+                                    Collection), _)),
         WOQL = using(Collection_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#From',
           'http://terminusdb.com/schema/woql#graph_filter' : Graph_Filter,
@@ -173,7 +173,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WG = Graph_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#graph_filter'|Path],
-                                    Graph_Filter))),
+                                    Graph_Filter), _)),
         WOQL = from(Graph_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Into',
           'http://terminusdb.com/schema/woql#graph' : Graph,
@@ -186,7 +186,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WG = Graph_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#graph'|Path],
-                                    Graph))),
+                                    Graph), _)),
         WOQL = into(Graph_String,WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Quad',
           'http://terminusdb.com/schema/woql#subject' : Subject,
@@ -207,7 +207,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WG = Graph_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#graph_filter'|Path],
-                                    Graph))),
+                                    Graph), _)),
 
         WOQL = t(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Triple',
@@ -274,7 +274,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (_{'@id' : _ID} :< Doc),
             error(woql_syntax_error(JSON,
                                     ['@id'|Path],
-                                    Doc))),
+                                    Doc), _)),
         WOQL = update_object(Doc)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteObject',
           'http://terminusdb.com/schema/woql#document' : Doc
@@ -283,7 +283,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (_{'@id' : ID} :< Doc),
             error(woql_syntax_error(JSON,
                                     ['@id'|Path],
-                                    Doc))),
+                                    Doc), _)),
         WOQL = delete_object(ID)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#AddTriple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
@@ -315,7 +315,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WG = Graph_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#graph'|Path],
-                                    Graph))),
+                                    Graph), _)),
         WOQL = insert(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#DeleteTriple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
@@ -347,7 +347,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WG = Graph_String^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#graph'|Path],
-                                    Graph))),
+                                    Graph), _)),
         WOQL = delete(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#When',
           'http://terminusdb.com/schema/woql#query' : Q,
@@ -444,7 +444,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
              atom_string(ID,ID_String)),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#identifier'|Path],
-                                    Identifier))),
+                                    Identifier), _)),
         (   get_dict('http://terminusdb.com/schema/woql#var_type',
                      JSON,
                      Type),
@@ -462,13 +462,13 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Put',
           'http://terminusdb.com/schema/woql#as_vars' : Header,
           'http://terminusdb.com/schema/woql#query' : Query,
-          'http://terminusdb.com/schema/woql#resource' : Resource
+          'http://terminusdb.com/schema/woql#query_resource' : Resource
          } :< JSON
     ->  json_to_woql_ast(Header,WHeader,['http://terminusdb.com/schema/woql#as_vars'
                                          |Path]),
         json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
                                        |Path]),
-        json_to_woql_ast(Resource,WResource,['http://terminusdb.com/schema/woql#resource'
+        json_to_woql_ast(Resource,WResource,['http://terminusdb.com/schema/woql#query_resource'
                                              |Path]),
         WOQL = put(WHeader,WQuery,WResource)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#RemoteResource',
@@ -481,7 +481,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#FileResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
-    ->  WOQL = file(File,JSON)
+    ->  json_to_woql_ast(File,WFile,['http://terminusdb.com/schema/woql#file'
+                                     |Path]),
+        WFile = File_String^^_,
+        WOQL = file(File_String,JSON)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PostResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
@@ -606,7 +609,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             (WN = Num^^_),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#start'|Path],
-                                    N))),
+                                    N), _)),
         WOQL = start(Num, WQ)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Limit',
           'http://terminusdb.com/schema/woql#limit' :  N,
@@ -802,7 +805,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                                   |Path])
     ;   true = JSON
     ->  WOQL = true
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON)))
+    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
     ).
 json_to_woql_ast(JSON,WOQL,Path) :-
     is_list(JSON),
@@ -822,12 +825,8 @@ json_to_woql_ast(JSON,WOQL,_Path) :-
     coerce_atom(JSON,WOQL),
     !.
 json_to_woql_ast(JSON,_,Path) :-
-    format(atom(Msg), 'Un-parsable Query: ~q', [JSON]),
     reverse(Path, Director),
-    throw(http_reply(not_found(_{'terminus:message' : Msg,
-                                 'vio:query' : JSON,
-                                 'vio:path' : Director,
-                                 'terminus:status' : 'terminus:failure'}))).
+    throw(error(unparsable_query(JSON,Director), _)).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
@@ -883,16 +882,16 @@ json_to_woql_path_pattern(JSON,Pattern,Path) :-
             (WN = N_int ^^ _),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#path_minimum'|Path],
-                                    N))),
+                                    N), _)),
 
         do_or_die(
             (WM = M_int ^^ _),
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#path_maximum'|Path],
-                                    M))),
+                                    M), _)),
 
         Pattern = times(PSubPattern,N_int,M_int)
-    ;   throw(woql_syntax_error(JSON,Path,JSON))
+    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
     ).
 
 is_json_var(A) :-
@@ -997,10 +996,10 @@ json_to_woql_arith(JSON,WOQL,Path) :-
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
         WOQL = '^^'(V,TE)
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON)))
+    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
     ).
 json_to_woql_arith(JSON,_,Path) :-
-    throw(error(woql_syntax_error(JSON,Path,JSON))).
+    throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
 json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],
@@ -1082,7 +1081,7 @@ test(not_a_query, []) :-
     woql_context(Prefixes),
     catch(
         json_woql(JSON,Prefixes,_WOQL),
-        error(woql_syntax_error(Q,P,E)),
+        error(woql_syntax_error(Q,P,E), _),
         json_woql_path_element_error_message(Q,P,E,Message)),
     Message = "Not well formed WOQL JSON-LD".
 
