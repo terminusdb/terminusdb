@@ -1,4 +1,4 @@
-# TerminusDB Server v2.0.5 Release Notes
+# TerminusDB Server v2.0.6 Release Notes
 
 This is largely a bug fix and cleanup release. We focused on improving error handling and code maintanability.
 
@@ -27,6 +27,13 @@ This is largely a bug fix and cleanup release. We focused on improving error han
 + Handling of floating point numbers has been improved to stop some spurious type errors.
 + Fixed a utf-8 encoding issue encountered when loading remote csvs.
 
+
+# TerminusDB Server v2.0.6 Release Notes
+
+## Changes
+
++ New TerminusDB Console
++ Bug fixes
 
 # TerminusDB Server v2.0.4 Release Notes
 
