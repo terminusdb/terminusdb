@@ -196,11 +196,17 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     do_or_die(
         (_{ comment : Comment,
             label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
+        error(bad_api_document(Database_Document,[comment,label]),_)),
 
-    (   _{ prefixes : Prefixes } :< Database_Document,
-        _{ doc : _Doc, scm : _Scm} :< Prefixes
-    ->  true
+    (   _{ prefixes : Input_Prefixes } :< Database_Document
+    ->  (   _{ doc : Doc} :< Input_Prefixes
+        ->  true
+        ;   Doc = "terminusdb:///data/"),
+        (   _{ scm : Scm} :< Input_Prefixes
+        ->  true
+        ;   Scm = "terminusdb:///schema#"),
+        Prefixes = Input_Prefixes.put(_{ doc : Doc,
+                                         scm : Scm })
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
@@ -326,6 +332,24 @@ test(db_create, [
               In, [json_object(dict),
                    authorization(basic(admin, Key))]),
     _{'api:status' : "api:success"} :< In.
+
+test(db_create_bad_api_document, [
+         setup(((   database_exists('admin', 'TEST_DB')
+                ->  force_delete_db('admin', 'TEST_DB')
+                ;   true)))
+     ]) :-
+    config:server(Server),
+    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    Doc = _{ label : "A label" },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              In, [json_object(dict),
+                   status_code(Code),
+                   authorization(basic(admin, Key))]),
+    400 = Code,
+    _{'@type' : "api:BadAPIDocumentErrorResponse",
+      'api:error' : Error} :< In,
+    _{'@type' : "api:RequiredFieldsMissing"} :< Error.
 
 test(db_create_existing_errors, [
          setup(((   database_exists('admin', 'TEST_DB')
@@ -508,10 +532,9 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
                   Error)).
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
-    (   _{ turtle : TTL,
-           commit_info : Commit_Info } :< Triples_Document
-    ->  true
-    ;   throw(error(bad_api_document(Triples_Document)))),
+    do_or_die(_{ turtle : TTL,
+                 commit_info : Commit_Info } :< Triples_Document,
+              error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
 
     catch_with_backtrace(
         (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
@@ -1341,7 +1364,7 @@ test(delete_object, [
     _{'@context' : _{ doc: "http://terminusdb.com/admin/test/document/",
                       scm: "http://terminusdb.com/schema/terminus#"},
       '@type' : "DeleteObject",
-      document : 'doc:my_database'},
+      document_uri : 'doc:my_database'},
 
     Commit_Info = commit_info{
                       author : "Steve",
@@ -1367,7 +1390,8 @@ test(get_object, [])
 :-
     Query0 =
     _{'@type' : "ReadObject",
-      document_uri : 'doc:admin',
+      document_uri : _{ '@type' : "woql:Node",
+                        'woql:node' : "doc:admin"},
       document : _{'@type' : "Variable",
                    variable_name : _{ '@type' : "xsd:string",
                                       '@value' : "Document"}}},
@@ -1379,7 +1403,7 @@ test(get_object, [])
               json(_{query : Query0}),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
-    [Result] = JSON0.bindings,
+    [Result] = (JSON0.bindings),
 
     _{'@id':"doc:admin",
       '@type':"system:User",
@@ -1401,12 +1425,9 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
     do_or_die(
         (_{ comment : Comment,
-            label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
-
-    do_or_die(
-        (_{ remote_url : Remote_URL } :< Database_Document),
-        error(no_remote_specified(Database_Document))),
+            label : Label,
+            remote_url: Remote_URL} :< Database_Document),
+        error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
     ->  true
@@ -1591,38 +1612,91 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
                   E)
     ).
 
-rebase_error_hander(error(invalid_target_absolute_path(Path),_), Request) :-
+rebase_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteTargetDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
-rebase_error_hander(error(invalid_source_absolute_path(Path),_), Request) :-
+                    [status(400)]).
+rebase_error_handler(error(invalid_source_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase source absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteSourceDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_target_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase target absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotATargetBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_source_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase source absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotASourceBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(unresolvable_target_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following target descriptor could not be resolved to a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableTargetAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
-    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+rebase_error_handler(error(unresolvable_source_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following source descriptor could not be resolved to a branch: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
-                                       'api:their_commit' : Their_Commit_Id,
-                                       'api:witness' : Fixup_Witnesses},
+                      'api:error' : _{ '@type' : 'api:UnresolvableSourceAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+rebase_error_handler(error(rebase_commit_application_failed(continue_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'continue' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseContinueOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'fixup' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
     format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
@@ -1632,7 +1706,18 @@ rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_
                                        'api:witness' : Fixup_Witnesses},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1726,9 +1811,7 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 
     (   _{ repository_head : Layer_ID } :< Document
     ->  Repo_Head_Option = some(Layer_ID)
-    ;   _{} :< Document
-    ->  Repo_Head_Option = none
-    ;   throw(error(bad_api_document(Document)))),
+    ;   Repo_Head_Option = none),
 
     catch_with_backtrace(
         (   pack(System_DB, Auth,
@@ -1750,7 +1833,7 @@ pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
 pack_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
@@ -1971,7 +2054,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     do_or_die(
         _{ remote : Remote_Name,
            remote_branch : Remote_Branch } :< Document,
-        error(push_has_no_remote(Document))),
+        error(bad_api_document(Document,[remote,remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Authorization),
@@ -2004,7 +2087,18 @@ push_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+push_error_handler(error(push_requires_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotABranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The branch described by the path ~q does not exist", [Path]),
@@ -2015,7 +2109,7 @@ push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Reque
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
-                    [status(400)]).
+                    [status(404)]).
 push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
     (   get_dict('api:message', Reason, Inner_Msg)
     ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])
@@ -2045,7 +2139,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                      json_object(dict),
                      status_code(Status_Code)]),
           E,
-          throw(error(communication_failure(E)))),
+          throw(error(communication_failure(E),_))),
 
     (   200 = Status_Code
     ->  true
@@ -2075,7 +2169,7 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
         _{ remote : Remote_Name,
            remote_branch : Remote_Branch_Name
          } :< Document,
-        error(pull_has_no_remote(Document))),
+        error(bad_api_document(Document, [remote, remote_branch]))),
 
     do_or_die(
         request_remote_authorization(Request, Remote_Auth),
@@ -2421,12 +2515,9 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
 graph_handler(post, Path, Request, System_Db, Auth) :-
     get_payload(Document, Request),
 
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document, [commit_info]), _)),
 
-    % DUBIOUS authentication??
     catch_with_backtrace(
         (create_graph(System_Db, Auth,
                       Path,
@@ -2442,10 +2533,8 @@ graph_handler(post, Path, Request, System_Db, Auth) :-
 graph_handler(delete, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
         (delete_graph(System_DB,Auth,
@@ -2734,7 +2823,7 @@ organization_handler(post, Name, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : New_Name } :< Document,
-              error(malformed_api_document(Document), _)),
+              error(bad_api_document(Document,[organization_name]), _)),
 
     catch_with_backtrace(
         (   update_organization_transaction(System_DB, Auth, Name, New_Name),
@@ -2808,7 +2897,7 @@ update_role_handler(post, Request, System_DB, Auth) :-
                  organization_name : Organization,
                  actions : Actions
                } :< Document,
-              error(bad_api_document)),
+              error(bad_api_document(Document, [database_name, agent_names, organization_name, actions]), _)),
 
     catch_with_backtrace(
         (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
@@ -2918,6 +3007,15 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
                  'scope' : Scope_String
                 },
                [status(403)]).
+customise_exception(error(bad_api_document(Document,Expected),_)) :-
+    format(string(Msg), "The input API document was missing required fields: ~q", [Expected]),
+    reply_json(_{'@type' : 'api:BadAPIDocumentErrorResponse',
+                 'api:status' : 'api:failure',
+                 'api:error' : _{'@type' : 'api:RequiredFieldsMissing',
+                                 'api:expected' : Expected,
+                                 'api:document' : Document},
+                 'api:message' : Msg},
+               [status(400)]).
 
 %% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
@@ -3001,10 +3099,6 @@ customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
     reply_json(_{'api:message' : M,
                  'api:status' : 'api:failure'},
-               [status(400)]).
-customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),

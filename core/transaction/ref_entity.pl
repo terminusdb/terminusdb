@@ -82,8 +82,7 @@ commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, ref:commit_author, Author^^xsd:string),
                  t(Commit_Uri, ref:commit_message, Message^^xsd:string),
-                 t(Commit_Uri, ref:commit_timestamp, Timestamp_String^^xsd:decimal)))),
-    number_string(Timestamp, Timestamp_String).
+                 t(Commit_Uri, ref:commit_timestamp, Timestamp^^xsd:decimal)))).
 commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
     commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp).

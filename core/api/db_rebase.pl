@@ -16,7 +16,7 @@ cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :
     (   Witnesses = []
     ->  true
     % put more stuff in error!
-    ;   throw(error(schema_validation_error(Witnesses)))),
+    ;   throw(error(schema_validation_error(Witnesses), _))),
     validation_objects_to_transaction_objects([Validation_Object], [New_Transaction_Object]),
 
     create_context(New_Transaction_Object, New_Context).
@@ -86,11 +86,11 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
             Commit_Application_Type = "api:valid_commit",
             Applied_Commit_Ids = [New_Commit_Id]
         ;   Strategy = continue
-        ->  throw(error(apply_commit(continue_on_valid_commit(Their_Commit_Id))))
+        ->  throw(error(apply_commit(continue_on_valid_commit(Their_Commit_Id)), _))
         ;   Strategy = fixup(_Message,_Woql)
-        ->  throw(error(apply_commit(fixup_on_valid_commit(Their_Commit_Id)))))
+        ->  throw(error(apply_commit(fixup_on_valid_commit(Their_Commit_Id)), _)))
     ;   (   Strategy = error
-        ->  throw(error(apply_commit(schema_validation_error(Their_Commit_Id, Witnesses))))
+        ->  throw(error(apply_commit(schema_validation_error(Their_Commit_Id, Witnesses)), _))
         ;   Strategy = continue
         ->  invalidate_commit(Our_Repo_Context2, New_Commit_Id),
             cycle_context(Our_Repo_Context2, Our_Repo_Context3, _, _),
@@ -112,7 +112,7 @@ apply_commit_chain(Our_Repo_Context, Their_Repo_Context, Us_Commit_Uri, Author, 
             validate_validation_objects([Commit_Fixup_Validation_Object], Fixup_Witnesses),
             (   Fixup_Witnesses = []
             ->  true
-            ;   throw(error(apply_commit(fixup_error(Their_Commit_Id, Fixup_Witnesses))))),
+            ;   throw(error(apply_commit(fixup_error(Their_Commit_Id, Fixup_Witnesses)), _))),
 
             % commit validation
             commit_commit_validation_object(Commit_Fixup_Validation_Object, _Parent_Transaction_List, New_Commit_Id2, New_Commit_Uri2),
@@ -138,14 +138,23 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
 
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:rebase, Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:commit_read_access, Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:schema_write_access, Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:instance_write_access, Auth),
+
+    do_or_die(
+        (branch_descriptor{} :< Our_Branch_Descriptor),
+        error(rebase_requires_target_branch(Our_Branch_Descriptor),_)),
 
     do_or_die(
         resolve_absolute_string_descriptor(Their_Branch_Path, Their_Branch_Descriptor),
         error(invalid_source_absolute_path(Their_Branch_Path),_)),
 
-    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:instance_read_access, Auth),
-    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:schema_read_access, Auth),
+    do_or_die(
+        (branch_descriptor{} :< Their_Branch_Descriptor),
+        error(rebase_requires_source_branch(Their_Branch_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:commit_read_access, Auth),
 
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repo_Descriptor = (Their_Branch_Descriptor.repository_descriptor),
@@ -194,8 +203,8 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
                                Final_Commit_Uri,
                                Semifinal_Context,
                                Reports),
-            error(apply_commit(Error)),
-            throw(error(rebase(Error,Our_Branch_History)))
+            error(apply_commit(Error), _),
+            throw(error(rebase_commit_application_failed(Error,Our_Branch_History), _))
         )
     ),
 
@@ -368,7 +377,7 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema("admin","test"))),
       cleanup(teardown_temp_store(State)),
-      throws(error(rebase(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id])))
+      throws(error(rebase_commit_application_failed(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id]), _))
      ])
 :-
     Master_Path = "admin/test",

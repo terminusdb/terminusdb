@@ -859,8 +859,10 @@ compile_wf(when(A,B),(ProgA,ProgB)) --> % forall(ProgA, ProgB)
     compile_wf(A,ProgA),
     compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
+    visible_vars(Visible),
     compile_wf(P, Prog),
-    restrict(VL).
+    { union(Visible,VL,Restricted) },
+    restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
     { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection) },
@@ -1022,7 +1024,7 @@ compile_wf(into(G,S),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         resolve_filter(G,Filter),
-        (   Filter = type_name_filter{ type : _Type, name : [_Name]}
+        (   Filter = type_name_filter{ type : _Type, names : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
         ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
         )
@@ -1317,6 +1319,12 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     }.
 compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
     resolve(Exp,ExpE).
+
+visible_vars(VL) -->
+    view(bindings, Bindings),
+    { maplist([Record,v(Name)]>>get_dict(var_name, Record, Name),
+              Bindings,
+              VL) }.
 
 restrict(VL) -->
     update(bindings,B0,B1),
@@ -2137,6 +2145,47 @@ test(order_by, []) :-
                      _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':20}}].
 
+test(order_by_desc, []) :-
+
+    Query = _{'@type' : "OrderBy",
+              variable_ordering : [_{ '@type' : "VariableOrdering",
+                                      index : _{'@type' : "xsd:integer",
+                                                '@value' : 0},
+                                      ascending : _{'@type' : "xsd:boolean",
+                                                    '@value' : false},
+                                      variable : _{'@type' : "Variable",
+                                                   variable_name : _{ '@type' : "xsd:string",
+                                                                      '@value' : "X"}}}],
+              query : _{ '@type' : 'Or',
+                         query_list :
+                         [_{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 10}}},
+                          _{'@type' : "QueryListElement",
+                            index : _{'@type' : "xsd:integer",
+                                      '@value' : 0},
+                            query : _{ '@type' : "Equals",
+                                       left : _{'@type' : "Variable",
+                                                variable_name :
+                                                _{'@type' : "xsd:string",
+                                                  '@value' : "X"}},
+                                       right : _{'@type' : "xsd:string",
+                                                 '@value' : 20}}}]}},
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':20}},
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                             '@value':10}}].
+
+
 test(path, []) :-
 
     % Pattern is:
@@ -2438,6 +2487,116 @@ test(select, []) :-
 
     query_test_response(system_descriptor{}, Query, JSON),
     [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
+
+
+test(double_select, []) :-
+
+    Query = _{ '@type': "woql:Using",
+               'woql:collection': _{ '@type': "xsd:string",
+                                     '@value': "_system" },
+               'woql:query':
+               _{ '@type': "woql:And",
+                  'woql:query_list':
+                  [_{'@type': "woql:QueryListElement",
+                     'woql:index':
+                     _{ '@type': "xsd:nonNegativeInteger",
+                        '@value': 0 },
+                     'woql:query':
+                     _{ '@type': "woql:Select",
+                        'woql:variable_list': [
+                            _{ '@type': "woql:VariableListElement",
+                               'woql:variable_name':
+                               _{ '@value': "X",
+                                  '@type': "xsd:string"
+                                },
+                               'woql:index':
+                               _{ '@type': "xsd:nonNegativeInteger",
+                                  '@value': 0}
+                             }
+                        ],
+                        'woql:query':
+                        _{ '@type': "woql:Triple",
+                           'woql:subject':
+                           _{ '@type': "woql:Variable",
+                              'woql:variable_name':
+                              _{ '@value': "X",
+                                 '@type': "xsd:string"
+                               }
+                            },
+                           'woql:predicate':
+                           _{ '@type': "woql:Variable",
+                              'woql:variable_name':
+                              _{ '@value': "P",
+                                 '@type': "xsd:string"
+                               }
+                            },
+                           'woql:object':
+                           _{ '@type': "woql:Datatype",
+                              'woql:datatype':
+                              _{ '@type': "xsd:string",
+                                 '@value': "admin"
+                               }
+                            }
+                         }
+                      }
+                    },
+                   _{ '@type': "woql:QueryListElement",
+                      'woql:index':
+                      _{ '@type': "xsd:nonNegativeInteger",
+                         '@value': 1
+                       },
+                      'woql:query':
+                      _{ '@type': "woql:Select",
+                         'woql:variable_list': [
+                             _{ '@type': "woql:VariableListElement",
+                                'woql:variable_name':
+                                _{ '@value': "Y",
+                                   '@type': "xsd:string"
+                                 },
+                                'woql:index':
+                                _{ '@type': "xsd:nonNegativeInteger",
+                                   '@value': 0
+                                 }
+                              }
+                         ],
+                         'woql:query':
+                         _{
+                             '@type': "woql:Triple",
+                             'woql:subject':
+                             _{ '@type': "woql:Variable",
+                                'woql:variable_name':
+                                _{ '@value': "Y",
+                                   '@type': "xsd:string"
+                                 }
+                              },
+                             'woql:predicate':
+                             _{ '@type': "woql:Variable",
+                                'woql:variable_name':
+                                _{ '@value': "P",
+                                   '@type': "xsd:string"
+                                 }
+                              },
+                             'woql:object':
+                             _{ '@type': "woql:Datatype",
+                                'woql:datatype':
+                                _{ '@type': "xsd:string",
+                                   '@value': "admin"
+                                 }
+                              }
+                         }
+                       }
+                    }
+                  ]
+                }
+             },
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    forall(
+        member(Elt,JSON.bindings),
+        (   get_dict('X',Elt, _),
+            get_dict('Y',Elt, _))
+    ).
+
 
 test(when, []) :-
 
@@ -3070,5 +3229,210 @@ test(get_put, []) :-
     query_test_response(Descriptor, Query, _JSON),
     exists_file('/tmp/test.csv').
 
+test(idgen, []) :-
+    Atom = '{
+  "@type": "woql:IDGenerator",
+  "woql:base": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "woql:Node",
+      "woql:node": "doc:Journey"
+    }
+  },
+  "woql:key_list": {
+    "@type": "woql:Array",
+    "woql:array_element": [
+      {
+        "@type": "woql:ArrayElement",
+        "woql:datatype": {
+          "@type": "xsd:string",
+          "@value": "test"
+        },
+        "woql:index": {
+          "@type": "xsd:nonNegativeInteger`",
+          "@value": 0
+        }
+      }
+    ]
+  },
+  "woql:uri": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Journey_ID",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
+
+
+test(meta_graph_update, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+
+    Atom = '{
+  "@type": "woql:Using",
+  "woql:collection": {
+    "@type": "xsd:string",
+    "@value": "admin/test/_meta"
+  },
+  "woql:query": {
+    "@type": "woql:Into",
+    "woql:graph": {
+      "@type": "xsd:string",
+      "@value": "instance/main"
+    },
+    "woql:query": {
+      "@type": "woql:And",
+      "woql:query_list": [
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 0
+          },
+          "woql:query": {
+            "@type": "woql:IDGenerator",
+            "woql:base": {
+              "@type": "woql:Datatype",
+              "woql:datatype": {
+                "@type": "woql:Node",
+                "woql:node": "terminusdb:///repository/data/Remote"
+              }
+            },
+            "woql:key_list": {
+              "@type": "woql:Array",
+              "woql:array_element": [
+                {
+                  "@type": "woql:ArrayElement",
+                  "woql:datatype": {
+                    "@type": "xsd:string",
+                    "@value": "origin"
+                  },
+                  "woql:index": {
+                    "@type": "xsd:nonNegativeInteger`",
+                    "@value": 0
+                  }
+                }
+              ]
+            },
+            "woql:uri": {
+              "@type": "woql:Variable",
+              "woql:variable_name": {
+                "@value": "Remote",
+                "@type": "xsd:string"
+              }
+            }
+          }
+        },
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 1
+          },
+          "woql:query": {
+            "@type": "woql:AddTriple",
+            "woql:subject": {
+              "@type": "woql:Variable",
+              "woql:variable_name": {
+                "@value": "Remote",
+                "@type": "xsd:string"
+              }
+            },
+            "woql:predicate": {
+              "@type": "woql:Node",
+              "woql:node": "rdf:type"
+            },
+            "woql:object": {
+              "@type": "woql:Node",
+              "woql:node": "repo:Remote"
+            }
+          }
+        },
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 2
+          },
+          "woql:query": {
+            "@type": "woql:And",
+            "woql:query_list": [
+              {
+                "@type": "woql:QueryListElement",
+                "woql:index": {
+                  "@type": "xsd:nonNegativeInteger",
+                  "@value": 0
+                },
+                "woql:query": {
+                  "@type": "woql:AddTriple",
+                  "woql:subject": {
+                    "@type": "woql:Variable",
+                    "woql:variable_name": {
+                      "@value": "Remote",
+                      "@type": "xsd:string"
+                    }
+                  },
+                  "woql:predicate": {
+                    "@type": "woql:Node",
+                    "woql:node": "repo:repository_name"
+                  },
+                  "woql:object": {
+                    "@type": "woql:Datatype",
+                    "woql:datatype": {
+                      "@type": "xsd:string",
+                      "@value": "origin"
+                    }
+                  }
+                }
+              },
+              {
+                "@type": "woql:QueryListElement",
+                "woql:index": {
+                  "@type": "xsd:nonNegativeInteger",
+                  "@value": 1
+                },
+                "woql:query": {
+                  "@type": "woql:AddTriple",
+                  "woql:subject": {
+                    "@type": "woql:Variable",
+                    "woql:variable_name": {
+                      "@value": "Remote",
+                      "@type": "xsd:string"
+                    }
+                  },
+                  "woql:predicate": {
+                    "@type": "woql:Node",
+                    "woql:node": "repo:remote_url"
+                  },
+                  "woql:object": {
+                    "@type": "woql:Datatype",
+                    "woql:datatype": {
+                      "@type": "xsd:string",
+                      "@value": "https://hub-dev-server.dcm.ist/gavin/LastBikeTest"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}',
+    atom_json_dict(Atom,Query,[]),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+
+    writeq(JSON).
 
 :- end_tests(woql).

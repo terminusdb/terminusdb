@@ -29,10 +29,18 @@ run_context_ast_jsonld_response(Context, AST, JSON) :-
         ),
         Meta_Data
     ),
+    context_variable_names(Output_Context, Names),
     Binding_JSON = _{'@type' : 'api:WoqlResponse',
                      'api:status' : 'api:success',
+                     'api:variable_names' : Names,
                      'bindings' : Binding_Set},
     put_dict(Meta_Data, Binding_JSON, JSON).
+
+context_variable_names(Context, Header) :-
+    get_dict(bindings, Context, Bindings),
+    maplist([Record, Name]>>get_dict(var_name, Record, Name),
+            Bindings, Rev),
+    reverse(Rev,Header).
 
 json_transform_binding_set(_Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context

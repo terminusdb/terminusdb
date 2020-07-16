@@ -9,6 +9,7 @@
 :- use_module(db_pack).
 :- use_module(db_rebase).
 :- use_module(db_create).
+:- use_module(core(account)).
 
 % error conditions:
 % - branch to push does not exist
@@ -29,7 +30,13 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
 
     do_or_die(
         resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-        error(invalid_absolute_descriptor(Branch_Descriptor),_)),
+        error(invalid_absolute_path(Branch),_)),
+
+    do_or_die(
+        (branch_descriptor{} :< Branch_Descriptor),
+        error(push_requires_branch(Branch_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, (Branch_Descriptor.repository_descriptor), system:push, Auth),
 
     do_or_die(
         open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscore
@@ -108,13 +115,13 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
     ;   Payload_Option = some(Payload),
         catch(call(Push_Predicate, Remote_URL, Payload),
               E,
-              (   E = error(Inner_E),
+              (   E = error(Inner_E,_),
                   (   Inner_E = history_diverged
                   ;   Inner_E = remote_unknown
                   ;   Inner_E = authorization_failure(_)
                   ;   Inner_E = communication_failure(_))
-              ->  throw(error(remote_unpack_failed(Inner_E)))
-              ;   throw(error(remote_unpack_unexpected_failure(E))))),
+              ->  throw(error(remote_unpack_failed(Inner_E),_))
+              ;   throw(error(remote_unpack_unexpected_failure(E),_)))),
         Database_Transaction_Object = (Remote_Transaction_Object.parent),
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
@@ -495,50 +502,50 @@ test(remote_diverged,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(history_diverged)))])
+      throws(error(remote_unpack_failed(history_diverged),_))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(history_diverged)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(history_diverged,_)), _Result).
 
 test(remote_does_not_exist,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(remote_unknown)))])
+      throws(error(remote_unpack_failed(remote_unknown),_))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(remote_unknown)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(remote_unknown,_)), _Result).
 
 test(remote_authorization_failed,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(authorization_failure(_))))])
+      throws(error(remote_unpack_failed(authorization_failure(_)),_))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(authorization_failure(some_context_idunno))), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(authorization_failure(some_context_idunno),_)), _Result).
 
 test(remote_communication_failed,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(communication_failure(_))))])
+      throws(error(remote_unpack_failed(communication_failure(_)),_))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(communication_failure(some_context_idunno))), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(communication_failure(some_context_idunno),_)), _Result).
 
 test(remote_gave_unknown_error,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full)))))])
+      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full),_)),_))])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(phase_of_the_moon_is_wrong(full))), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "master", erroring_push_predicate(error(phase_of_the_moon_is_wrong(full),_)), _Result).
 
 :- end_tests(push).

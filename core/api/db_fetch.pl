@@ -11,15 +11,16 @@
 
 % Dubious! Why no auth?
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
-remote_fetch(_System_DB, _Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
-
+remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Repository_Descriptor),
         error(invalid_absolute_path(Path),_)),
-
+ 
     do_or_die(
         (repository_descriptor{} :< Repository_Descriptor),
         error(fetch_requires_repository(Repository_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Repository_Descriptor, system:fetch, Auth),
 
     Database_Descriptor = (Repository_Descriptor.database_descriptor),
 

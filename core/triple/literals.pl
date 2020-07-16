@@ -155,6 +155,10 @@ storage_literal(X1^^T1,X3^^T2) :-
     storage_value(X1,X2),
     (   T2 = 'http://www.w3.org/2001/XMLSchema#dateTime'
     ->  date_string(X3,X2)
+    ;   T2 = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ->  (   string(X2)
+        ->  number_string(X3,X2)
+        ;   X2 = X3)
     ;   X2 = X3).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
@@ -169,10 +173,8 @@ storage_object(value(S),O) :-
         ->  storage_literal(X^^T,O)
         ;   Term = X@Lang
         ->  storage_literal(X@Lang,O)
-        ;   format(atom(M),'What fell term is this? ~q', [Term]),
-            throw(error(M)))
-    ;   format(atom(M),'Bad stored value ~q', [S]),
-        throw(error(M))).
+        ;   throw(error(storage_unknown_type_error(Term))))
+    ;   throw(error(storage_bad_value(S)))).
 storage_object(node(S),O) :-
     (   nonvar(O)
     ->  (   atom(O)
