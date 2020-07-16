@@ -50,7 +50,7 @@ jwt_public_key_id(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://unpkg.com/@terminusdb/terminusdb-console@2.0.5/console/dist/', Value).
+    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://unpkg.com/@terminusdb/terminusdb-console@2.0.6/console/dist/', Value).
 
 https_enabled :-
     getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
