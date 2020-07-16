@@ -372,16 +372,21 @@ commit_validation_objects_([]) :- !.
 commit_validation_objects_([Object|Objects]) :-
     transaction_object{} :< Object,
     !,
-    transaction_objects_to_validation_objects([Object], Validation_Objects),
+    Descriptor = (Object.descriptor),
+    (   member(Validation_Object,Objects),
+        validation_object{} :< Validation_Object,
+        (Validation_Object.descriptor) = Descriptor
+    ->  true % already check this transaction object
+    ;   transaction_objects_to_validation_objects([Object], Validation_Objects),
 
-    validate_validation_objects(Validation_Objects, Witnesses),
-    (   Witnesses \= []
-    ->  Descriptor = Object.descriptor,
-        throw(error(schema_validation_error('Internal metadata graph had an unexpected schema error',context(Descriptor,Witnesses))))
-    ;   true),
-    append(Validation_Objects, Objects, New_Objects),
-    predsort(commit_order, New_Objects, Sorted_Objects),
-    commit_validation_objects_(Sorted_Objects).
+        validate_validation_objects(Validation_Objects, Witnesses),
+        (   Witnesses \= []
+        ->  Descriptor = (Object.descriptor),
+            throw(error(meta_schema_validation_error(Descriptor,Witnesses),_))
+        ;   true),
+        append(Validation_Objects, Objects, New_Objects),
+        predsort(commit_order, New_Objects, Sorted_Objects),
+        commit_validation_objects_(Sorted_Objects)).
 commit_validation_objects_([Object|Objects]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),

@@ -3269,4 +3269,170 @@ test(idgen, []) :-
     [Value] = (JSON.bindings),
     (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
 
+
+test(meta_graph_update, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+
+    Atom = '{
+  "@type": "woql:Using",
+  "woql:collection": {
+    "@type": "xsd:string",
+    "@value": "admin/test/_meta"
+  },
+  "woql:query": {
+    "@type": "woql:Into",
+    "woql:graph": {
+      "@type": "xsd:string",
+      "@value": "instance/main"
+    },
+    "woql:query": {
+      "@type": "woql:And",
+      "woql:query_list": [
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 0
+          },
+          "woql:query": {
+            "@type": "woql:IDGenerator",
+            "woql:base": {
+              "@type": "woql:Datatype",
+              "woql:datatype": {
+                "@type": "woql:Node",
+                "woql:node": "terminusdb:///repository/data/Remote"
+              }
+            },
+            "woql:key_list": {
+              "@type": "woql:Array",
+              "woql:array_element": [
+                {
+                  "@type": "woql:ArrayElement",
+                  "woql:datatype": {
+                    "@type": "xsd:string",
+                    "@value": "origin"
+                  },
+                  "woql:index": {
+                    "@type": "xsd:nonNegativeInteger`",
+                    "@value": 0
+                  }
+                }
+              ]
+            },
+            "woql:uri": {
+              "@type": "woql:Variable",
+              "woql:variable_name": {
+                "@value": "Remote",
+                "@type": "xsd:string"
+              }
+            }
+          }
+        },
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 1
+          },
+          "woql:query": {
+            "@type": "woql:AddTriple",
+            "woql:subject": {
+              "@type": "woql:Variable",
+              "woql:variable_name": {
+                "@value": "Remote",
+                "@type": "xsd:string"
+              }
+            },
+            "woql:predicate": {
+              "@type": "woql:Node",
+              "woql:node": "rdf:type"
+            },
+            "woql:object": {
+              "@type": "woql:Node",
+              "woql:node": "repo:Remote"
+            }
+          }
+        },
+        {
+          "@type": "woql:QueryListElement",
+          "woql:index": {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": 2
+          },
+          "woql:query": {
+            "@type": "woql:And",
+            "woql:query_list": [
+              {
+                "@type": "woql:QueryListElement",
+                "woql:index": {
+                  "@type": "xsd:nonNegativeInteger",
+                  "@value": 0
+                },
+                "woql:query": {
+                  "@type": "woql:AddTriple",
+                  "woql:subject": {
+                    "@type": "woql:Variable",
+                    "woql:variable_name": {
+                      "@value": "Remote",
+                      "@type": "xsd:string"
+                    }
+                  },
+                  "woql:predicate": {
+                    "@type": "woql:Node",
+                    "woql:node": "repo:repository_name"
+                  },
+                  "woql:object": {
+                    "@type": "woql:Datatype",
+                    "woql:datatype": {
+                      "@type": "xsd:string",
+                      "@value": "origin"
+                    }
+                  }
+                }
+              },
+              {
+                "@type": "woql:QueryListElement",
+                "woql:index": {
+                  "@type": "xsd:nonNegativeInteger",
+                  "@value": 1
+                },
+                "woql:query": {
+                  "@type": "woql:AddTriple",
+                  "woql:subject": {
+                    "@type": "woql:Variable",
+                    "woql:variable_name": {
+                      "@value": "Remote",
+                      "@type": "xsd:string"
+                    }
+                  },
+                  "woql:predicate": {
+                    "@type": "woql:Node",
+                    "woql:node": "repo:remote_url"
+                  },
+                  "woql:object": {
+                    "@type": "woql:Datatype",
+                    "woql:datatype": {
+                      "@type": "xsd:string",
+                      "@value": "https://hub-dev-server.dcm.ist/gavin/LastBikeTest"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}',
+    atom_json_dict(Atom,Query,[]),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+
+    writeq(JSON).
+
 :- end_tests(woql).
