@@ -1024,7 +1024,7 @@ compile_wf(into(G,S),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         resolve_filter(G,Filter),
-        (   Filter = type_name_filter{ type : _Type, name : [_Name]}
+        (   Filter = type_name_filter{ type : _Type, names : [_Name]}
         ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
         ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
         )
