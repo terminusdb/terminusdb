@@ -1,3 +1,10 @@
+# TerminusDB Server v2.0.5 Release Notes
+
+## Changes
+
++ New TerminusDB Console
++ Bug fixes
+
 # TerminusDB Server v2.0.4 Release Notes
 
 ## Changes
