@@ -17,26 +17,26 @@ vio:ViolationReport
   rdfs:label "Violation Report"@en ;
   rdfs:comment "A report of violations found in quality-testing of a document or graph fragment"@en ;
   a owl:Class ;
-  rdfs:subClassOf system:Entity.
+  rdfs:subClassOf system:Document.
 
 vio:InstanceDataViolationReport
   rdfs:label "Instance Data Violation Report"@en ;
   rdfs:comment "A report of violations of schema rules encountered in quality-testing of instance data"@en;
   a owl:Class ;
-  rdfs:subClassOf system:Entity, vio:ViolationReport, vio:RestrictInstanceViolation .
+  rdfs:subClassOf system:Document, vio:ViolationReport, vio:RestrictInstanceViolation .
 
 vio:SchemaViolationReport
   rdfs:label "Schema Violation Report"@en ;
   rdfs:comment "A report of violations encountered in quality-testing of schema rules"@en;
   a owl:Class ;
-  rdfs:subClassOf system:Entity, vio:ViolationReport, vio:RestrictSchemaViolation .
+  rdfs:subClassOf system:Document, vio:ViolationReport, vio:RestrictSchemaViolation .
 
 vio:violation
   rdfs:label "Violation"@en ;
   rdfs:comment "The set of violations that make up the violation report"@en ;
   a owl:ObjectProperty ;
   rdfs:domain vio:ViolationReport ;
-  rdfs:range vio:Violation .  
+  rdfs:range vio:Violation .
 
 vio:RestrictSchemaViolation
   a owl:Restriction ;
@@ -72,12 +72,12 @@ vio:MessageCardinalityRestriction
   rdfs:comment "Every violation contains exactly one message string"@en;
   a owl:Restriction ;
   owl:onProperty vio:message .
-  
+
 vio:SchemaViolation
   system:tag system:abstract;
   rdfs:label "Schema Violation"@en ;
-  rdfs:comment "A Violation of the rules relating to valid schema definition. 
-  Schema violations indicate an attempt to change a schema into an invalid state 
+  rdfs:comment "A Violation of the rules relating to valid schema definition.
+  Schema violations indicate an attempt to change a schema into an invalid state
   - a situation where prevention is always much better than cure!"@en ;
   a owl:Class ;
   rdfs:subClassOf vio:Violation .
@@ -177,7 +177,7 @@ vio:ListEntry
   rdfs:comment "An entry in a list of paths"@en ;
   a owl:Class ;
   rdfs:subClassOf vio:IndexCardinalityRestriction, vio:PathComponentCardinalityRestriction .
-  
+
 vio:index
   rdfs:label "Index"@en ;
   rdfs:comment "The position in the inheritance cycle chain"@en ;
@@ -189,7 +189,7 @@ vio:IndexCardinalityRestriction
   owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
   a owl:Restriction ;
   rdfs:label "Single Mandatory Index"@en;
-  rdfs:comment "Every List Entry in an inheritance must have a single index"@en;  
+  rdfs:comment "Every List Entry in an inheritance must have a single index"@en;
   owl:onProperty vio:index .
 
 vio:path_component
@@ -203,7 +203,7 @@ vio:PathComponentCardinalityRestriction
   owl:cardinality "1"^^xsd:nonNegativeInteger ;
   a owl:Restriction ;
   rdfs:label "Single Mandatory Class"@en;
-  rdfs:comment "Every List Entry in an inheritance must have a single class component"@en;  
+  rdfs:comment "Every List Entry in an inheritance must have a single class component"@en;
   owl:onProperty vio:path_component .
 
 vio:PropertyViolation
@@ -251,7 +251,7 @@ vio:PropertyInheritanceViolation
   a owl:Class ;
   system:tag system:abstract ;
   rdfs:subClassOf vio:PropertyViolation, vio:ParentPropertyCardinalityRestriction .
-  
+
 vio:parent_property
   rdfs:label "Parent Property"@en ;
   rdfs:comment "The parent property that is associated with the violation"@en ;
@@ -366,7 +366,7 @@ vio:ViolationWithPredicate
   rdfs:comment "An instance data violation that is associated with a particular predicate encountered in the data."@en ;
   a owl:Class ;
   rdfs:subClassOf vio:InstanceDataViolation .
- 
+
 vio:predicate
   rdfs:label "Predicate"@en ;
   rdfs:comment "The relevant predicate in a violation"@en ;
@@ -411,7 +411,7 @@ vio:DatatypeSubsumptionViolation
   rdfs:comment "The datatype parent has a violation"@en ;
   a owl:Class ;
   rdfs:subClassOf vio:ViolationWithDatatypeObject .
-  
+
 vio:parent_type
   rdfs:label "Parent Type"@en ;
   rdfs:comment "Subsuming Type"@en ;
@@ -427,20 +427,20 @@ vio:base_type
   rdfs:range xsd:string .
 
 
- vio:PropertyCycleViolation 
+ vio:PropertyCycleViolation
    rdfs:label "Property Cycle"@en ;
    rdfs:comment "A cycle in a property inheritance hierarchy"@en ;
    a owl:Class.
-   
+
 vio:UntypedInstance
    rdfs:label "Untyped Instance"@en;
-   rdfs:comment "A subject is used without a rdf:type being defined for it"@en. 
+   rdfs:comment "A subject is used without a rdf:type being defined for it"@en.
    a owl:Class;
    rdfs:subClassOf vio:ViolationWithSubject.
 
-vio:InstanceSubsumptionViolation      
+vio:InstanceSubsumptionViolation
    rdfs:label "Instance Subsumption Violation"@en;
-   rdfs:comment "An instance subject has an invalid parent"@en. 
+   rdfs:comment "An instance subject has an invalid parent"@en.
    a owl:Class;
    rdfs:subClassOf vio:ViolationWithSubject, vio:ViolationWithParent.
 
