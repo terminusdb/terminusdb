@@ -76,7 +76,7 @@ add_organization_transaction(System_DB, Auth, Name) :-
     askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
 
     with_transaction(Ctx,
-                     add_organization(Ctx, Name),
+                     add_organization(Ctx, Name, _),
                      _).
 
 add_organization(Name, Organization_URI) :-
@@ -555,7 +555,9 @@ test(organization_creation, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    add_organization("testing_organization", _),
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Admin),
+    add_organization_transaction(System_DB, Admin,"testing_organization"),
 
     organization_name_exists(system_descriptor{}, "testing_organization").
 
@@ -566,7 +568,9 @@ test(organization_update, [
 
     add_organization("testing_organization", _),
 
-    update_organization("testing_organization", "new_organization"),
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Admin),
+    update_organization_transaction(System_DB, Admin, "testing_organization", "new_organization"),
 
     organization_name_exists(system_descriptor{}, "new_organization").
 
@@ -577,7 +581,10 @@ test(organization_delete, [
 
     add_organization("testing_organization", _),
 
-    delete_organization("testing_organization"),
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Admin),
+
+    delete_organization_transaction(System_DB, Admin, "testing_organization"),
 
     \+ organization_name_exists(system_descriptor{}, "testing_organization").
 
