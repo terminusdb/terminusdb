@@ -1054,7 +1054,7 @@ test(open_branch_descriptor_with_atom, [
     Database_Descriptor = database_descriptor{ organization_name: "admin",
                                                database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: master },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: main },
 
     open_descriptor(Branch_Descriptor, _Transaction).
 

@@ -158,7 +158,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, C
 
 default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
     atomic_list_concat([Organization_Name, '/', Database_Name, '/',
-                        "local/branch/master/schema/main"], Graph_Path).
+                        "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri),

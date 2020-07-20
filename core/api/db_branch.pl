@@ -175,7 +175,7 @@ test(create_branch_from_local_branch_with_commits,
      ]
     ) :-
 
-    Origin_Branch_Path = "admin/foo/local/branch/master",
+    Origin_Branch_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
     Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -203,7 +203,7 @@ test(create_branch_from_remote_branch,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -242,7 +242,7 @@ test(create_branch_from_local_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -287,7 +287,7 @@ test(create_branch_from_remote_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 

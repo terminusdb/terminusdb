@@ -187,7 +187,7 @@ test(push_on_empty,
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(Expected_Layer_Id), _Result),
 
-    resolve_absolute_string_descriptor("admin/foo/remote/branch/master", Remote_Branch),
+    resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
     sort(Triples, [a-b-c,c-d-e]).
 
@@ -243,7 +243,7 @@ test(push_twice,
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(_Expected_Layer_Id_2), _Result_2),
 
-    resolve_absolute_string_descriptor("admin/foo/remote/branch/master", Remote_Branch),
+    resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
     sort(Triples, [a-b-c,c-d-e,h-i-j,k-l-m]).
 

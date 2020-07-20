@@ -2289,7 +2289,7 @@ test(path_star, [
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  Commit_Info,
                  _Transaction_Metadata2),
 
@@ -2341,7 +2341,7 @@ test(complex_path, [
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  Commit_Info,
                  _Transaction_Metadata2),
 
@@ -2786,8 +2786,8 @@ test(metadata_graph, [
     ),
 
     ask(Descriptor,
-        (   size('admin/test/local/branch/master/instance/main',Size_Lit),
-            triple_count('admin/test/local/branch/master/instance/main', Count_Lit)
+        (   size('admin/test/local/branch/main/instance/main',Size_Lit),
+            triple_count('admin/test/local/branch/main/instance/main', Count_Lit)
         )),
 
     Size_Lit = Size^^xsd:decimal,
@@ -3431,8 +3431,6 @@ test(meta_graph_update, [
 }',
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, JSON),
-
-    writeq(JSON).
+    query_test_response(Descriptor, Query, _JSON).
 
 :- end_tests(woql).

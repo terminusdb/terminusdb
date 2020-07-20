@@ -127,7 +127,7 @@ resolve_absolute_descriptor([Organization, Database],
     resolve_absolute_descriptor([Organization, Database, "local", "branch", "main"], Descriptor).
 resolve_absolute_descriptor([Organization, Database, Repository], Descriptor) :-
     !,
-    resolve_absolute_descriptor([Organization, Database, Repository, branch, master], Descriptor).
+    resolve_absolute_descriptor([Organization, Database, Repository, branch, main], Descriptor).
 
 :- begin_tests(resolve_absolute_string).
 test(organization_db) :-

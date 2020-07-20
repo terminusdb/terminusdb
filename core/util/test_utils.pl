@@ -277,7 +277,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
     read_file_to_string(TTL_File, TTL, []),
 
     atomic_list_concat([Organization, '/', Db_Name,
-                        '/local/branch/master/schema/main'],
+                        '/local/branch/main/schema/main'],
                        Graph),
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add test schema"},
