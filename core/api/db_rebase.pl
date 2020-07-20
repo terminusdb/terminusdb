@@ -275,7 +275,7 @@ test(rebase_fast_forward,
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
     commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
 
-    branch_head_commit(Repo_Descriptor, "master", Commit_C_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Commit_C_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_A_Uri),
 
@@ -333,7 +333,7 @@ test(rebase_divergent_history,
                      _),
 
     Repo_Descriptor = Master_Descriptor.repository_descriptor,
-    branch_head_commit(Repo_Descriptor, "master", Old_Commit_D_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Old_Commit_D_Uri),
     commit_id_uri(Repo_Descriptor, Old_Commit_D_Id, Old_Commit_D_Uri),
 
     super_user_authority(Auth),
@@ -341,7 +341,7 @@ test(rebase_divergent_history,
 
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
 
-    branch_head_commit(Repo_Descriptor, "master", New_Commit_D_Uri),
+    branch_head_commit(Repo_Descriptor, "main", New_Commit_D_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, New_Commit_D_Uri, Commit_C_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
     commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_A_Uri),
@@ -424,7 +424,7 @@ test(rebase_conflicting_history_errors,
                          ),
                      _),
 
-    branch_head_commit(Repository_Descriptor, "master", Failure_Commit_Uri),
+    branch_head_commit(Repository_Descriptor, "main", Failure_Commit_Uri),
     commit_id_uri(Repository_Descriptor, Failure_Commit_Id, Failure_Commit_Uri),
 
     % create a commit on the second branch, diverging history

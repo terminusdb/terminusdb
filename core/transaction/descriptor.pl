@@ -744,10 +744,10 @@ make_branch_descriptor(Organization, DB, Repo_Name, Branch_Name, Branch_Descript
                                            repository_descriptor : Repository_Descriptor}.
 
 make_branch_descriptor(Organization, DB, Repo_Name, Branch_Descriptor) :-
-    make_branch_descriptor(Organization, DB, Repo_Name, "master", Branch_Descriptor).
+    make_branch_descriptor(Organization, DB, Repo_Name, "main", Branch_Descriptor).
 
 make_branch_descriptor(Organization, DB, Branch_Descriptor) :-
-    make_branch_descriptor(Organization, DB, "local", "master", Branch_Descriptor).
+    make_branch_descriptor(Organization, DB, "local", "main", Branch_Descriptor).
 
 /**
  * transactions_to_map(Context, Map) is det.
@@ -921,8 +921,8 @@ test(transactions_to_map,[
     maplist([Desc=_,Desc]>>true, Map, Descriptors),
     list_to_ord_set(Descriptors, Desc_Set),
     list_to_ord_set(
-        [branch_descriptor{branch_name:"master",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin", database_name:"test"},repository_name:"local"}},
-         branch_graph{branch_name:"master",organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
+        [branch_descriptor{branch_name:"main",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin", database_name:"test"},repository_name:"local"}},
+         branch_graph{branch_name:"main",organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
          repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin",database_name:"test"},repository_name:"local"},
          commit_graph{organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
          commit_graph{organization_name:"admin",database_name:"test",name:"layer",repository_name:"local",type:schema},
@@ -1067,7 +1067,7 @@ test(open_branch_descriptor_with_string, [
     Database_Descriptor = database_descriptor{ organization_name: "admin",
                                                database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "main" },
 
     open_descriptor(Branch_Descriptor, _Transaction).
 
@@ -1094,7 +1094,7 @@ test(open_commit_descriptor_with_atom, [
     Database_Descriptor = database_descriptor{ organization_name: "admin",
                                                database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "main" },
 
     % add a commit to open later
     create_context(Branch_Descriptor,
@@ -1107,7 +1107,7 @@ test(open_commit_descriptor_with_atom, [
                               insert(foo, bar, baz))),
                      _),
 
-    branch_head_commit(Repo_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
     commit_id_uri(Repo_Descriptor, Commit_Id, Commit_Uri),
 
     atom_string(Commit_Id_Atom, Commit_Id),
@@ -1126,7 +1126,7 @@ test(open_commit_descriptor_with_string, [
     Database_Descriptor = database_descriptor{ organization_name: "admin",
                                                database_name: "testdb" },
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
-    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "master" },
+    Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor, branch_name: "main" },
 
     % add a commit to open later
     create_context(Branch_Descriptor,
@@ -1139,7 +1139,7 @@ test(open_commit_descriptor_with_string, [
                               insert(foo, bar, baz))),
                      _),
 
-    branch_head_commit(Repo_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
     commit_id_uri(Repo_Descriptor, Commit_Id, Commit_Uri),
 
     Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: Commit_Id },

@@ -1792,7 +1792,7 @@ test(rebase_divergent_history, [
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
     commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_B, Commit_C, Commit_D]),
 
     commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),

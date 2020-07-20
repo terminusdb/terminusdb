@@ -866,7 +866,7 @@ test(insert_on_branch_descriptor, [
     Repo_Descriptor = repository_descriptor{ database_descriptor : DB_Descriptor,
                                              repository_name : "local" },
     Branch_Descriptor = branch_descriptor{ repository_descriptor: Repo_Descriptor,
-                                           branch_name: "master" },
+                                           branch_name: "main" },
     open_descriptor(Branch_Descriptor, Transaction),
     Transaction2 = Transaction.put(commit_info, commit_info{ author : "Me", message: "chill"}),
     ask(Transaction2,

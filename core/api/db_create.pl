@@ -79,7 +79,7 @@ create_ref_layer(Descriptor,Prefixes) :-
     create_context(Descriptor, Context),
     with_transaction(
         Context,
-        (   insert_branch_object(Context, "master", _),
+        (   insert_branch_object(Context, "main", _),
             update_prefixes(Context, Prefixes)
         ),
         _).
@@ -181,7 +181,7 @@ test(create_db_and_check_master_branch, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
 
-         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"master"^^xsd:string))),
+         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"main"^^xsd:string))),
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
@@ -196,6 +196,6 @@ test(create_db_and_check_master_branch, [
                           repository_name: "local" },
     Branch_Descriptor = branch_descriptor{
                             repository_descriptor: Repo_Descriptor,
-                            branch_name: "master" }.
+                            branch_name: "main" }.
 
 :- end_tests(database_creation).

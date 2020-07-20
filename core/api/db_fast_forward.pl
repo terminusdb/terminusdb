@@ -73,7 +73,7 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    \+ branch_head_commit(Repo_Descriptor, "master", _Head_Commit_Uri).
+    \+ branch_head_commit(Repo_Descriptor, "main", _Head_Commit_Uri).
 
 test(fast_forward_empty_branch_from_same_repo,
      [setup((setup_temp_store(State),
@@ -108,7 +108,7 @@ test(fast_forward_empty_branch_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
     History = [Commit_A, Commit_B],
     History = Applied_Commit_Ids,
@@ -158,7 +158,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
     History = [Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids = [Commit_B, Commit_C],
@@ -370,7 +370,7 @@ test(fast_forward_branch_from_other_repo,
 
     % check history
     Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
     History = [Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids = [Commit_B, Commit_C],
