@@ -18,6 +18,8 @@
               add_organization/3,
               add_organization_transaction/3,
 
+              add_user_organization_transaction/4,
+
               add_role/6,
               update_role/6,
               update_role_transaction/6,
@@ -65,6 +67,45 @@ delete_organization(Context,Name) :-
         (   t(Organization_Uri, rdf:type, system:'Organization'),
             delete_object(Organization_Uri)
         )).
+
+add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
+    do_or_die(is_super_user(Auth, _{}),
+              error(organization_creation_requires_superuser,_)),
+
+    Commit_Info = commit_info{
+                      author: "add_user_organization_transaction/3",
+                      message: "internal system operation"
+                  },
+    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
+
+    with_transaction(Ctx,
+                     add_user_organization(Ctx, Nick, Org, _Uri),
+                     _).
+
+add_user_organization(Context, Nick, Org, Organization_URI) :-
+
+    do_or_die(agent_name_exists(Context, Nick),
+              error(agent_name_does_not_exist(Nick))),
+
+    (   organization_name_exists(Context, Org)
+    ->  throw(error(organization_already_exists(Org),_))
+    ;   true),
+
+    ask(Context,
+        (   random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
+            random_idgen(doc:'Organization',[Org^^xsd:string], Organization_URI),
+            t(User_URI, system:agent_name, Nick^^xsd:string),
+            t(User_URI, system:role, Role_URI),
+            insert(Role_URI, system:capability, Capability_URI),
+            insert(Capability_URI, rdf:type, system:'Capability'),
+            insert(Capability_URI, system:capability_scope, Organization_URI),
+            insert(Capability_URI, system:action, system:manage_capabilities),
+            insert(Organization_URI, rdf:type, system:'Organization'),
+            insert(Organization_URI, system:organization_name, Org^^xsd:string),
+            insert(doc:admin_organization, system:resource_includes, Organization_URI)
+        ),
+       [compress_prefixes(false)]).
+
 
 add_organization_transaction(System_DB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -802,5 +843,25 @@ test(update_organization_role, [
           [_{'@id':'system:inference_read_access',
              '@type':'system:DBAction'},
            _{'@id':'system:manage_capabilities','@type':'system:DBAction'}])).
+
+test(add_user_organization, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    add_user("Kevin", "kevin@terminusdb.com", "here.i.am", some('password'), _Kevin_URI),
+
+    create_db_without_schema("Kevin", "flurp"),
+
+    super_user_authority(Admin),
+    add_user_organization_transaction(
+        system_descriptor{},
+        Admin,
+        "Kevin",
+        "Fantasy"),
+
+    agent_name_uri(system_descriptor{}, "Kevin", User_Uri),
+    organization_name_uri(system_descriptor{}, "Fantasy", Organization_Uri),
+    once(user_managed_resource(system_descriptor{}, User_Uri, Organization_Uri)).
 
 :- end_tests(user_management).

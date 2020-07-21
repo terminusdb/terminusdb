@@ -2800,12 +2800,13 @@ user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Reques
 organization_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    do_or_die(_{ organization_name : Name } :< Document,
+    do_or_die(_{ organization_name : Org,
+                 user_name : User } :< Document,
               error(malformed_organization_document(Document))
              ),
 
     catch_with_backtrace(
-        (   add_organization_transaction(System_DB, Auth, Name),
+        (   add_user_organization_transaction(System_DB, Auth, User, Org),
             cors_reply_json(Request,
                             _{'@type' : "api:AddOrganizationResponse",
                               'api:status' : "api:success"})),
