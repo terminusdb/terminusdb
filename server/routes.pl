@@ -2901,15 +2901,17 @@ delete_organization_error_handler(error(delete_organization_requires_superuser,_
 update_role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    do_or_die(_{ database_name : Database_Name,
-                 agent_names : Agents,
+    do_or_die(_{ agent_names : Agents,
                  organization_name : Organization,
                  actions : Actions
                } :< Document,
-              error(bad_api_document(Document, [database_name, agent_names, organization_name, actions]), _)),
+              error(bad_api_document(Document, [agent_names, organization_name, actions]), _)),
+    (   _{ database_name : Database_Name } :< Document
+    ->  Database_Name_Option = some(Database_Name)
+    ;   Database_Name_Option = none),
 
     catch_with_backtrace(
-        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name_Option, Actions),
             cors_reply_json(Request,
                             _{'@type' : "api:UpdateRoleResponse",
                               'api:status' : "api:success"})),
