@@ -2802,7 +2802,7 @@ organization_handler(post, Request, System_DB, Auth) :-
 
     do_or_die(_{ organization_name : Org,
                  user_name : User } :< Document,
-              error(malformed_organization_document(Document))
+              error(bad_api_document(Document, [organization_name, user_name]))
              ),
 
     catch_with_backtrace(
