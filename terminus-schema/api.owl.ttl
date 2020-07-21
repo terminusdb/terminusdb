@@ -922,3 +922,9 @@ api:APIDocument
   rdfs:label "API Document"@en ;
   rdfs:comment "Document containing response."@en ;
   a owl:Class .
+
+api:APIEndpointFailed
+  a owl:Class ;
+  rdfs:label "API Endpoint Failed"@en ;
+  rdfs:comment "The endpoint goal failed for an unknown reason"@en ;
+  rdfs:subClassOf api:Error .

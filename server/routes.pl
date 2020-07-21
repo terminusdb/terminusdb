@@ -2962,7 +2962,17 @@ cors_handler(Method, Goal, R) :-
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
                           },
-                         [status(401)]))).
+                         [status(401)]))),
+    !.
+cors_handler(_Method, Goal, R) :-
+    write_cors_headers(R),
+    format(string(Msg), "Failed to run the API endpoint goal ~q", Goal),
+    reply_json(_{'@type' : 'api:ErrorResponse',
+                 'api:status' : 'api:failure',
+                 'api:error' : _{'@type' : 'api:APIEndpointFailed'},
+                 'api:message' : Msg
+                },
+               [status(500)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(+,3,?,?,?).
