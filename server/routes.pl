@@ -2122,6 +2122,15 @@ push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
                                        'api:response' : Reason}
                      },
                     [status(401)]).
+push_error_handler(error(remote_unpack_failed(history_diverged),_), Request) :-
+    format(string(Msg), "The unpacking of layers on the remote was not possible as the history was divergent", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:HistoryDivergedError"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 
 remote_unpack_url(URL, Pack_URL) :-
@@ -2144,10 +2153,10 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     (   200 = Status_Code
     ->  true
     ;   400 = Status_Code,
-        Result :< _{'@type': Vio_Type}
-    ->  (   Vio_Type = "vio:NotALinearHistory"
+        _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
+    ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
         ->  throw(error(history_diverged,_))
-        ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
+        ;   _{'@type' : "api:UnpackDestinationDatabaseNotFound"} :< Error
         ->  throw(error(remote_unknown,_))
         ;   throw(error(unknown_status_code(Status_Code, Result),_))
         )
