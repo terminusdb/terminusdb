@@ -1606,7 +1606,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
             (   Common_Commit_ID_Option = some(Common_Commit_ID)
             ->  Reply = (Incomplete_Reply.put('api:common_commit_id', Common_Commit_ID))
             ;   Reply = Incomplete_Reply),
-            reply_json_dict(Reply)),
+            cors_reply_json(Request, Reply, [status(200)])),
         E,
         do_or_die(rebase_error_handler(E,Request),
                   E)

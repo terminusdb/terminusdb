@@ -191,7 +191,8 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     (   Our_Branch_History = []
     % yay we're done! All commits are known to us, no need to do a thing
     ->  Semifinal_Context = Our_Repo_Context2,
-        Final_Commit_Uri = Their_Commit_Uri
+        Final_Commit_Uri = Their_Commit_Uri,
+        Reports = []
     ;   catch(
             apply_commit_chain(Our_Repo_Context2,
                                Their_Repo_Context,
