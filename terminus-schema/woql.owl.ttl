@@ -1388,3 +1388,9 @@ woql:triple_count
   rdfs:label "triple count"@en ;
   rdfs:domain woql:TripleCount ;
   rdfs:range woql:Value .
+
+woql:With
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryWithSubQuery ;
+  rdfs:label "With"@en ;
+  rdfs:comment "Add a new addressable temporary graph resource"@en .

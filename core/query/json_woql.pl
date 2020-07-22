@@ -432,6 +432,24 @@ json_to_woql_ast(JSON,WOQL,Path) :-
         json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
                                               |Path]),
         WOQL = get(WAsVars,WResource)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#With',
+          'http://terminusdb.com/schema/woql#graph' : Graph,
+          'http://terminusdb.com/schema/woql#query_resource' : Resource,
+          'http://terminusdb.com/schema/woql#query' : Query
+         } :< JSON
+    ->  json_to_woql_ast(Graph,WGraph, ['http://terminusdb.com/schema/woql#graph'
+                                        |Path]),
+        json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
+                                              |Path]),
+        json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+                                       |Path]),
+        do_or_die(
+            (WGraph = Graph_String^^_),
+            error(woql_syntax_error(JSON,
+                                    ['http://terminusdb.com/schema/woql#graph'|Path],
+                                    Graph), _)),
+
+        WOQL = with(Graph_String,WResource,WQuery)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#NamedAsVar',
           'http://terminusdb.com/schema/woql#variable_name' : Var_Name,
           'http://terminusdb.com/schema/woql#identifier' : Identifier

@@ -539,7 +539,7 @@ resolve_root_relative_descriptor(root) -->
 resolve_root_relative_descriptor(system_descriptor{}) -->
     [ "_system" ],
     !.
-resolve_root_relative_descriptor(Descriptor) --> 
+resolve_root_relative_descriptor(Descriptor) -->
     [ "label" ],
     !,
     resolve_relative_descriptor(some_label, Descriptor).

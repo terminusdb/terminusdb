@@ -132,6 +132,14 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
             t(Capability, system:capability_scope, Scope_Iri)
         )
        ).
+auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
+    % For access to everything that the anonymous user has...
+    ask(DB,
+        (   t(doc:anonymous_role, system:capability, Capability),
+            t(Capability, system:action, Action),
+            t(Capability, system:capability_scope, Scope_Iri)
+        )
+       ).
 
 /*
  * resource_user_path(Askable,Resource,User,Path) is nondet.
