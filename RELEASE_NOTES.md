@@ -1,3 +1,25 @@
+# TerminusDB Server v3.0.0 Release Notes
+
+This is our TerminusDB Server v3 liberation release. We have removed
+the masters from our default branching.
+
+## New
+
++ Default branch is now called main and not master
++ Added much more extensive coverage of API in the api.owl.ttl ontology
++ Fixed some schema errors in woql.owl.ttl
+
+## Backwards-Incompatible Changes
+
++ Default branch will be set to main and not master, so that some
+  calls which relied on master being default will fail. This can be
+  fixed in all cases by doing a branch operation from master to main.
+
+## Bug fixes
+
++ Improved the API for organisation management
++ Improved CORS handling on some calls
+
 # TerminusDB Server v2.0.6 Release Notes
 
 This is largely a bug fix and cleanup release. We focused on improving error handling and code maintanability.
