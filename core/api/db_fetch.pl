@@ -131,7 +131,7 @@ test(fetch_something,
             Local_Repository_Layer_Id = Remote_Repository_Layer_Id,
             Head_Has_Updated = true,
 
-            resolve_absolute_string_descriptor("admin/test_local/terminus_remote/branch/master", Remote_Master_Descriptor),
+            resolve_absolute_string_descriptor("admin/test_local/terminus_remote/branch/main", Remote_Master_Descriptor),
             open_descriptor(Remote_Master_Descriptor, Remote_Master_Transaction),
             once(ask(Remote_Master_Transaction,
                      t(a,b,c)))

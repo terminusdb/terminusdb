@@ -3,6 +3,7 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix system: <http://terminusdb.com/schema/system#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
 @prefix api: <http://terminusdb.com/schema/api#> .
 
 <http://terminusdb.com/schema/api>
@@ -15,72 +16,102 @@
 
 api:Response
   a owl:Class ;
+  rdfs:label "Response"@en ;
+  rdfs:comment "The base class of an API response document"@en ;
   rdfs:subClassOf system:Document .
 
 api:Status
   a owl:Class ;
-  owl:oneOf ( api:success, api:failure ) .
+  rdfs:label "Status"@en ;
+  rdfs:comment "The current status response type."@en ;
+  owl:oneOf ( api:success api:failure ) .
 
 api:success a api:Status .
 api:failure a api:Status .
 
 api:status
   a owl:ObjectProperty ;
+  rdfs:label "status"@en ;
+  rdfs:comment "Points to the current response status."@en ;
   rdfs:domain api:Response ;
   rdfs:range api:Status .
 
 api:ResultResponse
   a owl:Class ;
+  rdfs:label "Result Response"@en ;
+  rdfs:comment "A result response containing information about a successful API call."@en ;
   rdfs:subClassOf api:Response .
 
 api:MessageResponse
   a owl:Class ;
+  rdfs:label "Message Response"@en ;
+  rdfs:comment "A response with a message."@en ;
   rdfs:subClassOf api:Response .
 
 api:message
   a owl:DatatypeProperty ;
+  rdfs:label "message"@en ;
+  rdfs:comment "Points to the message associated with a response."@en ;
   rdfs:domain api:MessageResponse ;
   rdfs:range xsd:string .
 
 api:ErrorResponse
   a owl:Class ;
-  rdfs:subClassOf api:MessageResponse.
+  rdfs:label "Error Response"@en ;
+  rdfs:comment "Response document which results from an error."@en ;
+  rdfs:subClassOf api:MessageResponse .
 
 api:Error
   a owl:Class ;
+  rdfs:label "Error"@en ;
+  rdfs:comment "An error document."@en ;
   rdfs:subClassOf system:Document .
 
 api:error
   a owl:ObjectProperty ;
+  rdfs:label "error"@en ;
+  rdfs:comment "Points to an error document."@en ;
   rdfs:domain api:ErrorResponse ;
   rdfs:range api:Error .
 
 api:FrameErrorResponse
   a owl:Class ;
+  rdfs:label "Frame Error Response"@en ;
+  rdfs:comment "Response object for errors to the Frame API."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
-api:WithAbsoluteDescriptor ;
+api:WithAbsoluteDescriptor
   a owl:Class .
 
-api:absolute_descriptor ;
+api:absolute_descriptor
   a owl:DatatypeProperty ;
+  rdfs:label "absolute descriptor"@en ;
+  rdfs:comment "Points to an absolute descriptor string."@en ;
   rdfs:domain api:WithAbsoluteDescriptor ;
   rdfs:range xsd:string .
 
 api:BadAbsoluteDescriptor
   a owl:Class ;
+  rdfs:label "Bad Absolute Descriptor"@en ;
+  rdfs:comment "A bad absolute descriptor has been supplied."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
 api:UnresolvableAbsoluteDescriptor
   a owl:Class ;
+  rdfs:label "Unresolvable Absolute Descriptor"@en ;
+  rdfs:comment "An absolute descriptor whose corresponding resource can not be found has been supplied."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
 api:UnresolvableTargetAbsoluteDescriptor
   a owl:Class ;
+  rdfs:label "Unresolvable Target Absolute Descriptor"@en ;
+  rdfs:comment "A target absolute descriptor whose corresponding resource can not be found has been supplied."@en ;
   rdfs:subClassOf api:UnresolvableAbsoluteDescriptor .
 
 api:UnresolvableSourceAbsoluteDescriptor
   a owl:Class ;
+  rdfs:label "Unresolvable Source Absolute Descriptor"@en ;
+  rdfs:comment "A source absolute descriptor whose corresponding resource can not be found has been supplied."@en ;
   rdfs:subClassOf api:UnresolvableAbsoluteDescriptor .
 
 api:WithClassUri
@@ -88,11 +119,15 @@ api:WithClassUri
 
 api:class_uri
   a owl:DatatypeProperty ;
+  rdfs:label "class URI"@en ;
+  rdfs:comment "Points to a class uri string."@en ;
   rdfs:domain api:WithClassUri ;
   rdfs:range xsd:string .
 
 api:CouldNotCreateClassFrame
   a owl:Class ;
+  rdfs:label "Could Not Create Class Frame"@en ;
+  rdfs:comment "Error in attempt to create the corresponding class."@en ;
   rdfs:subClassOf api:Error, api:WithClassUri .
 
 api:WithInstanceUri
@@ -100,79 +135,106 @@ api:WithInstanceUri
 
 api:instance_uri
   a owl:DatatypeProperty ;
+  rdfs:label "instance URI"@en ;
+  rdfs:comment "Points to a corresponding instance URI string."@en ;
   rdfs:domain api:WithInstanceUri ;
   rdfs:range xsd:string .
 
 api:CouldNotCreateFilledClassFrame
   a owl:Class ;
+  rdfs:label "Could Not Create Filled Class Frame"@en ;
+  rdfs:comment "Failure in attempt to create a filled class frame."@en ;
   rdfs:subClassOf api:Error, api:WithInstanceUri .
 
 api:InstanceUriHasUnknownPrefix
   a owl:Class ;
+  rdfs:label "Instance URI Has Unknown Prefix"@en ;
+  rdfs:comment "A prefix which is not defined in the current context was encountered for the corresponding instance."@en ;
   rdfs:subClassOf api:Error, api:WithInstanceUri .
 
 api:ClassUriHasUnknownPrefix
   a owl:Class ;
+  rdfs:label "Class URI Has Unknown Prefix"@en ;
+  rdfs:comment "A prefix which is not defined in the current context was encountered for the corresponding class."@en ;
   rdfs:subClassOf api:Error, api:WithClassUri .
 
 api:DbCreateResponse
   a owl:Class ;
+  rdfs:label "DB Create Response"@en ;
+  rdfs:comment "Response document for DB Creation."@en ;
   rdfs:subClassOf api:ResultResponse .
 
 api:DbDeleteResponse
   a owl:Class ;
+  rdfs:label "DB Delete Response"@en ;
+  rdfs:comment "Response document for DB Deletion."@en ;
   rdfs:subClassOf api:ResultResponse .
 
 api:DbCreateErrorResponse
   a owl:Class ;
+  rdfs:label "DB Creation Error Response"@en ;
+  rdfs:comment "Error response document for DB creation."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
-api:WithOrganizationName ;
+api:WithOrganizationName
   a owl:Class .
 
 api:organization_name
   a owl:DatatypeProperty ;
+  rdfs:label "organization name"@en ;
+  rdfs:comment "Points to the organization name."@en ;
   rdfs:domain api:WithOrganizationName ;
   rdfs:range xsd:string .
 
 api:UnknownOrganization
   a owl:Class ;
+  rdfs:label "Unknown Organization"@en ;
+  rdfs:comment "This organization does not appear to exist (or is not visible)."@en ;
   rdfs:subClassOf api:Error, api:WithOrganizationName .
 
-api:WithDatabaseName ;
+api:WithDatabaseName
   a owl:Class .
-
-api:organization_name
-  a owl:DatatypeProperty ;
-  rdfs:domain api:WithDatabaseName ;
-  rdfs:range xsd:string .
 
 api:DatabaseAlreadyExists
   a owl:Class ;
-  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+  rdfs:label "Database Already Exists"@en ;
+  rdfs:comment "A database with this identifier already exist."@en ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName, api:WithOrganizationName .
 
 api:DatabaseDoesNotExist
   a owl:Class ;
-  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+  rdfs:label "Database Does Not Exists"@en ;
+  rdfs:comment "A database with this identifier does not exist."@en ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName, api:WithOrganizationName .
 
 api:DatabaseNotFinalized
   a owl:Class ;
-  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+  rdfs:label "Database Not Finalized"@en ;
+  rdfs:comment "The identified database is not in a finalized state. This means that the database creation process was somehow interrupted. Manual intervention will probably be necessary to clean the system database."@en ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName, api:WithOrganizationName .
 
 api:DatabaseFilesDoNotExist
   a owl:Class ;
-  rdfs:subClassOf api:Error, api:WithDatabaseName , api:WithOrganizationName .
+  rdfs:label "Database Files Do Not Exist"@en ;
+  rdfs:comment "The files which are supposed to be associated with this database can not be found."@en ;
+  rdfs:subClassOf api:Error, api:WithDatabaseName, api:WithOrganizationName .
 
 api:DatabaseInInconsistentState
   a owl:Class ;
-  rdsf:subClassOf api:Error .
+  rdfs:label "Database In Inconsistent State"@en ;
+  rdfs:comment "The database is not in a consistent state and can not be used, opened or deleted."@en ;
+  rdfs:subClassOf api:Error .
 
 api:TriplesLoadResponse
   a owl:Class ;
+  rdfs:label "Triples Load Response"@en ;
+  rdfs:comment "Response document for triples API endpoint."@en ;
   rdfs:subClassOf api:Response .
 
 api:TriplesErrorResponse
   a owl:Class ;
+  rdfs:label "Triples Error Response"@en ;
+  rdfs:comment "Error response document for triples API endpoint."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:WithFormat
@@ -180,27 +242,37 @@ api:WithFormat
 
 api:format
   a owl:DatatypeProperty ;
+  rdfs:label "format"@en ;
+  rdfs:comment "Interchange format associated with document."@en ;
   rdfs:domain api:WithFormat ;
   rdfs:range xsd:string .
 
 api:TriplesUnknownFormat
   a owl:Class ;
+  rdfs:label "Triples Unknown Format"@en ;
+  rdfs:comment "The format which is requested for this request is unknown or unsupported."@en ;
   rdfs:subClassOf api:Error, api:WithFormat .
 
-api:WithAbsoluteGraphDescriptor ;
+api:WithAbsoluteGraphDescriptor
   a owl:Class .
 
-api:absolute_graph_descriptor ;
+api:absolute_graph_descriptor
   a owl:DatatypeProperty ;
+  rdfs:label "absolute graph descriptor"@en ;
+  rdfs:comment "Points to an absolute graph descriptor."@en ;
   rdfs:domain api:WithAbsoluteGraphDescriptor ;
   rdfs:range xsd:string .
 
 api:BadAbsoluteGraphDescriptor
   a owl:Class ;
+  rdfs:label "Bad Absolute Graph Descriptor"@en ;
+  rdfs:comment "The graph descriptor is not a validly constructed descriptor and can not be parsed."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
 
 api:UnresolvableAbsoluteGraphDescriptor
   a owl:Class ;
+  rdfs:label "Unresolvable Absolute Graph Descriptor"@en ;
+  rdfs:comment "The absolute graph descriptor can not be resolved to an existing graph resource."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteGraphDescriptor .
 
 api:WithBindings
@@ -211,6 +283,8 @@ api:Binding
 
 api:bindings
   a owl:ObjectProperty ;
+  rdfs:label "bindings"@en ;
+  rdfs:comment "Points to the bindings associated with a WOQL query."@en ;
   rdfs:domain api:WoqlResponse ;
   rdfs:range api:Binding .
 
@@ -219,6 +293,8 @@ api:WithTransactionRetryCount
 
 api:transaction_retry_count
   a owl:DatatypeProperty ;
+  rdfs:label "transaction retry count"@en ;
+  rdfs:comment "Points to the number of retries which were encountered during a transaction."@en ;
   rdfs:domain api:WoqlResponse ;
   rdfs:range xsd:nonNegativeInteger .
 
@@ -227,6 +303,8 @@ api:WithInserts
 
 api:inserts
   a owl:DatatypeProperty ;
+  rdfs:label "inserts"@en ;
+  rdfs:comment "Points to the number of inserts which took place in the transaction."@en ;
   rdfs:domain api:WoqlResponse ;
   rdfs:range xsd:nonNegativeInteger .
 
@@ -235,34 +313,48 @@ api:WithDeletes
 
 api:deletes
   a owl:DatatypeProperty ;
+  rdfs:label "deletes"@en ;
+  rdfs:comment "Points to the number of deletes which took place in the transaction."@en ;
   rdfs:domain api:WoqlResponse ;
   rdfs:range xsd:nonNegativeInteger .
 
 api:WoqlResponse
   a owl:Class ;
-  rdfs:subClassOf api:Response , api:WithBindings, api:WithTransactionRetryCount , api:WithInserts, api:WithDeletes .
+  rdfs:label "WOQL Response"@en ;
+  rdfs:comment "WOQL response document which holds all of the response information from a WOQL query."@en ;
+  rdfs:subClassOf api:Response, api:WithBindings, api:WithTransactionRetryCount , api:WithInserts, api:WithDeletes .
 
 api:WoqlErrorResponse
   a owl:Class ;
+  rdfs:label "WOQL Error Response"@en ;
+  rdfs:comment "WOQL error response document from a failed WOQL query."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:CloneResponse
   a owl:Class ;
+  rdfs:label "Clone Response"@en ;
+  rdfs:comment "Clone response document."@en ;
   rdfs:subClassOf api:Response .
 
 api:CloneErrorResponse
   a owl:Class ;
+  rdfs:label "Clone Error Response"@en ;
+  rdfs:comment "Clone error response document."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:RemoteConnectionError
   a owl:Class ;
+  rdfs:label "Remote Connection Error"@en ;
+  rdfs:comment "Error in communication to remote."@en ;
   rdfs:subClassOf api:Error .
 
 api:WithHead
   a owl:Class .
 
 api:head
-  a owql:DatatypeProperty ;
+  a owl:DatatypeProperty ;
+  rdfs:label "head"@en ;
+  rdfs:comment "Points to a head commit."@en ;
   rdfs:domain api:WithHead ;
   rdfs:range xsd:string .
 
@@ -270,16 +362,22 @@ api:WithHeadHasChanged
   a owl:Class .
 
 api:head_has_changed
-  a owql:DatatypeProperty ;
+  a owl:DatatypeProperty ;
+  rdfs:label "head has changed"@en ;
+  rdfs:comment "Points to a truth value of whether head state has changed."@en ;
   rdfs:domain api:WithHeadHasChanged ;
   rdfs:range xsd:boolean .
 
 api:FetchResponse
   a owl:Class ;
+  rdfs:label "Fetch Response"@en ;
+  rdfs:comment "Fetch response document."@en ;
   rdfs:subClassOf api:Response , api:WithHeadHasChanged, api:WithHead .
 
 api:FetchErrorResponse
   a owl:Class ;
+  rdfs:label "Fetch Error Response"@en ;
+  rdfs:comment "Fetch error response document."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:WithForwardedCommits
@@ -287,14 +385,30 @@ api:WithForwardedCommits
 
 api:forwarded_commits
   a owl:DatatypeProperty ;
+  rdfs:label "forwarded commits"@en ;
+  rdfs:comment "Commits which have been forwarded."@en ;
   rdfs:domain api:WithForwardedCommits ;
   rdfs:range xsd:string .
+
+api:RebaseReport
+  a owl:Class ;
+  rdfs:label "Rebase Report"@en ;
+  rdfs:comment "Report on rebase operations."@en ;
+  rdfs:subClassOf api:WithOriginCommit, api:WithApplied, api:WithCommitType .
+
+api:RebaseResponse
+  a owl:Class ;
+  rdfs:label "Rebase Response"@en ;
+  rdfs:comment "Report response document."@en ;
+  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithRebaseReport .
 
 api:WithRebaseReport
   a owl:Class .
 
 api:rebase_report
   a owl:ObjectProperty ;
+  rdfs:label "Rebase Report"@en ;
+  rdfs:comment "Points to a rebase report."@en ;
   rdfs:domain api:WithRebaseReport ;
   rdfs:range api:RebaseReport .
 
@@ -303,6 +417,8 @@ api:WithApplied
 
 api:applied
   a owl:DatatypeProperty ;
+  rdfs:label "applied"@en ;
+  rdfs:comment "Points to applied commit."@en ;
   rdfs:domain api:WithApplied ;
   rdfs:range xsd:string .
 
@@ -311,16 +427,15 @@ api:WithCommitType
 
 api:commit_type
   a owl:ObjectProperty ;
-  rdfs:domain api:WithCommitType ;
-  rdfs:range api:CommitType .
-
-api:applied
-  a owl:DatatypeProperty ;
+  rdfs:label "commit type"@en ;
+  rdfs:comment "Points to a commit type."@en ;
   rdfs:domain api:WithCommitType ;
   rdfs:range api:CommitType .
 
 api:CommitType
   a owl:Class ;
+  rdfs:label "Commit Type"@en ;
+  rdfs:comment "Variety of the commit. An `api:invalid_commit` is not correct with respect to the schema.  A `api:valid_commit` is a fully functional commit which is valid with respect to the schema."@en ;
   owl:oneOf ( api:valid_commit api:invalid_commit ) .
 
 api:valid_commit a api:CommitType .
@@ -331,27 +446,15 @@ api:WithOriginCommit
 
 api:origin_commit
   a owl:DatatypeProperty ;
+  rdfs:label "origin commit"@en ;
+  rdfs:comment "Points to the origin commit."@en ;
   rdfs:domain api:WithOriginCommit ;
   rdfs:range xsd:string .
 
-api:WithApplied
-  a owl:Class .
-
-api:applied
-  a owl:DatatypeProperty ;
-  rdfs:domain api:WithApplied ;
-  rdfs:range xsd:string .
-
-api:RebaseReport
-  a owl:Class ;
-  rdfs:subClassOf api:WithOriginCommit, api:WithApplied, api:WithCommitType .
-
-api:RebaseResponse
-  a owl:Class ;
-  rdfs:subClassOf api:Response , api:WithForwardedCommits, api:WithReport .
-
 api:RebaseErrorResponse
   a owl:Class ;
+  rdfs:label "Rebase Error Response"@en ;
+  rdfs:comment "Rebase error response document."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:WithTheirCommit
@@ -359,6 +462,8 @@ api:WithTheirCommit
 
 api:their_commit
   a owl:DatatypeProperty ;
+  rdfs:label "their commit"@en ;
+  rdfs:comment "Points to the origin commit."@en ;
   rdfs:domain api:WithTheirCommit ;
   rdfs:range xsd:string .
 
@@ -367,67 +472,97 @@ api:WithWitness
 
 api:witness
   a owl:ObjectProperty ;
+  rdfs:label "witness"@en ;
+  rdfs:comment "Points to a witness object."@en ;
   rdfs:domain api:WithWitness ;
   rdfs:range vio:Violation .
 
 api:RebaseFixupError
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+  rdfs:label "Rebase Fixup Error"@en ;
+  rdfs:comment "Error document for the rebase fixup operation."@en ;
+  rdfs:subClassOf api:Error, api:WithTheirCommit, api:WithWitness .
 
 api:RebaseSchemaValidationError
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithTheirCommit , api:WithWitness .
+  rdfs:label "Rebase Schema Validation Error"@en ;
+  rdfs:comment "The schema did not validate after applicaton of a commit in rebase."@en ;
+  rdfs:subClassOf api:Error, api:WithTheirCommit, api:WithWitness .
 
 api:RebaseContinueOnValidCommit
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithTheirCommit .
+  rdfs:label "Rebase Continue On Invalid Commit"@en ;
+  rdfs:comment "Strategy asked to continue on invalid commit but commit was valid."@en ;
+  rdfs:subClassOf api:Error, api:WithTheirCommit .
 
 api:RebaseFixupOnValidCommit
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithTheirCommit .
+  rdfs:label "Rebase Fixup On Valid Commit"@en ;
+  rdfs:comment "Strategy asked to do a WOQL fixup on an invalid commit but commit was valid."@en ;
+  rdfs:subClassOf api:Error, api:WithTheirCommit .
 
 api:PackErrorResponse
   a owl:Class ;
+  rdfs:label "Pack Error Response"@en ;
+  rdfs:comment "Error response document from Pack API."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:NotARepositoryDescriptorError
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+  rdfs:label "Not A Repository Descriptor"@en ;
+  rdfs:comment "Error attempting to use a descriptor which is not a repository descriptor."@en ;
+  rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
 api:UnpackResponse
   a owl:Class ;
+  rdfs:label "Unpack Response"@en ;
+  rdfs:comment "Response document from unpack API."@en ;
   rdfs:subClassOf api:Response .
 
 api:UnpackErrorResponse
   a owl:Class ;
+  rdfs:label "Unpack Error Response"@en ;
+  rdfs:comment "Response document resulting from an from unpack error."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:NotALinearHistory
   a owl:Class ;
+  rdfs:label "Not A Linear History"@en ;
+  rdfs:comment "Error due to the history not being linear."@en ;
   rdfs:subClassOf api:Error .
 
 api:UnknownLayerReference
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithLayerReference .
+  rdfs:label "Unknown Layer Reference"@en ;
+  rdfs:comment "Reference to an unknown layer."@en ;
+  rdfs:subClassOf api:Error, api:WithLayerReference .
 
 api:WithLayerReference
   a owl:Class .
 
 api:layer_reference
   a owl:ObjectProperty ;
+  rdfs:label "layer reference"@en ;
+  rdfs:comment "Pointer to a layer reference."@en ;
   rdfs:domain api:WithLayerReference ;
   rdfs:range vio:Violation .
 
 api:PushResponse
   a owl:Class ;
+  rdfs:label "Push Response"@en ;
+  rdfs:comment "Response document from push API."@en ;
   rdfs:subClassOf api:Response .
 
 api:PushNewHeadResponse
   a owl:Class ;
-  rdfs:subClassOf api:Response , api:WithHead .
+  rdfs:label "Push New Head Response"@en ;
+  rdfs:comment "Push API call resulted in a new head."@en ;
+  rdfs:subClassOf api:Response, api:WithHead .
 
 api:PushErrorResponse
   a owl:Class ;
+  rdfs:label "Push Error Response"@en ;
+  rdfs:comment "Push API call failed resulting in an error."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:WithPullReport
@@ -435,15 +570,21 @@ api:WithPullReport
 
 api:pull_report
   a owl:ObjectProperty ;
+  rdfs:label "pull report"@en ;
+  rdfs:comment "Points to a report describing a pull report."@en ;
   rdfs:domain api:WithPullReport ;
   rdfs:range api:PullReport .
 
 api:PullResponse
   a owl:Class ;
+  rdfs:label "Pull Response"@en ;
+  rdfs:comment "Response document from pull API."@en ;
   rdfs:subClassOf api:Response , api:WithPullReport .
 
 api:PullReport
-  a owl:Class ,
+  a owl:Class ;
+  rdfs:label "Pull Report"@en ;
+  rdfs:comment "Report of operations from pull API."@en ;
   rdfs:subClassOf api:WithPullStatus .
 
 api:WithPullStatus
@@ -451,11 +592,15 @@ api:WithPullStatus
 
 api:pull_status
   a owl:ObjectProperty ;
+  rdfs:label "pull status"@en ;
+  rdfs:comment "Points to the status of a pull."@en ;
   rdfs:domain api:WithPullStatus ;
   rdfs:range api:PullStatus .
 
 api:PullStatus
-  a owl:Class
+  a owl:Class ;
+  rdfs:label "Pull Status"@en ;
+  rdfs:comment "Status of a pull. If `api:pull_unchanged` then there was no change to head. If `api:pull_fast_forwarded` then the head has moved to a fast forward with some number of intermediate commits."@en ;
   owl:oneOf (
     api:pull_unchanged
     api:pull_fast_forwarded ) .
@@ -463,52 +608,74 @@ api:PullStatus
 api:pull_unchanged a api:PullStatus .
 api:pull_fast_forwarded a api:PullStatus .
 
-api:WithCommonCommit ;
+api:WithCommonCommit
   a owl:Class .
 
 api:common_commit
   a owl:DatatypeProperty ;
+  rdfs:label "common commit"@en ;
+  rdfs:comment "Commit common to two histories."@en ;
   rdfs:domain api:WithCommonCommit ;
   rdfs:range xsd:string .
 
 api:HistoryDivergedError
-  a owl:Class ,
+  a owl:Class ;
+  rdfs:label "History Diverged Error"@en ;
+  rdfs:comment "The history has diverged between two commits which should share a common history."@en ;
   rdfs:subClassOf api:Error , api:WithCommonCommit .
 
 api:NoCommonHistoryError
-  a owl:Class ,
+  a owl:Class ;
+  rdfs:label "No Common History Error"@en ;
+  rdfs:comment "There is no common commit in the two histories."@en ;
   rdfs:subClassOf api:Error .
 
 api:IncorrectAuthenticationError
-  a owl:Class ,
+  a owl:Class ;
+  rdfs:label "Incorrect Authentication Error"@en ;
+  rdfs:comment "Incorrect creditionals supplied so user could not be authenticated."@en ;
   rdfs:subClassOf api:Error .
 
 api:BadAbsoluteSourceDescriptor
   a owl:Class ;
+  rdfs:label "Bad Absolute Source Descriptor"@en ;
+  rdfs:comment "The absolute source descriptor did not parse to a valid descriptor."@en ;
   rdfs:subClassOf api:BadAbsoluteDescriptor .
 
 api:BadAbsoluteTargetDescriptor
   a owl:Class ;
+  rdfs:label "Bad Absolute Target Descriptor"@en ;
+  rdfs:comment "The absolute target descriptor did not parse to a valid descriptor."@en ;
   rdfs:subClassOf api:BadAbsoluteDescriptor .
 
 api:NotABranchDescriptorError
   a owl:Class ;
+  rdfs:label "Not A Branch Descriptor"@en ;
+  rdfs:comment "The supplied descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 
 api:NotATargetBranchDescriptorError
   a owl:Class ;
+  rdfs:label "Not A Target Branch Descriptor"@en ;
+  rdfs:comment "The supplied target descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:NotABranchDescriptorError.
 
 api:NotASourceBranchDescriptorError
   a owl:Class ;
+  rdfs:label "Not A Source Branch Descriptor"@en ;
+  rdfs:comment "The supplied target descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:NotABranchDescriptorError.
 
 api:NotAValidSourceDescriptorError
   a owl:Class ;
+  rdfs:label "Not A Valid Source Descriptor"@en ;
+  rdfs:comment "The supplied source descriptor is not valid."@en ;
   rdfs:subClassOf api:WithAbsoluteDescriptor .
 
 api:NotLocalRepositoryError
   a owl:Class ;
+  rdfs:label "Not A Local Repository Error"@en ;
+  rdfs:comment "The repository supplied does not resolve to a local repository."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
 api:WithBranchName
@@ -516,67 +683,77 @@ api:WithBranchName
 
 api:branch_name
   a owl:DatatypeProperty ;
+  rdfs:label "branch name"@en ;
+  rdfs:comment "Points to a branch name."@en ;
   rdfs:domain api:WithBranchName ;
   rdfs:range xsd:string .
 
 api:NotBranchableError
   a owl:Class ;
+  rdfs:label "Not Branchable Error"@en ;
+  rdfs:comment "This is not a branchable object."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
 api:CreateGraphErrorResponse
   a owl:Class ;
+  rdfs:label "Create Graph Error Response"@en ;
+  rdfs:comment "Error response object in create graph API."@en ;
   rdfs:subClassOf api:ErrorResponse .
-
-api:BadAbsoluteGraphDescriptor
-  a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithAbsoluteGraphDescriptor .
-
-api:WithAbsoluteGraphDescriptor ;
-  a owl:Class .
-
-api:absolute_graph_descriptor ;
-  a owl:DatatypeProperty ;
-  rdfs:domain api:WithAbsoluteGraphDescriptor ;
-  rdfs:range xsd:string .
 
 api:BadGraphType
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithGraphTYpe .
+  rdfs:label "Bad Graph Type"@en ;
+  rdfs:comment "Type supplied for graph is not a valid type (not one of {instance,schema,inference})."@en ;
+  rdfs:subClassOf api:Error, api:WithGraphType .
 
-api:WithGraphType ;
+api:WithGraphType
   a owl:Class .
 
-api:graph_type ;
+api:graph_type
   a owl:DatatypeProperty ;
+  rdfs:label "graph type"@en ;
+  rdfs:comment "Points to a graph type designation."@en ;
   rdfs:domain api:WithGraphType ;
   rdfs:range xsd:string .
 
 api:BranchAlreadyExists
   a owl:Class ;
-  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor ;
+  rdfs:label "Branch Already Exists"@en ;
+  rdfs:comment "The associated branch already exists."@en ;
+  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor .
 
-api:withGraphName
+api:WithGraphName
   a owl:Class .
 
 api:graph_name
   a owl:DatatypeProperty ;
+  rdfs:label "graph name"@en ;
+  rdfs:comment "Points to a graph name."@en ;
   rdfs:domain api:WithGraphName ;
   rdfs:range xsd:string .
 
 api:CreateGraphResponse
   a owl:Class ;
+  rdfs:label "Create Graph Response"@en ;
+  rdfs:comment "Response document for create graph API."@en ;
   rdfs:subClassOf api:Response .
 
 api:DeleteGraphResponse
   a owl:Class ;
+  rdfs:label "Delete Graph Response"@en ;
+  rdfs:comment "Response document for delete graph API."@en ;
   rdfs:subClassOf api:Response .
 
 api:UserUpdateErrorResponse
   a owl:Class ;
+  rdfs:label "User Update Error Response"@en ;
+  rdfs:comment "Error response document for user update."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:UserUpdateFailedWithoutError
   a owl:Class ;
+  rdfs:label "User Update Failed Without Error"@en ;
+  rdfs:comment "User update failed yet there was no error to report."@en ;
   rdfs:subClassOf api:Error, api:WithUserName .
 
 api:WithUserName
@@ -584,59 +761,87 @@ api:WithUserName
 
 api:user_name
   a owl:DatatypeProperty ;
+  rdfs:label "user name"@en ;
+  rdfs:comment "Points to a user name."@en ;
   rdfs:domain api:WithUserName ;
   rdfs:range xsd:string .
 
 api:UserDeleteErrorResponse
   a owl:Class ;
+  rdfs:label "User Delete Error Response"@en ;
+  rdfs:comment "Error response deleting user."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:UserDeleteFailedWithoutError
   a owl:Class ;
+  rdfs:label "User Delete Failed Without Error"@en ;
+  rdfs:comment "User delete failed, but did not yield an error."@en ;
   rdfs:subClassOf api:Error, api:WithUserName .
 
 api:MalformedAddUserDocument
   a owl:Class ;
+  rdfs:label "Malformed Add User Document"@en ;
+  rdfs:comment "Attempted to add a user document which was malformed."@en ;
   rdfs:subClassOf api:Error .
 
 api:AddOrganizationResponse
   a owl:Class ;
+  rdfs:label "Add Organization Response"@en ;
+  rdfs:comment "Response document while adding organization."@en ;
   rdfs:subClassOf api:Response .
 
 api:UpdateOrganizationResponse
   a owl:Class ;
+  rdfs:label "Update Organization Response"@en ;
+  rdfs:comment "Response document while updating organization."@en ;
   rdfs:subClassOf api:Response .
 
 api:DeleteOrganizationResponse
   a owl:Class ;
+  rdfs:label "Delete Organization Response"@en ;
+  rdfs:comment "Response document while deleting organization."@en ;
   rdfs:subClassOf api:Response .
 
 api:AddOrganizationErrorResponse
   a owl:Class ;
+  rdfs:label "Add Organization Response"@en ;
+  rdfs:comment "Response document while adding organization."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:DeleteOrganizationErrorResponse
   a owl:Class ;
+  rdfs:label "Delete Organization Error Response"@en ;
+  rdfs:comment "Error response document while delete organization."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:UpdateOrganizationErrorResponse
   a owl:Class ;
+  rdfs:label "Update Organization Error Response"@en ;
+  rdfs:comment "Error response document while update organization."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:OrganizationAlreadyExists
   a owl:Class ;
+  rdfs:label "Organization Already Exists"@en ;
+  rdfs:comment "The associated organziation already exists."@en ;
   rdfs:subClassOf api:Error, api:WithOrganizationName .
 
 api:RequiresSuperuserAuthority
   a owl:Class ;
+  rdfs:label "Requires Superuser Authority"@en ;
+  rdfs:comment "The operation attempted requires superuser authority."@en ;
   rdfs:subClassOf api:Error .
 
 api:UpdateRoleErrorResponse
   a owl:Class ;
+  rdfs:label "Update Role Error Response"@en ;
+  rdfs:comment "Error response for role update API."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:NoManageCapability
   a owl:Class ;
+  rdfs:label "No Manage Capability"@en ;
+  rdfs:comment "The authenticated user does not have manage capability on the associated resource."@en ;
   rdfs:subClassOf api:Error, api:WithOrganizationName, api:WithResourceName .
 
 api:WithResourceName
@@ -644,11 +849,15 @@ api:WithResourceName
 
 api:resource_name
   a owl:DatatypeProperty ;
+  rdfs:label "resource name"@en ;
+  rdfs:comment "Points to the name of a resource."@en ;
   rdfs:domain api:WithResourceName ;
   rdfs:range xsd:string .
 
 api:RemoteAuthorizationFailure
   a owl:Class ;
+  rdfs:label "Remote Authorization Failure"@en ;
+  rdfs:comment "Failure of authorization to remote resource."@en ;
   rdfs:subClassOf api:ErrorResponse, api:WithResponse .
 
 api:WithResponse
@@ -656,34 +865,46 @@ api:WithResponse
 
 api:response
   a owl:ObjectProperty ;
+  rdfs:label "response"@en ;
+  rdfs:comment "Points to a response document."@en ;
   rdfs:domain api:WithResponse ;
   rdfs:range api:Response .
 
 api:WOQLSyntaxError
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithErrorTerm .
+  rdfs:label "WOQL Syntax Error"@en ;
+  rdfs:comment "Syntax error in WOQL term."@en ;
+  rdfs:subClassOf api:Error, api:WithErrorTerm .
 
 api:WithErrorTerm
   a owl:Class .
 
 api:error_term
   a owl:DatatypeProperty ;
+  rdfs:label "error term"@en ;
+  rdfs:comment "Points to an error term."@en ;
   rdfs:domain api:WOQLSyntaxError ;
   rdfs:range xsd:string .
 
 api:BadAPIDocumentErrorResponse
   a owl:Class ;
+  rdfs:label "Bad API Document Error Response"@en ;
+  rdfs:comment "Response for bad API document."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:RequiredFieldsMissing
   a owl:Class ;
-  rdfs:subClassOf api:Error , api:WithDocument, api:WithExpected.
+  rdfs:label "Required Fields Missing"@en ;
+  rdfs:comment "The associated fields were missing from the API document but are required."@en ;
+  rdfs:subClassOf api:Error, api:WithDocument, api:WithExpected.
 
 api:WithExpected
   a owl:Class .
 
 api:expected
   a owl:DatatypeProperty ;
+  rdfs:label "expected"@en ;
+  rdfs:comment "Points to the exptected document keys."@en ;
   rdfs:domain api:WithExpected ;
   rdfs:range xsd:string .
 
@@ -692,8 +913,18 @@ api:WithDocument
 
 api:document
   a owl:ObjectProperty ;
+  rdfs:label "document"@en ;
+  rdfs:comment "Points to the document."@en ;
   rdfs:domain api:WithDocument ;
-  rdsf:range api:APIDocument .
+  rdfs:range api:APIDocument .
 
 api:APIDocument
+  rdfs:label "API Document"@en ;
+  rdfs:comment "Document containing response."@en ;
   a owl:Class .
+
+api:APIEndpointFailed
+  a owl:Class ;
+  rdfs:label "API Endpoint Failed"@en ;
+  rdfs:comment "The endpoint goal failed for an unknown reason"@en ;
+  rdfs:subClassOf api:Error .

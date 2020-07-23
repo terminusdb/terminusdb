@@ -2289,7 +2289,7 @@ test(path_star, [
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  Commit_Info,
                  _Transaction_Metadata2),
 
@@ -2341,7 +2341,7 @@ test(complex_path, [
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  Commit_Info,
                  _Transaction_Metadata2),
 
@@ -2786,8 +2786,8 @@ test(metadata_graph, [
     ),
 
     ask(Descriptor,
-        (   size('admin/test/local/branch/master/instance/main',Size_Lit),
-            triple_count('admin/test/local/branch/master/instance/main', Count_Lit)
+        (   size('admin/test/local/branch/main/instance/main',Size_Lit),
+            triple_count('admin/test/local/branch/main/instance/main', Count_Lit)
         )),
 
     Size_Lit = Size^^xsd:decimal,
@@ -3431,8 +3431,73 @@ test(meta_graph_update, [
 }',
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, JSON),
+    query_test_response(Descriptor, Query, _JSON).
 
-    writeq(JSON).
+test(temp_graph_rdf, [
+         blocked('No temp store yet'),
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Atom = '{
+  "@type": "woql:Limit",
+  "woql:limit": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "xsd:nonNegativeInteger",
+      "@value": 50
+    }
+  },
+  "woql:query": {
+    "@type": "woql:With",
+    "woql:graph": {
+      "@type": "woql:Datatype",
+      "woql:datatype": {
+        "@type": "xsd:string",
+        "@value": "graph://temp"
+      }
+    },
+    "woql:query_resource": {
+      "@type": "woql:FileResource",
+      "woql:file": {
+        "@type": "xsd:string",
+        "@value": "/app/local_files/language_skills_collection.ttl"
+      }
+    },
+    "woql:query": {
+      "@type": "woql:Quad",
+      "woql:subject": {
+        "@type": "woql:Variable",
+        "woql:variable_name": {
+          "@value": "Subject",
+          "@type": "xsd:string"
+        }
+      },
+      "woql:predicate": {
+        "@type": "woql:Variable",
+        "woql:variable_name": {
+          "@value": "Predicate",
+          "@type": "xsd:string"
+        }
+      },
+      "woql:object": {
+        "@type": "woql:Variable",
+        "woql:variable_name": {
+          "@value": "Object",
+          "@type": "xsd:string"
+        }
+      },
+      "woql:graph_filter": {
+        "@type": "xsd:string",
+        "@value": "graph://temp"
+      }
+    }
+  }
+}',
+    atom_json_dict(Atom,Query,[]),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    query_test_response(Descriptor, Query, _JSON).
+
 
 :- end_tests(woql).

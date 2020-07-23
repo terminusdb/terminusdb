@@ -61,8 +61,8 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predica
         copy_prefixes(From_Descriptor, To_Context),
         _),
 
-    resolve_absolute_descriptor([Account,DB,"local","branch", "master"], To_Branch_Descriptor),
-    resolve_absolute_descriptor([Account,DB,"origin","branch", "master"], From_Branch_Descriptor),
+    resolve_absolute_descriptor([Account,DB,"local","branch", "main"], To_Branch_Descriptor),
+    resolve_absolute_descriptor([Account,DB,"origin","branch", "main"], From_Branch_Descriptor),
 
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),

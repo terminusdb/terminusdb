@@ -7,6 +7,7 @@
 :- use_module(db_fast_forward).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(query)).
 
 :- meta_predicate pull(+, +, +, +, +, 3, -).
 pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fetch_Predicate,
@@ -36,8 +37,9 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
     do_or_die(open_descriptor(Their_Branch_Descriptor, _),
               error(not_a_valid_remote_branch(Their_Branch_Descriptor))),
 
+    resolve_absolute_string_descriptor(Their_Repository_Path, Their_Repository_Descriptor),
     % 1. fetch
-    remote_fetch(System_DB, Local_Auth, Their_Repository_Descriptor, Fetch_Predicate,
+    remote_fetch(System_DB, Local_Auth, Their_Repository_Path, Fetch_Predicate,
                  _New_Head_Layer_Id, Head_Has_Updated),
 
     % 2. try fast forward - alert front end if impossible.
