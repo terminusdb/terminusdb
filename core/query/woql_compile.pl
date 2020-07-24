@@ -3102,7 +3102,8 @@ test(ast_when_test, [
 
 
 test(get_put, []) :-
-
+    tmp_path(TempDir),
+    atom_concat(TempDir, '/test.csv', TestFile),
     Query = _{ '@type': "woql:Put",
                'woql:as_vars':
                [ _{ '@type': "woql:NamedAsVar",
@@ -3224,14 +3225,14 @@ test(get_put, []) :-
                'woql:query_resource': _{ '@type': "woql:FileResource",
                                          'woql:file':
                                          _{ '@type': "xsd:anyURI",
-                                            '@value': "/tmp/test.csv"
+                                            '@value': TestFile
                                           }
                                        }
              },
 
     resolve_absolute_string_descriptor("_system", Descriptor),
     query_test_response(Descriptor, Query, _JSON),
-    exists_file('/tmp/test.csv').
+    exists_file(TestFile).
 
 test(idgen, []) :-
     Atom = '{
