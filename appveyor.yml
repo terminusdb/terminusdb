@@ -18,11 +18,11 @@ install:
   - cd "%SWI_INSTALL_DIR%\pack"
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout v0.9.9.1
+  - git checkout v0.10.2
   - cd %APPVEYOR_BUILD_FOLDER%
   - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/libterminus_store.dll
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/terminus_store_prolog.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.10.2/libterminus_store.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.10.2/terminus_store_prolog.dll
   - mkdir swipl
   - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
 
@@ -32,7 +32,7 @@ build_script:
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout v0.9.9.1
+  - git checkout v0.10.2
   - cd ..\
   - makensis.exe terminusdb_windows_installer.nsi
   - cd ..\
