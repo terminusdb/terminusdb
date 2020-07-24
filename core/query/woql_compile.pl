@@ -3587,9 +3587,8 @@ test(using_sequence, [
 
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, _JSON),
-    % Not failing is good enough
-    * json_write_dict(current_output, _JSON, []).
+    % not failing is good enough
+    query_test_response(Descriptor, Query, _JSON).
 
 
 
