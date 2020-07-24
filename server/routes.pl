@@ -71,9 +71,10 @@
 :- multifile http:location/3.
 :- dynamic http:location/3.
 http:location(root, '/', []).
+http:location(api, '/api', []).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_handler(Method, connect_handler),
+:- http_handler(api(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -99,15 +100,19 @@ connect_handler(get, Request, System_DB, Auth) :-
 test(connection_authorized_user_jwt, [
      ]) :-
     config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
-    http_get(Server, _, [authorization(bearer(Bearer))]).
+    http_get(URL, _, [authorization(bearer(Bearer))]).
 
 test(connection_unauthorized_user_jwt, [
      ]) :-
+
     config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
+
     % mangled the payload so it should not validate
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodW0000000000aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
-    http_get(Server, _, [authorization(bearer(Bearer)), status_code(Status)]),
+    http_get(URL, _, [authorization(bearer(Bearer)), status_code(Status)]),
 
     Status = 401.
 
@@ -118,16 +123,20 @@ test(connection_unauthorized_user_jwt, [
 
 test(connection_authorised_user_http_basic, [
      ]) :-
-    config:server(Server),
     admin_pass(Key),
-    http_get(Server, _, [authorization(basic(admin, Key))]).
+    config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
+
+    http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
 test(connection_result_dbs, [])
 :-
-    config:server(Server),
     admin_pass(Key),
-    http_get(Server, Result, [json_object(dict),authorization(basic(admin, Key))]),
+    config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
+
+    http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     * json_write_dict(current_output, Result, []),
 
@@ -137,31 +146,8 @@ test(connection_result_dbs, [])
 
 :- end_tests(connect_handler).
 
-
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(console/_Path), cors_handler(Method, console_handler),
-                [method(Method),
-                 methods([options,get])]).
-
-/*
- * console_handler(+Method,+Request) is det.
- */
-console_handler(get,Request, _System_DB, _Auth) :-
-    config:index_path(Index_Path),
-    write_cors_headers(Request),
-    throw(http_reply(file('text/html', Index_Path))).
-
-:- begin_tests(console_route).
-
-test(console_route) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s/console/", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
-
-:- end_tests(console_route).
-
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(message), cors_handler(Method, message_handler),
+:- http_handler(api(message), cors_handler(Method, message_handler),
                 [method(Method),
                  methods([options,get,post])]).
 
@@ -183,7 +169,7 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
     reply_json(_{'api:status' : 'api:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
+:- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
                  methods([options,post,delete])]).
 
@@ -321,7 +307,7 @@ test(db_create, [
          cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -339,7 +325,7 @@ test(db_create_bad_api_document, [
                 ;   true)))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ label : "A label" },
     admin_pass(Key),
     http_post(URI, json(Doc),
@@ -360,7 +346,7 @@ test(db_create_existing_errors, [
          cleanup(force_delete_db('admin', 'TEST_DB'))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -377,7 +363,7 @@ test(db_create_existing_errors, [
 test(db_create_in_unknown_organization_errors, [
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -394,7 +380,7 @@ test(db_create_in_unknown_organization_errors, [
 test(db_create_unauthenticated_errors, [
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -412,7 +398,7 @@ test(db_create_unauthorized_errors, [
          cleanup(delete_user_and_organization("TERMINUSQA"))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -432,7 +418,7 @@ test(db_delete, [
                 create_db_without_schema("admin", "TEST_DB")))
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
@@ -442,7 +428,7 @@ test(db_delete, [
 test(db_delete_unknown_organization_errors, [
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
                 Result,
@@ -460,7 +446,7 @@ test(db_delete_unknown_organization_errors, [
 test(db_delete_nonexistent_errors, [
      ]) :-
     config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
                 Result,
@@ -492,7 +478,7 @@ test(db_auth_test, [
      ]) :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -508,7 +494,7 @@ test(db_auth_test, [
 
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(triples/Path), cors_handler(Method, triples_handler(Path)),
+:- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -606,7 +592,7 @@ test(triples_update, [
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
     config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/TEST_DB/local/branch/main/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
@@ -626,7 +612,7 @@ test(triples_get, [])
 :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/triples/_system/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/_system/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
@@ -657,7 +643,7 @@ test(triples_post_get, [
 layer:LayerIdRestriction a owl:Restriction.",
 
     config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/Jumanji/local/branch/main/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema/main'], URI),
     admin_pass(Key),
 
     http_post(URI, json(_{commit_info : _{ author : "Test",
@@ -676,7 +662,7 @@ layer:LayerIdRestriction a owl:Restriction.",
 test(get_invalid_descriptor, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/triples/nonsense'], URI),
+    atomic_list_concat([Server, '/api/triples/nonsense'], URI),
     admin_pass(Key),
 
     http_get(URI, In, [json_object(dict),
@@ -690,7 +676,7 @@ test(get_invalid_descriptor, [])
 test(get_bad_descriptor, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/fdsa'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
     admin_pass(Key),
 
     http_get(URI, In, [json_object(dict),
@@ -703,7 +689,7 @@ test(get_bad_descriptor, [])
 :- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(frame/Path), cors_handler(Method, frame_handler(Path)),
+:- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -808,7 +794,7 @@ frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
 test(get_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/_system'], URI),
+    atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ class : "system:Agent"
@@ -821,7 +807,7 @@ test(get_frame, [])
 test(get_filled_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/_system'], URI),
+    atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -834,7 +820,7 @@ test(get_filled_frame, [])
 test(bad_path_filled_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/garbage'], URI),
+    atomic_list_concat([Server, '/api/frame/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -849,7 +835,7 @@ test(bad_path_filled_frame, [])
 test(unresolvable_path_filled_frame, [])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/frame/believable/garbage'], URI),
+    atomic_list_concat([Server, '/api/frame/believable/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -865,11 +851,11 @@ test(unresolvable_path_filled_frame, [])
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(root(woql), cors_handler(Method, woql_handler),
+:- http_handler(api(woql), cors_handler(Method, woql_handler),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Path), cors_handler(Method, woql_handler(Path)),
+:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -964,7 +950,7 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
 
 test(db_not_there, []) :-
     config:server(Server),
-    atomic_list_concat([Server, '/woql/admin/blagblagblagblagblag'], URI),
+    atomic_list_concat([Server, '/api/woql/admin/blagblagblagblagblag'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{'query' : ""}),
@@ -1076,7 +1062,7 @@ test(no_db, [])
                                                              '@value' : "schema/*"}}}}]}}},
 
     config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{'query' : Query}),
@@ -1110,7 +1096,7 @@ test(indexed_get, [])
 
 
     config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{query : Query}),
@@ -1146,7 +1132,7 @@ test(named_get, [])
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{query : Query}),
@@ -1168,7 +1154,7 @@ test(branch_db, [
          cleanup((force_delete_db(admin,test)))
      ])
 :-
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1224,7 +1210,7 @@ test(update_object, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % First make a schema against which we can have an object
 
@@ -1372,7 +1358,7 @@ test(delete_object, [
                   },
 
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
     http_post(URI,
               json(_{ query : Query1,
                       commit_info : Commit_Info}),
@@ -1398,7 +1384,7 @@ test(get_object, [])
 
     config:server(Server),
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/_system'], URI),
+    atomic_list_concat([Server, '/api/woql/_system'], URI),
     http_post(URI,
               json(_{query : Query0}),
               JSON0,
@@ -1415,7 +1401,7 @@ test(get_object, [])
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
+:- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
@@ -1480,7 +1466,7 @@ test(clone_local, [
                      _),
 
     config:server(Server),
-    atomic_list_concat([Server, '/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server, '/api/clone/TERMINUSQA2/bar'], URL),
     atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
     base64("TERMINUSQA1:password1", Base64_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
@@ -1508,7 +1494,7 @@ test(clone_local, [
 :- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/Path), cors_handler(Method, fetch_handler(Path)),
+:- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -1577,7 +1563,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(rebase/Path), cors_handler(Method, rebase_handler(Path)),
+:- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -1775,7 +1761,7 @@ test(rebase_divergent_history, [
                      _),
 
     config:server(Server),
-    atomic_list_concat([Server, '/rebase/TERMINUSQA/foo'], URI),
+    atomic_list_concat([Server, '/api/rebase/TERMINUSQA/foo'], URI),
     http_post(URI,
               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
                      author : "Gavsky"}),
@@ -1802,7 +1788,7 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pack/Path), cors_handler(Method, pack_handler(Path)),
+:- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
@@ -1907,7 +1893,7 @@ test(pack_stuff, [
 
 
     config:server(Server),
-    atomic_list_concat([Server, '/pack/_a_test_user_/foo'], URI),
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
     http_post(URI,
@@ -1961,7 +1947,7 @@ test(pack_nothing, [
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
     config:server(Server),
-    atomic_list_concat([Server, '/pack/_a_test_user_/foo'], URI),
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
     http_post(URI,
               json(Document),
               _Data,
@@ -1971,7 +1957,7 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(unpack/Path), cors_handler(Method, unpack_handler(Path)),
+:- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
                  methods([options,post])]).
 
@@ -2043,7 +2029,7 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
 :- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/Path), cors_handler(Method, push_handler(Path)),
+:- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2166,7 +2152,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pull/Path), cors_handler(Method, pull_handler(Path)),
+:- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2241,7 +2227,7 @@ pull_error_handler(error(no_common_history, _), Request) :-
                     [status(400)]).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),
+:- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2366,7 +2352,7 @@ test(create_empty_branch, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{prefixes : _{ doc : "https://terminushub.com/document",
@@ -2390,7 +2376,7 @@ test(create_branch_from_local_without_prefixes, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/main'}),
@@ -2412,7 +2398,7 @@ test(create_branch_from_local_with_prefixes, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/main',
@@ -2437,7 +2423,7 @@ test(create_branch_that_already_exists_error, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/main'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/main'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/main',
@@ -2459,7 +2445,7 @@ test(create_branch_from_nonexisting_origin_error, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/bar',
@@ -2485,7 +2471,7 @@ test(create_branch_from_commit_graph_error, [
      ])
 :-
     config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'admin/test/local/_commits',
@@ -2507,7 +2493,7 @@ test(create_branch_from_commit_graph_error, [
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
+:- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2516,7 +2502,7 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(graph/Path), cors_handler(Method, graph_handler(Path)),
+:- http_handler(api(graph/Path), cors_handler(Method, graph_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2643,7 +2629,7 @@ test(create_graph, [
                           message : 'Edges here there and everywhere' },
 
     config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/local/branch/main/instance/naim'], URI),
+    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/instance/naim'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{commit_info : Commit}),
@@ -2678,7 +2664,7 @@ test(delete_graph, [
 :-
 
     config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/local/branch/main/schema/main'], URI),
+    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     Commit = commit_info{ author : 'Jeebuz', message : 'Hello my children' },
     http_get(URI,
@@ -2691,11 +2677,11 @@ test(delete_graph, [
 :- end_tests(graph_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(user), cors_handler(Method, user_handler),
+:- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(user/Name), cors_handler(Method, user_handler(Name)),
+:- http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2788,11 +2774,11 @@ user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Reques
 
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(organization), cors_handler(Method, organization_handler),
+:- http_handler(api(organization), cors_handler(Method, organization_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(organization/Name), cors_handler(Method, organization_handler(Name)),
+:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2894,7 +2880,7 @@ delete_organization_error_handler(error(delete_organization_requires_superuser,_
                     [status(401)]).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(update_role), cors_handler(Method, update_role_handler),
+:- http_handler(api(update_role), cors_handler(Method, update_role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2934,7 +2920,7 @@ update_role_error_handler(error(no_manage_capability(Organization,Resource_Name)
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(role), cors_handler(Method, role_handler),
+:- http_handler(api(role), cors_handler(Method, role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2949,6 +2935,33 @@ role_handler(post, Request, System_DB, Auth) :-
         E,
         do_or_die(woql_error_handler(E, Request),
                   E)).
+
+%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(.), cors_handler(Method, console_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+/*
+ * console_handler(+Method,+Request) is det.
+ */
+console_handler(get,Request, _System_DB, _Auth) :-
+    config:index_path(Index_Path),
+    write_cors_headers(Request),
+    throw(http_reply(file('text/html', Index_Path))).
+
+:- begin_tests(console_route).
+
+test(console_route) :-
+    config:server(SURI),
+    format(string(ConsoleURL), "~s/", [SURI]),
+    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+
+test(console_route_empty) :-
+    config:server(SURI),
+    format(string(ConsoleURL), "~s", [SURI]),
+    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+
+:- end_tests(console_route).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).

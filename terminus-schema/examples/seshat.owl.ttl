@@ -5,7 +5,7 @@
 @prefix tbs: <http://terminusdb.com/schema/tbs#> .
 @prefix xdd: <http://terminusdb.com/schema/xdd#> .
 @prefix vio: <http://terminusdb.com/schema/vio#> .
-@prefix terminus: <http://terminusdb.com/schema/terminus#> .
+@prefix system: <http://terminusdb.com/schema/system#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -15,10 +15,6 @@ scm:NonNegativeIntegerQualifiedByConfidenceTag
   rdfs:subClassOf tbs:NonNegativeInteger, tcs:QualifiedByConfidenceTag ;
   rdfs:label "NonNegativeInteger"@en ;
   rdfs:comment "NonNegativeInteger QualifiedByConfidenceTag "@en .
-
-
-
-
 
 scm:IntegerQualifiedByConfidenceTag
   a owl:Class ;
