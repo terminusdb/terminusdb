@@ -865,7 +865,11 @@ compile_wf(select(VL,P), Prog) -->
     restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
-    { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection) },
+    {
+        do_or_die(
+            resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
+            error(invalid_absolute_path(Collection_String),_))
+    },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
     update(default_collection,_,Old_Default_Collection).
@@ -3498,6 +3502,95 @@ test(temp_graph_rdf, [
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     query_test_response(Descriptor, Query, _JSON).
+
+test(using_sequence, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Atom = '{
+  "@type": "woql:And",
+  "woql:query_list": [
+    {
+      "@type": "woql:QueryListElement",
+      "woql:index": {
+        "@type": "xsd:nonNegativeInteger",
+        "@value": 0
+      },
+      "woql:query": {
+        "@type": "woql:Using",
+        "woql:collection": {
+          "@type": "xsd:string",
+          "@value": "_system"
+        },
+        "woql:query": {
+          "@type": "woql:Triple",
+          "woql:subject": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "DA",
+              "@type": "xsd:string"
+            }
+          },
+          "woql:predicate": {
+            "@type": "woql:Node",
+            "woql:node": "system:resource_name"
+          },
+          "woql:object": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "o",
+              "@type": "xsd:string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "@type": "woql:QueryListElement",
+      "woql:index": {
+        "@type": "xsd:nonNegativeInteger",
+        "@value": 1
+      },
+      "woql:query": {
+        "@type": "woql:Using",
+        "woql:collection": {
+          "@type": "xsd:string",
+          "@value": "admin/test"
+        },
+        "woql:query": {
+          "@type": "woql:Triple",
+          "woql:subject": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "D",
+              "@type": "xsd:string"
+            }
+          },
+          "woql:predicate": {
+            "@type": "woql:Node",
+            "woql:node": "system:database_name"
+          },
+          "woql:object": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "o",
+              "@type": "xsd:string"
+            }
+          }
+        }
+      }
+    }
+  ]
+}',
+
+    atom_json_dict(Atom,Query,[]),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    query_test_response(Descriptor, Query, _JSON),
+    % Not failing is good enough
+    * json_write_dict(current_output, _JSON, []).
+
 
 
 :- end_tests(woql).

@@ -721,7 +721,7 @@ instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Obj
 collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
     Transaction_Object.descriptor = Collection_Descriptor,
     !.
-collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
+collection_descriptor_transaction_object(Collection_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-
     collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
 
 read_write_object_to_name(Object, Name) :-
