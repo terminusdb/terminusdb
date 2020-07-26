@@ -92,16 +92,22 @@ database_inference(Transaction_Object, Inferences) :-
 database_schema(Transaction_Object, Schemas) :-
     Schemas = Transaction_Object.schema_objects.
 
+excluded_organization(Organization) :-
+    re_match('\\||console|api|db|home|profile', Organization).
+
+error_on_excluded_organization(Organization) :-
+    do_or_die(\+ excluded_organization(Organization),
+              error(invalid_organization_name(Organization))).
+
 error_on_pipe(Name) :-
-    (   re_match('\\|', Name)
-    ->  throw(error(ceci_n_est_pas_une_pipe(Name),_))
-    ;   true).
+    do_or_die(\+ re_match('\\|', Name),
+              error(ceci_n_est_pas_une_pipe(Name),_)).
 
 /**
  * organization_database_name(User,DB,Name) is det.
  *
  */
-organization_database_name(User,DB,Name) :-
-    freeze(User,error_on_pipe(User)),
+organization_database_name(Organization,DB,Name) :-
+    freeze(Organization,error_on_excluded_organization(Organization)),
     freeze(DB,error_on_pipe(DB)),
-    merge_separator_split(Name,'|',[User,DB]).
+    merge_separator_split(Name,'|',[Organization,DB]).
