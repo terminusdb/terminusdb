@@ -24,7 +24,7 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
 
     do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
                open_descriptor(Our_Branch_Descriptor, _)),
-              error(not_a_valid_local_branch(Our_Branch_Descriptor))),
+              error(not_a_valid_local_branch(Our_Branch_Descriptor),_)),
 
     Our_Repository_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repository_Descriptor = (Our_Repository_Descriptor.put(_{ repository_name : Remote_Name })),
@@ -35,7 +35,7 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                               },
 
     do_or_die(open_descriptor(Their_Branch_Descriptor, _),
-              error(not_a_valid_remote_branch(Their_Branch_Descriptor))),
+              error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
 
     resolve_absolute_string_descriptor(Their_Repository_Path, Their_Repository_Descriptor),
     % 1. fetch

@@ -823,7 +823,8 @@ test(update_role_unexpanded_keys, [
                             ["admin"],
                             "admin",
                             some("flurp"),
-                            ["system:inference_read_access"]
+                            ["system:inference_read_access",
+                             "system:push"]
                            ),
     % No error is sufficient
     true.

@@ -916,6 +916,17 @@ woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(not_a_valid_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The source path ~q is not a valid descriptor for branching", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:WoqlErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotASourceBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
 woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
@@ -927,9 +938,20 @@ woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(woql_syntax_error(badly_formed_ast(Term)),_), Request) :-
+    term_string(Term,String),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                                       'api:error_term' : String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
     term_string(Term,String),
-    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [String]),
+    format(string(Msg), "The : ~q", [String]),
     cors_reply_json(Request,
                     _{'@type' : 'api:WoqlErrorResponse',
                       'api:status' : 'api:failure',
