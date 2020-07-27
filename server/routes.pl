@@ -2963,6 +2963,14 @@ role_handler(post, Request, System_DB, Auth) :-
 :- http_handler(root(.), cors_handler(Method, console_handler),
                 [method(Method),
                  methods([options,get])]).
+:- http_handler(root(db), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(home), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
 
 /*
  * console_handler(+Method,+Request) is det.
@@ -2982,6 +2990,16 @@ test(console_route) :-
 test(console_route_empty) :-
     config:server(SURI),
     format(string(ConsoleURL), "~s", [SURI]),
+    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+
+test(console_route_db) :-
+    config:server(SURI),
+    format(string(ConsoleURL), "~s/db/gavin/baseball", [SURI]),
+    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+
+test(console_route_home) :-
+    config:server(SURI),
+    format(string(ConsoleURL), "~s/home/somewhere", [SURI]),
     http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
 
 :- end_tests(console_route).
