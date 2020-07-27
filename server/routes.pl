@@ -2893,6 +2893,7 @@ update_role_handler(post, Request, System_DB, Auth) :-
                  actions : Actions
                } :< Document,
               error(bad_api_document(Document, [agent_names, organization_name, actions]), _)),
+
     (   _{ database_name : Database_Name } :< Document
     ->  Database_Name_Option = some(Database_Name)
     ;   Database_Name_Option = none),

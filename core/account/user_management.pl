@@ -423,8 +423,15 @@ update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Ac
                              },
     askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
 
+    % NOTE: This should be replaced by appropriate document API expansion globally
+    default_prefixes(Prefixes),
+    maplist({Prefixes}/[Action,Action_URI]>>
+            prefix_expand(Action, Prefixes, Action_URI),
+            Actions,
+            Action_Uris),
+
     with_transaction(Ctx,
-                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Action_Uris),
                      _).
 
 
@@ -789,6 +796,37 @@ test(update_role, [
         (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
         (Cap.'system:action'.'@id') = 'system:inference_write_access').
 
+
+test(update_role_unexpanded_keys, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    create_db_without_schema("admin", "flurp"),
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
+
+    with_transaction(
+        Context,
+        add_role(Context,
+                 doc:admin,
+                 "admin",
+                 "admin",
+                 some("flurp"),
+                 [system:inference_write_access]
+                ),
+        _),
+
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
+
+    update_role_transaction(Context2,
+                            doc:admin,
+                            ["admin"],
+                            "admin",
+                            some("flurp"),
+                            ["system:inference_read_access"]
+                           ),
+    % No error is sufficient
+    true.
 
 test(add_role_no_capability, [
          setup(setup_temp_store(State)),
