@@ -395,6 +395,12 @@ commit_validation_objects_([Object|Objects]) :-
     commit_validation_objects_(Sorted_Objects).
 
 commit_validation_objects(Unsorted_Objects) :-
+    % NOTE: We need to check to make sure we do not simlutaneously
+    % modify a parent and child of the same transaction object
+    % - this could cause commit to fail when we attempt to make the
+    % neccessary changes to the parent transaction object required
+    % of a commit (adding commit information and repo change info for
+    % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects).
 
