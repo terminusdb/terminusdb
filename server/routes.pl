@@ -2080,7 +2080,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
                              'api:status' : "api:success"}
             ;   throw(error(internal_server_error,_))),
             cors_reply_json(Request,
-                            Result,
+                            Response,
                             [status(200)])),
         E,
         do_or_die(push_error_handler(E,Request),
