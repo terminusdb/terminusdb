@@ -1196,7 +1196,9 @@ update_descriptor_transactions(Descriptor)
         ->  true
         ;   Commit_Info = _{}),
         transactions_to_map(Transaction_Objects, Map),
-        open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
+        do_or_die(
+            open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
+            error(not_a_valid_descriptor(Descriptor),_)),
         union([Transaction_Object], Transaction_Objects, New_Transaction_Objects)
     }.
 

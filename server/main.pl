@@ -98,7 +98,7 @@ loading_page -->
 prolog:message(welcome('terminusdb-server', Server)) -->
          [ '~N% Welcome to TerminusDB\'s terminusdb-server!',
          nl,
-         '% You can view your server in a browser at \'~s/console\''-[Server],
+         '% You can view your server in a browser at \'~s\''-[Server],
          nl,
          nl
          ].

@@ -74,7 +74,6 @@ tmp_path(Value) :-
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
-
 server(Server) :-
     server_name(Name),
     server_port(Port),

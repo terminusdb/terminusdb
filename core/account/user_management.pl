@@ -141,15 +141,11 @@ add_organization(Context, Name, Organization_URI) :-
         ),
        [compress_prefixes(false)]).
 
+user_managed_resource(_Askable, User_Uri, _Resource_Uri) :-
+    is_super_user(User_Uri,_{doc : 'terminusdb:///system/data/'}),
+    !.
 user_managed_resource(Askable, User_Uri, Resource_Uri) :-
-    ask(Askable,
-        (   t(User_Uri, system:role, Role_Uri),
-            t(Role_Uri, rdf:type, system:'Role'),
-            t(Role_Uri, system:capability, Capability_Uri),
-            t(Capability_Uri, system:capability_scope, Resource_Uri),
-            t(Capability_Uri, rdf:type, system:'Capability'),
-            t(Capability_Uri, system:action, system:manage_capabilities)
-        )).
+    auth_action_scope(Askable, User_Uri, system:manage_capabilities, Resource_Uri).
 
 update_organization_transaction(System_DB, Auth, Name, New_Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -405,8 +401,7 @@ get_role(Askable, Auth_ID, Document, Response) :-
                   v('Database_ID'),
                   v('Agent'),
                   v('Organization')],
-                 (   (v('Auth_ID') = (Auth_ID)),
-                     t(v('Auth_ID'), system:role, v('Control_Role_ID')),
+                 (   t(Auth_ID, system:role, v('Control_Role_ID')),
                      t(v('Control_Role_ID'), system:capability, v('Control_Capability_ID')),
                      t(v('Control_Capability_ID'), system:capability_scope, v('Organization_ID')),
                      t(v('Control_Capability_ID'), system:action, system:manage_capabilities),
@@ -420,7 +415,6 @@ get_role(Askable, Auth_ID, Document, Response) :-
                      t(v('Owner_ID'), system:agent_name, Agent_Var),
                      read_object(v('Owner_Role_ID'), 3, v('Owner_Role_Obj'))
                  ))),
-
     run_context_ast_jsonld_response(Query_Context,Query,Response).
 
 update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions) :-
@@ -429,8 +423,15 @@ update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Ac
                              },
     askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
 
+    % NOTE: This should be replaced by appropriate document API expansion globally
+    default_prefixes(Prefixes),
+    maplist({Prefixes}/[Action,Action_URI]>>
+            prefix_expand(Action, Prefixes, Action_URI),
+            Actions,
+            Action_Uris),
+
     with_transaction(Ctx,
-                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Action_Uris),
                      _).
 
 
@@ -666,6 +667,54 @@ test(get_roles, [
            member(Name, ["Gavin"])
           ).
 
+test(get_loads_of_roles, [
+         blocked('takes too long, adds nothing'),
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document = _{},
+    add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+
+    create_db_without_schema("Gavin", "test1"),
+    create_db_without_schema("Gavin", "test2"),
+    create_db_without_schema("Gavin", "test3"),
+    create_db_without_schema("Gavin", "test4"),
+    create_db_without_schema("Gavin", "test6"),
+    create_db_without_schema("Gavin", "test7"),
+    create_db_without_schema("Gavin", "test8"),
+    create_db_without_schema("Gavin", "test9"),
+    create_db_without_schema("Gavin", "test10"),
+    create_db_without_schema("Gavin", "test12"),
+    create_db_without_schema("Gavin", "test13"),
+    create_db_without_schema("Gavin", "test14"),
+    create_db_without_schema("Gavin", "test15"),
+    create_db_without_schema("Gavin", "test16"),
+    create_db_without_schema("Gavin", "test17"),
+    create_db_without_schema("Gavin", "test18"),
+    create_db_without_schema("Gavin", "test19"),
+    create_db_without_schema("Gavin", "test20"),
+    create_db_without_schema("Gavin", "test21"),
+    create_db_without_schema("Gavin", "test22"),
+    create_db_without_schema("Gavin", "test23"),
+    create_db_without_schema("Gavin", "test24"),
+    create_db_without_schema("Gavin", "test25"),
+    create_db_without_schema("Gavin", "test26"),
+    create_db_without_schema("Gavin", "test27"),
+    create_db_without_schema("Gavin", "test28"),
+    create_db_without_schema("Gavin", "test29"),
+    create_db_without_schema("Gavin", "test30"),
+
+    get_role(system_descriptor{}, User_URI, Document, Response),
+
+    Bindings = (Response.bindings),
+
+    forall((member(Binding_Set, Bindings),
+            (Name = Binding_Set.'Organization'.'@value')
+           ),
+           member(Name, ["Gavin"])
+          ).
+
 test(add_role, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
@@ -747,6 +796,38 @@ test(update_role, [
         (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
         (Cap.'system:action'.'@id') = 'system:inference_write_access').
 
+
+test(update_role_unexpanded_keys, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    create_db_without_schema("admin", "flurp"),
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
+
+    with_transaction(
+        Context,
+        add_role(Context,
+                 doc:admin,
+                 "admin",
+                 "admin",
+                 some("flurp"),
+                 [system:inference_write_access]
+                ),
+        _),
+
+    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
+
+    update_role_transaction(Context2,
+                            doc:admin,
+                            ["admin"],
+                            "admin",
+                            some("flurp"),
+                            ["system:inference_read_access",
+                             "system:push"]
+                           ),
+    % No error is sufficient
+    true.
 
 test(add_role_no_capability, [
          setup(setup_temp_store(State)),

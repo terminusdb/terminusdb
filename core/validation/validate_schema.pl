@@ -485,6 +485,7 @@ sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y
 % - one_of should probably have individual sets for both CC, CP
 %
 % static solutions first.
+%:- table subsumption_of/3.
 subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
 subsumption_of(CC,CC,Database) :-
     immediate_class_or_restriction(CC,Database).
