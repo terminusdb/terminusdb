@@ -341,8 +341,11 @@ cleanup_user_database(User, Database) :-
 
 
 % spawn_server(+Path, -URL, -PID, +Options) is det.
-spawn_server(Path, URL, PID, Options) :-
-    option(port(Port), Options, 7000),
+spawn_server_1(Path, URL, PID, Options) :-
+    (   memberchk(port(Port), Options)
+    ->  true
+    ;   between(0,5,_),
+        random_between(49152, 65535, Port)),
 
     expand_file_search_path(terminus_home('start.pl'), Start_Script),
 
@@ -352,17 +355,54 @@ spawn_server(Path, URL, PID, Options) :-
 
     format(string(URL), "http://localhost:~d/", [Port]),
 
+    Env_List_1 = [
+        'LANG'='en_US.UTF-8',
+        'LC_TIME'='en_US.UTF-8',
+        'LC_MONETARY'='en_US.UTF-8',
+        'LC_MEASUREMENT'='en_US.UTF-8',
+        'LC_NUMERIC'='en_US.UTF-8',
+        'LC_PAPER'='en_US.UTF-8',
+
+        'TERMINUSDB_SERVER_PORT'=Port,
+        'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
+        'TERMINUSDB_SERVER_DB_PATH'=Path,
+        'TERMINUSDB_HTTPS_ENABLED'='false'
+    ],
+
+    (   getenv('HOME', Home)
+    ->  Env_List = ['HOME'=Home|Env_List_1]
+    ;   Env_List = Env_List_1),
+
     process_create(Swipl_Path, [Start_Script],
                    [
                        process(PID),
-                       environment(
-                           [
-                               'TERMINUSDB_SERVER_PORT'=Port,
-                               'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
-                               'TERMINUSDB_SERVER_DB_PATH'=Path,
-                               'TERMINUSDB_HTTPS_ENABLED'='false'
-                           ]),
-                       stdin(pipe(_Stream))
+                       env(Env_List),
+                       stdin(pipe(_Stream)),
+                       stdout(pipe(_)),
+                       stderr(pipe(Error))
                    ]),
 
-    true.
+    % this very much depends on something being written on startup
+    % we read 2 lines, because the first line will report start. the second line will be printed after load is done.
+    % This is very fragile though.
+    read_line_to_string(Error, _First_Line),
+    read_line_to_string(Error, _Second_Line),
+    sleep(0.01),
+    process_wait(PID, Status, [timeout(0)]),
+    (   Status = exit(98)
+    ->  fail
+    ;   Status \= timeout
+    ->  throw(error(server_spawn_failed(Status), _))
+    ;   true).
+
+spawn_server(Path, URL, PID, Options) :-
+    (   memberchk(port(_), Options)
+    ->  Error = server_spawn_port_in_use
+    ;   Error = server_spawn_retry_exceeded),
+    
+    do_or_die(spawn_server_1(Path, URL, PID, Options),
+              error(Error, _)).
+
+kill_server(PID) :-
+    process_kill(PID),
+    process_wait(PID, _).
