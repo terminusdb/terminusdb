@@ -5,7 +5,9 @@
               report_curl_command/1,
               admin_pass/1,
               setup_temp_store/1,
+              setup_unattached_store/1,
               teardown_temp_store/1,
+              teardown_unattached_store/1,
               with_temp_store/1,
               ensure_label/1,
               layer_schema_context_from_label_descriptor/2,
@@ -19,7 +21,14 @@
               print_all_triples/1,
               print_all_triples/2,
               delete_user_and_organization/1,
-              cleanup_user_database/2
+              cleanup_user_database/2,
+
+              spawn_server/4,
+              kill_server/1,
+              setup_temp_server/2,
+              teardown_temp_server/1,
+              setup_temp_unattached_server/3,
+              teardown_temp_unattached_server/1
           ]).
 
 :- use_module(library(process)).
@@ -193,17 +202,22 @@ admin_pass(Pass) :-
     ->  true
     ;   Pass='root').
 
-setup_temp_store(Store-Dir) :-
+setup_unattached_store(Store-Dir) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
-    initialize_database_with_store('http://localhost:1234', 'root', Store),
+    initialize_database_with_store('http://localhost:1234', 'root', Store).
+
+setup_temp_store(Store-Dir) :-
+    setup_unattached_store(Store-Dir),
     local_triple_store(Store).
 
-teardown_temp_store(State) :-
-    State=Store-Dir,
-    retract_local_triple_store(Store),
+teardown_unattached_store(_Store-Dir) :-
     delete_directory_and_contents(Dir).
+
+teardown_temp_store(Store-Dir) :-
+    retract_local_triple_store(Store),
+    teardown_unattached_store(Store-Dir).
 
 :- meta_predicate with_temp_store(:).
 with_temp_store(Goal) :-
@@ -353,7 +367,7 @@ spawn_server_1(Path, URL, PID, Options) :-
 
     current_prolog_flag(os_argv, [Swipl_Path|_]),
 
-    format(string(URL), "http://localhost:~d/", [Port]),
+    format(string(URL), "http://127.0.0.1:~d", [Port]),
 
     Env_List_1 = [
         'LANG'='en_US.UTF-8',
@@ -370,8 +384,12 @@ spawn_server_1(Path, URL, PID, Options) :-
     ],
 
     (   getenv('HOME', Home)
-    ->  Env_List = ['HOME'=Home|Env_List_1]
-    ;   Env_List = Env_List_1),
+    ->  Env_List_2 = ['HOME'=Home|Env_List_1]
+    ;   Env_List_2 = Env_List_1),
+
+    (   getenv('TERMINUSDB_ADMIN_PASSWD', Pass)
+    ->  Env_List = ['TERMINUSDB_ADMIN_PASSWD'=Pass|Env_List_2]
+    ;   Env_List = Env_List_2),
 
     process_create(Swipl_Path, [Start_Script],
                    [
@@ -406,3 +424,19 @@ spawn_server(Path, URL, PID, Options) :-
 kill_server(PID) :-
     process_kill(PID),
     process_wait(PID, _).
+
+setup_temp_server(Store-Dir-PID, URL) :-
+    setup_temp_store(Store-Dir),
+    spawn_server(Dir, URL, PID, []).
+
+teardown_temp_server(Store-Dir-PID) :-
+    kill_server(PID),
+    teardown_temp_store(Store-Dir).
+
+setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
+    setup_store(Store-Dir),
+    spawn_server(Dir, URL, PID, []).
+
+teardown_temp_unattached_server(Store-Dir-PID) :-
+    kill_server(PID),
+    teardown_store(Store-Dir).
