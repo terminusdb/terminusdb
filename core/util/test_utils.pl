@@ -22,6 +22,8 @@
               cleanup_user_database/2
           ]).
 
+:- use_module(library(process)).
+
 /** <module> Test Utilities
  *
  * Utils to assist in testing.
@@ -191,8 +193,7 @@ admin_pass(Pass) :-
     ->  true
     ;   Pass='root').
 
-setup_temp_store(State) :-
-    State=Store-Dir,
+setup_temp_store(Store-Dir) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
@@ -337,3 +338,31 @@ cleanup_user_database(User, Database) :-
    (   organization_name_exists(system_descriptor{}, User)
    ->  delete_organization(User)
    ;   true).
+
+
+% spawn_server(+Path, -URL, -PID, +Options) is det.
+spawn_server(Path, URL, PID, Options) :-
+    option(port(Port), Options, 7000),
+
+    expand_file_search_path(terminus_home('start.pl'), Start_Script),
+
+    index_path(INDEX_PATH),
+
+    current_prolog_flag(os_argv, [Swipl_Path|_]),
+
+    format(string(URL), "http://localhost:~d/", [Port]),
+
+    process_create(Swipl_Path, [Start_Script],
+                   [
+                       process(PID),
+                       environment(
+                           [
+                               'TERMINUSDB_SERVER_PORT'=Port,
+                               'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
+                               'TERMINUSDB_SERVER_DB_PATH'=Path,
+                               'TERMINUSDB_HTTPS_ENABLED'='false'
+                           ]),
+                       stdin(pipe(_Stream))
+                   ]),
+
+    true.
