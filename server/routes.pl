@@ -122,18 +122,21 @@ test(connection_unauthorized_user_jwt, [
 :- use_module(core(util/test_utils)).
 
 test(connection_authorised_user_http_basic, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
     admin_pass(Key),
-    config:server(Server),
     atomic_list_concat([Server, '/api'], URL),
 
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
-test(connection_result_dbs, [])
+test(connection_result_dbs, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
     admin_pass(Key),
-    config:server(Server),
     atomic_list_concat([Server, '/api'], URL),
 
     http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
@@ -301,12 +304,9 @@ delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)
 :- use_module(library(http/http_open)).
 
 test(db_create, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true))),
-         cleanup(force_delete_db('admin', 'TEST_DB'))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -320,11 +320,9 @@ test(db_create, [
     _{'api:status' : "api:success"} :< In.
 
 test(db_create_bad_api_document, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ label : "A label" },
     admin_pass(Key),
@@ -338,14 +336,10 @@ test(db_create_bad_api_document, [
     _{'@type' : "api:RequiredFieldsMissing"} :< Error.
 
 test(db_create_existing_errors, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true),
-                create_db_without_schema("admin", "TEST_DB")
-               )),
-         cleanup(force_delete_db('admin', 'TEST_DB'))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
+    create_db_without_schema("admin", "TEST_DB"),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -361,8 +355,9 @@ test(db_create_existing_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_in_unknown_organization_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -378,8 +373,9 @@ test(db_create_in_unknown_organization_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthenticated_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -394,10 +390,10 @@ test(db_create_unauthenticated_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthorized_errors, [
-         setup(add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID)),
-         cleanup(delete_user_and_organization("TERMINUSQA"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
+    add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -412,12 +408,10 @@ test(db_create_unauthorized_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true),
-                create_db_without_schema("admin", "TEST_DB")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
+    create_db_without_schema("admin", "TEST_DB"),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI, Delete_In, [json_object(dict),
@@ -426,8 +420,9 @@ test(db_delete, [
     _{'api:status' : "api:success"} :< Delete_In.
 
 test(db_delete_unknown_organization_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
@@ -444,8 +439,9 @@ test(db_delete_unknown_organization_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete_nonexistent_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
@@ -460,24 +456,11 @@ test(db_delete_nonexistent_errors, [
 
 
 test(db_auth_test, [
-         setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
-                ->  delete_organization('TERMINUS_QA')
-                ;   true
-                ),
-                (   agent_name_exists(system_descriptor{}, 'TERMINUS_QA')
-                ->  delete_user('TERMINUS_QA')
-                ;   add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID)
-                ),
-                (   database_exists('TERMINUS_QA', 'TEST_DB')
-                ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
-                ;   true))),
-         cleanup(((   database_exists('TERMINUS_QA', 'TEST_DB')
-                  ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
-                  ;   true),
-                  delete_user_and_organization('TERMINUS_QA')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID),
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
