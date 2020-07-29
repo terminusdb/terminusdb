@@ -98,16 +98,17 @@ connect_handler(get, Request, System_DB, Auth) :-
  * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
  */
 test(connection_authorized_user_jwt, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     atomic_list_concat([Server, '/api'], URL),
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
     http_get(URL, _, [authorization(bearer(Bearer))]).
 
 test(connection_unauthorized_user_jwt, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-
-    config:server(Server),
     atomic_list_concat([Server, '/api'], URL),
 
     % mangled the payload so it should not validate
@@ -551,14 +552,12 @@ triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
 :- use_module(library(http/http_open)).
 
 test(triples_update, [
-         setup(((   database_exists(admin, 'TEST_DB')
-                ->  force_delete_db(admin, 'TEST_DB')
-                ;   true),
-                create_db_without_schema(admin, 'TEST_DB'))),
-         cleanup((force_delete_db(admin, 'TEST_DB')))
-
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema(admin, 'TEST_DB'),
+
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
     make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
@@ -574,7 +573,6 @@ test(triples_update, [
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    config:server(Server),
     atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
@@ -591,10 +589,11 @@ test(triples_update, [
     memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
-test(triples_get, [])
+test(triples_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
-    config:server(Server),
     atomic_list_concat([Server, '/api/triples/_system/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
@@ -603,13 +602,11 @@ test(triples_get, [])
 
 
 test(triples_post_get, [
-         setup(((   database_exists("admin", "Jumanji")
-                ->  force_delete_db("admin", "Jumanji")
-                ;   true),
-                create_db_without_schema("admin", "Jumanji"))),
-         cleanup(force_delete_db("admin", "Jumanji"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "Jumanji"),
 
     super_user_authority(Auth),
     create_graph(system_descriptor{},
@@ -625,7 +622,6 @@ test(triples_post_get, [
 
 layer:LayerIdRestriction a owl:Restriction.",
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema/main'], URI),
     admin_pass(Key),
 
@@ -642,9 +638,11 @@ layer:LayerIdRestriction a owl:Restriction.",
                     "layer:LayerIdRestriction\n  a owl:Restriction")).
 
 
-test(get_invalid_descriptor, [])
+test(get_invalid_descriptor, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/triples/nonsense'], URI),
     admin_pass(Key),
 
@@ -656,9 +654,11 @@ test(get_invalid_descriptor, [])
     Code = 400.
 
 
-test(get_bad_descriptor, [])
+test(get_bad_descriptor, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
     admin_pass(Key),
 
@@ -774,9 +774,11 @@ frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(get_frame, [])
+test(get_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -787,9 +789,11 @@ test(get_frame, [])
     _{'@type':"system:Frame"} :< JSON.
 
 
-test(get_filled_frame, [])
+test(get_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -800,9 +804,11 @@ test(get_filled_frame, [])
     _{'@type':"system:FilledFrame"} :< JSON.
 
 
-test(bad_path_filled_frame, [])
+test(bad_path_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/frame/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -815,9 +821,11 @@ test(bad_path_filled_frame, [])
     JSON.'api:error'.'@type' = "api:BadAbsoluteDescriptor".
 
 
-test(unresolvable_path_filled_frame, [])
+test(unresolvable_path_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     atomic_list_concat([Server, '/api/frame/believable/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -953,8 +961,10 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(db_not_there, []) :-
-    config:server(Server),
+test(db_not_there, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
     atomic_list_concat([Server, '/api/woql/admin/blagblagblagblagblag'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -967,9 +977,11 @@ test(db_not_there, []) :-
       _{'@type' : "api:UnresolvableAbsoluteDescriptor",
         'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/main"}} :< JSON.
 
-test(no_db, [])
+test(no_db, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
     Query =
     _{'@type' : "Using",
       collection : _{'@type' : "xsd:string",
@@ -1066,7 +1078,6 @@ test(no_db, [])
                                             graph_filter : _{'@type' : "xsd:string",
                                                              '@value' : "schema/*"}}}}]}}},
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -1079,7 +1090,10 @@ test(no_db, [])
     * json_write_dict(current_output,JSON,[]),
     _{'bindings' : _L} :< JSON.
 
-test(indexed_get, [])
+test(indexed_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
     Query =
     _{'@type' : 'Get',
@@ -1099,8 +1113,6 @@ test(indexed_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-
-    config:server(Server),
     atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -1112,9 +1124,11 @@ test(indexed_get, [])
     ->  true
     ;   fail).
 
-test(named_get, [])
+test(named_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
     Query =
     _{'@type' : 'Get',
       as_vars : [
@@ -1136,7 +1150,6 @@ test(named_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -1151,14 +1164,11 @@ test(named_get, [])
                    '@value':790}} :< First.
 
 test(branch_db, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema(admin,test),
     atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
@@ -1206,15 +1216,11 @@ test(branch_db, [
     ).
 
 test(update_object, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema(admin,test),
     atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % First make a schema against which we can have an object
@@ -1296,14 +1302,11 @@ test(update_object, [
 
 
 test(delete_object, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema(admin,test),
 
     make_branch_descriptor("admin","test",Branch_Descriptor),
 
@@ -1377,7 +1380,10 @@ test(delete_object, [
            t('http://terminusdb.com/admin/test/document/my_database', _, _)).
 
 
-test(get_object, [])
+test(get_object, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
     Query0 =
     _{'@type' : "ReadObject",
@@ -1387,7 +1393,6 @@ test(get_object, [])
                    variable_name : _{ '@type' : "xsd:string",
                                       '@value' : "Document"}}},
 
-    config:server(Server),
     admin_pass(Key),
     atomic_list_concat([Server, '/api/woql/_system'], URI),
     http_post(URI,
@@ -1453,16 +1458,13 @@ clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
 :- use_module(library(http/http_open)).
 
 test(clone_local, [
-         setup((cleanup_user_database("TERMINUSQA1", "foo"),
-                cleanup_user_database("TERMINUSQA2", "bar"),
-
-                add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
-                add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
-                create_db_without_schema("TERMINUSQA1", "foo"))),
-         cleanup((cleanup_user_database("TERMINUSQA1", "foo"),
-                  cleanup_user_database("TERMINUSQA2", "bar")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+    add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+    create_db_without_schema("TERMINUSQA1", "foo"),
     resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
     create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
     with_transaction(Foo_Context,
@@ -1470,7 +1472,6 @@ test(clone_local, [
                          insert(a,b,c)),
                      _),
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/clone/TERMINUSQA2/bar'], URL),
     atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
     base64("TERMINUSQA1:password1", Base64_Auth),
@@ -1717,21 +1718,12 @@ rebase_error_handler(error(rebase_commit_application_failed(fixup_error(Their_Co
 :- use_module(library(http/http_open)).
 
 test(rebase_divergent_history, [
-         setup(((   database_exists("TERMINUSQA", "foo")
-                ->  force_delete_db("TERMINUSQA", "foo")
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, "TERMINUSQA")
-                ->  delete_user("TERMINUSQA")
-                ;   true),
-                (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
-                ->  delete_organization("TERMINUSQA")
-                ;   true),
-                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
-                create_db_without_schema("TERMINUSQA", "foo"))),
-         cleanup((force_delete_db("TERMINUSQA", "foo"),
-                  delete_user_and_organization("TERMINUSQA")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
+    create_db_without_schema("TERMINUSQA", "foo"),
 
     Master_Path = "TERMINUSQA/foo",
     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
@@ -1765,7 +1757,6 @@ test(rebase_divergent_history, [
                          insert(j,k,l)),
                      _),
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/rebase/TERMINUSQA/foo'], URI),
     http_post(URI,
               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
@@ -1857,22 +1848,11 @@ pack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
 :- use_module(library(terminus_store)).
 
 test(pack_stuff, [
-         % blocked('Blocked due to build problems - missing new store?'),
-         setup(((   database_exists('_a_test_user_',foo)
-                ->  force_delete_db('_a_test_user_',foo)
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user('_a_test_user_')
-                ;   true),
-                (   organization_name_exists(system_descriptor{},'_a_test_user_')
-                ->  delete_organization('_a_test_user_')
-                ;   true),
-                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
-                create_db_without_schema('_a_test_user_',foo)
-               )),
-         cleanup((force_delete_db('_a_test_user_',foo),
-                  delete_user_and_organization('_a_test_user_')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_',foo),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
 
@@ -1897,7 +1877,6 @@ test(pack_stuff, [
                      _),
 
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
@@ -1928,22 +1907,11 @@ test(pack_stuff, [
 
 
 test(pack_nothing, [
-         % blocked('causing travis to die'),
-         setup(((   database_exists('_a_test_user_','foo')
-                ->  force_delete_db('_a_test_user_','foo')
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user('_a_test_user_')
-                ;   true),
-                (   organization_name_exists(system_descriptor{},'_a_test_user_')
-                ->  delete_organization('_a_test_user_')
-                ;   true),
-                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
-                create_db_without_schema('_a_test_user_','foo')
-               )),
-         cleanup((force_delete_db('_a_test_user_','foo'),
-                  delete_user_and_organization('_a_test_user_')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_','foo'),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
     Repository_Descriptor = (Descriptor.repository_descriptor),
@@ -1951,7 +1919,6 @@ test(pack_nothing, [
     repository_head_layerid(Repo_Transaction, Repository_Head_Layer_ID),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
-    config:server(Server),
     atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
     http_post(URI,
               json(Document),
@@ -2348,15 +2315,11 @@ branch_error_handler(error(origin_cannot_be_branched(Origin_Descriptor), _), Req
 :- use_module(library(http/http_open)).
 
 test(create_empty_branch, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2372,15 +2335,11 @@ test(create_empty_branch, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_local_without_prefixes, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2394,15 +2353,11 @@ test(create_branch_from_local_without_prefixes, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_local_with_prefixes, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") %dubious
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2419,15 +2374,11 @@ test(create_branch_from_local_with_prefixes, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_that_already_exists_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % dubious
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/main'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2441,15 +2392,11 @@ test(create_branch_that_already_exists_error, [
     * json_write_dict(current_output, JSON, []).
 
 test(create_branch_from_nonexisting_origin_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2467,15 +2414,11 @@ test(create_branch_from_nonexisting_origin_error, [
     \+ has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_commit_graph_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
+    create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2622,18 +2565,14 @@ graph_error_handler(error(graph_already_exists(Descriptor,Graph_Name), _), Type,
 :- use_module(library(http/http_open)).
 
 test(create_graph, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "test"),
     Commit = commit_info{ author : 'The Graphinator',
                           message : 'Edges here there and everywhere' },
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/instance/naim'], URI),
     admin_pass(Key),
     http_post(URI,
@@ -2652,23 +2591,19 @@ test(create_graph, [
 
 
 test(delete_graph, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test")
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"),
-                super_user_authority(Auth),
-                create_graph(system_descriptor{},
-                             Auth,
-                             "admin/test/local/branch/main/schema/main",
-                             commit_info{ author : "test",
-                                          message: "Generated by automated testing"},
-                             _Transaction_Metadata))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "test"),
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/main/schema/main",
+                 commit_info{ author : "test",
+                              message: "Generated by automated testing"},
+                 _Transaction_Metadata),
 
-    config:server(Server),
     atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     Commit = commit_info{ author : 'Jeebuz', message : 'Hello my children' },
@@ -2964,26 +2899,35 @@ console_handler(get,Request, _System_DB, _Auth) :-
     throw(http_reply(file('text/html', Index_Path))).
 
 :- begin_tests(console_route).
+:- use_module(core(util/test_utils)).
 
-test(console_route) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s/", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+test(console_route, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
 
-test(console_route_empty) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+test(console_route_empty, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
 
-test(console_route_db) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s/db/gavin/baseball", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+test(console_route_db, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/db/gavin/baseball", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
 
-test(console_route_home) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s/home/somewhere", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
+test(console_route_home, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/home/somewhere", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
 
 :- end_tests(console_route).
 
