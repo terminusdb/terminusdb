@@ -64,7 +64,12 @@ terminus_server(_Argv) :-
                         port(Port), workers(Workers)]
     ;   HTTPOptions = [port(Port), workers(Workers)]
     ),
-    http_server(http_dispatch, HTTPOptions),
+    catch(http_server(http_dispatch, HTTPOptions),
+          _E,
+          (
+              format(user_error, "Error: Port ~d is already in use.", [Port]),
+              halt(98) % EADDRINUSE
+          )),
     setup_call_cleanup(
         http_handler(root(.), busy_loading,
                      [ priority(1000),
