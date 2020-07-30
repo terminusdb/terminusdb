@@ -808,8 +808,10 @@ compile_wf(t(X,P,Y),Goal) -->
     view(transaction_objects, Transaction_Objects),
     view(filter, Filter),
     {
-        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
-                                                 Transaction_Object),
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
         filter_transaction_object_goal(Filter, Transaction_Object, t(XE, PE, YE), Search_Clause),
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
@@ -1198,7 +1200,7 @@ update_descriptor_transactions(Descriptor)
         transactions_to_map(Transaction_Objects, Map),
         do_or_die(
             open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
-            error(not_a_valid_descriptor(Descriptor),_)),
+            error(unresolvable_absolute_descriptor(Descriptor),_)),
         union([Transaction_Object], Transaction_Objects, New_Transaction_Objects)
     }.
 
@@ -3506,94 +3508,55 @@ test(temp_graph_rdf, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     query_test_response(Descriptor, Query, _JSON).
 
-test(using_sequence, [
+test(unresolvable_descriptor_in_using, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         error(unresolvable_absolute_descriptor(
+                   branch_descriptor{
+                       branch_name : "main",
+                       repository_descriptor:
+                       repository_descriptor{
+                           database_descriptor:
+                           database_descriptor{
+                               database_name:"fdsa",
+                               organization_name:"admin"},
+                           repository_name:"local"}}), _)
      ]) :-
 
     Atom = '{
-  "@type": "woql:And",
-  "woql:query_list": [
-    {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 0
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "_system"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "DA",
-              "@type": "xsd:string"
-            }
-          },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:resource_name"
-          },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
-          }
-        }
+  "@type": "woql:Using",
+  "woql:collection": {
+    "@type": "xsd:string",
+    "@value": "admin/fdsa"
+  },
+  "woql:query": {
+    "@type": "woql:Triple",
+    "woql:subject": {
+      "@type": "woql:Variable",
+      "woql:variable_name": {
+        "@value": "X",
+        "@type": "xsd:string"
       }
     },
-    {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 1
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "admin/test"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "D",
-              "@type": "xsd:string"
-            }
-          },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:database_name"
-          },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
-          }
-        }
+    "woql:predicate": {
+      "@type": "woql:Variable",
+      "woql:variable_name": {
+        "@value": "P",
+        "@type": "xsd:string"
+      }
+    },
+    "woql:object": {
+      "@type": "woql:Variable",
+      "woql:variable_name": {
+        "@value": "Y",
+        "@type": "xsd:string"
       }
     }
-  ]
+  }
 }',
-
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, _JSON),
-    % Not failing is good enough
-    * json_write_dict(current_output, _JSON, []).
-
-
+    query_test_response(Descriptor, Query, _JSON).
 
 :- end_tests(woql).

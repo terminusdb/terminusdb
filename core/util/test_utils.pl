@@ -5,7 +5,9 @@
               report_curl_command/1,
               admin_pass/1,
               setup_temp_store/1,
+              setup_unattached_store/1,
               teardown_temp_store/1,
+              teardown_unattached_store/1,
               with_temp_store/1,
               ensure_label/1,
               layer_schema_context_from_label_descriptor/2,
@@ -16,11 +18,21 @@
               repo_schema_context_from_label_descriptor/3,
               create_db_with_test_schema/2,
               create_db_without_schema/2,
+              create_public_db_without_schema/2,
               print_all_triples/1,
               print_all_triples/2,
               delete_user_and_organization/1,
-              cleanup_user_database/2
+              cleanup_user_database/2,
+
+              spawn_server/4,
+              kill_server/1,
+              setup_temp_server/2,
+              teardown_temp_server/1,
+              setup_temp_unattached_server/3,
+              teardown_temp_unattached_server/1
           ]).
+
+:- use_module(library(process)).
 
 /** <module> Test Utilities
  *
@@ -191,18 +203,22 @@ admin_pass(Pass) :-
     ->  true
     ;   Pass='root').
 
-setup_temp_store(State) :-
-    State=Store-Dir,
+setup_unattached_store(Store-Dir) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
-    initialize_database_with_store('http://localhost:1234', 'root', Store),
+    initialize_database_with_store('http://localhost:1234', 'root', Store).
+
+setup_temp_store(Store-Dir) :-
+    setup_unattached_store(Store-Dir),
     local_triple_store(Store).
 
-teardown_temp_store(State) :-
-    State=Store-Dir,
-    retract_local_triple_store(Store),
+teardown_unattached_store(_Store-Dir) :-
     delete_directory_and_contents(Dir).
+
+teardown_temp_store(Store-Dir) :-
+    retract_local_triple_store(Store),
+    teardown_unattached_store(Store-Dir).
 
 :- meta_predicate with_temp_store(:).
 with_temp_store(Goal) :-
@@ -290,6 +306,13 @@ create_db_without_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
 
+create_public_db_without_schema(Organization, Db_Name) :-
+    Prefixes = _{ doc : 'http://somewhere.for.now/document',
+                  scm : 'http://somewhere.for.now/schema' },
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).
+
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),
              error(user_doesnt_exist(User_Name))),
@@ -337,3 +360,91 @@ cleanup_user_database(User, Database) :-
    (   organization_name_exists(system_descriptor{}, User)
    ->  delete_organization(User)
    ;   true).
+
+
+% spawn_server(+Path, -URL, -PID, +Options) is det.
+spawn_server_1(Path, URL, PID, Options) :-
+    (   memberchk(port(Port), Options)
+    ->  true
+    ;   between(0,5,_),
+        random_between(49152, 65535, Port)),
+
+    expand_file_search_path(terminus_home('start.pl'), Start_Script),
+
+    index_path(INDEX_PATH),
+
+    current_prolog_flag(executable, Swipl_Path),
+
+    format(string(URL), "http://127.0.0.1:~d", [Port]),
+
+    Env_List_1 = [
+        'LANG'='en_US.UTF-8',
+        'LC_TIME'='en_US.UTF-8',
+        'LC_MONETARY'='en_US.UTF-8',
+        'LC_MEASUREMENT'='en_US.UTF-8',
+        'LC_NUMERIC'='en_US.UTF-8',
+        'LC_PAPER'='en_US.UTF-8',
+
+        'TERMINUSDB_SERVER_PORT'=Port,
+        'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
+        'TERMINUSDB_SERVER_DB_PATH'=Path,
+        'TERMINUSDB_HTTPS_ENABLED'='false'
+    ],
+
+    (   getenv('HOME', Home)
+    ->  Env_List_2 = ['HOME'=Home|Env_List_1]
+    ;   Env_List_2 = Env_List_1),
+
+    (   getenv('TERMINUSDB_ADMIN_PASSWD', Pass)
+    ->  Env_List = ['TERMINUSDB_ADMIN_PASSWD'=Pass|Env_List_2]
+    ;   Env_List = Env_List_2),
+
+    process_create(Swipl_Path, [Start_Script],
+                   [
+                       process(PID),
+                       env(Env_List),
+                       stdin(pipe(_Stream)),
+                       stdout(pipe(_)),
+                       stderr(pipe(Error))
+                   ]),
+
+    % this very much depends on something being written on startup
+    % we read 2 lines, because the first line will report start. the second line will be printed after load is done.
+    % This is very fragile though.
+    read_line_to_string(Error, _First_Line),
+    read_line_to_string(Error, _Second_Line),
+    sleep(0.01),
+    process_wait(PID, Status, [timeout(0)]),
+    (   Status = exit(98)
+    ->  fail
+    ;   Status \= timeout
+    ->  throw(error(server_spawn_failed(Status), _))
+    ;   true).
+
+spawn_server(Path, URL, PID, Options) :-
+    (   memberchk(port(_), Options)
+    ->  Error = server_spawn_port_in_use
+    ;   Error = server_spawn_retry_exceeded),
+
+    do_or_die(spawn_server_1(Path, URL, PID, Options),
+              error(Error, _)).
+
+kill_server(PID) :-
+    process_kill(PID),
+    process_wait(PID, _).
+
+setup_temp_server(Store-Dir-PID, URL) :-
+    setup_temp_store(Store-Dir),
+    spawn_server(Dir, URL, PID, []).
+
+teardown_temp_server(Store-Dir-PID) :-
+    kill_server(PID),
+    teardown_temp_store(Store-Dir).
+
+setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
+    setup_unattached_store(Store-Dir),
+    spawn_server(Dir, URL, PID, []).
+
+teardown_temp_unattached_server(Store-Dir-PID) :-
+    kill_server(PID),
+    teardown_unattached_store(Store-Dir).
