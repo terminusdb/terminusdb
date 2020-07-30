@@ -22,9 +22,13 @@
 
 :- use_module(core(util/utils)).
 
+server_protocol(Value) :-
+    (   https_enabled
+    ->  Value = https
+    ;   Value = http).
 
 server_name(Value) :-
-    getenv_default('TERMINUSDB_SERVER_NAME', 'http://localhost', Value).
+    getenv_default('TERMINUSDB_SERVER_NAME', '127.0.0.1', Value).
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
@@ -75,9 +79,10 @@ tmp_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
 server(Server) :-
+    server_protocol(Protocol),
     server_name(Name),
     server_port(Port),
-    atomic_list_concat([Name,':',Port],Server).
+    atomic_list_concat([Protocol,'://',Name,':',Port],Server).
 
 server_worker_options([]).
 
