@@ -1630,7 +1630,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(fetch, [
+test(fetch_first_time, [
          setup(
              (   setup_temp_unattached_server(State_1,Store_1,Server_1),
                  setup_temp_unattached_server(State_2,Store_2,Server_2))),
@@ -1682,7 +1682,7 @@ test(fetch, [
               JSON,
               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
                request_header('Authorization-Remote'=Authorization_Remote),
-               status_code(_Status)]),
+               status_code(200)]),
 
     _{ '@type' : "api:FetchRequest",
        'api:head_has_changed' : true,
@@ -1695,6 +1695,184 @@ test(fetch, [
             once(ask(Bar_Descriptor_Origin,
                      t(a,b,c))),
             repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_no_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : false,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_with_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    with_triple_store(
+        Store_1,
+        (
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra1),
+            with_transaction(Foo_Context_Extra1,
+                             ask(Foo_Context_Extra1,
+                                 insert(d,e,f)),
+                             _),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra2),
+            with_transaction(Foo_Context_Extra2,
+                             ask(Foo_Context_Extra2,
+                                 insert(g,h,i)),
+                             _),
+
+            repository_head(Foo_Database_Desc,"local",New_Head)
+        )),
+            
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': New_Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", New_Head)
         )
     ).
 
