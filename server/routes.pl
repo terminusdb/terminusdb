@@ -1497,6 +1497,63 @@ test(clone_local, [
 
     true.
 
+test(clone_remote, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+    with_triple_store(
+        Store_1,
+        (   add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (   add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2)
+        )
+    ),
+
+    atomic_list_concat([Server_2, '/api/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'api:status' : "api:success"
+    } :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            once(ask(Bar_Descriptor,
+                     t(a,b,c)))
+        )
+    ).
+
+
 :- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1566,6 +1623,82 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ;   Status = 204
     ->  Payload_Option = none
     ;   throw(error(remote_connection_error(Payload),_))).
+
+:- begin_tests(fetch_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(fetch, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(_Status)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar/origin", Bar_Descriptor_Origin),
+            once(ask(Bar_Descriptor_Origin,
+                     t(a,b,c))),
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+:- end_tests(fetch_endpoint).
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1998,6 +2131,8 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                     [status(404)]).
 
 :- begin_tests(unpack_endpoint).
+
+
 :- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
