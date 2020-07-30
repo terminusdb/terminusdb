@@ -18,6 +18,7 @@
               repo_schema_context_from_label_descriptor/3,
               create_db_with_test_schema/2,
               create_db_without_schema/2,
+              create_public_db_without_schema/2,
               print_all_triples/1,
               print_all_triples/2,
               delete_user_and_organization/1,
@@ -305,6 +306,13 @@ create_db_without_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
 
+create_public_db_without_schema(Organization, Db_Name) :-
+    Prefixes = _{ doc : 'http://somewhere.for.now/document',
+                  scm : 'http://somewhere.for.now/schema' },
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).
+
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),
              error(user_doesnt_exist(User_Name))),
@@ -365,7 +373,7 @@ spawn_server_1(Path, URL, PID, Options) :-
 
     index_path(INDEX_PATH),
 
-    current_prolog_flag(os_argv, [Swipl_Path|_]),
+    current_prolog_flag(executable, Swipl_Path),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
 
@@ -417,7 +425,7 @@ spawn_server(Path, URL, PID, Options) :-
     (   memberchk(port(_), Options)
     ->  Error = server_spawn_port_in_use
     ;   Error = server_spawn_retry_exceeded),
-    
+
     do_or_die(spawn_server_1(Path, URL, PID, Options),
               error(Error, _)).
 
@@ -434,9 +442,9 @@ teardown_temp_server(Store-Dir-PID) :-
     teardown_temp_store(Store-Dir).
 
 setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
-    setup_store(Store-Dir),
+    setup_unattached_store(Store-Dir),
     spawn_server(Dir, URL, PID, []).
 
 teardown_temp_unattached_server(Store-Dir-PID) :-
     kill_server(PID),
-    teardown_store(Store-Dir).
+    teardown_unattached_store(Store-Dir).
