@@ -71,6 +71,7 @@
   "length_list" : {"@type" : "@id"},
   "typecast_value" : {"@type" : "@id"},
   "typecast_type" : {"@type" : "@id"},
-  "typecast_result" : {"@type" : "@id"}
+  "typecast_result" : {"@type" : "@id"},
+  "file" : {"@type" : "xsd:string"}
  }
 }
