@@ -133,15 +133,14 @@ format_ontology(Collection,Prefixes, Out_Stream) :-
         format(Out_Stream, "~n~n",[]),
         format_authors(Collection,Prefixes, O, Out_Stream),
         format_comment(Collection,Prefixes, O, Out_Stream)
-    ;   format(Out_Stream, "# Unknown Ontology")).
+    ;   format(Out_Stream, "# Unknown Ontology",[])).
 
 format_label_list(Collection, Prefixes, List, Out_Stream) :-
     maplist({Collection, Prefixes}/[Class,Label]>>(
                 format_label(Collection, Prefixes, Class, string(Label), 0)
             ),
             List, Labels),
-    intersperse(',',Labels,Format_List),
-    maplist({Out_Stream}/[Arg]>>format(Out_Stream, " ~s", [Arg]),Format_List).
+    maplist({Out_Stream}/[Arg]>>format(Out_Stream, " * ~s~n", [Arg]),Labels).
 
 format_supers(Collection, Prefixes, Class, Out_Stream) :-
     findall(
@@ -152,14 +151,14 @@ format_supers(Collection, Prefixes, Class, Out_Stream) :-
         Supers),
     sort(Supers, All_Supers),
     (   All_Supers \= []
-    ->  format(Out_Stream, "### Super classes: ", []),
+    ->  format(Out_Stream, "### Super classes ~n", []),
         format_label_list(Collection, Prefixes, All_Supers, Out_Stream),
         format(Out_Stream, "~n",[])
     ;   true).
 
 format_oneof(Collection, Prefixes, Class, Out_Stream) :-
     (   one_of_list(Class, OneOf, Collection)
-    ->  format(Out_Stream, "### One of: ", []),
+    ->  format(Out_Stream, "### One of ~n", []),
         format_label_list(Collection, Prefixes, OneOf, Out_Stream)
     ;   true).
 
