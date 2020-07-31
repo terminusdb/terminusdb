@@ -2445,71 +2445,6 @@ authorized_push(Authorization, Remote_URL, Payload) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
-    %% Setup: create a database on the remote server, clone it on the local server
-    with_triple_store(
-        Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
-            create_db_without_schema("KarlKautsky", "foo"))
-    ),
-
-    with_triple_store(
-        Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
-
-    
-    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
-    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
-    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-    http_post(Clone_URL,
-              json(_{comment: "hai hello",
-                     label: "bar",
-                     remote_url: Remote_URL}),
-
-              _,
-              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-               request_header('Authorization-Remote'=Authorization_Remote)]).
-
-setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
-    %% Setup: create a database with content on the remote server, clone it on the local server
-    with_triple_store(
-        Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
-            create_db_without_schema("KarlKautsky", "foo"),
-
-            resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
-            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context1),
-            with_transaction(Context1,
-                             ask(Context1,
-                                 insert(a,b,c)),
-                             _),
-            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context2),
-            with_transaction(Context2,
-                             ask(Context2,
-                                 insert(d,e,f)),
-                             _)
-        )
-    ),
-
-    with_triple_store(
-        Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
-
-    
-    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
-    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
-    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-    http_post(Clone_URL,
-              json(_{comment: "hai hello",
-                     label: "bar",
-                     remote_url: Remote_URL}),
-
-              _,
-              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-               request_header('Authorization-Remote'=Authorization_Remote)]).
-
 test(push_empty_to_empty_does_nothing_succesfully,
      [
          setup(
@@ -2743,10 +2678,11 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
         (   pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
                  authorized_fetch(Remote_Auth),
                  Result),
+            JSON_Base = _{'@type' : 'api:PullResponse',
+                          'api:status' : "api:success"},
+            put_dict(Result,JSON_Base,JSON_Response),
             cors_reply_json(Request,
-                            _{'@type' : 'api:PullResponse',
-                              'api:status' : "api:success",
-                              'api:pull_report' : Result},
+                            JSON_Response,
                             [status(200)])),
         E,
         do_or_die(
@@ -2760,6 +2696,7 @@ pull_error_handler(error(not_a_valid_local_branch(Descriptor), _), Request) :-
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : false,
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
@@ -2771,29 +2708,146 @@ pull_error_handler(error(not_a_valid_remote_branch(Descriptor), _), Request) :-
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : false,
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
                     [status(400)]).
-pull_error_handler(error(divergent_history(Common_Commit), _), Request) :-
+pull_error_handler(error(pull_divergent_history(Common_Commit,Head_Has_Updated), _), Request) :-
     format(string(Msg), "History diverges from commit ~q", [Common_Commit]),
     cors_reply_json(Request,
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : Head_Has_Updated,
                       'api:error' : _{ '@type' : 'api:HistoryDivergedError',
                                        'api:common_commit' : Common_Commit
                                      }},
                     [status(400)]).
-pull_error_handler(error(no_common_history, _), Request) :-
+pull_error_handler(error(pull_no_common_history(Head_Has_Updated), _), Request) :-
     format(string(Msg), "There is no common history between branches", []),
     cors_reply_json(Request,
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : Head_Has_Updated,
                       'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
                                      }},
                     [status(400)]).
+
+:- begin_tests(pull_endpoint, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(pull_from_empty_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        repository_head(Local_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Remote,
+        repository_head(Remote_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : false,
+      'api:status':"api:success"} :< JSON.
+
+
+
+test(pull_from_something_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(a,b,c)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head)
+            %  NOTE: Check commit id
+        )
+    ).
+
+
+:- end_tests(pull_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),

@@ -29,10 +29,10 @@
               setup_temp_server/2,
               teardown_temp_server/1,
               setup_temp_unattached_server/3,
-              teardown_temp_unattached_server/1
+              teardown_temp_unattached_server/1,
+              setup_cloned_situation/4,
+              setup_cloned_nonempty_situation/4
           ]).
-
-:- use_module(library(process)).
 
 /** <module> Test Utilities
  *
@@ -81,11 +81,14 @@
 
 :- use_module(library(terminus_store)).
 
+:- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+
+:- use_module(library(process)).
 
 :- meta_predicate test_format(:, +, +).
 
@@ -448,3 +451,67 @@ setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
 teardown_temp_unattached_server(Store-Dir-PID) :-
     kill_server(PID),
     teardown_unattached_store(Store-Dir).
+
+setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"))
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
+
+setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database with content on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"),
+
+            resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context1),
+            with_transaction(Context1,
+                             ask(Context1,
+                                 insert(a,b,c)),
+                             _),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context2),
+            with_transaction(Context2,
+                             ask(Context2,
+                                 insert(d,e,f)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
