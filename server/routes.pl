@@ -2334,14 +2334,17 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     catch_with_backtrace(
         (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
                  authorized_push(Authorization),Result),
-            (   Result = none
-            ->  Response = _{'@type' : "api:PushResponse",
-                             'api:status' : "api:success"}
-            ;   Result = some(Head_ID)
-            ->  Response = _{'@type' : "api:PushNewHeadResponse",
-                             'api:head' : Head_ID,
-                             'api:status' : "api:success"}
+            (   Result = same(Head_ID)
+            ->  Head_Updated = false
+            ;   Result = new(Head_ID)
+            ->  Head_Updated = true
             ;   throw(error(internal_server_error,_))),
+
+            Response =  _{'@type' : "api:PushResponse",
+                          'api:repo_head_updated' : Head_Updated,
+                          'api:repo_head' : Head_ID,
+                          'api:status' : "api:success"},
+            
             cors_reply_json(Request,
                             Response,
                             [status(200)])),
@@ -2435,6 +2438,287 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  throw(error(remote_authorization_failure(Result),_))
     ;   throw(error(unknown_status_code,_))
     ).
+
+:- begin_tests(push_endpoint, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"))
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+    
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
+
+setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database with content on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"),
+
+            resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context1),
+            with_transaction(Context1,
+                             ask(Context1,
+                                 insert(a,b,c)),
+                             _),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context2),
+            with_transaction(Context2,
+                             ask(Context2,
+                                 insert(d,e,f)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+    
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
+
+test(push_empty_to_empty_does_nothing_succesfully,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    \+ get_dict('api:head', JSON, _),
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+
+
+test(push_nonempty_to_empty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+test(push_nonempty_to_earlier_nonempty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    with_triple_store(
+        Store_Origin,
+        (   create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello"}, Origin_Context_1),
+            with_transaction(Origin_Context_1,
+                             ask(Origin_Context_1,
+                                 insert(g,h,i)),
+                             _),
+            create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello again"}, Origin_Context_2),
+            with_transaction(Origin_Context_2,
+                             ask(Origin_Context_2,
+                                 insert(j,k,l)),
+                             _)
+        )
+    ),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+:- end_tests(push_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
