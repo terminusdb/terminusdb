@@ -469,8 +469,9 @@ json_to_woql_ast(JSON,WOQL,Path) :-
                      JSON,
                      Type),
             json_to_woql_ast(Type, WType, ['http://terminusdb.com/schema/woql#var_type'
-                                           |Path])
-        ->  WOQL = as(ID, WOQL_Var, WType)
+                                           |Path]),
+            atom_string(Type_Atom,WType)
+        ->  WOQL = as(ID, WOQL_Var, Type_Atom)
         ;   WOQL = as(ID, WOQL_Var))
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#IndexedAsVar',
           'http://terminusdb.com/schema/woql#variable_name' : Var_Name
