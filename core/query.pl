@@ -10,6 +10,7 @@
               askable_settings_context/3,
               context_to_parent_transaction/2,
               collection_descriptor_prefixes/2,
+              collection_descriptor_default_write_graph/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,
               empty_context/1,
