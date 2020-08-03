@@ -65,7 +65,6 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
@@ -867,9 +866,13 @@ compile_wf(select(VL,P), Prog) -->
     restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
-    { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection) },
+    update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
+    { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
+      collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
+    },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
@@ -3543,5 +3546,28 @@ test(into_absolute_descriptor, [
 
     query_response:run_context_ast_jsonld_response(Context, AST, Response),
     Response.inserts = 1.
+
+test(using_insert_default_graph, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+    AST = using("admin/test/local/branch/new",
+                (insert('a','b','c'))),
+
+    create_context(system_descriptor{},Commit_Info,System_Context),
+    branch_create(System_Context,doc:admin,"admin/test/local/branch/new",none,_),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response),
+
+    resolve_absolute_string_descriptor("admin/test/local/branch/new",
+                                       New_Descriptor),
+    once(ask(New_Descriptor,
+             t(a,b,c))).
 
 :- end_tests(woql).
