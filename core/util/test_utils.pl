@@ -1,8 +1,6 @@
 :- module(test_utils,[
               try/1,
               status_200/1,
-              curl_json/2,
-              report_curl_command/1,
               admin_pass/1,
               setup_temp_store/1,
               setup_unattached_store/1,
@@ -158,42 +156,9 @@ write_args(Args) :-
     maplist(write_arg,Spaced),
     format('~n',[]).
 
-report_curl_command(Args) :-
-    prolog_current_frame(Frame),
-    prolog_frame_attribute(Frame, parent, Parent),
-    prolog_frame_attribute(Parent, predicate_indicator, PredIndicator),
-    with_output_to(string(ArgStr), write_args(Args)),
-    test_format(PredIndicator, '~NRunning command: curl ~w',[ArgStr]).
-
 status_200(URL) :-
     http_open(URL, _, [status_code(200)]).
 
-
-/*
- * curl_json(+Args,-JSON) is semidet.
- */
-curl_json(Args,JSON) :-
-    terminus_path(Path),
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(std),
-                     process(PID),
-                     cwd(Path)
-                   ]),
-
-    process_wait(PID,Status),
-
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    catch(json_read_dict(Out, JSON),
-          _,
-          JSON = _{'system:status' : 'system:failure'}),
-
-    close(Out).
 
 /*
  * admin_pass(+Pass) is det.
