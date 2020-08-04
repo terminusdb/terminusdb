@@ -2786,8 +2786,6 @@ test(pull_from_empty_to_empty,
       'api:fetch_status' : false,
       'api:status':"api:success"} :< JSON.
 
-
-
 test(pull_from_something_to_empty,
      [
          setup(
@@ -2801,9 +2799,11 @@ test(pull_from_something_to_empty,
                  teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-    Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
-    Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
 
     with_triple_store(
         Store_Remote,
@@ -2813,7 +2813,9 @@ test(pull_from_something_to_empty,
                 ask(Remote_Context_1,
                     insert(a,b,c)),
                 _),
-            repository_head(Remote_Database_Descriptor, "local", Head)
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
         )
     ),
 
@@ -2841,8 +2843,78 @@ test(pull_from_something_to_empty,
     with_triple_store(
         Store_Local,
         (
-            repository_head(Local_Database_Descriptor, "origin", Head)
-            %  NOTE: Check commit id
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        branch_head_commit(Local_Repository_Descriptor, "main", Local_Orginal_Commit_Uri)
+    ),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(e,f,g)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            \+ Local_Orginal_Commit_Uri = Local_Commit_Uri,
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
         )
     ).
 
