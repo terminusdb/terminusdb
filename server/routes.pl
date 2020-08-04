@@ -270,7 +270,7 @@ delete_db_error_handler(error(database_does_not_exist(Organization,Database), _)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExists',
+                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExist',
                                       'api:database_name' : Database,
                                       'api:organization_name' : Organization},
                       'api:message' : Msg},
