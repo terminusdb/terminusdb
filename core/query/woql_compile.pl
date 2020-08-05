@@ -65,7 +65,6 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
@@ -867,13 +866,13 @@ compile_wf(select(VL,P), Prog) -->
     restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
-    {
-        do_or_die(
-            resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
-            error(invalid_absolute_path(Collection_String),_))
+    update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
+    { resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
+      collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
@@ -1027,12 +1026,15 @@ compile_wf(into(G,S),Goal) -->
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     {
-        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
-                                                 Transaction_Object),
-        resolve_filter(G,Filter),
-        (   Filter = type_name_filter{ type : _Type, names : [_Name]}
-        ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
-        ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
+        (   resolve_absolute_string_graph_descriptor(G, Graph_Descriptor)
+        ->  true
+        ;   resolve_filter(G,Filter),
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            (   Filter = type_name_filter{ type : _Type, names : [_Name]}
+            ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
+            ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
+            )
         )
     },
     update(write_graph,OG,Graph_Descriptor),
@@ -1252,12 +1254,18 @@ marshall_args(M_Pred,Goal) :-
 literally(X, _X) :-
     var(X),
     !.
+literally(Date^^'http://www.w3.org/2001/XMLSchema#dateTime', String) :-
+    Date = date(_Y,_M,_D,_HH,_MM,_SS,_,_,_),
+    !,
+    date_string(Date,String).
 literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
-literally([],[]).
+literally([],[]) :-
+    !.
 literally([H|T],[HL|TL]) :-
+    !,
     literally(H,HL),
     literally(T,TL).
 literally(X, X) :-
@@ -1273,11 +1281,13 @@ literally(X, X) :-
 unliterally(X,Y) :-
     string(X),
     !,
-    (   Y = X^^Type,
+    (   Y = YVal^^Type,
         (   var(Type)
-        ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
-        ;   % subsumption test here.
-            true)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#string',
+            YVal = X
+        ;   Type = 'http://www.w3.org/2001/XMLSchema#dateTime'
+        ->  date_string(YVal,X)
+        ;   YVal = X)
     ->  true
     ;   Y = X@Lang,
         (   var(Lang)
@@ -3508,55 +3518,56 @@ test(temp_graph_rdf, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     query_test_response(Descriptor, Query, _JSON).
 
-test(unresolvable_descriptor_in_using, [
+test(date_marshall, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         error(unresolvable_absolute_descriptor(
-                   branch_descriptor{
-                       branch_name : "main",
-                       repository_descriptor:
-                       repository_descriptor{
-                           database_descriptor:
-                           database_descriptor{
-                               database_name:"fdsa",
-                               organization_name:"admin"},
-                           repository_name:"local"}}), _)
+         cleanup(teardown_temp_store(State))
      ]) :-
 
-    Atom = '{
-  "@type": "woql:Using",
-  "woql:collection": {
-    "@type": "xsd:string",
-    "@value": "admin/fdsa"
-  },
-  "woql:query": {
-    "@type": "woql:Triple",
-    "woql:subject": {
-      "@type": "woql:Variable",
-      "woql:variable_name": {
-        "@value": "X",
-        "@type": "xsd:string"
-      }
-    },
-    "woql:predicate": {
-      "@type": "woql:Variable",
-      "woql:variable_name": {
-        "@value": "P",
-        "@type": "xsd:string"
-      }
-    },
-    "woql:object": {
-      "@type": "woql:Variable",
-      "woql:variable_name": {
-        "@value": "Y",
-        "@type": "xsd:string"
-      }
-    }
-  }
-}',
-    atom_json_dict(Atom,Query,[]),
+    AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
+               remote("https://terminusdb.com/t/data/bike_tutorial.csv", _{}))),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, _JSON).
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    length(Response.bindings, 49).
+
+test(into_absolute_descriptor, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    AST = into("admin/test/local/branch/main/instance/main",
+               (insert('a','b','c'))),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    Response.inserts = 1.
+
+test(using_insert_default_graph, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+    AST = using("admin/test/local/branch/new",
+                (insert('a','b','c'))),
+
+    create_context(system_descriptor{},Commit_Info,System_Context),
+    branch_create(System_Context,doc:admin,"admin/test/local/branch/new",none,_),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response),
+
+    resolve_absolute_string_descriptor("admin/test/local/branch/new",
+                                       New_Descriptor),
+    once(ask(New_Descriptor,
+             t(a,b,c))).
 
 :- end_tests(woql).

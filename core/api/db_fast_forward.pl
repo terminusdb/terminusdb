@@ -23,10 +23,9 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                              ->  (   Our_Branch_Path = []
                                  ->  true
                                  ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path), _))),
-
+                                 Their_Branch_Path = Applied_Commit_Ids,
                                  (   Their_Branch_Path = []
-                                 ->  Next = nothing,
-                                     Applied_Commit_Ids = []
+                                 ->  Next = nothing
                                  ;   Next = copy_commit(Their_Commit_Id))
                              ;   throw(error(no_common_history,_)))
                          ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
@@ -373,18 +372,20 @@ test(fast_forward_branch_from_other_repo,
                          insert(g,h,i)),
                      _),
 
+    Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
+    commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
+
     % fast forward master with second
     fast_forward_branch(Foo_Descriptor, Bar_Descriptor, Applied_Commit_Ids),
 
     % check history
-    Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
+
     History = [Commit_A, Commit_B, Commit_C],
-    Applied_Commit_Ids = [Commit_B, Commit_C],
+    Applied_Commit_Ids == [Commit_B, Commit_C],
 
 
-    commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_B, _, "commit b", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_C, _, "commit c", _).
 :- end_tests(fast_forward_api).

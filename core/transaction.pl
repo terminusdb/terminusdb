@@ -13,6 +13,8 @@
               open_descriptor/3,
               open_descriptor/5,
               collection_descriptor_transaction_object/3,
+              collection_descriptor_prefixes/2,
+              collection_descriptor_default_write_graph/2,
               graph_descriptor_transaction_objects_read_write_object/3,
               instance_graph_descriptor_transaction_object/3,
               read_write_obj_reader/2,

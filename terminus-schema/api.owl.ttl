@@ -547,17 +547,31 @@ api:layer_reference
   rdfs:domain api:WithLayerReference ;
   rdfs:range vio:Violation .
 
+api:repo_head_updated
+  a owl:DatatypeProperty ;
+  rdfs:label "repo head updated"@en ;
+  rdfs:comment "Tells whether the repository head has been updated."@en ;
+  rdfs:domain api:WithRepoHead ;
+  rdfs:range xsd:boolean .
+
+api:WithRepoHeadUpdated
+  a owl:Class .
+
+api:repo_head
+  a owl:DatatypeProperty ;
+  rdfs:label "repo head"@en ;
+  rdfs:comment "The current repository head."@en ;
+  rdfs:domain api:WithRepoHead ;
+  rdfs:range xsd:string .
+
+api:WithRepoHead
+  a owl:Class .
+
 api:PushResponse
   a owl:Class ;
-  rdfs:label "Push Response"@en ;
   rdfs:comment "Response document from push API."@en ;
-  rdfs:subClassOf api:Response .
-
-api:PushNewHeadResponse
-  a owl:Class ;
-  rdfs:label "Push New Head Response"@en ;
-  rdfs:comment "Push API call resulted in a new head."@en ;
-  rdfs:subClassOf api:Response, api:WithHead .
+  rdfs:label "Push Response"@en ;
+  rdfs:subClassOf api:Response , api:WithRepoHeadUpdated, api:WithRepoHead .
 
 api:PushErrorResponse
   a owl:Class ;
@@ -928,3 +942,4 @@ api:APIEndpointFailed
   rdfs:label "API Endpoint Failed"@en ;
   rdfs:comment "The endpoint goal failed for an unknown reason"@en ;
   rdfs:subClassOf api:Error .
+

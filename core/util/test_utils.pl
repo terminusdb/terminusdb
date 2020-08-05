@@ -1,8 +1,6 @@
 :- module(test_utils,[
               try/1,
               status_200/1,
-              curl_json/2,
-              report_curl_command/1,
               admin_pass/1,
               setup_temp_store/1,
               setup_unattached_store/1,
@@ -29,10 +27,10 @@
               setup_temp_server/2,
               teardown_temp_server/1,
               setup_temp_unattached_server/3,
-              teardown_temp_unattached_server/1
+              teardown_temp_unattached_server/1,
+              setup_cloned_situation/4,
+              setup_cloned_nonempty_situation/4
           ]).
-
-:- use_module(library(process)).
 
 /** <module> Test Utilities
  *
@@ -81,11 +79,14 @@
 
 :- use_module(library(terminus_store)).
 
+:- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
 :- use_module(library(http/json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+
+:- use_module(library(process)).
 
 :- meta_predicate test_format(:, +, +).
 
@@ -155,42 +156,9 @@ write_args(Args) :-
     maplist(write_arg,Spaced),
     format('~n',[]).
 
-report_curl_command(Args) :-
-    prolog_current_frame(Frame),
-    prolog_frame_attribute(Frame, parent, Parent),
-    prolog_frame_attribute(Parent, predicate_indicator, PredIndicator),
-    with_output_to(string(ArgStr), write_args(Args)),
-    test_format(PredIndicator, '~NRunning command: curl ~w',[ArgStr]).
-
 status_200(URL) :-
     http_open(URL, _, [status_code(200)]).
 
-
-/*
- * curl_json(+Args,-JSON) is semidet.
- */
-curl_json(Args,JSON) :-
-    terminus_path(Path),
-    process_create(path(curl), Args,
-                   [ stdout(pipe(Out)),
-                     stderr(std),
-                     process(PID),
-                     cwd(Path)
-                   ]),
-
-    process_wait(PID,Status),
-
-    (   Status=killed(Signal)
-    ->  interpolate(["curl killed with signal ",Signal], M),
-        format('~n~s~n', M),
-        fail
-    ;   true),
-
-    catch(json_read_dict(Out, JSON),
-          _,
-          JSON = _{'system:status' : 'system:failure'}),
-
-    close(Out).
 
 /*
  * admin_pass(+Pass) is det.
@@ -448,3 +416,67 @@ setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
 teardown_temp_unattached_server(Store-Dir-PID) :-
     kill_server(PID),
     teardown_unattached_store(Store-Dir).
+
+setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"))
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
+
+setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination) :-
+    %% Setup: create a database with content on the remote server, clone it on the local server
+    with_triple_store(
+        Store_Destination,
+        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+            create_db_without_schema("KarlKautsky", "foo"),
+
+            resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context1),
+            with_transaction(Context1,
+                             ask(Context1,
+                                 insert(a,b,c)),
+                             _),
+            create_context(Descriptor, commit_info{author:"kautsky", message: "hi hello"}, Context2),
+            with_transaction(Context2,
+                             ask(Context2,
+                                 insert(d,e,f)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_Origin,
+        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+
+
+    atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
+    atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Clone_URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              _,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote)]).
