@@ -356,7 +356,9 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_HTTPS_ENABLED'='false'
+        'TERMINUSDB_HTTPS_ENABLED'='false',
+        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH'='test/public_key_test.key.pub',
+        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID'='testkey'
     ],
 
     (   getenv('HOME', Home)
