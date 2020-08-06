@@ -92,7 +92,9 @@ connect_handler(get, Request, System_DB, Auth) :-
 :- begin_tests(jwt_auth, [
                    condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", testkey))
                ]
-               ).
+              ).
+
+:- use_module(core(util/test_utils)).
 /*
  * Tests assume that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
  * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set

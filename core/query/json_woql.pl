@@ -509,7 +509,14 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PostResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
-    ->  WOQL = post(File,JSON)
+    ->  json_to_woql_ast(File, WFile, ['http://terminusdb.com/schema/woql#file'
+                                       |Path]),
+        do_or_die(
+            (WFile = File_String^^_),
+            error(woql_syntax_error(JSON,
+                                    ['http://terminusdb.com/schema/woql#file'|Path],
+                                    WFile), _)),
+        WOQL = post(File_String,JSON)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Unique',
           'http://terminusdb.com/schema/woql#base' : Base,
           'http://terminusdb.com/schema/woql#key_list' : Key,
@@ -1105,5 +1112,25 @@ test(not_a_query, []) :-
         error(woql_syntax_error(Q,P,E), _),
         json_woql_path_element_error_message(Q,P,E,Message)),
     Message = "Not well formed WOQL JSON-LD".
+
+test(post_marshalling, []) :-
+    JSON = _{'@type' : "Get",
+             as_vars : [_{'@type': "NamedAsVar",
+                          identifier:
+                          _{'@type': "xsd:string",
+                            '@value': "Start station"},
+                          variable_name:
+                          _{'@type': "xsd:string",
+                            '@value': "Start_Station"}}
+                       ],
+             query_resource:
+             _{'@type': "PostResource",
+               file: _{'@type': "xsd:string",
+                       '@value': "bike_csv"}}},
+
+    woql_context(Prefixes),
+    json_woql(JSON,Prefixes,WOQL),
+    WOQL = get(['Start station'as v('Start_Station')],
+               post("bike_csv",_)).
 
 :- end_tests(woql_jsonld).
