@@ -4132,11 +4132,13 @@ cors_reply_json(Request, JSON, Options) :-
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(post), Request),
-    memberchk(multipart(Parts), Request),
+    memberchk(multipart(Form_Data), Request),
     !,
-    (   memberchk(Key=Encoded_Value, Parts)
-    ->  uri_encoded(query_value, Value, Encoded_Value)
-    ;   throw(error(no_parameter_key_in_document(Key,Parts)))).
+    memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
+    memberchk(name(Key), Mime_Header),
+    (   memberchk(type('application/json'),Mime_Header)
+    ->  atom_json_dict(Encoded_Value,Value,[])
+    ;   uri_encoded(query_value, Value, Encoded_Value)).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
@@ -4177,10 +4179,13 @@ try_get_param(Key,_Request,_Value) :-
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(post), Request),
-    memberchk(multipart(Parts), Request),
+    memberchk(multipart(Form_Data), Request),
     !,
-    memberchk(Key=Encoded_Value, Parts),
-    uri_encoded(query_value, Value, Encoded_Value).
+    memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
+    memberchk(name(Key), Mime_Header),
+    (   memberchk(type('application/json'),Mime_Header)
+    ->  atom_json_dict(Encoded_Value,Value,[])
+    ;   uri_encoded(query_value, Value, Encoded_Value)).
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
@@ -4213,15 +4218,14 @@ try_atom_json(Atom,JSON) :-
  * This should really be done automatically at request time
  * using the endpoint wrappers so we don't forget to do it.
  */
-add_payload_to_request(Request,[multipart(Parts)|Request]) :-
+add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
     memberchk(content_type(ContentType), Request),
     http_parse_header_value(
         content_type, ContentType,
         media(multipart/'form-data', _)
     ),
-    http_log('~Nmulti-part form?~n', []),
     !,
-    http_read_data(Request, Parts, [on_filename(save_post_file)]).
+    http_read_data(Request, Form_Data, [on_filename(save_post_file),form_data(mime)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     memberchk(content_type('application/json'), Request),
     !,
@@ -4262,5 +4266,10 @@ save_post_file(In, file(Filename, File), Options) :-
 collect_posted_files(Request,Files) :-
     memberchk(multipart(Parts), Request),
     !,
-    include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
+    convlist([mime(Mime_Header,Data,_),Filename=Temp_Filename]>>(
+                 memberchk(filename(Filename),Mime_Header),
+                 \+ memberchk(type('application/json'),Mime_Header),
+                 tmp_file_stream(binary, Temp_Filename, Output),
+                 write(Output, Data)
+             ),Parts,Files).
 collect_posted_files(_Request,[]).

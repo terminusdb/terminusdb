@@ -1229,7 +1229,7 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
         Options = []),
     atom_string(Name_Atom,Name),
     merge_options(Options,Default,New_Options),
-    memberchk(Name_Atom=file(_Original,Path), Files).
+    memberchk(Name_Atom=Path, Files).
 
 
 %%
