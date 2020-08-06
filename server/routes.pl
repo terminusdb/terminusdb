@@ -4269,7 +4269,10 @@ collect_posted_files(Request,Files) :-
     convlist([mime(Mime_Header,Data,_),Filename=Temp_Filename]>>(
                  memberchk(filename(Filename),Mime_Header),
                  \+ memberchk(type('application/json'),Mime_Header),
-                 tmp_file_stream(binary, Temp_Filename, Output),
-                 write(Output, Data)
+                 setup_call_cleanup(
+                     tmp_file_stream(octet, Temp_Filename, Out),
+                     write(Out, Data),
+                     close(Out)
+                 )
              ),Parts,Files).
 collect_posted_files(_Request,[]).
