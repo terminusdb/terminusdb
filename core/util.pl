@@ -134,8 +134,15 @@
               gYearRange//2,
               integerRange//2,
               point//2,
-              url//0
+              url//0,
 
+              % benchmark.pl
+              benchmark_start/1,
+              benchmark_stop/0,
+              benchmark_subject_start/1,
+              benchmark_subject_stop/1,
+              benchmark/1,
+              benchmark/0
           ]).
 
 % note: test_utils is intentionally omitted
@@ -146,3 +153,4 @@
 :- use_module(util/utils).
 :- use_module(util/speculative_parse).
 :- use_module(util/xsd_parser).
+:- use_module(util/benchmark).
