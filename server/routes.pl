@@ -4134,7 +4134,7 @@ try_get_param(Key,Request,Value) :-
     memberchk(method(post), Request),
     memberchk(multipart(Form_Data), Request),
     !,
-    memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
+    member(mime(Mime_Header,Encoded_Value,_),Form_Data),
     memberchk(name(Key), Mime_Header),
     (   memberchk(type('application/json'),Mime_Header)
     ->  atom_json_dict(Encoded_Value,Value,[])
