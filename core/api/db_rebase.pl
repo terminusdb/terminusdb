@@ -133,6 +133,7 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
 rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports) :-
+    benchmark_subject_start('rebase on branch'),
 
     do_or_die(
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
@@ -167,21 +168,32 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         create_context(Their_Repo_Descriptor, Their_Repo_Context),
         error(unresolvable_source_descriptor(Their_Repo_Descriptor))),
 
+    benchmark(after_checks),
+
     branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
     branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
     commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
     branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
     commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
 
-    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History)
+    benchmark(after_commit_lookups),
+
+    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
+        benchmark(after_ancestor_lookup)
     ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
     ;   Optional_Common_Commit_Id = none,
         commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
-        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)),
+        benchmark(history_lookup_1),
+        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History),
+        benchmark(history_lookup_2)),
+
+    benchmark(before_copy),
 
     % copy commits from their repo into ours, ensuring we got the latest
     copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
+    benchmark(after_copy),
     cycle_context(Our_Repo_Context, Our_Repo_Context2, _, _),
+    benchmark(after_first_cycle),
 
     % take their commit uri as the top on which we're gonna apply_commit_chain
     % list of commits to apply is ours since common
@@ -209,10 +221,16 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         )
     ),
 
+    benchmark(after_application),
+
     unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri),
     link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
 
+    benchmark(after_commit_branch_relink),
+
     cycle_context(Semifinal_Context, _Final_Context, Transaction_Object, _),
+
+    benchmark(after_second_cycle),
 
     Repo_Name = Transaction_Object.descriptor.repository_name,
     [Read_Write_Obj] = Transaction_Object.instance_objects,
@@ -222,7 +240,10 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
     update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
 
-    run_transactions([Database_Transaction_Object], _).
+    benchmark(after_repository_head_update),
+
+    run_transactions([Database_Transaction_Object], _),
+    benchmark_subject_stop('rebase on branch').
 
 :- begin_tests(rebase).
 :- use_module(core(util/test_utils)).
