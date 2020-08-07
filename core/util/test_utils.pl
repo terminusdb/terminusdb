@@ -329,6 +329,16 @@ cleanup_user_database(User, Database) :-
    ->  delete_organization(User)
    ;   true).
 
+inherit_env_var(Env_List_In, Var, Env_List_Out) :-
+    (   getenv(Var, Val)
+    ->  Env_List_Out = [Var=Val|Env_List_In]
+    ;   Env_List_Out = Env_List_In).
+
+inherit_env_vars(Env_List, [], Env_List) :-
+    !.
+inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
+    inherit_env_var(Env_List_In, Var, Env_List_Out),
+    inherit_env_vars(Env_List_Out, Vars, Env_List).
 
 % spawn_server(+Path, -URL, -PID, +Options) is det.
 spawn_server_1(Path, URL, PID, Options) :-
@@ -356,22 +366,18 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_HTTPS_ENABLED'='false',
-        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH'='test/public_key_test.key.pub',
-        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID'='testkey'
+        'TERMINUSDB_HTTPS_ENABLED'='false'
     ],
 
-    (   getenv('HOME', Home)
-    ->  Env_List_2 = ['HOME'=Home|Env_List_1]
-    ;   Env_List_2 = Env_List_1),
-
-    (   getenv('TERMINUSDB_ADMIN_PASSWD', Pass)
-    ->  Env_List_3 = ['TERMINUSDB_ADMIN_PASSWD'=Pass|Env_List_2]
-    ;   Env_List_3 = Env_List_2),
-
-    (   getenv('TERMINUSDB_SERVER_PACK_DIR', Pack_Dir)
-    ->  Env_List = ['TERMINUSDB_SERVER_PACK_DIR'=Pack_Dir|Env_List_3]
-    ;   Env_List = Env_List_3),
+    inherit_env_vars(Env_List_1,
+                     [
+                         'HOME',
+                         'TERMINUSDB_ADMIN_PASSWD',
+                         'TERMINUSDB_SERVER_PACK_DIR',
+                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
+                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID'
+                     ],
+                     Env_List),
 
     process_create(Swipl_Path, [Start_Script],
                    [
