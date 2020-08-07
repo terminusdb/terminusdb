@@ -366,8 +366,12 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   Env_List_2 = Env_List_1),
 
     (   getenv('TERMINUSDB_ADMIN_PASSWD', Pass)
-    ->  Env_List = ['TERMINUSDB_ADMIN_PASSWD'=Pass|Env_List_2]
-    ;   Env_List = Env_List_2),
+    ->  Env_List_3 = ['TERMINUSDB_ADMIN_PASSWD'=Pass|Env_List_2]
+    ;   Env_List_3 = Env_List_2),
+
+    (   getenv('TERMINUSDB_SERVER_PACK_DIR', Pack_Dir)
+    ->  Env_List = ['TERMINUSDB_SERVER_PACK_DIR'=Pack_Dir|Env_List_3]
+    ;   Env_List = Env_List_3),
 
     process_create(Swipl_Path, [Start_Script],
                    [
