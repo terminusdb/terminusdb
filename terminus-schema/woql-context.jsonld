@@ -68,6 +68,7 @@
   "group_var" : {"@type" : "@id"},
   "grouped" : {"@type" : "@id"},
   "length_list" : {"@type" : "@id"},
+  "type" : {"@type" : "@id"},
   "typecast_value" : {"@type" : "@id"},
   "typecast_type" : {"@type" : "@id"},
   "typecast_result" : {"@type" : "@id"},
