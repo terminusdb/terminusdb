@@ -497,15 +497,37 @@ json_to_woql_ast(JSON,WOQL,Path) :-
          } :< JSON
     ->  json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#remote_uri'
                                    |Path]),
-        WURI = URI_String^^_,
-        WOQL = remote(URI_String,JSON)
+        do_or_die(
+            (WURI = URI_String^^_),
+            error(woql_syntax_error(JSON,
+                                    ['http://terminusdb.com/schema/woql#remote_uri'
+                                     |Path],
+                                    WURI), _)),
+
+        (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
+        ->  json_to_woql_ast(Format,WFormat,
+                             ['http://terminusdb.com/schema/woql#format'
+                              |Path])
+        ;   WFormat = _{}),
+
+        WOQL = remote(URI_String,WFormat)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#FileResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
     ->  json_to_woql_ast(File,WFile,['http://terminusdb.com/schema/woql#file'
                                      |Path]),
-        WFile = File_String^^_,
-        WOQL = file(File_String,JSON)
+        do_or_die(
+            (WFile = File_String^^_),
+            error(woql_syntax_error(JSON,
+                                    ['http://terminusdb.com/schema/woql#file'|Path],
+                                    WFile), _)),
+        (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
+        ->  json_to_woql_ast(Format,WFormat,
+                             ['http://terminusdb.com/schema/woql#format'
+                              |Path])
+        ;   WFormat = _{}),
+
+        WOQL = file(File_String,WFormat)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PostResource',
           'http://terminusdb.com/schema/woql#file' : File
          } :< JSON
@@ -516,7 +538,16 @@ json_to_woql_ast(JSON,WOQL,Path) :-
             error(woql_syntax_error(JSON,
                                     ['http://terminusdb.com/schema/woql#file'|Path],
                                     WFile), _)),
-        WOQL = post(File_String,JSON)
+        (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
+        ->  json_to_woql_ast(Format,WFormat,
+                             ['http://terminusdb.com/schema/woql#format'
+                              |Path])
+        ;   WFormat = _{}),
+
+        WOQL = post(File_String,WFormat)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Format'
+         } :< JSON
+    ->  json_extract_format(JSON,WOQL)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Unique',
           'http://terminusdb.com/schema/woql#base' : Base,
           'http://terminusdb.com/schema/woql#key_list' : Key,
@@ -1028,6 +1059,38 @@ json_to_woql_arith(JSON,WOQL,Path) :-
     ).
 json_to_woql_arith(JSON,_,Path) :-
     throw(error(woql_syntax_error(JSON,Path,JSON), _)).
+
+
+json_extract_format(JSON,WOQL) :-
+    (   _{'http://terminusdb.com/schema/woql#format_type' : Format_Type}
+        :< JSON
+    ->  json_to_woql_ast(Format_Type,WFormat_Type,
+                         ['http://terminusdb.com/schema/woql#format_type'
+                          |Path]),
+        do_or_die(
+            (WFormat_Type = Format_Type_String^^_),
+            error(woql_syntax_error(JSON,
+                                    ['http://terminusdb.com/schema/woql#format_type'|Path],
+                                    WFile), _))
+    ;   Format_Type_String = "csv"),
+
+    (   _{'http://terminusdb.com/schema/woql#format_header' : Format_Header}
+        :< JSON
+    ->  json_to_woql_ast(Format_Header,WFormat_Header,
+                         ['http://terminusdb.com/schema/woql#format_type'
+                          |Path]),
+        do_or_die(
+            (WFormat_Header = Format_Header_Bool^^_),
+            error(woql_syntax_error(
+                      JSON,
+                      ['http://terminusdb.com/schema/woql#format_header'|Path],
+                      WFile),
+                      _))
+    ;   Format_Header_Bool = true),
+
+    WOQL = _{ 'format_type' : Format_Type_String ,
+              'format_header' : Format_Header_Bool }.
+
 
 json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],

@@ -899,9 +899,8 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     update(default_collection,_,Old_Default_Collection).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
-        Default = _{
-                      'http://terminusdb.com/schema/woql#header' : "true",
-                      'http://terminusdb.com/schema/woql#type' : "csv"},
+        Default = _{  format_header : true,
+                      format_type : "csv"},
 
         (   as_vars(Spec,Vars),
             Has_Header = true
@@ -918,13 +917,13 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
-        (   memberchk('http://terminusdb.com/schema/woql#type'("csv"),New_Options)
+        (   memberchk(format_type("csv"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,CSV_Options)
-        ;   memberchk('http://terminusdb.com/schema/woql#type'("turtle"),New_Options),
+        ;   memberchk(format_type("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
-        ;   memberchk('http://terminusdb.com/schema/woql#type'("panda_json"),New_Options)
+        ;   memberchk(format_type("panda_json"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
@@ -2006,7 +2005,10 @@ test(named_get_two, [])
                      '@value':"2011-01-01 00:01:29"}} :< Res.
 
 
-test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
+test(turtle_get, [
+         %blocked('Turtle translation in JSON-LD not working yet')
+     ]
+    )
 :-
     terminus_path(Path),
     atomic_list_concat([Path,'/terminus-schema/system_schema.owl.ttl'], File),
@@ -2039,7 +2041,12 @@ test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
          }
     },
 
-    query_test_response(system_descriptor{}, Query, _JSON).
+    query_test_response(system_descriptor{}, Query, JSON),
+    ['First','Second','Third'] = (JSON.'api:variable_names'),
+    [One|_] = (JSON.'bindings'),
+    One = _{'First':'http://terminusdb.com/schema/system',
+            'Second':'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+            'Third':'http://www.w3.org/2002/07/owl#Ontology'}.
 
 test(concat, [])
 :-
