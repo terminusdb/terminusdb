@@ -73,6 +73,8 @@
   "typecast_type" : {"@type" : "@id"},
   "typecast_result" : {"@type" : "@id"},
   "file" : {"@type" : "xsd:string"},
-  "variable_name" : {"@type" : "xsd:string"}
+  "variable_name" : {"@type" : "xsd:string"},
+  "identifier" : {"@type" : "xsd:string"},
+  "index" : {"@type" : "xsd:NonNegativeInteger"}
  }
 }
