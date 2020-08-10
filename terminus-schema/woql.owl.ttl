@@ -776,14 +776,14 @@ woql:element
   rdfs:label "element"@en ;
   rdfs:comment "The element of an IsA being type checked"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Thing .
+  rdfs:range owl:Value .
 
 woql:of_type
   a owl:ObjectProperty ;
   rdfs:label "of type"@en ;
   rdfs:comment "Element is 'of type'"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Thing .
+  rdfs:range owl:Value .
 
 woql:Like
   a owl:Class ;

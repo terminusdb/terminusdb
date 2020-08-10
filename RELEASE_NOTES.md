@@ -35,6 +35,9 @@ This is largely a bug fix and cleanup release. We focused on improving error han
 + Added API for role and organisation creation.
 + Extensive work on making capability checking more robust.
 + First draft of auto-generating `.md` files from loaded ontologies.
++ Turtle files can now be read with WOQL.get using "by order of"
+  parameter list with three elements.
++ Posted files can now be processed by WOQL.get
 
 ## Changes
 

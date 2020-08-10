@@ -538,6 +538,13 @@ term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Term).
 
 
+isa(XE,CE,Transaction_Object) :-
+    atom(XE),
+    !,
+    instance_class(XE,CE,Transaction_Object).
+isa(_X^^Type,Type,_Transaction_Object).
+isa(_X@Lang,Lang,_Transaction_Object).
+
 /*
  * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
@@ -730,8 +737,7 @@ compile_wf(like(A,B,F), Isub) -->
     resolve(B,BE),
     resolve(F,FE),
     { marshall_args(isub(AE,BE,true,FE), Isub) }.
-compile_wf(isa(X,C),(instance_class(XE,D,Transaction_Object),
-                     subsumption_of(D,CE,Transaction_Object))) -->
+compile_wf(isa(X,C),isa(XE,CE,Transaction_Object)) -->
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection_Descriptor),
@@ -1715,26 +1721,6 @@ test(join, []) :-
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
-
-
-test(isa, []) :-
-    Query = _{'@type' : "IsA",
-              element : _{ '@type' : "Node",
-                           node : "doc:admin"},
-              of_type : _{'@type' : "Variable",
-                          variable_name :
-                          _{'@type' : "xsd:string",
-                            '@value' : "IsA"}}},
-
-    query_test_response(system_descriptor{}, Query, JSON),
-    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    list_to_ord_set(Orderable,Bindings_Set),
-    list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'IsA':'http://terminusdb.com/schema/system#User'},
-                     json{'IsA':'http://terminusdb.com/schema/system#Agent'},
-                     json{'IsA':'http://terminusdb.com/schema/system#Document'}],
-                    Expected),
-    ord_seteq(Bindings_Set, Expected).
 
 test(like, []) :-
     Query = _{'@type' : "Like",
@@ -3296,6 +3282,50 @@ test(idgen, []) :-
     [Value] = (JSON.bindings),
     (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
 
+test(isa_literal, []) :-
+    Atom = '{
+  "@type": "woql:IsA",
+  "woql:element": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "xsd:string",
+      "@value": "test"
+    }
+  },
+  "woql:of_type": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Type",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Type') = 'http://www.w3.org/2001/XMLSchema#string'.
+
+test(isa_node, []) :-
+    Atom = '{
+  "@type": "woql:IsA",
+  "woql:element": {
+    "@type": "woql:Node",
+    "woql:node": "doc:admin"
+  },
+  "woql:of_type": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Type",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Type') = 'http://terminusdb.com/schema/system#User'.
 
 test(meta_graph_update, [
          setup((setup_temp_store(State),
