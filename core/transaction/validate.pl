@@ -5,6 +5,7 @@
               commit_validation_objects/1,
               commit_commit_validation_object/4,
               validate_validation_objects/2,
+              validate_validation_objects/3,
               turtle_transaction/4,
               read_write_obj_to_graph_validation_obj/4
           ]).
@@ -798,10 +799,19 @@ refute_validation_objects(Validation_Objects, Witness) :-
     refute_validation_object(Validation_Object, Witness).
 
 validate_validation_objects(Validation_Objects, Witnesses) :-
-    findall(Witness,
-             refute_validation_objects(Validation_Objects, Witness),
-            Witnesses).
+    validate_validation_objects(Validation_Objects, true, Witnesses).
 
+validate_validation_objects_(true, Validation_Objects, Witnesses) :-
+    findall(Witness,
+            refute_validation_objects(Validation_Objects, Witness),
+            Witnesses).
+validate_validation_objects_(false, Validation_Objects, Witnesses) :-
+    (   refute_validation_objects(Validation_Objects, Witness)
+    ->  Witnesses = [Witness]
+    ;   Witnesses = []).
+
+validate_validation_objects(Validation_Objects, All_Witnesses, Witnesses) :-
+    validate_validation_objects_(All_Witnesses, Validation_Objects, Witnesses).
 
 transaction_objects_to_validation_objects(Transaction_Objects, Validation_Objects) :-
     mapm(transaction_object_to_validation_object, Transaction_Objects, Validation_Objects, [], _Map).
@@ -960,7 +970,7 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(schema_check_failure(_)))])
+      throws(error(schema_check_failure(_),_))])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
@@ -987,7 +997,7 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(schema_check_failure(_)))])
+      throws(error(schema_check_failure(_), _))])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
@@ -1020,6 +1030,7 @@ test(cardinality_min_error,
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
     context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
 
+    Master_Context2 = (Master_Context1.put(_{ all_witnesses : true })),
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
@@ -1033,11 +1044,11 @@ test(cardinality_min_error,
               },
 
     catch(
-        with_transaction(Master_Context1,
+        with_transaction(Master_Context2,
                          ask(Master_Context1,
                              update_object(Object)),
                          _),
-        error(schema_check_failure(Witnesses)),
+        error(schema_check_failure(Witnesses),_),
         true
     ),
 

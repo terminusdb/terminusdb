@@ -63,7 +63,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/7
+              woql_query_json/8
           ]).
 
 :- use_module(api/init).

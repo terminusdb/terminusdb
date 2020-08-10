@@ -242,7 +242,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
     benchmark(after_repository_head_update),
 
-    run_transactions([Database_Transaction_Object], _),
+    run_transactions([Database_Transaction_Object], true, _),
     benchmark_subject_stop('rebase on branch').
 
 :- begin_tests(rebase).

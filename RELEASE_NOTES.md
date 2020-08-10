@@ -8,12 +8,15 @@ the masters from our default branching.
 + Default branch is now called main and not master
 + Added much more extensive coverage of API in the api.owl.ttl ontology
 + Fixed some schema errors in woql.owl.ttl
++ Added boolean flag (`all_witnesses`) for returning all or only the first witness from schema checks.
 
 ## Backwards-Incompatible Changes
 
 + Default branch will be set to main and not master, so that some
   calls which relied on master being default will fail. This can be
   fixed in all cases by doing a branch operation from master to main.
++ By default only one witness is now returned in WOQL queries in which
+  the resulting database violates schema constraints.
 
 ## Bug fixes
 

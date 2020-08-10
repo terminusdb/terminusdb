@@ -130,7 +130,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
         Layer = (Read_Obj.read),
         layer_to_id(Layer, Current_Head_Id),
         update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-        run_transactions([Database_Transaction_Object], _),
+        run_transactions([Database_Transaction_Object], true, _),
         Result = new(Current_Head_Id)
     ).
 
