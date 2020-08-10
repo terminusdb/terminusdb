@@ -1247,4 +1247,35 @@ test(id_simplification, []) :-
                  ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
                  v('Journey_ID')).
 
+test(id_simplification_2, []) :-
+
+    JSON_Atom = '{
+  "@type": "IDGenerator",
+  "base": {
+      "@type": "Node",
+      "node": "Journey"
+   },
+  "key_list": {
+    "@type": "Array",
+    "array_element": [
+       {"@type": "Datatype",
+        "datatype": {
+          "@type": "xsd:string",
+          "@value": "test"
+        }
+       }
+    ]
+  },
+  "uri": {
+    "@type": "Variable",
+    "variable_name": "Journey_ID"
+  }
+}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON,Prefixes,WOQL),
+    WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
+                 ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
+                 v('Journey_ID')).
+
 :- end_tests(woql_jsonld).
