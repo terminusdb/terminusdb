@@ -1196,4 +1196,55 @@ test(post_marshalling, []) :-
     WOQL = get(['Start station'as v('Start_Station')],
                post("bike_csv",_)).
 
+
+
+test(var_simplification, []) :-
+    JSON = _{'@type' : "Get",
+             as_vars : [_{'@type': "NamedAsVar",
+                          identifier: "Start station",
+                          variable_name: "Start_Station"}
+                       ],
+             query_resource:
+             _{'@type': "PostResource",
+               file: "bike_csv"}},
+    * json_write_dict(current_output,JSON,[]),
+    woql_context(Prefixes),
+    json_woql(JSON,Prefixes,WOQL),
+    WOQL = get(['Start station'as v('Start_Station')],
+               post("bike_csv",_)).
+
+
+test(id_simplification, []) :-
+
+    JSON_Atom = '{
+  "@type": "IDGenerator",
+  "base": {
+      "@type": "Node",
+      "node": "Journey"
+   },
+  "key_list": {
+    "@type": "Array",
+    "array_element": [
+      {
+        "@type": "ArrayElement",
+        "datatype": {
+          "@type": "xsd:string",
+          "@value": "test"
+        },
+        "index": 0
+      }
+    ]
+  },
+  "uri": {
+    "@type": "Variable",
+    "variable_name": "Journey_ID"
+  }
+}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON,Prefixes,WOQL),
+    WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
+                 ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
+                 v('Journey_ID')).
+
 :- end_tests(woql_jsonld).
