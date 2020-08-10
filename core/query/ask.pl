@@ -114,6 +114,7 @@ create_context(Transaction_Object, Context) :-
         write_graph : Graph_Descriptor,
         system : system_descriptor{},
         update_guard : _Guard,
+        all_witnesses : false,
         files : [],
         bindings : [],
         selected : []

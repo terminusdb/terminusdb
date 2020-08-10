@@ -171,6 +171,7 @@ empty_context(Context) :-
         default_collection : root,
         filter : type_filter{ types : [instance] },
         prefixes : _{},
+        all_witnesses : false,
         write_graph : empty,
         update_guard : _,
         bindings : [],
@@ -3553,6 +3554,20 @@ test(into_absolute_descriptor, [
 
     query_response:run_context_ast_jsonld_response(Context, AST, Response),
     Response.inserts = 1.
+
+test(one_witness, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         throws(error(schema_check_failure([_]),_))
+     ]) :-
+    AST = (insert(a,b,c),
+           insert(d,e,f)),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response).
 
 test(using_insert_default_graph, [
          setup((setup_temp_store(State),

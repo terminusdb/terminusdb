@@ -1,8 +1,7 @@
 :- module(transaction, [
               % database.pl
               query_context_transaction_objects/2,
-              run_transaction/2,
-              run_transactions/2,
+              run_transactions/3,
               with_transaction/3,
               graph_inserts_deletes/3,
 
@@ -34,6 +33,7 @@
               commit_validation_object/2,
               commit_commit_validation_object/4,
               validate_validation_objects/2,
+              validate_validation_objects/3,
               turtle_transaction/4,
 
               % layer_entity.pl

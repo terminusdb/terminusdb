@@ -1,7 +1,6 @@
 :- module(database,[
               query_context_transaction_objects/2,
-              run_transaction/2,
-              run_transactions/2,
+              run_transactions/3,
               retry_transaction/2,
               with_transaction/3,
               graph_inserts_deletes/3
@@ -215,32 +214,23 @@ with_transaction(Query_Context,
     retry_transaction(Query_Context, Transaction_Retry_Count),
     (   call(Body)
     ->  query_context_transaction_objects(Query_Context, Transactions),
-        run_transactions(Transactions,Meta_Data0),
+        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0),
         !, % No going back now!
         Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count})
     ;   !,
         fail).
 
 /*
- * run_transaction(Transaction) is det.
- *
- * Run transaction and throw errors with witnesses.
- *
- */
-run_transaction(Transaction, Meta_Data) :-
-    run_transactions([Transaction], Meta_Data).
-
-/*
- * run_transactions(Transaction, Meta_Data) is det.
+ * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
  *
  * Run all transactions and throw errors with witnesses.
  */
-run_transactions(Transactions, Meta_Data) :-
+run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    validate_validation_objects(Validations,Witnesses),
+    validate_validation_objects(Validations, All_Witnesses, Witnesses),
     (   Witnesses = []
     ->  true
-    ;   throw(error(schema_check_failure(Witnesses)))),
+    ;   throw(error(schema_check_failure(Witnesses),_))),
     commit_validation_objects(Validations),
     collect_validations_metadata(Validations, Meta_Data).
 
@@ -389,7 +379,7 @@ test(partial_transaction_commit, [
         insert(doc:a, doc:b, doc:c)),
 
     query_context_transaction_objects(Context,Transaction_Objects),
-    run_transactions(Transaction_Objects, _),
+    run_transactions(Transaction_Objects, true, _),
 
     partial_commits(Context).
 

@@ -863,24 +863,12 @@ test(unresolvable_path_filled_frame, [
  * from terminus database on spartacus.
  */
 woql_handler(post, Request, System_DB, Auth) :-
-    try_get_param('query',Request,Query),
-
-    (   get_param('commit_info', Request, Commit_Info)
-    ->  true
-    ;   Commit_Info = _{}
-    ),
-    collect_posted_files(Request,Files),
-
-    catch_with_backtrace(
-        (   woql_query_json(System_DB, Auth, none, Query, Commit_Info, Files, JSON),
-            write_cors_headers(Request),
-            reply_json_dict(JSON)
-        ),
-        E,
-        do_or_die(woql_error_handler(E, Request),
-                  E)).
+    woql_handler_helper(Request, System_DB, Auth, none).
 
 woql_handler(post, Path, Request, System_DB, Auth) :-
+    woql_handler_helper(Request, System_DB, Auth, some(Path)).
+
+woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
     try_get_param('query',Request,Query),
 
     (   get_param('commit_info', Request, Commit_Info)
@@ -889,15 +877,18 @@ woql_handler(post, Path, Request, System_DB, Auth) :-
     ),
     collect_posted_files(Request,Files),
 
+    (   get_param('all_witnesses', Request, All_Witnesses)
+    ->  true
+    ;   All_Witnesses = false),
+
     catch_with_backtrace(
-        (   woql_query_json(System_DB, Auth, some(Path), Query, Commit_Info, Files, JSON),
+        (   woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, JSON),
             write_cors_headers(Request),
             reply_json_dict(JSON)
         ),
         E,
         do_or_die(woql_error_handler(E, Request),
                   E)).
-
 
 woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
@@ -2346,7 +2337,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
                           'api:repo_head_updated' : Head_Updated,
                           'api:repo_head' : Head_ID,
                           'api:status' : "api:success"},
-            
+
             cors_reply_json(Request,
                             Response,
                             [status(200)])),
