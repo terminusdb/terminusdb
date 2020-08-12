@@ -211,15 +211,24 @@ retry_transaction(Query_Context, Transaction_Retry_Count) :-
 with_transaction(Query_Context,
                  Body,
                  Meta_Data) :-
+    setup_call_cleanup(
+        true,
+        with_transaction_(Query_Context,Body,Meta_Data),
+        abolish_module_tables(validate_schema)
+    ).
+
+:- meta_predicate with_transaction(?,0,?).
+with_transaction_(Query_Context,
+                  Body,
+                  Meta_Data) :-
     retry_transaction(Query_Context, Transaction_Retry_Count),
     (   call(Body)
     ->  query_context_transaction_objects(Query_Context, Transactions),
         run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0),
         !, % No going back now!
-        Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count})
+        Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
     ;   !,
-        fail),
-    abolish_module_tables(validate_schema).
+        fail).
 
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
