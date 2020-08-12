@@ -87,98 +87,8 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     is_dict(JSON),
     !,
     (   _{'@type' : Type} :< JSON,
-        json_type_to_woql_ast(Type, JSON,WOQL,Path)
+        json_type_to_woql_ast(Type,JSON,WOQL,Path)
     ->  true
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Select',
-          'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
-          'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON
-    ->  json_to_woql_ast(Indexed_Variables,WOQL_Args,
-                         ['http://terminusdb.com/schema/woql#variable_list'
-                          |Path]),
-        json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
-                                             |Path]),
-        WOQL = select(WOQL_Args,Sub_WOQL)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#And',
-          'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON
-    ->  deindex_list('http://terminusdb.com/schema/woql#query',
-                     Indexed_Query_List, Query_List),
-        maplist({Path}/[Q,W]>>(
-                    json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
-                                          'http://terminusdb.com/schema/woql#query_list'
-                                          |Path])
-                ), Query_List, WOQL_Queries),
-        xfy_list(',',WOQL,WOQL_Queries)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Or',
-          'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON
-    ->  deindex_list('http://terminusdb.com/schema/woql#query',
-                     Indexed_Query_List, Query_List),
-        maplist({Path}/[Q,W]>>(
-                    json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
-                                          'http://terminusdb.com/schema/woql#query_list'
-                                         |Path])
-                ), Query_List, WOQL_Queries),
-        xfy_list(';',WOQL,WOQL_Queries)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Using',
-          'http://terminusdb.com/schema/woql#collection' : Collection,
-          'http://terminusdb.com/schema/woql#query' : Query } :< JSON
-    ->  json_to_woql_ast(Collection,WC,['http://terminusdb.com/schema/woql#collection'
-                                        |Path]),
-        json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
-                                   |Path]),
-        do_or_die(
-            (WC = Collection_String^^_),
-            error(woql_syntax_error(JSON,
-                                    ['http://terminusdb.com/schema/woql#collection'|Path],
-                                    Collection), _)),
-        WOQL = using(Collection_String,WQ)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#From',
-          'http://terminusdb.com/schema/woql#graph_filter' : Graph_Filter,
-          'http://terminusdb.com/schema/woql#query' : Query } :< JSON
-    ->  json_to_woql_ast(Graph_Filter,WG,['http://terminusdb.com/schema/woql#graph_filter'
-                                          |Path]),
-        json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
-                                   |Path]),
-        do_or_die(
-            (WG = Graph_String^^_),
-            error(woql_syntax_error(JSON,
-                                    ['http://terminusdb.com/schema/woql#graph_filter'|Path],
-                                    Graph_Filter), _)),
-        WOQL = from(Graph_String,WQ)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Into',
-          'http://terminusdb.com/schema/woql#graph' : Graph,
-          'http://terminusdb.com/schema/woql#query' : Query } :< JSON
-    ->  json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
-                                   |Path]),
-        json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
-                                   |Path]),
-        do_or_die(
-            (WG = Graph_String^^_),
-            error(woql_syntax_error(JSON,
-                                    ['http://terminusdb.com/schema/woql#graph'|Path],
-                                    Graph), _)),
-        WOQL = into(Graph_String,WQ)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Quad',
-          'http://terminusdb.com/schema/woql#subject' : Subject,
-          'http://terminusdb.com/schema/woql#predicate' : Predicate,
-          'http://terminusdb.com/schema/woql#object' : Object,
-          'http://terminusdb.com/schema/woql#graph_filter' : Graph
-         } :< JSON
-    ->  json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
-                                      |Path]),
-        json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
-                                        |Path]),
-        json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
-                                     |Path]),
-        json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
-                                   |Path]),
-
-        do_or_die(
-            (WG = Graph_String^^_),
-            error(woql_syntax_error(JSON,
-                                    ['http://terminusdb.com/schema/woql#graph_filter'|Path],
-                                    Graph), _)),
-
-        WOQL = t(WQA,WQB,WQC,Graph_String)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#Triple',
           'http://terminusdb.com/schema/woql#subject' : Subject,
           'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -859,7 +769,7 @@ json_to_woql_ast(JSON,_,Path) :-
 
 % Convert specific types to the WOQL AST, should be expanded to
 % make the predicate json_to_woql_ast less verbose and big
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Comment',WOQL,_) :-
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Comment',_,WOQL,_) :-
     WOQL = true.
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#TripleCount',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#resource' : Resource,
@@ -894,8 +804,96 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Size',JSON,WOQL,Path) :
                                 ['http://terminusdb.com/schema/woql#resource'|Path],
                                 Resource), _)),
     WOQL = size(Resource_String,WOQL_Size).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Select',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
+      'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON,
+    json_to_woql_ast(Indexed_Variables,WOQL_Args,
+                     ['http://terminusdb.com/schema/woql#variable_list'
+                      |Path]),
+    json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
+                                         |Path]),
+    WOQL = select(WOQL_Args,Sub_WOQL).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#And',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON,
+    deindex_list('http://terminusdb.com/schema/woql#query',
+                 Indexed_Query_List, Query_List),
+    maplist({Path}/[Q,W]>>(
+                json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
+                                      'http://terminusdb.com/schema/woql#query_list'
+                                      |Path])
+            ), Query_List, WOQL_Queries),
+    xfy_list(',',WOQL,WOQL_Queries).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Or',JSON,WOQL,Path) :-
+       _{'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON,
+       deindex_list('http://terminusdb.com/schema/woql#query',
+                    Indexed_Query_List, Query_List),
+       maplist({Path}/[Q,W]>>(
+                   json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
+                                         'http://terminusdb.com/schema/woql#query_list'
+                                         |Path])
+               ), Query_List, WOQL_Queries),
+       xfy_list(';',WOQL,WOQL_Queries).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Using',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#collection' : Collection,
+      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
+    json_to_woql_ast(Collection,WC,['http://terminusdb.com/schema/woql#collection'
+                                    |Path]),
+    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+                               |Path]),
+    do_or_die(
+        (WC = Collection_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#collection'|Path],
+                                Collection), _)),
+    WOQL = using(Collection_String,WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#From',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#graph_filter' : Graph_Filter,
+      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
+    json_to_woql_ast(Graph_Filter,WG,['http://terminusdb.com/schema/woql#graph_filter'
+                                      |Path]),
+    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+                               |Path]),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                Graph_Filter), _)),
+    WOQL = from(Graph_String,WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Into',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#graph' : Graph,
+      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+                               |Path]),
+    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+                               |Path]),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                Graph), _)),
+    WOQL = into(Graph_String,WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Quad',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#subject' : Subject,
+      'http://terminusdb.com/schema/woql#predicate' : Predicate,
+      'http://terminusdb.com/schema/woql#object' : Object,
+      'http://terminusdb.com/schema/woql#graph_filter' : Graph
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+                                 |Path]),
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+                               |Path]),
 
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                Graph), _)),
 
+    WOQL = t(WQA,WQB,WQC,Graph_String).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
