@@ -71,10 +71,11 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: New_Layer,
                                                  changed: Changed },
+
     (   var(Layer_Builder)
     ->  New_Layer = Layer,
         Changed = false
-
+    %   NOTE: This seems wasteful - we should ignore this layer not commit it if it is empty.
     ;   nb_commit(Layer_Builder, New_Layer),
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
         \+ (N = 0, M = 0)
@@ -173,7 +174,7 @@ commit_validation_object(Validation_Object, []) :-
 
     append([Instance_Objects,Schema_Objects,Inference_Objects], Objects),
     (   exists(validation_object_changed, Objects)
-    ->  throw(immutable_graph_update("Tried to commit a validation object with a commit descriptor. Commit descriptors don't have a head which can be moved."))
+    ->  throw(error(immutable_graph_update(Descriptor),_))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
@@ -211,7 +212,7 @@ commit_validation_object(Validation_Object, []) :-
     !,
 
     (   validation_object_changed(Instance_Object)
-    ->  throw(immutable_graph_update('Tried to update a query only database which was formed directly from a layer id.'))
+    ->  throw(error(immutable_graph_update(Descriptor),_))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{

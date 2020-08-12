@@ -218,7 +218,8 @@ with_transaction(Query_Context,
         !, % No going back now!
         Meta_Data = Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count})
     ;   !,
-        fail).
+        fail),
+    abolish_module_tables(validate_schema).
 
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
