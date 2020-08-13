@@ -373,10 +373,13 @@ spawn_server_1(Path, URL, PID, Options) :-
                      [
                          'HOME',
                          'SystemRoot', % Windows specific stuff...
+                         'TMP', % Windows sadness
+                         'TEMP', % Again...
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
                          'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
-                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID'
+                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID',
+                         'TERMINUSDB_SERVER_TMP_PATH'
                      ],
                      Env_List),
 
