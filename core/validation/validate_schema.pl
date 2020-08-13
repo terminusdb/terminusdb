@@ -287,6 +287,7 @@ restriction_on_property(CR,P,Database) :-
     database_schema(Database,Schema),
     restriction_on_property_(CR,P,Schema).
 
+:- table restriction_on_property/3.
 restriction_on_property_(CR,P,Schema) :-
 	xrdf(Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
 	restriction_(CR,Schema).
@@ -942,6 +943,7 @@ strict_subsumption_property_of(PC,PP,Database) :-
     database_schema(Database,Schema),
     strict_subsumption_property_of_(PC,PP,Schema).
 
+:- table strict_subsumption_property_of_/3.
 strict_subsumption_property_of_(PC,PP,Schema) :-
     sub_property_of_(PC, PP, Schema).
 strict_subsumption_property_of_(PC,PP,Schema) :-
