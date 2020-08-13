@@ -706,6 +706,15 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Sum',JSON,WOQL,Path) :-
     json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#sum'
                                    |Path]),
     WOQL = sum(WList,WValue).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Count',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#query' : Query,
+      'http://terminusdb.com/schema/woql#count' : Count
+     } :< JSON,
+    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+                                  |Path]),
+    json_to_woql_ast(Count,WCount,['http://terminusdb.com/schema/woql#count'
+                                   |Path]),
+    WOQL = count(WQuery,WCount).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Start',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#start' : N,
       'http://terminusdb.com/schema/woql#query' : Q

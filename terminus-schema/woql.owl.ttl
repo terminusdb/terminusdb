@@ -1169,6 +1169,19 @@ woql:Not
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
 
+woql:Count
+  a owl:Class ;
+  rdfs:label "Count"@en ;
+  rdfs:comment "Count of results from query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:count
+  a owl:DatatypeProperty ;
+  rdfs:label "count"@en ;
+  rdfs:comment "property which contains the count"@en ;
+  rdfs:domain woql:Count ;
+  rdfs:range woql:nonNegativeInteger .
+
 woql:Typecast
   a owl:Class ;
   rdfs:label "Typecast"@en ;
