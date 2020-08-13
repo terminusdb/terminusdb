@@ -372,7 +372,7 @@ spawn_server_1(Path, URL, PID, Options) :-
     inherit_env_vars(Env_List_1,
                      [
                          'HOME',
-                         'SysRoot', % Windows specific stuff...
+                         'SystemRoot', % Windows specific stuff...
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
                          'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
