@@ -61,10 +61,12 @@ https_enabled :-
     Value = 'true'.
 
 ssl_cert(Value) :-
-    getenv_default('TERMINUSDB_SSL_CERT', 'localhost.crt', Value).
+    expand_file_search_path(terminus_home('localhost.crt'), Default),
+    getenv_default('TERMINUSDB_SSL_CERT', Default, Value).
 
 ssl_cert_key(Value) :-
-    getenv_default('TERMINUSDB_SSL_CERT_KEY', 'localhost.key', Value).
+    expand_file_search_path(terminus_home('localhost.key'), Default),
+    getenv_default('TERMINUSDB_SSL_CERT_KEY', Default, Value).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
