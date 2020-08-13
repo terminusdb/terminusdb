@@ -1071,6 +1071,10 @@ most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
  */
 domain(P,D,Database) :-
     database_schema(Database,Schema),
+    domain_(P,D,Schema).
+
+:- table domain_/3.
+domain_(P,D,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /**
