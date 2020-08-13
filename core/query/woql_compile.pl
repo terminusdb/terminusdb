@@ -1019,6 +1019,11 @@ compile_wf(start(N,S),(literally(NE,Num),offset(Num,Prog))) -->
 compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
     resolve(N,NE),
     compile_wf(S, Prog).
+compile_wf(count(P,N), (literally(NE,Num),aggregate_all(count, Prog, Num),unliterally(Num,NE))) -->
+    resolve(N, NE),
+    visible_vars(Visible),
+    compile_wf(P,Prog),
+    restrict(Visible).
 compile_wf(asc(X),asc(XE)) -->
     resolve(X,XE).
 compile_wf(desc(X),desc(XE)) -->
@@ -3621,5 +3626,29 @@ test(using_insert_default_graph, [
                                        New_Descriptor),
     once(ask(New_Descriptor,
              t(a,b,c))).
+
+test(count_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+    AST = (insert('a','b','c'),
+           insert('e','f','g')),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response),
+
+    resolve_absolute_string_descriptor("admin/test", New_Descriptor),
+
+    New_AST = count(t(v('X'),v('Y'),v('Z')), v('Count')),
+    create_context(New_Descriptor,Commit_Info,New_Context),
+
+    query_response:run_context_ast_jsonld_response(New_Context, New_AST, New_Response),
+    [Binding] = (New_Response.bindings),
+    2 = (Binding.'Count'.'@value').
 
 :- end_tests(woql).

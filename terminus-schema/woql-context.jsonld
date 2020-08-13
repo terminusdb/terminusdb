@@ -75,6 +75,7 @@
   "file" : {"@type" : "xsd:string"},
   "variable_name" : {"@type" : "xsd:string"},
   "identifier" : {"@type" : "xsd:string"},
-  "index" : {"@type" : "xsd:NonNegativeInteger"}
+  "count" : {"@type" : "xsd:nonNegativeInteger"},
+  "index" : {"@type" : "xsd:nonNegativeInteger"}
  }
 }
