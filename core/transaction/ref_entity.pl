@@ -177,6 +177,7 @@ reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
     ignore(unlink_commit_object_from_branch(Context,Branch_Uri)),
     link_commit_object_to_branch(Context,Branch_Uri, Commit_Uri).
 
+% Note: We should probably refactor to add this to copy graph / copy new graph
 attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
     once(ask(Context,
              (   insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
@@ -186,12 +187,18 @@ attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-
     once(ask(Context,
              insert(Graph_Uri, ref:graph_layer, Graph_Layer_Uri))).
 
+graph_idgen(Context, Commit_Id, Graph_Type, Graph_Name, Graph_Uri) :-
+    once(
+        ask(Context,
+            idgen(doc:'Graph',
+                  [Commit_Id^^xsd:string,
+                   Graph_Type^^xsd:string,
+                   Graph_Name^^xsd:string], Graph_Uri))).
+
 insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
+    graph_idgen(Context,Commit_Id,Graph_Type,Graph_Name,Graph_Uri),
     once(ask(Context,
-             (   idgen(doc:'Graph', [Commit_Id^^xsd:string,
-                                     Graph_Type^^xsd:string,
-                                     Graph_Name^^xsd:string], Graph_Uri),
-                 insert(Graph_Uri, rdf:type, ref:'Graph')))),
+             insert(Graph_Uri, rdf:type, ref:'Graph'))),
     attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri),
 
     % also attach a layer if it is there
@@ -207,6 +214,22 @@ copy_graph_object(Origin_Context, Destination_Context, Graph_Uri) :-
     ->  layer_id_uri(Origin_Context, Layer_Id, Layer_Uri),
         insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
         attach_layer_to_graph(Destination_Context, Graph_Uri, Layer_Uri)
+    ;   true).
+
+copy_new_graph_object(Origin_Askable, Destination_Context, Old_Graph_Uri,
+                      Commit_Id, New_Graph_Uri) :-
+
+    commit_id_uri(Origin_Askable,Commit_Id,Commit_Uri),
+    once(graph_for_commit(Origin_Askable, Commit_Uri, Graph_Type, Graph_Name,
+                          Old_Graph_Uri)),
+    graph_idgen(Destination_Context,Commit_Id,Graph_Type,Graph_Name,New_Graph_Uri),
+    once(ask(Destination_Context,
+             insert(New_Graph_Uri, rdf:type, ref:'Graph'))),
+
+    (   layer_uri_for_graph(Origin_Askable, Old_Graph_Uri, Layer_Uri)
+    ->  layer_id_uri(Origin_Askable, Layer_Id, Layer_Uri),
+        insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
+        attach_layer_to_graph(Destination_Context, New_Graph_Uri, Layer_Uri)
     ;   true).
 
 copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
@@ -804,6 +827,20 @@ ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_
     ->  true
     ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
 
+ensure_graph_sets_included(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs) :-
+    findall(Type1-Name1,
+            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type1, Name1, _),
+            Us_Graphs),
+    findall(Type2-Name2,
+            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type2, Name2, _),
+            Them_Graphs),
+    list_to_ord_set(Us_Graphs, Us_Graph_Set),
+    list_to_ord_set(Them_Graphs, Them_Graph_Set),
+    ord_subtract(Them_Graph_Set, Us_Graph_Set, New_Graphs),
+    (   ord_subtract(Us_Graph_Set, Them_Graph_Set, [])
+    ->  true
+    ;   throw(error(graph_sets_not_included(Us_Commit_Uri, Them_Commit_Uri)))).
+
 apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
     get_time(Now),
     apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
@@ -831,7 +868,7 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
     % ensure graph sets are equivalent. if not, error
-    ensure_graph_sets_equal(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri),
+    ensure_graph_sets_included(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs),
 
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
@@ -847,8 +884,8 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
         New_Commit_Id,
         New_Commit_Uri),
 
-    forall(graph_for_commit(Them_Repo_Askable,
-                            Them_Commit_Uri,
+    forall(graph_for_commit(Us_Repo_Context,
+                            Us_Commit_Uri,
                             Type,
                             Name,
                             _Graph_Uri),
@@ -861,6 +898,16 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
                               Type,
                               Name,
                               _New_Graph_Uri)),
+
+    forall(member(Graph_Type-Graph_Name,
+                  New_Graphs),
+           (   once(graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)),
+               copy_new_graph_object(Them_Repo_Askable, Us_Repo_Context, Graph_Uri,
+                                     Them_Commit_Id, New_Graph_Uri),
+               attach_graph_to_commit(Us_Repo_Context, New_Commit_Uri,
+                                      Graph_Type, Graph_Name, New_Graph_Uri)
+           )
+          ),
 
     % Note, this doesn't yet commit the commit graph.
     % We may actually have written an invalid commit here.

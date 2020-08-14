@@ -244,6 +244,8 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     commit_validation_objects(Validations),
     collect_validations_metadata(Validations, Meta_Data).
 
+
+/* NOTE: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-
     graph_validation_obj{ changed: Value } :< Graph,
     (   ground(Value),
@@ -251,7 +253,7 @@ graph_inserts_deletes(Graph, I, D) :-
     ;   var(Value)),
     !,
     % layer_addition_count(Graph.read, I),
-    %layer_removal_count(Graph.read, D).
+    % layer_removal_count(Graph.read, D).
     findall(1,
             xrdf_deleted([Graph], _, _, _),
             Delete_List),
