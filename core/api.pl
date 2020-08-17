@@ -53,7 +53,8 @@
               pull/7,
 
               % graph_load.pl
-              graph_load/6,
+              graph_update/6,
+              graph_insert/6,
 
               % graph_dump.pl
               graph_dump/5,

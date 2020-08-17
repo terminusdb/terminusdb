@@ -36,12 +36,11 @@ make_validation_object_appear_as_changed(Validation_Object, New_Validation_Objec
             Validation_Object.inference_objects,
             Inference_Objects),
 
-    New_Validation_Object = Validation_Object.put(
-                                                  _{
-                                                      instance_objects: Instance_Objects,
-                                                      schema_objects: Schema_Objects,
-                                                      inference_objects: Inference_Objects
-                                                  }).
+    Objects = _{ instance_objects: Instance_Objects,
+                 schema_objects: Schema_Objects,
+                 inference_objects: Inference_Objects },
+
+    New_Validation_Object = (Validation_Object.put(Objects)).
 
 apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context, []) :-
     !,

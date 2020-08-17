@@ -34,7 +34,6 @@
               commit_commit_validation_object/4,
               validate_validation_objects/2,
               validate_validation_objects/3,
-              turtle_transaction/4,
 
               % layer_entity.pl
               has_layer/2,

@@ -1,6 +1,7 @@
 :- module(turtle_utils,[
               graph_to_turtle/3,
               update_turtle_graph/2,
+              insert_turtle_graph/2,
               dump_turtle_graph/2,
               dump_md/2
           ]).
@@ -48,8 +49,76 @@ update_turtle_graph(Context,TTL) :-
     coerce_literal_string(TTL, TTLS),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        turtle_transaction(Context, Graph, TTLStream,_),
+        update_turtle_graph_(Context, Graph, TTLStream,_),
         close(TTLStream)
+    ).
+
+update_turtle_graph_(Database, Graph, New_Graph_Stream, Meta_Data) :-
+    with_transaction(
+        Database,
+        (   % make a fresh empty graph against which to diff
+            open_memory_store(Store),
+            open_write(Store, Builder),
+
+            % write to a temporary builder.
+            rdf_process_turtle(
+                New_Graph_Stream,
+                {Builder}/
+                [Triples,_Resource]>>(
+                    forall(member(T, Triples),
+                           (   normalise_triple(T, rdf(X,P,Y)),
+                               object_storage(Y,S),
+                               nb_add_triple(Builder, X, P, S)
+                           ))),
+                [encoding(utf8)]),
+
+            % commit this builder to a temporary layer to perform a diff.
+            nb_commit(Builder,Layer),
+
+            % first write everything into the layer-builder that is in the new
+            % file, but not in the db.
+            forall(
+                (   xrdf([Graph], A_Old, B_Old, C_Old),
+                    \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
+                delete(Graph,A_Old,B_Old,C_Old,_)
+            ),
+            forall(
+                (   xrdf_db(Layer,A_New,B_New,C_New),
+                    \+ xrdf([Graph], A_New, B_New, C_New)),
+                insert(Graph,A_New,B_New,C_New,_)
+
+            )
+        ),
+        Meta_Data
+    ).
+
+insert_turtle_graph(Context,TTL) :-
+    (   graph_descriptor_transaction_objects_read_write_object(Context.write_graph, Context.transaction_objects, Graph)
+    ->  true
+    ;   throw(error(unknown_graph(Context.write_graph), _))),
+
+    coerce_literal_string(TTL, TTLS),
+    setup_call_cleanup(
+        open_string(TTLS, TTLStream),
+        insert_turtle_graph_(Context, Graph, TTLStream,_),
+        close(TTLStream)
+    ).
+
+add_all_turtle_triples(Graph,Triples,_Resource) :-
+    forall(member(T, Triples),
+           (   normalise_triple(T, rdf(X,P,Y)),
+               insert(Graph,X,P,Y,_)
+           )).
+
+insert_turtle_graph_(Database, Graph, New_Graph_Stream, Meta_Data) :-
+    with_transaction(
+        Database,
+        (   rdf_process_turtle(
+                New_Graph_Stream,
+                add_all_turtle_triples(Graph),
+                [encoding(utf8)])
+        ),
+        Meta_Data
     ).
 
 /*

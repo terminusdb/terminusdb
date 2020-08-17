@@ -245,7 +245,7 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     collect_validations_metadata(Validations, Meta_Data).
 
 
-/* NOTE: This should not exist */
+/* Note: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-
     graph_validation_obj{ changed: Value } :< Graph,
     (   ground(Value),

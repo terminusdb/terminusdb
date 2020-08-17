@@ -6,7 +6,6 @@
               commit_commit_validation_object/4,
               validate_validation_objects/2,
               validate_validation_objects/3,
-              turtle_transaction/4,
               read_write_obj_to_graph_validation_obj/4
           ]).
 
@@ -820,49 +819,6 @@ transaction_objects_to_validation_objects(Transaction_Objects, Validation_Object
 validation_objects_to_transaction_objects(Validation_Objects, Transaction_Objects) :-
     mapm(validation_object_to_transaction_object, Validation_Objects, Transaction_Objects, [], _Map).
 
-/**
- * turtle_transaction(Database, Graph, New_Graph_Stream, Meta_Data) is semidet.
- *
- * Updates a graph with the given turtle.
- */
-turtle_transaction(Database, Graph, New_Graph_Stream, Meta_Data) :-
-    with_transaction(
-        Database,
-        (   % make a fresh empty graph against which to diff
-            open_memory_store(Store),
-            open_write(Store, Builder),
-
-            % write to a temporary builder.
-            rdf_process_turtle(
-                New_Graph_Stream,
-                {Builder}/
-                [Triples,_Resource]>>(
-                    forall(member(T, Triples),
-                           (   normalise_triple(T, rdf(X,P,Y)),
-                               object_storage(Y,S),
-                               nb_add_triple(Builder, X, P, S)
-                           ))),
-                [encoding(utf8)]),
-
-            % commit this builder to a temporary layer to perform a diff.
-            nb_commit(Builder,Layer),
-
-            % first write everything into the layer-builder that is in the new
-            % file, but not in the db.
-            forall(
-                (   xrdf([Graph], A_Old, B_Old, C_Old),
-                    \+ xrdf_db(Layer,A_Old,B_Old,C_Old)),
-                delete(Graph,A_Old,B_Old,C_Old,_)
-            ),
-            forall(
-                (   xrdf_db(Layer,A_New,B_New,C_New),
-                    \+ xrdf([Graph], A_New, B_New, C_New)),
-                insert(Graph,A_New,B_New,C_New,_)
-
-            )
-        ),
-        Meta_Data
-    ).
 
 :- begin_tests(inserts).
 :- use_module(core(util/test_utils)).
