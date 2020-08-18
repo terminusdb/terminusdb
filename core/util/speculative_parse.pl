@@ -173,5 +173,8 @@ test(negative_decimal, []) :-
     guess_number("-43322.3243", X),
     X = -43322.3243^^'http://www.w3.org/2001/XMLSchema#decimal'.
 
+test(zero_prepend, []) :-
+    guess_number("043322.3243", X),
+    X = 43322.3243^^'http://www.w3.org/2001/XMLSchema#decimal'.
 
 :- end_tests(speculative_parse).
