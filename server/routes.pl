@@ -1011,6 +1011,11 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(schema_check_failure(Witnesses),_), Request) :-
+    cors_reply_json(Request,
+                    Witnesses,
+                    [status(405)]).
+
 
 
 % woql_handler Unit Tests
