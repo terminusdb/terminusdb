@@ -22,6 +22,8 @@
               delete_user_and_organization/1,
               cleanup_user_database/2,
 
+              
+
               spawn_server/4,
               kill_server/1,
               setup_temp_server/2,
@@ -328,6 +330,40 @@ cleanup_user_database(User, Database) :-
    (   organization_name_exists(system_descriptor{}, User)
    ->  delete_organization(User)
    ;   true).
+
+select_mode([],[],[],true).
+select_mode([(?)|Rest],[Arg1|Args1],[Arg2|Args2],Equations) :-
+    Arg1 = Arg2,
+    select_mode(Rest,Args1,Args2,Equations).
+select_mode([(?)|Rest],[Arg1|Args1],[Arg2|Args2],Equations) :-
+    select_mode(Rest,Args1,Args2,Other_Equations),
+    Equations = (Arg1=Arg2,Other_Equations).
+select_mode([(-)|Rest],[Arg1|Args1],[Arg2|Args2],Equations) :-
+    select_mode(Rest,Args1,Args2,Other_Equations),
+    Equations = (Arg1=Arg2,Other_Equations).
+select_mode([domain(L)|Rest],[X|Args1],[X|Args2],Equations) :-
+    member(X,L),
+    select_mode(Rest,Args1,Args2,Equations).
+
+/*
+ * simulates(+P,+Q,+Modes) is det.
+ *
+ * Predicate P simulates Q, (P < Q)
+ *
+ * Modes is a a list with len = arity(P) = arity(Q)
+ * containing elements either (?), (-) or domain([X,Y,Z,...])
+ * where X,Y,Z are ground values in the domain.
+ *
+ */
+simulates(M:P,N:Q,Modes) :-
+    forall((   member(Mode,Modes),
+               select_mode(Mode,Args1,Args2,Equations),
+               P_Goal =.. [P|Args1],
+               Q_Goal =.. [Q|Args2],
+               call(N:Q_Goal)),
+           (   call(M:P_Goal),
+               call(Equations)
+           )).
 
 inherit_env_var(Env_List_In, Var, Env_List_Out) :-
     (   getenv(Var, Val)
