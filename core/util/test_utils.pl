@@ -361,8 +361,12 @@ simulates(M:P,N:Q,Modes) :-
                P_Goal =.. [P|Args1],
                Q_Goal =.. [Q|Args2],
                call(N:Q_Goal)),
-           (   call(M:P_Goal),
-               call(Equations)
+           (   (   call(M:P_Goal),
+                   call(Equations)
+               ->  true
+               ;   format("Goal ~q did not simulate ~q~nunder equations (~q) for mode ~q",
+                          [P_Goal,Q_Goal,Equations,Mode]),
+                   fail)
            )).
 
 inherit_env_var(Env_List_In, Var, Env_List_Out) :-

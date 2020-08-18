@@ -8,6 +8,7 @@
               commit_uri_to_metadata/5,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
+              descriptor_commit_id_uri/4,
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,
@@ -73,6 +74,14 @@ has_commit(Askable, Commit_Id) :-
 has_commit(Askable, Commit_Id) :-
     ask(Askable,
         t(_, ref:commit_id, Commit_Id^^xsd:string)).
+
+descriptor_commit_id_uri(Askable, Descriptor, Commit_Id, Commit_Uri) :-
+    commit_descriptor{ commit_id : Commit_Id} :< Descriptor,
+    !,
+    commit_id_uri(Askable, Commit_Id, Commit_Uri).
+descriptor_commit_id_uri(Askable, Descriptor, Commit_Id, Commit_Uri) :-
+    branch_head_commit(Askable, Descriptor.branch_name, Commit_Uri),
+    commit_id_uri(Askable, Commit_Id, Commit_Uri).
 
 commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
