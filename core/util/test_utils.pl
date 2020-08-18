@@ -22,7 +22,7 @@
               delete_user_and_organization/1,
               cleanup_user_database/2,
 
-              
+              simulates/3,
 
               spawn_server/4,
               kill_server/1,
