@@ -1015,6 +1015,16 @@ woql_error_handler(error(schema_check_failure(Witnesses),_), Request) :-
     cors_reply_json(Request,
                     Witnesses,
                     [status(405)]).
+woql_error_handler(error(woql_instantiation_error(Vars),_), Request) :-
+    format(string(Msg), "The following variables were unbound but must be bound: ~q", [Vars]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLModeError',
+                                       'api:error_vars' : Vars},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
 
 
 

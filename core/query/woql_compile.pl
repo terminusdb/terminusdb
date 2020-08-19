@@ -353,7 +353,8 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+    (   do_or_die(compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+                  error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
         % this is redundant if we do a pre-pass that sets the guard as well.
         Guard = Ctx_Out.update_guard,
@@ -710,8 +711,12 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(
                freeze(Guard,
-                      insert(Read_Write_Object,XE,PE,YE,_))
-           ))
+                      ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
+                                  [ground,ground,ground],
+                                  [XE,PE,YE],
+                                  [X,P,Y]))
+           )
+          )
 -->
     assert_write_access,
     resolve(X,XE),
@@ -1187,8 +1192,25 @@ compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Argument
     [].
 compile_wf(true,true) -->
     [].
-compile_wf(Q,_) -->
-    { throw(error(woql_syntax_error(badly_formed_ast(Q)),_)) }.
+
+:- meta_predicate ensure_mode(0,+,+,+).
+ensure_mode(Goal,Mode,Args,Names) :-
+    catch(
+        call(Goal),
+        error(instantiation_error,_),
+        (   find_mode_violations(Mode,Args,Names,Violations),
+            throw(error(woql_instantiation_error(Violations),_)))
+    ).
+
+find_mode_violations([],[],[],[]).
+find_mode_violations([ground|Mode],[Arg|Args],[Name|Names],New_Violations) :-
+    find_mode_violations(Mode,Args,Names,Violations),
+    (   var(Arg)
+    ->  Name = v(Var),
+        New_Violations = [Var|Violations]
+    ;   New_Violations = Violations).
+find_mode_violations([any|Mode],[_|Args],[_|Names],Violations) :-
+    find_mode_violations(Mode,Args,Names,Violations).
 
 debug_wf(Lit) -->
     { debug(terminus(woql_compile(compile_wf)), '~w', [Lit]) },
@@ -3650,5 +3672,20 @@ test(count_test, [
     query_response:run_context_ast_jsonld_response(New_Context, New_AST, New_Response),
     [Binding] = (New_Response.bindings),
     2 = (Binding.'Count'.'@value').
+
+test(unbound_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_instantiation_error([a,b,c]),_)
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(v('a'),v('b'),v('c')),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response).
 
 :- end_tests(woql).
