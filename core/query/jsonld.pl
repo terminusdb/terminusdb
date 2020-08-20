@@ -558,9 +558,9 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
         append(Triples_List, Triples)
     ;   string(V)
     ->  atom_string(A,V),
-        Triples = [(ID,Pred,A^^'http://www.w3.org/2001/XMLSchema#string')]
+        Triples = [(ID,Pred,A)]
     ;   atom(V)
-    ->  Triples = [(ID,Pred,V^^'http://www.w3.org/2001/XMLSchema#string')]
+    ->  Triples = [(ID,Pred,V)]
     ;   Triples = [(ID,Pred,V)]).
 
 /*

@@ -1,5 +1,10 @@
 os: Visual Studio 2015
 
+environment:
+  TERMINUSDB_SERVER_PACK_DIR: 'C:\Program Files\swipl\pack'
+  TERMINUSDB_HTTPS_ENABLED: false
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.10.4
+
 # If you only care about stable channel build failures, uncomment the following line:
     #- channel: beta
 
@@ -18,11 +23,11 @@ install:
   - cd "%SWI_INSTALL_DIR%\pack"
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout v0.9.9.1
+  - git checkout %TERMINUSDB_STORE_PROLOG_VERSION%
   - cd %APPVEYOR_BUILD_FOLDER%
   - set PATH=%PATH%;C:\Program Files\swipl\bin;C:\Program Files (x86)\NSIS\;
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/libterminus_store.dll
-  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/v0.9.9.1/terminus_store_prolog.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/%TERMINUSDB_STORE_PROLOG_VERSION%/libterminus_store.dll
+  - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/%TERMINUSDB_STORE_PROLOG_VERSION%/terminus_store_prolog.dll
   - mkdir swipl
   - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
 
@@ -32,7 +37,7 @@ build_script:
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
-  - git checkout v0.9.9.1
+  - git checkout %TERMINUSDB_STORE_PROLOG_VERSION%
   - cd ..\
   - makensis.exe terminusdb_windows_installer.nsi
   - cd ..\

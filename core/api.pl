@@ -53,7 +53,8 @@
               pull/7,
 
               % graph_load.pl
-              graph_load/6,
+              graph_update/6,
+              graph_insert/6,
 
               % graph_dump.pl
               graph_dump/5,
@@ -63,7 +64,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/7
+              woql_query_json/8
           ]).
 
 :- use_module(api/init).

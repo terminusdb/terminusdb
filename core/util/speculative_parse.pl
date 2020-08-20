@@ -30,6 +30,7 @@
 
 :- reexport(core(util/syntax)).
 :- use_module(xsd_parser).
+:- use_module(utils).
 :- use_module(library(dcg/basics), [whites//0, blanks//0]).
 
 /*
@@ -58,37 +59,15 @@ guess_integer(Val,N^^'http://www.w3.org/2001/XMLSchema#integer') :-
  *
  * Guess some possible numbers.
  */
-guess_number(Val,Val^^'http://www.w3.org/2001/XMLSchema#decimal') :-
+guess_number(Val,Result^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Val),
-    !.
+    !,
+    Result = Val.
 guess_number(Val,N^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     (   atom(Val)
     ;   string(Val)),
-    atom_codes(Val,Codes),
-    phrase((whites,
-            integer(N),
-            whites),
-           Codes),
-    !.
-guess_number(Val,Result^^'http://www.w3.org/2001/XMLSchema#decimal') :-
-    (   atom(Val)
-    ;   string(Val)),
-    atom_codes(Val,Codes),
-    phrase((whites,
-            guess_number(Ans,",","."),
-            whites),
-           Codes),
-    number_string(Result,Ans),
-    !.
-guess_number(Val,Result^^'http://www.w3.org/2001/XMLSchema#decimal') :-
-    (   atom(Val)
-    ;   string(Val)),
-    atom_codes(Val,Codes),
-    phrase((whites,
-            guess_number(Ans,".",","),
-            whites),
-           Codes),
-    number_string(Result,Ans).
+    trim(Val, TrimmedVal),
+    number_string(N,TrimmedVal).
 
 guess_integer_range(Val,Val^^'http://terminusdb.com/schema/xdd#integerRange') :-
     (   atom(Val)
@@ -182,3 +161,20 @@ guess_time(time(H,M,S,Z,ZH,ZM)) -->
     !.
 guess_time(time(H,M,0,0,-,-)) -->
     twoDigitNatural(H), ":", twoDigitNatural(M).
+
+
+:- begin_tests(speculative_parse).
+
+test(decimal_with_five_numbers, []) :-
+    guess_number("43322.3243", X),
+    X = 43322.3243^^'http://www.w3.org/2001/XMLSchema#decimal'.
+
+test(negative_decimal, []) :-
+    guess_number("-43322.3243", X),
+    X = -43322.3243^^'http://www.w3.org/2001/XMLSchema#decimal'.
+
+test(zero_prepend, []) :-
+    guess_number("043322.3243", X),
+    X = 43322.3243^^'http://www.w3.org/2001/XMLSchema#decimal'.
+
+:- end_tests(speculative_parse).

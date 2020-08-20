@@ -95,8 +95,11 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
         % No shared history
         ;   true),
 
-        copy_commits(Repository_Context, Remote_Repository_Context, Local_Commit_Id),
-        reset_branch_head(Remote_Repository_Context_With_Prefixes, Remote_Branch_Uri, Local_Commit_Uri)
+        (   (   Remote_Commit_Uri_Option = none
+            ;   Remote_Commit_Id \= Local_Commit_Id)
+        ->  copy_commits(Repository_Context, Remote_Repository_Context, Local_Commit_Id),
+            reset_branch_head(Remote_Repository_Context_With_Prefixes, Remote_Branch_Uri, Local_Commit_Uri)
+        ;   true)
     ;   (   has_branch(Remote_Repository_Context,
                        Remote_Branch),
             branch_head_commit(Remote_Repository_Context,
@@ -111,7 +114,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
 
 
     (   Payload_Option = none % Last_Head_Id = Current_Head_Id
-    ->  Result = none
+    ->  Result = same(Last_Head_Id)
     ;   Payload_Option = some(Payload),
         catch(call(Push_Predicate, Remote_URL, Payload),
               E,
@@ -127,11 +130,9 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
         Layer = (Read_Obj.read),
         layer_to_id(Layer, Current_Head_Id),
         update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-        run_transactions([Database_Transaction_Object], _),
-        Result = some(Current_Head_Id)
+        run_transactions([Database_Transaction_Object], true, _),
+        Result = new(Current_Head_Id)
     ).
-
-
 
 :- begin_tests(push).
 :- use_module(core(util/test_utils)).
@@ -246,6 +247,49 @@ test(push_twice,
     resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
     sort(Triples, [a-b-c,c-d-e,h-i-j,k-l-m]).
+
+test(push_twice_with_second_push_changing_nothing,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Repository_Descriptor),
+
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+    create_ref_layer(Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    create_context(Descriptor, commit_info{author: "me",
+                                           message: "something"},
+                   Branch_Context),
+
+    with_transaction(
+        Branch_Context,
+        ask(Branch_Context,
+            (   insert(a,b,c),
+                insert(c,d,e))),
+        _Meta_Data_B),
+
+    super_user_authority(Auth),
+
+    once(ask(Descriptor.repository_descriptor,
+                        t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
+
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(Expected_Layer_Id), Result),
+    Result = new(Head),
+    
+
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(_Expected_Layer_Id_2), Result_2),
+
+    Result_2 = same(Head).
 
 test(push_empty_branch,
      [setup((setup_temp_store(State),

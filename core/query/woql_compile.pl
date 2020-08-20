@@ -65,7 +65,6 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-
 /*
  * Ctx is a context object which is used in WOQL queries to
  * keep track of state.
@@ -172,6 +171,7 @@ empty_context(Context) :-
         default_collection : root,
         filter : type_filter{ types : [instance] },
         prefixes : _{},
+        all_witnesses : false,
         write_graph : empty,
         update_guard : _,
         bindings : [],
@@ -353,7 +353,8 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+    (   do_or_die(compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+                  error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
         % this is redundant if we do a pre-pass that sets the guard as well.
         Guard = Ctx_Out.update_guard,
@@ -538,6 +539,13 @@ term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Term).
 
 
+isa(XE,CE,Transaction_Object) :-
+    atom(XE),
+    !,
+    instance_class(XE,CE,Transaction_Object).
+isa(_X^^Type,Type,_Transaction_Object).
+isa(_X@Lang,Lang,_Transaction_Object).
+
 /*
  * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
@@ -703,8 +711,12 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(
                freeze(Guard,
-                      insert(Read_Write_Object,XE,PE,YE,_))
-           ))
+                      ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
+                                  [ground,ground,ground],
+                                  [XE,PE,YE],
+                                  [X,P,Y]))
+           )
+          )
 -->
     assert_write_access,
     resolve(X,XE),
@@ -730,8 +742,7 @@ compile_wf(like(A,B,F), Isub) -->
     resolve(B,BE),
     resolve(F,FE),
     { marshall_args(isub(AE,BE,true,FE), Isub) }.
-compile_wf(isa(X,C),(instance_class(XE,D,Transaction_Object),
-                     subsumption_of(D,CE,Transaction_Object))) -->
+compile_wf(isa(X,C),isa(XE,CE,Transaction_Object)) -->
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection_Descriptor),
@@ -808,8 +819,10 @@ compile_wf(t(X,P,Y),Goal) -->
     view(transaction_objects, Transaction_Objects),
     view(filter, Filter),
     {
-        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
-                                                 Transaction_Object),
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
         filter_transaction_object_goal(Filter, Transaction_Object, t(XE, PE, YE), Search_Clause),
         Goal = (not_literal(XE),not_literal(PE),Search_Clause)
     }.
@@ -865,13 +878,16 @@ compile_wf(select(VL,P), Prog) -->
     restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
+    update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
     {
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
             error(invalid_absolute_path(Collection_String),_))
+        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
@@ -898,9 +914,8 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     update(default_collection,_,Old_Default_Collection).
 compile_wf(get(Spec,File_Spec), Prog) -->
     {
-        Default = _{
-                      'http://terminusdb.com/woql#header' : "true",
-                      'http://terminusdb.com/woql#type' : "csv"},
+        Default = _{  format_header : true,
+                      format_type : "csv"},
 
         (   as_vars(Spec,Vars),
             Has_Header = true
@@ -917,13 +932,13 @@ compile_wf(get(Spec,File_Spec), Prog) -->
         file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
-        (   memberchk('http://terminusdb.com/woql#type'("csv"),New_Options)
+        (   memberchk(format_type("csv"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,CSV_Options)
-        ;   memberchk('http://terminusdb.com/woql#type'("turtle"),New_Options),
+        ;   memberchk(format_type("turtle"),New_Options),
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
-        ;   memberchk('http://terminusdb.com/woql#type'("panda_json"),New_Options)
+        ;   memberchk(format_type("panda_json"),New_Options)
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
@@ -1012,6 +1027,11 @@ compile_wf(start(N,S),(literally(NE,Num),offset(Num,Prog))) -->
 compile_wf(limit(N,S),(literally(NE,Num),limit(Num,Prog))) -->
     resolve(N,NE),
     compile_wf(S, Prog).
+compile_wf(count(P,N), (literally(NE,Num),aggregate_all(count, Prog, Num),unliterally(Num,NE))) -->
+    resolve(N, NE),
+    visible_vars(Visible),
+    compile_wf(P,Prog),
+    restrict(Visible).
 compile_wf(asc(X),asc(XE)) -->
     resolve(X,XE).
 compile_wf(desc(X),desc(XE)) -->
@@ -1025,12 +1045,15 @@ compile_wf(into(G,S),Goal) -->
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     {
-        collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
-                                                 Transaction_Object),
-        resolve_filter(G,Filter),
-        (   Filter = type_name_filter{ type : _Type, names : [_Name]}
-        ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
-        ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
+        (   resolve_absolute_string_graph_descriptor(G, Graph_Descriptor)
+        ->  true
+        ;   resolve_filter(G,Filter),
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            (   Filter = type_name_filter{ type : _Type, names : [_Name]}
+            ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
+            ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
+            )
         )
     },
     update(write_graph,OG,Graph_Descriptor),
@@ -1107,11 +1130,17 @@ compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE),
-    { marshall_args(utils:join(XE,SE,YE), Join) }.
+    {
+        marshall_args(utils:join(XE,SE,YE), Goal),
+        Join = ensure_mode(Goal,[ground,ground,any],[XE,SE,YE],[X,S,Y])
+    }.
 compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
-    { marshall_args(sumlist(XE,YE), Sum) }.
+    {
+        marshall_args(sumlist(XE,YE), Goal),
+        Sum = ensure_mode(Goal,[ground,any],[XE,YE],X,Y])
+    }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
     resolve(X,XE),
@@ -1172,8 +1201,25 @@ compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Argument
     [].
 compile_wf(true,true) -->
     [].
-compile_wf(Q,_) -->
-    { throw(error(woql_syntax_error(badly_formed_ast(Q)),_)) }.
+
+:- meta_predicate ensure_mode(0,+,+,+).
+ensure_mode(Goal,Mode,Args,Names) :-
+    catch(
+        call(Goal),
+        error(instantiation_error,_),
+        (   find_mode_violations(Mode,Args,Names,Violations),
+            throw(error(woql_instantiation_error(Violations),_)))
+    ).
+
+find_mode_violations([],[],[],[]).
+find_mode_violations([ground|Mode],[Arg|Args],[Name|Names],New_Violations) :-
+    find_mode_violations(Mode,Args,Names,Violations),
+    (   var(Arg)
+    ->  Name = v(Var),
+        New_Violations = [Var|Violations]
+    ;   New_Violations = Violations).
+find_mode_violations([any|Mode],[_|Args],[_|Names],Violations) :-
+    find_mode_violations(Mode,Args,Names,Violations).
 
 debug_wf(Lit) -->
     { debug(terminus(woql_compile(compile_wf)), '~w', [Lit]) },
@@ -1196,7 +1242,9 @@ update_descriptor_transactions(Descriptor)
         ->  true
         ;   Commit_Info = _{}),
         transactions_to_map(Transaction_Objects, Map),
-        open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
+        do_or_die(
+            open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map, _Map),
+            error(unresolvable_absolute_descriptor(Descriptor),_)),
         union([Transaction_Object], Transaction_Objects, New_Transaction_Objects)
     }.
 
@@ -1223,7 +1271,7 @@ file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
         Options = []),
     atom_string(Name_Atom,Name),
     merge_options(Options,Default,New_Options),
-    memberchk(Name_Atom=file(_Original,Path), Files).
+    memberchk(Name_Atom=Path, Files).
 
 
 %%
@@ -1248,12 +1296,18 @@ marshall_args(M_Pred,Goal) :-
 literally(X, _X) :-
     var(X),
     !.
+literally(Date^^'http://www.w3.org/2001/XMLSchema#dateTime', String) :-
+    Date = date(_Y,_M,_D,_HH,_MM,_SS,_,_,_),
+    !,
+    date_string(Date,String).
 literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
     !.
-literally([],[]).
+literally([],[]) :-
+    !.
 literally([H|T],[HL|TL]) :-
+    !,
     literally(H,HL),
     literally(T,TL).
 literally(X, X) :-
@@ -1269,11 +1323,13 @@ literally(X, X) :-
 unliterally(X,Y) :-
     string(X),
     !,
-    (   Y = X^^Type,
+    (   Y = YVal^^Type,
         (   var(Type)
-        ->  Type = 'http://www.w3.org/2001/XMLSchema#string'
-        ;   % subsumption test here.
-            true)
+        ->  Type = 'http://www.w3.org/2001/XMLSchema#string',
+            YVal = X
+        ;   Type = 'http://www.w3.org/2001/XMLSchema#dateTime'
+        ->  date_string(YVal,X)
+        ;   YVal = X)
     ->  true
     ;   Y = X@Lang,
         (   var(Lang)
@@ -1702,26 +1758,6 @@ test(join, []) :-
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
 
-
-test(isa, []) :-
-    Query = _{'@type' : "IsA",
-              element : _{ '@type' : "Node",
-                           node : "doc:admin"},
-              of_type : _{'@type' : "Variable",
-                          variable_name :
-                          _{'@type' : "xsd:string",
-                            '@value' : "IsA"}}},
-
-    query_test_response(system_descriptor{}, Query, JSON),
-    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    list_to_ord_set(Orderable,Bindings_Set),
-    list_to_ord_set([json{'IsA':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'IsA':'http://terminusdb.com/schema/system#User'},
-                     json{'IsA':'http://terminusdb.com/schema/system#Agent'},
-                     json{'IsA':'http://terminusdb.com/schema/system#Document'}],
-                    Expected),
-    ord_seteq(Bindings_Set, Expected).
-
 test(like, []) :-
     Query = _{'@type' : "Like",
               left : _{ '@type' : "Datatype",
@@ -1992,7 +2028,10 @@ test(named_get_two, [])
                      '@value':"2011-01-01 00:01:29"}} :< Res.
 
 
-test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
+test(turtle_get, [
+         %blocked('Turtle translation in JSON-LD not working yet')
+     ]
+    )
 :-
     terminus_path(Path),
     atomic_list_concat([Path,'/terminus-schema/system_schema.owl.ttl'], File),
@@ -2025,7 +2064,12 @@ test(turtle_get, [blocked('Turtle translation in JSON-LD not working yet')])
          }
     },
 
-    query_test_response(system_descriptor{}, Query, _JSON).
+    query_test_response(system_descriptor{}, Query, JSON),
+    ['First','Second','Third'] = (JSON.'api:variable_names'),
+    [One|_] = (JSON.'bindings'),
+    One = _{'First':'http://terminusdb.com/schema/system',
+            'Second':'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+            'Third':'http://www.w3.org/2002/07/owl#Ontology'}.
 
 test(concat, [])
 :-
@@ -3102,7 +3146,8 @@ test(ast_when_test, [
 
 
 test(get_put, []) :-
-
+    tmp_path(TempDir),
+    atom_concat(TempDir, '/test.csv', TestFile),
     Query = _{ '@type': "woql:Put",
                'woql:as_vars':
                [ _{ '@type': "woql:NamedAsVar",
@@ -3224,14 +3269,14 @@ test(get_put, []) :-
                'woql:query_resource': _{ '@type': "woql:FileResource",
                                          'woql:file':
                                          _{ '@type': "xsd:anyURI",
-                                            '@value': "/tmp/test.csv"
+                                            '@value': TestFile
                                           }
                                        }
              },
 
     resolve_absolute_string_descriptor("_system", Descriptor),
     query_test_response(Descriptor, Query, _JSON),
-    exists_file('/tmp/test.csv').
+    exists_file(TestFile).
 
 test(idgen, []) :-
     Atom = '{
@@ -3273,6 +3318,50 @@ test(idgen, []) :-
     [Value] = (JSON.bindings),
     (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
 
+test(isa_literal, []) :-
+    Atom = '{
+  "@type": "woql:IsA",
+  "woql:element": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "xsd:string",
+      "@value": "test"
+    }
+  },
+  "woql:of_type": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Type",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Type') = 'http://www.w3.org/2001/XMLSchema#string'.
+
+test(isa_node, []) :-
+    Atom = '{
+  "@type": "woql:IsA",
+  "woql:element": {
+    "@type": "woql:Node",
+    "woql:node": "doc:admin"
+  },
+  "woql:of_type": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "Type",
+      "@type": "xsd:string"
+    }
+  }
+}',
+    atom_json_dict(Atom, Query, []),
+    resolve_absolute_string_descriptor("_system", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    [Value] = (JSON.bindings),
+    (Value.'Type') = 'http://terminusdb.com/schema/system#User'.
 
 test(meta_graph_update, [
          setup((setup_temp_store(State),
@@ -3503,93 +3592,110 @@ test(temp_graph_rdf, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     query_test_response(Descriptor, Query, _JSON).
 
-test(using_sequence, [
+test(date_marshall, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Atom = '{
-  "@type": "woql:And",
-  "woql:query_list": [
-    {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 0
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "_system"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "DA",
-              "@type": "xsd:string"
-            }
-          },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:resource_name"
-          },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
-          }
-        }
-      }
-    },
-    {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 1
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "admin/test"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "D",
-              "@type": "xsd:string"
-            }
-          },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:database_name"
-          },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
-          }
-        }
-      }
-    }
-  ]
-}',
-
-    atom_json_dict(Atom,Query,[]),
+    AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
+               remote("https://terminusdb.com/t/data/bike_tutorial.csv", _{}))),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    % not failing is good enough
-    query_test_response(Descriptor, Query, _JSON).
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
 
+    query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    length(Response.bindings, 49).
+
+test(into_absolute_descriptor, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    AST = into("admin/test/local/branch/main/instance/main",
+               (insert('a','b','c'))),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    Response.inserts = 1.
+
+test(one_witness, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         throws(error(schema_check_failure([_]),_))
+     ]) :-
+    AST = (insert(a,b,c),
+           insert(d,e,f)),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response).
+
+test(using_insert_default_graph, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+    AST = using("admin/test/local/branch/new",
+                (insert('a','b','c'))),
+
+    create_context(system_descriptor{},Commit_Info,System_Context),
+    branch_create(System_Context,doc:admin,"admin/test/local/branch/new",none,_),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response),
+
+    resolve_absolute_string_descriptor("admin/test/local/branch/new",
+                                       New_Descriptor),
+    once(ask(New_Descriptor,
+             t(a,b,c))).
+
+test(count_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+    AST = (insert('a','b','c'),
+           insert('e','f','g')),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response),
+
+    resolve_absolute_string_descriptor("admin/test", New_Descriptor),
+
+    New_AST = count(t(v('X'),v('Y'),v('Z')), v('Count')),
+    create_context(New_Descriptor,Commit_Info,New_Context),
+
+    query_response:run_context_ast_jsonld_response(New_Context, New_AST, New_Response),
+    [Binding] = (New_Response.bindings),
+    2 = (Binding.'Count'.'@value').
+
+test(unbound_test, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_instantiation_error([a,b,c]),_)
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(v('a'),v('b'),v('c')),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _Response).
 
 
 :- end_tests(woql).

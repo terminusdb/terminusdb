@@ -122,8 +122,9 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
 /*
  * patterns have the following syntax:
  *
- * P,Q,R := p(P) | P,Q | P;Q | plus(P) | times(P,N,M)
+ * P,Q,R := p(P) | n(P) | P,Q | P;Q | plus(P) | times(P,N,M)
  *
+ * foo>,<baz,bar>
  */
 compile_pattern(p(Pred), Compiled, Prefixes, Transaction_Object) :-
     prefixed_to_uri(Pred,Prefixes,Pred_Expanded),

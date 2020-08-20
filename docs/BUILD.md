@@ -68,8 +68,6 @@ The Terminus Server source tree should then be cloned from GitHub:
 ```
 git clone https://github.com/terminusdb/terminusdb-server
 cd terminusdb-server
-git submodule init
-git submodule update
 ```
 
 You need to set the admin user password which is used as a
@@ -136,8 +134,6 @@ The Terminus Server source tree should then be cloned from GitHub:
 ```
 git clone https://github.com/terminusdb/terminusdb-server
 cd terminusdb-server
-git submodule init
-git submodule update
 ```
 
 You need to set the admin user password which is used as a
@@ -202,8 +198,6 @@ The Terminus Server source tree should then be cloned from GitHub:
 ```
 git clone https://github.com/terminusdb/terminusdb-server
 cd terminusdb-server
-git submodule init
-git submodule update
 ```
 
 You need to set the admin user password which is used as a
