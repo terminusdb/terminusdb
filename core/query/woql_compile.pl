@@ -1136,7 +1136,7 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(Y,YE),
     {
         marshall_args(sumlist(XE,YE), Goal),
-        Sum = ensure_mode(Goal,[ground,any],[XE,YE],X,Y])
+        Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
