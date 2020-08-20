@@ -1127,11 +1127,17 @@ compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),
     resolve(Y,YE),
-    { marshall_args(utils:join(XE,SE,YE), Join) }.
+    {
+        marshall_args(utils:join(XE,SE,YE), Goal),
+        Join = ensure_mode(Goal,[ground,ground,any],[XE,SE,YE],[X,S,Y])
+    }.
 compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
-    { marshall_args(sumlist(XE,YE), Sum) }.
+    {
+        marshall_args(sumlist(XE,YE), Goal),
+        Sum = ensure_mode(Goal,[ground,any],[XE,YE],X,Y])
+    }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
     resolve(X,XE),
