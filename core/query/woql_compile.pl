@@ -3697,5 +3697,4 @@ test(unbound_test, [
 
     query_response:run_context_ast_jsonld_response(Context, AST, _Response).
 
-
 :- end_tests(woql).

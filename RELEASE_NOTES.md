@@ -9,7 +9,7 @@ the masters from our default branching.
 + Added much more extensive coverage of API in the api.owl.ttl ontology
 + Fixed some schema errors in woql.owl.ttl
 + Added boolean flag (`all_witnesses`) for returning all or only the first witness from schema checks.
-+ Improvements to schema checking. Most large inserts will be 40% faster
++ Improvements to schema checking. Most large inserts with schema will be 40% faster
 
 ## Backwards-Incompatible Changes
 
