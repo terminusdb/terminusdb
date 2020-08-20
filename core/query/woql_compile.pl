@@ -882,7 +882,7 @@ compile_wf(using(Collection_String,P),Goal) -->
     {
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
-            error(invalid_absolute_path(Collection_String),_))
+            error(invalid_absolute_path(Collection_String),_)),
         collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
     },
     update_descriptor_transactions(Default_Collection),
@@ -1139,7 +1139,7 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(Y,YE),
     {
         marshall_args(sumlist(XE,YE), Goal),
-        Sum = ensure_mode(Goal,[ground,any],[XE,YE],X,Y])
+        Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
