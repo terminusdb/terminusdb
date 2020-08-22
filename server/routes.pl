@@ -1989,6 +1989,7 @@ test(fetch_second_time_with_change, [
 :- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 
