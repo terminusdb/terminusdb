@@ -1491,11 +1491,10 @@ test(get_object, [
                  methods([options,post])]).
 
 clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-    get_payload(Database_Document,Request),
 
     do_or_die(
-        (_{ comment : Comment,
+        (get_payload(Database_Document,Request),
+         _{ comment : Comment,
             label : Label,
             remote_url: Remote_URL} :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
@@ -1505,7 +1504,11 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Public = false),
 
     catch_with_backtrace(
-        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization,_)),
+
+            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
@@ -1515,6 +1518,15 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         do_or_die(clone_error_handler(E,Request),
                   E)).
 
+clone_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
     format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
     cors_reply_json(Request,
@@ -1638,10 +1650,12 @@ test(clone_remote, [
                  methods([options,post])]).
 
 fetch_handler(post,Path,Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-
     catch_with_backtrace(
-        (   remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization_for_fetch,_)),
+
+            remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
                          New_Head_Layer_Id, Head_Has_Updated),
             write_cors_headers(Request),
             reply_json_dict(
@@ -1653,6 +1667,15 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
         do_or_die(fetch_error_handler(E,Request),
                   E)).
 
+fetch_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
@@ -1679,10 +1702,17 @@ remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
 
+is_local_https(URL) :-
+    re_match('^https://127.0.0.1', URL, []).
+
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head }
     ;   Document = _{}),
+
+    (   is_local_https(URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
 
     remote_pack_url(URL,Pack_URL),
 
@@ -1691,7 +1721,8 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               Payload,
               [request_header('Authorization'=Authorization),
                json_object(dict),
-               status_code(Status)]),
+               status_code(Status)
+              |Additional_Options]),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
@@ -2480,6 +2511,33 @@ push_error_handler(error(remote_unpack_failed(history_diverged),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(400)]).
+push_error_handler(error(remote_unpack_failed(communication_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to a communication error: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:CommunicationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(authorization_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to an authorization failure: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:AuthorizationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(remote_unknown),_), Request) :-
+    format(string(Msg), "The remote requested was not known", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:RemoteUnknown"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 
 remote_unpack_url(URL, Pack_URL) :-
@@ -2488,6 +2546,10 @@ remote_unpack_url(URL, Pack_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+    (   is_local_https(Remote_URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
+
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -2495,7 +2557,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),
-                     status_code(Status_Code)]),
+                     status_code(Status_Code)
+                     |Additional_Options]),
           E,
           throw(error(communication_failure(E),_))),
 
