@@ -1993,15 +1993,12 @@ test(fetch_second_time_with_change, [
 
 
 rebase_handler(post, Path, Request, System_DB, Auth) :-
-
-    get_payload(Document, Request),
-    (   get_dict(rebase_from, Document, Their_Path)
-    ->  true
-    ;   throw(error(rebase_from_missing))),
-
-    (   get_dict(author, Document, Author)
-    ->  true
-    ;   throw(error(rebase_author_missing))),
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ author : Author,
+               rebase_from : Their_Path } :< Document
+        ),
+        error(bad_api_document(Document,[author,rebase_from]),_)),
 
     catch_with_backtrace(
         (   Strategy_Map = [],
@@ -2426,11 +2423,10 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                  methods([options,post])]).
 
 push_handler(post,Path,Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch } :< Document,
+        (  get_payload(Document, Request),
+           _{ remote : Remote_Name,
+              remote_branch : Remote_Branch } :< Document),
         error(bad_api_document(Document,[remote,remote_branch]),_)),
 
     do_or_die(
