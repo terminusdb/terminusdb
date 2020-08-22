@@ -2797,13 +2797,13 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
                  methods([options,post])]).
 
 pull_handler(post,Path,Request, System_DB, Local_Auth) :-
-    get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch_Name
-         } :< Document,
-        error(bad_api_document(Document, [remote, remote_branch]))),
+        (   get_payload(Document, Request),
+            _{ remote : Remote_Name,
+               remote_branch : Remote_Branch_Name
+             } :< Document),
+        error(bad_api_document(Document, [remote, remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Remote_Auth),
@@ -3180,7 +3180,9 @@ test(pull_from_something_to_something_equal_other_branch,
                  methods([options,post])]).
 
 branch_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
+    do_or_die(
+        get_payload(Document, Request),
+        error(bad_api_document(Document, []),_)),
 
     (   get_dict(origin, Document, Origin_Path)
     ->  Origin_Option = some(Origin_Path)
