@@ -1025,6 +1025,17 @@ woql_error_handler(error(woql_instantiation_error(Vars),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The WOQL query referenced an invalid absolute path for descriptor ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:WoqlErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
 
 
 
