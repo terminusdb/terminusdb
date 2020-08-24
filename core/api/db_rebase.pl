@@ -36,12 +36,11 @@ make_validation_object_appear_as_changed(Validation_Object, New_Validation_Objec
             Validation_Object.inference_objects,
             Inference_Objects),
 
-    New_Validation_Object = Validation_Object.put(
-                                                  _{
-                                                      instance_objects: Instance_Objects,
-                                                      schema_objects: Schema_Objects,
-                                                      inference_objects: Inference_Objects
-                                                  }).
+    Objects = _{ instance_objects: Instance_Objects,
+                 schema_objects: Schema_Objects,
+                 inference_objects: Inference_Objects },
+
+    New_Validation_Object = (Validation_Object.put(Objects)).
 
 apply_commit_chain(Our_Repo_Context, _Their_Repo_Context, Us_Commit_Uri, _Author, _Auth_Object, [], [], Us_Commit_Uri, Our_Repo_Context, []) :-
     !,
@@ -133,6 +132,7 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
 rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports) :-
+    benchmark_subject_start('rebase on branch'),
 
     do_or_die(
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
@@ -147,17 +147,19 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         error(rebase_requires_target_branch(Our_Branch_Descriptor),_)),
 
     do_or_die(
-        resolve_absolute_string_descriptor(Their_Branch_Path, Their_Branch_Descriptor),
+        resolve_absolute_string_descriptor(Their_Branch_Path, Their_Ref_Descriptor),
         error(invalid_source_absolute_path(Their_Branch_Path),_)),
 
     do_or_die(
-        (branch_descriptor{} :< Their_Branch_Descriptor),
-        error(rebase_requires_source_branch(Their_Branch_Descriptor),_)),
+        (   branch_descriptor{} :< Their_Ref_Descriptor
+        ->  true
+        ;   commit_descriptor{} :< Their_Ref_Descriptor),
+        error(rebase_requires_source_branch(Their_Ref_Descriptor),_)),
 
-    check_descriptor_auth(System_DB, Their_Branch_Descriptor, system:commit_read_access, Auth),
+    check_descriptor_auth(System_DB, Their_Ref_Descriptor, system:commit_read_access, Auth),
 
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
-    Their_Repo_Descriptor = (Their_Branch_Descriptor.repository_descriptor),
+    Their_Repo_Descriptor = (Their_Ref_Descriptor.repository_descriptor),
 
     do_or_die(
         create_context(Our_Repo_Descriptor, Our_Repo_Context),
@@ -167,21 +169,32 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         create_context(Their_Repo_Descriptor, Their_Repo_Context),
         error(unresolvable_source_descriptor(Their_Repo_Descriptor))),
 
+    benchmark(after_checks),
+
     branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
     branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
     commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
-    branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
-    commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
 
-    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History)
+    descriptor_commit_id_uri(Their_Repo_Context, Their_Ref_Descriptor, Their_Commit_Id, Their_Commit_Uri),
+
+    benchmark(after_commit_lookups),
+
+    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
+        benchmark(after_ancestor_lookup)
     ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
     ;   Optional_Common_Commit_Id = none,
         commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
-        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)),
+        benchmark(history_lookup_1),
+        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History),
+        benchmark(history_lookup_2)),
+
+    benchmark(before_copy),
 
     % copy commits from their repo into ours, ensuring we got the latest
     copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
+    benchmark(after_copy),
     cycle_context(Our_Repo_Context, Our_Repo_Context2, _, _),
+    benchmark(after_first_cycle),
 
     % take their commit uri as the top on which we're gonna apply_commit_chain
     % list of commits to apply is ours since common
@@ -209,10 +222,16 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         )
     ),
 
+    benchmark(after_application),
+
     unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri),
     link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
 
+    benchmark(after_commit_branch_relink),
+
     cycle_context(Semifinal_Context, _Final_Context, Transaction_Object, _),
+
+    benchmark(after_second_cycle),
 
     Repo_Name = Transaction_Object.descriptor.repository_name,
     [Read_Write_Obj] = Transaction_Object.instance_objects,
@@ -222,7 +241,10 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
     update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
 
-    run_transactions([Database_Transaction_Object], _).
+    benchmark(after_repository_head_update),
+
+    run_transactions([Database_Transaction_Object], true, _),
+    benchmark_subject_stop('rebase on branch').
 
 :- begin_tests(rebase).
 :- use_module(core(util/test_utils)).
@@ -233,6 +255,8 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
 :- use_module(db_create).
 :- use_module(db_branch).
+:- use_module(db_graph).
+
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
@@ -295,6 +319,77 @@ test(rebase_fast_forward,
      t(g,h,i)] = Triples,
 
     true.
+
+test(rebase_fast_forward_from_commit,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor("admin/foo", Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context),
+    with_transaction(Master_Context,
+                     ask(Master_Context,
+                         insert(a,b,c)),
+                    _),
+
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
+    with_transaction(Second_Context2,
+                     ask(Second_Context2,
+                         insert(g,h,i)),
+                     _),
+
+    super_user_authority(Auth),
+
+    descriptor_commit_id_uri((Second_Descriptor.repository_descriptor),
+                             Second_Descriptor,
+                             Commit_Id,
+                             _Commit_Uri),
+
+    atomic_list_concat(['admin/foo/local/commit/',Commit_Id], Commit_Path),
+
+    rebase_on_branch(system_descriptor{}, Auth, Master_Path, Commit_Path, "rebaser",  [], some(Common_Commit_Id), Their_Applied_Commit_Ids, []),
+    Repo_Descriptor = Master_Descriptor.repository_descriptor,
+
+    commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit a", _),
+
+    [Old_Commit_B_Id, Old_Commit_C_Id] = Their_Applied_Commit_Ids,
+    commit_id_to_metadata(Repo_Descriptor, Old_Commit_B_Id, _, "commit b", _),
+    commit_id_to_metadata(Repo_Descriptor, Old_Commit_C_Id, _, "commit c", _),
+
+    branch_head_commit(Repo_Descriptor, "main", Commit_C_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_C_Uri, Commit_B_Uri),
+    commit_uri_to_parent_uri(Repo_Descriptor, Commit_B_Uri, Commit_A_Uri),
+
+
+    commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_B_Uri, _, "commit b", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_C_Uri, _, "commit c", _),
+
+    findall(t(S,P,O),
+            ask(Master_Descriptor,
+                t(S,P,O)),
+            Triples_Unsorted),
+
+    sort(Triples_Unsorted, Triples),
+    [t(d,e,f),
+     t(g,h,i)] = Triples,
+
+    true.
+
 
 test(rebase_divergent_history,
      [setup((setup_temp_store(State),
@@ -449,5 +544,52 @@ test(rebase_conflicting_history_errors,
 
 
     rebase_on_branch(system_descriptor{}, Auth, Master_Path, Second_Path, "rebaser", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
+
+test(rebase_with_new_graph,
+     [blocked('Rebase does not work with new graphs'),
+      setup((setup_temp_store(State),
+             create_db_without_schema("admin","test"))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+
+    Main_Path = "admin/test",
+    Second_Path = "admin/test/local/branch/second",
+    super_user_authority(Auth),
+    resolve_absolute_string_descriptor(Main_Path,Main_Descriptor),
+    create_context(Main_Descriptor, commit_info{author:"test",message:"commit a"}, Main_Context),
+
+    with_transaction(
+        Main_Context,
+        ask(Main_Context,insert(doc:ur_foo, rdf:type, scm:'Foo')),
+        _),
+
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Main_Path), _),
+
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit a"}, Second_Context),
+
+    with_transaction(
+        Second_Context,
+        ask(Second_Context,insert(doc:foo, rdf:type, scm:'Foo')),
+        _),
+
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/main/schema/main",
+                 commit_info{ author : "test",
+                              message: "Generated by automated testing"},
+                 _Transaction_Metadata2),
+
+    resolve_absolute_string_descriptor(Main_Path,Main_Descriptor),
+    create_context(Main_Descriptor, commit_info{author:"test",message:"commit a"}, Main_Context1),
+
+    with_transaction(
+        Main_Context1,
+        ask(Main_Context1,
+            insert(scm:'Foo', rdf:type, owl:'Class',"schema/main")),
+        _),
+
+    rebase_on_branch(system_descriptor{}, Auth, Main_Path, Second_Path, "rebaser", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
 
 :- end_tests(rebase).

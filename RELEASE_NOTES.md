@@ -8,12 +8,16 @@ the masters from our default branching.
 + Default branch is now called main and not master
 + Added much more extensive coverage of API in the api.owl.ttl ontology
 + Fixed some schema errors in woql.owl.ttl
++ Added boolean flag (`all_witnesses`) for returning all or only the first witness from schema checks.
++ Improvements to schema checking. Most large inserts with schema will be 40% faster
 
 ## Backwards-Incompatible Changes
 
 + Default branch will be set to main and not master, so that some
   calls which relied on master being default will fail. This can be
   fixed in all cases by doing a branch operation from master to main.
++ By default only one witness is now returned in WOQL queries in which
+  the resulting database violates schema constraints.
 
 ## Bug fixes
 
@@ -32,6 +36,9 @@ This is largely a bug fix and cleanup release. We focused on improving error han
 + Added API for role and organisation creation.
 + Extensive work on making capability checking more robust.
 + First draft of auto-generating `.md` files from loaded ontologies.
++ Turtle files can now be read with WOQL.get using "by order of"
+  parameter list with three elements.
++ Posted files can now be processed by WOQL.get
 
 ## Changes
 
@@ -50,7 +57,7 @@ This is largely a bug fix and cleanup release. We focused on improving error han
 + Fixed a utf-8 encoding issue encountered when loading remote csvs.
 
 
-# TerminusDB Server v2.0.6 Release Notes
+# TerminusDB Server v2.0.5 Release Notes
 
 ## Changes
 

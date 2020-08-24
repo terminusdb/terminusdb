@@ -1231,7 +1231,7 @@ test(update_object,
 
     update_object(Document, Query),
     %retry_transaction(Query_Out),
-    run_transactions(Query.transaction_objects, _Meta_Data),
+    run_transactions(Query.transaction_objects, true, _Meta_Data),
 
     open_descriptor(Descriptor, Transaction2),
     create_context(Transaction2, Query2),
@@ -1283,12 +1283,12 @@ test(delete_object, [
 
     update_object(Document, Query),
     %retry_transaction(Query_Out),
-    run_transactions(Query.transaction_objects, _Meta_Data1),
+    run_transactions(Query.transaction_objects, true, _Meta_Data1),
 
     create_context(Descriptor, Query_Context),
 
     delete_object("doc:new_user",Query_Context),
-    run_transactions(Query_Context.transaction_objects, _Meta_Data2),
+    run_transactions(Query_Context.transaction_objects, true, _Meta_Data2),
 
     create_context(Descriptor, Query_Context2),
 

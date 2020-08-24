@@ -141,19 +141,20 @@ Classes
  *        a non-inferred rfds or owl Class.
  * @param Schema Atom idntifying the current schema graph.
 */
-% :- rdf_meta immediate_class(r,o).
 immediate_class(X,Database) :-
     database_schema(Database,Schema),
+    immediate_class_(X,Schema).
+
+immediate_class_(X,Schema) :-
     xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Class').
-immediate_class(X,Database) :-
-    database_schema(Database,Schema),
+immediate_class_(X,Schema) :-
     xrdf(Schema, X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Class').
-immediate_class('http://www.w3.org/2002/07/owl#Thing',_).
-immediate_class('http://www.w3.org/2002/07/owl#Nothing',_).
+immediate_class_('http://www.w3.org/2002/07/owl#Thing',_).
+immediate_class_('http://www.w3.org/2002/07/owl#Nothing',_).
 % This makes me nervous... [ Gavin ]
-immediate_class('http://www.w3.org/2002/07/owl#Ontology', _).
+immediate_class_('http://www.w3.org/2002/07/owl#Ontology', _).
 % Should this be here?
-immediate_class('http://terminusdb.com/schema/system#Document', _).
+immediate_class_('http://terminusdb.com/schema/system#Document', _).
 
 %% class(?X:uri_or_id, +Schema:database is nondet
 % class(+X:uri_or_id, +Schema:database is det
@@ -163,10 +164,13 @@ immediate_class('http://terminusdb.com/schema/system#Document', _).
 % @param X URI_OR_ID identifier for which to check if the schema has recorded a
 %        an inferred rfds or owl Class.
 % @param Database object with the current schema graph.
-%% :- rdf_meta class(r,o).
-class(X,Database) :- immediate_class(X,Database).
-class(X,Database) :- sub_class_of(X,Y,Database), class(Y,Database).
-class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
+class(X,Database) :-
+    database_schema(Database,Schema),
+    class_(X,Schema).
+
+class_(X,Schema) :- immediate_class_(X,Schema).
+class_(X,Schema) :- sub_class_of_(X,Y,Schema), class_(Y,Schema).
+class_(X,Schema) :- equivalent_class_(X,Y,Schema), class_(Y,Schema).
 
 
 %
@@ -174,12 +178,20 @@ class(X,Database) :- equivalent_class(X,Y,Database), class(Y,Database).
 %
 immediate_restriction(R,Database) :-
     database_schema(Database,Schema),
+    immediate_restriction_(R,Schema).
+
+immediate_restriction_(R,Schema) :-
     xrdf(Schema, R, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2002/07/owl#Restriction').
 
 immediate_class_or_restriction(R_or_C,Database) :-
-    immediate_restriction(R_or_C,Database).
-immediate_class_or_restriction(R_or_C,Database) :-
-    immediate_class(R_or_C,Database).
+    database_schema(Database,Schema),
+    immediate_class_or_restriction_(R_or_C,Schema).
+
+immediate_class_or_restriction_(R_or_C,Schema) :-
+    immediate_restriction_(R_or_C,Schema),
+    !.
+immediate_class_or_restriction_(R_or_C,Schema) :-
+    immediate_class_(R_or_C,Schema).
 
 
 % restriction(+R:uri_or_id, +Database:database) is nondet.
@@ -189,15 +201,18 @@ immediate_class_or_restriction(R_or_C,Database) :-
 % @param R URI_OR_ID identifier for which to check if the schema has recorded a
 %        an inferred owl Restriction.
 % @param Database identifying the current schema graph.
-%% :- rdf_meta restriction(r,o).
 restriction(R,Database) :-
-    immediate_restriction(R,Database).
-restriction(R,Database) :-
-    sub_class_of(R,R2,Database),
-    restriction(R2,Database).
-restriction(R,Database) :-
-    equivalent_class(R,R2,Database),
-    restriction(R2,Database).
+    database_schema(Database,Schema),
+    restriction_(R,Schema).
+
+restriction_(R,Schema) :-
+    immediate_restriction_(R,Schema).
+restriction_(R,Schema) :-
+    sub_class_of_(R,R2,Schema),
+    restriction_(R2,Schema).
+restriction_(R,Schema) :-
+    equivalent_class_(R,R2,Schema),
+    restriction_(R2,Schema).
 
 %% no_immediate_class_SC(+Database:database -Reason:any) is nondet
 %
@@ -270,11 +285,15 @@ no_immediate_class_SC(Database, Reason) :-
 % @param Database the current graph
 restriction_on_property(CR,P,Database) :-
     database_schema(Database,Schema),
+    restriction_on_property_(CR,P,Schema).
+
+:- table restriction_on_property/3.
+restriction_on_property_(CR,P,Schema) :-
 	xrdf(Schema,CR,'http://www.w3.org/2002/07/owl#onProperty',P),
-	restriction(CR,Database).
-restriction_on_property(CR,P,Database) :-
-	strict_subsumption_property_of(P,Q,Database),
-	restriction_on_property(CR,Q,Database).
+	restriction_(CR,Schema).
+restriction_on_property_(CR,P,Schema) :-
+	strict_subsumption_property_of_(P,Q,Schema),
+	restriction_on_property_(CR,Q,Schema).
 
 %% class_or_restriction(?X:uri_or_id, +Database:database is nondet
 %
@@ -282,8 +301,12 @@ restriction_on_property(CR,P,Database) :-
 %
 % @param X A class or restriction class specified as a URI_OR_ID
 % @param Database The current graph
-class_or_restriction(X,Database) :- class(X,Database).
-class_or_restriction(X,Database) :- restriction(X,Database).
+class_or_restriction(X,Database) :-
+    database_schema(Database,Schema),
+    class_or_restriction_(X,Schema).
+
+class_or_restriction_(X,Schema) :- class_(X,Schema).
+class_or_restriction_(X,Schema) :- restriction_(X,Schema).
 
 % TODO: compound is vague, reasons should have a specification.
 
@@ -314,17 +337,21 @@ not_unique_class_SC(Database,Reason) :- not_unique_class(_,Database,Reason).
 % It may be better to treat lists programmatically through rdf rather than
 % collect them, using a derived predicate like rdf_listMembership
 %
+% @param Database Ignored
+% @param Graphs The graphs to search for the list
 % @param X The URI_OR_ID of an RDF list
 % @param L Term
-% @param Database The current graph
-collect(_,_,'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil',[]) :-
+collect(_Database,Graphs,X,List) :-
+    collect_(Graphs,X,List).
+
+collect_(_,'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil',[]) :-
     !.
-collect(Database,Database_atom,X,[H|T]) :-
-    xrdf(Database_atom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',H),
+collect_(Graphs,X,[H|T]) :-
+    xrdf(Graphs,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',H),
     !, % assume one result
-    xrdf(Database_atom,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Y),
+    xrdf(Graphs,X,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Y),
     !, % assume one result
-    collect(Database,Database_atom,Y,T).
+    collect_(Graphs,Y,T).
 
 %% sub_class_of(?Child:uri_or_id,?Parent:uri_or_id,+Database:database is nondet
 %
@@ -335,6 +362,9 @@ collect(Database,Database_atom,X,[H|T]) :-
 sub_class_of(Child,Parent,Database) :-
     % TODO: Query only schema with ask
     database_schema(Database,Schema),
+    sub_class_of_(Child,Parent,Schema).
+
+sub_class_of_(Child,Parent,Schema) :-
     xrdf(Schema,Child, 'http://www.w3.org/2000/01/rdf-schema#subClassOf', Parent).
 
 %% union_of(?Super:uri_or_id,?Sub:uri_or_id,+Database:database is nondet
@@ -346,8 +376,11 @@ sub_class_of(Child,Parent,Database) :-
 % @param Database The current graph
 union_of(C,U,Database) :-
     database_schema(Database,Schema),
+    union_of_(C,U,Schema).
+
+union_of_(C,U,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
-    collect(Database,Schema,ListObj,L),
+    collect_(Schema,ListObj,L),
     member(U,L).
 
 %% union_of_list(+Super:uri_or_id,-Sub:list(uri_or_id),+Database:database is det
@@ -359,8 +392,11 @@ union_of(C,U,Database) :-
 % @param Database The current graph
 union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
+    union_of_list_(C,UList,Schema).
+
+union_of_list_(C,UList,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#unionOf',ListObj),
-    collect(Database,Schema,ListObj,UList),
+    collect_(Schema,ListObj,UList),
     % This looks so dubious, I hope I didn't write it.
     !.
 
@@ -374,8 +410,11 @@ union_of_list(C,UList,Database) :-
 %% :- rdf_meta disjoint_union_of(r,r,o).
 disjoint_union_of(C,U,Database) :-
     database_schema(Database,Schema),
+    disjoint_union_of_(C,U,Schema).
+
+disjoint_union_of_(C,U,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
-    collect(Database,Schema,ListObj,L),
+    collect_(Schema,ListObj,L),
     member(U,L).
 
 %% disjoint_union_of_list(+Super:uri_or_id,-Sub_list:list(uri_or_id),+Database:database is det
@@ -388,8 +427,11 @@ disjoint_union_of(C,U,Database) :-
 %% :- rdf_meta disjoint_unionOf_list(r,r,o).
 disjoint_union_of_list(C,UList,Database) :-
     database_schema(Database,Schema),
+    disjoint_union_of_list_(C,UList,Schema).
+
+disjoint_union_of_list_(C,UList,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#disjointUnionOf',ListObj),
-    collect(Database,Schema,ListObj,UList),
+    collect_(Schema,ListObj,UList),
     % DUBIOUS
     !.
 
@@ -403,22 +445,27 @@ disjoint_union_of_list(C,UList,Database) :-
 %% :- rdf_meta intersection_of(r,r,o).
 intersection_of(C,I,Database) :-
     database_schema(Database,Schema),
+    intersection_of_(C,I,Schema).
+
+intersection_of_(C,I,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
-    collect(Database,Schema,ListObj,L),
+    collect_(Schema,ListObj,L),
     member(I,L).
 
-%% disjoint_union_of_list(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:database is det
+%% intersection_of_list(+Inter:uri_or_id,-Classes:list(uri_or_id),+Database:database is det
 %
 % Gives URI_OR_ID solutions as a list for which the Super URI_OR_ID is determined to be an intersection.
 %
 % @param Inter The class URI_OR_ID which is the disjoint union of other classes.
 % @param Classes The prolog list of class URI_OR_IDs which are intersected.
 % @param Database The current schema graph.
-%% :- rdf_meta intersection_of_list(r,r,o).
 intersection_of_list(C,IList,Database) :-
     database_schema(Database,Schema),
+    intersection_of_list_(C,IList,Schema).
+
+intersection_of_list_(C,IList,Schema) :-
     xrdf(Schema, C,'http://www.w3.org/2002/07/owl#intersectionOf',ListObj),
-    collect(Database,Schema,ListObj,IList),
+    collect_(Schema,ListObj,IList),
     !.
 
 %% one_of(?CC:uri_or_id,?X:uri_or_id,+Database:database is det
@@ -431,8 +478,11 @@ intersection_of_list(C,IList,Database) :-
 %% :- rdf_meta one_of(r,r,o).
 one_of(CC,X,Database) :-
     database_schema(Database,Schema),
+    one_of_(CC,X,Schema).
+
+one_of_(CC,X,Schema) :-
     xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
-    collect(Database,Schema,ListObj,OneList),
+    collect_(Schema,ListObj,OneList),
     member(X,OneList).
 
 %% one_of_list(+CC:uri_or_id,-OneList:list(uri_or_id),+Database:database is det
@@ -445,22 +495,34 @@ one_of(CC,X,Database) :-
 %% :- rdf_meta one_of_list(r,r,o).
 one_of_list(C,OneList,Database) :-
     database_schema(Database,Schema),
+    one_of_list_(C,OneList,Schema).
+
+one_of_list_(C,OneList,Schema) :-
     xrdf(Schema,C,'http://www.w3.org/2002/07/owl#oneOf',ListObj),
-    collect(Database,Schema,ListObj,OneList).
+    collect_(Schema,ListObj,OneList).
 
 %% :- rdf_meta complement_of(r,r,o).
 complement_of(CC,CN,Database) :-
     database_schema(Database,Schema),
+    complement_of_(CC,CN,Schema).
+
+complement_of_(CC,CN,Schema) :-
     xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#complementOf',CN).
 
 %% :- rdf_meta datatype_complementOf(r,r,o).
 datatype_complementOf(CC,CN,Database) :-
     database_schema(Database,Schema),
+    datatype_complementOf_(CC,CN,Schema).
+
+datatype_complementOf_(CC,CN,Schema) :-
     xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#datatypeComplementOf',CN).
 
 %% :- rdf_meta equivalent_class(r,r,o).
 equivalent_class(CC,CE,Database) :-
     database_schema(Database,Schema),
+    equivalent_class_(CC,CE,Schema).
+
+equivalent_class_(CC,CE,Schema) :-
     xrdf(Schema,CC,'http://www.w3.org/2002/07/owl#equivalentClass',CE).
 
 /*  Previous code for equivalent class.
@@ -471,13 +533,22 @@ equivalent_class(CC,CE,Database) :-
 %% :- rdf_meta equivalent_class(r,r,o).
 anonymous_equivalentClass(C,CE,Database) :-
     database_schema(Database,Schema),
-    equivalent_class(C,CE,Database),
+    anonymous_equivalentClass_(C,CE,Schema).
+
+anonymous_equivalentClass_(C,CE,Schema) :-
+    equivalent_class_(C,CE,Schema),
     % Exactly one reference to this class, or everything will go to hell.
     bagof(X,xrdf(Schema,X,_,CE), [_]).
 
 % transitive strict relation
-sub_class_strict(X,Y,Database) :- sub_class_of(X,Y,Database).
-sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y,Z, Database).
+sub_class_strict(X,Y,Database) :-
+    database_schema(Database,Schema),
+    sub_class_strict_(X,Y,Schema).
+
+sub_class_strict_(X,Y,Schema) :- sub_class_of_(X,Y,Schema).
+sub_class_strict_(X,Z,Schema) :-
+    sub_class_of_(X,Y,Schema),
+    sub_class_strict_(Y,Z,Schema).
 
 % Implements class subsumption
 % - complement_of classes do not give subsumption properly yet (unimplemented).
@@ -486,34 +557,42 @@ sub_class_strict(X,Z,Database) :- sub_class_of(X,Y,Database), sub_class_strict(Y
 %
 % static solutions first.
 %:- table subsumption_of/3.
-subsumption_of(_,'http://www.w3.org/2002/07/owl#Thing',_).
-subsumption_of(CC,CC,Database) :-
-    immediate_class_or_restriction(CC,Database).
 subsumption_of(CC,CP,Database) :-
-    sub_class_of(CC,CZ,Database),
-    subsumption_of(CZ,CP,Database).
-subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    union_of(CZ,CC,Database),
-    subsumption_of(CZ,CP,Database).
-subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    disjoint_union_of(CZ,CC,Database),
-    subsumption_of(CZ,CP,Database).
-subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    intersection_of(CC,CZ,Database),
-    subsumption_of(CZ,CP,Database).
-subsumption_of(CC,CP,Database) :-
-    anonymous_equivalentClass(CC,CZ,Database),
-    subsumption_of(CZ,CP,Database).
-subsumption_of(CC,CP,Database) :- % datatypes
-    datatype(CC,Database),
-    datatype_subsumption_of(CC,CP,Database).
+    database_schema(Database,Schema),
+    subsumption_of_(CC,CP,Schema).
+
+:- table subsumption_of_/3.
+subsumption_of_(_,'http://www.w3.org/2002/07/owl#Thing',_).
+subsumption_of_(CC,CC,Schema) :-
+    immediate_class_or_restriction_(CC,Schema).
+subsumption_of_(CC,CP,Schema) :-
+    sub_class_of_(CC,CZ,Schema),
+    subsumption_of_(CZ,CP,Schema).
+subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    union_of_(CZ,CC,Schema),
+    subsumption_of_(CZ,CP,Schema).
+subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    disjoint_union_of_(CZ,CC,Schema),
+    subsumption_of_(CZ,CP,Schema).
+subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    intersection_of_(CC,CZ,Schema),
+    subsumption_of_(CZ,CP,Schema).
+subsumption_of_(CC,CP,Schema) :-
+    anonymous_equivalentClass_(CC,CZ,Schema),
+    subsumption_of_(CZ,CP,Schema).
+subsumption_of_(CC,CP,Schema) :- % datatypes
+    datatype_(CC,Schema),
+    datatype_subsumption_of_(CC,CP,Schema).
 
 %% :- rdf_meta custom_datatype(r,o).
 custom_datatype(X,Database) :-
     database_schema(Database,Schema),
+    custom_datatype_(X,Schema).
+
+custom_datatype_(X,Schema) :-
     xrdf(Schema,X, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://www.w3.org/2000/01/rdf-schema#Datatype').
 
 /**
@@ -521,38 +600,46 @@ custom_datatype(X,Database) :-
  * datatype(-X:uri_or_id,+Database:database) is det.
  */
 %% :- rdf_meta datatype(r,o).
-datatype(X,Database) :- custom_datatype(X,Database).
-datatype(X,_) :- base_type(X).
+datatype(X,Database) :-
+    database_schema(Database,Schema),
+    datatype_(X,Schema).
+
+datatype_(X,Schema) :- custom_datatype_(X,Schema).
+datatype_(X,_) :- base_type(X).
 
 % implements strict class subsumption (CC < CP) [Needs fully instantiated arguments]
 %% :- rdf_meta strict_subsumption_of(r,r,o).
-strict_subsumption_of(CC,'http://www.w3.org/2002/07/owl#Thing',_) :- CC \= 'http://www.w3.org/2002/07/owl#Thing'.
-strict_subsumption_of('http://www.w3.org/2002/07/owl#Nothing',CP,_) :- CP \= 'http://www.w3.org/2002/07/owl#Nothing'.
 strict_subsumption_of(CC,CP,Database) :-
-    sub_class_of(CC,CP,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    union_of(CP,CC,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    intersection_of(CC,CP,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    sub_class_of(CC,CZ,Database),
-    strict_subsumption_of(CZ,CP,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    union_of(CZ,CC,Database),
-    strict_subsumption_of(CZ,CP,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    disjoint_union_of(CZ,CC,Database),
-    strict_subsumption_of(CZ,CP,Database).
-strict_subsumption_of(CC,CP,Database) :-
-    immediate_class_or_restriction(CC,Database),
-    intersection_of(CC,CZ,Database),
-    strict_subsumption_of(CZ,CP,Database).
-strict_subsumption_of(CC,CP,Database) :- % xsd and custom data types
-    datatype_strict_subsumption_of(CC,CP,Database).
+    database_schema(Database,Schema),
+    strict_subsumption_of_(CC,CP,Schema).
+
+strict_subsumption_of_(CC,'http://www.w3.org/2002/07/owl#Thing',_) :- CC \= 'http://www.w3.org/2002/07/owl#Thing'.
+strict_subsumption_of_('http://www.w3.org/2002/07/owl#Nothing',CP,_) :- CP \= 'http://www.w3.org/2002/07/owl#Nothing'.
+strict_subsumption_of_(CC,CP,Schema) :-
+    sub_class_of_(CC,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    union_of_(CP,CC,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    intersection_of_(CC,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    sub_class_of_(CC,CZ,Schema),
+    strict_subsumption_of_(CZ,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    union_of_(CZ,CC,Schema),
+    strict_subsumption_of_(CZ,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    disjoint_union_of_(CZ,CC,Schema),
+    strict_subsumption_of_(CZ,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :-
+    immediate_class_or_restriction_(CC,Schema),
+    intersection_of_(CC,CZ,Schema),
+    strict_subsumption_of_(CZ,CP,Schema).
+strict_subsumption_of_(CC,CP,Schema) :- % xsd and custom data types
+    datatype_strict_subsumption_of_(CC,CP,Schema).
 
 
 
@@ -574,21 +661,24 @@ basetype_subsumption_of(Sub,Super) :-
  * Implements the subsumption latice for datatypes by making use of reflexivity and
  * base_type_parent\2.
  */
-%% :- rdf_meta datatype_subsumption_of(r,r).
-datatype_subsumption_of(T,T,Database) :- datatype(T,Database).
 datatype_subsumption_of(Sub,Super,Database) :-
-    custom_datatype(Sub,Database),
-    union_of(Super,Sub,Database).
-datatype_subsumption_of(Sub,Super,Database) :-
-    custom_datatype(Sub,Database),
-    intersection_of(Sub,Super,Database).
-datatype_subsumption_of(Sub,Super,Database) :-
+    database_schema(Database,Schema),
+    datatype_subsumption_of(Sub,Super,Schema).
+
+datatype_subsumption_of_(T,T,Schema) :- datatype_(T,Schema).
+datatype_subsumption_of_(Sub,Super,Schema) :-
+    custom_datatype_(Sub,Schema),
+    union_of_(Super,Sub,Schema).
+datatype_subsumption_of_(Sub,Super,Schema) :-
+    custom_datatype_(Sub,Schema),
+    intersection_of_(Sub,Super,Schema).
+datatype_subsumption_of_(Sub,Super,Schema) :-
     % This only works because of the strict hierarchy (no derived union / intersections)
-    custom_datatype(Sub,Database),
-    datatype_complementOf(Sub,CN,Database),
-    \+ datatype_subsumption_of(CN,Super,Database).
-datatype_subsumption_of(Sub,Super,Database) :-
-    base_type_parent(Sub,Parent), datatype_subsumption_of(Parent,Super,Database).
+    custom_datatype_(Sub,Schema),
+    datatype_complementOf_(Sub,CN,Schema),
+    \+ datatype_subsumption_of_(CN,Super,Schema).
+datatype_subsumption_of_(Sub,Super,Schema) :-
+    base_type_parent(Sub,Parent), datatype_subsumption_of_(Parent,Super,Schema).
 
 /**
  * datatype_subsumption_of(?Sub,?Super,+Database:database) is nondet.
@@ -597,12 +687,16 @@ datatype_subsumption_of(Sub,Super,Database) :-
  * base_type_parent/2.
  */
 %% :- rdf_meta datatype_strict_subsumption_of(r,r).
-datatype_strict_subsumption_of(Sub,Super,_) :-
-    base_type_parent(Sub,Super).
 datatype_strict_subsumption_of(Sub,Super,Database) :-
+    database_schema(Database,Schema),
+    datatype_strict_subsumption_of_(Sub,Super,Schema).
+
+datatype_strict_subsumption_of_(Sub,Super,_) :-
+    base_type_parent(Sub,Super).
+datatype_strict_subsumption_of_(Sub,Super,Schema) :-
     % DDD probably need one more clause for each owl custom build property
     base_type_parent(Sub,Parent),
-    datatype_subsumption_of(Parent,Super,Database).
+    datatype_subsumption_of_(Parent,Super,Schema).
 
 /**
  * orphan_class_SC(+Database:database-Reason:vio) is nondet.
@@ -704,34 +798,52 @@ rdfs_property(P) :- rdfs_object_property(P).
 %:- rdf_meta rdf_property(r,o).
 rdf_property(P,Database) :-
     database_schema(Database,Schema),
+    rdf_property_(P,Schema).
+
+rdf_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#Property').
 
 %:- rdf_meta datatype_property(r,o).
 datatype_property(P,Database) :-
     database_schema(Database,Schema),
+    datatype_property_(P,Schema).
+
+datatype_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
-datatype_property(P,_) :- rdfs_datatype_property(P).
+datatype_property_(P,_) :- rdfs_datatype_property(P).
 
 %:- rdf_meta annotation_property(r,o).
 annotation_property(P,Database) :-
     database_schema(Database,Schema),
+    annotation_property_(P,Schema).
+
+annotation_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#AnnotationProperty').
 
 %:- rdf_meta functional_property(r,o).
 functional_property(P,Database) :-
     database_schema(Database,Schema),
+    functional_property_(P,Schema).
+
+functional_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#FunctionalProperty').
 
 %:- rdf_meta inverse_functional_property(r,o).
 inverse_functional_property(P,Database) :-
     database_schema(Database,Schema),
+    inverse_functional_property_(P,Schema).
+
+inverse_functional_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#InverseFunctionalProperty').
 
 %:- rdf_meta object_property(r,o).
 object_property(P,Database) :-
     database_schema(Database,Schema),
+    object_property_(P,Schema).
+
+object_property_(P,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
-object_property(P,_) :- rdfs_object_property(P).
+object_property_(P,_) :- rdfs_object_property(P).
 
 /**
  * property(?P,+Database:database) is nondet.
@@ -740,12 +852,16 @@ object_property(P,_) :- rdfs_object_property(P).
  */
 %:- rdf_meta property(r,o).
 property(P,Database) :-
+    database_schema(Database,Schema),
+    property_(P,Schema).
+
+property_(P,Schema) :-
     % Don't predicate over annotations (even if they are otherwise declared as properties).
-    (   annotation_property(P,Database)
+    (   annotation_property_(P,Schema)
     *-> fail
-    ;   (   datatype_property(P, Database)
-        ;   object_property(P,Database)
-        ;   rdf_property(P,Database)
+    ;   (   datatype_property_(P, Schema)
+        ;   object_property_(P,Schema)
+        ;   rdf_property_(P,Schema)
         )
     ).
 
@@ -795,6 +911,9 @@ not_unique_property_SC(Database,Reason) :-
 %:- rdf_meta sub_property_of(r,r,o).
 sub_property_of(X,Y,Database) :-
     database_schema(Database,Schema),
+    sub_property_of_(X,Y,Schema).
+
+sub_property_of_(X,Y,Schema) :-
     xrdf(Schema,X,'http://www.w3.org/2000/01/rdf-schema#subPropertyOf',Y).
 
 /**
@@ -802,35 +921,42 @@ sub_property_of(X,Y,Database) :-
  *
  * Transitive reflexive closure of Subproperty relation.
  */
-%:- rdf_meta subsumption_properties_of(r,r,o).
-subsumption_properties_of(PC,PC,_).
 subsumption_properties_of(PC,PP,Database) :-
-    sub_property_of(PC, PZ, Database),
-    subsumption_properties_of(PZ,PP,Database).
-subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
-    object_property(PC,Database).
-subsumption_properties_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
-    datatype_property(PC,Database).
+    database_schema(Database,Schema),
+    subsumption_properties_of_(PC,PP,Schema).
+
+subsumption_properties_of_(PC,PC,_).
+subsumption_properties_of_(PC,PP,Schema) :-
+    sub_property_of_(PC, PZ, Schema),
+    subsumption_properties_of_(PZ,PP,Schema).
+subsumption_properties_of_(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Schema) :-
+    object_property_(PC,Schema).
+subsumption_properties_of_(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Schema) :-
+    datatype_property_(PC,Schema).
 
 /**
  * strict_subsumption_property_of(?PChild,?PParent,-Database:database) is nondet.
  *
  * Non-reflexive subsumption relation for properties in Database.
  */
-%:- rdf_meta strict_subsumption_property_of(r,r,o).
 strict_subsumption_property_of(PC,PP,Database) :-
-    sub_property_of(PC, PP, Database).
-strict_subsumption_property_of(PC,PP,Database) :-
-    sub_property_of(PC, PZ, Database),
-    subsumption_properties_of(PZ,PP,Database).
-strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Database) :-
+    database_schema(Database,Schema),
+    strict_subsumption_property_of_(PC,PP,Schema).
+
+:- table strict_subsumption_property_of_/3.
+strict_subsumption_property_of_(PC,PP,Schema) :-
+    sub_property_of_(PC, PP, Schema).
+strict_subsumption_property_of_(PC,PP,Schema) :-
+    sub_property_of_(PC, PZ, Schema),
+    subsumption_properties_of_(PZ,PP,Schema).
+strict_subsumption_property_of_(PC,'http://www.w3.org/2002/07/owl#topObjectProperty',Schema) :-
     % What is this?
     PC \= 'http://www.w3.org/2002/07/owl#top_objectProperty',
-    object_property(PC,Database).
-strict_subsumption_property_of(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Database) :-
+    object_property_(PC,Schema).
+strict_subsumption_property_of_(PC,'http://www.w3.org/2002/07/owl#topDataProperty',Schema) :-
     % What is this?
     PC \= 'http://www.w3.org/2002/07/owl#top_dataProperty',
-    datatype_property(PC,Database).
+    datatype_property_(PC,Schema).
 
 orphan_property(X,Y,Database,Reason) :-     % is a subproperty of Y but Y is not a valid property
     sub_property_of(X,Y,Database),
@@ -945,6 +1071,10 @@ most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
  */
 domain(P,D,Database) :-
     database_schema(Database,Schema),
+    domain_(P,D,Schema).
+
+:- table domain_/3.
+domain_(P,D,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/2000/01/rdf-schema#domain',D).
 
 /**

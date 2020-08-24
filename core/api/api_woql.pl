@@ -1,10 +1,10 @@
-:- module(api_woql, [woql_query_json/7]).
+:- module(api_woql, [woql_query_json/8]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
-woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, JSON) :-
+woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, JSON) :-
     woql_context(Woql_Prefixes),
     % No descriptor to work with until the query sets one up
     (   some(Path) = Path_Option
@@ -18,6 +18,7 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, JSON) :
         Context = (Empty.put(_{system: System_DB,
                                files: Files,
                                authorization : Auth,
+                               all_witnesses : All_Witnesses,
                                commit_info : Commit_Info}))
     ;   throw(error(unknown_path_option(Path_Option), _))
     ),

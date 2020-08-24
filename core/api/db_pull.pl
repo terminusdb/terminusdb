@@ -11,9 +11,7 @@
 
 :- meta_predicate pull(+, +, +, +, +, 3, -).
 pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fetch_Predicate,
-     status{ fetch_status : Head_Has_Updated,
-             branch_status : Branch_Status
-           }) :-
+     Status) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Our_Branch_Path,Our_Branch_Descriptor),
@@ -24,7 +22,7 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
 
     do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
                open_descriptor(Our_Branch_Descriptor, _)),
-              error(not_a_valid_local_branch(Our_Branch_Descriptor))),
+              error(not_a_valid_local_branch(Our_Branch_Descriptor),_)),
 
     Our_Repository_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repository_Descriptor = (Our_Repository_Descriptor.put(_{ repository_name : Remote_Name })),
@@ -35,7 +33,7 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                               },
 
     do_or_die(open_descriptor(Their_Branch_Descriptor, _),
-              error(not_a_valid_remote_branch(Their_Branch_Descriptor))),
+              error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
 
     resolve_absolute_string_descriptor(Their_Repository_Path, Their_Repository_Descriptor),
     % 1. fetch
@@ -43,15 +41,25 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                  _New_Head_Layer_Id, Head_Has_Updated),
 
     % 2. try fast forward - alert front end if impossible.
-    fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
-    Branch_Status = branch_status{
-                        '@type' : "api:PullReport",
-                        'api:pull_status': Inner_Status
-                    },
-    (   Applied_Commit_Ids = []
-    ->  Inner_Status = "api:pull_unchanged"
-    ;   Inner_Status = "api:pull_fast_forwarded"
+    catch_with_backtrace(
+        (   fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
+            Status = status{
+                         'api:pull_status': Inner_Status,
+                         'api:fetch_status' : Head_Has_Updated
+                     },
+            (   Applied_Commit_Ids = []
+            ->  Inner_Status = "api:pull_unchanged"
+            ;   Inner_Status = "api:pull_fast_forwarded"
+            )
+        ),
+        E,
+        (   E = error(Inner_E,Ctx),
+            (   Inner_E = divergent_history(Common_Commit)
+            ->  throw(error(pull_divergent_history(Common_Commit,Head_Has_Updated),Ctx))
+            ;   Inner_E = no_common_history
+            ->  throw(error(pull_no_common_history(Head_Has_Updated),Ctx))
+            ;   throw(E))
+        )
     ).
-
 
 

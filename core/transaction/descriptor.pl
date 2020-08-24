@@ -15,7 +15,9 @@
               make_branch_descriptor/4,
               make_branch_descriptor/3,
               transactions_to_map/2,
-              collection_descriptor_graph_filter_graph_descriptor/3
+              collection_descriptor_graph_filter_graph_descriptor/3,
+              collection_descriptor_prefixes/2,
+              collection_descriptor_default_write_graph/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -721,7 +723,7 @@ instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Obj
 collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
     Transaction_Object.descriptor = Collection_Descriptor,
     !.
-collection_descriptor_transaction_object(Collection_Descriptor, [Transaction_Object|Transaction_Objects], Transaction_Object) :-
+collection_descriptor_transaction_object(Collection_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-
     collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
 
 read_write_object_to_name(Object, Name) :-
@@ -892,6 +894,114 @@ collection_descriptor_graph_filter_graph_descriptor(
                   type: Type,
                   name : "main"}) :-
     !.
+
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    system_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{doc: 'terminusdb:///system/data/'}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    id_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    label_descriptor{} :< Descriptor,
+    !,
+    atomic_list_concat(['terminusdb:///data/'], Doc_Prefix),
+    Prefixes = _{doc: Doc_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    database_descriptor{} :< Descriptor,
+    !,
+    atomic_list_concat(['terminusdb:///repository/data/'], Doc_Prefix),
+    Prefixes = _{doc: Doc_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    repository_descriptor{} :< Descriptor,
+    !,
+    atomic_list_concat(['terminusdb:///commits/data/'], Commit_Document_Prefix),
+    Prefixes = _{doc : Commit_Document_Prefix}.
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    % Note: possible race condition.
+    % We're querying the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
+    branch_descriptor{
+        repository_descriptor: Repository_Descriptor
+    } :< Descriptor,
+    !,
+    repository_prefixes(Repository_Descriptor, Prefixes).
+collection_descriptor_prefixes_(Descriptor, Prefixes) :-
+    % We don't know which documents you are retrieving
+    % because we don't know the branch you are on,
+    % and you can't write so it's up to you to set this
+    % in the query.
+    commit_descriptor{} :< Descriptor,
+    !,
+    Prefixes = _{}.
+
+collection_descriptor_prefixes(Descriptor, Prefixes) :-
+    default_prefixes(Default_Prefixes),
+    collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
+    merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
+
+collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
+    !,
+    Graph_Descriptor = system_graph{
+                           type : instance,
+                           name : "main"
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database } = Descriptor,
+    !,
+    Graph_Descriptor = repo_graph{
+                           organization_name : Organization,
+                           database_name : Database,
+                           type : instance,
+                           name : "main"
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    repository_descriptor{
+        database_descriptor : Database_Descriptor,
+        repository_name : Repository_Name
+    } = Descriptor,
+    !,
+    database_descriptor{ organization_name : Organization,
+                         database_name : Database_Name } = Database_Descriptor,
+    Graph_Descriptor = commit_graph{
+                           organization_name : Organization,
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           type : instance,
+                           name : "main"
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    branch_descriptor{ branch_name : Branch_Name,
+                       repository_descriptor : Repository_Descriptor
+                     } :< Descriptor,
+    !,
+    repository_descriptor{
+        database_descriptor : Database_Descriptor,
+        repository_name : Repository_Name
+    } :< Repository_Descriptor,
+    database_descriptor{
+        organization_name : Organization,
+        database_name : Database_Name
+    } :< Database_Descriptor,
+
+    Graph_Descriptor = branch_graph{
+                           organization_name : Organization,
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           branch_name : Branch_Name,
+                           type : instance,
+                           name : "main"
+                       }.
+collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
+    label_descriptor{ label: Label} :< Descriptor,
+    !,
+    text_to_string(Label, Label_String),
+    Graph_Descriptor = labelled_graph{label:Label_String,
+                                      type: instance,
+                                      name:"main"
+                                     }.
+collection_descriptor_default_write_graph(_, empty).
 
 :- begin_tests(open_descriptor).
 :- use_module(core(util/test_utils)).

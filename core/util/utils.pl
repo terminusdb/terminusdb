@@ -650,6 +650,10 @@ snoc([First|Tail],Last,[First|Rest]) :-
  * Joins a list of strings/atoms into a single string.
  */
 join(List, Sep, Atom) :-
+    do_or_die(
+        (   ground(List),
+            ground(Sep)),
+        error(instantiation_error,_)),
     intersperse(Sep,List,New_List),
     interpolate_string(New_List, Atom).
 
