@@ -489,6 +489,12 @@ api:RebaseSchemaValidationError
   rdfs:comment "The schema did not validate after applicaton of a commit in rebase."@en ;
   rdfs:subClassOf api:Error, api:WithTheirCommit, api:WithWitness .
 
+api:SchemaValidationError
+  a owl:Class ;
+  rdfs:label "Schema Validation Error"@en ;
+  rdfs:comment "The schema did not validate after update."@en ;
+  rdfs:subClassOf api:Error, api:WithWitness .
+
 api:RebaseContinueOnValidCommit
   a owl:Class ;
   rdfs:label "Rebase Continue On Invalid Commit"@en ;
