@@ -557,6 +557,15 @@ triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
                                       'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
+triples_error_handler(error(schema_check_failure([Witness|_]), _), Request) :-
+    format(string(Msg), "Schema did not validate after this update", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:SchemaValidationError',
+                                      'api:witness' : Witness},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(triples_endpoint).
@@ -3462,9 +3471,8 @@ graph_handler(post, Path, Request, System_Db, Auth) :-
         do_or_die(graph_error_handler(E, 'api:CreateGraphErrorResponse', Request),
                   E)).
 graph_handler(delete, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
+    do_or_die((   get_payload(Document, Request),
+                  _{ commit_info : Commit_Info } :< Document),
               error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
