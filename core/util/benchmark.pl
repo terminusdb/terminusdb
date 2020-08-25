@@ -20,6 +20,8 @@ benchmark_start(Stream) :-
     asserta(benchmark_file(Stream)).
 
 benchmark_stop() :-
+    benchmark_file(S),
+    flush_output(S),
     retractall(benchmark_file(_)).
 
 :- thread_local benchmark_subject/1.
