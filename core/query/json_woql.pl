@@ -118,7 +118,9 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     predsort(woql_index_sort, JSON, JSON_Sorted),
     length(JSON, Len),
     End is Len - 1,
-    numlist(0,End,Indexes),
+    (   End = -1
+    ->  Indexes = []
+    ;   numlist(0,End,Indexes)),
     maplist({Path}/[Q,I,W]>>(
                 json_to_woql_ast(Q,W,[I|Path])
             ), JSON_Sorted, Indexes, WOQL).
