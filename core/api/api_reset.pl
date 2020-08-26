@@ -7,7 +7,7 @@
 :- use_module(core(util/test_utils)).
 
 api_reset(System_DB, Auth, Path, Ref) :-
-    
+
     do_or_die(
         resolve_absolute_string_descriptor(Path, Branch_Descriptor),
         error(invalid_absolute_path(Path),_)),
@@ -29,7 +29,7 @@ api_reset(System_DB, Auth, Path, Ref) :-
 
     do_or_die(
         Repo = Ref_Repo,
-        error(reset_different_repositories(Repo,Ref_Repo),_)),
+        error(different_repositories(Repo,Ref_Repo),_)),
 
     do_or_die(
         commit_id_uri(Repo,Commit_Id,Commit_Uri),

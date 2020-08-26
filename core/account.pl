@@ -16,6 +16,7 @@
               user_object/3,
               super_user_authority/1,
               check_descriptor_auth/4,
+              is_super_user/1,
               is_super_user/2,
 
               % user_management.pl

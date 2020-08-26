@@ -70,7 +70,11 @@
               api_squash/6,
 
               % api_reset.pl
-              api_reset/4
+              api_reset/4,
+
+              % api_optimize.pl
+              api_optimize/3
+
           ]).
 
 :- use_module(api/init).
@@ -92,3 +96,4 @@
 :- use_module(api/api_woql).
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).
+:- use_module(api/api_optimize).

@@ -3873,6 +3873,305 @@ role_handler(post, Request, System_DB, Auth) :-
         do_or_die(woql_error_handler(E, Request),
                   E)).
 
+%%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * squash_handler(Mode,Path,Request,System,Auth) is det.
+ *
+ * Squash commit chain to a new commit
+ */
+squash_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_info : Commit_Info } :< Document),
+        error(bad_api_document(Document, [commit_info]), _)),
+
+    catch_with_backtrace(
+        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit),
+            cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
+                                       'api:commit' : Commit,
+                                       'api:old_commit' : Old_Commit,
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(squash_error_handler(Error, Request),
+                  Error)).
+
+squash_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+squash_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+squash_error_handler(error(unresolvable_absolute_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s can not be resolved to a resource", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(squash_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(terminus_store)).
+
+test(squash_a_branch, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/test",
+    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Commit_Info_1 = commit_info{
+                      author : "me",
+                      message: "first commit"
+                  },
+
+    create_context(Descriptor, Commit_Info_1, Context1),
+
+    with_transaction(
+        Context1,
+        ask(Context1,
+            insert(a,b,c)),
+        _),
+
+    Commit_Info_2 = commit_info{
+                        author : "me",
+                        message: "second commit"
+                    },
+
+    create_context(Descriptor, Commit_Info_2, Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    descriptor_commit_id_uri((Descriptor.repository_descriptor),
+                             Descriptor,
+                             Commit_Id, _Commit_Uri),
+
+    Commit_Info = commit_info{
+                      author : "me",
+                      message: "Squash"
+                  },
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_info: Commit_Info}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    JSON = _{'@type':"api:SquashResponse",
+             'api:commit': New_Commit_Path,
+             'api:old_commit' : Old_Commit_Path,
+             'api:status':"api:success"},
+    resolve_absolute_string_descriptor(New_Commit_Path, Commit_Descriptor),
+    open_descriptor(Commit_Descriptor, Transaction),
+
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_),
+    findall(X-Y-Z,ask(Commit_Descriptor,t(X,Y,Z)), Triples),
+    sort(Triples,Sorted),
+    sort([a-b-c,e-f-g],Correct),
+    ord_seteq(Sorted, Correct),
+
+    resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
+    commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
+
+:- end_tests(squash_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * reset_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+reset_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_descriptor : Ref } :< Document),
+        error(bad_api_document(Document, [commit_descriptor]), _)),
+
+    catch_with_backtrace(
+        (   api_reset(System_DB, Auth, Path, Ref),
+            cors_reply_json(Request, _{'@type' : 'api:ResetResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(reset_error_handler(Error, Request),
+                  Error)).
+
+reset_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_commit_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a commit descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotACommitDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(different_repositories(Descriptor1,Descriptor2),_),
+                    Request) :-
+    resolve_absolute_string_descriptor(Path1, Descriptor1),
+    resolve_absolute_string_descriptor(Path2, Descriptor2),
+    format(string(Msg), "The repository of the path to be reset ~s is not in the same repository as the commit which is in ~s", [Path1,Path2]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:DifferentRepositoriesError",
+                                       'api:source_absolute_descriptor' : Path1,
+                                       'api:target_absolute_descriptor': Path2
+                                     }
+                     },
+                    [status(400)]).
+reset_error_handler(error(branch_does_not_exist(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+
+%%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * optimize_handler(Mode,DB,Request) is det.
+ *
+ * Optimize a resource
+ */
+optimize_handler(post, Path, Request, System_DB, Auth) :-
+    catch_with_backtrace(
+        (   api_optimize(System_DB, Auth, Path),
+            cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(optimize_error_handler(Error, Request),
+                  Error)).
+
+optimize_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+optimize_error_handler(error(not_a_valid_descriptor_for_optimization(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not an optimizable descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotAValidOptimizationDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(optimize_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(optimize_system, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    create_db_without_schema("admin", "test2"),
+    atomic_list_concat([Server, '/api/optimize/_system'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:OptimizeResponse",
+             'api:status':"api:success"},
+
+    open_descriptor(system_descriptor{}, Transaction),
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_).
+
+:- end_tests(optimize_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
                 [method(Method),
