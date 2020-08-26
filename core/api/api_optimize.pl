@@ -103,4 +103,115 @@ test(optimize_system,
     database_exists("admin","testdb"),
     database_exists("admin","testdb2").
 
+
+test(optimize_repo,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 2" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    resolve_absolute_string_descriptor(Repo_Path,Repository_Descriptor),
+
+    api_optimize(system_descriptor{}, Auth, Repo_Path),
+
+    open_descriptor(Repository_Descriptor, Transaction),
+    [Instance_Object] = (Transaction.instance_objects),
+    Layer = (Instance_Object.read),
+    % No parent
+    \+ parent(Layer,_),
+
+    has_branch(Repository_Descriptor, "main"),
+    findall(X-Y-Z,
+            ask(Descriptor,
+                t(X,Y,Z)),
+            Triples),
+    sort(Triples,Sorted),
+    sort([a-b-c,e-f-g],Correct),
+    ord_seteq(Sorted, Correct).
+
+
+test(optimize_db,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 2" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    resolve_absolute_string_descriptor(Database_Path,Database_Descriptor),
+
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    open_descriptor(Database_Descriptor, Transaction),
+    [Instance_Object] = (Transaction.instance_objects),
+    Layer = (Instance_Object.read),
+    % No parent
+    \+ parent(Layer,_),
+
+    once(has_repository(Database_Descriptor, "local")),
+
+    findall(X-Y-Z,
+            ask(Descriptor,
+                t(X,Y,Z)),
+            Triples),
+    sort(Triples,Sorted),
+    sort([a-b-c,e-f-g],Correct),
+    ord_seteq(Sorted, Correct).
+
 :- end_tests(optimize).
