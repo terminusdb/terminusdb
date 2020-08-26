@@ -4099,6 +4099,78 @@ reset_error_handler(error(branch_does_not_exist(Descriptor), _), Request) :-
                      },
                     [status(400)]).
 
+:- begin_tests(reset_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(reset, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "testdb"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/testdb",
+
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    descriptor_commit_id_uri(Repository_Descriptor,
+                             Descriptor,
+                             Commit_Id,
+                             _Commit_Uri),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 2" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    writeq('iamhere'),
+    resolve_relative_descriptor(Repository_Descriptor,
+                                ["commit",Commit_Id],
+                                Commit_Descriptor),
+
+    resolve_absolute_string_descriptor(Ref,Commit_Descriptor),
+
+    atomic_list_concat([Server, '/api/reset/admin/testdb'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_descriptor : Ref }),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    writeq(JSON),
+    JSON = _{'@type':"api:ResetResponse",
+             'api:status':"api:success"},
+
+    findall(X-Y-Z,
+            ask(Descriptor,
+                t(X,Y,Z)),
+            Triples),
+
+    [a-b-c] = Triples.
+
+:- end_tests(reset_endpoint).
+
 
 %%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
