@@ -102,6 +102,22 @@ api:UnresolvableAbsoluteDescriptor
   rdfs:comment "An absolute descriptor whose corresponding resource can not be found has been supplied."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
 
+api:UnresolvableCommitId
+  a owl:Class ;
+  rdfs:label "Unresolvable Commit ID"@en ;
+  rdfs:comment "A reference was made to a commit id which does not exist."@en ;
+  rdfs:subClassOf api:Error, api:WithCommitId .
+
+api:WithCommitId
+  a owl:Class .
+
+api:commit_id
+  a owl:DatatypeProperty ;
+  rdfs:comment "The property points to a commit id string"@en ;
+  rdfs:label "commit id"@en ;
+  rdfs:domain api:WithCommitId ;
+  rdfs:range xsd:string .
+
 api:UnresolvableTargetAbsoluteDescriptor
   a owl:Class ;
   rdfs:label "Unresolvable Target Absolute Descriptor"@en ;
@@ -674,6 +690,12 @@ api:NotABranchDescriptorError
   rdfs:comment "The supplied descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 
+api:NotACommitDescriptorError
+  a owl:Class ;
+  rdfs:label "Not A Commit Descriptor"@en ;
+  rdfs:comment "The supplied descriptor is not a commit descriptor, but a commit descriptor is required."@en ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+
 api:NotATargetBranchDescriptorError
   a owl:Class ;
   rdfs:label "Not A Target Branch Descriptor"@en ;
@@ -740,6 +762,12 @@ api:BranchAlreadyExists
   a owl:Class ;
   rdfs:label "Branch Already Exists"@en ;
   rdfs:comment "The associated branch already exists."@en ;
+  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor .
+
+api:BranchDoesNotExists
+  a owl:Class ;
+  rdfs:label "Branch Does Not Exist"@en ;
+  rdfs:comment "The branch described does not exist."@en ;
   rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor .
 
 api:WithGraphName

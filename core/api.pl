@@ -67,7 +67,10 @@
               woql_query_json/8,
 
               % api_squash.pl
-              api_squash/6
+              api_squash/6,
+
+              % api_reset.pl
+              api_reset/4
           ]).
 
 :- use_module(api/init).
@@ -88,3 +91,4 @@
 :- use_module(api/api_frame).
 :- use_module(api/api_woql).
 :- use_module(api/api_squash).
+:- use_module(api/api_reset).
