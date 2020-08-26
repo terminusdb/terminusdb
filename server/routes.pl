@@ -4143,7 +4143,6 @@ test(reset, [
             insert(e,f,g)),
         _),
 
-    writeq('iamhere'),
     resolve_relative_descriptor(Repository_Descriptor,
                                 ["commit",Commit_Id],
                                 Commit_Descriptor),
@@ -4158,7 +4157,6 @@ test(reset, [
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
 
-    writeq(JSON),
     JSON = _{'@type':"api:ResetResponse",
              'api:status':"api:success"},
 
