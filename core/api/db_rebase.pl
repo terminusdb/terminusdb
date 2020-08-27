@@ -172,21 +172,26 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     benchmark(after_checks),
 
     branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
-    branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
-    commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
 
+    % Note: What if there is nothing to rebase?  Should fail or do nothing...
     descriptor_commit_id_uri(Their_Repo_Context, Their_Ref_Descriptor, Their_Commit_Id, Their_Commit_Uri),
 
-    benchmark(after_commit_lookups),
-
-    (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
-        benchmark(after_ancestor_lookup)
-    ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
+    (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
+        commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri)
+    ->  (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
+            benchmark(after_ancestor_lookup)
+        ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
+        % We have no common history
+        ;   Optional_Common_Commit_Id = none,
+            commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
+            benchmark(history_lookup_1),
+            commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History),
+            benchmark(history_lookup_2))
+    % Branch head commit may not exist if our branch is empty...
     ;   Optional_Common_Commit_Id = none,
-        commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
-        benchmark(history_lookup_1),
-        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History),
-        benchmark(history_lookup_2)),
+        Our_Branch_History = [],
+        commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)
+    ),
 
     benchmark(before_copy),
 
@@ -224,7 +229,8 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
     benchmark(after_application),
 
-    unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri),
+    ignore(unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri)),
+
     link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
 
     benchmark(after_commit_branch_relink),
@@ -591,5 +597,48 @@ test(rebase_with_new_graph,
         _),
 
     rebase_on_branch(system_descriptor{}, Auth, Main_Path, Second_Path, "rebaser", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
+
+test(rebase_fast_forward_from_nothing,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))])
+:-
+    Main_Path = "admin/foo",
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, some(Main_Path), _),
+
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    descriptor_commit_id_uri((Second_Descriptor.repository_descriptor),
+                             Second_Descriptor,
+                             Commit_Id1,
+                             _Commit_Uri1),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
+    with_transaction(Second_Context2,
+                     ask(Second_Context2,
+                         insert(g,h,i)),
+                     _),
+
+    super_user_authority(Auth),
+
+    descriptor_commit_id_uri((Second_Descriptor.repository_descriptor),
+                             Second_Descriptor,
+                             Commit_Id2,
+                             _Commit_Uri2),
+
+    atomic_list_concat(['admin/foo/local/commit/',Commit_Id2], Commit_Path),
+
+    rebase_on_branch(system_descriptor{}, Auth, Main_Path, Commit_Path, "rebaser",  [], Optional_Common_Commit_Id, Their_Applied_Commit_Ids, []),
+    Optional_Common_Commit_Id = none,
+    [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
 
 :- end_tests(rebase).
