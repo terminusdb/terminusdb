@@ -181,6 +181,15 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Select',JSON,WOQL,Path)
     json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
                                          |Path]),
     WOQL = select(WOQL_Args,Sub_WOQL).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Distinct',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
+      'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON,
+    json_to_woql_ast(Indexed_Variables,WOQL_Args,
+                     ['http://terminusdb.com/schema/woql#variable_list'
+                      |Path]),
+    json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
+                                         |Path]),
+    WOQL = distinct(WOQL_Args,Sub_WOQL).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#And',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON,
     deindex_list('http://terminusdb.com/schema/woql#query',
