@@ -2221,6 +2221,7 @@ test(rebase_divergent_history, [
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -2366,6 +2367,7 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
@@ -2441,6 +2443,7 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
 :- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 push_handler(post,Path,Request, System_DB, Auth) :-
@@ -2814,6 +2817,7 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
 :- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pull_handler(post,Path,Request, System_DB, Local_Auth) :-
