@@ -1667,6 +1667,7 @@ test(clone_remote, [
 :- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 fetch_handler(post,Path,Request, System_DB, Auth) :-
