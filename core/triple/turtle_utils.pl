@@ -34,7 +34,7 @@
 :- use_module(literals).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-
+:- use_module(core(triple/casting)).
 :- use_module(library(semweb/turtle)).
 
 /*
@@ -97,10 +97,16 @@ insert_turtle_graph(Context,TTL) :-
     ->  true
     ;   throw(error(unknown_graph(Context.write_graph), _))),
 
+    % Setup blank nodes
+    get_dict(prefixes,Context, Prefixes),
+    (   get_dict(doc,Prefixes,Doc)
+    ->  random_idgen(Doc,['Blank_Node'],Blank_Node_Prefix)
+    ;   random_idgen('terminusdb:///data/Blank_Node',[],Blank_Node_Prefix)),
+
     coerce_literal_string(TTL, TTLS),
     setup_call_cleanup(
         open_string(TTLS, TTLStream),
-        insert_turtle_graph_(Context, Graph, TTLStream,_),
+        insert_turtle_graph_(Context, Graph, TTLStream, Blank_Node_Prefix, _),
         close(TTLStream)
     ).
 
@@ -110,13 +116,13 @@ add_all_turtle_triples(Graph,Triples,_Resource) :-
                insert(Graph,X,P,Y,_)
            )).
 
-insert_turtle_graph_(Database, Graph, New_Graph_Stream, Meta_Data) :-
+insert_turtle_graph_(Database, Graph, New_Graph_Stream, Blank_Node_Prefix, Meta_Data) :-
     with_transaction(
         Database,
         (   rdf_process_turtle(
                 New_Graph_Stream,
                 add_all_turtle_triples(Graph),
-                [encoding(utf8)])
+                [encoding(utf8),anon_prefix(Blank_Node_Prefix)])
         ),
         Meta_Data
     ).
