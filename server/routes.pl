@@ -4259,6 +4259,26 @@ test(optimize_system, [
                 [method(Method),
                  prefix,
                  methods([options,get])]).
+:- http_handler(root(clone), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(collaborate), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(newdb), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(profile), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(hub), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
 
 /*
  * console_handler(+Method,+Request) is det.
