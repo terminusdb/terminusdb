@@ -18,6 +18,7 @@ stages:
     if: branch = rc AND type != pull_request
   - name: deploy_tag
     if: tag =~ ^v AND type != pull_request
+  - trigger_appimage
 
 jobs:
   include:
@@ -37,7 +38,6 @@ jobs:
         - docker build -t terminusdb/terminusdb-server:dev .
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push terminusdb/terminusdb-server:dev
-        - bash .ci/trigger_appimage.sh
 
     - stage: deploy_canary
       script:
@@ -57,3 +57,7 @@ jobs:
         - docker build -t "terminusdb/terminusdb-server:$TRAVIS_TAG" .
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push "terminusdb/terminusdb-server:$TRAVIS_TAG"
+
+    - stage: trigger_appimage
+      script:
+        - bash .ci/trigger_appimage.sh
