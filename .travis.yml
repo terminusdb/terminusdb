@@ -23,7 +23,7 @@ stages:
 jobs:
   include:
     - stage: build
-    - script:
+      script:
         - docker build -t terminusdb/terminusdb-server:latest .
         - docker run $DOCKERENVS -it terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
 
