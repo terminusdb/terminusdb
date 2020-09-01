@@ -90,6 +90,26 @@ api:absolute_descriptor
   rdfs:domain api:WithAbsoluteDescriptor ;
   rdfs:range xsd:string .
 
+api:WithSourceAbsoluteDescriptor
+  a owl:Class .
+
+api:source_absolute_descriptor
+  a owl:DatatypeProperty ;
+  rdfs:label "source absolute descriptor"@en ;
+  rdfs:comment "Points to an absolute descriptor string of a source."@en ;
+  rdfs:domain api:WithSourceAbsoluteDescriptor ;
+  rdfs:range xsd:string .
+
+api:WithTargetAbsoluteDescriptor
+  a owl:Class .
+
+api:target_absolute_descriptor
+  a owl:DatatypeProperty ;
+  rdfs:label "taret absolute descriptor"@en ;
+  rdfs:comment "Points to an absolute descriptor string of a target."@en ;
+  rdfs:domain api:WithTargetAbsoluteDescriptor ;
+  rdfs:range xsd:string .
+
 api:BadAbsoluteDescriptor
   a owl:Class ;
   rdfs:label "Bad Absolute Descriptor"@en ;
@@ -101,6 +121,22 @@ api:UnresolvableAbsoluteDescriptor
   rdfs:label "Unresolvable Absolute Descriptor"@en ;
   rdfs:comment "An absolute descriptor whose corresponding resource can not be found has been supplied."@en ;
   rdfs:subClassOf api:Error, api:WithAbsoluteDescriptor .
+
+api:UnresolvableCommitId
+  a owl:Class ;
+  rdfs:label "Unresolvable Commit ID"@en ;
+  rdfs:comment "A reference was made to a commit id which does not exist."@en ;
+  rdfs:subClassOf api:Error, api:WithCommitId .
+
+api:WithCommitId
+  a owl:Class .
+
+api:commit_id
+  a owl:DatatypeProperty ;
+  rdfs:comment "The property points to a commit id string"@en ;
+  rdfs:label "commit id"@en ;
+  rdfs:domain api:WithCommitId ;
+  rdfs:range xsd:string .
 
 api:UnresolvableTargetAbsoluteDescriptor
   a owl:Class ;
@@ -489,6 +525,12 @@ api:RebaseSchemaValidationError
   rdfs:comment "The schema did not validate after applicaton of a commit in rebase."@en ;
   rdfs:subClassOf api:Error, api:WithTheirCommit, api:WithWitness .
 
+api:SchemaValidationError
+  a owl:Class ;
+  rdfs:label "Schema Validation Error"@en ;
+  rdfs:comment "The schema did not validate after update."@en ;
+  rdfs:subClassOf api:Error, api:WithWitness .
+
 api:RebaseContinueOnValidCommit
   a owl:Class ;
   rdfs:label "Rebase Continue On Invalid Commit"@en ;
@@ -505,6 +547,44 @@ api:PackErrorResponse
   a owl:Class ;
   rdfs:label "Pack Error Response"@en ;
   rdfs:comment "Error response document from Pack API."@en ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:WithOldCommit
+  a owl:Class .
+
+api:old_commit
+  a owl:DatatypeProperty ;
+  rdfs:comment "The property points to the old commit descriptor path"@en ;
+  rdfs:label "old commit"@en ;
+  rdfs:domain api:WithOldCommit ;
+  rdfs:range xsd:string .
+
+api:commit
+  a owl:DatatypeProperty ;
+  rdfs:comment "The property points to a commit descriptor path"@en ;
+  rdfs:label "commit"@en ;
+  rdfs:domain api:WitCommit ;
+  rdfs:range xsd:string .
+
+api:WithCommit
+  a owl:Class .
+
+api:SquashResponse
+  a owl:Class ;
+  rdfs:label "Squash Response"@en ;
+  rdfs:comment "Response document from Squash API."@en ;
+  rdfs:subClassOf api:WithOldCommit, api:WithCommit  .
+
+api:ResetResponse
+  a owl:Class ;
+  rdfs:label "Reset Response"@en ;
+  rdfs:comment "Response document from Reset API."@en ;
+  rdfs:subClassOf api:Response  .
+
+api:ResetErrorResponse
+  a owl:Class ;
+  rdfs:label "Reset Error Response"@en ;
+  rdfs:comment "Error response document from Reset API."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:NotARepositoryDescriptorError
@@ -668,6 +748,12 @@ api:NotABranchDescriptorError
   rdfs:comment "The supplied descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
 
+api:NotACommitDescriptorError
+  a owl:Class ;
+  rdfs:label "Not A Commit Descriptor"@en ;
+  rdfs:comment "The supplied descriptor is not a commit descriptor, but a commit descriptor is required."@en ;
+  rdfs:subClassOf api:Error , api:WithAbsoluteDescriptor .
+
 api:NotATargetBranchDescriptorError
   a owl:Class ;
   rdfs:label "Not A Target Branch Descriptor"@en ;
@@ -680,10 +766,22 @@ api:NotASourceBranchDescriptorError
   rdfs:comment "The supplied target descriptor is not a branch descriptor, but a branch descriptor is required."@en ;
   rdfs:subClassOf api:NotABranchDescriptorError.
 
+api:DifferentRepositoriesError
+  a owl:Class ;
+  rdfs:label "Different Repositories Error"@en ;
+  rdfs:comment "The operation requires that the repositories be the same for source and target"@en ;
+  rdfs:subClassOf api:WithSourceAbsoluteDescriptor,api:WithTargetAbsoluteDescriptor .
+
 api:NotAValidSourceDescriptorError
   a owl:Class ;
   rdfs:label "Not A Valid Source Descriptor"@en ;
   rdfs:comment "The supplied source descriptor is not valid."@en ;
+  rdfs:subClassOf api:WithAbsoluteDescriptor .
+
+api:NotAValidOptimizationDescriptorError
+  a owl:Class ;
+  rdfs:label "Not A Valid Optimization Descriptor"@en ;
+  rdfs:comment "The supplied descriptor is not valid for optimization."@en ;
   rdfs:subClassOf api:WithAbsoluteDescriptor .
 
 api:NotLocalRepositoryError
@@ -736,6 +834,12 @@ api:BranchAlreadyExists
   rdfs:comment "The associated branch already exists."@en ;
   rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor .
 
+api:BranchDoesNotExists
+  a owl:Class ;
+  rdfs:label "Branch Does Not Exist"@en ;
+  rdfs:comment "The branch described does not exist."@en ;
+  rdfs:subClassOf api:Error, api:WithGraphName, api:WithAbsoluteDescriptor .
+
 api:WithGraphName
   a owl:Class .
 
@@ -745,6 +849,12 @@ api:graph_name
   rdfs:comment "Points to a graph name."@en ;
   rdfs:domain api:WithGraphName ;
   rdfs:range xsd:string .
+
+api:OptimizeResponse
+  a owl:Class ;
+  rdfs:label "Optimize Response"@en ;
+  rdfs:comment "Response document for optimization API."@en ;
+  rdfs:subClassOf api:Response .
 
 api:CreateGraphResponse
   a owl:Class ;
@@ -762,6 +872,12 @@ api:UserUpdateErrorResponse
   a owl:Class ;
   rdfs:label "User Update Error Response"@en ;
   rdfs:comment "Error response document for user update."@en ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:OptimizeErrorResponse
+  a owl:Class ;
+  rdfs:label "Optimize Error Response"@en ;
+  rdfs:comment "Error response document for optimize."@en ;
   rdfs:subClassOf api:ErrorResponse .
 
 api:UserUpdateFailedWithoutError

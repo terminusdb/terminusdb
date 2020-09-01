@@ -15,6 +15,7 @@
               user_object/3,
               super_user_authority/1,
               check_descriptor_auth/4,
+              is_super_user/1,
               is_super_user/2
           ]).
 
@@ -168,6 +169,9 @@ assert_write_access(G, Context, Context) :-
 write_type_access(instance,system:instance_write_access).
 write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
+
+is_super_user(Auth) :-
+    is_super_user(Auth, {doc : 'terminusdb:///system/data/'}).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),

@@ -557,6 +557,15 @@ triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
                                       'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
+triples_error_handler(error(schema_check_failure([Witness|_]), _), Request) :-
+    format(string(Msg), "Schema did not validate after this update", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:SchemaValidationError',
+                                      'api:witness' : Witness},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(triples_endpoint).
@@ -1025,6 +1034,17 @@ woql_error_handler(error(woql_instantiation_error(Vars),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The WOQL query referenced an invalid absolute path for descriptor ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:WoqlErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
 
 
 
@@ -1491,11 +1511,10 @@ test(get_object, [
                  methods([options,post])]).
 
 clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-    get_payload(Database_Document,Request),
 
     do_or_die(
-        (_{ comment : Comment,
+        (get_payload(Database_Document,Request),
+         _{ comment : Comment,
             label : Label,
             remote_url: Remote_URL} :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
@@ -1505,7 +1524,11 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ;   Public = false),
 
     catch_with_backtrace(
-        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization,_)),
+
+            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
@@ -1515,6 +1538,15 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         do_or_die(clone_error_handler(E,Request),
                   E)).
 
+clone_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
     format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
     cors_reply_json(Request,
@@ -1635,13 +1667,16 @@ test(clone_remote, [
 :- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 fetch_handler(post,Path,Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-
     catch_with_backtrace(
-        (   remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization_for_fetch,_)),
+
+            remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
                          New_Head_Layer_Id, Head_Has_Updated),
             write_cors_headers(Request),
             reply_json_dict(
@@ -1653,6 +1688,15 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
         do_or_die(fetch_error_handler(E,Request),
                   E)).
 
+fetch_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
@@ -1679,10 +1723,17 @@ remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
 
+is_local_https(URL) :-
+    re_match('^https://127.0.0.1', URL, []).
+
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head }
     ;   Document = _{}),
+
+    (   is_local_https(URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
 
     remote_pack_url(URL,Pack_URL),
 
@@ -1691,7 +1742,8 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               Payload,
               [request_header('Authorization'=Authorization),
                json_object(dict),
-               status_code(Status)]),
+               status_code(Status)
+              |Additional_Options]),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
@@ -1958,19 +2010,17 @@ test(fetch_second_time_with_change, [
 :- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 
 rebase_handler(post, Path, Request, System_DB, Auth) :-
-
-    get_payload(Document, Request),
-    (   get_dict(rebase_from, Document, Their_Path)
-    ->  true
-    ;   throw(error(rebase_from_missing))),
-
-    (   get_dict(author, Document, Author)
-    ->  true
-    ;   throw(error(rebase_author_missing))),
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ author : Author,
+               rebase_from : Their_Path } :< Document
+        ),
+        error(bad_api_document(Document,[author,rebase_from]),_)),
 
     catch_with_backtrace(
         (   Strategy_Map = [],
@@ -2172,6 +2222,7 @@ test(rebase_divergent_history, [
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -2317,6 +2368,7 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
@@ -2392,14 +2444,14 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
 :- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 push_handler(post,Path,Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch } :< Document,
+        (  get_payload(Document, Request),
+           _{ remote : Remote_Name,
+              remote_branch : Remote_Branch } :< Document),
         error(bad_api_document(Document,[remote,remote_branch]),_)),
 
     do_or_die(
@@ -2480,6 +2532,33 @@ push_error_handler(error(remote_unpack_failed(history_diverged),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(400)]).
+push_error_handler(error(remote_unpack_failed(communication_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to a communication error: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:CommunicationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(authorization_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to an authorization failure: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:AuthorizationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(remote_unknown),_), Request) :-
+    format(string(Msg), "The remote requested was not known", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:RemoteUnknown"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 
 remote_unpack_url(URL, Pack_URL) :-
@@ -2488,6 +2567,10 @@ remote_unpack_url(URL, Pack_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+    (   is_local_https(Remote_URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
+
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -2495,7 +2578,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),
-                     status_code(Status_Code)]),
+                     status_code(Status_Code)
+                     |Additional_Options]),
           E,
           throw(error(communication_failure(E),_))),
 
@@ -2734,16 +2818,17 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
 :- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pull_handler(post,Path,Request, System_DB, Local_Auth) :-
-    get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch_Name
-         } :< Document,
-        error(bad_api_document(Document, [remote, remote_branch]))),
+        (   get_payload(Document, Request),
+            _{ remote : Remote_Name,
+               remote_branch : Remote_Branch_Name
+             } :< Document),
+        error(bad_api_document(Document, [remote, remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Remote_Auth),
@@ -3120,7 +3205,9 @@ test(pull_from_something_to_something_equal_other_branch,
                  methods([options,post])]).
 
 branch_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
+    do_or_die(
+        get_payload(Document, Request),
+        error(bad_api_document(Document, []),_)),
 
     (   get_dict(origin, Document, Origin_Path)
     ->  Origin_Option = some(Origin_Path)
@@ -3389,9 +3476,8 @@ graph_handler(post, Path, Request, System_Db, Auth) :-
         do_or_die(graph_error_handler(E, 'api:CreateGraphErrorResponse', Request),
                   E)).
 graph_handler(delete, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
+    do_or_die((   get_payload(Document, Request),
+                  _{ commit_info : Commit_Info } :< Document),
               error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
@@ -3791,6 +3877,375 @@ role_handler(post, Request, System_DB, Auth) :-
         E,
         do_or_die(woql_error_handler(E, Request),
                   E)).
+
+%%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * squash_handler(Mode,Path,Request,System,Auth) is det.
+ *
+ * Squash commit chain to a new commit
+ */
+squash_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_info : Commit_Info } :< Document),
+        error(bad_api_document(Document, [commit_info]), _)),
+
+    catch_with_backtrace(
+        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit),
+            cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
+                                       'api:commit' : Commit,
+                                       'api:old_commit' : Old_Commit,
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(squash_error_handler(Error, Request),
+                  Error)).
+
+squash_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+squash_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+squash_error_handler(error(unresolvable_absolute_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s can not be resolved to a resource", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(squash_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(terminus_store)).
+
+test(squash_a_branch, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/test",
+    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Commit_Info_1 = commit_info{
+                      author : "me",
+                      message: "first commit"
+                  },
+
+    create_context(Descriptor, Commit_Info_1, Context1),
+
+    with_transaction(
+        Context1,
+        ask(Context1,
+            insert(a,b,c)),
+        _),
+
+    Commit_Info_2 = commit_info{
+                        author : "me",
+                        message: "second commit"
+                    },
+
+    create_context(Descriptor, Commit_Info_2, Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    descriptor_commit_id_uri((Descriptor.repository_descriptor),
+                             Descriptor,
+                             Commit_Id, _Commit_Uri),
+
+    Commit_Info = commit_info{
+                      author : "me",
+                      message: "Squash"
+                  },
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_info: Commit_Info}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    JSON = _{'@type':"api:SquashResponse",
+             'api:commit': New_Commit_Path,
+             'api:old_commit' : Old_Commit_Path,
+             'api:status':"api:success"},
+    resolve_absolute_string_descriptor(New_Commit_Path, Commit_Descriptor),
+    open_descriptor(Commit_Descriptor, Transaction),
+
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_),
+    findall(X-Y-Z,ask(Commit_Descriptor,t(X,Y,Z)), Triples),
+    sort(Triples,Sorted),
+    sort([a-b-c,e-f-g],Correct),
+    ord_seteq(Sorted, Correct),
+
+    resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
+    commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
+
+:- end_tests(squash_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * reset_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+reset_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_descriptor : Ref } :< Document),
+        error(bad_api_document(Document, [commit_descriptor]), _)),
+
+    catch_with_backtrace(
+        (   api_reset(System_DB, Auth, Path, Ref),
+            cors_reply_json(Request, _{'@type' : 'api:ResetResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(reset_error_handler(Error, Request),
+                  Error)).
+
+reset_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_commit_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a commit descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotACommitDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(different_repositories(Descriptor1,Descriptor2),_),
+                    Request) :-
+    resolve_absolute_string_descriptor(Path1, Descriptor1),
+    resolve_absolute_string_descriptor(Path2, Descriptor2),
+    format(string(Msg), "The repository of the path to be reset ~s is not in the same repository as the commit which is in ~s", [Path1,Path2]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:DifferentRepositoriesError",
+                                       'api:source_absolute_descriptor' : Path1,
+                                       'api:target_absolute_descriptor': Path2
+                                     }
+                     },
+                    [status(400)]).
+reset_error_handler(error(branch_does_not_exist(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(reset_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(reset, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "testdb"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/testdb",
+
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    descriptor_commit_id_uri(Repository_Descriptor,
+                             Descriptor,
+                             Commit_Id,
+                             _Commit_Uri),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 2" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    resolve_relative_descriptor(Repository_Descriptor,
+                                ["commit",Commit_Id],
+                                Commit_Descriptor),
+
+    resolve_absolute_string_descriptor(Ref,Commit_Descriptor),
+
+    atomic_list_concat([Server, '/api/reset/admin/testdb'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_descriptor : Ref }),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:ResetResponse",
+             'api:status':"api:success"},
+
+    findall(X-Y-Z,
+            ask(Descriptor,
+                t(X,Y,Z)),
+            Triples),
+
+    [a-b-c] = Triples.
+
+:- end_tests(reset_endpoint).
+
+
+%%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * optimize_handler(Mode,DB,Request) is det.
+ *
+ * Optimize a resource
+ */
+optimize_handler(post, Path, Request, System_DB, Auth) :-
+    catch_with_backtrace(
+        (   api_optimize(System_DB, Auth, Path),
+            cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(optimize_error_handler(Error, Request),
+                  Error)).
+
+optimize_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+optimize_error_handler(error(not_a_valid_descriptor_for_optimization(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not an optimizable descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotAValidOptimizationDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(optimize_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(optimize_system, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    create_db_without_schema("admin", "test2"),
+    atomic_list_concat([Server, '/api/optimize/_system'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:OptimizeResponse",
+             'api:status':"api:success"},
+
+    open_descriptor(system_descriptor{}, Transaction),
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_).
+
+:- end_tests(optimize_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),

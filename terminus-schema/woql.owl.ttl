@@ -211,6 +211,12 @@ woql:Select
   rdfs:comment "A Selection of variables from subquery"@en ;
   rdfs:subClassOf woql:HasVariableList, woql:QueryWithSubQuery .
 
+woql:Distinct
+  a owl:Class ;
+  rdfs:label "Distinct"@en ;
+  rdfs:comment "Guaranteed unique solutions for variables in list."@en ;
+  rdfs:subClassOf woql:HasVariableList, woql:QueryWithSubQuery .
+
 woql:And
   a owl:Class ;
   rdfs:label "And"@en ;

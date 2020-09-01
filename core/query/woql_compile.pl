@@ -1119,6 +1119,9 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     resolve(WTemplate,Template),
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
+compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
+    resolve(X,XE),
+    compile_wf(WQuery,Query).
 compile_wf(length(L,N),Length) -->
     resolve(L,LE),
     resolve(N,NE),
@@ -3696,5 +3699,31 @@ test(unbound_test, [
     create_context(Descriptor,Commit_Info, Context),
 
     query_response:run_context_ast_jsonld_response(Context, AST, _Response).
+
+test(distinct, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = distinct([v('a'),v('b')],
+                   (   member(v('a'), [1,2]),
+                       member(v('b'), [1,2]))),
+    writeq('here'),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    Bindings = (Response.bindings),
+    findall(X-Y,
+            (   member(B,Bindings),
+                get_dict(a,B,X),
+                get_dict(b,B,Y)),
+            Result),
+    sort(Result, Sorted),
+    sort([1-1,1-2,2-1,2-2], Expected),
+    ord_seteq(Sorted,Expected).
 
 :- end_tests(woql).
