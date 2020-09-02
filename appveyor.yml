@@ -30,6 +30,7 @@ install:
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/%TERMINUSDB_STORE_PROLOG_VERSION%/terminus_store_prolog.dll
   - mkdir swipl
   - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
+  - move *.dll swipl\bin
 
 ## Build Script ##
 
