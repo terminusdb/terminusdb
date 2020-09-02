@@ -931,25 +931,62 @@ repository_prefixes(Repository_Askable, Prefixes) :-
             Key_Value_Pairs),
     dict_create(Prefixes,_,Key_Value_Pairs).
 
-update_prefixes(Context, Prefixes) :-
-    forall(ask(Context,
-               (   t(ref:default_prefixes, ref:prefix_pair, Pair),
-                   delete_object(Pair),
-                   delete(ref_default_prefixes, ref:prefix_pair, Pair))),
-           true),
+insert_prefix(Context, Key, URI) :-
+    ask(Context,
+        (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
+            insert(Pair, rdf:type, ref:'PrefixPair'),
+            insert(ref:default_prefixes, ref:prefix_pair, Pair),
+            insert(Pair, ref:prefix, Key^^xsd:string),
+            insert(Pair, ref:prefix_uri, URI^^xsd:string)
+        )
+       ).
 
-    dict_keys(Prefixes, Keys),
-    forall((   member(Key, Keys),
-               get_dict(Key,Prefixes,URI)),
-           ask(Context,
-               (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
-                   insert(Pair, rdf:type, ref:'PrefixPair'),
-                   insert(ref:default_prefixes, ref:prefix_pair, Pair),
-                   insert(Pair, ref:prefix, Key^^xsd:string),
-                   insert(Pair, ref:prefix_uri, URI^^xsd:string)
-               )
-              )
-          ).
+remove_prefix(Context, Key) :-
+    ask(Context,
+        (   t(Pair, ref:prefix, Key^^xsd:string),
+            t(Pair, ref:prefix_uri, URI^^xsd:string),
+            delete(Pair, rdf:type, ref:'PrefixPair'),
+            delete(ref:default_prefixes, ref:prefix_pair, Pair),
+            delete(Pair, ref:prefix, Key^^xsd:string),
+            delete(Pair, ref:prefix_uri, URI^^xsd:string))).
+
+update_prefix(Context, Key, URI) :-
+    ask(Context,
+        (   t(Pair, ref:prefix, Key^^xsd:string),
+            t(Pair, ref:prefix_uri, Old_URI^^xsd:string),
+            delete(Pair, ref:prefix_uri, Old_URI^^xsd:string),
+            insert(Pair, ref:prefix_uri, URI^^xsd:string))).
+
+update_prefixes(Context, Prefixes) :-
+    repository_prefixes(Context, Old_Prefixes),
+
+    dict_keys(Prefixes, Prefixes_Keys),
+    list_to_ord_set(Prefixes_Keys, Prefixes_Keys_Set),
+    dict_keys(Old_Prefixes, Old_Prefixes_Keys),
+    list_to_ord_set(Old_Prefixes_Keys, Old_Prefixes_Keys_Set),
+
+    ord_subtract(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Add),
+    ord_subtract(Old_Prefixes_Keys_Set, Prefixes_Keys_Set, Keys_To_Remove),
+    ord_intersect(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Potentially_Update),
+
+    exclude({Old_Prefixes, Prefixes}/[X]>>(get_dict(X, Old_Prefixes, Result),
+                                           get_dict(X, Prefixes, Result)),
+            Keys_To_Potentially_Update,
+            Keys_To_Update),
+
+    % first, delete all prefixes that are no longer needed
+    forall(member(Key, Keys_To_Add),
+           (   get_dict(Key, Prefixes, URI),
+               insert_prefix(Context, Key, URI))),
+
+    % second, insert prefixes that are new
+    forall(member(Key, Keys_To_Remove),
+           remove_prefix(Context, Key)),
+
+    % third, update existing prefixes that have changed
+    forall(member(Key, Keys_To_Update),
+           (   get_dict(Key, Prefixes, URI),
+               update_prefix(Context, Key, URI))).
 
 copy_prefixes(Repo_From_Askable, Repo_To_Context) :-
     repository_prefixes(Repo_From_Askable, Prefixes),
