@@ -35,6 +35,7 @@ install:
 ## Build Script ##
 
 build_script:
+  - tar.exe caf windows/terminusdb_windows.zip *
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
@@ -49,3 +50,4 @@ test_script:
 
 artifacts:
   - path: windows\terminusdb_setup.exe
+  - path: windows\terminusdb_windows.zip
