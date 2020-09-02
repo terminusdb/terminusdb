@@ -1556,6 +1556,32 @@ clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+clone_error_handler(error(database_already_exists(Organization_Name, Database_Name),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseAlreadyExists',
+                                      'api:database_name' : Database_Name,
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : 'Database already exists.'},
+                    [status(400)]).
+clone_error_handler(error(database_in_inconsistent_state,_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
+
+                      'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    [status(500)]).
+clone_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(clone_endpoint).
