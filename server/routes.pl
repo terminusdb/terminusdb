@@ -1556,6 +1556,32 @@ clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+clone_error_handler(error(database_already_exists(Organization_Name, Database_Name),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseAlreadyExists',
+                                      'api:database_name' : Database_Name,
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : 'Database already exists.'},
+                    [status(400)]).
+clone_error_handler(error(database_in_inconsistent_state,_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
+
+                      'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    [status(500)]).
+clone_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(clone_endpoint).
@@ -2233,15 +2259,15 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
     ;   Repo_Head_Option = none),
 
     catch_with_backtrace(
-        (   pack(System_DB, Auth,
-                 Path, Repo_Head_Option, Payload_Option),
-
-            (   Payload_Option = some(Payload)
-            ->  throw(http_reply(bytes('application/octets',Payload)))
-            ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)])))),
+       pack(System_DB, Auth,
+            Path, Repo_Head_Option, Payload_Option),
         E,
         do_or_die(pack_error_handler(E,Request),
-                  E)).
+                  E)),
+
+    (   Payload_Option = some(Payload)
+    ->  throw(http_reply(bytes('application/octets',Payload)))
+    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
 
 pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
@@ -2567,6 +2593,7 @@ remote_unpack_url(URL, Pack_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+
     (   is_local_https(Remote_URL)
     ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
     ;   Additional_Options = []),
@@ -2578,6 +2605,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),
+                     timeout(infinite),
                      status_code(Status_Code)
                      |Additional_Options]),
           E,
@@ -4256,6 +4284,26 @@ test(optimize_system, [
                  prefix,
                  methods([options,get])]).
 :- http_handler(root(home), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(clone), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(collaborate), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(newdb), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(profile), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(hub), cors_handler(Method, console_handler),
                 [method(Method),
                  prefix,
                  methods([options,get])]).

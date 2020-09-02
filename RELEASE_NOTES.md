@@ -5,6 +5,8 @@ the masters from our default branching.
 
 ## New
 
++ Reset API allows reseting branch to arbitrary commit
++ Squash API operation now available
 + Default branch is now called main and not master
 + Added much more extensive coverage of API in the api.owl.ttl ontology
 + Fixed some schema errors in woql.owl.ttl
