@@ -3708,7 +3708,7 @@ test(distinct, [
     AST = distinct([v('a'),v('b')],
                    (   member(v('a'), [1,2]),
                        member(v('b'), [1,2]))),
-    writeq('here'),
+
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
