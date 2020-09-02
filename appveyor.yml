@@ -44,8 +44,8 @@ build_script:
   - cd ..\
 
 test_script:
-  - swipl utils\db_init -s localhost -k root
-  - swipl -g run_tests -g halt start.pl
+  - swipl\bin\swipl utils\db_init -s localhost -k root
+  - swipl\bin\swipl -g run_tests -g halt start.pl
 
 artifacts:
   - path: windows\terminusdb_setup.exe
