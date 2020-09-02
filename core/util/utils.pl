@@ -53,7 +53,9 @@
               choice_points/1,
               sol_set/2,
               sol_bag/2,
-              optional/1
+              optional/1,
+              chunk/2,
+              chunk/3
           ]).
 
 /** <module> Utils
@@ -798,3 +800,18 @@ optional(Goal) :-
     (   call(Goal)
     *-> true
     ;   true).
+
+chunk(String,Chunk) :-
+    Size = 100000,
+    chunk(String,Chunk,Size).
+
+chunk(String,Chunk,Size) :-
+    string_length(String,Length),
+    Iterations is Length div Size + 1,
+    between(0, Iterations, I),
+    Offset is Size * I,
+    End_Chunk is Offset + Size + 1,
+    (   End_Chunk > Length
+    ->  sub_string(String,Offset,_,0,Chunk),
+        !
+    ;   sub_string(String,Offset,Size,_,Chunk)).

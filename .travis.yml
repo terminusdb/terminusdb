@@ -9,50 +9,32 @@ env:
 stages:
   - build
   - name: deploy
-    if: branch = master AND type != pull_request
-  - name: deploy_dev
-    if: branch = dev AND type != pull_request
-  - name: deploy_canary
-    if: branch = canary AND type != pull_request
-  - name: deploy_rc
-    if: branch = rc AND type != pull_request
+    if: branch IN (dev, canary, rc) AND type != pull_request
   - name: deploy_tag
     if: tag =~ ^v AND type != pull_request
+  - trigger_appimage
 
 jobs:
   include:
     - stage: build
-    - script:
+      script:
         - docker build -t terminusdb/terminusdb-server:latest .
         - docker run $DOCKERENVS -it terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
 
     - stage: deploy
       script:
-        - docker build -t terminusdb/terminusdb-server:latest .
+        - docker build -t "terminusdb/terminusdb-server:$TRAVIS_BRANCH" .
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminusdb-server:latest
-
-    - stage: deploy_dev
-      script:
-        - docker build -t terminusdb/terminusdb-server:dev .
-        - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminusdb-server:dev
-
-    - stage: deploy_canary
-      script:
-        - docker build -t terminusdb/terminusdb-server:canary .
-        - bash .ci/trigger_canary.sh
-        - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminusdb-server:canary
-
-    - stage: deploy_rc
-      script:
-        - docker build -t terminusdb/terminusdb-server:rc .
-        - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
-        - docker push terminusdb/terminusdb-server:rc
+        - docker push "terminusdb/terminusdb-server:$TRAVIS_BRANCH"
 
     - stage: deploy_tag
       script:
         - docker build -t "terminusdb/terminusdb-server:$TRAVIS_TAG" .
         - echo "$DOCKER_PASS" | docker login -u terminusdb --password-stdin
         - docker push "terminusdb/terminusdb-server:$TRAVIS_TAG"
+        - docker tag "terminusdb/terminusdb-server:$TRAVIS_TAG" "terminusdb/terminusdb-server:latest"
+        - docker push "terminusdb/terminusdb-server:latest"
+
+    - stage: trigger_appimage
+      script:
+        - bash .ci/trigger_appimage.sh
