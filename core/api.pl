@@ -44,7 +44,7 @@
               clone/10,
 
               % db_push.pl
-              push/7,
+              push/8,
 
               % db_unpack.pl
               unpack/4,

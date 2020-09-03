@@ -45,9 +45,7 @@ Section "TerminusDB" TerminusDB
   SetOutPath $INSTDIR
   ;File "My Program.exe"
   ;File "Readme.txt"
-  File "..\terminus_store_prolog.dll"
   writeUninstaller "$INSTDIR\uninstall.exe"
-  File "..\libterminus_store.dll"
   File /r /x "windows" ..\*
   File "terminusdb_circle.ico"
   ; Start menu creation
