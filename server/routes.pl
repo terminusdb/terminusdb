@@ -2484,8 +2484,12 @@ push_handler(post,Path,Request, System_DB, Auth) :-
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
+    (   get_dict(push_prefixes, Document, true)
+    ->  Push_Prefixes = true
+    ;   Push_Prefixes = false),
+
     catch_with_backtrace(
-        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch, [prefixes(Push_Prefixes)],
                  authorized_push(Authorization),Result),
             (   Result = same(Head_ID)
             ->  Head_Updated = false
@@ -2679,7 +2683,62 @@ test(push_empty_to_empty_does_nothing_succesfully,
       'api:repo_head': Head,
       'api:status':"api:success"} :< JSON.
 
+test(push_empty_with_prefix_change_to_empty_changes_prefixes,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
 
+    with_triple_store(
+        Store_Origin,
+        (   create_context((Origin_Branch_Descriptor.repository_descriptor),
+                           Origin_Repository_Context),
+            with_transaction(Origin_Repository_Context,
+                             update_prefixes(Origin_Repository_Context,
+                                             _{doc: "http://this_is_docs/",
+                                               scm: "http://this_is_scm/",
+                                               foo: "http://this_is_foo/"}),
+                             _))),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main",
+                       push_prefixes: true
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': _,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Destination,
+        (   repository_prefixes((Destination_Branch_Descriptor.repository_descriptor),
+                                Prefixes),
+            Prefixes = _{doc: 'http://this_is_docs/',
+                         scm: 'http://this_is_scm/',
+                         foo: 'http://this_is_foo/'})).
 
 test(push_nonempty_to_empty_advances_remote_head,
      [

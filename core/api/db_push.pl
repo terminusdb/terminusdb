@@ -1,5 +1,5 @@
 :- module(db_push, [
-              push/7
+              push/8
           ]).
 
 :- use_module(core(util)).
@@ -24,8 +24,8 @@
 % -- remote authorization failed
 % - communication error while talking to the remote
 
-:- meta_predicate push(+, +, +, +, +, 2, -).
-push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
+:- meta_predicate push(+, +, +, +, +, +, 2, -).
+push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
      Push_Predicate, Result) :-
 
     do_or_die(
@@ -52,6 +52,10 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
     do_or_die(
         Type = remote,
         error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name),_)),
+
+    (   memberchk(prefixes(true), Options)
+    ->  Push_Prefixes = true
+    ;   Push_Prefixes = false),
 
     repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
 
@@ -108,6 +112,11 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch,
         ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
         )
     ),
+
+    %% add prefixes if desired
+    (   Push_Prefixes = true
+    ->  copy_prefixes(Repository_Context, Remote_Repository_Context)
+    ;   true),
 
     cycle_context(Remote_Repository_Context, Final_Context, Remote_Transaction_Object, _),
     pack_from_context(Final_Context, some(Last_Head_Id), Payload_Option),
@@ -186,7 +195,7 @@ test(push_on_empty,
     once(ask(Descriptor.repository_descriptor,
                         t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(Expected_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), _Result),
 
     resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
@@ -228,7 +237,7 @@ test(push_twice,
     once(ask(Descriptor.repository_descriptor,
                         t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(Expected_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), _Result),
 
     create_context(Descriptor, commit_info{author: "me",
                                            message: "something else"},
@@ -242,7 +251,7 @@ test(push_twice,
         _Meta_Data_B_2),
 
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(_Expected_Layer_Id_2), _Result_2),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_Expected_Layer_Id_2), _Result_2),
 
     resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
@@ -283,11 +292,11 @@ test(push_twice_with_second_push_changing_nothing,
     once(ask(Descriptor.repository_descriptor,
                         t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(Expected_Layer_Id), Result),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), Result),
     Result = new(Head),
     
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(_Expected_Layer_Id_2), Result_2),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_Expected_Layer_Id_2), Result_2),
 
     Result_2 = same(Head).
 
@@ -311,7 +320,7 @@ test(push_empty_branch,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "main"),
 
     true.
@@ -342,7 +351,7 @@ test(push_new_nonmaster_branch,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
 
     true.
@@ -381,7 +390,7 @@ test(push_new_nonmaster_branch_with_content,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
@@ -411,7 +420,7 @@ test(push_without_branch,
 
     super_user_authority(Auth),
 
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result).
+    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", [], test_pusher(_New_Layer_Id), _Result).
 
 test(push_without_repository,
      [setup((setup_temp_store(State),
@@ -430,7 +439,7 @@ test(push_without_repository,
     resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, "admin/foo/local/branch/work", "remote", "work", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
 
     true.
@@ -469,7 +478,7 @@ test(push_local,
                      _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
@@ -507,12 +516,46 @@ test(push_headless_remote,
                      _),
 
     super_user_authority(Auth),
-    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", test_pusher(_New_Layer_Id), _Result),
+    push(system_descriptor{}, Auth, Destination_Path, "remote", "work", [], test_pusher(_New_Layer_Id), _Result),
     has_branch(Remote_Repository_Descriptor, "work"),
     branch_head_commit(Repository_Descriptor, "work", Head_Commit),
     branch_head_commit(Remote_Repository_Descriptor, "work", Head_Commit),
 
     true.
+
+test(push_prefixes, 
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+
+    Database_Descriptor = (Descriptor.repository_descriptor.database_descriptor),
+
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+
+
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://somewhere", _),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor,
+                     _{doc : 'http://somewhere/', scm: 'http://somewhere/schema#'}),
+
+    super_user_authority(Auth),
+
+
+    create_context((Descriptor.repository_descriptor), Local_Repository_Context),
+    with_transaction(
+        Local_Repository_Context,
+        update_prefixes(Local_Repository_Context,
+                        _{doc : 'http://somewhere_else/', scm: 'http://somewhere/schema#', foo: 'http://the_foo_place/'}),
+        _),
+
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [prefixes(true)], test_pusher(_), _Result),
+
+    repository_prefixes(Remote_Repository_Descriptor, Prefixes),
+    Prefixes = _{doc : 'http://somewhere_else/', scm: 'http://somewhere/schema#', foo: 'http://the_foo_place/'}.
 
 erroring_push_predicate(Error, _Remote_Url, _Payload) :-
     throw(Error).
@@ -550,7 +593,7 @@ test(remote_diverged,
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", erroring_push_predicate(error(history_diverged,_)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(history_diverged,_)), _Result).
 
 test(remote_does_not_exist,
      [setup((setup_temp_store(State),
@@ -560,7 +603,7 @@ test(remote_does_not_exist,
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", erroring_push_predicate(error(remote_unknown,_)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(remote_unknown,_)), _Result).
 
 test(remote_authorization_failed,
      [setup((setup_temp_store(State),
@@ -570,7 +613,7 @@ test(remote_authorization_failed,
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", erroring_push_predicate(error(authorization_failure(some_context_idunno),_)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(authorization_failure(some_context_idunno),_)), _Result).
 
 test(remote_communication_failed,
      [setup((setup_temp_store(State),
@@ -580,7 +623,7 @@ test(remote_communication_failed,
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", erroring_push_predicate(error(communication_failure(some_context_idunno),_)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(communication_failure(some_context_idunno),_)), _Result).
 
 test(remote_gave_unknown_error,
      [setup((setup_temp_store(State),
@@ -590,6 +633,6 @@ test(remote_gave_unknown_error,
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", erroring_push_predicate(error(phase_of_the_moon_is_wrong(full),_)), _Result).
+    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(phase_of_the_moon_is_wrong(full),_)), _Result).
 
 :- end_tests(push).

@@ -30,10 +30,12 @@ install:
   - appveyor DownloadFile https://github.com/terminusdb/terminus_store_prolog/releases/download/%TERMINUSDB_STORE_PROLOG_VERSION%/terminus_store_prolog.dll
   - mkdir swipl
   - xcopy /E /q "%SWI_INSTALL_DIR%" swipl\
+  - move *.dll swipl\bin
 
 ## Build Script ##
 
 build_script:
+  - tar.exe caf windows/terminusdb_windows.zip *
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
@@ -43,8 +45,9 @@ build_script:
   - cd ..\
 
 test_script:
-  - swipl utils\db_init -s localhost -k root
-  - swipl -g run_tests -g halt start.pl
+  - swipl\bin\swipl utils\db_init -s localhost -k root
+  - swipl\bin\swipl -g run_tests -g halt start.pl
 
 artifacts:
   - path: windows\terminusdb_setup.exe
+  - path: windows\terminusdb_windows.zip
