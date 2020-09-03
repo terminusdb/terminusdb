@@ -473,6 +473,14 @@ days_in_month(_,12,31).
 /*
  * refute_basetype_elt(+Literal,+Type,-Reason)
  */
+refute_basetype_elt(S@L,'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString', Reason) :-
+    (   \+ atom(L), term_to_atom(lang(L,S),A)
+    ->  Reason = _{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom in language section, found term.',
+			         'vio:literal' : _{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
 refute_basetype_elt(S@L,'http://www.w3.org/2001/XMLSchema#string',Reason) :-
     (   \+ atom(L), term_to_atom(lang(L,S),A)
     ->  Reason = _{
