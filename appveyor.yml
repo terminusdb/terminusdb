@@ -35,7 +35,7 @@ install:
 ## Build Script ##
 
 build_script:
-  - tar.exe -a -c -f windows/terminusdb_windows.tar.gz *
+  - tar.exe -a -c -f --exclude windows/terminusdb_windows.tar.gz windows/terminusdb_windows.tar.gz *
   - cd windows
   - git clone https://github.com/terminusdb/terminus_store_prolog.git
   - cd terminus_store_prolog
