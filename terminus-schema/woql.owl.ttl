@@ -1232,6 +1232,12 @@ woql:PathPredicate
   rdfs:comment "Contains a predicate to follow in a pattern"@en ;
   rdfs:subClassOf woql:PathPattern .
 
+woql:InvertedPathPredicate
+  a owl:Class ;
+  rdfs:label "Inverted Predicate"@en ;
+  rdfs:comment "Contains a predicate to follow (backwards) in a pattern"@en ;
+  rdfs:subClassOf woql:PathPattern .
+
 woql:path_predicate
   a owl:ObjectProperty ;
   rdfs:domain woql:PathPredicate ;

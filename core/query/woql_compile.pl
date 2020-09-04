@@ -699,6 +699,11 @@ compile_wf(delete(X,P,Y),(
     {
        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, Transaction_Objects, Read_Write_Object)
     }.
+compile_wf(immediately(Goal),Term)
+-->
+    update(update_guard, Guard, true),
+    compile_wf(Goal, Term),
+    update(update_guard, _, Guard).
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(insert(X,P,Y,G),Goal)
 -->
@@ -1198,6 +1203,8 @@ compile_wf(triple_count(Path,Count),Goal) -->
         )
     }.
 compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Arguments)) -->
+    [].
+compile_wf(false,false) -->
     [].
 compile_wf(true,true) -->
     [].
@@ -3722,5 +3729,67 @@ test(distinct, [
     sort(Result, Sorted),
     sort([1-1,1-2,2-1,2-2], Expected),
     ord_seteq(Sorted,Expected).
+
+test(immediately, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = opt((immediately(insert(a,b,c)),
+               false)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    once(ask(Descriptor,
+             t(a,b,c))).
+
+
+test(immediately_doesnt_go, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = opt((insert(a,b,c),
+               false)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    \+ once(ask(Descriptor,
+                t(a,b,c))).
+
+
+test(negative_path_pattern, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    once(ask(Descriptor,
+             path(a, plus((p(b),n(b))), f, _Path))).
+
 
 :- end_tests(woql).

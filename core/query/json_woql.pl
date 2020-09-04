@@ -923,6 +923,11 @@ json_to_woql_path_pattern(JSON,Pattern,Path) :-
     ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
                                       |Path]),
          Pattern = p(WNode)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#InvertedPathPredicate',
+          'http://terminusdb.com/schema/woql#path_predicate' : Node} :< JSON
+    ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
+                                      |Path]),
+         Pattern = n(WNode)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathSequence',
           'http://terminusdb.com/schema/woql#path_first' : First,
           'http://terminusdb.com/schema/woql#path_second' : Second} :< JSON
