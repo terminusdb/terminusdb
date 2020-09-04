@@ -57,7 +57,8 @@ user_name_uri(Askable, User_Name, Uri) :-
  */
 agent_name_uri(Askable, Name, User_URI) :-
     once(ask(Askable,
-             t(User_URI, system:agent_name, Name^^xsd:string)
+             t(User_URI, system:agent_name, Name^^xsd:string),
+             [compress_prefixes(false)]
             )).
 
 agent_name_exists(Askable, Name) :-

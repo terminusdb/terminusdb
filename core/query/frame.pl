@@ -914,7 +914,7 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFT
                  ->  get_dict(descriptor,G,G_Desc)
                  ;   G = inferred
                  ->  G = G_Desc
-                 ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _))))),
+                 ;   throw(error(unexpected_graph_object(G),_))),
                  (   document(V,Database)
                  ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
                  ;   realise_quads(V,Frame,Database,Below),
@@ -940,7 +940,7 @@ realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RD
                     ->  get_dict(descriptor,G,G_Desc)
                     ;   G = inferred
                     ->  G = G_Desc
-                    ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))
+                    ;   throw(error(unexpected_graph_object(G),_)))
                 ),
               Realisers_on_P)
     ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
@@ -1231,7 +1231,7 @@ test(update_object,
 
     update_object(Document, Query),
     %retry_transaction(Query_Out),
-    run_transactions(Query.transaction_objects, _Meta_Data),
+    run_transactions(Query.transaction_objects, true, _Meta_Data),
 
     open_descriptor(Descriptor, Transaction2),
     create_context(Transaction2, Query2),
@@ -1283,12 +1283,12 @@ test(delete_object, [
 
     update_object(Document, Query),
     %retry_transaction(Query_Out),
-    run_transactions(Query.transaction_objects, _Meta_Data1),
+    run_transactions(Query.transaction_objects, true, _Meta_Data1),
 
     create_context(Descriptor, Query_Context),
 
     delete_object("doc:new_user",Query_Context),
-    run_transactions(Query_Context.transaction_objects, _Meta_Data2),
+    run_transactions(Query_Context.transaction_objects, true, _Meta_Data2),
 
     create_context(Descriptor, Query_Context2),
 

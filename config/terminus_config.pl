@@ -22,9 +22,13 @@
 
 :- use_module(core(util/utils)).
 
+server_protocol(Value) :-
+    (   https_enabled
+    ->  Value = https
+    ;   Value = http).
 
 server_name(Value) :-
-    getenv_default('TERMINUSDB_SERVER_NAME', 'http://localhost', Value).
+    getenv_default('TERMINUSDB_SERVER_NAME', '127.0.0.1', Value).
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
@@ -50,17 +54,19 @@ jwt_public_key_id(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://unpkg.com/@terminusdb/terminusdb-console@2.0.6/console/dist/', Value).
+    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://unpkg.com/@terminusdb/terminusdb-console@3.0.0/console/dist/', Value).
 
 https_enabled :-
     getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
     Value = 'true'.
 
 ssl_cert(Value) :-
-    getenv_default('TERMINUSDB_SSL_CERT', 'localhost.crt', Value).
+    expand_file_search_path(terminus_home('localhost.crt'), Default),
+    getenv_default('TERMINUSDB_SSL_CERT', Default, Value).
 
 ssl_cert_key(Value) :-
-    getenv_default('TERMINUSDB_SSL_CERT_KEY', 'localhost.key', Value).
+    expand_file_search_path(terminus_home('localhost.key'), Default),
+    getenv_default('TERMINUSDB_SSL_CERT_KEY', Default, Value).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
@@ -74,11 +80,11 @@ tmp_path(Value) :-
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
-
 server(Server) :-
+    server_protocol(Protocol),
     server_name(Name),
     server_port(Port),
-    atomic_list_concat([Name,':',Port],Server).
+    atomic_list_concat([Protocol,'://',Name,':',Port],Server).
 
 server_worker_options([]).
 

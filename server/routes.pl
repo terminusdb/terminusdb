@@ -71,9 +71,10 @@
 :- multifile http:location/3.
 :- dynamic http:location/3.
 http:location(root, '/', []).
+http:location(api, '/api', []).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_handler(Method, connect_handler),
+:- http_handler(api(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -91,23 +92,30 @@ connect_handler(get, Request, System_DB, Auth) :-
 :- begin_tests(jwt_auth, [
                    condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", testkey))
                ]
-               ).
+              ).
+
+:- use_module(core(util/test_utils)).
 /*
  * Tests assume that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
  * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
  */
 test(connection_authorized_user_jwt, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
-    http_get(Server, _, [authorization(bearer(Bearer))]).
+    http_get(URL, _, [authorization(bearer(Bearer))]).
 
 test(connection_unauthorized_user_jwt, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
+    atomic_list_concat([Server, '/api'], URL),
+
     % mangled the payload so it should not validate
     Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodW0000000000aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
-    http_get(Server, _, [authorization(bearer(Bearer)), status_code(Status)]),
+    http_get(URL, _, [authorization(bearer(Bearer)), status_code(Status)]),
 
     Status = 401.
 
@@ -117,17 +125,24 @@ test(connection_unauthorized_user_jwt, [
 :- use_module(core(util/test_utils)).
 
 test(connection_authorised_user_http_basic, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
     admin_pass(Key),
-    http_get(Server, _, [authorization(basic(admin, Key))]).
+    atomic_list_concat([Server, '/api'], URL),
+
+    http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
-test(connection_result_dbs, [])
+test(connection_result_dbs, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
     admin_pass(Key),
-    http_get(Server, Result, [json_object(dict),authorization(basic(admin, Key))]),
+    atomic_list_concat([Server, '/api'], URL),
+
+    http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     * json_write_dict(current_output, Result, []),
 
@@ -137,31 +152,8 @@ test(connection_result_dbs, [])
 
 :- end_tests(connect_handler).
 
-
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(console/_Path), cors_handler(Method, console_handler),
-                [method(Method),
-                 methods([options,get])]).
-
-/*
- * console_handler(+Method,+Request) is det.
- */
-console_handler(get,Request, _System_DB, _Auth) :-
-    config:index_path(Index_Path),
-    write_cors_headers(Request),
-    throw(http_reply(file('text/html', Index_Path))).
-
-:- begin_tests(console_route).
-
-test(console_route) :-
-    config:server(SURI),
-    format(string(ConsoleURL), "~s/console/", [SURI]),
-    http_get(ConsoleURL, _, [request_header('Origin'=SURI)]).
-
-:- end_tests(console_route).
-
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(message), cors_handler(Method, message_handler),
+:- http_handler(api(message), cors_handler(Method, message_handler),
                 [method(Method),
                  methods([options,get,post])]).
 
@@ -183,7 +175,7 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
     reply_json(_{'api:status' : 'api:success'}).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
+:- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
                  methods([options,post,delete])]).
 
@@ -196,11 +188,17 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     do_or_die(
         (_{ comment : Comment,
             label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
+        error(bad_api_document(Database_Document,[comment,label]),_)),
 
-    (   _{ prefixes : Prefixes } :< Database_Document,
-        _{ doc : _Doc, scm : _Scm} :< Prefixes
-    ->  true
+    (   _{ prefixes : Input_Prefixes } :< Database_Document
+    ->  (   _{ doc : Doc} :< Input_Prefixes
+        ->  true
+        ;   Doc = "terminusdb:///data/"),
+        (   _{ scm : Scm} :< Input_Prefixes
+        ->  true
+        ;   Scm = "terminusdb:///schema#"),
+        Prefixes = Input_Prefixes.put(_{ doc : Doc,
+                                         scm : Scm })
     ;   Prefixes = _{ doc : "terminusdb:///data/",
                       scm : "terminusdb:///schema#" }),
 
@@ -274,7 +272,7 @@ delete_db_error_handler(error(database_does_not_exist(Organization,Database), _)
     cors_reply_json(Request,
                     _{'@type' : 'api:DbDeleteErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExists',
+                      'api:error' : _{'@type' : 'api:DatabaseDoesNotExist',
                                       'api:database_name' : Database,
                                       'api:organization_name' : Organization},
                       'api:message' : Msg},
@@ -309,13 +307,10 @@ delete_db_error_handler(error(database_files_do_not_exist(Organization,Database)
 :- use_module(library(http/http_open)).
 
 test(db_create, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true))),
-         cleanup(force_delete_db('admin', 'TEST_DB'))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -327,16 +322,28 @@ test(db_create, [
                    authorization(basic(admin, Key))]),
     _{'api:status' : "api:success"} :< In.
 
-test(db_create_existing_errors, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true),
-                create_db_without_schema("admin", "TEST_DB")
-               )),
-         cleanup(force_delete_db('admin', 'TEST_DB'))
+test(db_create_bad_api_document, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
+    Doc = _{ label : "A label" },
+    admin_pass(Key),
+    http_post(URI, json(Doc),
+              In, [json_object(dict),
+                   status_code(Code),
+                   authorization(basic(admin, Key))]),
+    400 = Code,
+    _{'@type' : "api:BadAPIDocumentErrorResponse",
+      'api:error' : Error} :< In,
+    _{'@type' : "api:RequiredFieldsMissing"} :< Error.
+
+test(db_create_existing_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -351,9 +358,10 @@ test(db_create_existing_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_in_unknown_organization_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -368,9 +376,10 @@ test(db_create_in_unknown_organization_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthenticated_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -384,11 +393,11 @@ test(db_create_unauthenticated_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthorized_errors, [
-         setup(add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID)),
-         cleanup(delete_user_and_organization("TERMINUSQA"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -402,13 +411,11 @@ test(db_create_unauthorized_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete, [
-         setup(((   database_exists('admin', 'TEST_DB')
-                ->  force_delete_db('admin', 'TEST_DB')
-                ;   true),
-                create_db_without_schema("admin", "TEST_DB")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI, Delete_In, [json_object(dict),
                                  authorization(basic(admin, Key))]),
@@ -416,9 +423,10 @@ test(db_delete, [
     _{'api:status' : "api:success"} :< Delete_In.
 
 test(db_delete_unknown_organization_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
                 Result,
@@ -434,9 +442,10 @@ test(db_delete_unknown_organization_errors, [
     _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete_nonexistent_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/db/admin/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     admin_pass(Key),
     http_delete(URI,
                 Result,
@@ -450,25 +459,12 @@ test(db_delete_nonexistent_errors, [
 
 
 test(db_auth_test, [
-         setup(((   organization_name_exists(system_descriptor{}, 'TERMINUS_QA')
-                ->  delete_organization('TERMINUS_QA')
-                ;   true
-                ),
-                (   agent_name_exists(system_descriptor{}, 'TERMINUS_QA')
-                ->  delete_user('TERMINUS_QA')
-                ;   add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID)
-                ),
-                (   database_exists('TERMINUS_QA', 'TEST_DB')
-                ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
-                ;   true))),
-         cleanup(((   database_exists('TERMINUS_QA', 'TEST_DB')
-                  ->  force_delete_db('TERMINUS_QA', 'TEST_DB')
-                  ;   true),
-                  delete_user_and_organization('TERMINUS_QA')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID),
 
-    config:server(Server),
-    atomic_list_concat([Server, '/db/TERMINUS_QA/TEST_DB'], URI),
+    atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
@@ -484,11 +480,11 @@ test(db_auth_test, [
 
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(triples/Path), cors_handler(Method, triples_handler(Path)),
+:- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
-                 methods([options,get,post])]).
+                 methods([options,get,post,put])]).
 
 /*
  * triples_handler(Mode,DB,Request) is det.
@@ -508,14 +504,26 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
                   Error)).
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
-    (   _{ turtle : TTL,
-           commit_info : Commit_Info } :< Triples_Document
-    ->  true
-    ;   throw(error(bad_api_document(Triples_Document)))),
+    do_or_die(_{ turtle : TTL,
+                 commit_info : Commit_Info } :< Triples_Document,
+              error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
 
     catch_with_backtrace(
-        (   graph_load(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
-            cors_reply_json(Request, _{'@type' : 'api:TriplesLoadResponse',
+        (   graph_update(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
+            cors_reply_json(Request, _{'@type' : 'api:TriplesUpdateResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(triples_error_handler(Error, Request),
+                  Error)).
+triples_handler(put,Path,Request, System_DB, Auth) :-
+    get_payload(Triples_Document,Request),
+    do_or_die(_{ turtle : TTL,
+                 commit_info : Commit_Info } :< Triples_Document,
+              error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
+
+    catch_with_backtrace(
+        (   graph_insert(System_DB, Auth, Path, Commit_Info, "turtle", TTL),
+            cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
                                        'api:status' : "api:success"})),
         Error,
         do_or_die(triples_error_handler(Error, Request),
@@ -549,6 +557,15 @@ triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
                                       'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
+triples_error_handler(error(schema_check_failure([Witness|_]), _), Request) :-
+    format(string(Msg), "Schema did not validate after this update", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:TriplesErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:SchemaValidationError',
+                                      'api:witness' : Witness},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(triples_endpoint).
@@ -559,21 +576,19 @@ triples_error_handler(error(unknown_graph(Graph_Descriptor), _), Request) :-
 :- use_module(library(http/http_open)).
 
 test(triples_update, [
-         setup(((   database_exists(admin, 'TEST_DB')
-                ->  force_delete_db(admin, 'TEST_DB')
-                ;   true),
-                create_db_without_schema(admin, 'TEST_DB'))),
-         cleanup((force_delete_db(admin, 'TEST_DB')))
-
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema(admin, 'TEST_DB'),
+
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
     make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/TEST_DB/local/branch/master/schema/main",
+                 "admin/TEST_DB/local/branch/main/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
                  Transaction_Metadata),
@@ -582,8 +597,7 @@ test(triples_update, [
     terminus_path(Path),
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
-    config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/TEST_DB/local/branch/master/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
@@ -599,11 +613,12 @@ test(triples_update, [
     memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
 
 
-test(triples_get, [])
+test(triples_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
-    config:server(Server),
-    atomic_list_concat([Server, '/triples/_system/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/_system/schema/main'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
@@ -611,18 +626,16 @@ test(triples_get, [])
 
 
 test(triples_post_get, [
-         setup(((   database_exists("admin", "Jumanji")
-                ->  force_delete_db("admin", "Jumanji")
-                ;   true),
-                create_db_without_schema("admin", "Jumanji"))),
-         cleanup(force_delete_db("admin", "Jumanji"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "Jumanji"),
 
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/Jumanji/local/branch/master/schema/main",
+                 "admin/Jumanji/local/branch/main/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
                  _Transaction_Metadata),
@@ -633,8 +646,7 @@ test(triples_post_get, [
 
 layer:LayerIdRestriction a owl:Restriction.",
 
-    config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/Jumanji/local/branch/master/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema/main'], URI),
     admin_pass(Key),
 
     http_post(URI, json(_{commit_info : _{ author : "Test",
@@ -650,10 +662,66 @@ layer:LayerIdRestriction a owl:Restriction.",
                     "layer:LayerIdRestriction\n  a owl:Restriction")).
 
 
-test(get_invalid_descriptor, [])
+
+test(triples_put_two, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/triples/nonsense'], URI),
+    create_db_without_schema("admin", "Jumanji"),
+
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/Jumanji/local/branch/main/schema/main",
+                 commit_info{ author : "test",
+                              message: "Generated by automated testing"},
+                 _Transaction_Metadata),
+
+    TTL = "
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+layer:LayerIdRestriction a owl:Restriction.",
+
+    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema/main'], URI),
+    admin_pass(Key),
+
+
+    http_put(URI, json(_{commit_info : _{ author : "Test",
+                                           message : "testing" },
+                         turtle : TTL}),
+             _Result1, [json_object(dict),
+                        authorization(basic(admin, Key))]),
+
+    TTL2 = "
+@prefix layer: <http://terminusdb.com/schema/layer#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+layer:LayerIdRestriction2 a owl:Restriction.",
+
+    http_put(URI, json(_{commit_info : _{ author : "Test",
+                                          message : "testing" },
+                         turtle : TTL2}),
+             _Result2, [json_object(dict),
+                        authorization(basic(admin, Key))]),
+
+    http_get(URI, Result, [json_object(dict),
+                           authorization(basic(admin, Key))]),
+
+    once(sub_string(Result, _, _, _,
+                    "layer:LayerIdRestriction\n  a owl:Restriction")),
+
+    once(sub_string(Result, _, _, _,
+                    "layer:LayerIdRestriction2\n  a owl:Restriction")).
+
+
+test(get_invalid_descriptor, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    atomic_list_concat([Server, '/api/triples/nonsense'], URI),
     admin_pass(Key),
 
     http_get(URI, In, [json_object(dict),
@@ -664,10 +732,12 @@ test(get_invalid_descriptor, [])
     Code = 400.
 
 
-test(get_bad_descriptor, [])
+test(get_bad_descriptor, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/triples/admin/fdsa'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
     admin_pass(Key),
 
     http_get(URI, In, [json_object(dict),
@@ -680,7 +750,7 @@ test(get_bad_descriptor, [])
 :- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(frame/Path), cors_handler(Method, frame_handler(Path)),
+:- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -782,10 +852,12 @@ frame_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(get_frame, [])
+test(get_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/frame/_system'], URI),
+    atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ class : "system:Agent"
@@ -795,10 +867,12 @@ test(get_frame, [])
     _{'@type':"system:Frame"} :< JSON.
 
 
-test(get_filled_frame, [])
+test(get_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/frame/_system'], URI),
+    atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -808,10 +882,12 @@ test(get_filled_frame, [])
     _{'@type':"system:FilledFrame"} :< JSON.
 
 
-test(bad_path_filled_frame, [])
+test(bad_path_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/frame/garbage'], URI),
+    atomic_list_concat([Server, '/api/frame/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -823,10 +899,12 @@ test(bad_path_filled_frame, [])
     JSON.'api:error'.'@type' = "api:BadAbsoluteDescriptor".
 
 
-test(unresolvable_path_filled_frame, [])
+test(unresolvable_path_filled_frame, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/frame/believable/garbage'], URI),
+    atomic_list_concat([Server, '/api/frame/believable/garbage'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ instance : "doc:admin"
@@ -842,11 +920,11 @@ test(unresolvable_path_filled_frame, [])
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(root(woql), cors_handler(Method, woql_handler),
+:- http_handler(api(woql), cors_handler(Method, woql_handler),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(root(woql/Path), cors_handler(Method, woql_handler(Path)),
+:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -861,24 +939,12 @@ test(unresolvable_path_filled_frame, [])
  * from terminus database on spartacus.
  */
 woql_handler(post, Request, System_DB, Auth) :-
-    try_get_param('query',Request,Query),
-
-    (   get_param('commit_info', Request, Commit_Info)
-    ->  true
-    ;   Commit_Info = _{}
-    ),
-    collect_posted_files(Request,Files),
-
-    catch_with_backtrace(
-        (   woql_query_json(System_DB, Auth, none, Query, Commit_Info, Files, JSON),
-            write_cors_headers(Request),
-            reply_json_dict(JSON)
-        ),
-        E,
-        do_or_die(woql_error_handler(E, Request),
-                  E)).
+    woql_handler_helper(Request, System_DB, Auth, none).
 
 woql_handler(post, Path, Request, System_DB, Auth) :-
+    woql_handler_helper(Request, System_DB, Auth, some(Path)).
+
+woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
     try_get_param('query',Request,Query),
 
     (   get_param('commit_info', Request, Commit_Info)
@@ -887,15 +953,18 @@ woql_handler(post, Path, Request, System_DB, Auth) :-
     ),
     collect_posted_files(Request,Files),
 
+    (   get_param('all_witnesses', Request, All_Witnesses)
+    ->  true
+    ;   All_Witnesses = false),
+
     catch_with_backtrace(
-        (   woql_query_json(System_DB, Auth, some(Path), Query, Commit_Info, Files, JSON),
+        (   woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, JSON),
             write_cors_headers(Request),
             reply_json_dict(JSON)
         ),
         E,
         do_or_die(woql_error_handler(E, Request),
                   E)).
-
 
 woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
@@ -907,6 +976,17 @@ woql_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(not_a_valid_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The source path ~q is not a valid descriptor for branching", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:WoqlErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotASourceBranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
 woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
@@ -918,9 +998,9 @@ woql_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
-woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
+woql_error_handler(error(woql_syntax_error(badly_formed_ast(Term)),_), Request) :-
     term_string(Term,String),
-    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [String]),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
     cors_reply_json(Request,
                     _{'@type' : 'api:WoqlErrorResponse',
                       'api:status' : 'api:failure',
@@ -929,6 +1009,43 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
+    term_string(Term,String),
+    format(string(Msg), "The : ~q", [String]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                                       'api:error_term' : String},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+woql_error_handler(error(schema_check_failure(Witnesses),_), Request) :-
+    cors_reply_json(Request,
+                    Witnesses,
+                    [status(405)]).
+woql_error_handler(error(woql_instantiation_error(Vars),_), Request) :-
+    format(string(Msg), "The following variables were unbound but must be bound: ~q", [Vars]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLModeError',
+                                       'api:error_vars' : Vars},
+                      'api:message' : Msg
+                     },
+                    [status(404)]).
+woql_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The WOQL query referenced an invalid absolute path for descriptor ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : "api:WoqlErrorResponse",
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
 
 
 % woql_handler Unit Tests
@@ -939,9 +1056,11 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(db_not_there, []) :-
-    config:server(Server),
-    atomic_list_concat([Server, '/woql/admin/blagblagblagblagblag'], URI),
+test(db_not_there, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    atomic_list_concat([Server, '/api/woql/admin/blagblagblagblagblag'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{'query' : ""}),
@@ -951,11 +1070,13 @@ test(db_not_there, []) :-
     _{'@type' : "api:WoqlErrorResponse",
       'api:error' :
       _{'@type' : "api:UnresolvableAbsoluteDescriptor",
-        'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/master"}} :< JSON.
+        'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/main"}} :< JSON.
 
-test(no_db, [])
+test(no_db, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
     Query =
     _{'@type' : "Using",
       collection : _{'@type' : "xsd:string",
@@ -1052,8 +1173,7 @@ test(no_db, [])
                                             graph_filter : _{'@type' : "xsd:string",
                                                              '@value' : "schema/*"}}}}]}}},
 
-    config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{'query' : Query}),
@@ -1065,7 +1185,10 @@ test(no_db, [])
     * json_write_dict(current_output,JSON,[]),
     _{'bindings' : _L} :< JSON.
 
-test(indexed_get, [])
+test(indexed_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
     Query =
     _{'@type' : 'Get',
@@ -1085,9 +1208,7 @@ test(indexed_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-
-    config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{query : Query}),
@@ -1098,9 +1219,11 @@ test(indexed_get, [])
     ->  true
     ;   fail).
 
-test(named_get, [])
+test(named_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
-
     Query =
     _{'@type' : 'Get',
       as_vars : [
@@ -1122,8 +1245,7 @@ test(named_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    config:server(Server),
-    atomic_list_concat([Server, '/woql'], URI),
+    atomic_list_concat([Server, '/api/woql'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{query : Query}),
@@ -1137,15 +1259,12 @@ test(named_get, [])
                    '@value':790}} :< First.
 
 test(branch_db, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    create_db_without_schema(admin,test),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1192,23 +1311,19 @@ test(branch_db, [
     ).
 
 test(update_object, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    create_db_without_schema(admin,test),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
 
     % First make a schema against which we can have an object
 
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
                  _Transaction_Metadata2),
@@ -1217,13 +1332,13 @@ test(update_object, [
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
 
-    Graph = "admin/test/local/branch/master/schema/main",
+    Graph = "admin/test/local/branch/main/schema/main",
     super_user_authority(Auth),
-    graph_load(system_descriptor{}, Auth, Graph,
-               commit_info{
-                   author : "Steve",
-                   message : "Yeah I did it"},
-               "turtle", TTL),
+    graph_update(system_descriptor{}, Auth, Graph,
+                 commit_info{
+                     author : "Steve",
+                     message : "Yeah I did it"},
+                 "turtle", TTL),
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
@@ -1282,14 +1397,11 @@ test(update_object, [
 
 
 test(delete_object, [
-         setup((config:server(Server),
-                (   database_exists(admin,test)
-                ->  force_delete_db(admin,test)
-                ;   true),
-                create_db_without_schema(admin,test))),
-         cleanup((force_delete_db(admin,test)))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema(admin,test),
 
     make_branch_descriptor("admin","test",Branch_Descriptor),
 
@@ -1297,7 +1409,7 @@ test(delete_object, [
     super_user_authority(Auth),
     create_graph(system_descriptor{},
                  Auth,
-                 "admin/test/local/branch/master/schema/main",
+                 "admin/test/local/branch/main/schema/main",
                  commit_info{ author : "test",
                               message: "Generated by automated testing"},
                  _Transaction_Metadata2),
@@ -1307,13 +1419,13 @@ test(delete_object, [
     interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
 
-    Graph = "admin/test/local/branch/master/schema/main",
+    Graph = "admin/test/local/branch/main/schema/main",
     super_user_authority(Auth),
-    graph_load(system_descriptor{}, Auth, Graph,
-               commit_info{
-                   author : "Steve",
-                   message : "Yeah I did it"},
-               "turtle", TTL),
+    graph_update(system_descriptor{}, Auth, Graph,
+                 commit_info{
+                     author : "Steve",
+                     message : "Yeah I did it"},
+                 "turtle", TTL),
 
     % Create the object
     Doc = _{ '@type' : "scm:Database",
@@ -1341,7 +1453,7 @@ test(delete_object, [
     _{'@context' : _{ doc: "http://terminusdb.com/admin/test/document/",
                       scm: "http://terminusdb.com/schema/terminus#"},
       '@type' : "DeleteObject",
-      document : 'doc:my_database'},
+      document_uri : 'doc:my_database'},
 
     Commit_Info = commit_info{
                       author : "Steve",
@@ -1349,7 +1461,7 @@ test(delete_object, [
                   },
 
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/admin/test'], URI),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
     http_post(URI,
               json(_{ query : Query1,
                       commit_info : Commit_Info}),
@@ -1363,23 +1475,26 @@ test(delete_object, [
            t('http://terminusdb.com/admin/test/document/my_database', _, _)).
 
 
-test(get_object, [])
+test(get_object, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
 :-
     Query0 =
     _{'@type' : "ReadObject",
-      document_uri : 'doc:admin',
+      document_uri : _{ '@type' : "woql:Node",
+                        'woql:node' : "doc:admin"},
       document : _{'@type' : "Variable",
                    variable_name : _{ '@type' : "xsd:string",
                                       '@value' : "Document"}}},
 
-    config:server(Server),
     admin_pass(Key),
-    atomic_list_concat([Server, '/woql/_system'], URI),
+    atomic_list_concat([Server, '/api/woql/_system'], URI),
     http_post(URI,
               json(_{query : Query0}),
               JSON0,
               [json_object(dict),authorization(basic(admin,Key))]),
-    [Result] = JSON0.bindings,
+    [Result] = (JSON0.bindings),
 
     _{'@id':"doc:admin",
       '@type':"system:User",
@@ -1391,29 +1506,29 @@ test(get_object, [])
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
+:- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
 clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-    get_payload(Database_Document,Request),
 
     do_or_die(
-        (_{ comment : Comment,
-            label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document))),
-
-    do_or_die(
-        (_{ remote_url : Remote_URL } :< Database_Document),
-        error(no_remote_specified(Database_Document))),
+        (get_payload(Database_Document,Request),
+         _{ comment : Comment,
+            label : Label,
+            remote_url: Remote_URL} :< Database_Document),
+        error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
     ->  true
     ;   Public = false),
 
     catch_with_backtrace(
-        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization,_)),
+
+            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
@@ -1423,6 +1538,15 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         do_or_die(clone_error_handler(E,Request),
                   E)).
 
+clone_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
     format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
     cors_reply_json(Request,
@@ -1432,6 +1556,32 @@ clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
                       'api:message' : Msg
                      },
                     [status(404)]).
+clone_error_handler(error(database_already_exists(Organization_Name, Database_Name),_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseAlreadyExists',
+                                      'api:database_name' : Database_Name,
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : 'Database already exists.'},
+                    [status(400)]).
+clone_error_handler(error(database_in_inconsistent_state,_), Request) :-
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
+
+                      'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'},
+                    [status(500)]).
+clone_error_handler(error(unknown_organization(Organization_Name),_), Request) :-
+    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CloneErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:UnknownOrganization',
+                                      'api:organization_name' : Organization_Name},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(clone_endpoint).
@@ -1441,16 +1591,13 @@ clone_error_handler(error(remote_connection_error(Payload),_),Request) :-
 :- use_module(library(http/http_open)).
 
 test(clone_local, [
-         setup((cleanup_user_database("TERMINUSQA1", "foo"),
-                cleanup_user_database("TERMINUSQA2", "bar"),
-
-                add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
-                add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
-                create_db_without_schema("TERMINUSQA1", "foo"))),
-         cleanup((cleanup_user_database("TERMINUSQA1", "foo"),
-                  cleanup_user_database("TERMINUSQA2", "bar")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+    add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+    create_db_without_schema("TERMINUSQA1", "foo"),
     resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
     create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
     with_transaction(Foo_Context,
@@ -1458,8 +1605,7 @@ test(clone_local, [
                          insert(a,b,c)),
                      _),
 
-    config:server(Server),
-    atomic_list_concat([Server, '/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server, '/api/clone/TERMINUSQA2/bar'], URL),
     atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
     base64("TERMINUSQA1:password1", Base64_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
@@ -1484,19 +1630,79 @@ test(clone_local, [
 
     true.
 
+test(clone_remote, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+    with_triple_store(
+        Store_1,
+        (   add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (   add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2)
+        )
+    ),
+
+    atomic_list_concat([Server_2, '/api/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'api:status' : "api:success"
+    } :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            once(ask(Bar_Descriptor,
+                     t(a,b,c)))
+        )
+    ).
+
+
 :- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(fetch/Path), cors_handler(Method, fetch_handler(Path)),
+:- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 fetch_handler(post,Path,Request, System_DB, Auth) :-
-    request_remote_authorization(Request, Authorization),
-
     catch_with_backtrace(
-        (   remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
+        (   do_or_die(
+                request_remote_authorization(Request, Authorization),
+                error(no_remote_authorization_for_fetch,_)),
+
+            remote_fetch(System_DB, Auth, Path, authorized_fetch(Authorization),
                          New_Head_Layer_Id, Head_Has_Updated),
             write_cors_headers(Request),
             reply_json_dict(
@@ -1508,6 +1714,15 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
         do_or_die(fetch_error_handler(E,Request),
                   E)).
 
+fetch_error_handler(error(no_remote_authorization,_),Request) :-
+    format(string(Msg), "No remote authorization supplied", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:FetchErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:AuthorizationError'},
+                      'api:message' : Msg
+                     },
+                    [status(401)]).
 fetch_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
@@ -1532,12 +1747,19 @@ fetch_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
 
 remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"pack"|Rest]).
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
+
+is_local_https(URL) :-
+    re_match('^https://127.0.0.1', URL, []).
 
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head }
     ;   Document = _{}),
+
+    (   is_local_https(URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
 
     remote_pack_url(URL,Pack_URL),
 
@@ -1546,7 +1768,8 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               Payload,
               [request_header('Authorization'=Authorization),
                json_object(dict),
-               status_code(Status)]),
+               status_code(Status)
+              |Additional_Options]),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
@@ -1554,24 +1777,276 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ->  Payload_Option = none
     ;   throw(error(remote_connection_error(Payload),_))).
 
+:- begin_tests(fetch_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(fetch_first_time, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar/origin", Bar_Descriptor_Origin),
+            once(ask(Bar_Descriptor_Origin,
+                     t(a,b,c))),
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_no_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : false,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_with_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    with_triple_store(
+        Store_1,
+        (
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra1),
+            with_transaction(Foo_Context_Extra1,
+                             ask(Foo_Context_Extra1,
+                                 insert(d,e,f)),
+                             _),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra2),
+            with_transaction(Foo_Context_Extra2,
+                             ask(Foo_Context_Extra2,
+                                 insert(g,h,i)),
+                             _),
+
+            repository_head(Foo_Database_Desc,"local",New_Head)
+        )),
+            
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': New_Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", New_Head)
+        )
+    ).
+
+:- end_tests(fetch_endpoint).
+
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(rebase/Path), cors_handler(Method, rebase_handler(Path)),
+:- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 
 rebase_handler(post, Path, Request, System_DB, Auth) :-
-
-    get_payload(Document, Request),
-    (   get_dict(rebase_from, Document, Their_Path)
-    ->  true
-    ;   throw(error(rebase_from_missing))),
-
-    (   get_dict(author, Document, Author)
-    ->  true
-    ;   throw(error(rebase_author_missing))),
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ author : Author,
+               rebase_from : Their_Path } :< Document
+        ),
+        error(bad_api_document(Document,[author,rebase_from]),_)),
 
     catch_with_backtrace(
         (   Strategy_Map = [],
@@ -1585,44 +2060,97 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
             (   Common_Commit_ID_Option = some(Common_Commit_ID)
             ->  Reply = (Incomplete_Reply.put('api:common_commit_id', Common_Commit_ID))
             ;   Reply = Incomplete_Reply),
-            reply_json_dict(Reply)),
+            cors_reply_json(Request, Reply, [status(200)])),
         E,
         do_or_die(rebase_error_handler(E,Request),
                   E)
     ).
 
-rebase_error_hander(error(invalid_target_absolute_path(Path),_), Request) :-
+rebase_error_handler(error(invalid_target_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteTargetDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
-rebase_error_hander(error(invalid_source_absolute_path(Path),_), Request) :-
+                    [status(400)]).
+rebase_error_handler(error(invalid_source_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following rebase source absolute resource descriptor string is invalid: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteSourceDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_target_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase target absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotATargetBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_requires_source_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following rebase source absolute resource descriptor does not describe a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotASourceBranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(unresolvable_target_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following target descriptor could not be resolved to a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:UnresolvableTargetAbsoluteDescriptor',
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
-    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+rebase_error_handler(error(unresolvable_source_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following source descriptor could not be resolved to a branch: ~q", [Path]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
                       'api:status' : 'api:failure',
-                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
-                                       'api:their_commit' : Their_Commit_Id,
-                                       'api:witness' : Fixup_Witnesses},
+                      'api:error' : _{ '@type' : 'api:UnresolvableSourceAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
                     [status(404)]).
-rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+rebase_error_handler(error(rebase_commit_application_failed(continue_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'continue' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseContinueOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_on_valid_commit(Their_Commit_Id)),_), Request) :-
+    format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'fixup' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupOnValidCommit',
+                                       'api:their_commit' : Their_Commit_Id},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
     format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
     cors_reply_json(Request,
                     _{'@type' : 'api:RebaseErrorResponse',
@@ -1632,7 +2160,18 @@ rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_
                                        'api:witness' : Fixup_Witnesses},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+rebase_error_handler(error(rebase_commit_application_failed(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), Request) :-
+    format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:RebaseErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:RebaseFixupError',
+                                       'api:their_commit' : Their_Commit_Id,
+                                       'api:witness' : Fixup_Witnesses},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1641,21 +2180,12 @@ rebase_error_hander(error(rebase(schema_validation_error(Their_Commit_Id, Fixup_
 :- use_module(library(http/http_open)).
 
 test(rebase_divergent_history, [
-         setup(((   database_exists("TERMINUSQA", "foo")
-                ->  force_delete_db("TERMINUSQA", "foo")
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, "TERMINUSQA")
-                ->  delete_user("TERMINUSQA")
-                ;   true),
-                (   organization_name_exists(system_descriptor{}, "TERMINUSQA")
-                ->  delete_organization("TERMINUSQA")
-                ;   true),
-                add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
-                create_db_without_schema("TERMINUSQA", "foo"))),
-         cleanup((force_delete_db("TERMINUSQA", "foo"),
-                  delete_user_and_organization("TERMINUSQA")))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
+    create_db_without_schema("TERMINUSQA", "foo"),
 
     Master_Path = "TERMINUSQA/foo",
     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
@@ -1689,8 +2219,7 @@ test(rebase_divergent_history, [
                          insert(j,k,l)),
                      _),
 
-    config:server(Server),
-    atomic_list_concat([Server, '/rebase/TERMINUSQA/foo'], URI),
+    atomic_list_concat([Server, '/api/rebase/TERMINUSQA/foo'], URI),
     http_post(URI,
               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
                      author : "Gavsky"}),
@@ -1707,7 +2236,7 @@ test(rebase_divergent_history, [
     } :< JSON,
 
     Repository_Descriptor = Master_Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
     commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_B, Commit_C, Commit_D]),
 
     commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),
@@ -1717,8 +2246,9 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pack/Path), cors_handler(Method, pack_handler(Path)),
+:- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -1726,20 +2256,18 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 
     (   _{ repository_head : Layer_ID } :< Document
     ->  Repo_Head_Option = some(Layer_ID)
-    ;   _{} :< Document
-    ->  Repo_Head_Option = none
-    ;   throw(error(bad_api_document(Document)))),
+    ;   Repo_Head_Option = none),
 
     catch_with_backtrace(
-        (   pack(System_DB, Auth,
-                 Path, Repo_Head_Option, Payload_Option),
-
-            (   Payload_Option = some(Payload)
-            ->  throw(http_reply(bytes('application/octets',Payload)))
-            ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)])))),
+       pack(System_DB, Auth,
+            Path, Repo_Head_Option, Payload_Option),
         E,
         do_or_die(pack_error_handler(E,Request),
-                  E)).
+                  E)),
+
+    (   Payload_Option = some(Payload)
+    ->  throw(http_reply(bytes('application/octets',Payload)))
+    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
 
 pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
@@ -1750,7 +2278,7 @@ pack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
 pack_error_handler(error(unresolvable_collection(Descriptor),_), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
@@ -1783,22 +2311,11 @@ pack_error_handler(error(not_a_repository_descriptor(Descriptor),_), Request) :-
 :- use_module(library(terminus_store)).
 
 test(pack_stuff, [
-         % blocked('Blocked due to build problems - missing new store?'),
-         setup(((   database_exists('_a_test_user_',foo)
-                ->  force_delete_db('_a_test_user_',foo)
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user('_a_test_user_')
-                ;   true),
-                (   organization_name_exists(system_descriptor{},'_a_test_user_')
-                ->  delete_organization('_a_test_user_')
-                ;   true),
-                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
-                create_db_without_schema('_a_test_user_',foo)
-               )),
-         cleanup((force_delete_db('_a_test_user_',foo),
-                  delete_user_and_organization('_a_test_user_')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_',foo),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
 
@@ -1823,8 +2340,7 @@ test(pack_stuff, [
                      _),
 
 
-    config:server(Server),
-    atomic_list_concat([Server, '/pack/_a_test_user_/foo'], URI),
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
     http_post(URI,
@@ -1854,22 +2370,11 @@ test(pack_stuff, [
 
 
 test(pack_nothing, [
-         % blocked('causing travis to die'),
-         setup(((   database_exists('_a_test_user_','foo')
-                ->  force_delete_db('_a_test_user_','foo')
-                ;   true),
-                (   agent_name_exists(system_descriptor{}, '_a_test_user_')
-                ->  delete_user('_a_test_user_')
-                ;   true),
-                (   organization_name_exists(system_descriptor{},'_a_test_user_')
-                ->  delete_organization('_a_test_user_')
-                ;   true),
-                add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
-                create_db_without_schema('_a_test_user_','foo')
-               )),
-         cleanup((force_delete_db('_a_test_user_','foo'),
-                  delete_user_and_organization('_a_test_user_')))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ]) :-
+    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_','foo'),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
     Repository_Descriptor = (Descriptor.repository_descriptor),
@@ -1877,8 +2382,7 @@ test(pack_nothing, [
     repository_head_layerid(Repo_Transaction, Repository_Head_Layer_ID),
 
     Document = _{ repository_head : Repository_Head_Layer_ID },
-    config:server(Server),
-    atomic_list_concat([Server, '/pack/_a_test_user_/foo'], URI),
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
     http_post(URI,
               json(Document),
               _Data,
@@ -1888,8 +2392,9 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(unpack/Path), cors_handler(Method, unpack_handler(Path)),
+:- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 time_limit(infinite),
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
@@ -1957,39 +2462,48 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                     [status(404)]).
 
 :- begin_tests(unpack_endpoint).
+
+
 :- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(push/Path), cors_handler(Method, push_handler(Path)),
+:- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 push_handler(post,Path,Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch } :< Document,
-        error(push_has_no_remote(Document))),
+        (  get_payload(Document, Request),
+           _{ remote : Remote_Name,
+              remote_branch : Remote_Branch } :< Document),
+        error(bad_api_document(Document,[remote,remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Authorization),
         error(no_remote_authorization)),
 
+    (   get_dict(push_prefixes, Document, true)
+    ->  Push_Prefixes = true
+    ;   Push_Prefixes = false),
+
     catch_with_backtrace(
-        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch, [prefixes(Push_Prefixes)],
                  authorized_push(Authorization),Result),
-            (   Result = none
-            ->  Response = _{'@type' : "api:PushResponse",
-                             'api:status' : "api:success"}
-            ;   Result = some(Head_ID)
-            ->  Response = _{'@type' : "api:PushNewHeadResponse",
-                             'api:head' : Head_ID,
-                             'api:status' : "api:success"}
+            (   Result = same(Head_ID)
+            ->  Head_Updated = false
+            ;   Result = new(Head_ID)
+            ->  Head_Updated = true
             ;   throw(error(internal_server_error,_))),
+
+            Response =  _{'@type' : "api:PushResponse",
+                          'api:repo_head_updated' : Head_Updated,
+                          'api:repo_head' : Head_ID,
+                          'api:status' : "api:success"},
+
             cors_reply_json(Request,
-                            Result,
+                            Response,
                             [status(200)])),
         E,
         do_or_die(push_error_handler(E,Request),
@@ -2004,7 +2518,18 @@ push_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                                        'api:absolute_descriptor' : Path},
                       'api:message' : Msg
                      },
-                    [status(404)]).
+                    [status(400)]).
+push_error_handler(error(push_requires_branch(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:NotABranchDescriptorError',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Request) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The branch described by the path ~q does not exist", [Path]),
@@ -2015,7 +2540,7 @@ push_error_handler(error(unresolvable_absolute_descriptor(Descriptor), _), Reque
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
-                    [status(400)]).
+                    [status(404)]).
 push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
     (   get_dict('api:message', Reason, Inner_Msg)
     ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])
@@ -2028,14 +2553,55 @@ push_error_handler(error(remote_authorization_failure(Reason), _), Request) :-
                                        'api:response' : Reason}
                      },
                     [status(401)]).
+push_error_handler(error(remote_unpack_failed(history_diverged),_), Request) :-
+    format(string(Msg), "The unpacking of layers on the remote was not possible as the history was divergent", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:HistoryDivergedError"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(communication_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to a communication error: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:CommunicationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(authorization_failure(Reason)),_), Request) :-
+    format(string(Msg), "The unpacking of layers failed on the remote due to an authorization failure: ~q", [Reason]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:AuthorizationFailure"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+push_error_handler(error(remote_unpack_failed(remote_unknown),_), Request) :-
+    format(string(Msg), "The remote requested was not known", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PushErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : "api:RemoteUnknown"},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
 
 
 remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"unpack"|Rest]).
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","unpack"|Rest]).
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+
+    (   is_local_https(Remote_URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
+
     remote_unpack_url(Remote_URL, Unpack_URL),
 
     catch(http_post(Unpack_URL,
@@ -2043,17 +2609,19 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),
-                     status_code(Status_Code)]),
+                     timeout(infinite),
+                     status_code(Status_Code)
+                     |Additional_Options]),
           E,
-          throw(error(communication_failure(E)))),
+          throw(error(communication_failure(E),_))),
 
     (   200 = Status_Code
     ->  true
     ;   400 = Status_Code,
-        Result :< _{'@type': Vio_Type}
-    ->  (   Vio_Type = "vio:NotALinearHistory"
+        _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
+    ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
         ->  throw(error(history_diverged,_))
-        ;   Vio_Type = "vio:UnpackDestinationDatabaseNotFound"
+        ;   _{'@type' : "api:UnpackDestinationDatabaseNotFound"} :< Error
         ->  throw(error(remote_unknown,_))
         ;   throw(error(unknown_status_code(Status_Code, Result),_))
         )
@@ -2062,20 +2630,292 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   throw(error(unknown_status_code,_))
     ).
 
+:- begin_tests(push_endpoint, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(push_empty_to_empty_does_nothing_succesfully,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    \+ get_dict('api:head', JSON, _),
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+test(push_empty_with_prefix_change_to_empty_changes_prefixes,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        (   create_context((Origin_Branch_Descriptor.repository_descriptor),
+                           Origin_Repository_Context),
+            with_transaction(Origin_Repository_Context,
+                             update_prefixes(Origin_Repository_Context,
+                                             _{doc: "http://this_is_docs/",
+                                               scm: "http://this_is_scm/",
+                                               foo: "http://this_is_foo/"}),
+                             _))),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main",
+                       push_prefixes: true
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': _,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Destination,
+        (   repository_prefixes((Destination_Branch_Descriptor.repository_descriptor),
+                                Prefixes),
+            Prefixes = _{doc: 'http://this_is_docs/',
+                         scm: 'http://this_is_scm/',
+                         foo: 'http://this_is_foo/'})).
+
+test(push_nonempty_to_empty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+test(push_nonempty_to_earlier_nonempty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    with_triple_store(
+        Store_Origin,
+        (   create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello"}, Origin_Context_1),
+            with_transaction(Origin_Context_1,
+                             ask(Origin_Context_1,
+                                 insert(g,h,i)),
+                             _),
+            create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello again"}, Origin_Context_2),
+            with_transaction(Origin_Context_2,
+                             ask(Origin_Context_2,
+                                 insert(j,k,l)),
+                             _)
+        )
+    ),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+:- end_tests(push_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(pull/Path), cors_handler(Method, pull_handler(Path)),
+:- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
+                 time_limit(infinite),
                  methods([options,post])]).
 
 pull_handler(post,Path,Request, System_DB, Local_Auth) :-
-    get_payload(Document, Request),
     % Can't we just ask for the default remote?
     do_or_die(
-        _{ remote : Remote_Name,
-           remote_branch : Remote_Branch_Name
-         } :< Document,
-        error(pull_has_no_remote(Document))),
+        (   get_payload(Document, Request),
+            _{ remote : Remote_Name,
+               remote_branch : Remote_Branch_Name
+             } :< Document),
+        error(bad_api_document(Document, [remote, remote_branch]),_)),
 
     do_or_die(
         request_remote_authorization(Request, Remote_Auth),
@@ -2085,10 +2925,11 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
         (   pull(System_DB, Local_Auth, Path, Remote_Name, Remote_Branch_Name,
                  authorized_fetch(Remote_Auth),
                  Result),
+            JSON_Base = _{'@type' : 'api:PullResponse',
+                          'api:status' : "api:success"},
+            put_dict(Result,JSON_Base,JSON_Response),
             cors_reply_json(Request,
-                            _{'@type' : 'api:PullResponse',
-                              'api:status' : "api:success",
-                              'api:pull_report' : Result},
+                            JSON_Response,
                             [status(200)])),
         E,
         do_or_die(
@@ -2102,6 +2943,7 @@ pull_error_handler(error(not_a_valid_local_branch(Descriptor), _), Request) :-
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : false,
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
@@ -2113,38 +2955,346 @@ pull_error_handler(error(not_a_valid_remote_branch(Descriptor), _), Request) :-
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : false,
                       'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                                        'api:absolute_descriptor' : Path}
                      },
                     [status(400)]).
-pull_error_handler(error(divergent_history(Common_Commit), _), Request) :-
+pull_error_handler(error(pull_divergent_history(Common_Commit,Head_Has_Updated), _), Request) :-
     format(string(Msg), "History diverges from commit ~q", [Common_Commit]),
     cors_reply_json(Request,
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : Head_Has_Updated,
                       'api:error' : _{ '@type' : 'api:HistoryDivergedError',
                                        'api:common_commit' : Common_Commit
                                      }},
                     [status(400)]).
-pull_error_handler(error(no_common_history, _), Request) :-
+pull_error_handler(error(pull_no_common_history(Head_Has_Updated), _), Request) :-
     format(string(Msg), "There is no common history between branches", []),
     cors_reply_json(Request,
                     _{'@type' : "api:PullErrorResponse",
                       'api:status' : "api:failure",
                       'api:message' : Msg,
+                      'api:fetch_status' : Head_Has_Updated,
                       'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
                                      }},
                     [status(400)]).
 
+:- begin_tests(pull_endpoint, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(pull_from_empty_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        repository_head(Local_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Remote,
+        repository_head(Remote_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : false,
+      'api:status':"api:success"} :< JSON.
+
+test(pull_from_something_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(a,b,c)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        branch_head_commit(Local_Repository_Descriptor, "main", Local_Orginal_Commit_Uri)
+    ),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(e,f,g)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            \+ Local_Orginal_Commit_Uri = Local_Commit_Uri,
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something_equal,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : false,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something_equal_other_branch,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote)))
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Remote,
+        (
+            agent_name_uri(system_descriptor{}, "KarlKautsky", User_Uri),
+            branch_create(system_descriptor{}, User_Uri, "KarlKautsky/foo/local/branch/other", some("KarlKautsky/foo/local/branch/main"), _),
+            repository_head(Remote_Database_Descriptor, "local", Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_Local,
+        (
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ).
+
+
+:- end_tests(pull_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(branch/Path), cors_handler(Method, branch_handler(Path)),
+:- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
 
 branch_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
+    do_or_die(
+        get_payload(Document, Request),
+        error(bad_api_document(Document, []),_)),
 
     (   get_dict(origin, Document, Origin_Path)
     ->  Origin_Option = some(Origin_Path)
@@ -2254,16 +3404,12 @@ branch_error_handler(error(origin_cannot_be_branched(Origin_Descriptor), _), Req
 :- use_module(library(http/http_open)).
 
 test(create_empty_branch, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{prefixes : _{ doc : "https://terminushub.com/document",
@@ -2278,19 +3424,15 @@ test(create_empty_branch, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_local_without_prefixes, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{origin:'/admin/test/local/branch/master'}),
+              json(_{origin:'/admin/test/local/branch/main'}),
               JSON,
               [json_object(dict),authorization(basic(admin,Key))]),
     * json_write_dict(current_output, JSON, []),
@@ -2300,19 +3442,15 @@ test(create_branch_from_local_without_prefixes, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_local_with_prefixes, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") %dubious
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{origin:'/admin/test/local/branch/master',
+              json(_{origin:'/admin/test/local/branch/main',
                      prefixes : _{ doc : "https://terminushub.com/document",
                                    scm : "https://terminushub.com/schema"}
                     }),
@@ -2325,19 +3463,15 @@ test(create_branch_from_local_with_prefixes, [
     has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_that_already_exists_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % dubious
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/master'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/main'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{origin:'/admin/test/local/branch/master',
+              json(_{origin:'/admin/test/local/branch/main',
                      base_uri:'http://terminushub.com/admin/test/foodocument'}),
               JSON,
               [json_object(dict),
@@ -2347,16 +3481,12 @@ test(create_branch_that_already_exists_error, [
     * json_write_dict(current_output, JSON, []).
 
 test(create_branch_from_nonexisting_origin_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'/admin/test/local/branch/bar',
@@ -2373,16 +3503,12 @@ test(create_branch_from_nonexisting_origin_error, [
     \+ has_branch(Repository_Descriptor, "foo").
 
 test(create_branch_from_commit_graph_error, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
-    config:server(Server),
-    atomic_list_concat([Server, '/branch/admin/test/local/branch/foo'], URI),
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{origin:'admin/test/local/_commits',
@@ -2404,7 +3530,7 @@ test(create_branch_from_commit_graph_error, [
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(root(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
+:- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2413,7 +3539,7 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
     throw(error(not_implemented)).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(graph/Path), cors_handler(Method, graph_handler(Path)),
+:- http_handler(api(graph/Path), cors_handler(Method, graph_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2421,12 +3547,9 @@ prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
 graph_handler(post, Path, Request, System_Db, Auth) :-
     get_payload(Document, Request),
 
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document, [commit_info]), _)),
 
-    % DUBIOUS authentication??
     catch_with_backtrace(
         (create_graph(System_Db, Auth,
                       Path,
@@ -2440,12 +3563,9 @@ graph_handler(post, Path, Request, System_Db, Auth) :-
         do_or_die(graph_error_handler(E, 'api:CreateGraphErrorResponse', Request),
                   E)).
 graph_handler(delete, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    (   _{ commit_info : Commit_Info } :< Document
-    ->  true
-    ;   Commit_Info = _{} % Probably need to error here...
-    ),
+    do_or_die((   get_payload(Document, Request),
+                  _{ commit_info : Commit_Info } :< Document),
+              error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
         (delete_graph(System_DB,Auth,
@@ -2533,19 +3653,15 @@ graph_error_handler(error(graph_already_exists(Descriptor,Graph_Name), _), Type,
 :- use_module(library(http/http_open)).
 
 test(create_graph, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test") % very dubious database name
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "test"),
     Commit = commit_info{ author : 'The Graphinator',
                           message : 'Edges here there and everywhere' },
 
-    config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/local/branch/master/instance/naim'], URI),
+    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/instance/naim'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{commit_info : Commit}),
@@ -2563,24 +3679,20 @@ test(create_graph, [
 
 
 test(delete_graph, [
-         setup((config:server(Server),
-                (   database_exists("admin", "test")
-                ->  force_delete_db("admin", "test")
-                ;   true),
-                create_db_without_schema("admin", "test"),
-                super_user_authority(Auth),
-                create_graph(system_descriptor{},
-                             Auth,
-                             "admin/test/local/branch/master/schema/main",
-                             commit_info{ author : "test",
-                                          message: "Generated by automated testing"},
-                             _Transaction_Metadata))),
-         cleanup(force_delete_db("admin", "test"))
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
      ])
 :-
+    create_db_without_schema("admin", "test"),
+    super_user_authority(Auth),
+    create_graph(system_descriptor{},
+                 Auth,
+                 "admin/test/local/branch/main/schema/main",
+                 commit_info{ author : "test",
+                              message: "Generated by automated testing"},
+                 _Transaction_Metadata),
 
-    config:server(Server),
-    atomic_list_concat([Server, '/graph/admin/test/local/branch/master/schema/main'], URI),
+    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/schema/main'], URI),
     admin_pass(Key),
     Commit = commit_info{ author : 'Jeebuz', message : 'Hello my children' },
     http_get(URI,
@@ -2593,11 +3705,11 @@ test(delete_graph, [
 :- end_tests(graph_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(user), cors_handler(Method, user_handler),
+:- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(user/Name), cors_handler(Method, user_handler(Name)),
+:- http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2690,11 +3802,11 @@ user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Reques
 
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(organization), cors_handler(Method, organization_handler),
+:- http_handler(api(organization), cors_handler(Method, organization_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(root(organization/Name), cors_handler(Method, organization_handler(Name)),
+:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2702,12 +3814,13 @@ user_delete_error_handler(error(user_delete_failed_without_error(Name),_),Reques
 organization_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    do_or_die(_{ organization_name : Name } :< Document,
-              error(malformed_organization_document(Document))
+    do_or_die(_{ organization_name : Org,
+                 user_name : User } :< Document,
+              error(bad_api_document(Document, [organization_name, user_name]))
              ),
 
     catch_with_backtrace(
-        (   add_organization_transaction(System_DB, Auth, Name),
+        (   add_user_organization_transaction(System_DB, Auth, User, Org),
             cors_reply_json(Request,
                             _{'@type' : "api:AddOrganizationResponse",
                               'api:status' : "api:success"})),
@@ -2734,7 +3847,7 @@ organization_handler(post, Name, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     do_or_die(_{ organization_name : New_Name } :< Document,
-              error(malformed_api_document(Document), _)),
+              error(bad_api_document(Document,[organization_name]), _)),
 
     catch_with_backtrace(
         (   update_organization_transaction(System_DB, Auth, Name, New_Name),
@@ -2795,7 +3908,7 @@ delete_organization_error_handler(error(delete_organization_requires_superuser,_
                     [status(401)]).
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(update_role), cors_handler(Method, update_role_handler),
+:- http_handler(api(update_role), cors_handler(Method, update_role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2803,15 +3916,18 @@ delete_organization_error_handler(error(delete_organization_requires_superuser,_
 update_role_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
-    do_or_die(_{ database_name : Database_Name,
-                 agent_names : Agents,
+    do_or_die(_{ agent_names : Agents,
                  organization_name : Organization,
                  actions : Actions
                } :< Document,
-              error(bad_api_document)),
+              error(bad_api_document(Document, [agent_names, organization_name, actions]), _)),
+
+    (   _{ database_name : Database_Name } :< Document
+    ->  Database_Name_Option = some(Database_Name)
+    ;   Database_Name_Option = none),
 
     catch_with_backtrace(
-        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions),
+        (   update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name_Option, Actions),
             cors_reply_json(Request,
                             _{'@type' : "api:UpdateRoleResponse",
                               'api:status' : "api:success"})),
@@ -2833,7 +3949,7 @@ update_role_error_handler(error(no_manage_capability(Organization,Resource_Name)
 
 
 %%%%%%%%%%%%%%%%%%%% Role handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(role), cors_handler(Method, role_handler),
+:- http_handler(api(role), cors_handler(Method, role_handler),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -2848,6 +3964,449 @@ role_handler(post, Request, System_DB, Auth) :-
         E,
         do_or_die(woql_error_handler(E, Request),
                   E)).
+
+%%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * squash_handler(Mode,Path,Request,System,Auth) is det.
+ *
+ * Squash commit chain to a new commit
+ */
+squash_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_info : Commit_Info } :< Document),
+        error(bad_api_document(Document, [commit_info]), _)),
+
+    catch_with_backtrace(
+        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit),
+            cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
+                                       'api:commit' : Commit,
+                                       'api:old_commit' : Old_Commit,
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(squash_error_handler(Error, Request),
+                  Error)).
+
+squash_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+squash_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+squash_error_handler(error(unresolvable_absolute_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s can not be resolved to a resource", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:SquashErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(squash_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(terminus_store)).
+
+test(squash_a_branch, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/test",
+    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Commit_Info_1 = commit_info{
+                      author : "me",
+                      message: "first commit"
+                  },
+
+    create_context(Descriptor, Commit_Info_1, Context1),
+
+    with_transaction(
+        Context1,
+        ask(Context1,
+            insert(a,b,c)),
+        _),
+
+    Commit_Info_2 = commit_info{
+                        author : "me",
+                        message: "second commit"
+                    },
+
+    create_context(Descriptor, Commit_Info_2, Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    descriptor_commit_id_uri((Descriptor.repository_descriptor),
+                             Descriptor,
+                             Commit_Id, _Commit_Uri),
+
+    Commit_Info = commit_info{
+                      author : "me",
+                      message: "Squash"
+                  },
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_info: Commit_Info}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+    JSON = _{'@type':"api:SquashResponse",
+             'api:commit': New_Commit_Path,
+             'api:old_commit' : Old_Commit_Path,
+             'api:status':"api:success"},
+    resolve_absolute_string_descriptor(New_Commit_Path, Commit_Descriptor),
+    open_descriptor(Commit_Descriptor, Transaction),
+
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_),
+    findall(X-Y-Z,ask(Commit_Descriptor,t(X,Y,Z)), Triples),
+    sort(Triples,Sorted),
+    sort([a-b-c,e-f-g],Correct),
+    ord_seteq(Sorted, Correct),
+
+    resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
+    commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
+
+:- end_tests(squash_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * reset_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+reset_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ commit_descriptor : Ref } :< Document),
+        error(bad_api_document(Document, [commit_descriptor]), _)),
+
+    catch_with_backtrace(
+        (   api_reset(System_DB, Auth, Path, Ref),
+            cors_reply_json(Request, _{'@type' : 'api:ResetResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(reset_error_handler(Error, Request),
+                  Error)).
+
+reset_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_branch_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotABranchDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(not_a_commit_descriptor(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not a commit descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotACommitDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+reset_error_handler(error(different_repositories(Descriptor1,Descriptor2),_),
+                    Request) :-
+    resolve_absolute_string_descriptor(Path1, Descriptor1),
+    resolve_absolute_string_descriptor(Path2, Descriptor2),
+    format(string(Msg), "The repository of the path to be reset ~s is not in the same repository as the commit which is in ~s", [Path1,Path2]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:DifferentRepositoriesError",
+                                       'api:source_absolute_descriptor' : Path1,
+                                       'api:target_absolute_descriptor': Path2
+                                     }
+                     },
+                    [status(400)]).
+reset_error_handler(error(branch_does_not_exist(Descriptor), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:ResetErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(reset_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(reset, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "testdb"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    Path = "admin/testdb",
+
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    descriptor_commit_id_uri(Repository_Descriptor,
+                             Descriptor,
+                             Commit_Id,
+                             _Commit_Uri),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 2" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(e,f,g)),
+        _),
+
+    resolve_relative_descriptor(Repository_Descriptor,
+                                ["commit",Commit_Id],
+                                Commit_Descriptor),
+
+    resolve_absolute_string_descriptor(Ref,Commit_Descriptor),
+
+    atomic_list_concat([Server, '/api/reset/admin/testdb'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_descriptor : Ref }),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:ResetResponse",
+             'api:status':"api:success"},
+
+    findall(X-Y-Z,
+            ask(Descriptor,
+                t(X,Y,Z)),
+            Triples),
+
+    [a-b-c] = Triples.
+
+:- end_tests(reset_endpoint).
+
+
+%%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * optimize_handler(Mode,DB,Request) is det.
+ *
+ * Optimize a resource
+ */
+optimize_handler(post, Path, Request, System_DB, Auth) :-
+    catch_with_backtrace(
+        (   api_optimize(System_DB, Auth, Path),
+            cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(optimize_error_handler(Error, Request),
+                  Error)).
+
+optimize_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+optimize_error_handler(error(not_a_valid_descriptor_for_optimization(Descriptor),_), Request) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The path ~s is not an optimizable descriptor", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:OptimizeErrorResponse',
+                      'api:status' : "api:failure",
+                      'api:message' : Msg,
+                      'api:error' : _{ '@type' : "api:NotAValidOptimizationDescriptorError",
+                                       'api:absolute_descriptor' : Path}
+                     },
+                    [status(400)]).
+
+:- begin_tests(optimize_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(optimize_system, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    create_db_without_schema("admin", "test2"),
+    atomic_list_concat([Server, '/api/optimize/_system'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:OptimizeResponse",
+             'api:status':"api:success"},
+
+    open_descriptor(system_descriptor{}, Transaction),
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_).
+
+:- end_tests(optimize_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root(.), cors_handler(Method, console_handler),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(root(db), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(home), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(clone), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(collaborate), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(newdb), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(profile), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(root(hub), cors_handler(Method, console_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+/*
+ * console_handler(+Method,+Request) is det.
+ */
+console_handler(get,Request, _System_DB, _Auth) :-
+    config:index_path(Index_Path),
+    write_cors_headers(Request),
+    throw(http_reply(file('text/html', Index_Path))).
+
+:- begin_tests(console_route).
+:- use_module(core(util/test_utils)).
+
+test(console_route, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
+
+test(console_route_empty, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
+
+test(console_route_db, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/db/gavin/baseball", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
+
+test(console_route_home, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    format(string(ConsoleURL), "~s/home/somewhere", [Server]),
+    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
+
+:- end_tests(console_route).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
@@ -2873,7 +4432,17 @@ cors_handler(Method, Goal, R) :-
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
                           },
-                         [status(401)]))).
+                         [status(401)]))),
+    !.
+cors_handler(_Method, Goal, R) :-
+    write_cors_headers(R),
+    format(string(Msg), "Failed to run the API endpoint goal ~q", Goal),
+    reply_json(_{'@type' : 'api:ErrorResponse',
+                 'api:status' : 'api:failure',
+                 'api:error' : _{'@type' : 'api:APIEndpointFailed'},
+                 'api:message' : Msg
+                },
+               [status(500)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(+,3,?,?,?).
@@ -2918,6 +4487,15 @@ customise_exception(error(access_not_authorised(Auth,Action,Scope))) :-
                  'scope' : Scope_String
                 },
                [status(403)]).
+customise_exception(error(bad_api_document(Document,Expected),_)) :-
+    format(string(Msg), "The input API document was missing required fields: ~q", [Expected]),
+    reply_json(_{'@type' : 'api:BadAPIDocumentErrorResponse',
+                 'api:status' : 'api:failure',
+                 'api:error' : _{'@type' : 'api:RequiredFieldsMissing',
+                                 'api:expected' : Expected,
+                                 'api:document' : Document},
+                 'api:message' : Msg},
+               [status(400)]).
 
 %% everything below this comment is dubious for this case predicate. a lot of these cases should be handled internally by their respective route handlers.
 customise_exception(syntax_error(M)) :-
@@ -3001,10 +4579,6 @@ customise_exception(error(database_files_do_not_exist(DB))) :-
     format(atom(M), 'Database fields do not exist for database with the name ~q', [DB]),
     reply_json(_{'api:message' : M,
                  'api:status' : 'api:failure'},
-               [status(400)]).
-customise_exception(error(bad_api_document(Document))) :-
-    reply_json(_{'api:status' : 'api:failure',
-                 'system:document' : Document},
                [status(400)]).
 customise_exception(error(database_already_exists(DB))) :-
     format(atom(MSG), 'Database ~s already exists', [DB]),
@@ -3163,7 +4737,7 @@ authenticate(_, _, doc:anonymous).
 write_cors_headers(Request) :-
     (   memberchk(origin(Origin), Request)
     ->  current_output(Out),
-        format(Out,'Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\n',[]),
+        format(Out,'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\n',[]),
         format(Out,'Access-Control-Allow-Credentials: true\n',[]),
         format(Out,'Access-Control-Max-Age: 1728000\n',[]),
         format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
@@ -3192,17 +4766,20 @@ cors_reply_json(Request, JSON, Options) :-
  */
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
-    memberchk(method(post), Request),
-    memberchk(multipart(Parts), Request),
+    memberchk(method(Method), Request),
+    memberchk(Method, [post,put]),
+    memberchk(multipart(Form_Data), Request),
     !,
-    (   memberchk(Key=Encoded_Value, Parts)
-    ->  uri_encoded(query_value, Value, Encoded_Value)
-    ;   throw(error(no_parameter_key_in_document(Key,Parts)))).
+    member(mime(Mime_Header,Encoded_Value,_),Form_Data),
+    memberchk(name(Key), Mime_Header),
+    (   memberchk(type('application/json'),Mime_Header)
+    ->  atom_json_dict(Encoded_Value,Value,[])
+    ;   uri_encoded(query_value, Value, Encoded_Value)).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
     (   memberchk(Method, [get,delete])
-    ;   Method = post,
+    ;   memberchk(Method, [post,put]),
         \+ memberchk(content_type('application/json'), Request)),
 
     http_parameters(Request, [], [form_data(Data)]),
@@ -3212,7 +4789,9 @@ try_get_param(Key,Request,Value) :-
     !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
-    memberchk(method(post), Request),
+    memberchk(method(Method), Request),
+    memberchk(Method, [post,put]),
+
     memberchk(content_type('application/json'), Request),
 
     (   memberchk(payload(Document), Request)
@@ -3237,16 +4816,21 @@ try_get_param(Key,_Request,_Value) :-
  */
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
-    memberchk(method(post), Request),
-    memberchk(multipart(Parts), Request),
+    memberchk(method(Method), Request),
+    memberchk(Method, [post,put]),
+
+    memberchk(multipart(Form_Data), Request),
     !,
-    memberchk(Key=Encoded_Value, Parts),
-    uri_encoded(query_value, Value, Encoded_Value).
+    memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
+    memberchk(name(Key), Mime_Header),
+    (   memberchk(type('application/json'),Mime_Header)
+    ->  atom_json_dict(Encoded_Value,Value,[])
+    ;   uri_encoded(query_value, Value, Encoded_Value)).
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
     memberchk(method(Method), Request),
     (   memberchk(Method, [get,delete])
-    ;   Method = post,
+    ;   memberchk(Method, [post,put]),
         \+ memberchk(content_type('application/json'), Request)),
 
     http_parameters(Request, [], [form_data(Data)]),
@@ -3254,7 +4838,9 @@ get_param(Key,Request,Value) :-
     !.
 get_param(Key,Request,Value) :-
     % POST with JSON package
-    memberchk(method(post), Request),
+    memberchk(method(Method), Request),
+    memberchk(Method, [post,put]),
+
     memberchk(content_type('application/json'), Request),
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
@@ -3274,15 +4860,14 @@ try_atom_json(Atom,JSON) :-
  * This should really be done automatically at request time
  * using the endpoint wrappers so we don't forget to do it.
  */
-add_payload_to_request(Request,[multipart(Parts)|Request]) :-
+add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
     memberchk(content_type(ContentType), Request),
     http_parse_header_value(
         content_type, ContentType,
         media(multipart/'form-data', _)
     ),
-    http_log('~Nmulti-part form?~n', []),
     !,
-    http_read_data(Request, Parts, [on_filename(save_post_file)]).
+    http_read_data(Request, Form_Data, [on_filename(save_post_file),form_data(mime)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     memberchk(content_type('application/json'), Request),
     !,
@@ -3323,5 +4908,13 @@ save_post_file(In, file(Filename, File), Options) :-
 collect_posted_files(Request,Files) :-
     memberchk(multipart(Parts), Request),
     !,
-    include([_Token=file(_Name,_Storage)]>>true,Parts,Files).
+    convlist([mime(Mime_Header,Data,_),Filename=Temp_Filename]>>(
+                 memberchk(filename(Filename),Mime_Header),
+                 \+ memberchk(type('application/json'),Mime_Header),
+                 setup_call_cleanup(
+                     tmp_file_stream(octet, Temp_Filename, Out),
+                     write(Out, Data),
+                     close(Out)
+                 )
+             ),Parts,Files).
 collect_posted_files(_Request,[]).

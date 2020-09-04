@@ -16,6 +16,7 @@
               user_object/3,
               super_user_authority/1,
               check_descriptor_auth/4,
+              is_super_user/1,
               is_super_user/2,
 
               % user_management.pl
@@ -36,6 +37,7 @@
               add_organization/2,
               add_organization/3,
               add_organization_transaction/3,
+              add_user_organization_transaction/4,
               add_role/6,
               update_role/6,
               update_role_transaction/6,

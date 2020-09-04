@@ -15,6 +15,7 @@
               user_object/3,
               super_user_authority/1,
               check_descriptor_auth/4,
+              is_super_user/1,
               is_super_user/2
           ]).
 
@@ -132,6 +133,14 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
             t(Capability, system:capability_scope, Scope_Iri)
         )
        ).
+auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
+    % For access to everything that the anonymous user has...
+    ask(DB,
+        (   t(doc:anonymous_role, system:capability, Capability),
+            t(Capability, system:action, Action),
+            t(Capability, system:capability_scope, Scope_Iri)
+        )
+       ).
 
 /*
  * resource_user_path(Askable,Resource,User,Path) is nondet.
@@ -160,6 +169,9 @@ assert_write_access(G, Context, Context) :-
 write_type_access(instance,system:instance_write_access).
 write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
+
+is_super_user(Auth) :-
+    is_super_user(Auth, {doc : 'terminusdb:///system/data/'}).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
@@ -370,22 +382,24 @@ user_object(DB, User_ID, User_Obj) :-
             )).
 
 
-check_descriptor_auth_(system_descriptor{},Action,Auth,Terminus) :-
-    assert_auth_action_scope(Terminus,Auth,Action,doc:system).
+check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
+    assert_auth_action_scope(System_DB,Auth,Action,doc:system).
 check_descriptor_auth_(database_descriptor{ database_name : Database,
                                             organization_name : Organization},
-                       Action, Auth, Terminus) :-
-    organization_database_name_uri(Terminus, Organization, Database, URI),
-    assert_auth_action_scope(Terminus,Auth,Action, URI).
-check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,
-                                              repository_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(DB, Action, Auth, Terminus).
-check_descriptor_auth_(branch_descriptor{ repository_descriptor : Repo,
-                                          branch_name : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(Repo, Action, Auth, Terminus).
-check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
-                                          commit_id : _ }, Action, Auth, Terminus) :-
-    check_descriptor_auth_(Repo, Action, Auth, Terminus).
+                       Action, Auth, System_DB) :-
+    do_or_die(organization_database_name_uri(System_DB, Organization, Database, URI),
+              error(database_does_not_exist(Organization, Database),_)),
 
-check_descriptor_auth(Terminus, Descriptor, Action, Auth) :-
-    check_descriptor_auth_(Descriptor, Action, Auth, Terminus).
+    assert_auth_action_scope(System_DB,Auth,Action, URI).
+check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,
+                                              repository_name : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(DB, Action, Auth, System_DB).
+check_descriptor_auth_(branch_descriptor{ repository_descriptor : Repo,
+                                          branch_name : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(Repo, Action, Auth, System_DB).
+check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
+                                          commit_id : _ }, Action, Auth, System_DB) :-
+    check_descriptor_auth_(Repo, Action, Auth, System_DB).
+
+check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
+    check_descriptor_auth_(Descriptor, Action, Auth, System_DB).

@@ -8,6 +8,7 @@
               commit_uri_to_metadata/5,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
+              descriptor_commit_id_uri/4,
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,
@@ -74,6 +75,14 @@ has_commit(Askable, Commit_Id) :-
     ask(Askable,
         t(_, ref:commit_id, Commit_Id^^xsd:string)).
 
+descriptor_commit_id_uri(Askable, Descriptor, Commit_Id, Commit_Uri) :-
+    commit_descriptor{ commit_id : Commit_Id} :< Descriptor,
+    !,
+    commit_id_uri(Askable, Commit_Id, Commit_Uri).
+descriptor_commit_id_uri(Askable, Descriptor, Commit_Id, Commit_Uri) :-
+    branch_head_commit(Askable, Descriptor.branch_name, Commit_Uri),
+    commit_id_uri(Askable, Commit_Id, Commit_Uri).
+
 commit_id_uri(Askable, Commit_Id, Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, ref:commit_id, Commit_Id^^xsd:string))).
@@ -82,8 +91,7 @@ commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, ref:commit_author, Author^^xsd:string),
                  t(Commit_Uri, ref:commit_message, Message^^xsd:string),
-                 t(Commit_Uri, ref:commit_timestamp, Timestamp_String^^xsd:decimal)))),
-    number_string(Timestamp, Timestamp_String).
+                 t(Commit_Uri, ref:commit_timestamp, Timestamp^^xsd:decimal)))).
 commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
     commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp).
@@ -178,6 +186,7 @@ reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
     ignore(unlink_commit_object_from_branch(Context,Branch_Uri)),
     link_commit_object_to_branch(Context,Branch_Uri, Commit_Uri).
 
+% Note: We should probably refactor to add this to copy graph / copy new graph
 attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
     once(ask(Context,
              (   insert(Commit_Uri, ref:Graph_Type, Graph_Uri),
@@ -187,12 +196,18 @@ attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-
     once(ask(Context,
              insert(Graph_Uri, ref:graph_layer, Graph_Layer_Uri))).
 
+graph_idgen(Context, Commit_Id, Graph_Type, Graph_Name, Graph_Uri) :-
+    once(
+        ask(Context,
+            idgen(doc:'Graph',
+                  [Commit_Id^^xsd:string,
+                   Graph_Type^^xsd:string,
+                   Graph_Name^^xsd:string], Graph_Uri))).
+
 insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
+    graph_idgen(Context,Commit_Id,Graph_Type,Graph_Name,Graph_Uri),
     once(ask(Context,
-             (   idgen(doc:'Graph', [Commit_Id^^xsd:string,
-                                     Graph_Type^^xsd:string,
-                                     Graph_Name^^xsd:string], Graph_Uri),
-                 insert(Graph_Uri, rdf:type, ref:'Graph')))),
+             insert(Graph_Uri, rdf:type, ref:'Graph'))),
     attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri),
 
     % also attach a layer if it is there
@@ -208,6 +223,22 @@ copy_graph_object(Origin_Context, Destination_Context, Graph_Uri) :-
     ->  layer_id_uri(Origin_Context, Layer_Id, Layer_Uri),
         insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
         attach_layer_to_graph(Destination_Context, Graph_Uri, Layer_Uri)
+    ;   true).
+
+copy_new_graph_object(Origin_Askable, Destination_Context, Old_Graph_Uri,
+                      Commit_Id, New_Graph_Uri) :-
+
+    commit_id_uri(Origin_Askable,Commit_Id,Commit_Uri),
+    once(graph_for_commit(Origin_Askable, Commit_Uri, Graph_Type, Graph_Name,
+                          Old_Graph_Uri)),
+    graph_idgen(Destination_Context,Commit_Id,Graph_Type,Graph_Name,New_Graph_Uri),
+    once(ask(Destination_Context,
+             insert(New_Graph_Uri, rdf:type, ref:'Graph'))),
+
+    (   layer_uri_for_graph(Origin_Askable, Old_Graph_Uri, Layer_Uri)
+    ->  layer_id_uri(Origin_Askable, Layer_Id, Layer_Uri),
+        insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
+        attach_layer_to_graph(Destination_Context, New_Graph_Uri, Layer_Uri)
     ;   true).
 
 copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
@@ -776,11 +807,9 @@ apply_graph_change(Us_Repo_Context, Them_Repo_Askable, New_Commit_Uri, New_Commi
     read_write_obj_for_graph(Us_Repo_Context, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
     read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
 
-    forall(xrdf_added([Them_Read_Write_Obj], S, P, O),
-           insert(Us_Read_Write_Obj, S, P, O, _)),
-    forall(xrdf_deleted([Them_Read_Write_Obj], S, P, O),
-           delete(Us_Read_Write_Obj, S, P, O, _)),
-
+    read_write_obj_builder(Us_Read_Write_Obj, Builder),
+    read_write_obj_reader(Them_Read_Write_Obj, Layer),
+    nb_apply_delta(Builder,Layer),
 
     read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
     (   ground(Us_Validation_Obj.read)
@@ -804,6 +833,20 @@ ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_
     (   ord_seteq(Us_Graph_Set, Them_Graph_Set)
     ->  true
     ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
+
+ensure_graph_sets_included(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs) :-
+    findall(Type1-Name1,
+            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type1, Name1, _),
+            Us_Graphs),
+    findall(Type2-Name2,
+            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type2, Name2, _),
+            Them_Graphs),
+    list_to_ord_set(Us_Graphs, Us_Graph_Set),
+    list_to_ord_set(Them_Graphs, Them_Graph_Set),
+    ord_subtract(Them_Graph_Set, Us_Graph_Set, New_Graphs),
+    (   ord_subtract(Us_Graph_Set, Them_Graph_Set, [])
+    ->  true
+    ;   throw(error(graph_sets_not_included(Us_Commit_Uri, Them_Commit_Uri)))).
 
 apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
     get_time(Now),
@@ -832,7 +875,7 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
     % ensure graph sets are equivalent. if not, error
-    ensure_graph_sets_equal(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri),
+    ensure_graph_sets_included(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs),
 
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
@@ -848,8 +891,8 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
         New_Commit_Id,
         New_Commit_Uri),
 
-    forall(graph_for_commit(Them_Repo_Askable,
-                            Them_Commit_Uri,
+    forall(graph_for_commit(Us_Repo_Context,
+                            Us_Commit_Uri,
                             Type,
                             Name,
                             _Graph_Uri),
@@ -862,6 +905,16 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
                               Type,
                               Name,
                               _New_Graph_Uri)),
+
+    forall(member(Graph_Type-Graph_Name,
+                  New_Graphs),
+           (   once(graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)),
+               copy_new_graph_object(Them_Repo_Askable, Us_Repo_Context, Graph_Uri,
+                                     Them_Commit_Id, New_Graph_Uri),
+               attach_graph_to_commit(Us_Repo_Context, New_Commit_Uri,
+                                      Graph_Type, Graph_Name, New_Graph_Uri)
+           )
+          ),
 
     % Note, this doesn't yet commit the commit graph.
     % We may actually have written an invalid commit here.
@@ -878,25 +931,62 @@ repository_prefixes(Repository_Askable, Prefixes) :-
             Key_Value_Pairs),
     dict_create(Prefixes,_,Key_Value_Pairs).
 
-update_prefixes(Context, Prefixes) :-
-    forall(ask(Context,
-               (   t(ref:default_prefixes, ref:prefix_pair, Pair),
-                   delete_object(Pair),
-                   delete(ref_default_prefixes, ref:prefix_pair, Pair))),
-           true),
+insert_prefix(Context, Key, URI) :-
+    ask(Context,
+        (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
+            insert(Pair, rdf:type, ref:'PrefixPair'),
+            insert(ref:default_prefixes, ref:prefix_pair, Pair),
+            insert(Pair, ref:prefix, Key^^xsd:string),
+            insert(Pair, ref:prefix_uri, URI^^xsd:string)
+        )
+       ).
 
-    dict_keys(Prefixes, Keys),
-    forall((   member(Key, Keys),
-               get_dict(Key,Prefixes,URI)),
-           ask(Context,
-               (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
-                   insert(Pair, rdf:type, ref:'PrefixPair'),
-                   insert(ref:default_prefixes, ref:prefix_pair, Pair),
-                   insert(Pair, ref:prefix, Key^^xsd:string),
-                   insert(Pair, ref:prefix_uri, URI^^xsd:string)
-               )
-              )
-          ).
+remove_prefix(Context, Key) :-
+    ask(Context,
+        (   t(Pair, ref:prefix, Key^^xsd:string),
+            t(Pair, ref:prefix_uri, URI^^xsd:string),
+            delete(Pair, rdf:type, ref:'PrefixPair'),
+            delete(ref:default_prefixes, ref:prefix_pair, Pair),
+            delete(Pair, ref:prefix, Key^^xsd:string),
+            delete(Pair, ref:prefix_uri, URI^^xsd:string))).
+
+update_prefix(Context, Key, URI) :-
+    ask(Context,
+        (   t(Pair, ref:prefix, Key^^xsd:string),
+            t(Pair, ref:prefix_uri, Old_URI^^xsd:string),
+            delete(Pair, ref:prefix_uri, Old_URI^^xsd:string),
+            insert(Pair, ref:prefix_uri, URI^^xsd:string))).
+
+update_prefixes(Context, Prefixes) :-
+    repository_prefixes(Context, Old_Prefixes),
+
+    dict_keys(Prefixes, Prefixes_Keys),
+    list_to_ord_set(Prefixes_Keys, Prefixes_Keys_Set),
+    dict_keys(Old_Prefixes, Old_Prefixes_Keys),
+    list_to_ord_set(Old_Prefixes_Keys, Old_Prefixes_Keys_Set),
+
+    ord_subtract(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Add),
+    ord_subtract(Old_Prefixes_Keys_Set, Prefixes_Keys_Set, Keys_To_Remove),
+    ord_intersect(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Potentially_Update),
+
+    exclude({Old_Prefixes, Prefixes}/[X]>>(get_dict(X, Old_Prefixes, Result),
+                                           get_dict(X, Prefixes, Result)),
+            Keys_To_Potentially_Update,
+            Keys_To_Update),
+
+    % first, delete all prefixes that are no longer needed
+    forall(member(Key, Keys_To_Add),
+           (   get_dict(Key, Prefixes, URI),
+               insert_prefix(Context, Key, URI))),
+
+    % second, insert prefixes that are new
+    forall(member(Key, Keys_To_Remove),
+           remove_prefix(Context, Key)),
+
+    % third, update existing prefixes that have changed
+    forall(member(Key, Keys_To_Update),
+           (   get_dict(Key, Prefixes, URI),
+               update_prefix(Context, Key, URI))).
 
 copy_prefixes(Repo_From_Askable, Repo_To_Context) :-
     repository_prefixes(Repo_From_Askable, Prefixes),
@@ -932,10 +1022,10 @@ test(apply_single_addition,
     create_context(Descriptor1.repository_descriptor, Context3),
     create_context(Descriptor2.repository_descriptor, Context4),
 
-    branch_head_commit(Context4, "master", Commit_B_Uri),
+    branch_head_commit(Context4, "main", Commit_B_Uri),
 
     with_transaction(Context3,
-                     apply_commit_on_branch(Context3, Context4, "master", Commit_B_Uri,
+                     apply_commit_on_branch(Context3, Context4, "main", Commit_B_Uri,
                                             "rebaser",
                                             12345,
                                             _New_Commit_Id,
@@ -983,10 +1073,10 @@ test(apply_single_removal,
     create_context(Descriptor1.repository_descriptor, Context3),
     create_context(Descriptor2.repository_descriptor, Context4),
 
-    branch_head_commit(Context4, "master", Commit_B_Uri),
+    branch_head_commit(Context4, "main", Commit_B_Uri),
 
     with_transaction(Context3,
-                     apply_commit_on_branch(Context3, Context4, "master", Commit_B_Uri,
+                     apply_commit_on_branch(Context3, Context4, "main", Commit_B_Uri,
                                             "rebaser",
                                             12345,
                                             _New_Commit_Id,
@@ -1022,10 +1112,10 @@ test(apply_existing_addition,
     create_context(Descriptor1.repository_descriptor, Context3),
     create_context(Descriptor2.repository_descriptor, Context4),
 
-    branch_head_commit(Context4, "master", Commit_B_Uri),
+    branch_head_commit(Context4, "main", Commit_B_Uri),
 
     with_transaction(Context3,
-                     apply_commit_on_branch(Context3, Context4, "master", Commit_B_Uri,
+                     apply_commit_on_branch(Context3, Context4, "main", Commit_B_Uri,
                                             "rebaser",
                                             12345,
                                             _New_Commit_Id,
@@ -1066,10 +1156,10 @@ test(apply_nonexisting_removal,
     create_context(Descriptor1.repository_descriptor, Context3),
     create_context(Descriptor2.repository_descriptor, Context4),
 
-    branch_head_commit(Context4, "master", Commit_B_Uri),
+    branch_head_commit(Context4, "main", Commit_B_Uri),
 
     with_transaction(Context3,
-                     apply_commit_on_branch(Context3, Context4, "master", Commit_B_Uri,
+                     apply_commit_on_branch(Context3, Context4, "main", Commit_B_Uri,
                                             "rebaser",
                                             12345,
                                             _New_Commit_Id,
@@ -1162,7 +1252,7 @@ test(common_ancestor_after_branch_and_some_commits,
     Repo_Descriptor = Descriptor.repository_descriptor,
     create_context(Repo_Descriptor, Repo_Context),
 
-    branch_head_commit(Repo_Context, "master", Head1_Commit_Uri),
+    branch_head_commit(Repo_Context, "main", Head1_Commit_Uri),
     commit_id_uri(Repo_Context, Head1_Commit_Id, Head1_Commit_Uri),
     branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
     commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
@@ -1238,7 +1328,7 @@ test(commit_history_ids,
     Repository_Descriptor = Descriptor.repository_descriptor,
 
     branch_head_commit(Repository_Descriptor,
-                       "master",
+                       "main",
                        Commit_Uri),
     commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A_Id, Commit_B_Id]),
 
@@ -1266,7 +1356,7 @@ test(commit_history_uris,
     Repository_Descriptor = Descriptor.repository_descriptor,
 
     branch_head_commit(Repository_Descriptor,
-                       "master",
+                       "main",
                        Commit_Uri),
     commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, [Commit_A_Uri, Commit_B_Uri]),
 

@@ -1,8 +1,7 @@
 :- module(transaction, [
               % database.pl
               query_context_transaction_objects/2,
-              run_transaction/2,
-              run_transactions/2,
+              run_transactions/3,
               with_transaction/3,
               graph_inserts_deletes/3,
 
@@ -13,6 +12,8 @@
               open_descriptor/3,
               open_descriptor/5,
               collection_descriptor_transaction_object/3,
+              collection_descriptor_prefixes/2,
+              collection_descriptor_default_write_graph/2,
               graph_descriptor_transaction_objects_read_write_object/3,
               instance_graph_descriptor_transaction_object/3,
               read_write_obj_reader/2,
@@ -32,7 +33,7 @@
               commit_validation_object/2,
               commit_commit_validation_object/4,
               validate_validation_objects/2,
-              turtle_transaction/4,
+              validate_validation_objects/3,
 
               % layer_entity.pl
               has_layer/2,
@@ -48,6 +49,7 @@
               commit_uri_to_metadata/5,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
+              descriptor_commit_id_uri/4,
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,

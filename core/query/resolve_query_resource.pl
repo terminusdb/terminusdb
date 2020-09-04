@@ -124,10 +124,10 @@ resolve_absolute_descriptor([Organization, Database, Repository, "commit", Commi
 resolve_absolute_descriptor([Organization, Database],
                             Descriptor) :-
     !,
-    resolve_absolute_descriptor([Organization, Database, "local", "branch", "master"], Descriptor).
+    resolve_absolute_descriptor([Organization, Database, "local", "branch", "main"], Descriptor).
 resolve_absolute_descriptor([Organization, Database, Repository], Descriptor) :-
     !,
-    resolve_absolute_descriptor([Organization, Database, Repository, branch, master], Descriptor).
+    resolve_absolute_descriptor([Organization, Database, Repository, branch, main], Descriptor).
 
 :- begin_tests(resolve_absolute_string).
 test(organization_db) :-
@@ -137,7 +137,7 @@ test(organization_db) :-
 
     Descriptor = branch_descriptor{
                      repository_descriptor: Repository_Descriptor,
-                     branch_name: "master"
+                     branch_name: "main"
                  },
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: Database_Descriptor,
@@ -155,7 +155,7 @@ test(user_db_repo) :-
 
     Descriptor = branch_descriptor{
                      repository_descriptor: Repository_Descriptor,
-                     branch_name: "master"
+                     branch_name: "main"
                  },
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: Database_Descriptor,
@@ -214,7 +214,7 @@ test(user_db) :-
 
     Descriptor = branch_descriptor{
                      repository_descriptor: Repository_Descriptor,
-                     branch_name: "master"
+                     branch_name: "main"
                  },
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: Database_Descriptor,
@@ -232,7 +232,7 @@ test(user_db_repo) :-
 
     Descriptor = branch_descriptor{
                      repository_descriptor: Repository_Descriptor,
-                     branch_name: "master"
+                     branch_name: "main"
                  },
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor: Database_Descriptor,
@@ -425,14 +425,14 @@ context_completion(Database_Context, Completion) :-
                       },
     Completion = branch_descriptor{
                      repository_descriptor: Repo_Descriptor,
-                     branch_name: "master"
+                     branch_name: "main"
                  }.
 context_completion(Repository_Context, Completion) :-
     repository_descriptor{} :< Repository_Context,
     !,
     Completion = branch_descriptor{
                      repository_descriptor: Repository_Context,
-                     branch_name: "master"
+                     branch_name: "main"
                  }.
 context_completion(Branch_Context, Branch_Context) :-
     branch_descriptor{} :< Branch_Context,
@@ -539,7 +539,7 @@ resolve_root_relative_descriptor(root) -->
 resolve_root_relative_descriptor(system_descriptor{}) -->
     [ "_system" ],
     !.
-resolve_root_relative_descriptor(Descriptor) --> 
+resolve_root_relative_descriptor(Descriptor) -->
     [ "label" ],
     !,
     resolve_relative_descriptor(some_label, Descriptor).

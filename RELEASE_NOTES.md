@@ -1,3 +1,64 @@
+# TerminusDB Server v3.0.0 Release Notes
+
+This is our TerminusDB Server v3 liberation release. We have removed
+the masters from our default branching.
+
+## New
+
++ Reset API allows reseting branch to arbitrary commit
++ Squash API operation now available
++ Default branch is now called main and not master
++ Added much more extensive coverage of API in the api.owl.ttl ontology
++ Fixed some schema errors in woql.owl.ttl
++ Added boolean flag (`all_witnesses`) for returning all or only the first witness from schema checks.
++ Improvements to schema checking. Most large inserts with schema will be 40% faster
+
+## Backwards-Incompatible Changes
+
++ Default branch will be set to main and not master, so that some
+  calls which relied on master being default will fail. This can be
+  fixed in all cases by doing a branch operation from master to main.
++ By default only one witness is now returned in WOQL queries in which
+  the resulting database violates schema constraints.
+
+## Bug fixes
+
++ Improved the API for organisation management
++ Improved CORS handling on some calls
+
+# TerminusDB Server v2.0.6 Release Notes
+
+This is largely a bug fix and cleanup release. We focused on improving error handling and code maintanability.
+
+## New
+
++ Better overall error handling.
++ Extended create db API to allow users to specify whether they want a schema or not.
++ Improved JWT handling for authentication.
++ Added API for role and organisation creation.
++ Extensive work on making capability checking more robust.
++ First draft of auto-generating `.md` files from loaded ontologies.
++ Turtle files can now be read with WOQL.get using "by order of"
+  parameter list with three elements.
++ Posted files can now be processed by WOQL.get
+
+## Changes
+
++ Fixed API endpoint for WOQL.put which allows us to dump to CSV
+
+## Backwards-Incompatible Changes
+
++ Errors are now largely structured as JSON-LD carrying with them a type which
+  is defined in `terminus-schema/api.owl.ttl`. This should make it much easier
+  for clients to determine the exact meaning of an error, and allows Error reporting
+  to be documented in an ontology.
+
+## Bug fixes
+
++ Handling of floating point numbers has been improved to stop some spurious type errors.
++ Fixed a utf-8 encoding issue encountered when loading remote csvs.
+
+
 # TerminusDB Server v2.0.5 Release Notes
 
 ## Changes

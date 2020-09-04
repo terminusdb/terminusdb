@@ -338,7 +338,7 @@ refute_restriction(Database,X,CR,P,Reason) :-
     coerce_number(CardStr,N),
     card(X,P,_,Database,M),
     N \= M, atom_number(A,M),
-    interpolate(['Cardinality does not match for restrction: ',CR],Msg),
+    interpolate(['Cardinality does not match for restriction: ',CR],Msg),
     Reason = _{
                  '@type' : 'vio:InstanceCardinalityRestrictionViolation',
 			     'vio:message' : _{ '@value' : Msg, '@type' : 'xsd:string' },

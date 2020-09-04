@@ -19,7 +19,7 @@
 ; Attributes
 Name "TerminusDB"
 OutFile "terminusdb_setup.exe"
-InstallDir "$PROGRAMFILES64\terminus_server"
+InstallDir "$PROGRAMFILES64\terminusdb_server"
 ;InstallDirRegKey HKCU "Software\DataChemist\terminus_server" ""
 RequestExecutionLevel admin ; user|highest|admin
 
@@ -45,9 +45,7 @@ Section "TerminusDB" TerminusDB
   SetOutPath $INSTDIR
   ;File "My Program.exe"
   ;File "Readme.txt"
-  File "..\terminus_store_prolog.dll"
   writeUninstaller "$INSTDIR\uninstall.exe"
-  File "..\libterminus_store.dll"
   File /r /x "windows" ..\*
   File "terminusdb_circle.ico"
   ; Start menu creation

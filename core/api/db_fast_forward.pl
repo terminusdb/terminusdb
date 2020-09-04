@@ -23,9 +23,10 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                              ->  (   Our_Branch_Path = []
                                  ->  true
                                  ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path), _))),
-
-                                 Applied_Commit_Ids = Their_Branch_Path,
-                                 Next = copy_commit(Their_Commit_Id)
+                                 Their_Branch_Path = Applied_Commit_Ids,
+                                 (   Their_Branch_Path = []
+                                 ->  Next = nothing
+                                 ;   Next = copy_commit(Their_Commit_Id))
                              ;   throw(error(no_common_history,_)))
                          ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
                              ->  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
@@ -73,7 +74,7 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    \+ branch_head_commit(Repo_Descriptor, "master", _Head_Commit_Uri).
+    \+ branch_head_commit(Repo_Descriptor, "main", _Head_Commit_Uri).
 
 test(fast_forward_empty_branch_from_same_repo,
      [setup((setup_temp_store(State),
@@ -108,7 +109,7 @@ test(fast_forward_empty_branch_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
     History = [Commit_A, Commit_B],
     History = Applied_Commit_Ids,
@@ -158,7 +159,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
 
     % check history
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
     History = [Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids = [Commit_B, Commit_C],
@@ -300,7 +301,9 @@ test(fast_forward_empty_branch_from_empty_branch,
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
 
-    Applied_Commit_Ids == [].
+    Applied_Commit_Ids == [],
+    Repository_Descriptor = (Master_Descriptor.repository_descriptor),
+    \+ branch_head_commit(Repository_Descriptor, "main", _Head_Commit).
 
 test(fast_forward_nonempty_branch_from_equal_branch,
      [setup((setup_temp_store(State),
@@ -326,7 +329,11 @@ test(fast_forward_nonempty_branch_from_equal_branch,
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
 
-    Applied_Commit_Ids == [].
+    Applied_Commit_Ids == [],
+
+    Repository_Descriptor = (Master_Descriptor.repository_descriptor),
+    branch_head_commit(Repository_Descriptor, "main", Head_Commit),
+    branch_head_commit(Repository_Descriptor, "second", Head_Commit).
 
 test(fast_forward_branch_from_other_repo,
      [setup((setup_temp_store(State),
@@ -365,19 +372,20 @@ test(fast_forward_branch_from_other_repo,
                          insert(g,h,i)),
                      _),
 
+    Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
+    commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
+
     % fast forward master with second
     fast_forward_branch(Foo_Descriptor, Bar_Descriptor, Applied_Commit_Ids),
 
     % check history
-    Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
-    branch_head_commit(Repo_Descriptor, "master", Head_Commit_Uri),
+    branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
+
     History = [Commit_A, Commit_B, Commit_C],
-    Applied_Commit_Ids = [Commit_B, Commit_C],
+    Applied_Commit_Ids == [Commit_B, Commit_C],
 
 
-    commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_B, _, "commit b", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_C, _, "commit c", _).
-
 :- end_tests(fast_forward_api).

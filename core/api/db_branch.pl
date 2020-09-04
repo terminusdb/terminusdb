@@ -175,7 +175,7 @@ test(create_branch_from_local_branch_with_commits,
      ]
     ) :-
 
-    Origin_Branch_Path = "admin/foo/local/branch/master",
+    Origin_Branch_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Branch_Path, Origin_Branch_Descriptor),
     Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -193,7 +193,7 @@ test(create_branch_from_local_branch_with_commits,
     branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Branch_Path),_),
 
     has_branch(Repository_Descriptor, "moo"),
-    branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
     branch_head_commit(Repository_Descriptor, "moo", Commit_Uri).
 
 test(create_branch_from_remote_branch,
@@ -203,7 +203,7 @@ test(create_branch_from_remote_branch,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -223,7 +223,7 @@ test(create_branch_from_remote_branch,
     resolve_absolute_string_descriptor(Destination_Path, Destination_Descriptor),
     Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
     has_branch(Destination_Repository_Descriptor, "moo"),
-    branch_head_commit(Origin_Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Origin_Repository_Descriptor, "main", Commit_Uri),
     create_context(Origin_Repository_Descriptor, Origin_Context),
     prefixed_to_uri(Commit_Uri, Origin_Context.prefixes, Commit_Uri_Unprefixed),
     branch_head_commit(Destination_Repository_Descriptor, "moo", Commit_Uri_Unprefixed),
@@ -242,7 +242,7 @@ test(create_branch_from_local_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -255,7 +255,7 @@ test(create_branch_from_local_commit,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    branch_head_commit(Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
     commit_id_uri(Repository_Descriptor, Commit_Id, Commit_Uri),
 
     Commit_Descriptor = commit_descriptor{
@@ -287,7 +287,7 @@ test(create_branch_from_remote_commit,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    Origin_Path = "admin/foo/local/branch/master",
+    Origin_Path = "admin/foo/local/branch/main",
     resolve_absolute_string_descriptor(Origin_Path, Origin_Branch_Descriptor),
     Origin_Repository_Descriptor = (Origin_Branch_Descriptor.repository_descriptor),
 
@@ -300,7 +300,7 @@ test(create_branch_from_remote_commit,
                      once(ask(Context2, insert(baz,bar,foo))),
                      _),
 
-    branch_head_commit(Origin_Repository_Descriptor, "master", Commit_Uri),
+    branch_head_commit(Origin_Repository_Descriptor, "main", Commit_Uri),
     commit_id_uri(Origin_Repository_Descriptor, Commit_Id, Commit_Uri),
 
     Commit_Descriptor = commit_descriptor{

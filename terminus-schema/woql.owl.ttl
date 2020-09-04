@@ -108,7 +108,7 @@ woql:ArrayElement
 
 woql:array_element
   a owl:ObjectProperty ;
-  rdsf:label "array element"@en ;
+  rdfs:label "array element"@en ;
   rdfs:comment "Points to an element of an array"@en ;
   rdfs:domain woql:Array ;
   rdfs:range woql:ArrayElement .
@@ -211,6 +211,12 @@ woql:Select
   rdfs:comment "A Selection of variables from subquery"@en ;
   rdfs:subClassOf woql:HasVariableList, woql:QueryWithSubQuery .
 
+woql:Distinct
+  a owl:Class ;
+  rdfs:label "Distinct"@en ;
+  rdfs:comment "Guaranteed unique solutions for variables in list."@en ;
+  rdfs:subClassOf woql:HasVariableList, woql:QueryWithSubQuery .
+
 woql:And
   a owl:Class ;
   rdfs:label "And"@en ;
@@ -263,7 +269,7 @@ woql:Into
 
 woql:Triple
   a owl:Class ;
-  rdfs:subClassOf woql:HasSubject, woql:HasObject, woql:HasPredicate, woql:Query
+  rdfs:subClassOf woql:HasSubject, woql:HasObject, woql:HasPredicate, woql:Query ;
   rdfs:label "Triple"@en ;
   rdfs:comment "A edge in the graph specified by subject, predicate, object"@en .
 
@@ -405,7 +411,7 @@ woql:substring
   rdfs:comment "The substring of a substring search"@en ;
   rdfs:domain woql:Substring ;
   rdfs:range woql:Value .
-
+  
 woql:DocumentQuery
   a owl:Class ;
   rdfs:subClassOf woql:Query ;
@@ -461,7 +467,7 @@ woql:document_uri
   rdfs:label "Document uri"@en ;
   rdfs:comment "The Document uri of the document to be retrieved"@en ;
   rdfs:domain system:Document ;
-  rfds:range owl:Thing .
+  rdfs:range owl:Thing .
 
 woql:UpdateObject
   a owl:Class ;
@@ -518,7 +524,7 @@ woql:var_type
   rdfs:label "var type"@en ;
   rdfs:comment "An AsVar casting type"@en ;
   rdfs:domain woql:AsVar ;
-  rdfs:range xsd:Node .
+  rdfs:range xsd:string .
 
 woql:NamedAsVars
   a owl:Class
@@ -776,14 +782,14 @@ woql:element
   rdfs:label "element"@en ;
   rdfs:comment "The element of an IsA being type checked"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Thing .
+  rdfs:range owl:Value .
 
 woql:of_type
   a owl:ObjectProperty ;
   rdfs:label "of type"@en ;
   rdfs:comment "Element is 'of type'"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Thing .
+  rdfs:range owl:Value .
 
 woql:Like
   a owl:Class ;
@@ -1169,6 +1175,19 @@ woql:Not
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
 
+woql:Count
+  a owl:Class ;
+  rdfs:label "Count"@en ;
+  rdfs:comment "Count of results from query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
+woql:count
+  a owl:DatatypeProperty ;
+  rdfs:label "count"@en ;
+  rdfs:comment "property which contains the count"@en ;
+  rdfs:domain woql:Count ;
+  rdfs:range woql:nonNegativeInteger .
+
 woql:Typecast
   a owl:Class ;
   rdfs:label "Typecast"@en ;
@@ -1229,7 +1248,7 @@ woql:PathSequence
   a owl:Class ;
   rdfs:subClassOf woql:PathPattern ;
   rdfs:label "Sequence"@en ;
-  rdsf:comment "path_first followed by path_second"@en .
+  rdfs:comment "path_first followed by path_second"@en .
 
 woql:path_first
   a owl:ObjectProperty ;
@@ -1249,7 +1268,7 @@ woql:PathOr
   a owl:Class ;
   rdfs:subClassOf woql:PathPattern ;
   rdfs:label "Sequence"@en ;
-  rdsf:comment "path_first followed by path_second"@en .
+  rdfs:comment "path_first followed by path_second"@en .
 
 woql:path_left
   a owl:ObjectProperty ;
@@ -1265,7 +1284,7 @@ woql:path_right
   rdfs:label "right"@en ;
   rdfs:comment "The right branch pattern in a fork"@en .
 
-woql:HasPathPattern ;
+woql:HasPathPattern
   a owl:Class ;
   system:tag system:abstract ;
   rdfs:label "Has Pattern"@en ;
@@ -1289,19 +1308,19 @@ woql:PathPlus
   a owl:Class ;
   rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
   rdfs:label "Plus"@en ;
-  rdsf:comment "Follow pattern at least once"@en .
+  rdfs:comment "Follow pattern at least once"@en .
 
 woql:PathStar
   a owl:Class ;
   rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
   rdfs:label "Star"@en ;
-  rdsf:comment "Follow pattern any number of times (including the empty transition)"@en .
+  rdfs:comment "Follow pattern any number of times (including the empty transition)"@en .
 
 woql:PathTimes
   a owl:Class ;
   rdfs:subClassOf woql:HasPathPattern, woql:PathPattern ;
   rdfs:label "Plus"@en ;
-  rdsf:comment "Follow pattern at least once"@en .
+  rdfs:comment "Follow pattern at least once"@en .
 
 woql:path_minimum
   a owl:DatatypeProperty ;
@@ -1321,37 +1340,37 @@ woql:Edge
   a owl:Class ;
   rdfs:subClassOf woql:HasSubject, woql:HasPredicate, woql:HasObject ;
   rdfs:label "Plus"@en ;
-  rdsf:comment "Follow pattern at least once"@en .
+  rdfs:comment "Follow pattern at least once"@en .
 
 woql:Dot
   a owl:Class ;
   rdfs:subClassOf woql:Query ;
   rdfs:label "Dot"@en ;
-  rdsf:comment "Select from a dictionary"@en .
+  rdfs:comment "Select from a dictionary"@en .
 
 woql:dictionary
-  a owl:ObjectProperty
+  a owl:ObjectProperty ;
   rdfs:domain woql:Dot ;
   rdfs:range woql:Value ;
   rdfs:label "dictionary"@en ;
-  rdsf:comment "Dictionary of a selection"@en .
+  rdfs:comment "Dictionary of a selection"@en .
 
 woql:dictionary_key
-  a owl:ObjectProperty
+  a owl:ObjectProperty ;
   rdfs:domain woql:Dot ;
   rdfs:range woql:Value ;
   rdfs:label "key"@en ;
-  rdsf:comment "Dictionary key of a selection"@en .
+  rdfs:comment "Dictionary key of a selection"@en .
 
 woql:dictionary_value
-  a owl:ObjectProperty
+  a owl:ObjectProperty ;
   rdfs:domain woql:Dot ;
   rdfs:range woql:Value ;
   rdfs:label "value"@en ;
-  rdsf:comment "Dictionary value of a selection"@en .
+  rdfs:comment "Dictionary value of a selection"@en .
 
 woql:HasResource
-  a owl:Class
+  a owl:Class ;
   rdfs:subClassOf woql:Query ;
   rdfs:comment "Has a graph or collection resource descriptor"@en ;
   rdfs:label "Has a resource"@en .
@@ -1388,3 +1407,9 @@ woql:triple_count
   rdfs:label "triple count"@en ;
   rdfs:domain woql:TripleCount ;
   rdfs:range woql:Value .
+
+woql:With
+  a owl:Class ;
+  rdfs:subClassOf woql:QueryWithSubQuery ;
+  rdfs:label "With"@en ;
+  rdfs:comment "Add a new addressable temporary graph resource"@en .

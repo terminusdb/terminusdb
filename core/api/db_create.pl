@@ -79,7 +79,7 @@ create_ref_layer(Descriptor,Prefixes) :-
     create_context(Descriptor, Context),
     with_transaction(
         Context,
-        (   insert_branch_object(Context, "master", _),
+        (   insert_branch_object(Context, "main", _),
             update_prefixes(Context, Prefixes)
         ),
         _).
@@ -158,7 +158,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, C
 
 default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
     atomic_list_concat([Organization_Name, '/', Database_Name, '/',
-                        "local/branch/master/schema/main"], Graph_Path).
+                        "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri),
@@ -181,7 +181,7 @@ test(create_db_and_check_master_branch, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
 
-         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"master"^^xsd:string))),
+         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"main"^^xsd:string))),
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
@@ -196,6 +196,6 @@ test(create_db_and_check_master_branch, [
                           repository_name: "local" },
     Branch_Descriptor = branch_descriptor{
                             repository_descriptor: Repo_Descriptor,
-                            branch_name: "master" }.
+                            branch_name: "main" }.
 
 :- end_tests(database_creation).

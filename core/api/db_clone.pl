@@ -31,6 +31,8 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predica
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, Public, _{}, Db_Uri),
 
+    open_descriptor(system_descriptor{}, System_DB2),
+
     resolve_absolute_descriptor([Account,DB,"_meta"], Database_Descriptor),
     create_context(Database_Descriptor, Database_Context),
     % Add remote
@@ -50,7 +52,7 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predica
     merge_separator_split(From_Path, '/', From_Path_List),
 
     % Fetch remote
-    remote_fetch(System_DB, Auth, From_Path, Fetch_Predicate, _New_Head, _Has_Updated),
+    remote_fetch(System_DB2, Auth, From_Path, Fetch_Predicate, _New_Head, _Has_Updated),
 
     create_context(To_Descriptor, To_Context),
     with_transaction(
@@ -59,8 +61,8 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predica
         copy_prefixes(From_Descriptor, To_Context),
         _),
 
-    resolve_absolute_descriptor([Account,DB,"local","branch", "master"], To_Branch_Descriptor),
-    resolve_absolute_descriptor([Account,DB,"origin","branch", "master"], From_Branch_Descriptor),
+    resolve_absolute_descriptor([Account,DB,"local","branch", "main"], To_Branch_Descriptor),
+    resolve_absolute_descriptor([Account,DB,"origin","branch", "main"], From_Branch_Descriptor),
 
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
