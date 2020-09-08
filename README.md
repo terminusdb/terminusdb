@@ -24,17 +24,13 @@ featured graph database.
 
 ## Latest Version
 
-v3.0.0
+v3.0.2
 
 ## Getting Started
 
-### Install from Docker image (*RECOMMENDED*)
+For Windows and Linux, Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
-For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminusdb-quickstart) installer.
-
-Follow the instructions there. If you choose to run the Docker image directly, please note that
-the default username is "admin" and the password is "root" (without the double quotes) and that you should change it in a
-production environment.
+For development and testing, as well as Mac users, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
 ### Building from source
 
