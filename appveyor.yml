@@ -36,18 +36,10 @@ install:
 
 build_script:
   - tar.exe --exclude=windows/terminusdb_windows.tar.gz -a -c -f windows\terminusdb_windows.tar.gz *
-  - cd windows
-  - git clone https://github.com/terminusdb/terminus_store_prolog.git
-  - cd terminus_store_prolog
-  - git checkout %TERMINUSDB_STORE_PROLOG_VERSION%
-  - cd ..\
-  - makensis.exe terminusdb_windows_installer.nsi
-  - cd ..\
 
 test_script:
   - swipl\bin\swipl utils\db_init -s localhost -k root
   - swipl\bin\swipl -g run_tests -g halt start.pl
 
 artifacts:
-  - path: windows\terminusdb_setup.exe
   - path: windows\terminusdb_windows.tar.gz
