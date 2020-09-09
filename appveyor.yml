@@ -35,11 +35,12 @@ install:
 ## Build Script ##
 
 build_script:
-  - tar.exe -a -c -f terminusdb_windows.tar.gz *
+  - mkdir extracted
+  - tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
 
 test_script:
   - swipl\bin\swipl utils\db_init -s localhost -k root
   - swipl\bin\swipl -g run_tests -g halt start.pl
 
 artifacts:
-  - path: terminusdb_windows.tar.gz
+  - path: extracted\terminusdb_windows.tar.gz
