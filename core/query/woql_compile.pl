@@ -2160,6 +2160,23 @@ test(length, [])
                  '@value': 2}} :< Res.
 
 
+test(length_of_var, [])
+:-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = ((v('X')=[1^^'http://www.w3.org/2001/XMLSchema#integer',
+                    2^^'http://www.w3.org/2001/XMLSchema#integer',
+                    3^^'http://www.w3.org/2001/XMLSchema#integer']),
+           length(v('X'), v('N'))),
+
+    create_context(system_descriptor{},Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, Result),
+    [First] = (Result.bindings),
+    (First.'N'.'@value') = 3.
+
+
 test(order_by, []) :-
 
     Query = _{'@type' : "OrderBy",

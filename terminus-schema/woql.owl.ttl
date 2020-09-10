@@ -615,11 +615,23 @@ woql:AddTriple
   rdfs:label "Add triple"@en ;
   rdfs:comment "Add a triple"@en .
 
+woql:AddedTriple
+  a owl:Class ;
+  rdfs:subClassOf woql:Triple ;
+  rdfs:label "Added triple"@en ;
+  rdfs:comment "A triple which was added to this commit"@en .
+
 woql:AddQuad
   a owl:Class ;
   rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
   rdfs:label "Add quad"@en ;
   rdfs:comment "Add a quad"@en .
+
+woql:AddedQuad
+  a owl:Class ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:label "Added quad"@en ;
+  rdfs:comment "A quad which was added to this commit on this graph"@en .
 
 woql:DeleteQuad
   a owl:Class ;
@@ -627,11 +639,23 @@ woql:DeleteQuad
   rdfs:label "Delete quad"@en ;
   rdfs:comment "Delete a quad"@en .
 
+woql:DeletedQuad
+  a owl:Class ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:label "Deleted quad"@en ;
+  rdfs:comment "A quad which was deleted from this commit"@en .
+
 woql:DeleteTriple
   a owl:Class ;
   rdfs:subClassOf woql:Triple ;
   rdfs:label "Delete triple"@en ;
   rdfs:comment "Delete a triple"@en .
+
+woql:DeletedTriple
+  a owl:Class ;
+  rdfs:subClassOf woql:Triple ;
+  rdfs:label "Deleted triple"@en ;
+  rdfs:comment "A triple which was deleted from this commit on this graph"@en .
 
 woql:When
   a owl:Class ;
