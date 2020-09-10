@@ -56,9 +56,40 @@ jobs:
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
-    trigger_appimage:
-      if: github.event_name == 'push'
-      needs: test_and_push_docker
-      steps:
-        - name: Trigger AppImage
-          run: bash .ci/trigger_appimage.sh
+  appimage:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    # Runs a single command using the runners shell
+    - name: rust-toolchain
+      uses: actions-rs/toolchain@v1.0.6
+      with:
+            toolchain: stable
+
+    # Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+        sudo apt-add-repository ppa:swi-prolog/stable -y
+        sudo apt-get update -y
+        sudo apt-get install swi-prolog-nox libpcre3 -y
+
+    - name: Download LinuxDeploy AppImage
+      run: wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+
+    - name: Give Linuxdeploy exec permissions
+      run: chmod +x linuxdeploy-x86_64.AppImage
+
+    - name: Run the build script
+      run: ./build_script.sh canary
+
+    - name: Rename AppImage
+      run: mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
+
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: TerminusDB-amd64.AppImage
+        path: TerminusDB-amd64.AppImage
