@@ -3810,6 +3810,91 @@ test(negative_path_pattern, [
 
     once(ask(Descriptor,
              path(a, plus((p(b),n(b))), f, _Path))).
+test(using_sequence, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Atom = '{
+  "@type": "woql:And",
+  "woql:query_list": [
+    {
+      "@type": "woql:QueryListElement",
+      "woql:index": {
+        "@type": "xsd:nonNegativeInteger",
+        "@value": 0
+      },
+      "woql:query": {
+        "@type": "woql:Using",
+        "woql:collection": {
+          "@type": "xsd:string",
+          "@value": "_system"
+        },
+        "woql:query": {
+          "@type": "woql:Triple",
+          "woql:subject": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "DA",
+              "@type": "xsd:string"
+            }
+          },
+          "woql:predicate": {
+            "@type": "woql:Node",
+            "woql:node": "system:resource_name"
+          },
+          "woql:object": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "o",
+              "@type": "xsd:string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "@type": "woql:QueryListElement",
+      "woql:index": {
+        "@type": "xsd:nonNegativeInteger",
+        "@value": 1
+      },
+      "woql:query": {
+        "@type": "woql:Using",
+        "woql:collection": {
+          "@type": "xsd:string",
+          "@value": "admin/test"
+        },
+        "woql:query": {
+          "@type": "woql:Triple",
+          "woql:subject": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "D",
+              "@type": "xsd:string"
+            }
+          },
+          "woql:predicate": {
+            "@type": "woql:Node",
+            "woql:node": "system:database_name"
+          },
+          "woql:object": {
+            "@type": "woql:Variable",
+            "woql:variable_name": {
+              "@value": "o",
+              "@type": "xsd:string"
+            }
+          }
+        }
+      }
+    }
+  ]
+}',
 
+    atom_json_dict(Atom,Query,[]),
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+    % Not failing is good enough
+    * json_write_dict(current_output, JSON, []).
 
 :- end_tests(woql).
