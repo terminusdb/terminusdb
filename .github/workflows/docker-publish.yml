@@ -98,7 +98,7 @@ jobs:
 
     env:
       SWI_PROLOG: terminusdb/terminusdb-server
-      SWI_INSTALL_DIR: "C:\Program Files\swipl"
+      SWI_INSTALL_DIR: C:\Program Files\swipl
     steps:
     - uses: actions/checkout@v2
 
