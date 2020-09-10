@@ -26,7 +26,7 @@ the masters from our default branching.
 + Added much more extensive coverage of API in the api.owl.ttl ontology
 + Fixed some schema errors in woql.owl.ttl
 + Added boolean flag (`all_witnesses`) for returning all or only the first witness from schema checks.
-+ Improvements to schema checking. Most large inserts will be 40% faster
++ Improvements to schema checking. Most large inserts with schema will be 40% faster
 
 ## Backwards-Incompatible Changes
 
@@ -74,7 +74,7 @@ This is largely a bug fix and cleanup release. We focused on improving error han
 + Fixed a utf-8 encoding issue encountered when loading remote csvs.
 
 
-# TerminusDB Server v2.0.6 Release Notes
+# TerminusDB Server v2.0.5 Release Notes
 
 ## Changes
 
