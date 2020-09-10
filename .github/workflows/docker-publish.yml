@@ -75,7 +75,7 @@ jobs:
         sudo apt-add-repository ppa:swi-prolog/stable -y
         sudo apt-get update -y
         sudo apt-get install swi-prolog-nox libpcre3 -y
-        cd distributions/appimage
+        cd distribution/appimage
 
     - name: Download LinuxDeploy AppImage
       run: wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
