@@ -96,9 +96,6 @@ jobs:
   windows:
     runs-on: windows-latest
 
-    env:
-      SWI_PROLOG: terminusdb/terminusdb-server
-      SWI_INSTALL_DIR: C:\Program Files\swipl
     steps:
     - uses: actions/checkout@v2
 
@@ -107,17 +104,17 @@ jobs:
 
     - name: Download Windows requirements
       run: |
-        mkdir "$SWI_INSTALL_DIR\pack"
-        cd "$SWI_INSTALL_DIR\pack"
-        git clone https://github.com/terminusdb/terminus_store_prolog.git
-        cd terminus_store_prolog
-        git checkout $TERMINUSDB_STORE_PROLOG_VERSION
-        cd "$GITHUB_WORKSPACE"
+        Set-Variable -Name "SWI_INSTALL_DIR" -Value "C:\Program Files\swipl"
         mkdir swipl
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
         cd swipl\bin
         Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
         Invole-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
+        cd ..
+        mkdir pack && cd pack
+        git clone https://github.com/terminusdb/terminus_store_prolog.git
+        cd terminus_store_prolog
+        git checkout $TERMINUSDB_STORE_PROLOG_VERSION
         cd "$GITHUB_WORKSPACE"
 
     - name: Package windows tar
