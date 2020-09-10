@@ -31,7 +31,7 @@ jobs:
 
       - name: Build image
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
-      
+
       - name: Run tests
         run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
 
@@ -47,7 +47,7 @@ jobs:
           IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
           # Strip git ref prefix from version
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-    
+
           # Use Docker `latest` tag convention
           [ "$VERSION" == "master" ] && VERSION=latest
 
