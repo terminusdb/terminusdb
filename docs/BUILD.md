@@ -221,19 +221,14 @@ Now you are ready to interact with the HTTP server.
 
 ## Mac OS
 
-### Installing SWI Prolog
+### Installing SWI Prolog and Rust
 
-First of all, SWI Prolog should be installed from [homebrew](https://brew.sh/) by executing in a terminal:
+First of all, SWI Prolog and Rust should be installed from [homebrew](https://brew.sh/) by executing in a terminal:
 
 ```
 brew install swi-prolog
+brew install rust
 ```
-
-### Installing Rust
-
-To compile the storage engine, Rust should be installed as well. It can be installed by following the instructions on:
-
-https://www.rust-lang.org/tools/install
 
 ### Installing and compiling the storage back-end
 
@@ -251,7 +246,7 @@ If the compilation has finished, press Ctrl+D to exit the SWI Prolog interactive
 
 ### Running TerminusDB-server
 
-Clone the Git repository and execute the `start.pl` file with SWI Prolog, the `db_init` script will initialize 
+Clone the Git repository and execute the `start.pl` file with SWI Prolog, the `db_init` script will initialize
 the system database:
 
 ```
