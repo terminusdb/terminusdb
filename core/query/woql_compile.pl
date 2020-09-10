@@ -3769,7 +3769,6 @@ test(immediately, [
     once(ask(Descriptor,
              t(a,b,c))).
 
-
 test(immediately_doesnt_go, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3788,7 +3787,6 @@ test(immediately_doesnt_go, [
 
     \+ once(ask(Descriptor,
                 t(a,b,c))).
-
 
 test(negative_path_pattern, [
          setup((setup_temp_store(State),
@@ -3810,6 +3808,7 @@ test(negative_path_pattern, [
 
     once(ask(Descriptor,
              path(a, plus((p(b),n(b))), f, _Path))).
+
 test(using_sequence, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3896,5 +3895,67 @@ test(using_sequence, [
     query_test_response(Descriptor, Query, JSON),
     % Not failing is good enough
     * json_write_dict(current_output, JSON, []).
+
+test(added_deleted_triple, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(h,i,j),
+            delete(a,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   addition(h,i,j),
+                 removal(a,b,c)))
+        ).
+
+test(added_deleted_quad, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(h,i,j),
+            delete(a,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   addition(h,i,j, "instance/main"),
+                 removal(a,b,c, "instance/main")))
+        ).
 
 :- end_tests(woql).
