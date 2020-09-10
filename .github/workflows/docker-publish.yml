@@ -83,7 +83,7 @@ jobs:
       run: chmod +x linuxdeploy-x86_64.AppImage
 
     - name: Run the build script
-      run: ./build_script.sh canary
+      run: ./build_script.sh $(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
 
     - name: Rename AppImage
       run: mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
