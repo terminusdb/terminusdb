@@ -6,6 +6,8 @@
 
 [Arch Linux](#arch-linux)
 
+[Mac OS](#mac-os)
+
 ## Debian or Ubuntu
 
 The following directions should work on debian or ubuntu.
@@ -216,3 +218,47 @@ At this point you can enter the terminusDB directory and start the server:
 ```
 
 Now you are ready to interact with the HTTP server.
+
+## Mac OS
+
+### Installing SWI Prolog
+
+First of all, SWI Prolog should be installed from [homebrew](https://brew.sh/) by executing in a terminal:
+
+```
+brew install swi-prolog
+```
+
+### Installing Rust
+
+To compile the storage engine, Rust should be installed as well. It can be installed by following the instructions on:
+
+https://www.rust-lang.org/tools/install
+
+### Installing and compiling the storage back-end
+
+Run SWI-Prolog by running `swipl` inside a terminal.
+
+In the SWI-Prolog prompt, enter the following:
+
+```
+pack_install(terminus\_store\_prolog).
+```
+
+Press Y if it asks for confirmation, be sure to check the GitHub URLs to check whether you trust the package.
+
+If the compilation has finished, press Ctrl+D to exit the SWI Prolog interactive prompt.
+
+### Running TerminusDB-server
+
+Clone the Git repository and execute the `start.pl` file with SWI Prolog, the `db_init` script will initialize 
+the system database:
+
+```
+git clone https://github.com/terminusdb/terminusdb-server.git
+cd terminusdb-server
+./utils/db_init -s localhost -k root
+./start.pl
+```
+
+It should now start on https://127.0.0.1:6363.
