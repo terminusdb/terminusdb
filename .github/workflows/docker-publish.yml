@@ -75,22 +75,17 @@ jobs:
         sudo apt-add-repository ppa:swi-prolog/stable -y
         sudo apt-get update -y
         sudo apt-get install swi-prolog-nox libpcre3 -y
+
+    - name: Create appimage
+      run: |
         cd distribution/appimage
-
-    - name: Download LinuxDeploy AppImage
-      run: wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-
-    - name: Give Linuxdeploy exec permissions
-      run: chmod +x linuxdeploy-x86_64.AppImage
-
-    - name: Run the build script
-      run: ./build_script.sh $(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-
-    - name: Rename AppImage
-      run: mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+        ./build_script.sh $(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
       with:
         name: TerminusDB-amd64.AppImage
-        path: TerminusDB-amd64.AppImage
+        path: distribution/appimage/TerminusDB-amd64.AppImage
