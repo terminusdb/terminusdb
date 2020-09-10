@@ -108,13 +108,13 @@ jobs:
         mkdir swipl
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
         cd swipl\bin
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
-        Invole-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
+        Invole-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
         cd ..
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
-        git checkout $TERMINUSDB_STORE_PROLOG_VERSION
+        git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         cd "$GITHUB_WORKSPACE"
 
     - name: Package windows tar
