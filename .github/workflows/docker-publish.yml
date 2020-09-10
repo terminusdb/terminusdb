@@ -55,3 +55,10 @@ jobs:
 
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+
+    trigger_appimage:
+      if: github.event_name == 'push'
+      needs: test_and_push_docker
+      steps:
+        - name: Trigger AppImage
+          run: bash .ci/trigger_appimage.sh
