@@ -242,7 +242,7 @@ Run SWI-Prolog by running `swipl` inside a terminal.
 In the SWI-Prolog prompt, enter the following:
 
 ```
-pack_install(terminus\_store\_prolog).
+pack_install(terminus_store_prolog).
 ```
 
 Press Y if it asks for confirmation, be sure to check the GitHub URLs to check whether you trust the package.
