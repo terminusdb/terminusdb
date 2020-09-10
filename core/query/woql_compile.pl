@@ -890,7 +890,6 @@ compile_wf(using(Collection_String,P),Goal) -->
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
-    update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
@@ -3891,8 +3890,8 @@ test(using_sequence, [
 
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, _JSON),
+    query_test_response(Descriptor, Query, JSON),
     % Not failing is good enough
-    * json_write_dict(current_output, _JSON, []).
+    * json_write_dict(current_output, JSON, []).
 
 :- end_tests(woql).
