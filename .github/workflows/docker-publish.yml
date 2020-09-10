@@ -1,4 +1,4 @@
-name: Docker Publish
+name: Publish
 
 on:
   push:
@@ -22,9 +22,8 @@ env:
   DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false"
 
 jobs:
-  test_and_push:
+  test_and_push_docker:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v2
