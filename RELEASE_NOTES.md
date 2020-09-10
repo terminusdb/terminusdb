@@ -1,3 +1,18 @@
+# TerminusDB Server v3.0.3 Release Notes
+
+This is a feature and bugfix release
+
+## New
+
++ Added reverse path queries allowing backwards follow in graph regular expressions for path
++ New word "immediately" which does non-backtracking side-effects
++ Force flag now allows database deletion to work even when database is not finalised
++ Expose additions and removals (deltas) to the WOQL query API
+
+## Bug fixes
+
++ Add proper handling for rdf:langString
+
 # TerminusDB Server v3.0.0 Release Notes
 
 This is our TerminusDB Server v3 liberation release. We have removed
