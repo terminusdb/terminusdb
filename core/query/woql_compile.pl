@@ -883,13 +883,16 @@ compile_wf(select(VL,P), Prog) -->
     restrict(Restricted).
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
+    update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
     {
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
-            error(invalid_absolute_path(Collection_String),_))
+            error(invalid_absolute_path(Collection_String),_)),
+        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
     { resolve_filter(Filter_String,Filter) },
