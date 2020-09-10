@@ -41,19 +41,6 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
-insert_db_object(System_Transaction, Organization_Name, Database_Name, Label, Comment, DB_Uri) :-
-    ask(System_Transaction,
-        (
-            t(Organization_Uri, system:organization_name, Organization_Name^^xsd:string),
-            random_idgen(doc:'Database', [Organization_Name^^xsd:string, Database_Name^^xsd:string], DB_Uri),
-            insert(DB_Uri, rdf:type, system:'Database'),
-            insert(DB_Uri, system:resource_name, Database_Name^^xsd:string),
-            insert(DB_Uri, rdfs:label, Label@en),
-            insert(DB_Uri, rdfs:comment, Comment@en),
-
-            insert(Organization_Uri, system:organization_database, DB_Uri)
-        )).
-
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].

@@ -128,6 +128,7 @@ base_type('http://www.w3.org/2001/XMLSchema#IDREF'). % unimplemented.
 base_type('http://www.w3.org/2001/XMLSchema#ENTITY'). % unimplemented.
 base_type('http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral'). % Not fullly implemented
 base_type('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral').
+base_type('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString').
 base_type('http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type('http://terminusdb.com/schema/xdd#coordinate').
 base_type('http://terminusdb.com/schema/xdd#coordinatePolygon').
@@ -151,6 +152,7 @@ base_type('http://terminusdb.com/schema/xdd#html').
  *
  * We visually represent the heirarchy with whitespace - please maintain!
  */
+base_type_parent('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2000/01/rdf-schema#XMLLiteral','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#anySimpleType','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#string','http://www.w3.org/2001/XMLSchema#anySimpleType').

@@ -4,19 +4,24 @@
 
 [![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
-TerminusDB is an open source model driven RDF graph database for
-knowledge graph representation designed specifically for the web-age.
+TerminusDB is an open source, model driven, revision controlled RDF
+graph database for distributed collaboration designed for the web-age.
 
-TerminusDB Server provides TerminusDB with a RESTful API for interacting
-with knowledge graphs via the JSON-LD exchange format. This means you
-can easily compose applications within your own toolchain which
-utilise the powerful features of graph search and graph storage.
+TerminusDB allows you to push, pull, time-travel and merge graphs,
+much in the way that is possible in git.
+
+TerminusDB Server provides TerminusDB with a RESTful API for
+interacting with knowledge graphs via the JSON-LD exchange
+format. This means you can easily compose applications within your own
+toolchain which utilise the powerful features of graph search and
+graph storage.
 
 We use an advanced git-like model, storing append only changes to
 graphs represented in succinct datastructures using
 [terminusdb-store](https://github.com/terminusdb/terminusdb-store). You
-can read a description of the architecture in our [Succinct Data Structures and Delta Encoding for Modern Databases](docs/whitepaper/terminusdb.pdf)
-whitepaper.
+can read a description of the architecture in our [Succinct Data
+Structures and Delta Encoding for Modern
+Databases](docs/whitepaper/terminusdb.pdf) whitepaper.
 
 TerminusDB's *delta-encoding* approach makes possible branch, merge,
 push, pull, clone, time-travel and other git-like operations on a fully
@@ -24,17 +29,13 @@ featured graph database.
 
 ## Latest Version
 
-v3.0.0
+v3.0.3
 
 ## Getting Started
 
-### Install from Docker image (*RECOMMENDED*)
+For Windows and Linux, Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
-For all users, we recommend our [Quickstart](https://github.com/terminusdb/terminusdb-quickstart) installer.
-
-Follow the instructions there. If you choose to run the Docker image directly, please note that
-the default username is "admin" and the password is "root" (without the double quotes) and that you should change it in a
-production environment.
+For development and testing, as well as Mac users, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
 ### Building from source
 
@@ -42,12 +43,13 @@ In order to build from source, follow the [build from source](docs/BUILD.md) dir
 
 ### Open Console
 
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console "http://SERVER:PORT/console". (the default is: [http://localhost:6363/console](http://localhost:6363/console)).
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [http://localhost:6363/](http://localhost:6363/)).
 
 ## Why
 
 TerminusDB will:
 
+* Give you collaboration features currently available in git, but designed to work well with large datasets
 * Make complex data models easy, maintainable and enforced.
 * Overcome the Object Impedance mismatch without turning your Database into an incomprehensible soup.
 * Allow you to search for repeating patterns using recursion.
@@ -58,27 +60,27 @@ TerminusDB will:
 ## Client
 
 In order to begin manipulating and querying your database you can
-simply point your browser to `TERMINUS_SERVER/console` which should
+simply point your browser to `"http://SERVER:PORT/"` which should
 allow you to manage and query your database.
 
 You can also perform all configuration, querying and management
 functions via the RESTful API. We have a number of client libraries to
 help you get started:
 
-The [JavaScript client libraries](https://github.com/terminusdb/terminus-client) give you
+The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programatic access.
 
-The [JavaScript dashboard](https://github.com/terminusdb/terminus-dashboard) is an example
+The [JavaScript dashboard](https://github.com/terminusdb/terminusdb-dashboard) is an example
 application allowing manipulation of the database using the javascript client fluent syntax.
 
-The [Python client libraries](https://github.com/terminusdb/terminus-client-python) allow
+The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allow
 you to use a pythonic syntax to query the database.
 
 ## Documentation
 
 In order to use your TerminusDB through the console rather than
 directly through clients you should look at the documentation on our
-[TerminusDB documentation](https://terminusdb.com/docs/) website.
+[TerminusDB documentation](https://terminusdb.com/documentation/) website.
 
 ## Changes in this Version
 

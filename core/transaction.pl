@@ -106,7 +106,8 @@
               database_finalized/3,
               user_name_uri/3,
               agent_name_uri/3,
-              agent_name_exists/2
+              agent_name_exists/2,
+              insert_db_object/6
 
           ]).
 
