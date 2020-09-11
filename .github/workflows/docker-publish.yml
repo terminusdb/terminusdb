@@ -157,6 +157,7 @@ jobs:
         cd public/windows
         tar xf ../../../../terminusdb_windows.tar.gz
         cd ../../
+        npm i
         npx electron-builder build -p never
       shell: bash
 
