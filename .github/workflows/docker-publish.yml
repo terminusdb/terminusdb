@@ -137,3 +137,32 @@ jobs:
       with:
         name: TerminusDB-server-windows.tar.gz
         path: extracted\terminusdb_windows.tar.gz
+
+
+  windows_desktop:
+    runs-on: windows-latest
+    needs: windows
+
+    steps:
+    - uses: actions/checkout@v2
+
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: TerminusDB-server-windows.tar.gz
+        path: distribution/desktop/temp.tar.gz
+
+    - run: |
+        cd distribution/desktop
+        mkdir public/windows
+        cd public/windows
+        tar xf ../../temp.tar.gz
+        cd ../../
+        npx electron-builder build -p never
+      shell: bash
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: "terminusdb-desktop Setup 3.0.0.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.0.exe"
