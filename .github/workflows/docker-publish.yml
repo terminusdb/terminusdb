@@ -96,7 +96,7 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
-      TERMINUSDB_SERVER_PACK_DIR: "$env:GITHUB_WORKSPACE/swipl/pack"
+      TERMINUSDB_SERVER_PACK_DIR: C:\Program Files\swipl\pack
       TERMINUSDB_HTTPS_ENABLED: false
 
     steps:
@@ -108,17 +108,17 @@ jobs:
     - name: Download Windows requirements
       run: |
         Set-Variable -Name "SWI_INSTALL_DIR" -Value "C:\Program Files\swipl"
-        mkdir swipl
-        xcopy /E /q "$SWI_INSTALL_DIR" swipl\
-        cd swipl\bin
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
-        cd ..
+        cd "$SWI_INSTALL_DIR"
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         cd "$GITHUB_WORKSPACE"
+        mkdir swipl
+        xcopy /E /q "$SWI_INSTALL_DIR" swipl\
+        cd swipl\bin
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
 
     - name: Package windows tar
       run: mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
