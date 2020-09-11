@@ -107,8 +107,9 @@ jobs:
 
     - name: Download Windows requirements
       run: |
-        Set-Variable -Name "SWI_INSTALL_DIR" -Value "C:\Program Files\swipl"
+        $SWI_INSTALL_DIR="C:\Program Files\swipl"
         cd "$SWI_INSTALL_DIR"
+        ls
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
