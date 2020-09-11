@@ -15,15 +15,11 @@ function createWindow () {
     height: 680,
     nodeIntegration: false,
     webPreferences: {
-      plugins: true,
-      webSecurity: false,
-      allowDisplayingInsecureContent: true,
-      allowRunningInsecureContent: true
+      spellcheck: false
     },
     icon: path.join(__dirname, 'assets/icons/favicon.png')
   })
 
-  // const options = { extraHeaders: 'pragma: no-cache\n' }
   mainWindow.setMenu(null)
 
   if (isDev) {
@@ -57,7 +53,6 @@ function createWindow () {
   electron.globalShortcut.register('Alt+Right', () => {
     if (mainWindow.webContents.canGoForward()) mainWindow.webContents.goForward()
   })
-  
 
   console.log('ready')
   mainWindow.loadURL('https://127.0.0.1:6363/')
@@ -99,24 +94,28 @@ electron.app.on('ready', () => {
   } else if (fs.existsSync(exePath)) {
     binPath = exePath
     binArgs = []
-  } else {
-    console.log('Terminusdb appImage Not Found')
   }
 
-  console.log('PATH', binPath)
-  let serverReady = false
-  console.log('Starting TerminusDB')
-  const child = execFile(binPath, binArgs)
-  child.stderr.on('data', (data) => {
-    if (!serverReady) {
-      console.log('stderr: ' + data)
-      if (data.toString().substring(2, 16) === 'Started server') {
-        serverReady = true
-        console.log('Terminusdb started')
-        startConsole()
+  if (binPath) {
+    console.log('PATH', binPath)
+    let serverReady = false
+    console.log('Starting TerminusDB')
+    const child = execFile(binPath, binArgs)
+    child.stderr.on('data', (data) => {
+      if (!serverReady) {
+        console.log('stderr: ' + data)
+        if (data.toString().substring(2, 16) === 'Started server') {
+          serverReady = true
+          console.log('Terminusdb started')
+          startConsole()
+        }
       }
-    }
-  })
+    })
+  } else {
+    console.log('TerminusDB not found in path')
+    console.log('Please start TerminusDB')
+    startConsole()
+  }
 })
 
 const createMenu = () => {
