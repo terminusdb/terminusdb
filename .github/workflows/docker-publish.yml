@@ -114,7 +114,7 @@ jobs:
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
-        cd "$GITHUB_WORKSPACE"
+        cd "$env:GITHUB_WORKSPACE"
         mkdir swipl
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
         cd swipl\bin
