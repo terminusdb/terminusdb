@@ -155,7 +155,7 @@ jobs:
         cd distribution/desktop
         mkdir public/windows
         cd public/windows
-        tar xf ../../../../TerminusDB-server-windows.tar.gz
+        tar xf ../../../../terminusdb_windows.tar.gz
         cd ../../
         npx electron-builder build -p never
       shell: bash
