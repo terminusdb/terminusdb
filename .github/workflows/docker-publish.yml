@@ -125,6 +125,9 @@ jobs:
 
     - name: Run tests
       run: |
+        ls
+        ls swipl\
+        ls swipl\bin
         swipl\bin\swipl utils\db_init -s localhost -k root
         swipl\bin\swipl -g run_tests -g halt start.pl
 
