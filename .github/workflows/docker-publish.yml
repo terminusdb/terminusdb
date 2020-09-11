@@ -200,3 +200,51 @@ jobs:
         name: terminusdb-desktop.AppImage
         path: distribution/desktop/dist/terminusdb-desktop-3.0.0.AppImage
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
+    if: github.event_name != 'pull_request' &&
+      contains('
+        refs/heads/canary
+        refs/heads/rc
+        refs/tags/v
+      ', github.ref)
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/download-artifact@v2
+      with:
+        path: artifacts
+          
+    - name: Set release name
+      id: release_name
+      run: |
+        SUFFIX = ""
+        if echo "$GITHUB_REF" | grep -P "canary|rc" ; then SUFFIX="-tag"; fi
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        TAG_WITH_SUFFIX="$TAG$SUFFIX"
+        echo "::set-output name=tag::$TAG_WITH_SUFFIX"
+
+    - name: Delete tag and release
+      uses: dev-drprasad/delete-tag-and-release@v0.1.2
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.release_name.outputs.tag }}
+      continue-on-error: true
+
+    - name: Create a Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.terminusdb_branch }}-tag
+        prerelease: true
+        files: |
+          terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.0.AppImage
+          TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
+          TerminusDB-server-windows.tar.gz/TerminusDB-server-windows.tar.gz
+          
