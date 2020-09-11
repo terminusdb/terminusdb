@@ -150,13 +150,12 @@ jobs:
     - uses: actions/download-artifact@v2
       with:
         name: TerminusDB-server-windows.tar.gz
-        path: distribution/desktop/temp.tar.gz
 
     - run: |
         cd distribution/desktop
         mkdir public/windows
         cd public/windows
-        tar xf ../../temp.tar.gz
+        tar xf ../../../../TerminusDB-server-windows.tar.gz
         cd ../../
         npx electron-builder build -p never
       shell: bash
