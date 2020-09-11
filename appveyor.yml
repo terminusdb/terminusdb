@@ -3,7 +3,7 @@ os: Visual Studio 2015
 environment:
   TERMINUSDB_SERVER_PACK_DIR: 'C:\Program Files\swipl\pack'
   TERMINUSDB_HTTPS_ENABLED: false
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.11.7
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.11.5
 
 # If you only care about stable channel build failures, uncomment the following line:
     #- channel: beta
