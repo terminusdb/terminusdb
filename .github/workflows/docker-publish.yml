@@ -95,6 +95,9 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    env:
+      TERMINUSDB_SERVER_PACK_DIR: "$env:GITHUB_WORKSPACE/swipl/pack"
+      TERMINUSDB_HTTPS_ENABLED: false
 
     steps:
     - uses: actions/checkout@v2
