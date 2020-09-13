@@ -344,6 +344,164 @@ var_record_pl_var(Var_Name,
 var_compare(Op, Left, Right) :-
     compare(Op, Left.var_name, Right.var_name).
 
+bt_conjunctive_head_nb_tail(A, B, (AHead,BHead), true) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,true),
+    !.
+bt_conjunctive_head_nb_tail(A, B, AHead, BTail) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,true,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, (AHead, BHead), BTail) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, true, (ATail,BTail)) :-
+    bt_head_nb_tail(A,true,ATail),
+    bt_head_nb_tail(B,true,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, AHead, (ATail,BTail)) :-
+    bt_head_nb_tail(A,AHead,ATail),
+    bt_head_nb_tail(B,true,BTail).
+
+% unfortunately defaulty. We could add more clauses...
+bt_head_nb_tail((A,B),Head,Tail) :-
+    !,
+    bt_conjunctive_head_nb_tail(A,B,Head,Tail).
+bt_head_nb_tail((A;B),(AHead;BHead),true) :-
+    !,
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,true).
+bt_head_nb_tail(insert(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = insert(A,B,C).
+bt_head_nb_tail(insert(A,B,C,D),Head,Result) :-
+    !,
+    Head = true,
+    Result = insert(A,B,C,D).
+bt_head_nb_tail(delete(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete(A,B,C).
+bt_head_nb_tail(delete(A,B,C,D),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete(A,B,C,D).
+bt_head_nb_tail(update_object(A,B),Head,Result) :-
+    !,
+    Head = true,
+    Result = update_object(A,B).
+bt_head_nb_tail(update_object(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = update_object(A,B,C).
+bt_head_nb_tail(delete_object(A),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete_object(A).
+bt_head_nb_tail(Term, Term, true).
+
+/*
+ * safe_guard_insertion(Term, NewTerm) is det.
+ */
+safe_guard_insertion(Term, (Head,immediately(Tail))) :-
+    bt_head_nb_tail(Term,Head,Tail),
+    !.
+safe_guard_insertion(Term, Term).
+
+:- begin_tests(guards).
+
+test(guard_removal_is_impossible, []) :-
+
+    AST = (
+        t(a,b,c),
+        insert(a,b,c)
+    ;   t(e,f,g),
+        insert(d,b,c)),
+
+    safe_guard_insertion(AST, AST).
+
+test(guard_removal_is_safe, []) :-
+
+    AST = (
+        t(a,b,c),
+        t(e,f,g),
+        insert(a,b,c),
+        insert(d,b,c),
+        insert(e,f,g)
+    ),
+
+    safe_guard_insertion(AST, AST2),
+    AST2 = ((
+                   t(a,b,c),
+                   t(e,f,g)),
+            immediately(
+                (
+                    insert(a,b,c),
+                    insert(d,b,c),
+                    insert(e,f,g)))).
+
+test(alternating_inserts, []) :-
+
+    AST = (
+        t(a,b,c),
+        insert(a,b,c),
+        t(e,f,g),
+        insert(d,b,c),
+        insert(e,f,g)
+    ),
+
+    safe_guard_insertion(AST, AST).
+
+test(guard_removal_with_deep_inserts, []) :-
+
+    AST = (
+        t(a,b,c),
+        (   t(e,f,g),
+            (   insert(a,b,c),
+                insert(d,b,c),
+                (   insert(e,f,g),
+                    insert(f,g,h))))),
+
+    safe_guard_insertion(AST, AST2),
+
+    AST2 = ((t(a,b,c),
+             t(e,f,g)),
+            immediately(
+                (insert(a,b,c),
+                 insert(d,b,c),
+                 insert(e,f,g),
+                 insert(f,g,h)))).
+
+test(guard_single_query, []) :-
+
+    AST = t(a,b,c),
+
+    safe_guard_insertion(AST, (t(a,b,c),immediately(true))).
+
+
+test(guard_single_insertion, []) :-
+
+    AST = insert(a,b,c),
+
+    safe_guard_insertion(AST, (true,immediately(insert(a,b,c)))).
+
+test(guard_single_deletion, []) :-
+
+    AST = delete(a,b,c),
+
+    safe_guard_insertion(AST, (true,immediately(delete(a,b,c)))).
+
+test(guard_double_insertion, []) :-
+
+    AST = (insert(a,b,c),insert(d,e,f)),
+
+    safe_guard_insertion(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
+
+:- end_tests(guards).
+
+
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
@@ -353,7 +511,8 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   do_or_die(compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+    (   safe_guard_insertion(Term, Optimized),
+        do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
         % this is redundant if we do a pre-pass that sets the guard as well.
@@ -646,7 +805,8 @@ compile_wf(read_object(Doc_ID,N,Doc),
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
-compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
+compile_wf(read_object(Doc_ID,Doc),
+           frame:document_jsonld(S0,URI,JSON)) -->
     assert_read_access,
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
