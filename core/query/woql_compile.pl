@@ -403,12 +403,12 @@ bt_head_nb_tail(delete_object(A),Head,Result) :-
 bt_head_nb_tail(Term, Term, true).
 
 /*
- * safe_guard_insertion(Term, NewTerm) is det.
+ * safe_guard_removal(Term, NewTerm) is det.
  */
-safe_guard_insertion(Term, (Head,immediately(Tail))) :-
+safe_guard_removal(Term, (Head,immediately(Tail))) :-
     bt_head_nb_tail(Term,Head,Tail),
     !.
-safe_guard_insertion(Term, Term).
+safe_guard_removal(Term, Term).
 
 :- begin_tests(guards).
 
@@ -420,7 +420,7 @@ test(guard_removal_is_impossible, []) :-
     ;   t(e,f,g),
         insert(d,b,c)),
 
-    safe_guard_insertion(AST, AST).
+    safe_guard_removal(AST, AST).
 
 test(guard_removal_is_safe, []) :-
 
@@ -432,7 +432,7 @@ test(guard_removal_is_safe, []) :-
         insert(e,f,g)
     ),
 
-    safe_guard_insertion(AST, AST2),
+    safe_guard_removal(AST, AST2),
     AST2 = ((
                    t(a,b,c),
                    t(e,f,g)),
@@ -452,7 +452,7 @@ test(alternating_inserts, []) :-
         insert(e,f,g)
     ),
 
-    safe_guard_insertion(AST, AST).
+    safe_guard_removal(AST, AST).
 
 test(guard_removal_with_deep_inserts, []) :-
 
@@ -464,7 +464,7 @@ test(guard_removal_with_deep_inserts, []) :-
                 (   insert(e,f,g),
                     insert(f,g,h))))),
 
-    safe_guard_insertion(AST, AST2),
+    safe_guard_removal(AST, AST2),
 
     AST2 = ((t(a,b,c),
              t(e,f,g)),
@@ -478,26 +478,26 @@ test(guard_single_query, []) :-
 
     AST = t(a,b,c),
 
-    safe_guard_insertion(AST, (t(a,b,c),immediately(true))).
+    safe_guard_removal(AST, (t(a,b,c),immediately(true))).
 
 
 test(guard_single_insertion, []) :-
 
     AST = insert(a,b,c),
 
-    safe_guard_insertion(AST, (true,immediately(insert(a,b,c)))).
+    safe_guard_removal(AST, (true,immediately(insert(a,b,c)))).
 
 test(guard_single_deletion, []) :-
 
     AST = delete(a,b,c),
 
-    safe_guard_insertion(AST, (true,immediately(delete(a,b,c)))).
+    safe_guard_removal(AST, (true,immediately(delete(a,b,c)))).
 
 test(guard_double_insertion, []) :-
 
     AST = (insert(a,b,c),insert(d,e,f)),
 
-    safe_guard_insertion(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
+    safe_guard_removal(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
 
 :- end_tests(guards).
 
@@ -511,7 +511,7 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   safe_guard_insertion(Term, Optimized),
+    (   safe_guard_removal(Term, Optimized),
         do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
