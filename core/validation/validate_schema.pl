@@ -558,44 +558,45 @@ sub_class_strict_(X,Z,Schema) :-
 % - one_of should probably have individual sets for both CC, CP
 %
 % static solutions first.
-%:- table subsumption_of/3.
+/*
 subsumption_of(CC,CP,Database) :-
     database_schema(Database,Schema),
-    (   is_schema_compiled(Schema)
+    subsumption_of_(CC,CP,Schema).
+*/
+
+subsumption_of(CC,CP,Database) :-
+    (   is_database_schema_compiled(Database)
     ->  true
     ;   compile_schema(Database)),
-    compiled_subsumption_of(CC,CP,Schema).
+    compiled_subsumption_of(CC,CP,Database).
 
 :- dynamic compiled_subsumption_of_/3.
-:- dynamic compiled_classes_below_/3.
 :- dynamic schema_identifier_/2.
 
-compiled_subsumption_of(CC,CP,Schema) :-
-    schema_identifier(Schema,Schema_Id),
+compiled_subsumption_of(CC,CP,Database) :-
+    schema_identifier(Database,Schema_Id),
     compiled_subsumption_of_(Schema_Id,CC,CP).
 
-schema_identifier(Schema, Schema_Id) :-
-    schema_identifier_(Schema, Schema_Id),
+schema_identifier(Database, Schema_Id) :-
+    get_dict(descriptor, Database, DB_Desc),
+    schema_identifier_(DB_Desc, Schema_Id),
     !.
-schema_identifier(Schema, Schema_Id) :-
-    maplist([Dict,Descriptor]>>get_dict(descriptor,Dict,Descriptor),
-            Schema,
-            Descriptors),
-    sort(Descriptors,Sorted),
-    format(string(Canonical), "~q", [Sorted]),
+schema_identifier(Database, Schema_Id) :-
+    get_dict(descriptor, Database, DB_Desc),
+    format(string(Canonical), "~q", [DB_Desc]),
     md5_hash(Canonical, Schema_Id, []),
-    assertz(schema_identifier_(Schema,Schema_Id)).
+    assertz(schema_identifier_(DB_Desc,Schema_Id)).
 
-is_schema_compiled(Schema_Id) :-
-    schema_identifier_(_Schema,Schema_Id).
+is_database_schema_compiled(Database) :-
+    get_dict(descriptor, Database, DB_Desc),
+    schema_identifier_(DB_Desc,_Schema_Id).
 
 compile_schema(Database) :-
-    database_schema(Database,Schema),
-    schema_identifier(Schema,Schema_Id),
-    compile_subsumption(Schema,Schema_Id).
+    schema_identifier(Database,Schema_Id),
+    compile_subsumption(Database,Schema_Id).
 
-compile_subsumption(Schema,Schema_Id) :-
-    schema_identifier(Schema,Schema_Id),
+compile_subsumption(Database,Schema_Id) :-
+    database_schema(Database,Schema),
     forall(
         subsumption_of_(CC,CP,Schema),
         (   compiled_subsumption_of_(Schema_Id,CC,CP)
@@ -603,8 +604,7 @@ compile_subsumption(Schema,Schema_Id) :-
         ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP)))).
 
 invalidate_schema(Database) :-
-    database_schema(Database,Schema),
-    schema_identifier(Schema,Schema_Id),
+    schema_identifier(Database,Schema_Id),
     with_mutex(
         Schema_Id,
         (   retractall(schema_identifier_(_,Schema_Id)),
