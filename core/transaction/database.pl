@@ -216,6 +216,7 @@ with_transaction(Query_Context,
         true,
         with_transaction_(Query_Context,Body,Meta_Data),
         (   abolish_module_tables(validate_schema),
+            abolish_module_tables(frame),
             get_dict(transaction_objects,Query_Context,Databases),
             maplist(invalidate_schema,Databases)
         )

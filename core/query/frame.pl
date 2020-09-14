@@ -303,6 +303,7 @@ class_assertion(Database,Class,class(Class)) :-
  * @param Class Atom URI identifier of rfds or owl Class.
  * @param Formula Term describing the class relationships.
  */
+:- table class_formula/3.
 class_formula(Class,Database,F) :-
     setof(Sol,class_assertion(Database,Class,Sol), Solns),
     (   [F]=Solns
@@ -489,7 +490,6 @@ calculate_property_restriction(Property,Restriction_Formula,Database,Restriction
  *
  *
  */
-%:- table apply_restriction/5.
 apply_restriction(Class,Property,Database,Restriction_Formula,
                   [type=datatypeProperty,
                    property=Property,
@@ -597,9 +597,7 @@ calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
  *
  * Fails if the class doesn't exist.
  */
-%:- if(current_prolog_flag(optimise,true)).
-%:- table class_frame/3.
-%:- endif.
+:- table class_frame/3.
 class_frame(Class,Database,Frame) :-
     class_frame_aux(Class,Database,Frame).
 

@@ -190,8 +190,7 @@ immediate_class_or_restriction(R_or_C,Database) :-
     immediate_class_or_restriction_(R_or_C,Schema).
 
 immediate_class_or_restriction_(R_or_C,Schema) :-
-    immediate_restriction_(R_or_C,Schema),
-    !.
+    immediate_restriction_(R_or_C,Schema).
 immediate_class_or_restriction_(R_or_C,Schema) :-
     immediate_class_(R_or_C,Schema).
 
@@ -557,21 +556,15 @@ sub_class_strict_(X,Z,Schema) :-
 %   Requires anti-subsumption predicate
 % - one_of should probably have individual sets for both CC, CP
 %
-% static solutions first.
-/*
-subsumption_of(CC,CP,Database) :-
-    database_schema(Database,Schema),
-    subsumption_of_(CC,CP,Schema).
-*/
-
+% Compile solutions statically
 subsumption_of(CC,CP,Database) :-
     (   is_database_schema_compiled(Database)
     ->  true
     ;   compile_schema(Database)),
     compiled_subsumption_of(CC,CP,Database).
 
-:- dynamic compiled_subsumption_of_/3.
-:- dynamic schema_identifier_/2.
+:- thread_local compiled_subsumption_of_/3.
+:- thread_local schema_identifier_/2.
 
 compiled_subsumption_of(CC,CP,Database) :-
     schema_identifier(Database,Schema_Id),
@@ -583,6 +576,7 @@ schema_identifier(Database, Schema_Id) :-
     !.
 schema_identifier(Database, Schema_Id) :-
     get_dict(descriptor, Database, DB_Desc),
+    debug(schema, "Reconstructing schema~n", []),
     format(string(Canonical), "~q", [DB_Desc]),
     md5_hash(Canonical, Schema_Id, []),
     assertz(schema_identifier_(DB_Desc,Schema_Id)).
@@ -597,18 +591,19 @@ compile_schema(Database) :-
 
 compile_subsumption(Database,Schema_Id) :-
     database_schema(Database,Schema),
+    schema_identifier(Database,Schema_Id),
     forall(
-        subsumption_of_(CC,CP,Schema),
-        (   compiled_subsumption_of_(Schema_Id,CC,CP)
-        ->  true
-        ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP)))).
+        immediate_class_or_restriction_(CC,Schema),
+        forall(
+            subsumption_of_(CC,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))).
 
 invalidate_schema(Database) :-
     schema_identifier(Database,Schema_Id),
-    with_mutex(
-        Schema_Id,
-        (   retractall(schema_identifier_(_,Schema_Id)),
-            retractall(compiled_subsumption_of_(Schema_Id,_,_)))).
+    retractall(schema_identifier_(_,Schema_Id)),
+    retractall(compiled_subsumption_of_(Schema_Id,_,_)).
 
 :- table subsumption_of_/3.
 subsumption_of_(_,'http://www.w3.org/2002/07/owl#Thing',_).
@@ -1107,7 +1102,6 @@ any_range(OP,R,Database) :-
     xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     any_domain(P,R,Database).
 
-%:- rdf_meta most_specific_range(r,r,o).
 most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
 
 /**
