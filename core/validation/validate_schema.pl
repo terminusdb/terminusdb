@@ -1,4 +1,6 @@
 :- module(validate_schema,[
+              invalidate_schema/1,
+
               class/2,
               immediate_class/2,
               restriction/2,
@@ -592,35 +594,6 @@ compile_schema(Database) :-
     schema_identifier(Schema,Schema_Id),
     compile_subsumption(Schema,Schema_Id).
 
-/**
- * classes_below(+Class:uri, +Database, -Below:list(uri)) is det.
- *
- * Get all classes below us in the subsumption hierarchy,
- * excluding owl:Nothing or abstract classes.
- */
-/*
-classes_below(Class,Database,BelowList) :-
-    database_schema(Database,Schema),
-    (   is_schema_compiled(Schema)
-    ->  true
-    ;   compile_schema(Schema)),
-    compiled_classes_below(Class,Schema,BelowList).
-
-compiled_classes_below(Class,Schema,BelowList) :-
-    schema_identifier(Schema,Schema_Id),
-    compiled_classes_below_(Schema_Id,Class,CP).
-*/
-
-classes_below(Class,Database,BelowList) :-
-    unique_solutions(Below,subsumption_of(Below,Class,Database),Classes),
-    exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
-    database_schema(Database,Schema),
-    exclude({Database, Schema}/[X]>>(
-                xrdf(Schema,
-                     X,system:tag,system:abstract)),
-            ClassesNoBottom,
-            BelowList).
-
 compile_subsumption(Schema,Schema_Id) :-
     schema_identifier(Schema,Schema_Id),
     forall(
@@ -635,8 +608,7 @@ invalidate_schema(Database) :-
     with_mutex(
         Schema_Id,
         (   retractall(schema_identifier_(_,Schema_Id)),
-            retractall(compiled_subsumption_of_(Schema_Id,_,_)),
-            retractall(compiled_classes_below_(Schema_Id,_,_)))).
+            retractall(compiled_subsumption_of_(Schema_Id,_,_)))).
 
 :- table subsumption_of_/3.
 subsumption_of_(_,'http://www.w3.org/2002/07/owl#Thing',_).
@@ -717,9 +689,6 @@ strict_subsumption_of_(CC,CP,Schema) :-
     strict_subsumption_of_(CZ,CP,Schema).
 strict_subsumption_of_(CC,CP,Schema) :- % xsd and custom data types
     datatype_strict_subsumption_of_(CC,CP,Schema).
-
-
-
 
 /**
  * basetype_subsumption_of(?Sub,?Super) is nondet.

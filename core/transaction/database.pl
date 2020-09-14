@@ -33,6 +33,7 @@
 
 :- use_module(core(transaction/descriptor)).
 :- use_module(core(transaction/validate)).
+:- use_module(core(validation)).
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
@@ -214,7 +215,10 @@ with_transaction(Query_Context,
     setup_call_cleanup(
         true,
         with_transaction_(Query_Context,Body,Meta_Data),
-        abolish_module_tables(validate_schema)
+        (   abolish_module_tables(validate_schema),
+            get_dict(transaction_objects,Query_Context,Databases),
+            maplist(invalidate_schema,Databases)
+        )
     ).
 
 :- meta_predicate with_transaction(?,0,?).
