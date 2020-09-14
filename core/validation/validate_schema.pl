@@ -559,7 +559,84 @@ sub_class_strict_(X,Z,Schema) :-
 %:- table subsumption_of/3.
 subsumption_of(CC,CP,Database) :-
     database_schema(Database,Schema),
-    subsumption_of_(CC,CP,Schema).
+    (   is_schema_compiled(Schema)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_subsumption_of(CC,CP,Schema).
+
+:- dynamic compiled_subsumption_of_/3.
+:- dynamic compiled_classes_below_/3.
+:- dynamic schema_identifier_/2.
+
+compiled_subsumption_of(CC,CP,Schema) :-
+    schema_identifier(Schema,Schema_Id),
+    compiled_subsumption_of_(Schema_Id,CC,CP).
+
+schema_identifier(Schema, Schema_Id) :-
+    schema_identifier_(Schema, Schema_Id),
+    !.
+schema_identifier(Schema, Schema_Id) :-
+    maplist([Dict,Descriptor]>>get_dict(descriptor,Dict,Descriptor),
+            Schema,
+            Descriptors),
+    sort(Descriptors,Sorted),
+    format(string(Canonical), "~q", [Sorted]),
+    md5_hash(Canonical, Schema_Id, []),
+    assertz(schema_identifier_(Schema,Schema_Id)).
+
+is_schema_compiled(Schema_Id) :-
+    schema_identifier_(_Schema,Schema_Id).
+
+compile_schema(Database) :-
+    database_schema(Database,Schema),
+    schema_identifier(Schema,Schema_Id),
+    compile_subsumption(Schema,Schema_Id).
+
+/**
+ * classes_below(+Class:uri, +Database, -Below:list(uri)) is det.
+ *
+ * Get all classes below us in the subsumption hierarchy,
+ * excluding owl:Nothing or abstract classes.
+ */
+/*
+classes_below(Class,Database,BelowList) :-
+    database_schema(Database,Schema),
+    (   is_schema_compiled(Schema)
+    ->  true
+    ;   compile_schema(Schema)),
+    compiled_classes_below(Class,Schema,BelowList).
+
+compiled_classes_below(Class,Schema,BelowList) :-
+    schema_identifier(Schema,Schema_Id),
+    compiled_classes_below_(Schema_Id,Class,CP).
+*/
+
+classes_below(Class,Database,BelowList) :-
+    unique_solutions(Below,subsumption_of(Below,Class,Database),Classes),
+    exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
+    database_schema(Database,Schema),
+    exclude({Database, Schema}/[X]>>(
+                xrdf(Schema,
+                     X,system:tag,system:abstract)),
+            ClassesNoBottom,
+            BelowList).
+
+compile_subsumption(Schema,Schema_Id) :-
+    schema_identifier(Schema,Schema_Id),
+    forall(
+        subsumption_of_(CC,CP,Schema),
+        (   compiled_subsumption_of_(Schema_Id,CC,CP)
+        ->  true
+        ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP)))).
+
+invalidate_schema(Database) :-
+    database_schema(Database,Schema),
+    schema_identifier(Schema,Schema_Id),
+    with_mutex(
+        Schema_Id,
+        (   retractall(schema_identifier_(_,Schema_Id)),
+            retractall(compiled_subsumption_of_(Schema_Id,_,_)),
+            retractall(compiled_classes_below_(Schema_Id,_,_)))).
 
 :- table subsumption_of_/3.
 subsumption_of_(_,'http://www.w3.org/2002/07/owl#Thing',_).

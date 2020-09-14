@@ -408,8 +408,7 @@ normalise_restriction([type=xor, operands=Results],N) :-
     simplify_restriction_list(xor,Result,N).
 normalise_restriction([uri=U|Res],[uri=U|Res]) :-
     !.
-normalise_restriction(true,true) :-
-    !.
+normalise_restriction(true,true).
 
 /*
  * restriction_formula(+Formula:class_formula,+Database:database
@@ -417,11 +416,12 @@ normalise_restriction(true,true) :-
  *
  * Calculate the formula of restrictions for a class.
  */
-restriction_formula(_<L,Database,S) :-
+restriction_formula(_<L,Database,Norm) :-
     !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
-    simplify_restriction_list(sub,R,S).
+    simplify_restriction_list(sub,R,S),
+    normalise_restriction(S,Norm).
 restriction_formula(_=or(L),Database,S) :-
     !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
@@ -441,8 +441,7 @@ restriction_formula(class(_),_,true) :-
     !.
 restriction_formula(restriction(L),_,L) :-
     !.
-restriction_formula(_=oneOf(_),_,true) :-
-    !.
+restriction_formula(_=oneOf(_),_,true).
 
 /**
  * select_restriction(+P:uri,+R:property_restriction,+Database:database-S:property_restriction) is det.
@@ -490,7 +489,7 @@ calculate_property_restriction(Property,Restriction_Formula,Database,Restriction
  *
  *
  */
-%:- rdf_meta apply_restriction(r,r,o,o,t).
+%:- table apply_restriction/5.
 apply_restriction(Class,Property,Database,Restriction_Formula,
                   [type=datatypeProperty,
                    property=Property,
