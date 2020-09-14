@@ -167,8 +167,23 @@ immediate_class_('http://terminusdb.com/schema/system#Document', _).
 %        an inferred rfds or owl Class.
 % @param Database object with the current schema graph.
 class(X,Database) :-
-    database_schema(Database,Schema),
-    class_(X,Schema).
+    (   is_database_schema_compiled(Database)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_class(X,Database).
+
+:- thread_local compiled_class_/2.
+compiled_class(C,Database) :-
+    schema_identifier(Database,Schema_Id),
+    compiled_class_(Schema_Id,C).
+
+compile_class(Database, Schema_Id) :-
+    database_schema(Database, Schema),
+    forall(
+        class_(C,Schema),
+        (   compiled_class_(Schema_Id,C)
+        ->  true
+        ;   assertz(compiled_class_(Schema_Id,C)))).
 
 class_(X,Schema) :- immediate_class_(X,Schema).
 class_(X,Schema) :- sub_class_of_(X,Y,Schema), class_(Y,Schema).
@@ -564,12 +579,11 @@ subsumption_of(CC,CP,Database) :-
     compiled_subsumption_of(CC,CP,Database).
 
 :- thread_local compiled_subsumption_of_/3.
-:- thread_local schema_identifier_/2.
-
 compiled_subsumption_of(CC,CP,Database) :-
     schema_identifier(Database,Schema_Id),
     compiled_subsumption_of_(Schema_Id,CC,CP).
 
+:- thread_local schema_identifier_/2.
 schema_identifier(Database, Schema_Id) :-
     get_dict(descriptor, Database, DB_Desc),
     schema_identifier_(DB_Desc, Schema_Id),
@@ -587,15 +601,29 @@ is_database_schema_compiled(Database) :-
 
 compile_schema(Database) :-
     schema_identifier(Database,Schema_Id),
+    compile_class(Database,Schema_Id),
     compile_subsumption(Database,Schema_Id).
 
 compile_subsumption(Database,Schema_Id) :-
     database_schema(Database,Schema),
-    schema_identifier(Database,Schema_Id),
     forall(
         immediate_class_or_restriction_(CC,Schema),
         forall(
             subsumption_of_(CC,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))),
+    forall(
+        anonymous_equivalentClass_(CC,CZ,Schema),
+        forall(
+            subsumption_of_(CZ,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))),
+    forall(
+        datatype_(CC,Schema),
+        forall(
+            datatype_subsumption_of_(CC,CP,Schema),
             (   compiled_subsumption_of_(Schema_Id,CC,CP)
             ->  true
             ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))).
