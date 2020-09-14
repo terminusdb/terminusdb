@@ -4118,4 +4118,143 @@ test(added_deleted_quad, [
                  removal(a,b,c, "instance/main")))
         ).
 
+test(guard_interspersed_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           t(a,b,c),
+           insert(d,b,c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    \+ ask(Descriptor,
+           (   t(a,b,c))).
+
+test(guard_safe_intersperesed_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(e,f,g),
+            t(a,b,c),
+            insert(d,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(a,b,c),
+                 t(e,f,g),
+                 t(d,b,c)))).
+
+test(guard_safe_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (
+        t(a,b,c),
+        insert(e,f,g)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(a,b,c),
+                 t(e,f,g)))).
+
+test(guard_disjunctive_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (   t(a,b,c),
+               insert(e,f,g)
+           ;   not(t(a,b,c)),
+               insert(x,y,z)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             t(e,f,g))),
+
+    \+ once(ask(Descriptor,
+             t(x,y,z))).
+
+test(guard_deep_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (   t(a,b,c),
+               (   insert(e,f,g),
+                   (   insert(x,y,z)),
+                   insert(h,i,j)
+               ),
+               insert(l,m,n)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(e,f,g),
+                 t(x,y,z),
+                 t(h,i,j),
+                 t(l,m,n),
+                 t(e,f,g)))).
+
 :- end_tests(woql).
