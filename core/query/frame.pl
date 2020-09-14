@@ -326,6 +326,7 @@ maybe_system_tag(C,Database,[system_tag=DC]) :-
     !.
 maybe_system_tag(_,_,[]).
 
+:- table maybe_meta/3.
 maybe_meta(C,Database,LCD) :-
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
@@ -1001,7 +1002,8 @@ document_jsonld(Query_Context, Document, JSON_LD) :-
  * up to depth Depth
  */
 document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
-    Prefixes = Query_Context.prefixes,
+    Descriptor = (Query_Context.default_collection),
+    collection_descriptor_prefixes(Descriptor, Prefixes),
     query_default_collection(Query_Context, Collection),
     prefix_expand(Document,Prefixes,Document_Ex),
     document_object(Collection, Document_Ex, Depth, Realiser),
