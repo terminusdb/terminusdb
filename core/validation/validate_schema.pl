@@ -217,10 +217,26 @@ immediate_class_or_restriction_(R_or_C,Schema) :-
 % @param R URI_OR_ID identifier for which to check if the schema has recorded a
 %        an inferred owl Restriction.
 % @param Database identifying the current schema graph.
-restriction(R,Database) :-
-    database_schema(Database,Schema),
-    restriction_(R,Schema).
+restriction(X,Database) :-
+    (   is_database_schema_compiled(Database)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_restriction(X,Database).
 
+:- thread_local compiled_restriction_/2.
+compiled_restriction(C,Database) :-
+    schema_identifier(Database,Schema_Id),
+    compiled_restriction_(Schema_Id,C).
+
+compile_restriction(Database, Schema_Id) :-
+    database_schema(Database, Schema),
+    forall(
+        restriction_(R,Schema),
+        (   compiled_restriction_(Schema_Id,R)
+        ->  true
+        ;   assertz(compiled_restriction_(Schema_Id,R)))).
+
+:- table restriction_/2.
 restriction_(R,Schema) :-
     immediate_restriction_(R,Schema).
 restriction_(R,Schema) :-
@@ -602,6 +618,7 @@ is_database_schema_compiled(Database) :-
 compile_schema(Database) :-
     schema_identifier(Database,Schema_Id),
     compile_class(Database,Schema_Id),
+    compile_restriction(Database,Schema_Id),
     compile_subsumption(Database,Schema_Id).
 
 compile_subsumption(Database,Schema_Id) :-
@@ -1130,6 +1147,7 @@ any_range(OP,R,Database) :-
     xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     any_domain(P,R,Database).
 
+:- table most_specific_range/3.
 most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
 
 /**
