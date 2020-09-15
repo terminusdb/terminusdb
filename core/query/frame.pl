@@ -179,43 +179,51 @@ has_formula(Class,Database) :-
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
-    xrdf(Schema,CR,owl:someValuesFrom,C).
+    xrdf(Schema,CR,owl:someValuesFrom,C),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
-    xrdf(Schema,CR,owl:allValuesFrom,C).
+    xrdf(Schema,CR,owl:allValuesFrom,C),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:minCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:maxCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:cardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:minQualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:qualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
@@ -562,9 +570,12 @@ apply_restriction(Class,Property,Database,Restriction_Formula,Frame) :-
  * Calculate the application of the restriction formula to the properties.
  */
 calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
-    maplist({Class,Database,Restriction_Formula}/[Property,Property_Frame]
-            >>(apply_restriction(Class,Property,Database,Restriction_Formula,Property_Frame)),
-            Properties, Frames).
+    calculate_frame_(Properties,Class,Restriction_Formula,Database,Frames).
+
+calculate_frame_([],_Class,_Restriction_Formula,_Database,[]).
+calculate_frame_([Property|Property_Rest],Class,Restriction_Formula,Database,[Property_Frame|Frame_Rest]) :-
+    apply_restriction(Class,Property,Database,Restriction_Formula,Property_Frame),
+    calculate_frame_(Property_Rest,Class,Restriction_Formula,Database,Frame_Rest).
 
 /*
  * We can't actually check types here because tabling doesn't work with

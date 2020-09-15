@@ -895,7 +895,8 @@ datatype_property(P,Database) :-
     datatype_property_(P,Schema).
 
 datatype_property_(P,Schema) :-
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
+    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty'),
+    !.
 datatype_property_(P,_) :- rdfs_datatype_property(P).
 
 %:- rdf_meta annotation_property(r,o).
@@ -928,7 +929,8 @@ object_property(P,Database) :-
     object_property_(P,Schema).
 
 object_property_(P,Schema) :-
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
+    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
+    !.
 object_property_(P,_) :- rdfs_object_property(P).
 
 /**
