@@ -1,4 +1,4 @@
-# TerminusDB Server v3.0.3 Release Notes
+# TerminusDB Server v3.0.4 Release Notes
 
 This is a feature and bugfix release
 
