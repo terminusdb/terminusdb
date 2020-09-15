@@ -1,5 +1,5 @@
 :- module(db_delete,[
-              delete_db/4,
+              delete_db/5,
               force_delete_db/2
           ]).
 
@@ -59,7 +59,7 @@ delete_db_from_system(Organization,DB) :-
  *
  * Deletes a database if it exists, fails if it doesn't.
  */
-delete_db(System, Auth, Organization,DB_Name) :-
+delete_db(System, Auth, Organization,DB_Name, Force) :-
     create_context(System, System_Context),
     with_transaction(
         System_Context,
@@ -74,18 +74,22 @@ delete_db(System, Auth, Organization,DB_Name) :-
                       error(database_does_not_exist(Organization,DB_Name), _)),
             % Do something here? User may need to know what went wrong
 
-            do_or_die(
-                database_finalized(System_Context,Organization,DB_Name),
-                error(database_not_finalized(Organization,DB_Name),
-                      context(delete_db/2))),
+            (   Force \= true
+            ->  do_or_die(
+                    database_finalized(System_Context,Organization,DB_Name),
+                    error(database_not_finalized(Organization,DB_Name),
+                          context(delete_db/2))),
 
-            begin_deleting_db_from_system(System_Context, Organization,DB_Name)
+                begin_deleting_db_from_system(System_Context, Organization,DB_Name)
+            ;   true)
         ),
         _),
 
-    delete_database_label(Organization,DB_Name),
+    (   Force = true
+    ->  force_delete_db(Organization, DB_Name)
+    ;   delete_database_label(Organization,DB_Name),
 
-    delete_db_from_system(Organization,DB_Name).
+        delete_db_from_system(Organization,DB_Name)).
 
 delete_database_label(Organization,Db) :-
     db_path(Path),

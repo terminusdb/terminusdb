@@ -220,9 +220,14 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
         do_or_die(create_db_error_handler(Error, Request),
                   Error)).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
+    (   get_payload(Document,Request),
+        _{ force: true} :< Document
+    ->  Force_Delete = true
+    ;   Force_Delete = false),
+
     /* DELETE: Delete database */
     catch_with_backtrace(
-        (   delete_db(System_DB, Auth, Organization, DB),
+        (   delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'})),
 
@@ -421,6 +426,56 @@ test(db_delete, [
                                  authorization(basic(admin, Key))]),
 
     _{'api:status' : "api:success"} :< Delete_In.
+
+test(db_force_delete_unfinalized_system_only, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(Context,
+                     insert_db_object(Context, "admin", "foo", "testdb", "test db", _),
+                     _),
+    database_exists("admin", "foo"),
+
+    atomic_list_concat([Server, '/api/db/admin/foo'], URI),
+    admin_pass(Key),
+    http_get(URI,
+             Delete_In,
+             [method(delete),
+              post(json(_{force:true})),
+              json_object(dict),
+              authorization(basic(admin, Key))]),
+
+    _{'api:status' : "api:success"} :< Delete_In,
+
+    \+ database_exists("admin", "foo").
+
+test(db_force_delete_unfinalized_system_and_label, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    super_user_authority(Auth),
+
+    organization_database_name("admin","foo",Label),
+    triple_store(Store),
+
+    db_create:create_db_unfinalized(system_descriptor{}, Auth, "admin", "foo", "dblabel", "db comment", false, _{}, _),
+    database_exists("admin", "foo"),
+    safe_open_named_graph(Store, Label, _),
+    
+    atomic_list_concat([Server, '/api/db/admin/foo'], URI),
+    admin_pass(Key),
+    http_get(URI,
+             Delete_In,
+             [method(delete),
+              post(json(_{force:true})),
+              json_object(dict),
+              authorization(basic(admin, Key))]),
+
+    _{'api:status' : "api:success"} :< Delete_In,
+
+    \+ database_exists("admin", "foo"),
+    \+ safe_open_named_graph(Store, Label, _).
 
 test(db_delete_unknown_organization_errors, [
          setup(setup_temp_server(State, Server)),
