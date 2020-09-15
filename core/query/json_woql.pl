@@ -360,6 +360,30 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddTriple',JSON,WOQL,Pa
     json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
                                  |Path]),
     WOQL = insert(WQA,WQB,WQC).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedTriple',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#subject' : Subject,
+      'http://terminusdb.com/schema/woql#predicate' : Predicate,
+      'http://terminusdb.com/schema/woql#object' : Object
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+                                 |Path]),
+    WOQL = addition(WQA,WQB,WQC).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedTriple',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#subject' : Subject,
+      'http://terminusdb.com/schema/woql#predicate' : Predicate,
+      'http://terminusdb.com/schema/woql#object' : Object
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+                                 |Path]),
+    WOQL = removal(WQA,WQB,WQC).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddQuad',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#subject' : Subject,
       'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -380,6 +404,46 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddQuad',JSON,WOQL,Path
                                 ['http://terminusdb.com/schema/woql#graph'|Path],
                                 Graph), _)),
     WOQL = insert(WQA,WQB,WQC,Graph_String).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedQuad',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#subject' : Subject,
+      'http://terminusdb.com/schema/woql#predicate' : Predicate,
+      'http://terminusdb.com/schema/woql#object' : Object,
+      'http://terminusdb.com/schema/woql#graph' : Graph
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+                                 |Path]),
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+                               |Path]),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                Graph), _)),
+    WOQL = addition(WQA,WQB,WQC,Graph_String).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedQuad',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#subject' : Subject,
+      'http://terminusdb.com/schema/woql#predicate' : Predicate,
+      'http://terminusdb.com/schema/woql#object' : Object,
+      'http://terminusdb.com/schema/woql#graph' : Graph
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+                                 |Path]),
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+                               |Path]),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                Graph), _)),
+    WOQL = removal(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteTriple',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#subject' : Subject,
       'http://terminusdb.com/schema/woql#predicate' : Predicate,
@@ -923,6 +987,11 @@ json_to_woql_path_pattern(JSON,Pattern,Path) :-
     ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
                                       |Path]),
          Pattern = p(WNode)
+    ;   _{'@type' : 'http://terminusdb.com/schema/woql#InvertedPathPredicate',
+          'http://terminusdb.com/schema/woql#path_predicate' : Node} :< JSON
+    ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
+                                      |Path]),
+         Pattern = n(WNode)
     ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathSequence',
           'http://terminusdb.com/schema/woql#path_first' : First,
           'http://terminusdb.com/schema/woql#path_second' : Second} :< JSON

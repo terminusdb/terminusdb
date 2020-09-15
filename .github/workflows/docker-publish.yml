@@ -1,0 +1,57 @@
+name: Publish
+
+on:
+  push:
+    # Publish `master` as Docker `latest` image.
+    branches:
+      - dev
+      - canary
+      - rc
+      - master
+
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
+
+  # Run tests for any PRs.
+  pull_request:
+
+jobs:
+  test_and_push_docker:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: terminusdb/terminusdb-server
+      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false"
+
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build image
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+
+      - name: Run tests
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+
+      - name: Log into Docker Container Registry
+        if: github.event_name != 'pull_request'
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u terminusdb --password-stdin
+
+      - name: Push image to Docker Container Registry
+        if: github.event_name != 'pull_request'
+        run: |
+          IMAGE_ID=$IMAGE_NAME
+          # Change all uppercase to lowercase
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+
+          # Use Docker `latest` tag convention
+          [ "$VERSION" == "master" ] && VERSION=latest
+
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=$VERSION
+
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
+          docker push $IMAGE_ID:$VERSION
