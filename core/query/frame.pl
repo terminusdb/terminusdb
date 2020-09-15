@@ -419,24 +419,30 @@ normalise_restriction(true,true).
  * Calculate the formula of restrictions for a class.
  */
 restriction_formula(_<L,Database,Norm) :-
+    !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
     simplify_restriction_list(sub,R,S),
     normalise_restriction(S,Norm).
 restriction_formula(_=or(L),Database,S) :-
+    !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
     simplify_restriction_list(or,R,S).
 restriction_formula(_=and(L),Database,S) :-
+    !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
     simplify_restriction_list(and,R,S).
 restriction_formula(_=xor(L),Database,S) :-
+    !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
     simplify_restriction_list(xor,R,S).
-restriction_formula(class(_),_,true).
-restriction_formula(restriction(L),_,L).
+restriction_formula(class(_),_,true) :-
+    !.
+restriction_formula(restriction(L),_,L) :-
+    !.
 restriction_formula(_=oneOf(_),_,true).
 
 /**
