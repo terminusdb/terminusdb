@@ -47,22 +47,22 @@
 
 is_property_restriction(true).
 is_property_restriction(L) :-
-    member(type=Type,L),
-    member(Type,[and,or,not,xor,sub]), % [type=xor,Ops=[....]]
-    member(operands=Ops,L),
+    memberchk(type=Type,L),
+    memberchk(Type,[and,or,not,xor,sub]), % [type=xor,Ops=[....]]
+    memberchk(operands=Ops,L),
     exclude(is_property_restriction,Ops,[]).
 is_property_restriction(L) :- % [mincard=?,valuesFrom=?, ...]
-    member(minCardinality=_,L).
+    memberchk(minCardinality=_,L).
 is_property_restriction(L) :-
-    member(maxCardinality=_,L).
+    memberchk(maxCardinality=_,L).
 is_property_restriction(L) :-
-    member(cardinality=_,L).
+    memberchk(cardinality=_,L).
 is_property_restriction(L) :-
-    member(hasValue=_,L).
+    memberchk(hasValue=_,L).
 is_property_restriction(L) :-
-    member(allValuesFrom=_,L).
+    memberchk(allValuesFrom=_,L).
 is_property_restriction(L) :-
-    member(someValuesFrom=_,L).
+    memberchk(someValuesFrom=_,L).
 
 :- multifile error:has_type/2.
 
@@ -73,57 +73,57 @@ error:has_type(restriction_formula,restriction(X)) :-
     is_property_restriction(X).
 
 is_property_frame(F) :-
-    member(type=Type,F),
-    member(Type, [objectProperty, datatypeProperty]),
-    member(property=_PP,F),
-    member(domain=_Domain,F),
-    member(range=_Range,F),
-    (member(label=_Label,F) ; true), % This is for documentation purposes as it cant' fail
-    (member(comment=_Comment,F) ; true), % This is for documentation purposes as it cant' fail
-    (   member(frame=Frame,F)
+    memberchk(type=Type,F),
+    memberchk(Type, [objectProperty, datatypeProperty]),
+    memberchk(property=_PP,F),
+    memberchk(domain=_Domain,F),
+    memberchk(range=_Range,F),
+    (memberchk(label=_Label,F) ; true), % This is for documentation purposes as it cant' fail
+    (memberchk(comment=_Comment,F) ; true), % This is for documentation purposes as it cant' fail
+    (   memberchk(frame=Frame,F)
     ->  is_frame(Frame)
     ;   true),
-    (   member(restriction=R,F)
+    (   memberchk(restriction=R,F)
     ->  is_property_restriction(R)
     ;   true).
 is_property_frame(F) :-
-    member(type=restriction,F),
-    member(property=_PP,F),
-    member(restriction=R,F),
+    memberchk(type=restriction,F),
+    memberchk(property=_PP,F),
+    memberchk(restriction=R,F),
     is_property_restriction(R).
 
 error:has_type(property_frame,X) :-
     is_property_frame(X).
 
 is_logical_frame(F) :-
-    member(type=Type,F),
-    member(Type,[and,or,not,xor]),
-    member(operands=Ops,F),
+    memberchk(type=Type,F),
+    memberchk(Type,[and,or,not,xor]),
+    memberchk(operands=Ops,F),
     exclude(is_frame,Ops,[]).
 
 is_one_of_frame(F) :-
-    member(type=oneOf,F),
-    member(elements=_Elts,F).
+    memberchk(type=oneOf,F),
+    memberchk(elements=_Elts,F).
 
 is_document_frame(F) :-
-    member(type=document,F),
-    member(class=_Class,F).
+    memberchk(type=document,F),
+    memberchk(class=_Class,F).
 
 is_class_choice_frame(F) :-
-    member(type=class_choice,F),
-    member(operands=_Classes,F).
+    memberchk(type=class_choice,F),
+    memberchk(operands=_Classes,F).
 
 is_or_frame(F) :-
-    member(type=or,F),
-    member(operands=_,F).
+    memberchk(type=or,F),
+    memberchk(operands=_,F).
 
 is_and_frame(F) :-
-    member(type=and,F),
-    member(operands=_,F).
+    memberchk(type=and,F),
+    memberchk(operands=_,F).
 
 is_xor_frame(F) :-
-    member(type=xor,F),
-    member(operands=_,F).
+    memberchk(type=xor,F),
+    memberchk(operands=_,F).
 
 is_frame(F) :- exclude(is_property_frame,F,[]).
 is_frame(F) :- is_document_frame(F).
