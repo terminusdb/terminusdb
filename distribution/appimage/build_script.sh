@@ -18,7 +18,7 @@ rm -rf app_dir/usr/lib/swi-prolog/bin/x86_64-linux/swipl-ld
 git clone https://github.com/terminusdb/terminus_store_prolog.git "$TERMINUSDB_STORE_PROLOG_DIR"
 cd "$TERMINUSDB_STORE_PROLOG_DIR"
 git checkout "$TERMINUSDB_STORE_PROLOG_VERSION"
-./make
+./make.sh
 rm -rf rust/target/release/build
 rm -rf rust/target/release/deps
 cd $CURRENT_DIR
