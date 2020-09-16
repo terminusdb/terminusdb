@@ -257,16 +257,8 @@ graph_inserts_deletes(Graph, I, D) :-
         Value = true
     ;   var(Value)),
     !,
-    % layer_addition_count(Graph.read, I),
-    % layer_removal_count(Graph.read, D).
-    findall(1,
-            xrdf_deleted([Graph], _, _, _),
-            Delete_List),
-    sumlist(Delete_List, D),
-    findall(1,
-            xrdf_added([Graph], _, _, _),
-            Insert_List),
-    sumlist(Insert_List, I).
+    layer_addition_count(Graph.read, I),
+    layer_removal_count(Graph.read, D).
 graph_inserts_deletes(_Graph, 0, 0).
 
 validation_inserts_deletes(Validation, Inserts, Deletes) :-
