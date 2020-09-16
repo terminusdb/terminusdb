@@ -766,9 +766,18 @@ refute_instance(Validation_Object,Witness) :-
  * early phases, it's probably best if we leave it in so we can be confident
  * we are not writing nonsense!
  *
+ * As a feature, the environment variable TERMINUSDB_IGNORE_REF_AND_REPO_SCHEMA
+ * can be set to true to skip validation of the ref and repo graph.
+ *
  * There is no current way to do inference validation. We are not allowing updates
  * so hopefully this is ok!
  */
+refute_validation_object(Validation_Object, _Witness) :-
+    ignore_ref_and_repo_schema,
+    is_dict((Validation_Object.descriptor), Type),
+    memberchk(Type, [repository_descriptor, database_descriptor]),
+    !,
+    fail.
 refute_validation_object(Validation_Object, Witness) :-
     % Pre Schema
     needs_schema_validation(Validation_Object),
