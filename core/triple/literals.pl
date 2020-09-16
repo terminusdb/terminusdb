@@ -99,8 +99,7 @@ ground_object_storage(Val^^Type, value(S)) :-
     ->  date_string(Val,Date_String),
         format(string(S), '"~s"^^\'http://www.w3.org/2001/XMLSchema#dateTime\'', [Date_String])
     ;   format(string(S), '~q^^~q', [Val,Type])).
-ground_object_storage(O, node(S)) :-
-    atom_string(O,S).
+ground_object_storage(O, node(O)).
 
 /*
  * We can only make a concrete referrent if all parts are bound.
