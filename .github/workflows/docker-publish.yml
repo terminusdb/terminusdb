@@ -240,7 +240,7 @@ jobs:
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.event.inputs.terminusdb_branch }}-tag
+        tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: true
         files: |
           terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
