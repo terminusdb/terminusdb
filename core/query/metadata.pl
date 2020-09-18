@@ -24,9 +24,7 @@ read_object_triple_count(Object, Count) :-
     Layer = (Object.read),
     (   var(Layer)
     ->  Count = 0
-    ;   layer_total_triple_count(Layer, Off_Count),
-        Count is Off_Count - 1
-    ).
+    ;   layer_total_triple_count(Layer, Count)).
 
 transaction_object_size(Transaction, Size) :-
     transaction_object_read_write_objs(Transaction,Objects),

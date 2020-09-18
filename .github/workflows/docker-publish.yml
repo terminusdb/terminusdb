@@ -16,6 +16,9 @@ on:
   # Run tests for any PRs.
   pull_request:
 
+env:
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.12.3
+
 jobs:
   test_and_push_docker:
     runs-on: ubuntu-latest
@@ -55,3 +58,193 @@ jobs:
 
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+
+  appimage:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    # Runs a single command using the runners shell
+    - name: rust-toolchain
+      uses: actions-rs/toolchain@v1.0.6
+      with:
+        toolchain: stable
+
+    # Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+        sudo apt-add-repository ppa:swi-prolog/stable -y
+        sudo apt-get update -y
+        sudo apt-get install swi-prolog-nox libpcre3 -y
+
+    - name: Create appimage
+      run: |
+        cd distribution/appimage
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+        ./build_script.sh "$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')" "$TERMINUSDB_STORE_PROLOG_VERSION"
+        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
+
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: TerminusDB-amd64.AppImage
+        path: distribution/appimage/TerminusDB-amd64.AppImage
+
+  windows:
+    runs-on: windows-latest
+    env:
+      TERMINUSDB_SERVER_PACK_DIR: C:\Program Files\swipl\pack
+      TERMINUSDB_HTTPS_ENABLED: false
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install SWI Prolog
+      run: choco install swi-prolog
+
+    - name: Download Windows requirements
+      run: |
+        $SWI_INSTALL_DIR="C:\Program Files\swipl"
+        cd "$SWI_INSTALL_DIR"
+        ls
+        mkdir pack && cd pack
+        git clone https://github.com/terminusdb/terminus_store_prolog.git
+        cd terminus_store_prolog
+        git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
+        cd "$env:GITHUB_WORKSPACE"
+        mkdir swipl
+        xcopy /E /q "$SWI_INSTALL_DIR" swipl\
+        cd swipl\bin
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
+
+    - name: Package windows tar
+      run: mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
+
+    - name: Run tests
+      run: |
+        ls
+        ls swipl\
+        ls swipl\bin
+        swipl\bin\swipl utils\db_init -s localhost -k root
+        swipl\bin\swipl -g run_tests -g halt start.pl
+
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: TerminusDB-server-windows.tar.gz
+        path: extracted\terminusdb_windows.tar.gz
+
+
+  windows_desktop:
+    runs-on: windows-latest
+    needs: windows
+
+    steps:
+    - uses: actions/checkout@v2
+
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: TerminusDB-server-windows.tar.gz
+
+    - run: |
+        cd distribution/desktop
+        mkdir public/windows
+        cd public/windows
+        tar xf ../../../../terminusdb_windows.tar.gz
+        cd ../../
+        npm i
+        npx electron-builder build -p never
+      shell: bash
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: "terminusdb-desktop Setup 3.0.0.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.0.exe"
+
+
+  linux_desktop:
+    runs-on: ubuntu-latest
+    needs: appimage
+    defaults:
+      run:
+        working-directory: distribution/desktop
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js 12
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12
+
+    - run: npm install
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: TerminusDB-amd64.AppImage
+        path: distribution/desktop/public
+
+    - run: chmod +x public/TerminusDB-amd64.AppImage
+
+    - run: npx electron-builder build --linux appimage -p never
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-desktop.AppImage
+        path: distribution/desktop/dist/terminusdb-desktop-3.0.0.AppImage
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
+    if: github.event_name != 'pull_request' &&
+      contains('
+        refs/heads/canary
+        refs/heads/rc
+        refs/tags/v
+      ', github.ref)
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/download-artifact@v2
+      with:
+        path: artifacts
+          
+    - name: Set release name
+      id: release_name
+      run: |
+        SUFFIX = ""
+        if echo "$GITHUB_REF" | grep -P "canary|rc" ; then SUFFIX="-tag"; fi
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        TAG_WITH_SUFFIX="$TAG$SUFFIX"
+        echo "::set-output name=tag::$TAG_WITH_SUFFIX"
+
+    - name: Delete tag and release
+      uses: dev-drprasad/delete-tag-and-release@v0.1.2
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.release_name.outputs.tag }}
+      continue-on-error: true
+
+    - name: Create a Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.terminusdb_branch }}-tag
+        prerelease: true
+        files: |
+          terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.0.AppImage
+          TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
+          TerminusDB-server-windows.tar.gz/TerminusDB-server-windows.tar.gz
+          

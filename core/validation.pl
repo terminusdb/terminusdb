@@ -1,5 +1,7 @@
 :- module(validation, [
               % schema_definitions.pl
+              invalidate_schema/1,
+
               schema_predicate/1,
               rdfs_properties/1,
               owl_basic_properties/1,

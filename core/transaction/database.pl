@@ -33,6 +33,7 @@
 
 :- use_module(core(transaction/descriptor)).
 :- use_module(core(transaction/validate)).
+:- use_module(core(validation)).
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
@@ -214,7 +215,11 @@ with_transaction(Query_Context,
     setup_call_cleanup(
         true,
         with_transaction_(Query_Context,Body,Meta_Data),
-        abolish_module_tables(validate_schema)
+        (   abolish_module_tables(validate_schema),
+            abolish_module_tables(frame),
+            get_dict(transaction_objects,Query_Context,Databases),
+            maplist(invalidate_schema,Databases)
+        )
     ).
 
 :- meta_predicate with_transaction(?,0,?).
@@ -252,16 +257,8 @@ graph_inserts_deletes(Graph, I, D) :-
         Value = true
     ;   var(Value)),
     !,
-    % layer_addition_count(Graph.read, I),
-    % layer_removal_count(Graph.read, D).
-    findall(1,
-            xrdf_deleted([Graph], _, _, _),
-            Delete_List),
-    sumlist(Delete_List, D),
-    findall(1,
-            xrdf_added([Graph], _, _, _),
-            Insert_List),
-    sumlist(Insert_List, I).
+    layer_addition_count(Graph.read, I),
+    layer_removal_count(Graph.read, D).
 graph_inserts_deletes(_Graph, 0, 0).
 
 validation_inserts_deletes(Validation, Inserts, Deletes) :-

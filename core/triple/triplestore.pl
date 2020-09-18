@@ -221,7 +221,7 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  * Insert triple into transaction layer, record changed as 1 or 0
  */
 insert(G,X,Y,Z,Changed) :-
-    object_storage(Z,S),
+    ground_object_storage(Z,S),
     read_write_obj_builder(G, Builder),
     (   nb_add_triple(Builder, X, Y, S)
     ->  Changed = 1
@@ -233,7 +233,7 @@ insert(G,X,Y,Z,Changed) :-
  * Delete quad from transaction predicates, record changed as 1 or 0
  */
 delete(G,X,Y,Z,Changed) :-
-    object_storage(Z,S),
+    ground_object_storage(Z,S),
     read_write_obj_builder(G, Builder),
     (   nb_remove_triple(Builder, X, Y, S)
     ->  Changed = 1

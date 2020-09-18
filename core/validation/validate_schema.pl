@@ -1,4 +1,6 @@
 :- module(validate_schema,[
+              invalidate_schema/1,
+
               class/2,
               immediate_class/2,
               restriction/2,
@@ -165,8 +167,23 @@ immediate_class_('http://terminusdb.com/schema/system#Document', _).
 %        an inferred rfds or owl Class.
 % @param Database object with the current schema graph.
 class(X,Database) :-
-    database_schema(Database,Schema),
-    class_(X,Schema).
+    (   is_database_schema_compiled(Database)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_class(X,Database).
+
+:- thread_local compiled_class_/2.
+compiled_class(C,Database) :-
+    schema_identifier(Database,Schema_Id),
+    compiled_class_(Schema_Id,C).
+
+compile_class(Database, Schema_Id) :-
+    database_schema(Database, Schema),
+    forall(
+        class_(C,Schema),
+        (   compiled_class_(Schema_Id,C)
+        ->  true
+        ;   assertz(compiled_class_(Schema_Id,C)))).
 
 class_(X,Schema) :- immediate_class_(X,Schema).
 class_(X,Schema) :- sub_class_of_(X,Y,Schema), class_(Y,Schema).
@@ -188,8 +205,7 @@ immediate_class_or_restriction(R_or_C,Database) :-
     immediate_class_or_restriction_(R_or_C,Schema).
 
 immediate_class_or_restriction_(R_or_C,Schema) :-
-    immediate_restriction_(R_or_C,Schema),
-    !.
+    immediate_restriction_(R_or_C,Schema).
 immediate_class_or_restriction_(R_or_C,Schema) :-
     immediate_class_(R_or_C,Schema).
 
@@ -201,10 +217,26 @@ immediate_class_or_restriction_(R_or_C,Schema) :-
 % @param R URI_OR_ID identifier for which to check if the schema has recorded a
 %        an inferred owl Restriction.
 % @param Database identifying the current schema graph.
-restriction(R,Database) :-
-    database_schema(Database,Schema),
-    restriction_(R,Schema).
+restriction(X,Database) :-
+    (   is_database_schema_compiled(Database)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_restriction(X,Database).
 
+:- thread_local compiled_restriction_/2.
+compiled_restriction(C,Database) :-
+    schema_identifier(Database,Schema_Id),
+    compiled_restriction_(Schema_Id,C).
+
+compile_restriction(Database, Schema_Id) :-
+    database_schema(Database, Schema),
+    forall(
+        restriction_(R,Schema),
+        (   compiled_restriction_(Schema_Id,R)
+        ->  true
+        ;   assertz(compiled_restriction_(Schema_Id,R)))).
+
+:- table restriction_/2.
 restriction_(R,Schema) :-
     immediate_restriction_(R,Schema).
 restriction_(R,Schema) :-
@@ -555,11 +587,68 @@ sub_class_strict_(X,Z,Schema) :-
 %   Requires anti-subsumption predicate
 % - one_of should probably have individual sets for both CC, CP
 %
-% static solutions first.
-%:- table subsumption_of/3.
+% Compile solutions statically
 subsumption_of(CC,CP,Database) :-
+    (   is_database_schema_compiled(Database)
+    ->  true
+    ;   compile_schema(Database)),
+    compiled_subsumption_of(CC,CP,Database).
+
+:- thread_local compiled_subsumption_of_/3.
+compiled_subsumption_of(CC,CP,Database) :-
+    schema_identifier(Database,Schema_Id),
+    compiled_subsumption_of_(Schema_Id,CC,CP).
+
+:- thread_local schema_identifier_/2.
+schema_identifier(Database, Schema_Id) :-
+    get_dict(descriptor, Database, DB_Desc),
+    schema_identifier_(DB_Desc, Schema_Id),
+    !.
+schema_identifier(Database, Schema_Id) :-
+    get_dict(descriptor, Database, DB_Desc),
+    debug(schema, "Reconstructing schema~n", []),
+    format(string(Canonical), "~q", [DB_Desc]),
+    md5_hash(Canonical, Schema_Id, []),
+    assertz(schema_identifier_(DB_Desc,Schema_Id)).
+
+is_database_schema_compiled(Database) :-
+    get_dict(descriptor, Database, DB_Desc),
+    schema_identifier_(DB_Desc,_Schema_Id).
+
+compile_schema(Database) :-
+    schema_identifier(Database,Schema_Id),
+    compile_class(Database,Schema_Id),
+    compile_restriction(Database,Schema_Id),
+    compile_subsumption(Database,Schema_Id).
+
+compile_subsumption(Database,Schema_Id) :-
     database_schema(Database,Schema),
-    subsumption_of_(CC,CP,Schema).
+    forall(
+        immediate_class_or_restriction_(CC,Schema),
+        forall(
+            subsumption_of_(CC,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))),
+    forall(
+        anonymous_equivalentClass_(CC,CZ,Schema),
+        forall(
+            subsumption_of_(CZ,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))),
+    forall(
+        datatype_(CC,Schema),
+        forall(
+            datatype_subsumption_of_(CC,CP,Schema),
+            (   compiled_subsumption_of_(Schema_Id,CC,CP)
+            ->  true
+            ;   assertz(compiled_subsumption_of_(Schema_Id,CC,CP))))).
+
+invalidate_schema(Database) :-
+    schema_identifier(Database,Schema_Id),
+    retractall(schema_identifier_(_,Schema_Id)),
+    retractall(compiled_subsumption_of_(Schema_Id,_,_)).
 
 :- table subsumption_of_/3.
 subsumption_of_(_,'http://www.w3.org/2002/07/owl#Thing',_).
@@ -640,9 +729,6 @@ strict_subsumption_of_(CC,CP,Schema) :-
     strict_subsumption_of_(CZ,CP,Schema).
 strict_subsumption_of_(CC,CP,Schema) :- % xsd and custom data types
     datatype_strict_subsumption_of_(CC,CP,Schema).
-
-
-
 
 /**
  * basetype_subsumption_of(?Sub,?Super) is nondet.
@@ -809,7 +895,8 @@ datatype_property(P,Database) :-
     datatype_property_(P,Schema).
 
 datatype_property_(P,Schema) :-
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty').
+    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#DatatypeProperty'),
+    !.
 datatype_property_(P,_) :- rdfs_datatype_property(P).
 
 %:- rdf_meta annotation_property(r,o).
@@ -842,7 +929,8 @@ object_property(P,Database) :-
     object_property_(P,Schema).
 
 object_property_(P,Schema) :-
-    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty').
+    xrdf(Schema,P,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/2002/07/owl#ObjectProperty'),
+    !.
 object_property_(P,_) :- rdfs_object_property(P).
 
 /**
@@ -1061,7 +1149,7 @@ any_range(OP,R,Database) :-
     xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
     any_domain(P,R,Database).
 
-%:- rdf_meta most_specific_range(r,r,o).
+:- table most_specific_range/3.
 most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
 
 /**
