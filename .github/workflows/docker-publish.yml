@@ -220,7 +220,7 @@ jobs:
     - name: Set release name
       id: release_name
       run: |
-        SUFFIX = ""
+        SUFFIX=""
         if echo "$GITHUB_REF" | grep -P "canary|rc" ; then SUFFIX="-tag"; fi
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
         TAG_WITH_SUFFIX="$TAG$SUFFIX"
