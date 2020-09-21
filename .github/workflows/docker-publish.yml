@@ -243,8 +243,8 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: true
         files: |
-          terminusdb-desktop Setup 3.0.0.exe
-          terminusdb-desktop-3.0.0.AppImage
-          TerminusDB-amd64.AppImage
-          TerminusDB-server-windows.tar.gz
+          artifacts/terminusdb-desktop Setup 3.0.0.exe
+          artifacts/terminusdb-desktop-3.0.0.AppImage
+          artifacts/TerminusDB-amd64.AppImage
+          artifacts/TerminusDB-server-windows.tar.gz
           
