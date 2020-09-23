@@ -3,85 +3,20 @@ const path = require('path')
 const fs = require('fs')
 const execFile = require('child_process').execFile
 
-const isDev = require('electron-is-dev')
+let MAIN_WINDOW
+let SYSTEM_TRAY
 
-let mainWindow
-let tray = null
-const clippings = ['TerminusDB']
-
-function createWindow () {
-  mainWindow = new electron.BrowserWindow({
-    width: 900,
-    height: 680,
-    nodeIntegration: false,
-    webPreferences: {
-      spellcheck: false
-    },
-    icon: path.join(__dirname, 'assets/icons/favicon.png')
-  })
-
-  mainWindow.setMenu(null)
-
-  if (isDev) {
-    // Open the DevTools.
-    // mainWindow.webContents.openDevTools();
-
-    mainWindow.on('minimize', function (event) {
-      event.preventDefault()
-      mainWindow.hide()
-    })
-
-    mainWindow.on('close', function (event) {
-      if (!electron.app.isQuiting) {
-        event.preventDefault()
-        mainWindow.hide()
-      }
-      return false
-    })
+electron.app.on('certificate-error',
+  (event, webContents, url, error, certificate, accept) => {
+    if (url.startsWith('https://127.0.0.1')) {
+      accept(true)
+    } else {
+      accept(false)
+    }
   }
-
-  mainWindow.webContents.on('new-window', function (e, url) {
-    e.preventDefault()
-    electron.shell.openExternal(url)
-  })
-
-  electron.globalShortcut.register('f5', () => mainWindow.reload())
-  electron.globalShortcut.register('CommandOrControl+R', () => mainWindow.reload())
-  electron.globalShortcut.register('Alt+Left', () => {
-    if (mainWindow.webContents.canGoBack()) mainWindow.webContents.goBack()
-  })
-  electron.globalShortcut.register('Alt+Right', () => {
-    if (mainWindow.webContents.canGoForward()) mainWindow.webContents.goForward()
-  })
-
-  console.log('ready')
-  mainWindow.loadURL('https://127.0.0.1:6363/')
-}
-
-electron.app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-  if (url.startsWith('https://127.0.0.1')) {
-    callback(true)
-  } else {
-    callback(false)
-  }
-  // mainWindow.webContents.openDevTools();
-  mainWindow.webContents.on('devtools-opened', () => { mainWindow.webContents.closeDevTools() })
-})
+)
 
 electron.app.on('ready', () => {
-  const startConsole = () => {
-    if (electron.app.dock) electron.app.dock.hide()
-
-    tray = new electron.Tray(path.join(__dirname, 'assets/icons/favicon.png'))
-    if (process.platform === 'win32') {
-      tray.on('click', tray.popUpContextMenu)
-    }
-
-    createMenu()
-    tray.setToolTip('TerminusDB')
-    createWindow()
-  }
-
   const appDir = path.dirname(require.main.filename)
   const appImagePath = `${appDir}/TerminusDB-amd64.AppImage`
   const exePath = `${appDir}/windows/start_windows.bat`
@@ -107,34 +42,127 @@ electron.app.on('ready', () => {
         if (data.toString().substring(2, 16) === 'Started server') {
           serverReady = true
           console.log('Terminusdb started')
-          startConsole()
+          createWindow()
         }
       }
     })
   } else {
     console.log('TerminusDB not found in path')
     console.log('Please start TerminusDB')
-    startConsole()
+    createWindow()
   }
 })
 
-const createMenu = () => {
-  const menu = electron.Menu.buildFromTemplate([
-    ...clippings.map((clipping, index) => ({
-      label: clipping,
-      click () {
-        mainWindow.show()
-      }
-    })),
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click () {
-        electron.app.isQuiting = true
-        electron.app.quit()
-      }
-    }
-  ])
+function createWindow () {
+  MAIN_WINDOW = new electron.BrowserWindow({
+    width: 900,
+    height: 680,
+    nodeIntegration: false,
+    webPreferences: {
+      spellcheck: false
+    },
+    icon: path.join(__dirname, 'assets/icons/favicon.png')
+  })
 
-  tray.setContextMenu(menu)
+  MAIN_WINDOW.on('minimize', function (event) {
+    event.preventDefault()
+    MAIN_WINDOW.hide()
+  })
+
+  MAIN_WINDOW.on('close', function (event) {
+    if (!electron.app.isQuiting) {
+      event.preventDefault()
+      MAIN_WINDOW.hide()
+    }
+    return false
+  })
+
+  MAIN_WINDOW.webContents.on('new-window', function (e, url) {
+    e.preventDefault()
+    electron.shell.openExternal(url)
+  })
+
+  MAIN_WINDOW.loadURL('https://127.0.0.1:6363/')
+
+  const appMenu = new electron.Menu()
+
+  appMenu.append(new electron.MenuItem({
+    label: 'Reload (Ctrl+R)',
+    accelerator: 'CommandOrControl+R',
+    click () {
+      MAIN_WINDOW.reload()
+    }
+  }))
+  appMenu.append(new electron.MenuItem({
+    label: 'Reload (F5)',
+    accelerator: 'f5',
+    click () {
+      MAIN_WINDOW.reload()
+    }
+  }))
+  appMenu.append(new electron.MenuItem({
+    label: 'Back',
+    accelerator: 'Alt+Left',
+    click () {
+      MAIN_WINDOW.webContents.goBack()
+    }
+  }))
+  appMenu.append(new electron.MenuItem({
+    label: 'Back',
+    accelerator: 'Alt+Right',
+    click () {
+      MAIN_WINDOW.webContents.goForward()
+    }
+  }))
+  appMenu.append(new electron.MenuItem({
+    accelerator: 'CommandOrControl+B',
+    label: 'Open in Browser',
+    click () {
+      electron.shell.openExternal('https://127.0.0.1:6363')
+    }
+  }))
+
+  electron.Menu.setApplicationMenu(appMenu)
+  MAIN_WINDOW.setMenuBarVisibility(false)
+
+  const trayMenu = new electron.Menu()
+
+  trayMenu.append(new electron.MenuItem({
+    label: 'TerminusDB',
+    click () {
+      MAIN_WINDOW.show()
+    }
+  }))
+  trayMenu.append(new electron.MenuItem({ type: 'separator' }))
+  trayMenu.append(new electron.MenuItem({
+    label: 'Hide',
+    click () {
+      MAIN_WINDOW.hide()
+    }
+  }))
+  trayMenu.append(new electron.MenuItem({
+    label: 'Reload',
+    click () {
+      MAIN_WINDOW.show()
+      MAIN_WINDOW.reload()
+    }
+  }))
+  trayMenu.append(new electron.MenuItem({
+    label: 'Quit',
+    click () {
+      electron.app.isQuiting = true
+      electron.app.quit()
+    }
+  }))
+
+  SYSTEM_TRAY = new electron.Tray(path.join(__dirname,
+    'assets/icons/favicon.png'))
+
+  if (process.platform === 'win32') {
+    SYSTEM_TRAY.on('click', SYSTEM_TRAY.popUpContextMenu)
+  }
+
+  SYSTEM_TRAY.setContextMenu(trayMenu)
+  SYSTEM_TRAY.setToolTip('TerminusDB')
 }
+
