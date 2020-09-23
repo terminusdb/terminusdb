@@ -1044,14 +1044,19 @@ compile_wf(select(VL,P), Prog) -->
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
     update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
+    update(prefixes,Old_NS,New_NS),
     {
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
             error(invalid_absolute_path(Collection_String),_)),
-        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
+        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor),
+
+        collection_descriptor_prefixes(Default_Collection, Prefixes),
+        put_dict(Prefixes, Old_NS, New_NS)
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(prefixes,_,Old_NS),
     update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
@@ -4256,5 +4261,25 @@ test(guard_deep_insertions, [
                  t(h,i,j),
                  t(l,m,n),
                  t(e,f,g)))).
+
+test(using_multiple_prefixes, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"),
+                create_db_without_schema("admin", "schemaless_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = using("admin/schema_db",
+                (insert(doc:'Dublin', rdf:type, scm:'City'),
+                 insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string))),
+
+    resolve_absolute_string_descriptor("admin/schemaless_db", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _).
+
 
 :- end_tests(woql).
