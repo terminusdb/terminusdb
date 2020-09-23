@@ -214,8 +214,6 @@ jobs:
     - uses: actions/checkout@v2
 
     - uses: actions/download-artifact@v2
-      with:
-        path: artifacts
           
     - name: Set release name
       id: release_name
@@ -243,8 +241,8 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: true
         files: |
-          terminusdb-server/artifacts/terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
-          terminusdb-server/artifacts/terminusdb-desktop.AppImage/terminusdb-desktop-3.0.0.AppImage
-          terminusdb-server/artifacts/TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
-          terminusdb-server/artifacts/TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
+          terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.0.AppImage
+          TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
+          TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           
