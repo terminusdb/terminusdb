@@ -98,7 +98,7 @@ max_journal_queue_length(30).
 ignore_ref_and_repo_schema :-
     getenv('TERMINUSDB_IGNORE_REF_AND_REPO_SCHEMA', true).
 
-:- set_prolog_flag(stack_limit, 2_147_483_648).
+:- set_prolog_flag(stack_limit, 8_589_934_592).
 
 % Turn off mavis
 :- set_prolog_flag(optimise, true).
