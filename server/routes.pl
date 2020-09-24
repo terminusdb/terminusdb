@@ -462,7 +462,7 @@ test(db_force_delete_unfinalized_system_and_label, [
     db_create:create_db_unfinalized(system_descriptor{}, Auth, "admin", "foo", "dblabel", "db comment", false, _{}, _),
     database_exists("admin", "foo"),
     safe_open_named_graph(Store, Label, _),
-
+    
     atomic_list_concat([Server, '/api/db/admin/foo'], URI),
     admin_pass(Key),
     http_get(URI,
@@ -533,42 +533,6 @@ test(db_auth_test, [
 
 :- end_tests(db_endpoint).
 
-%%%%%%%%%%%%%%%%%%%% CVS Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(csv/Path), cors_handler(Method, csv_handler(Path)),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([options,put])]).
-
-/*
- * csv_handler(Mode,DB,Request) is det.
- *
- * Get or update a graph with csv.
- */
-csv_handler(put,Path,Request, System_DB, Auth) :-
-    get_payload(Document,Request),
-    collect_posted_files(Request,Files),
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
-              error(bad_api_document(Document,[commit_info]),_)),
-
-    catch_with_backtrace(
-        (   csv_load(System_DB, Auth, Path, Commit_Info, Files, Document),
-            cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
-                                       'api:status' : "api:success"})),
-        Error,
-        do_or_die(csv_error_handler(Error, Request),
-                  Error)).
-
-csv_error_handler(error(unknown_encoding(Enc), _), Request) :-
-    format(string(Msg), "Unrecognized encoding (try utf-8): ~q", [Enc]),
-    cors_reply_json(Request,
-                    _{'@type' : 'api:CsvErrorResponse',
-                      'api:status' : 'api:failure',
-                      'api:error' : _{'@type' : 'api:UnknownEncoding',
-                                      'api:format' : Enc},
-                      'api:message' : Msg},
-                    [status(400)]).
-
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
@@ -580,7 +544,7 @@ csv_error_handler(error(unknown_encoding(Enc), _), Request) :-
 /*
  * triples_handler(Mode,DB,Request) is det.
  *
- * Get or update a graph with turtle.
+ * Get or update a schema.
  */
 triples_handler(get,Path,Request, System_DB, Auth) :-
     (   get_param('format', Request, Format)

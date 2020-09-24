@@ -73,10 +73,8 @@
               api_reset/4,
 
               % api_optimize.pl
-              api_optimize/3,
+              api_optimize/3
 
-              % api_csv
-              csv_load/6
           ]).
 
 :- use_module(api/init).
@@ -99,4 +97,3 @@
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).
 :- use_module(api/api_optimize).
-:- use_module(api/api_csv).
