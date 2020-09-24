@@ -344,6 +344,164 @@ var_record_pl_var(Var_Name,
 var_compare(Op, Left, Right) :-
     compare(Op, Left.var_name, Right.var_name).
 
+bt_conjunctive_head_nb_tail(A, B, (AHead,BHead), true) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,true),
+    !.
+bt_conjunctive_head_nb_tail(A, B, AHead, BTail) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,true,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, (AHead, BHead), BTail) :-
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, true, (ATail,BTail)) :-
+    bt_head_nb_tail(A,true,ATail),
+    bt_head_nb_tail(B,true,BTail),
+    !.
+bt_conjunctive_head_nb_tail(A, B, AHead, (ATail,BTail)) :-
+    bt_head_nb_tail(A,AHead,ATail),
+    bt_head_nb_tail(B,true,BTail).
+
+% unfortunately defaulty. We could add more clauses...
+bt_head_nb_tail((A,B),Head,Tail) :-
+    !,
+    bt_conjunctive_head_nb_tail(A,B,Head,Tail).
+bt_head_nb_tail((A;B),(AHead;BHead),true) :-
+    !,
+    bt_head_nb_tail(A,AHead,true),
+    bt_head_nb_tail(B,BHead,true).
+bt_head_nb_tail(insert(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = insert(A,B,C).
+bt_head_nb_tail(insert(A,B,C,D),Head,Result) :-
+    !,
+    Head = true,
+    Result = insert(A,B,C,D).
+bt_head_nb_tail(delete(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete(A,B,C).
+bt_head_nb_tail(delete(A,B,C,D),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete(A,B,C,D).
+bt_head_nb_tail(update_object(A,B),Head,Result) :-
+    !,
+    Head = true,
+    Result = update_object(A,B).
+bt_head_nb_tail(update_object(A,B,C),Head,Result) :-
+    !,
+    Head = true,
+    Result = update_object(A,B,C).
+bt_head_nb_tail(delete_object(A),Head,Result) :-
+    !,
+    Head = true,
+    Result = delete_object(A).
+bt_head_nb_tail(Term, Term, true).
+
+/*
+ * safe_guard_removal(Term, NewTerm) is det.
+ */
+safe_guard_removal(Term, (Head,immediately(Tail))) :-
+    bt_head_nb_tail(Term,Head,Tail),
+    !.
+safe_guard_removal(Term, Term).
+
+:- begin_tests(guards).
+
+test(guard_removal_is_impossible, []) :-
+
+    AST = (
+        t(a,b,c),
+        insert(a,b,c)
+    ;   t(e,f,g),
+        insert(d,b,c)),
+
+    safe_guard_removal(AST, AST).
+
+test(guard_removal_is_safe, []) :-
+
+    AST = (
+        t(a,b,c),
+        t(e,f,g),
+        insert(a,b,c),
+        insert(d,b,c),
+        insert(e,f,g)
+    ),
+
+    safe_guard_removal(AST, AST2),
+    AST2 = ((
+                   t(a,b,c),
+                   t(e,f,g)),
+            immediately(
+                (
+                    insert(a,b,c),
+                    insert(d,b,c),
+                    insert(e,f,g)))).
+
+test(alternating_inserts, []) :-
+
+    AST = (
+        t(a,b,c),
+        insert(a,b,c),
+        t(e,f,g),
+        insert(d,b,c),
+        insert(e,f,g)
+    ),
+
+    safe_guard_removal(AST, AST).
+
+test(guard_removal_with_deep_inserts, []) :-
+
+    AST = (
+        t(a,b,c),
+        (   t(e,f,g),
+            (   insert(a,b,c),
+                insert(d,b,c),
+                (   insert(e,f,g),
+                    insert(f,g,h))))),
+
+    safe_guard_removal(AST, AST2),
+
+    AST2 = ((t(a,b,c),
+             t(e,f,g)),
+            immediately(
+                (insert(a,b,c),
+                 insert(d,b,c),
+                 insert(e,f,g),
+                 insert(f,g,h)))).
+
+test(guard_single_query, []) :-
+
+    AST = t(a,b,c),
+
+    safe_guard_removal(AST, (t(a,b,c),immediately(true))).
+
+
+test(guard_single_insertion, []) :-
+
+    AST = insert(a,b,c),
+
+    safe_guard_removal(AST, (true,immediately(insert(a,b,c)))).
+
+test(guard_single_deletion, []) :-
+
+    AST = delete(a,b,c),
+
+    safe_guard_removal(AST, (true,immediately(delete(a,b,c)))).
+
+test(guard_double_insertion, []) :-
+
+    AST = (insert(a,b,c),insert(d,e,f)),
+
+    safe_guard_removal(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
+
+:- end_tests(guards).
+
+
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
@@ -353,7 +511,8 @@ compile_query(Term, Prog, Ctx_Out) :-
     compile_query(Term,Prog,Ctx_In,Ctx_Out).
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   do_or_die(compile_wf(Term, Pre_Prog, Ctx_In, Ctx_Out),
+    (   safe_guard_removal(Term, Optimized),
+        do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
         % this is redundant if we do a pre-pass that sets the guard as well.
@@ -646,7 +805,8 @@ compile_wf(read_object(Doc_ID,N,Doc),
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
-compile_wf(read_object(Doc_ID,Doc), frame:document_jsonld(S0,URI,JSON)) -->
+compile_wf(read_object(Doc_ID,Doc),
+           frame:document_jsonld(S0,URI,JSON)) -->
     assert_read_access,
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
@@ -884,14 +1044,19 @@ compile_wf(select(VL,P), Prog) -->
 compile_wf(using(Collection_String,P),Goal) -->
     update(default_collection,Old_Default_Collection,Default_Collection),
     update(write_graph,Old_Write_Graph,Write_Graph_Descriptor),
+    update(prefixes,Old_NS,New_NS),
     {
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
             error(invalid_absolute_path(Collection_String),_)),
-        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
+        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor),
+
+        collection_descriptor_prefixes(Default_Collection, Prefixes),
+        put_dict(Prefixes, Old_NS, New_NS)
     },
     update_descriptor_transactions(Default_Collection),
     compile_wf(P, Goal),
+    update(prefixes,_,Old_NS),
     update(write_graph,_,Old_Write_Graph),
     update(default_collection,_,Old_Default_Collection).
 compile_wf(from(Filter_String,P),Goal) -->
@@ -901,7 +1066,6 @@ compile_wf(from(Filter_String,P),Goal) -->
     update(filter,_,Old_Default_Filter).
 compile_wf(prefixes(NS,S), Prog) -->
     % Need to convert the datatype of prefixes here.
-    debug_wf('DO YOU HEAR ME ~q', [NS]),
     update(prefixes,NS_Old,NS_New),
     { append(NS, NS_Old, NS_New) },
     compile_wf(S, Prog),
@@ -3769,7 +3933,6 @@ test(immediately, [
     once(ask(Descriptor,
              t(a,b,c))).
 
-
 test(immediately_doesnt_go, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3788,7 +3951,6 @@ test(immediately_doesnt_go, [
 
     \+ once(ask(Descriptor,
                 t(a,b,c))).
-
 
 test(negative_path_pattern, [
          setup((setup_temp_store(State),
@@ -3810,6 +3972,7 @@ test(negative_path_pattern, [
 
     once(ask(Descriptor,
              path(a, plus((p(b),n(b))), f, _Path))).
+
 test(using_sequence, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3896,5 +4059,245 @@ test(using_sequence, [
     query_test_response(Descriptor, Query, JSON),
     % Not failing is good enough
     * json_write_dict(current_output, JSON, []).
+
+test(added_deleted_triple, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(h,i,j),
+            delete(a,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   addition(h,i,j),
+                 removal(a,b,c)))
+        ).
+
+test(added_deleted_quad, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(h,i,j),
+            delete(a,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   addition(h,i,j, "instance/main"),
+                 removal(a,b,c, "instance/main")))
+        ).
+
+test(guard_interspersed_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           t(a,b,c),
+           insert(d,b,c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    \+ ask(Descriptor,
+           (   t(a,b,c))).
+
+test(guard_safe_intersperesed_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+
+    AST2 = (insert(e,f,g),
+            t(a,b,c),
+            insert(d,b,c)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(a,b,c),
+                 t(e,f,g),
+                 t(d,b,c)))).
+
+test(guard_safe_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (
+        t(a,b,c),
+        insert(e,f,g)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(a,b,c),
+                 t(e,f,g)))).
+
+test(guard_disjunctive_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (   t(a,b,c),
+               insert(e,f,g)
+           ;   not(t(a,b,c)),
+               insert(x,y,z)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             t(e,f,g))),
+
+    \+ once(ask(Descriptor,
+             t(x,y,z))).
+
+test(guard_deep_insertions, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = insert(a,b,c),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    create_context(Descriptor,Commit_Info, Context2),
+
+    AST2 = (   t(a,b,c),
+               (   insert(e,f,g),
+                   (   insert(x,y,z)),
+                   insert(h,i,j)
+               ),
+               insert(l,m,n)),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST2, _),
+
+    once(ask(Descriptor,
+             (   t(e,f,g),
+                 t(x,y,z),
+                 t(h,i,j),
+                 t(l,m,n),
+                 t(e,f,g)))).
+
+test(using_multiple_prefixes, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"),
+                create_db_without_schema("admin", "schemaless_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = using("admin/schema_db",
+                (insert(doc:'Dublin', rdf:type, scm:'City'),
+                 insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string))),
+
+    resolve_absolute_string_descriptor("admin/schemaless_db", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _).
+
+test(bad_class_vio, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(doc:'Dublin', rdf:type, scm:'City_State'),
+           insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string)),
+
+    resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    catch(
+        query_response:run_context_ast_jsonld_response(Context, AST, _Result),
+        error(schema_check_failure([Failure]),_),
+        get_dict('@type', Failure, 'vio:InvalidClassViolation')).
 
 :- end_tests(woql).

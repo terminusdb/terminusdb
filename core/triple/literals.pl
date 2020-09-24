@@ -2,6 +2,7 @@
               fixup_schema_literal/2,
               normalise_triple/2,
               object_storage/2,
+              ground_object_storage/2,
               storage_object/2,
               date_string/2,
               uri_to_prefixed/3,
@@ -87,6 +88,18 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
     ->  fixup_schema_literal(Y,YF)
     %   Otherwise walk on by...
     ;   Y = YF).
+
+ground_object_storage(String@Lang, value(S)) :-
+    !,
+    format(string(S), '~q@~q', [String,Lang]).
+ground_object_storage(Val^^Type, value(S)) :-
+    !,
+    (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
+        Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
+    ->  date_string(Val,Date_String),
+        format(string(S), '"~s"^^\'http://www.w3.org/2001/XMLSchema#dateTime\'', [Date_String])
+    ;   format(string(S), '~q^^~q', [Val,Type])).
+ground_object_storage(O, node(O)).
 
 /*
  * We can only make a concrete referrent if all parts are bound.

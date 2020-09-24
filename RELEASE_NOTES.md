@@ -1,3 +1,18 @@
+# TerminusDB Server v3.0.5 Release Notes
+
+This is a feature and bugfix release
+
+## New
+
++ Add tabling and compilation of schema definitions for faster document access
++ Speed improvements to literal marshalling
+
+## Bug fixes
+
++ Fix long standing reporting issue on missing classes
++ Increased default stack-size because large packs are stack allocated and can cause stack-overflow on small stacks.
++ Improved determinism in frame code.
+
 # TerminusDB Server v3.0.3 Release Notes
 
 This is a feature and bugfix release

@@ -179,43 +179,51 @@ has_formula(Class,Database) :-
 %:- rdf_meta restriction_type(r,t,?).
 restriction_type(CR,restriction([uri=CR,property=OP,someValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
-    xrdf(Schema,CR,owl:someValuesFrom,C).
+    xrdf(Schema,CR,owl:someValuesFrom,C),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP).
 restriction_type(CR,restriction([uri=CR,property=OP,allValuesFrom=C]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
-    xrdf(Schema,CR,owl:allValuesFrom,C).
+    xrdf(Schema,CR,owl:allValuesFrom,C),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP).
 restriction_type(CR,restriction([uri=CR,property=OP,minCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:minCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxCardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:maxCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,cardinality=N]),Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:cardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,minQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:minQualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,maxQualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:maxQualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,qualifiedCardinality=N,onClass=C]), Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:qualifiedCardinality,CardStr^^_),
+    !,
+    xrdf(Schema,CR,owl:onProperty,OP),
     xrdf(Schema,CR,owl:onClass,C),
     (number(CardStr)-> CardStr=N ; atom_number(CardStr,N)).
 restriction_type(CR,restriction([uri=CR,property=OP,hasValue=V]), Database) :-
@@ -303,6 +311,7 @@ class_assertion(Database,Class,class(Class)) :-
  * @param Class Atom URI identifier of rfds or owl Class.
  * @param Formula Term describing the class relationships.
  */
+:- table class_formula/3.
 class_formula(Class,Database,F) :-
     setof(Sol,class_assertion(Database,Class,Sol), Solns),
     (   [F]=Solns
@@ -325,6 +334,7 @@ maybe_system_tag(C,Database,[system_tag=DC]) :-
     !.
 maybe_system_tag(_,_,[]).
 
+:- table maybe_meta/3.
 maybe_meta(C,Database,LCD) :-
     maybe_label(C,Database,Label),
     maybe_comment(C,Database,Comment),
@@ -408,8 +418,7 @@ normalise_restriction([type=xor, operands=Results],N) :-
     simplify_restriction_list(xor,Result,N).
 normalise_restriction([uri=U|Res],[uri=U|Res]) :-
     !.
-normalise_restriction(true,true) :-
-    !.
+normalise_restriction(true,true).
 
 /*
  * restriction_formula(+Formula:class_formula,+Database:database
@@ -417,11 +426,12 @@ normalise_restriction(true,true) :-
  *
  * Calculate the formula of restrictions for a class.
  */
-restriction_formula(_<L,Database,S) :-
+restriction_formula(_<L,Database,Norm) :-
     !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
             L,R),
-    simplify_restriction_list(sub,R,S).
+    simplify_restriction_list(sub,R,S),
+    normalise_restriction(S,Norm).
 restriction_formula(_=or(L),Database,S) :-
     !,
     maplist({Database}/[C,F]>>(restriction_formula(C,Database,F)),
@@ -441,34 +451,25 @@ restriction_formula(class(_),_,true) :-
     !.
 restriction_formula(restriction(L),_,L) :-
     !.
-restriction_formula(_=oneOf(_),_,true) :-
-    !.
+restriction_formula(_=oneOf(_),_,true).
 
 /**
- * select_restriction(+P:uri,+R:property_restriction,+Database:database-S:property_restriction) is det.
+ * select_restriction(+R:property_restriction,+P:uri,+Database:database-S:property_restriction) is det.
  */
-select_restriction(P,[type=or,operands=Operands],G,Restriction) :-
+select_restriction(P,R,G,Restriction) :-
+    select_restriction_(R,P,G,Restriction).
+
+select_restriction_([type=Type,operands=Operands],P,G,Restriction) :-
     !,
     convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
-    simplify_restriction_list(or,NewOperands,Restriction).
-select_restriction(P,[type=sub,operands=Operands],G,Restriction) :-
+    simplify_restriction_list(Type,NewOperands,Restriction).
+select_restriction_([uri=U,property=Q|R],P,G,Restriction) :-
     !,
-    convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
-    simplify_restriction_list(sub,NewOperands,Restriction).
-select_restriction(P,[type=and,operands=Operands],G,Restriction) :-
-    !,
-    convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
-    simplify_restriction_list(and,NewOperands,Restriction).
-select_restriction(P,[type=xor,operands=Operands],G,Restriction) :-
-    !,
-    convlist({P,G}/[R,S]>>select_restriction(P,R,G,S), Operands, NewOperands),
-    simplify_restriction_list(xor,NewOperands,Restriction).
-select_restriction(P,[uri=U,property=Q|R],G,[uri=U,property=P|R]) :-
-    subsumption_properties_of(P,Q,G),
-    !.
-select_restriction(_,[uri=_,property=_|_],_,true) :-
-    !. % \+ subsumption_properties_of(P,Q,Database).
-select_restriction(_,true,_,true).
+    (   subsumption_properties_of(P,Q,G)
+    ->  Restriction = [uri=U,property=P|R]
+    ;   Restriction = true
+    ).
+select_restriction_(true,_,_,true).
 
 
 /**
@@ -484,92 +485,54 @@ calculate_property_restriction(Property,Restriction_Formula,Database,Restriction
     normalise_restriction([type=and,operands=[PropRestriction,CalculatedRestriction]],
                           Restriction).
 
-/**
- * apply_restriction(+Class:uri,+Property:uri,+Database:database
- *                   +RestrictionFormula:property_restriction,Frame) is semidet.
- *
- *
- */
-%:- rdf_meta apply_restriction(r,r,o,o,t).
-apply_restriction(Class,Property,Database,Restriction_Formula,
+apply_restiction_(annotation,Class,Property,_Database,
+                  Restriction,Range,Record_Remainder,
                   [type=datatypeProperty,
                    property=Property,
                    domain=Class,
                    restriction=Restriction,
                    range=Range
-                   |RecordRemainder]) :-
-    % Checking for pseudo_properties, which denote annotations and other opaque linking
-    % we don't want to generate a frame here at all.
-    annotation_property(Property,Database),
-    !,
-    most_specific_range(Property,Range,Database),
-    property_record(Database,Property,RecordRemainder),
-    calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
-apply_restriction(Class,Property,Database,Restriction_Formula,
-                  [type=datatypeProperty,
-                   property=Property,
-                   domain=Class,
-                   restriction=Restriction,
-                   range=Range
-                   |RecordRemainder]) :-
-    most_specific_range(Property,Range,Database),
-    datatype(Range,Database),
-    % We only just found out that we've no alternatives now after testing data type..
-    !,
-    property_record(Database,Property,RecordRemainder),
-    calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
-apply_restriction(Class,Property,Database,Restriction_Formula,
-                  [type=objectProperty,
-                   property=Property,
-                   domain=Class,
-                   range=Range,
-                   restriction=Restriction,
-                   frame=[type=document,class=Range|RTail]
-                   |RecordRemainder]) :-
-    most_specific_range(Property,Range,Database),
-    class(Range,Database),
-    document(Range,Database),
-    % We are a document frame.
-    !,
-    property_record(Database,Property,RecordRemainder),
-    maybe_label(Range,Database,RLabel),
-    maybe_comment(Range,Database,RComment),
-    append(RLabel, RComment, RTail),
-    calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
-apply_restriction(Class,Property,Database,Restriction_Formula,
-                  [type=objectProperty,
-                   property=Property,
-                   domain=Class,
-                   range=Range,
-                   restriction=Restriction,
-                   frame=Frame
-                   |RecordRemainder]) :-
-    most_specific_range(Property,Range,Database),
-    class(Range,Database),
-    one_of_list(Range,OneList,Database),
-    % We are an document frame.
-    !,
-    Frame = [type=oneOf, elements=DecoratedOneList],
-    decorate_elements(OneList,Database,DecoratedOneList),
-    property_record(Database,Property,RecordRemainder),
-    % These always come together as a triplet, so should probably be one thing.
-    calculate_property_restriction(Property,Restriction_Formula,Database,Restriction).
-apply_restriction(Class,Property,Database,Restriction_Formula,
-                  [type=objectProperty,
-                   property=Property,
-                   domain=Class,
-                   range=Range,
-                   frame=Frame,
-                   restriction=Restriction
-                   |RecordRemainder]) :-
-    most_specific_range(Property,Range,Database),
-    class(Range,Database),
-    % Object property but not an document
-    !,
-    property_record(Database,Property,RecordRemainder),
-    calculate_property_restriction(Property,Restriction_Formula,Database,Restriction),
-
-    classes_below(Range,Database,Below),
+                   |Record_Remainder]).
+apply_restriction_(datatype,Class,Property,_Database,
+                   Restriction,Range,Record_Remainder,
+                   [type=datatypeProperty,
+                    property=Property,
+                    domain=Class,
+                    restriction=Restriction,
+                    range=Range
+                    |Record_Remainder]).
+apply_restriction_(document,Class,Property,Database,
+                   Restriction,Range,Record_Remainder,
+                   [type=objectProperty,
+                    property=Property,
+                    domain=Class,
+                    range=Range,
+                    restriction=Restriction,
+                    frame=[type=document,class=Range|RTail]
+                    |Record_Remainder]) :-
+    once(maybe_label(Range,Database,RLabel)),
+    once(maybe_comment(Range,Database,RComment)),
+    append(RLabel, RComment, RTail).
+apply_restriction_(one_of(OneList),Class,Property,Database,
+                   Restriction,Range,Record_Remainder,
+                   [type=objectProperty,
+                    property=Property,
+                    domain=Class,
+                    range=Range,
+                    restriction=Restriction,
+                    frame=[type=oneOf, elements=DecoratedOneList]
+                    |Record_Remainder]) :-
+    once(decorate_elements(OneList,Database,DecoratedOneList)).
+apply_restriction_(object,Class,Property,Database,
+                   Restriction,Range,Record_Remainder,
+                   [type=objectProperty,
+                    property=Property,
+                    domain=Class,
+                    range=Range,
+                    frame=Frame,
+                    restriction=Restriction
+                    |Record_Remainder]) :-
+    once(classes_below(Range,Database,Below)),
     (   [NextClass] = Below
         % singleton choice of class class should just be rendered.
     ->  class_frame_aux(NextClass,Database,Frame)
@@ -578,16 +541,41 @@ apply_restriction(Class,Property,Database,Restriction_Formula,
         Frame=[type=class_choice,operands=Frames]
     ).
 
+/**
+ * apply_restriction(+Class:uri,+Property:uri,+Database:database
+ *                   +RestrictionFormula:property_restriction,Frame) is semidet.
+ *
+ *
+ */
+apply_restriction(Class,Property,Database,Restriction_Formula,Frame) :-
+    most_specific_range(Property,Range,Database),
+    (   annotation_property(Property,Database)
+    ->  Type = annotation
+    ;   datatype(Range,Database)
+    ->  Type = datatype
+    ;   document(Range,Database)
+    ->  Type = document
+    ;   one_of_list(Range,OneList,Database)
+    ->  Type = one_of(OneList)
+    ;   Type = object),
+    once(calculate_property_restriction(Property,Restriction_Formula,Database,Restriction)),
+    once(property_record(Database,Property,Record_Remainder)),
+    apply_restriction_(Type,Class,Property,Database,
+                       Restriction,Range,Record_Remainder,Frame).
+
 /*
  * calculate_frame(+Class:uri,+Properties:list(uri),
  *                 +Restriction_Formula:property_restriction, Database:database -Frame) is det.
  *
  * Calculate the application of the restriction formula to the properties.
-333 */
+ */
 calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
-    maplist({Class,Database,Restriction_Formula}/[Property,Property_Frame]
-            >>(apply_restriction(Class,Property,Database,Restriction_Formula,Property_Frame)),
-            Properties, Frames).
+    calculate_frame_(Properties,Class,Restriction_Formula,Database,Frames).
+
+calculate_frame_([],_Class,_Restriction_Formula,_Database,[]).
+calculate_frame_([Property|Property_Rest],Class,Restriction_Formula,Database,[Property_Frame|Frame_Rest]) :-
+    apply_restriction(Class,Property,Database,Restriction_Formula,Property_Frame),
+    calculate_frame_(Property_Rest,Class,Restriction_Formula,Database,Frame_Rest).
 
 /*
  * We can't actually check types here because tabling doesn't work with
@@ -598,9 +586,7 @@ calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
  *
  * Fails if the class doesn't exist.
  */
-%:- if(current_prolog_flag(optimise,true)).
-%:- table class_frame/3.
-%:- endif.
+:- table class_frame/3.
 class_frame(Class,Database,Frame) :-
     class_frame_aux(Class,Database,Frame).
 
@@ -1004,7 +990,8 @@ document_jsonld(Query_Context, Document, JSON_LD) :-
  * up to depth Depth
  */
 document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
-    Prefixes = Query_Context.prefixes,
+    Descriptor = (Query_Context.default_collection),
+    collection_descriptor_prefixes(Descriptor, Prefixes),
     query_default_collection(Query_Context, Collection),
     prefix_expand(Document,Prefixes,Document_Ex),
     document_object(Collection, Document_Ex, Depth, Realiser),
