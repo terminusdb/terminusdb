@@ -180,17 +180,24 @@ refute_insertion(Database,X,P,Y,Reason) :-
  */
 refute_node_at_class(Database,X,Class,Reason) :-
     (   instance_class(X,IC,Database)
-    ->  (   subsumption_of(IC,Class,Database)
-        ->  subsumption_of(IC,Super,Database),
-            domain(P,Super,Database),
-            refute_all_restrictions(Database,X,P,Reason)
-        ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
+    ->  (   class(IC, Database)
+        ->  (   subsumption_of(IC,Class,Database)
+            ->  subsumption_of(IC,Super,Database),
+                domain(P,Super,Database),
+                refute_all_restrictions(Database,X,P,Reason)
+            ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
+                Reason = _{
+                             '@type' : 'vio:InstanceSubsumptionViolation',
+                             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                             'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+                             'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
+                             'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
+                         })
+        ;   format(atom(Message), 'The class ~q is not found in the schema', [Class]),
             Reason = _{
-                         '@type' : 'vio:InstanceSubsumptionViolation',
+                         '@type' : 'vio:InvalidClassViolation',
                          'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                         'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
-                         'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
-                         'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
+                         'vio:class' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
                      })
     ;   format(atom(Message),'The subject ~q has no defined class.',[X]),
         Reason = _{
