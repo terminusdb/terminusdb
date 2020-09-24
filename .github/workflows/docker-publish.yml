@@ -204,11 +204,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
     if: github.event_name != 'pull_request' &&
-      contains('
+      contains(github.ref, '
         refs/heads/canary
         refs/heads/rc
         refs/tags/v
-      ', github.ref)
+      ')
     
     steps:
     - uses: actions/checkout@v2
