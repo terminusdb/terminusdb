@@ -1,22 +1,22 @@
 {
     "name": "terminusdb-desktop",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "private": true,
     "main": "public/electron.js",
     "scripts": {
         "electron-dev": "electron --no-sandbox ."
     },
     "devDependencies": {
-        "electron": "^10.1.1",
-        "electron-builder": "^22.8.0"
+        "electron": "^10.1.2",
+        "electron-builder": "^22.8.1"
     },
     "dependencies": {
         "electron-is-dev": "^1.2.0"
     },
     "build": {
-        "appId": "your.id",
+        "appId": "com.terminusdb.TerminusDB-Desktop",
         "mac": {
-            "category": "your.app.category.type"
+            "category": "public.app-category.database"
         },
         "win": {
             "asar": false,
