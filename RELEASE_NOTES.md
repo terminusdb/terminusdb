@@ -9,7 +9,6 @@ This is a feature and bugfix release
 
 ## Bug fixes
 
-+ Fix long standing reporting issue on missing classes
 + Increased default stack-size because large packs are stack allocated and can cause stack-overflow on small stacks.
 + Improved determinism in frame code.
 
