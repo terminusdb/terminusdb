@@ -164,8 +164,8 @@ jobs:
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
-        name: "terminusdb-desktop Setup 3.0.0.exe"
-        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.0.exe"
+        name: "terminusdb-desktop Setup 3.0.1.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.1.exe"
 
 
   linux_desktop:
@@ -198,7 +198,7 @@ jobs:
       uses: actions/upload-artifact@v2.1.4
       with:
         name: terminusdb-desktop.AppImage
-        path: distribution/desktop/dist/terminusdb-desktop-3.0.0.AppImage
+        path: distribution/desktop/dist/terminusdb-desktop-3.0.1.AppImage
 
   deploy:
     runs-on: ubuntu-latest
@@ -241,8 +241,8 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup 3.0.0.exe/terminusdb-desktop Setup 3.0.0.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.0.AppImage
+          terminusdb-desktop Setup 3.0.1.exe/terminusdb-desktop Setup 3.0.1.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.1.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           
