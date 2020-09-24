@@ -886,9 +886,15 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Typecast',JSON,WOQL,Pat
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Not',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#query' : Q
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#typecast_result'
+    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                            |Path]),
     WOQL = not(WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Immediately',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#query' : Q
+     } :< JSON,
+    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+                           |Path]),
+    WOQL = immediately(WQ).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Dot',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#dictionary' : Dictionary,
       'http://terminusdb.com/schema/woql#dictionary_key' : Key,

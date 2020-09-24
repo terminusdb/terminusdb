@@ -1199,6 +1199,12 @@ woql:Not
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
 
+woql:Immediately
+  a owl:Class ;
+  rdfs:label "Not"@en ;
+  rdfs:comment "Not the query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
 woql:Count
   a owl:Class ;
   rdfs:label "Count"@en ;
