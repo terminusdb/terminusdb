@@ -568,7 +568,55 @@ csv_error_handler(error(unknown_encoding(Enc), _), Request) :-
                                       'api:format' : Enc},
                       'api:message' : Msg},
                     [status(400)]).
+csv_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
+    format(string(Msg), "Unable to find write graph for ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CsvErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:BadAbsoluteGraphDescriptor',
+                                      'api:absolute_graph_descriptor' : Path},
+                      'api:message' : Msg},
+                    [status(400)]).
 
+
+:- begin_tests(csv_endpoint).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(csv_load, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    create_db_without_schema(admin, 'TEST_DB'),
+
+    % We actually have to create the graph before we can post to it!
+    % First make the schema graph
+    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
+    super_user_authority(Auth),
+    * json_write_dict(current_output,Transaction_Metadata, []),
+
+    terminus_path(Path),
+    interpolate([Path, '/test/0CE.csv'], CSV_File),
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
+    admin_pass(Key),
+
+    http_post(URI, json(_{commit_info : _{ author : "Test",
+                                           message : "testing" }}),
+              _In, [json_object(dict),
+                    authorization(basic(admin, Key)),
+                    reply_header(_Fields)]),
+
+    findall(A-B-C,
+            ask(Branch_Descriptor,
+                t(A, B, C, "schema/*")),
+            Triples),
+    memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
+
+:- end_tests(csv_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),

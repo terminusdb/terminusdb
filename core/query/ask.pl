@@ -242,13 +242,16 @@ query_default_collection(Query_Context, Collection) :-
                                              Collection).
 
 /*
- * query_default_write_graph(Query_Context, Graph) is semidet.
+ * query_default_write_graph(Query_Context, Graph) is det.
  *
- * Finds the transaction object for the default collection if it exists.
+ * Finds the transaction object for the default collection if it exists
+ * and errors otherwise
  */
 query_default_write_graph(Query_Context, Write_Graph) :-
-    Graph_Descriptor = Query_Context.write_graph,
-    Transaction_Objects = Query_Context.transaction_objects,
-    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
-                                                           Transaction_Objects,
-                                                           Write_Graph).
+    Graph_Descriptor = (Query_Context.write_graph),
+    Transaction_Objects = (Query_Context.transaction_objects),
+    do_or_die(
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
+                                                               Transaction_Objects,
+                                                               Write_Graph),
+        error(unknown_graph(Graph_Descriptor))).
