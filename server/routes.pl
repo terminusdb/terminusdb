@@ -595,10 +595,6 @@ test(csv_load, [
 
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
-    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
-    super_user_authority(Auth),
-    * json_write_dict(current_output,Transaction_Metadata, []),
-
     terminus_path(Path),
     interpolate([Path, '/test/0CE.csv'], CSV_File),
     atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
@@ -607,14 +603,9 @@ test(csv_load, [
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" }}),
               _In, [json_object(dict),
+                    file(CSV_File),
                     authorization(basic(admin, Key)),
-                    reply_header(_Fields)]),
-
-    findall(A-B-C,
-            ask(Branch_Descriptor,
-                t(A, B, C, "schema/*")),
-            Triples),
-    memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
+                    reply_header(_Fields)]).
 
 :- end_tests(csv_endpoint).
 
