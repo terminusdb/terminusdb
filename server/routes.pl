@@ -538,7 +538,7 @@ test(db_auth_test, [
                 [method(Method),
                  prefix,
                  time_limit(infinite),
-                 methods([options,put])]).
+                 methods([options,post,put,get])]).
 
 /*
  * csv_handler(Mode,DB,Request) is det.
@@ -555,6 +555,28 @@ csv_handler(put,Path,Request, System_DB, Auth) :-
         (   csv_load(System_DB, Auth, Path, Commit_Info, Files, Document),
             cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
                                        'api:status' : "api:success"})),
+        Error,
+        do_or_die(csv_error_handler(Error, Request),
+                  Error)).
+csv_handler(post,Path,Request, System_DB, Auth) :-
+    get_payload(Document,Request),
+    collect_posted_files(Request,Files),
+    do_or_die(_{ commit_info : Commit_Info } :< Document,
+              error(bad_api_document(Document,[commit_info]),_)),
+
+    catch_with_backtrace(
+        (   csv_update(System_DB, Auth, Path, Commit_Info, Files, Document),
+            cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
+                                       'api:status' : "api:success"})),
+        Error,
+        do_or_die(csv_error_handler(Error, Request),
+                  Error)).
+csv_handler(get,Path,Request, System_DB, Auth) :-
+
+    catch_with_backtrace(
+        (   csv_dump(System_DB, Auth, Path, Files, _{}),
+            member(csv=CSV_Path, Files),
+            throw(http_reply(file('text/csv', CSV_Path)))),
         Error,
         do_or_die(csv_error_handler(Error, Request),
                   Error)).
@@ -591,21 +613,117 @@ test(csv_load, [
          cleanup(teardown_temp_server(State))
      ])
 :-
+
     create_db_without_schema(admin, 'TEST_DB'),
 
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
     terminus_path(Path),
-    interpolate([Path, '/test/0CE.csv'], CSV_File),
+    interpolate([Path, '/test/test.csv'], CSV_File),
     atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
     admin_pass(Key),
+    atom_json_term(JSON, _{ commit_info : _{ author : "comment",
+                                             message : "message"}}, []),
 
-    http_post(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" }}),
-              _In, [json_object(dict),
-                    file(CSV_File),
-                    authorization(basic(admin, Key)),
-                    reply_header(_Fields)]).
+    http_put(URI, form_data([ payload = JSON,
+                              csv     = file(CSV_File)
+                            ]),
+             _Result,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key)),
+              reply_header(_Fields)]),
+
+    DB_Path = 'admin/TEST_DB',
+    resolve_absolute_string_descriptor(DB_Path, DB),
+    findall(X-Y-Z,
+            ask(DB,
+                t(X, Y, Z)),
+            Triples),
+
+    Triples = [
+        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:bar)-("2"^^xsd:string),
+        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:foo)-("1"^^xsd:string),(doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(rdf:type)-(scm:'Row'),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:bar)-("4"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:foo)-("3"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(rdf:type)-(scm:'Row')
+    ].
+
+
+test(csv_round_trip, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+    create_db_without_schema(admin, 'TEST_DB'),
+
+    % We actually have to create the graph before we can post to it!
+    % First make the schema graph
+    terminus_path(Path),
+    interpolate([Path, '/test/test.csv'], CSV_File),
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    atom_json_term(JSON, _{ commit_info : _{ author : "comment",
+                                             message : "message"}}, []),
+
+    http_put(URI, form_data([ payload = JSON,
+                              csv     = file(CSV_File)
+                            ]),
+             _Result,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key)),
+              reply_header(_Fields)]),
+
+    http_get(URI,
+             CSV,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))
+             ]),
+    CSV = 'bar,foo\r\n2,1\r\n4,3\r\n'.
+
+
+test(csv_update, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+        create_db_without_schema(admin, 'TEST_DB'),
+
+    % We actually have to create the graph before we can post to it!
+    % First make the schema graph
+    terminus_path(Path),
+    interpolate([Path, '/test/test.csv'], CSV_File),
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    atom_json_term(JSON, _{ commit_info : _{ author : "comment",
+                                             message : "message"}}, []),
+
+    http_put(URI, form_data([ payload = JSON,
+                               csv     = file(CSV_File)
+                            ]),
+             _Result1,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]),
+
+
+    interpolate([Path, '/test/test2.csv'], CSV_File2),
+    http_post(URI, form_data([ payload = JSON,
+                               csv     = file(CSV_File2)
+                            ]),
+             _Result2,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]),
+
+    http_get(URI,
+             CSV,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))
+             ]),
+
+    writeq(CSV).
+
+
 
 :- end_tests(csv_endpoint).
 
@@ -5009,7 +5127,13 @@ add_payload_to_request(Request,[payload(Document)|Request]) :-
 add_payload_to_request(Request,Request).
 
 get_payload(Payload,Request) :-
-    memberchk(payload(Payload),Request).
+    memberchk(payload(Payload),Request),
+    !.
+get_payload(Payload,Request) :-
+    memberchk(multipart(Form_Data),Request),
+    member(mime(Meta,Value,_),Form_Data),
+    memberchk(name(payload), Meta),
+    atom_json_dict(Value,Payload, []).
 
 /*
  * request_remote_authorization(Request, Authorization) is det.

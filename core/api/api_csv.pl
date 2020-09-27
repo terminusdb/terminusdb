@@ -1,4 +1,4 @@
-:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6]).
+:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/5]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -97,11 +97,11 @@ csv_update_into_context(_Name, Path, Context, Options) :-
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
-            nb_apply_delta(CSV_Builder,Layer)
+            nb_apply_diff(CSV_Builder,Layer)
         ),
         _).
 
-csv_dump(System_DB, Auth, Path, Commit_Info, [csv=Filename], _Options) :-
+csv_dump(System_DB, Auth, Path, [csv=Filename], _Options) :-
     do_or_die(
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
@@ -110,7 +110,6 @@ csv_dump(System_DB, Auth, Path, Commit_Info, [csv=Filename], _Options) :-
         Descriptor,
         _{ system : System_DB,
            authorization : Auth,
-           commit_info: Commit_Info,
            filter : type_name_filter{ type: (Graph.type),
                                       names : [Graph.name]}},
         Context),
@@ -178,7 +177,18 @@ test(csv_load,
     Commit_Info = _{ author : "me", message : "a message"},
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    csv_load(System_DB, Auth, Path, Commit_Info, Files, []).
+    csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
+    resolve_absolute_string_descriptor(Path, Desc),
+    findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+
+    Triples = [
+        (doc:Row1)-(scm:header)-("2"^^xsd:string),
+        (doc:Row1)-(scm:some)-("1"^^xsd:string),
+        (doc:Row1)-(rdf:type)-(scm:'Row'),
+        (doc:Row2)-(scm:header)-("4"^^xsd:string),
+        (doc:Row2)-(scm:some)-("3"^^xsd:string),
+        (doc:Row2)-(rdf:type)-(scm:'Row')
+    ].
 
 test(csv_update,
      [setup((setup_temp_store(State),
@@ -198,9 +208,28 @@ test(csv_update,
     Commit_Info = _{ author : "me", message : "a message"},
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    csv_update(System_DB, Auth, Path, Commit_Info, Files, []),
+    csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
 
-    true.
+    tmp_file_stream(Filename2, Stream2, [encoding(utf8)]),
+    format(Stream2, "some,header~n", []),
+    format(Stream2, "1,9~n", []),
+    format(Stream2, "3,4~n", []),
+    close(Stream2),
+
+    Files2 = ['csv'=Filename2],
+    open_descriptor(system_descriptor{}, System_DB2),
+    csv_update(System_DB2, Auth, Path, Commit_Info, Files2, []),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+    Triples = [
+        (doc:Row1)-(scm:header)-("4"^^xsd:string),
+        (doc:Row1)-(scm:some)-("3"^^xsd:string),
+        (doc:Row1)-(rdf:type)-(scm:'Row'),
+        (doc:Row2)-(scm:header)-("9"^^xsd:string),
+        (doc:Row2)-(scm:some)-("1"^^xsd:string),
+        (doc:Row2)-(rdf:type)-(scm:'Row')
+    ].
 
 test(csv_dump,
      [setup((setup_temp_store(State),
@@ -222,7 +251,7 @@ test(csv_dump,
     super_user_authority(Auth),
     csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
 
-    csv_dump(System_DB, Auth, Path, Commit_Info, CSV_Files, []),
+    csv_dump(System_DB, Auth, Path, CSV_Files, []),
     member(csv=CSV_Filename, CSV_Files),
     open(CSV_Filename, read, Read_Stream),
     read_string(Read_Stream, _, String),

@@ -76,7 +76,10 @@
               api_optimize/3,
 
               % api_csv
-              csv_load/6
+              csv_load/6,
+              csv_update/6,
+              csv_dump/5
+
           ]).
 
 :- use_module(api/init).
