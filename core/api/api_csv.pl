@@ -255,6 +255,9 @@ test(csv_dump,
     member(csv=CSV_Filename, CSV_Files),
     open(CSV_Filename, read, Read_Stream),
     read_string(Read_Stream, _, String),
+    nl,
+    writeq(String),
+    nl,
     String = "header,some\r\n2,1\r\n4,3\r\n".
 
 :- end_tests(csv_api).
