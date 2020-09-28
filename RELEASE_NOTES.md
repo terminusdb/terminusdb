@@ -1,3 +1,9 @@
+# TerminusDB Server v3.0.6 Release Notes
+
+## Bug fixes
+
++ Fix subject-object iterator
+
 # TerminusDB Server v3.0.5 Release Notes
 
 This is a feature and bugfix release
