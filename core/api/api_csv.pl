@@ -256,6 +256,6 @@ test(csv_dump,
     open(CSV_Filename, read, Read_Stream),
     read_string(Read_Stream, _, String),
     % newline depends on platform
-    re('header,some(\r\n|\n)2,1(\r\n|\n)4,3(\r\n|\n)', String,[]).
+    re_match("header,some(\r\n|\n)2,1(\r\n|\n)4,3(\r\n|\n)",String).
 
 :- end_tests(csv_api).
