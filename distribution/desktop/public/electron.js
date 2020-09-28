@@ -55,8 +55,8 @@ electron.app.on('ready', () => {
 
 function createWindow () {
   MAIN_WINDOW = new electron.BrowserWindow({
-    width: 900,
-    height: 680,
+    width: 1024,
+    height: 768,
     nodeIntegration: false,
     webPreferences: {
       spellcheck: false
@@ -121,6 +121,13 @@ function createWindow () {
       electron.shell.openExternal('https://127.0.0.1:6363')
     }
   }))
+  appMenu.append(new electron.MenuItem({
+    accelerator: 'Ctrl+Shift+I',
+    label: 'Developer Tools',
+    click () {
+      MAIN_WINDOW.webContents.toggleDevTools()
+    }
+  }))
 
   electron.Menu.setApplicationMenu(appMenu)
   MAIN_WINDOW.setMenuBarVisibility(false)
@@ -158,11 +165,9 @@ function createWindow () {
   SYSTEM_TRAY = new electron.Tray(path.join(__dirname,
     'assets/icons/favicon.png'))
 
-  if (process.platform === 'win32') {
-    SYSTEM_TRAY.on('click', SYSTEM_TRAY.popUpContextMenu)
-  }
-
   SYSTEM_TRAY.setContextMenu(trayMenu)
   SYSTEM_TRAY.setToolTip('TerminusDB')
+
+  SYSTEM_TRAY.on('click', () => SYSTEM_TRAY.popUpContextMenu(trayMenu))
 }
 
