@@ -1259,7 +1259,7 @@ woql_error_handler(error(woql_syntax_error(badly_formed_ast(Term)),_), Request) 
                     [status(404)]).
 woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
     term_string(Term,String),
-    format(string(Msg), "The : ~q", [String]),
+    format(string(Msg), "Unknown syntax error in WOQL: ~q", [String]),
     cors_reply_json(Request,
                     _{'@type' : 'api:WoqlErrorResponse',
                       'api:status' : 'api:failure',
@@ -1269,8 +1269,14 @@ woql_error_handler(error(woql_syntax_error(Term),_), Request) :-
                      },
                     [status(404)]).
 woql_error_handler(error(schema_check_failure(Witnesses),_), Request) :-
+    format(string(Msg), "There was an error when schema checking", []),
     cors_reply_json(Request,
-                    Witnesses,
+                    _{'@type' : 'api:WoqlErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:WOQLSchemaCheckFailure',
+                                       'api:witnesses' : Witnesses},
+                      'api:message' : Msg
+                     },
                     [status(405)]).
 woql_error_handler(error(woql_instantiation_error(Vars),_), Request) :-
     format(string(Msg), "The following variables were unbound but must be bound: ~q", [Vars]),
@@ -4772,8 +4778,8 @@ customise_exception(error(syntax_error(M))) :-
                  'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                            'vio:literal' : OM}]},
                [status(400)]).
-customise_exception(error(type_error(T,O),C)) :-
-    format(atom(M),'Type error for ~q which should be ~q with context ~q', [O,T,C]),
+customise_exception(error(type_error(T,O),_C)) :-
+    format(atom(M),'Type error for ~q which should be ~q', [O,T]),
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
     reply_json(_{'api:status' : 'api:failure',

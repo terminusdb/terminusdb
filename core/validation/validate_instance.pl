@@ -193,12 +193,22 @@ refute_node_at_class(Database,X,Class,Reason) :-
                              'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
                              'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
                          })
-        ;   format(atom(Message), 'The class ~q is not found in the schema', [Class]),
-            Reason = _{
-                         '@type' : 'vio:InvalidClassViolation',
-                         'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                         'vio:class' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
-                     })
+        ;   (   \+ atom(Class)
+            ->  format(atom(Message), 'The term ~q is not a valid class', [Class]),
+                term_string(Class, Term_String),
+                Reason = _{
+                             '@type' : 'vio:InvalidClassViolation',
+                             'vio:message' : _{ '@value' : Message,
+                                                '@type' : 'xsd:string'},
+                             'vio:class' : _{ '@value' : Term_String,
+                                              '@type' : 'xsd:anyURI' }
+                         }
+            ;   format(atom(Message), 'The class ~q is not found in the schema', [Class]),
+                Reason = _{
+                             '@type' : 'vio:InvalidClassViolation',
+                             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                             'vio:class' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
+                         }))
     ;   format(atom(Message),'The subject ~q has no defined class.',[X]),
         Reason = _{
                      '@type' : 'vio:UntypedInstance',
