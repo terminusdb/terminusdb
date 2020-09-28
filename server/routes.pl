@@ -721,7 +721,7 @@ test(csv_update, [
               authorization(basic(admin, Key))
              ]),
 
-    writeq(CSV).
+    CSV = 'bar,foo\r\n2,1\r\n1,2\r\n'.
 
 
 
