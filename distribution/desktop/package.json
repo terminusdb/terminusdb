@@ -21,6 +21,10 @@
         "win": {
             "asar": false,
             "icon": "public/favicon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
         }
     }
 }
