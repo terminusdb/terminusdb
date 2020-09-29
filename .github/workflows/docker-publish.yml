@@ -193,7 +193,9 @@ jobs:
         name: TerminusDB-amd64.AppImage
         path: distribution/desktop/public
 
-    - run: chmod +x public/TerminusDB-amd64.AppImage
+    - run: |
+        chmod +x public/TerminusDB-*-amd64.AppImage
+        mv public/TerminusDB-*-amd64.AppImage TerminusDB-amd64.AppImage
 
     - run: |
         npx electron-builder build --linux appimage -p never
@@ -211,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
     if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
-    
+
     steps:
     - uses: actions/checkout@v2
 
