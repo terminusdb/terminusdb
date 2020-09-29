@@ -54,6 +54,8 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
            ->  maplist(prefix_preterm(Ctx),Woql_Var,Pre_Term)
            ;   number(Woql_Var)
            ->  Woql_Var = Pre_Term
+           ;   Woql_Var =.. [date|_]
+           ->  Woql_Var = Pre_Term
            ;   Woql_Var = _@_
            ->  Pre_Term = Woql_Var
            ;   Woql_Var = Elt^^Type

@@ -124,7 +124,7 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Val) :-
     /* It might be wise to check URI validity */
     !.
 typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime',
-                'http://www.w3.org/2001/XMLSchema#dateTime', _, Val) :-
+                'http://www.w3.org/2001/XMLSchema#dateTime', _, Val^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !.
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
