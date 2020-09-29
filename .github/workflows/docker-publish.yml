@@ -122,13 +122,11 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
 
     - name: Package windows tar
-      run: mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
+      run: |
+        mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
 
     - name: Run tests
       run: |
-        ls
-        ls swipl\
-        ls swipl\bin
         swipl\bin\swipl utils\db_init -s localhost -k root
         swipl\bin\swipl -g run_tests -g halt start.pl
 
@@ -159,13 +157,14 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
+        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup.exe"
       shell: bash
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
-        name: "terminusdb-desktop Setup 3.0.1.exe"
-        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.1.exe"
+        name: "terminusdb-desktop Setup.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup.exe"
 
 
   linux_desktop:
@@ -192,24 +191,28 @@ jobs:
 
     - run: chmod +x public/TerminusDB-amd64.AppImage
 
-    - run: npx electron-builder build --linux appimage -p never
+    - run: |
+        npx electron-builder build --linux appimage -p never
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv dist/*.AppImage dist/terminusdb-desktop.AppImage
+
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
         name: terminusdb-desktop.AppImage
-        path: distribution/desktop/dist/terminusdb-desktop-3.0.1.AppImage
+        path: distribution/desktop/dist/terminusdb-desktop.AppImage
 
   deploy:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
     if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
-    
+
     steps:
     - uses: actions/checkout@v2
 
     - uses: actions/download-artifact@v2
-          
+
     - name: Set release name
       id: release_name
       run: |
@@ -236,8 +239,7 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup 3.0.1.exe/terminusdb-desktop Setup 3.0.1.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.1.AppImage
+          terminusdb-desktop Setup.exe/terminusdb-desktop Setup.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
-          
