@@ -85,14 +85,13 @@ jobs:
         wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
         chmod +x linuxdeploy-x86_64.AppImage
         ./build_script.sh "$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')" "$TERMINUSDB_STORE_PROLOG_VERSION"
-        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-$TAG-amd64.AppImage
+        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v1
       with:
         name: TerminusDB-amd64.AppImage
-        path: distribution/appimage/TerminusDB-*-amd64.AppImage
+        path: distribution/appimage/TerminusDB-amd64.AppImage
 
   windows:
     runs-on: windows-latest
@@ -124,9 +123,7 @@ jobs:
 
     - name: Package windows tar
       run: |
-        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mkdir extracted && tar --exclude="extracted/terminusdb_$TAG_windows.tar.gz" -a -c -f "extracted/terminusdb_$TAG_windows.tar.gz" *
-      shell: bash
+        mkdir extracted && tar.exe --exclude=extracted\terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
 
     - name: Run tests
       run: |
@@ -134,10 +131,10 @@ jobs:
         swipl\bin\swipl -g run_tests -g halt start.pl
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v1
       with:
         name: TerminusDB-server-windows.tar.gz
-        path: extracted\terminusdb_*_windows.tar.gz
+        path: extracted\terminusdb_windows.tar.gz
 
 
   windows_desktop:
@@ -160,15 +157,14 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
-        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup $TAG.exe"
+        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup.exe"
       shell: bash
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
         name: "terminusdb-desktop Setup.exe"
-        path: "distribution/desktop/dist/terminusdb-desktop Setup*.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup.exe"
 
 
   linux_desktop:
@@ -193,21 +189,19 @@ jobs:
         name: TerminusDB-amd64.AppImage
         path: distribution/desktop/public
 
-    - run: |
-        chmod +x public/TerminusDB-*-amd64.AppImage
-        mv public/TerminusDB-*-amd64.AppImage TerminusDB-amd64.AppImage
+    - run: chmod +x public/TerminusDB-amd64.AppImage
 
     - run: |
         npx electron-builder build --linux appimage -p never
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mv dist/*.AppImage "dist/terminusdb-desktop-$TAG.AppImage"
+        mv dist/*.AppImage dist/terminusdb-desktop.AppImage
 
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
         name: terminusdb-desktop.AppImage
-        path: distribution/desktop/dist/terminusdb-desktop*.AppImage
+        path: distribution/desktop/dist/terminusdb-desktop.AppImage
 
   deploy:
     runs-on: ubuntu-latest
@@ -245,8 +239,7 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup.exe/terminusdb-desktop Setup*.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop*.AppImage
-          TerminusDB-amd64.AppImage/TerminusDB-*-amd64.AppImage
-          TerminusDB-server-windows.tar.gz/terminusdb_*_windows.tar.gz
-          
+          terminusdb-desktop Setup.exe/terminusdb-desktop Setup.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop.AppImage
+          TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
+          TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
