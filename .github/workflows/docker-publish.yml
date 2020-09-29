@@ -123,7 +123,7 @@ jobs:
 
     - name: Package windows tar
       run: |
-        mkdir extracted && tar.exe --exclude=extracted\terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
+        mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
 
     - name: Run tests
       run: |
