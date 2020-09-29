@@ -159,13 +159,15 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup $TAG.exe"
       shell: bash
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
-        name: "terminusdb-desktop Setup 3.0.1.exe"
-        path: "distribution/desktop/dist/terminusdb-desktop Setup 3.0.1.exe"
+        name: "terminusdb-desktop Setup.exe"
+        path: "distribution/desktop/dist/terminusdb-desktop Setup*.exe"
 
 
   linux_desktop:
@@ -192,13 +194,17 @@ jobs:
 
     - run: chmod +x public/TerminusDB-amd64.AppImage
 
-    - run: npx electron-builder build --linux appimage -p never
+    - run: |
+        npx electron-builder build --linux appimage -p never
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv dist/*.AppImage "terminusdb-desktop-$TAG.AppImage"
+
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
       with:
         name: terminusdb-desktop.AppImage
-        path: distribution/desktop/dist/terminusdb-desktop-3.0.1.AppImage
+        path: distribution/desktop/dist/terminusdb-desktop*.AppImage
 
   deploy:
     runs-on: ubuntu-latest
@@ -236,8 +242,8 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup 3.0.1.exe/terminusdb-desktop Setup 3.0.1.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.1.AppImage
+          terminusdb-desktop Setup.exe/terminusdb-desktop Setup*.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop*.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           
