@@ -137,7 +137,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: TerminusDB-server-windows.tar.gz
-        path: extracted\terminusdb_windows.tar.gz
+        path: extracted\terminusdb_*_windows.tar.gz
 
 
   windows_desktop:
