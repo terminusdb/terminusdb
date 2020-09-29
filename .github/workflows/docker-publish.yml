@@ -192,7 +192,11 @@ jobs:
 
     - run: chmod +x public/TerminusDB-amd64.AppImage
 
-    - run: npx electron-builder build --linux appimage -p never
+    - run: |
+        npx electron-builder build --linux appimage -p never
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv dist/*.AppImage "dist/terminusdb-desktop-$TAG.AppImage"
+
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
