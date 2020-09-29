@@ -85,7 +85,8 @@ jobs:
         wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
         chmod +x linuxdeploy-x86_64.AppImage
         ./build_script.sh "$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')" "$TERMINUSDB_STORE_PROLOG_VERSION"
-        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-$TAG-amd64.AppImage
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
@@ -122,7 +123,10 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
 
     - name: Package windows tar
-      run: mkdir extracted && tar.exe --exclude=extracted/terminusdb_windows.tar.gz -a -c -f extracted\terminusdb_windows.tar.gz *
+      run: |
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        mkdir extracted && tar.exe --exclude="extracted/terminusdb_$TAG_windows.tar.gz" -a -c -f "extracted/terminusdb_$TAG_windows.tar.gz" *
+      shell: bash
 
     - name: Run tests
       run: |
@@ -237,8 +241,8 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup 3.0.1.exe/terminusdb-desktop Setup 3.0.1.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop-3.0.1.AppImage
-          TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
-          TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
+          terminusdb-desktop Setup.exe/terminusdb-desktop Setup*.exe
+          terminusdb-desktop.AppImage/terminusdb-desktop*.AppImage
+          TerminusDB-amd64.AppImage/TerminusDB-*-amd64.AppImage
+          TerminusDB-server-windows.tar.gz/terminusdb_*_windows.tar.gz
           
