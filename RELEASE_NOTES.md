@@ -1,3 +1,9 @@
+# TerminusDB Server v3.0.7 Release Notes
+
+## Bug fixes
+
++ Fix Windows tray icon error bug
+
 # TerminusDB Server v3.0.6 Release Notes
 
 ## Bug fixes
