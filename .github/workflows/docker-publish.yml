@@ -203,12 +203,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
-    if: github.event_name != 'pull_request' &&
-      contains(github.ref, '
-        refs/heads/canary
-        refs/heads/rc
-        refs/tags/v
-      ')
+    if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
     
     steps:
     - uses: actions/checkout@v2
