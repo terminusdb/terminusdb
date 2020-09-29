@@ -89,7 +89,7 @@ jobs:
         mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-$TAG-amd64.AppImage
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v2
       with:
         name: TerminusDB-amd64.AppImage
         path: distribution/appimage/TerminusDB-*-amd64.AppImage
@@ -134,7 +134,7 @@ jobs:
         swipl\bin\swipl -g run_tests -g halt start.pl
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v2
       with:
         name: TerminusDB-server-windows.tar.gz
         path: extracted\terminusdb_*_windows.tar.gz
