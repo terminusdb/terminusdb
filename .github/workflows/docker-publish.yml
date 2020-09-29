@@ -92,7 +92,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: TerminusDB-amd64.AppImage
-        path: distribution/appimage/TerminusDB-amd64.AppImage
+        path: distribution/appimage/TerminusDB-*-amd64.AppImage
 
   windows:
     runs-on: windows-latest
