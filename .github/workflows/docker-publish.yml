@@ -197,7 +197,7 @@ jobs:
     - run: |
         npx electron-builder build --linux appimage -p never
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mv dist/*.AppImage "terminusdb-desktop-$TAG.AppImage"
+        mv dist/*.AppImage "dist/terminusdb-desktop-$TAG.AppImage"
 
 
     - name: Upload a Build Artifact
