@@ -599,6 +599,15 @@ csv_error_handler(error(invalid_graph_descriptor(Path), _), Request) :-
                                       'api:absolute_graph_descriptor' : Path},
                       'api:message' : Msg},
                     [status(400)]).
+csv_error_handler(error(schema_check_failure([Witness|_]), _), Request) :-
+    format(string(Msg), "Schema did not validate after this update", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CsvErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:SchemaValidationError',
+                                      'api:witness' : Witness},
+                      'api:message' : Msg},
+                    [status(400)]).
 
 
 :- begin_tests(csv_endpoint).
