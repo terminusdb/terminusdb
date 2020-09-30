@@ -2,6 +2,12 @@
 
 Some CURL examples to make things easier for people building clients in various languages.
 
+# Connect
+
+```bash
+curl -X GET "https://127.0.0.1:6363/api/" -u "admin:root" -k -H "Content-Type: application/json"
+```
+
 # Create DB
 
 ```bash
