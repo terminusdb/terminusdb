@@ -553,7 +553,7 @@ csv_handler(put,Path,Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   csv_load(System_DB, Auth, Path, Commit_Info, Files, Document),
-            cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
+            cors_reply_json(Request, _{'@type' : 'api:CSVInsertResponse',
                                        'api:status' : "api:success"})),
         Error,
         do_or_die(csv_error_handler(Error, Request),
@@ -566,7 +566,7 @@ csv_handler(post,Path,Request, System_DB, Auth) :-
 
     catch_with_backtrace(
         (   csv_update(System_DB, Auth, Path, Commit_Info, Files, Document),
-            cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
+            cors_reply_json(Request, _{'@type' : 'api:CSVUpdateResponse',
                                        'api:status' : "api:success"})),
         Error,
         do_or_die(csv_error_handler(Error, Request),
