@@ -576,7 +576,6 @@ csv_handler(get,Path,Request, System_DB, Auth) :-
     catch_with_backtrace(
         (   csv_dump(System_DB, Auth, Path, Files, _{}),
             member(csv=CSV_Path, Files),
-            write_cors_headers(Request),
             throw(http_reply(file('text/csv', CSV_Path)))),
         Error,
         do_or_die(csv_error_handler(Error, Request),
