@@ -1256,7 +1256,9 @@ compile_wf(re(P,S,L),Re) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE),
-    { marshall_args(utils:re(PE,SE,LE),Re) }.
+    { marshall_args(utils:re(PE,SE,LE),Re),
+      debug(compilation,"re: ~q",[Re])
+    }.
 compile_wf(split(S,P,L),Split) -->
     resolve(S,SE),
     resolve(P,PE),
@@ -1371,10 +1373,36 @@ compile_wf(triple_count(Path,Count),Goal) -->
     }.
 compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, ArgumentsE)) -->
     resolve(Arguments, ArgumentsE).
+compile_wf(typeof(X,T), typeof(XE,TE)) -->
+    resolve(X,XE),
+    resolve(T,TE).
 compile_wf(false,false) -->
     [].
 compile_wf(true,true) -->
     [].
+
+typeof(X,T) :-
+    var(X),
+    var(T),
+    !,
+    when(nonvar(X), typeof(X,T)),
+    when(nonvar(T), typeof(X,T)).
+typeof(X,T) :-
+    var(X),
+    !,
+    (   T = 'http://www.w3.org/2002/07/owl#Thing'
+    ->  when(nonvar(X), atom(X))
+    ;   base_type(T)
+    ->  when(nonvar(X),
+             X = _^^T)
+    ;   X = _@T).
+typeof(_@T,T) :-
+    !.
+typeof(_^^T,T) :-
+    !.
+typeof(A,T) :-
+    atom(A),
+    T = 'http://www.w3.org/2002/07/owl#Thing'.
 
 :- meta_predicate ensure_mode(0,+,+,+).
 ensure_mode(Goal,Mode,Args,Names) :-
