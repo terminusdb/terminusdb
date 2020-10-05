@@ -233,7 +233,7 @@ lookup_backwards(Prolog_Var,Var_Name,[_|Records]) :-
 resolve_prefix(Pre,Suf,URI) -->
     view(prefixes,Prefixes),
     {
-        (   Full_Prefix = Prefixes.get(Pre)
+        (   Full_Prefix = (Prefixes.get(Pre))
         ->  true
         ;   throw(error(woql_syntax_error(unresolvable_prefix(Pre,Suf)),_)))
     },
@@ -4327,5 +4327,35 @@ test(bad_class_vio, [
         query_response:run_context_ast_jsonld_response(Context, AST, _Result),
         error(schema_check_failure([Failure]),_),
         get_dict('@type', Failure, 'vio:InvalidClassViolation')).
+
+
+test(typeof, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type' : "And",
+              query_list :
+              [_{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 0},
+                 query : _{'@type' : "Equals",
+                           left : _{'@type' : "xsd:string",
+                                    '@value' : "test"},
+                           right : _{'@type' : "Variable",
+                                     variable_name : "X"}}},
+               _{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 1},
+                 query : _{'@type' : "TypeOf",
+                           type : _{'@type' : "Variable",
+                                     variable_name : "Type"},
+                           value : _{'@type' : "Variable",
+                                     variable_name : "X"}}}]},
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Result] = (JSON.bindings),
+    Result.'Type' = 'http://www.w3.org/2001/XMLSchema#string'.
+
 
 :- end_tests(woql).

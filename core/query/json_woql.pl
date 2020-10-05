@@ -983,7 +983,17 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Variable',JSON,WOQL,Pat
     Result = String_or_Atom_Name^^_,
     coerce_atom(String_or_Atom_Name, Atom_Name),
     WOQL = v(Atom_Name).
-
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#value' : Value,
+      'http://terminusdb.com/schema/woql#type' : Type
+     } :< JSON,
+    json_to_woql_ast(Value,WOQL_Value,
+                     ['http://terminusdb.com/schema/woql#value'
+                      |Path]),
+    json_to_woql_ast(Type,WOQL_Type,
+                     ['http://terminusdb.com/schema/woql#type'
+                      |Path]),
+    WOQL = typeof(WOQL_Value,WOQL_Type).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),

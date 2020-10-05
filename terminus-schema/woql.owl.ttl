@@ -1449,3 +1449,24 @@ woql:With
   rdfs:subClassOf woql:QueryWithSubQuery ;
   rdfs:label "With"@en ;
   rdfs:comment "Add a new addressable temporary graph resource"@en .
+
+woql:TypeOf
+  a owl:Class ;
+  rdsf:subClassOf woql:Query, woql:HasValue, woql:HasType ;
+  rdfs:label "TypeOf"@en ;
+  rdsf:comment "Find the type of a node or literal"@en .
+
+woql:value
+  rdfs:label "value"@en ;
+  rdfs:comment "The value associated with a query"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain woql:HasValue ;
+  rdfs:range woql:Value .
+
+woql:type
+  rdfs:label "type"@en ;
+  rdfs:comment "The type associated with a query"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain woql:HasType ;
+  rdfs:range xsd:string .
+
