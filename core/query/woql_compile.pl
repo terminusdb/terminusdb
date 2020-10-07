@@ -2726,6 +2726,60 @@ test(group_by, [
                    [p,z]],
        'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
 
+test(group_by_simple_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q),
+                      insert(y,p,z),
+                      insert(y,p,w))),
+        _Meta),
+
+    Query = _{'@type' : "GroupBy",
+              group_by : [_{ '@type' : "VariableListElement",
+                             index : _{'@type' : "xsd:integer",
+                                       '@value' : 0},
+                             variable_name : _{ '@type' : "xsd:string",
+                                                '@value' : "Subject"}}],
+              group_template :  _{ '@type' : "Variable",
+                                   variable_name : _{ '@type' : "xsd:string",
+                                                      '@value' : "Predicate"}},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "Variable",
+                                     variable_name :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Subject"}},
+                         predicate : _{'@type' : "Variable",
+                                       variable_name :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Predicate"}},
+                         object : _{'@type' : "Variable",
+                                    variable_name :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Object"}}
+                       },
+              grouped : _{'@type' : "Variable",
+                          variable_name :
+                          _{'@type' : "xsd:string",
+                            '@value' : "Grouped"}}},
+
+    query_test_response(Descriptor, Query, JSON),
+
+    [_{'Grouped': [p,p,p],
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
+     _{'Grouped': [p,p],
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
+
 test(select, []) :-
 
     Query = _{'@type' : "Limit",
