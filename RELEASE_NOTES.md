@@ -1,3 +1,16 @@
+# TerminusDB Server v3.0.8 Release Notes
+
+## New
+
++ Added "typeof" to WOQL allowing extraction or filtering of types from arbitrary nodes or datapoints
++ Added some CURL connection examples
+
+## Bug fixes
+
++ Fix CORS headers on get request for CSV
++ Fixed handling of dates in typecasting
++ Schema validation error handling improved
+
 # TerminusDB Server v3.0.7 Release Notes
 
 ## Bug fixes
