@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.12.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.12.5
 
 jobs:
   test_and_push_docker:
@@ -119,7 +119,6 @@ jobs:
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
         cd swipl\bin
         Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
 
     - name: Package windows tar
       run: |
