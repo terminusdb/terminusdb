@@ -30,7 +30,7 @@ csv_load(System_DB, Auth, Path, Commit_Info, Files, Options) :-
 
     csv_load_into_context(Name,CSV_Path,Context,Options).
 
-csv_load_into_context(_Name, Path, Context, Options) :-
+csv_load_into_context(Name, Path, Context, Options) :-
     get_dict(prefixes,Context, Prefixes),
 
     (   option(data_prefix(_), Options)
@@ -47,7 +47,7 @@ csv_load_into_context(_Name, Path, Context, Options) :-
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, Builder),
-            csv_builder(Path, Builder, Final_Options)
+            csv_builder(Name, Path, Builder, Final_Options)
         ),
         _).
 
@@ -75,7 +75,7 @@ csv_update(System_DB, Auth, Path, Commit_Info, Files, Options) :-
 
     csv_update_into_context(Name,CSV_Path,Context,Options).
 
-csv_update_into_context(_Name, Path, Context, Options) :-
+csv_update_into_context(Name, Path, Context, Options) :-
     get_dict(prefixes,Context, Prefixes),
 
     (   option(data_prefix(_), Options)
@@ -90,7 +90,7 @@ csv_update_into_context(_Name, Path, Context, Options) :-
 
     open_memory_store(Store),
     open_write(Store, Builder),
-    csv_builder(Path, Builder, Final_Options),
+    csv_builder(Name, Path, Builder, Final_Options),
     nb_commit(Builder, Layer),
 
     with_transaction(
@@ -121,11 +121,13 @@ csv_dump(System_DB, Auth, Path, [csv=Filename], _Options) :-
 
     get_dict(prefixes, Context, Prefixes),
 
+    csv_columns(Layer, Columns),
     % collect header predicates
     findall(Predicate-P_Name,
             (   predicate_id(Layer, Predicate, _P_Id),
                 uri_to_prefixed(Predicate, Prefixes, Prefix:P_Name_Enc),
-                Prefix \= rdf,
+                \+ member(Prefix, [rdf,rdfs]),
+                writeq(Predicate),
                 uri_encoded(query_value, P_Name, P_Name_Enc)
             ),
             Columns),
@@ -150,6 +152,17 @@ csv_dump(System_DB, Auth, Path, [csv=Filename], _Options) :-
         csv_write_stream(Stream, [RowValue], [])
     ),
     close(Stream).
+
+csv_columns(Name, Data_Prefix, Schema_Prefix, Layer, Sorted_Columns) :-
+    findall(Predicate-P_Name-P_Order,
+            ask(Layer,
+                t(CSV, rdfs:label, Name^^xsd:string),
+                t(CSV, 'csv:///schema#column', ColumnObject),
+                t(ColumnObject, rdf:type, 'csv:///schema#Column'),
+                t(ColumnObject, _, _),
+            Columns),
+
+    predsort([P-N-O,Q-M-I]>>(compare(O,I)), Predicates, Sorted_Columns).
 
 :- begin_tests(csv_api).
 
@@ -182,12 +195,23 @@ test(csv_load,
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
     Triples = [
-        (doc:Row1)-(scm:header)-("2"^^xsd:string),
-        (doc:Row1)-(scm:some)-("1"^^xsd:string),
-        (doc:Row1)-(rdf:type)-(scm:'Row'),
-        (doc:Row2)-(scm:header)-("4"^^xsd:string),
-        (doc:Row2)-(scm:some)-("3"^^xsd:string),
-        (doc:Row2)-(rdf:type)-(scm:'Row')
+        'csv:///data/ColumnObject_csv_header'-'csv:///schema#column_name'-("header"^^xsd:string),
+        'csv:///data/ColumnObject_csv_header'-'csv:///schema#index'-(1^^xsd:integer),
+        'csv:///data/ColumnObject_csv_header'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/ColumnObject_csv_some'-'csv:///schema#column_name'-("some"^^xsd:string),
+        'csv:///data/ColumnObject_csv_some'-'csv:///schema#index'-(0^^xsd:integer),
+        'csv:///data/ColumnObject_csv_some'-(rdf:type)-'csv:///schema#Column',
+        (doc:csv)-'csv:///schema#column'-'csv:///data/ColumnObject_csv_header',
+        (doc:csv)-'csv:///schema#column'-'csv:///data/ColumnObject_csv_some',
+        (doc:csv)-(scm:row)-(doc:row7b52009b64fd0a2a49e6d8a939753077792b0554),
+        (doc:csv)-(scm:row)-(doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59),
+        (doc:csv)-(rdf:type)-(scm:'Csv'),(doc:csv)-(rdfs:label)-("csv"^^xsd:string),
+        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:header)-("2"^^xsd:string),
+        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:some)-("1"^^xsd:string),
+        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(rdf:type)-(scm:'Row_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:header)-("4"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:some)-("3"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(rdf:type)-(scm:'Row_c40ce0246f480cd2baca44a7477fee98662917b7')
     ].
 
 test(csv_update,
@@ -223,12 +247,24 @@ test(csv_update,
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
     Triples = [
-        (doc:Row1)-(scm:header)-("4"^^xsd:string),
-        (doc:Row1)-(scm:some)-("3"^^xsd:string),
-        (doc:Row1)-(rdf:type)-(scm:'Row'),
-        (doc:Row2)-(scm:header)-("9"^^xsd:string),
-        (doc:Row2)-(scm:some)-("1"^^xsd:string),
-        (doc:Row2)-(rdf:type)-(scm:'Row')
+        'csv:///data/ColumnObject_csv_header'-'csv:///schema#column_name'-("header"^^xsd:string),
+        'csv:///data/ColumnObject_csv_header'-'csv:///schema#index'-(1^^xsd:integer),
+        'csv:///data/ColumnObject_csv_header'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/ColumnObject_csv_some'-'csv:///schema#column_name'-("some"^^xsd:string),
+        'csv:///data/ColumnObject_csv_some'-'csv:///schema#index'-(0^^xsd:integer),
+        'csv:///data/ColumnObject_csv_some'-(rdf:type)-'csv:///schema#Column',
+        (doc:csv)-'csv:///schema#column'-'csv:///data/ColumnObject_csv_header',
+        (doc:csv)-'csv:///schema#column'-'csv:///data/ColumnObject_csv_some',
+        (doc:csv)-(scm:row)-(doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59),
+        (doc:csv)-(scm:row)-(doc:rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f),
+        (doc:csv)-(rdf:type)-(scm:'Csv'),
+        (doc:csv)-(rdfs:label)-("csv"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:header)-("4"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:some)-("3"^^xsd:string),
+        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(rdf:type)-(scm:'Row_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f)-(scm:header)-("9"^^xsd:string),
+        (doc:rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f)-(scm:some)-("1"^^xsd:string),
+        (doc:rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f)-(rdf:type)-(scm:'Row_c40ce0246f480cd2baca44a7477fee98662917b7')
     ].
 
 test(csv_dump,
@@ -255,7 +291,9 @@ test(csv_dump,
     member(csv=CSV_Filename, CSV_Files),
     open(CSV_Filename, read, Read_Stream),
     read_string(Read_Stream, _, String),
+    writeq(String),
     % newline depends on platform
     re_match("header,some(\r\n|\n)2,1(\r\n|\n)4,3(\r\n|\n)",String).
 
 :- end_tests(csv_api).
+m
