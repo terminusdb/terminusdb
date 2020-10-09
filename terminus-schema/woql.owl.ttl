@@ -1199,6 +1199,12 @@ woql:Not
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
 
+woql:Once
+  a owl:Class ;
+  rdfs:label "Once"@en ;
+  rdfs:comment "One solution of the the query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
 woql:Immediately
   a owl:Class ;
   rdfs:label "Not"@en ;

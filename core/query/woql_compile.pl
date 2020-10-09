@@ -1027,6 +1027,8 @@ compile_wf((A;B),(ProgA;ProgB)) -->
     return(S0),
     compile_wf(B,ProgB),
     merge(S1). % merges S1 back in to current state.
+compile_wf(once(A),once(ProgA)) -->
+    compile_wf(A,ProgA).
 compile_wf((A,B),(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
     compile_wf(B,ProgB),

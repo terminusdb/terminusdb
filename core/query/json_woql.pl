@@ -889,6 +889,12 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Not',JSON,WOQL,Path) :-
     json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                            |Path]),
     WOQL = not(WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Once',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#query' : Q
+     } :< JSON,
+    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+                           |Path]),
+    WOQL = once(WQ).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Immediately',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#query' : Q
      } :< JSON,
