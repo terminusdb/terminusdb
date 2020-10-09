@@ -547,7 +547,7 @@ test(db_auth_test, [
  */
 csv_handler(put,Path,Request, System_DB, Auth) :-
     get_payload(Document,Request),
-    collect_posted_files(Request,Files),
+    collect_posted_named_files(Request,Files),
     do_or_die(_{ commit_info : Commit_Info } :< Document,
               error(bad_api_document(Document,[commit_info]),_)),
 
@@ -560,7 +560,7 @@ csv_handler(put,Path,Request, System_DB, Auth) :-
                   Error)).
 csv_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Document,Request),
-    collect_posted_files(Request,Files),
+    collect_posted_named_files(Request,Files),
     do_or_die(_{ commit_info : Commit_Info } :< Document,
               error(bad_api_document(Document,[commit_info]),_)),
 
@@ -648,20 +648,20 @@ test(csv_load, [
             ask(DB,
                 t(X, Y, Z)),
             Triples),
-    writeq(Triples),
+
     Triples = [
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar',
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo',
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-(rdfs:label)-("/home/gavin/dev/terminus-server/test/test.csv"^^xsd:string),
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-'csv:///schema#column_name'-("bar"^^xsd:string),
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-'csv:///schema#column_name'-("foo"^^xsd:string),
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/ColumnObject_csv_bar'-'csv:///schema#column_name'-("bar"^^xsd:string),
+        'csv:///data/ColumnObject_csv_bar'-'csv:///schema#index'-(1^^xsd:integer),
+        'csv:///data/ColumnObject_csv_bar'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/ColumnObject_csv_foo'-'csv:///schema#column_name'-("foo"^^xsd:string),
+        'csv:///data/ColumnObject_csv_foo'-'csv:///schema#index'-(0^^xsd:integer),
+        'csv:///data/ColumnObject_csv_foo'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_bar',
+        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_foo',
+        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
+        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
+        'csv:///data/csv'-(rdf:type)-'csv:///schema#Csv',
+        'csv:///data/csv'-(rdfs:label)-("csv"^^xsd:string),
         'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_bar'-("2"^^xsd:string),
         'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_foo'-("1"^^xsd:string),
         'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-(rdf:type)-'csv:///schema#Row_60518c1c11dc0452be71a7118a43ab68e3451b82',
@@ -5201,3 +5201,22 @@ collect_posted_files(Request,Files) :-
                  )
              ),Parts,Files).
 collect_posted_files(_Request,[]).
+
+/*
+ * Make a collection of all posted files for
+ * use in a Context via csv interface
+ */
+collect_posted_named_files(Request,Files) :-
+    memberchk(multipart(Parts), Request),
+    !,
+    convlist([mime(Mime_Header,Data,_),Name=Temp_Filename]>>(
+                 memberchk(filename(_),Mime_Header),
+                 memberchk(name(Name),Mime_Header),
+                 \+ memberchk(type('application/json'),Mime_Header),
+                 setup_call_cleanup(
+                     tmp_file_stream(octet, Temp_Filename, Out),
+                     write(Out, Data),
+                     close(Out)
+                 )
+             ),Parts,Files).
+collect_posted_named_files(_Request,[]).
