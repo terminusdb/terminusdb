@@ -648,13 +648,25 @@ test(csv_load, [
             ask(DB,
                 t(X, Y, Z)),
             Triples),
-
     Triples = [
-        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:bar)-("2"^^xsd:string),
-        (doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(scm:foo)-("1"^^xsd:string),(doc:row7b52009b64fd0a2a49e6d8a939753077792b0554)-(rdf:type)-(scm:'Row'),
-        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:bar)-("4"^^xsd:string),
-        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(scm:foo)-("3"^^xsd:string),
-        (doc:rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59)-(rdf:type)-(scm:'Row')
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar',
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo',
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-(rdf:type)-'csv:///schema#Csv',
+        'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-(rdfs:label)-("/home/gavin/dev/terminus-server/test/test.csv"^^xsd:string),
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-'csv:///schema#column_name'-("bar"^^xsd:string),
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-'csv:///schema#index'-(1^^xsd:integer),
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-'csv:///schema#column_name'-("foo"^^xsd:string),
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-'csv:///schema#index'-(0^^xsd:integer),
+        'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo'-(rdf:type)-'csv:///schema#Column',
+        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_bar'-("2"^^xsd:string),
+        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_foo'-("1"^^xsd:string),
+        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-(rdf:type)-'csv:///schema#Row_60518c1c11dc0452be71a7118a43ab68e3451b82',
+        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_bar'-("4"^^xsd:string),
+        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_foo'-("3"^^xsd:string),
+        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_60518c1c11dc0452be71a7118a43ab68e3451b82'
     ].
 
 
@@ -688,7 +700,8 @@ test(csv_round_trip, [
              [cert_verify_hook(cert_accept_any),
               authorization(basic(admin, Key))
              ]),
-    CSV = 'bar,foo\r\n2,1\r\n4,3\r\n'.
+
+    CSV = 'foo,bar\r\n1,2\r\n3,4\r\n'.
 
 
 test(csv_update, [
@@ -697,7 +710,7 @@ test(csv_update, [
      ])
 :-
 
-        create_db_without_schema(admin, 'TEST_DB'),
+    create_db_without_schema(admin, 'TEST_DB'),
 
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
@@ -730,7 +743,7 @@ test(csv_update, [
               authorization(basic(admin, Key))
              ]),
 
-    CSV = 'bar,foo\r\n2,1\r\n1,2\r\n'.
+    CSV = 'foo,bar\r\n1,2\r\n2,1\r\n'.
 
 
 
