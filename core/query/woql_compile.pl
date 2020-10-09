@@ -4414,4 +4414,35 @@ test(typeof, [
     Result.'Type' = 'http://www.w3.org/2001/XMLSchema#string'.
 
 
+test(once, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type' : "Once",
+              query: _{'@type' : "Or",
+                       query_list :
+                       [_{'@type' : "QueryListElement",
+                          index : _{'@type' : "xsd:integer",
+                                    '@value' : 0},
+                          query : _{'@type' : "Equals",
+                                    left : _{'@type' : "xsd:string",
+                                             '@value' : "foo"},
+                                    right : _{'@type' : "Variable",
+                                              variable_name : "X"}}},
+                        _{'@type' : "QueryListElement",
+                          index : _{'@type' : "xsd:integer",
+                                    '@value' : 1},
+                          query : _{'@type' : "Equals",
+                                    left : _{'@type' : "xsd:string",
+                                             '@value' : "bar"},
+                                    right : _{'@type' : "Variable",
+                                              variable_name : "X"}}}]
+                      }
+             },
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Result] = (JSON.bindings),
+    Result.'X'.'@value' = "foo".
+
+
 :- end_tests(woql).
