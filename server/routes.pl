@@ -648,6 +648,7 @@ test(csv_load, [
             ask(DB,
                 t(X, Y, Z)),
             Triples),
+    writeq(Triples),
     Triples = [
         'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_bar',
         'csv:///data/%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv'-'csv:///schema#column'-'csv:///data/ColumnObject_%2Fhome%2Fgavin%2Fdev%2Fterminus-server%2Ftest%2Ftest.csv_foo',
