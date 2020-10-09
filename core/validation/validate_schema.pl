@@ -1117,6 +1117,9 @@ property_cycle_SC(Database,Reason) :- property_cycle(_,_,Database,Reason).
  */
 range(P,R,Database) :-
     database_schema(Database,Schema),
+    range_(P,R,Schema).
+
+range_(P,R,Schema) :-
     xrdf(Schema,P,'http://www.w3.org/2000/01/rdf-schema#range',R).
 
 /**
@@ -1126,7 +1129,11 @@ range(P,R,Database) :-
  * the places in which to "clip" the graph.
  */
 document(Class,Database) :-
-	subsumption_of(Class,'http://terminusdb.com/schema/system#Document', Database).
+    database_schema(Database,Schema),
+    document_(Class,Schema).
+
+document_(Class,Schema) :-
+    subsumption_of_(Class,'http://terminusdb.com/schema/system#Document', Schema).
 
 /**
  * any_range(?P,?R,+Database:database) is nondet.
@@ -1134,23 +1141,32 @@ document(Class,Database) :-
  * Determine if R is a viable range for P.
  * This must be ordered according to Hasse diagram!
  */
-%:- rdf_meta any_range(r,r,o).
-any_range('http://www.w3.org/2002/07/owl#topObjectProperty','http://www.w3.org/2002/07/owl#Thing',_).
-any_range('http://www.w3.org/2002/07/owl#topDataProperty','http://www.w3.org/2000/01/rdf-schema#Literal',_).
-any_range('http://www.w3.org/2000/01/rdf-schema#label','http://www.w3.org/2001/XMLSchema#string',_).
-any_range('http://www.w3.org/2000/01/rdf-schema#comment','http://www.w3.org/2001/XMLSchema#string',_).
 any_range(P,R,Database) :-
-    range(P,R,Database).
-any_range(P,R,Database) :-
-    strict_subsumption_property_of(P,P2,Database),
-    any_range(P2,R,Database).
-any_range(OP,R,Database) :-
+    database_schema(Database,Schema),
     database_inference(Database,Inference),
-    xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
-    any_domain(P,R,Database).
+    any_range_(P,R,Schema,Inference).
 
-:- table most_specific_range/3.
-most_specific_range(P,R,Database) :- any_range(P,R,Database), !.
+any_range_('http://www.w3.org/2002/07/owl#topObjectProperty','http://www.w3.org/2002/07/owl#Thing',_,_).
+any_range_('http://www.w3.org/2002/07/owl#topDataProperty','http://www.w3.org/2000/01/rdf-schema#Literal',_,_).
+any_range_('http://www.w3.org/2000/01/rdf-schema#label','http://www.w3.org/2001/XMLSchema#string',_,_).
+any_range_('http://www.w3.org/2000/01/rdf-schema#comment','http://www.w3.org/2001/XMLSchema#string',_,_).
+any_range_(P,R,Schema,_Inference) :-
+    range_(P,R,Schema).
+any_range_(P,R,Schema,Inference) :-
+    strict_subsumption_property_of_(P,P2,Schema),
+    any_range_(P2,R,Schema, Inference).
+any_range_(OP,R,Schema,Inference) :-
+    xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
+    any_domain_(P,R,Schema,Inference).
+
+most_specific_range(P,R,Database) :-
+    database_schema(Database,Schema),
+    database_inference(Database,Inference),
+    most_specific_range_(P,R,Schema,Inference).
+
+:- table most_specific_range_/4.
+most_specific_range_(P,R,Schema,Inference) :-
+    any_range_(P,R,Schema,Inference), !.
 
 /**
  * domain(P:uri,D:uri,Database:database) is nondet.
@@ -1170,24 +1186,27 @@ domain_(P,D,Schema) :-
  *
  * Determine if R is a viable domain for P.
  */
-%:- rdf_meta any_domain(r,r,o).
-any_domain('http://www.w3.org/2002/07/owl#topObjectProperty',
-          'http://www.w3.org/2002/07/owl#Thing',_).
-any_domain('http://www.w3.org/2002/07/owl#topDataProperty',
-          'http://www.w3.org/2000/01/rdf-schema#Literal',_).
-any_domain('http://www.w3.org/2000/01/rdf-schema#label',D,Database) :-
-    document(D,Database).
-any_domain('http://www.w3.org/2000/01/rdf-schema#comment',D,Database) :-
-    document(D,Database).
 any_domain(P,R,Database) :-
-    domain(P,R,Database).
-any_domain(OP,R,Database) :-
+    database_schema(Database,Schema),
     database_inference(Database,Inference),
+    any_domain_(P,R,Schema,Inference).
+
+any_domain_('http://www.w3.org/2002/07/owl#topObjectProperty',
+          'http://www.w3.org/2002/07/owl#Thing',_,_).
+any_domain_('http://www.w3.org/2002/07/owl#topDataProperty',
+          'http://www.w3.org/2000/01/rdf-schema#Literal',_,_).
+any_domain_('http://www.w3.org/2000/01/rdf-schema#label',D,Schema,_) :-
+    document_(D,Schema).
+any_domain_('http://www.w3.org/2000/01/rdf-schema#comment',D,Schema,_) :-
+    document_(D,Schema).
+any_domain_(P,R,Schema,_) :-
+    domain_(P,R,Schema).
+any_domain_(OP,R,Schema,Inference) :-
     xrdf(Inference,OP,'http://www.w3.org/2002/07/owl#inverseOf',P),
-    any_range(P,R,Database).
-any_domain(P,R,Database) :-
-    strict_subsumption_property_of(P,P2,Database),
-    any_domain(P2,R,Database).
+    any_range_(P,R,Schema,Inference).
+any_domain_(P,R,Schema,Inference) :-
+    strict_subsumption_property_of_(P,P2,Schema),
+    any_domain_(P2,R,Schema,Inference).
 
 % TODO inverse isn't enough! need to do more inference
 
