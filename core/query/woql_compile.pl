@@ -344,69 +344,164 @@ var_record_pl_var(Var_Name,
 var_compare(Op, Left, Right) :-
     compare(Op, Left.var_name, Right.var_name).
 
-bt_conjunctive_head_nb_tail(A, B, (AHead,BHead), true) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,true),
+/* This partitions a tree cleanly into two segments or fails:
+   Reads:  read only
+   Writes: write only
+*/
+partition((A,B), Reads, Writes) :-
+    partition(A, A_Reads, []),
+    !,
+    partition(B, B_Reads, Writes),
+    append(A_Reads, B_Reads, Reads).
+partition((A,B), Reads, Writes) :-
+    partition(B, [], B_Writes),
+    !,
+    partition(A, Reads, A_Writes),
+    append(A_Writes, B_Writes, Writes).
+partition((A;B), [(A;B)], []) :-
+    /* just fail if we are doing disjunctive writes */
+    !,
+    partition(A, _, []),
+    partition(B, _, []).
+partition(not(Q), [not(Q)], []) :-
+    /* just fail if we have a write in a not. */
+    !,
+    partition(Q, _, []).
+partition(once(Q), [once(Q)], []) :-
+    !,
+    partition(Q, _, []).
+partition(once(Q), [], [once(Q)]) :-
+    partition(Q, [], _),
     !.
-bt_conjunctive_head_nb_tail(A, B, AHead, BTail) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,true,BTail),
+partition(limit(N,Q), [limit(N,Q)], []) :-
+    /* just fail if we have a limit on a write */
+    !,
+    partition(Q, _, []).
+partition(select(V,Q), [select(V,Q)], []) :-
+    /* just fail if we have a select on a write */
+    !,
+    partition(Q, _, []).
+partition(opt(P), [opt(P)], []) :-
+    /* just fail if we have an opt on a write */
+    !,
+    partition(P, _, []).
+partition(when(A,B), Reads, Writes) :-
+    /* assume "when"s have a read only head */
+    !,
+    partition(A, A_Reads, []),
+    partition(B, B_Reads, Writes),
+    append(A_Reads, B_Reads, Reads).
+partition(using(C,P), Reads, Writes) :-
+    !,
+    partition(P, P_Reads, P_Writes),
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [using(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [using(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [using(C,A)],
+        Writes = [using(C,B)]
+    ).
+partition(from(C,P), Reads, Writes) :-
+    partition(P, P_Reads, P_Writes),
+    !,
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [from(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [from(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [from(C,A)],
+        Writes = [from(C,B)]
+    ).
+partition(start(N,P), [start(N,P)], []) :-
+    partition(P, _, []),
     !.
-bt_conjunctive_head_nb_tail(A, B, (AHead, BHead), BTail) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,BTail),
+partition(count(P,N), [count(P,N)], []) :-
+    partition(P, _, []),
     !.
-bt_conjunctive_head_nb_tail(A, B, true, (ATail,BTail)) :-
-    bt_head_nb_tail(A,true,ATail),
-    bt_head_nb_tail(B,true,BTail),
+partition(where(P), Reads, Writes) :-
+    % where means nothing
+    partition(P, Reads, Writes),
     !.
-bt_conjunctive_head_nb_tail(A, B, AHead, (ATail,BTail)) :-
-    bt_head_nb_tail(A,AHead,ATail),
-    bt_head_nb_tail(B,true,BTail).
-
-% unfortunately defaulty. We could add more clauses...
-bt_head_nb_tail((A,B),Head,Tail) :-
+partition(order_by(L,S), [order_by(L,S)], []) :-
+    partition(S, _, []),
+    !.
+partition(into(C,P), Reads, Writes) :-
+    partition(P, P_Reads, P_Writes),
     !,
-    bt_conjunctive_head_nb_tail(A,B,Head,Tail).
-bt_head_nb_tail((A;B),(AHead;BHead),true) :-
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [into(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [into(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [into(C,A)],
+        Writes = [into(C,B)]
+    ).
+partition(group_by(L,S), [group_by(L,S)], []) :-
+    partition(S, _, []),
+    !.
+partition(insert(A,B,C), Reads, Writes) :-
     !,
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,true).
-bt_head_nb_tail(insert(A,B,C),Head,Result) :-
+    Reads = [],
+    Writes = [insert(A,B,C)].
+partition(insert(A,B,C,D), Reads, Writes) :-
     !,
-    Head = true,
-    Result = insert(A,B,C).
-bt_head_nb_tail(insert(A,B,C,D),Head,Result) :-
+    Reads = [],
+    Writes = [insert(A,B,C,D)].
+partition(delete(A,B,C), Reads, Writes) :-
     !,
-    Head = true,
-    Result = insert(A,B,C,D).
-bt_head_nb_tail(delete(A,B,C),Head,Result) :-
+    Reads = [],
+    Writes = [delete(A,B,C)].
+partition(delete(A,B,C,D), Reads, Writes) :-
     !,
-    Head = true,
-    Result = delete(A,B,C).
-bt_head_nb_tail(delete(A,B,C,D),Head,Result) :-
+    Reads = [],
+    Writes = [delete(A,B,C,D)].
+partition(update_object(A,B), Reads, Writes) :-
     !,
-    Head = true,
-    Result = delete(A,B,C,D).
-bt_head_nb_tail(update_object(A,B),Head,Result) :-
+    Reads = [],
+    Writes = [update_object(A,B)].
+partition(update_object(A,B,C), Reads, Writes) :-
     !,
-    Head = true,
-    Result = update_object(A,B).
-bt_head_nb_tail(update_object(A,B,C),Head,Result) :-
-    !,
-    Head = true,
-    Result = update_object(A,B,C).
-bt_head_nb_tail(delete_object(A),Head,Result) :-
-    !,
-    Head = true,
-    Result = delete_object(A).
-bt_head_nb_tail(Term, Term, true).
+    Reads = [],
+    Writes = [update_object(A,B,C)].
+partition(delete_object(A), Reads, Writes) :-
+    Reads = [],
+    Writes = [delete_object(A)].
+partition(T,[T],[]) :-
+    /* Everything else should be read only
+     * Note: A bit more energy here would remove the default case and need for cuts.
+     */
+    !.
 
 /*
  * safe_guard_removal(Term, NewTerm) is det.
  */
-safe_guard_removal(Term, (Head,immediately(Tail))) :-
-    bt_head_nb_tail(Term,Head,Tail),
+safe_guard_removal(Term, Prog) :-
+    partition(Term,Reads,Writes),
+    (   Writes = []
+    ->  xfy_list(',', Prog, Reads)
+    ;   Reads = []
+    ->  xfy_list(',', Write_Term, Writes),
+        Prog = immediately(Write_Term)
+    ;   xfy_list(',', A, Reads),
+        xfy_list(',', B, Writes),
+        Prog = (A,immediately(B))
+    ),
     !.
 safe_guard_removal(Term, Term).
 
@@ -433,6 +528,7 @@ test(guard_removal_is_safe, []) :-
     ),
 
     safe_guard_removal(AST, AST2),
+
     AST2 = ((
                    t(a,b,c),
                    t(e,f,g)),
@@ -478,26 +574,26 @@ test(guard_single_query, []) :-
 
     AST = t(a,b,c),
 
-    safe_guard_removal(AST, (t(a,b,c),immediately(true))).
+    safe_guard_removal(AST, (t(a,b,c))).
 
 
 test(guard_single_insertion, []) :-
 
     AST = insert(a,b,c),
 
-    safe_guard_removal(AST, (true,immediately(insert(a,b,c)))).
+    safe_guard_removal(AST, immediately(insert(a,b,c))).
 
 test(guard_single_deletion, []) :-
 
     AST = delete(a,b,c),
 
-    safe_guard_removal(AST, (true,immediately(delete(a,b,c)))).
+    safe_guard_removal(AST, immediately(delete(a,b,c))).
 
 test(guard_double_insertion, []) :-
 
     AST = (insert(a,b,c),insert(d,e,f)),
 
-    safe_guard_removal(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
+    safe_guard_removal(AST, (immediately((insert(a,b,c),insert(d,e,f))))).
 
 :- end_tests(guards).
 
