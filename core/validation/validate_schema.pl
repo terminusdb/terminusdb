@@ -1405,10 +1405,13 @@ schema_object_blank_node(Z,Database) :-
  */
 label(X,Y,Database) :-
     database_instance(Database,Instance),
-    xrdf(Instance,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
+    label_(X,Y,Instance).
 label(X,Y,Database) :-
-    database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
+    database_schema(Database,Instance),
+    label_(X,Y,Instance).
+
+label_(X,Y,Graphs) :-
+    xrdf(Graphs,X, 'http://www.w3.org/2000/01/rdf-schema#label',Y).
 
 /**
  * comment(?X,?Y,+Database:database) is det.
@@ -1417,10 +1420,13 @@ label(X,Y,Database) :-
  */
 comment(X,Y,Database) :-
     database_instance(Database,Instance),
-    xrdf(Instance,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
+    comment_(X,Y,Instance).
 comment(X,Y,Database) :-
     database_schema(Database,Schema),
-    xrdf(Schema,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
+    comment_(X,Y,Schema).
+
+comment_(X,Y,Graphs) :-
+    xrdf(Graphs,X, 'http://www.w3.org/2000/01/rdf-schema#comment', Y).
 
 /**
  * system_tag(?X:uri_or_id,?Y:any,+Database:database) is det.
@@ -1429,6 +1435,9 @@ comment(X,Y,Database) :-
  */
 system_tag(X,Y,Database) :-
     database_schema(Database,Schema),
+    system_tag(X,Y,Schema).
+
+system_tag_(X,Y,Schema) :-
     xrdf(Schema,X, 'http://terminusdb.com/schema/system#tag', Y).
 
 class_has_label(X,Y,Database) :- class(X,Database), label(X,Y,Database).
