@@ -3810,10 +3810,56 @@ test(create_branch_from_commit_graph_error, [
 :- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
-                 methods([options,post])]).
+                 methods([options,get])]).
 
-prefix_handler(post, _Path, _Request, _System_DB, _Auth) :-
-    throw(error(not_implemented)).
+% this allows the client to discover prefixes for a given resource
+% from an endpoint, but also regularises the use of JSON-LD contexts
+% which can then include the endpoint for context discovery
+prefix_handler(get, Path, Request, System_DB, Auth) :-
+    catch_with_backtrace(
+        (   get_prefixes(Path, System_DB, Auth, Prefixes),
+            cors_reply_json(Request,
+                            Prefixes,
+                            [status(200)])),
+        E,
+        do_or_die(prefix_error_handler(E, Request),
+                  E)).
+
+prefix_error_handler(error(invalid_absolute_path(Path),_), Request) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:PrefixErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                                       'api:absolute_descriptor' : Path},
+                      'api:message' : Msg
+                     },
+                    [status(400)]).
+
+
+:- begin_tests(prefixes_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(create_graph, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    create_db_without_schema("admin", "test"),
+
+    atomic_list_concat([Server, '/api/prefixes/admin/test'], URI),
+    admin_pass(Key),
+    http_get(URI,
+             JSON,
+             [json_object(dict),authorization(basic(admin,Key))]),
+    _{ doc:"http://somewhere.for.now/document/",
+       scm:"http://somewhere.for.now/schema#"
+     } :< (JSON.'@context').
+
+:- end_tests(prefixes_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(graph/Path), cors_handler(Method, graph_handler(Path)),

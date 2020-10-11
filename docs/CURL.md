@@ -37,3 +37,8 @@ curl -X POST "https://127.0.0.1:6363/api/csv/admin/TEST_DB" -u "admin:root" -k -
 ```bash
 curl -X GET "https://127.0.0.1:6363/api/csv/admin/TEST_DB" -u "admin:root" -k -H "Content-Type: application/json"
 ```
+# Get Prefixes
+
+```bash
+curl -X GET "https://127.0.0.1:6363/api/prefixes/admin/movie_graph" -u "admin:root" -k -H "Content-Type: application/json"
+```

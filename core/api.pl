@@ -78,8 +78,10 @@
               % api_csv
               csv_load/6,
               csv_update/6,
-              csv_dump/5
+              csv_dump/5,
 
+              % api_prefixes
+              get_prefixes/4
           ]).
 
 :- use_module(api/init).
@@ -103,3 +105,4 @@
 :- use_module(api/api_reset).
 :- use_module(api/api_optimize).
 :- use_module(api/api_csv).
+:- use_module(api/api_prefixes).
