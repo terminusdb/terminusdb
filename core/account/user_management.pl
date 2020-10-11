@@ -740,6 +740,7 @@ test(add_role, [
     },
     get_role(system_descriptor{}, doc:admin, Document, Response),
     Bindings = (Response.bindings),
+
     once((member(Elt,Bindings),
           (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
           (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
