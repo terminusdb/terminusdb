@@ -77,7 +77,9 @@ expand(JSON_LD, Context, JSON) :-
     select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
     expand_context(New_Context,Context_Expanded),
-    merge_dictionaries(Context_Expanded,Context,Local_Context),
+    (   is_dict(Context)
+    ->  merge_dictionaries(Context_Expanded,Context,Local_Context)
+    ;   Local_Context = Context_Expanded),
     expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
     put_dict('@context',JSON_Ex,Local_Context,JSON).
 expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
@@ -223,9 +225,24 @@ prefix_expand(K,Context,Key) :-
  * Expand all prefixes in the context for other elements of the context
  */
 expand_context(Context,Context_Expanded) :-
+    is_dict(Context),
+    !,
     dict_pairs(Context,_,Pairs),
     maplist({Context}/[K-V,Key-V]>>context_prefix_expand(K,Context,Key), Pairs, Expanded_Pairs),
     dict_create(Context_Expanded, _, Expanded_Pairs).
+expand_context(Context_URI,Context_Expanded) :-
+    atomic(Context_URI),
+    server(Server),
+    atomic_list_concat([Server, '/api/prefixes/(?P<path>.*)'], Pattern),
+    pcre:re_matchsub(Pattern, Context_URI, Match, []),
+
+    Path = (Match.path),
+
+    do_or_die(
+        query:resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    collection_descriptor_prefixes(Descriptor, Context_Expanded).
 
 /*
  * expand_key(+K,+Context,-Key,-Value) is det.
@@ -255,6 +272,17 @@ test(expand_inner, [])
     expand(Document, Context, JSON_LD),
 
     _{ test:_{'@id':'http://inner_document/test'}} :< JSON_LD.
+
+
+test(expand_path, [])
+:-
+    server(Server),
+    atomic_list_concat([Server, '/api/prefixes/_system'], Context),
+    Document = _{'@context' : Context,
+                 'test' : _{'@id' : 'doc:test'}},
+    expand(Document, Context, JSON_LD),
+    Result = (JSON_LD.'@context'),
+    _{ doc:'terminusdb:///system/data/'} :< Result.
 
 :- end_tests(jsonld_expand).
 
