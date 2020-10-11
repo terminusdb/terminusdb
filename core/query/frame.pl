@@ -73,6 +73,9 @@
 class_record(Database,Class,[class=Class|L]) :-
     maybe_meta(Class,Database,L).
 
+class_record_(Schema,Class,[class=Class|L]) :-
+    maybe_meta_(Class,Schema,L).
+
 property_record(Database,Property,L) :-
     maybe_meta(Property,Database,L).
 
@@ -363,6 +366,11 @@ decorate_elements([Elt|Rest],Database,[MLC|Restp]) :-
     class_record(Database,Elt,MLC),
     decorate_elements(Rest,Database,Restp).
 
+decorate_elements_([],_,[]).
+decorate_elements_([Elt|Rest],Schema,[MLC|Restp]) :-
+    class_record_(Schema,Elt,MLC),
+    decorate_elements_(Rest,Schema,Restp).
+
 /**
  * property_restriction(+Property:uri,+Database:databasePR:property_restriction) is det.
  *
@@ -546,7 +554,7 @@ apply_restriction_(one_of(OneList),Class,Property,Schema,_Inference,
                     restriction=Restriction,
                     frame=[type=oneOf, elements=DecoratedOneList]
                     |Record_Remainder]) :-
-    once(decorate_elements(OneList,Schema,DecoratedOneList)).
+    once(decorate_elements_(OneList,Schema,DecoratedOneList)).
 apply_restriction_(object,Class,Property,Schema,Inference,
                    Restriction,Range,Record_Remainder,
                    [type=objectProperty,
@@ -580,7 +588,7 @@ apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Frame) :-
     ;   validate_schema:document_(Range,Schema)
     ->  Type = document
     ;   validate_schema:one_of_list_(Range,OneList,Schema)
-    ->  Type = one_of_(OneList)
+    ->  Type = one_of(OneList)
     ;   Type = object),
     once(calculate_property_restriction_(Property,Restriction_Formula,Schema,Restriction)),
     once(property_record_(Schema,Property,Record_Remainder)),
