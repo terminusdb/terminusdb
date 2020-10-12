@@ -232,8 +232,7 @@ expand_context(Context,Context_Expanded) :-
     dict_create(Context_Expanded, _, Expanded_Pairs).
 expand_context(Context_URI,Context_Expanded) :-
     atomic(Context_URI),
-    server(Server),
-    atomic_list_concat([Server, '/api/prefixes/(?P<path>.*)'], Pattern),
+    atomic_list_concat(['(http(s?)://[^/]*)?/api/prefixes/(?P<path>.*)'], Pattern),
     pcre:re_matchsub(Pattern, Context_URI, Match, []),
 
     Path = (Match.path),
