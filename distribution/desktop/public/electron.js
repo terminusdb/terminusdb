@@ -20,6 +20,7 @@ electron.app.on('ready', () => {
   const appDir = path.dirname(require.main.filename)
   const appImagePath = `${appDir}/TerminusDB-amd64.AppImage`
   const exePath = `${appDir}/windows/start_windows.bat`
+  const macOSPath = `${appDir}/SWI-Prolog.app/Contents/MacOS/swipl`
 
   let binPath
   let binArgs
@@ -29,6 +30,21 @@ electron.app.on('ready', () => {
   } else if (fs.existsSync(exePath)) {
     binPath = exePath
     binArgs = []
+  } else if (fs.existsSync(macOSPath)) {
+    binPath = macOSPath
+    binArgs = [`${appDir}/terminusdb-server/start.pl`]
+    const homeDir = process.env.HOME
+    const cwd = `${homeDir}/.terminusdb`
+    process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
+    process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
+    process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
+    if (!fs.existsSync(`${cwd}/db`)) {
+      fs.mkdirSync(cwd)
+      const initDb = execFile(macOSPath, [`${appDir}/terminusdb-server/utils/db_init`, '-s', 'localhost',
+        '-k', 'root', '--autologin=true'])
+      initDb.stdout.on('data', (data) => console.log(data))
+      initDb.stderr.on('data', (data) => console.log(data))
+    }
   }
 
   if (binPath) {
