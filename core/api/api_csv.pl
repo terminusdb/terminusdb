@@ -28,7 +28,8 @@ csv_load(System_DB, Auth, Path, Commit_Info, Files, Options) :-
 
 csv_load_into_context(Files, Context, Options) :-
 
-    default_options(Options, Default_Options),
+    get_dict(prefixes, Context, Prefixes),
+    default_options(Options, Prefixes, Default_Options),
 
     with_transaction(
         Context,
@@ -62,7 +63,8 @@ csv_update(System_DB, Auth, Path, Commit_Info, Files, Options) :-
     csv_update_into_context(Files,Context,Options).
 
 csv_update_into_context(Files, Context, Options) :-
-    default_options(Options, Default_Options),
+    get_dict(prefixes, Context, Prefixes),
+    default_options(Options, Prefixes, Default_Options),
 
     open_memory_store(Store),
     open_write(Store, Builder),
@@ -87,8 +89,6 @@ csv_dump(System_DB, Auth, Path, [Name=Filename], Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    default_options(Options, Default_Options),
-
     askable_settings_context(
         Descriptor,
         _{ system : System_DB,
@@ -96,8 +96,11 @@ csv_dump(System_DB, Auth, Path, [Name=Filename], Options) :-
            filter : type_name_filter{ type: (Graph.type),
                                       names : [Graph.name]}},
         Pre_Context),
-    % Set up csv prefix
+
     get_dict(prefixes, Pre_Context, Prefixes),
+    default_options(Options, Prefixes, Default_Options),
+
+    % Set up csv prefix
     option(schema_prefix(Schema_Prefix), Default_Options),
 
     New_Prefixes = (Prefixes.put(_{ csv: Schema_Prefix })),
@@ -116,18 +119,18 @@ csv_dump(System_DB, Auth, Path, [Name=Filename], Options) :-
     % write rows
     forall(
         (   ask(Context,
-                (   t(CSV, rdfs:label, Name^^_),
-                    t(CSV, csv:row, Row)
+                (   t(CSV, rdfs:label, Name@en),
+                    t(CSV, csv:csv_row, Row)
                 )),
 
             findall(RowDatum,
                     (   member(Predicate-_-_, Columns),
-
                         ask(Context,
                             t(Row, Predicate, RowDatumTyped)),
                         RowDatum^^_ = RowDatumTyped
                     ),
                     RowData),
+
             RowValue =.. [row|RowData]),
         csv_write_stream(Stream, [RowValue], [])
     ),
@@ -139,10 +142,10 @@ csv_columns(Name, Context, Sorted_Columns) :-
 
     findall(Predicate-Column_Name-Column_Index,
             (   ask(Context,
-                    (   t(CSV, rdfs:label, Name^^_),
-                        t(CSV, csv:column, ColumnObject),
-                        t(ColumnObject, csv:column_name, Column_Name^^_),
-                        t(ColumnObject, csv:index, Column_Index^^_)
+                    (   t(CSV, rdfs:label, Name@en),
+                        t(CSV, csv:csv_column, ColumnObject),
+                        t(ColumnObject, csv:csv_column_name, Column_Name^^_),
+                        t(ColumnObject, csv:csv_column_index, Column_Index^^_)
                     )),
                 uri_encoded(query_value, Column_Name, Column_Encoded),
                 atomic_list_concat([column_, Column_Encoded], Col),
@@ -153,15 +156,15 @@ csv_columns(Name, Context, Sorted_Columns) :-
     predsort([Cmp,_-_-O,_-_-I]>>compare(Cmp,O,I), Columns, Sorted_Columns).
 
 
-default_options(Options, Default_Options) :-
+default_options(Options, Prefixes, Default_Options) :-
     (   option(data_prefix(_), Options)
     ->  Options_1 = Options
-    ;   Data_Prefix = 'csv:///data/',
+    ;   Data_Prefix = (Prefixes.doc),
         merge_options(Options, [data_prefix(Data_Prefix)], Options_1)),
 
     (   option(schema_prefix(_), Options_1)
     ->  Default_Options = Options_1
-    ;   Schema_Prefix = 'csv:///schema#',
+    ;   Schema_Prefix = (Prefixes.scm),
         merge_options(Options_1, [schema_prefix(Schema_Prefix)], Default_Options)).
 
 
@@ -198,23 +201,24 @@ test(csv_load,
 
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
     Triples = [
-        'csv:///data/ColumnObject_csv_header'-'csv:///schema#column_name'-("header"^^xsd:string),
-        'csv:///data/ColumnObject_csv_header'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv_header'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv_some'-'csv:///schema#column_name'-("some"^^xsd:string),
-        'csv:///data/ColumnObject_csv_some'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv_some'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_header','csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_some',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/csv'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv'-(rdfs:label)-("csv"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_header'-("2"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_some'-("1"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7',
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_header'-("4"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_some'-("3"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7'
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_header)-("2"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_some)-("1"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
+        (doc:'ColumnObject_csv_header')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv_header')-(scm:csv_column_name)-("header"^^xsd:string),
+        (doc:'ColumnObject_csv_header')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_name)-("some"^^xsd:string),
+        (doc:'ColumnObject_csv_some')-(rdf:type)-(scm:'Column')
     ].
 
 test(csv_update,
@@ -250,24 +254,24 @@ test(csv_update,
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
     Triples = [
-        'csv:///data/ColumnObject_csv_header'-'csv:///schema#column_name'-("header"^^xsd:string),
-        'csv:///data/ColumnObject_csv_header'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv_header'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv_some'-'csv:///schema#column_name'-("some"^^xsd:string),
-        'csv:///data/ColumnObject_csv_some'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv_some'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_header',
-        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_some',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f',
-        'csv:///data/csv'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv'-(rdfs:label)-("csv"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_header'-("4"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_some'-("3"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7',
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-'csv:///schema#column_header'-("9"^^xsd:string),
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-'csv:///schema#column_some'-("1"^^xsd:string),
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7'
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'),
+        (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
+        (doc:'ColumnObject_csv_header')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv_header')-(scm:csv_column_name)-("header"^^xsd:string),
+        (doc:'ColumnObject_csv_header')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_name)-("some"^^xsd:string),
+        (doc:'ColumnObject_csv_some')-(rdf:type)-(scm:'Column'),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_header)-("9"^^xsd:string),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_some)-("1"^^xsd:string),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7')
     ].
 
 test(csv_dump,
@@ -333,43 +337,44 @@ test(csv_load_multiple,
     resolve_absolute_string_descriptor(Path, Desc),
 
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+
     Triples = [
-        'csv:///data/ColumnObject_csv1_header'-'csv:///schema#column_name'-("header"^^xsd:string),
-        'csv:///data/ColumnObject_csv1_header'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv1_header'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv1_some'-'csv:///schema#column_name'-("some"^^xsd:string),
-        'csv:///data/ColumnObject_csv1_some'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv1_some'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv2_another'-'csv:///schema#column_name'-("another"^^xsd:string),
-        'csv:///data/ColumnObject_csv2_another'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv2_another'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv2_one'-'csv:///schema#column_name'-("one"^^xsd:string),
-        'csv:///data/ColumnObject_csv2_one'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv2_one'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/csv1'-'csv:///schema#column'-'csv:///data/ColumnObject_csv1_header',
-        'csv:///data/csv1'-'csv:///schema#column'-'csv:///data/ColumnObject_csv1_some',
-        'csv:///data/csv1'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
-        'csv:///data/csv1'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/csv1'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv1'-(rdfs:label)-("csv1"^^xsd:string),
-        'csv:///data/csv2'-'csv:///schema#column'-'csv:///data/ColumnObject_csv2_another',
-        'csv:///data/csv2'-'csv:///schema#column'-'csv:///data/ColumnObject_csv2_one',
-        'csv:///data/csv2'-'csv:///schema#row'-'csv:///data/row61a9be6a4ed0500fd8cbad8a734b2b6613cee256',
-        'csv:///data/csv2'-'csv:///schema#row'-'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe',
-        'csv:///data/csv2'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv2'-(rdfs:label)-("csv2"^^xsd:string),
-        'csv:///data/row61a9be6a4ed0500fd8cbad8a734b2b6613cee256'-'csv:///schema#column_another'-("888.8"^^xsd:string),
-        'csv:///data/row61a9be6a4ed0500fd8cbad8a734b2b6613cee256'-'csv:///schema#column_one'-("Goofball"^^xsd:string),
-        'csv:///data/row61a9be6a4ed0500fd8cbad8a734b2b6613cee256'-(rdf:type)-'csv:///schema#Row_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031',
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_header'-("2"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_some'-("1"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7',
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_header'-("4"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_some'-("3"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7',
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-'csv:///schema#column_another'-("99.9"^^xsd:string),
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-'csv:///schema#column_one'-("Fuzzbucket"^^xsd:string),
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-(rdf:type)-'csv:///schema#Row_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'
+        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(scm:column_another)-("888.8"^^xsd:string),
+        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(scm:column_one)-("Goofball"^^xsd:string),
+        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_header)-("2"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_some)-("1"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_another)-("99.9"^^xsd:string),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+        (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
+        (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv1')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv1')-(rdfs:label)-("csv1"@en),
+        (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_another'),
+        (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_one'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe'),
+        (doc:'CSV_csv2')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv2')-(rdfs:label)-("csv2"@en),
+        (doc:'ColumnObject_csv1_header')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv1_header')-(scm:csv_column_name)-("header"^^xsd:string),
+        (doc:'ColumnObject_csv1_header')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv1_some')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv1_some')-(scm:csv_column_name)-("some"^^xsd:string),
+        (doc:'ColumnObject_csv1_some')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv2_another')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv2_another')-(scm:csv_column_name)-("another"^^xsd:string),
+        (doc:'ColumnObject_csv2_another')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv2_one')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv2_one')-(scm:csv_column_name)-("one"^^xsd:string),
+        (doc:'ColumnObject_csv2_one')-(rdf:type)-(scm:'Column')
     ].
 
 test(csv_update_multiple,
@@ -418,44 +423,43 @@ test(csv_update_multiple,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-
     Triples = [
-        'csv:///data/ColumnObject_csv1_header'-'csv:///schema#column_name'-("header"^^xsd:string),
-        'csv:///data/ColumnObject_csv1_header'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv1_header'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv1_some'-'csv:///schema#column_name'-("some"^^xsd:string),
-        'csv:///data/ColumnObject_csv1_some'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv1_some'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv2_another'-'csv:///schema#column_name'-("another"^^xsd:string),
-        'csv:///data/ColumnObject_csv2_another'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv2_another'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv2_one'-'csv:///schema#column_name'-("one"^^xsd:string),
-        'csv:///data/ColumnObject_csv2_one'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv2_one'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/csv1'-'csv:///schema#column'-'csv:///data/ColumnObject_csv1_header',
-        'csv:///data/csv1'-'csv:///schema#column'-'csv:///data/ColumnObject_csv1_some',
-        'csv:///data/csv1'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/csv1'-'csv:///schema#row'-'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f',
-        'csv:///data/csv1'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv1'-(rdfs:label)-("csv1"^^xsd:string),
-        'csv:///data/csv2'-'csv:///schema#column'-'csv:///data/ColumnObject_csv2_another',
-        'csv:///data/csv2'-'csv:///schema#column'-'csv:///data/ColumnObject_csv2_one',
-        'csv:///data/csv2'-'csv:///schema#row'-'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe',
-        'csv:///data/csv2'-'csv:///schema#row'-'csv:///data/row127d3117b32a00b1042b6c64186080ae36f4a14c',
-        'csv:///data/csv2'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv2'-(rdfs:label)-("csv2"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_header'-("4"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_some'-("3"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7',
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-'csv:///schema#column_another'-("99.9"^^xsd:string),
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-'csv:///schema#column_one'-("Fuzzbucket"^^xsd:string),
-        'csv:///data/rowff4486a1156a60f60967e314f083cb2b26c37bfe'-(rdf:type)-'csv:///schema#Row_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031',
-        'csv:///data/row127d3117b32a00b1042b6c64186080ae36f4a14c'-'csv:///schema#column_another'-("666"^^xsd:string),
-        'csv:///data/row127d3117b32a00b1042b6c64186080ae36f4a14c'-'csv:///schema#column_one'-("Goofball"^^xsd:string),
-        'csv:///data/row127d3117b32a00b1042b6c64186080ae36f4a14c'-(rdf:type)-'csv:///schema#Row_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031',
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-'csv:///schema#column_header'-("9"^^xsd:string),
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-'csv:///schema#column_some'-("1"^^xsd:string),
-        'csv:///data/rowb3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'-(rdf:type)-'csv:///schema#Row_c40ce0246f480cd2baca44a7477fee98662917b7'
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_another)-("99.9"^^xsd:string),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+        (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
+        (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'),
+        (doc:'CSV_csv1')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv1')-(rdfs:label)-("csv1"@en),
+        (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_another'),
+        (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_one'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c'),
+        (doc:'CSV_csv2')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv2')-(rdfs:label)-("csv2"@en),
+        (doc:'ColumnObject_csv1_header')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv1_header')-(scm:csv_column_name)-("header"^^xsd:string),
+        (doc:'ColumnObject_csv1_header')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv1_some')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv1_some')-(scm:csv_column_name)-("some"^^xsd:string),
+        (doc:'ColumnObject_csv1_some')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv2_another')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv2_another')-(scm:csv_column_name)-("another"^^xsd:string),
+        (doc:'ColumnObject_csv2_another')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv2_one')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv2_one')-(scm:csv_column_name)-("one"^^xsd:string),
+        (doc:'ColumnObject_csv2_one')-(rdf:type)-(scm:'Column'),
+        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(scm:column_another)-("666"^^xsd:string),
+        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(scm:column_one)-("Goofball"^^xsd:string),
+        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_header)-("9"^^xsd:string),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_some)-("1"^^xsd:string),
+        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7')
     ].
 
 :- end_tests(csv_api).
