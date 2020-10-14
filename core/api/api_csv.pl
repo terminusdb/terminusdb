@@ -35,9 +35,16 @@ csv_load_into_context(Files, Context, Options) :-
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, Builder),
+            (   query_default_schema_write_graph(Context, Schema_Read_Write_Obj)
+            ->  read_write_obj_builder(Schema_Read_Write_Obj, Schema_Builder)
+            ;   Schema_Builder = false
+            ),
             forall(
                 member(Name=Path, Files),
-                csv_builder(Name, Path, Builder, Default_Options)
+                (   Schema_Builder = false
+                ->  csv_builder(Name, Path, Builder, Default_Options)
+                ;   csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
+                )
             )
         ),
         _).
@@ -69,17 +76,35 @@ csv_update_into_context(Files, Context, Options) :-
     open_memory_store(Store),
     open_write(Store, Builder),
 
+    (   query_default_schema_write_graph(Context, Schema_Read_Write_Obj)
+    ->  read_write_obj_builder(Schema_Read_Write_Obj, Schema_Builder),
+        open_write(Store, Schema_Builder)
+    ;   Schema_Builder = false
+    ),
+
     forall(
         member(Name=Path, Files),
-        csv_builder(Name, Path, Builder, Default_Options)
+        (   Schema_Builder = false
+        ->  csv_builder(Name, Path, Builder, Default_Options)
+        ;   csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
+        )
     ),
     nb_commit(Builder, Layer),
+
+    (   Schema_Builder = false
+    ->  true
+    ;   nb_commit(Schema_Builder, Schema_Layer)
+    ),
 
     with_transaction(
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
-            nb_apply_diff(CSV_Builder,Layer)
+            nb_apply_diff(CSV_Builder,Layer),
+            (   Schema_Builder = false
+            ->  true
+            ;   nb_apply_diff(Schema_Builder,Schema_Layer)
+            )
         ),
         _).
 
@@ -174,7 +199,6 @@ default_options(Options, Prefixes, Default_Options) :-
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
-
 
 test(csv_load,
      [setup((setup_temp_store(State),
@@ -461,5 +485,31 @@ test(csv_update_multiple,
         (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_some)-("1"^^xsd:string),
         (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7')
     ].
+
+test(csv_load_with_schema,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
+    format(Stream, "some,header~n", []),
+    format(Stream, "1,2~n", []),
+    format(Stream, "3,4~n", []),
+    close(Stream),
+
+    Path = 'admin/testdb',
+    Files = ['csv'=Filename],
+    Commit_Info = _{ author : "me", message : "a message"},
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+
+    csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+
+    once(ask(Desc,
+             t((scm:'CSV'),(rdfs:comment),("CSV object"@en), schema))).
 
 :- end_tests(csv_api).

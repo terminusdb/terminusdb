@@ -12,7 +12,8 @@
               context_default_prefixes/2,
               empty_context/1,
               query_default_collection/2,
-              query_default_write_graph/2
+              query_default_write_graph/2,
+              query_default_schema_write_graph/2
           ]).
 
 /** <module> Ask
@@ -257,3 +258,34 @@ query_default_write_graph(Query_Context, Write_Graph) :-
                                                                Transaction_Objects,
                                                                Write_Graph),
         error(unknown_graph(Graph_Descriptor))).
+
+/*
+ * query_default_schema_write_graph(Query_Context, Write_Graph) is semidet.
+ *
+ * fails if no default schema write graph is found
+ */
+query_default_schema_write_graph(Query_Context, Write_Graph) :-
+    Default_Collection = (Query_Context.default_collection),
+    do_or_die(
+        branch_descriptor{
+            branch_name : Branch_Name,
+            repository_descriptor : Repository_Descriptor
+        } :< Default_Collection,
+        error(not_a_branch_descriptor(Default_Collection))),
+    Repository_Descriptor = (Default_Collection.repository_descriptor),
+    Repository_Name = (Repository_Descriptor.repository_name),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    Database_Name = (Database_Descriptor.database_name),
+    Organization_Name = (Database_Descriptor.organization_name),
+    Graph_Descriptor = branch_graph{
+                           organization_name : Organization_Name,
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           branch_name : Branch_Name,
+                           type : schema,
+                           name : "main"
+                       },
+    Transaction_Objects = (Query_Context.transaction_objects),
+    graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
+                                                           Transaction_Objects,
+                                                           Write_Graph).

@@ -14,6 +14,7 @@
               empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2,
+              query_default_schema_write_graph/2,
 
               % frame.pl
               class_frame/3,
