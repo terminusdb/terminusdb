@@ -1,4 +1,4 @@
-:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/5]).
+:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -108,7 +108,7 @@ csv_update_into_context(Files, Context, Options) :-
         ),
         _).
 
-csv_dump(System_DB, Auth, Path, [Name=Filename], Options) :-
+csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
     do_or_die(
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
@@ -318,9 +318,8 @@ test(csv_dump,
     super_user_authority(Auth),
     csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
 
-    csv_dump(System_DB, Auth, Path, CSV_Files, []),
+    csv_dump(System_DB, Auth, Path, csv, CSV_Filename, []),
 
-    member(csv=CSV_Filename, CSV_Files),
     open(CSV_Filename, read, Read_Stream),
     read_string(Read_Stream, _, String),
 

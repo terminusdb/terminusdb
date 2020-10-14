@@ -572,10 +572,11 @@ csv_handler(post,Path,Request, System_DB, Auth) :-
         do_or_die(csv_error_handler(Error, Request),
                   Error)).
 csv_handler(get,Path,Request, System_DB, Auth) :-
-
+    do_or_die(
+        get_param(name, Request, Name),
+        error(no_csv_name_supplied)),
     catch_with_backtrace(
-        (   csv_dump(System_DB, Auth, Path, Files, _{}),
-            member(csv=CSV_Path, Files),
+        (   csv_dump(System_DB, Auth, Path, Name, CSV_Path, _{}),
             throw(http_reply(file('application/binary', CSV_Path)))),
         Error,
         do_or_die(csv_error_handler(Error, Request),
@@ -606,6 +607,14 @@ csv_error_handler(error(schema_check_failure([Witness|_]), _), Request) :-
                       'api:status' : 'api:failure',
                       'api:error' : _{'@type' : 'api:SchemaValidationError',
                                       'api:witness' : Witness},
+                      'api:message' : Msg},
+                    [status(400)]).
+csv_error_handler(error(no_csv_name_supplied, _), Request) :-
+    format(string(Msg), "You did not provide a 'name' get parameter with the name of the CSV", []),
+    cors_reply_json(Request,
+                    _{'@type' : 'api:CsvErrorResponse',
+                      'api:status' : 'api:failure',
+                      'api:error' : _{'@type' : 'api:NoCsvName'},
                       'api:message' : Msg},
                     [status(400)]).
 
@@ -650,24 +659,24 @@ test(csv_load, [
             Triples),
 
     Triples = [
-        'csv:///data/ColumnObject_csv_bar'-'csv:///schema#column_name'-("bar"^^xsd:string),
-        'csv:///data/ColumnObject_csv_bar'-'csv:///schema#index'-(1^^xsd:integer),
-        'csv:///data/ColumnObject_csv_bar'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/ColumnObject_csv_foo'-'csv:///schema#column_name'-("foo"^^xsd:string),
-        'csv:///data/ColumnObject_csv_foo'-'csv:///schema#index'-(0^^xsd:integer),
-        'csv:///data/ColumnObject_csv_foo'-(rdf:type)-'csv:///schema#Column',
-        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_bar',
-        'csv:///data/csv'-'csv:///schema#column'-'csv:///data/ColumnObject_csv_foo',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554',
-        'csv:///data/csv'-'csv:///schema#row'-'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59',
-        'csv:///data/csv'-(rdf:type)-'csv:///schema#Csv',
-        'csv:///data/csv'-(rdfs:label)-("csv"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_bar'-("2"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-'csv:///schema#column_foo'-("1"^^xsd:string),
-        'csv:///data/row7b52009b64fd0a2a49e6d8a939753077792b0554'-(rdf:type)-'csv:///schema#Row_60518c1c11dc0452be71a7118a43ab68e3451b82',
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_bar'-("4"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-'csv:///schema#column_foo'-("3"^^xsd:string),
-        'csv:///data/rowf1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'-(rdf:type)-'csv:///schema#Row_60518c1c11dc0452be71a7118a43ab68e3451b82'
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_bar)-("2"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_foo)-("1"^^xsd:string),
+        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_60518c1c11dc0452be71a7118a43ab68e3451b82'),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_bar)-("4"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_foo)-("3"^^xsd:string),
+        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_60518c1c11dc0452be71a7118a43ab68e3451b82'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_bar'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_foo'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
+        (doc:'ColumnObject_csv_bar')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv_bar')-(scm:csv_column_name)-("bar"^^xsd:string),
+        (doc:'ColumnObject_csv_bar')-(rdf:type)-(scm:'Column'),
+        (doc:'ColumnObject_csv_foo')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv_foo')-(scm:csv_column_name)-("foo"^^xsd:string),
+        (doc:'ColumnObject_csv_foo')-(rdf:type)-(scm:'Column')
     ].
 
 
@@ -696,7 +705,8 @@ test(csv_round_trip, [
               authorization(basic(admin, Key)),
               reply_header(_Fields)]),
 
-    http_get(URI,
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB?name=csv'], Get_URI),
+    http_get(Get_URI,
              CSV,
              [cert_verify_hook(cert_accept_any),
               authorization(basic(admin, Key))
@@ -723,7 +733,7 @@ test(csv_update, [
                                              message : "message"}}, []),
 
     http_put(URI, form_data([ payload = JSON,
-                               csv     = file(CSV_File)
+                              csv     = file(CSV_File)
                             ]),
              _Result1,
              [cert_verify_hook(cert_accept_any),
@@ -738,7 +748,9 @@ test(csv_update, [
              [cert_verify_hook(cert_accept_any),
               authorization(basic(admin, Key))]),
 
-    http_get(URI,
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB?name=csv'], Get_URI),
+
+    http_get(Get_URI,
              CSV,
              [cert_verify_hook(cert_accept_any),
               authorization(basic(admin, Key))

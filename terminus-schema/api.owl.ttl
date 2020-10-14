@@ -292,6 +292,18 @@ api:TriplesUnknownFormat
 api:WithAbsoluteGraphDescriptor
   a owl:Class .
 
+api:CsvErrorResponse
+  a owl:Class ;
+  rdfs:label "Csv Error Response"@en ;
+  rdfs:comment "Error response document for csv API endpoint."@en ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NoCsvName
+  a owl:Class ;
+  rdfs:label "No CSV name"@en ;
+  rdfs:comment "The CSV GET endpoint was called without specifying the 'name' paramter in the query string."@en ;
+  rdfs:subClassOf api:Error .
+
 api:absolute_graph_descriptor
   a owl:DatatypeProperty ;
   rdfs:label "absolute graph descriptor"@en ;
