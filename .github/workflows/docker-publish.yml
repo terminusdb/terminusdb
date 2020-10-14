@@ -35,7 +35,7 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
 
       - name: Run tests
-        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
 
       - name: Log into Docker Container Registry
         if: github.event_name != 'pull_request'
@@ -127,7 +127,7 @@ jobs:
     - name: Run tests
       run: |
         swipl\bin\swipl utils\db_init -s localhost -k root
-        swipl\bin\swipl -g run_tests -g halt start.pl
+        swipl\bin\swipl -g run_tests -g halt start.pl -O
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
