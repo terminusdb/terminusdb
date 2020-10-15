@@ -29,7 +29,7 @@ featured graph database.
 
 ## Latest Version
 
-v3.0.7
+v4.0.0
 
 ## Getting Started
 
