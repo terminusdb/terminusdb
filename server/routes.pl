@@ -550,7 +550,6 @@ csv_handler(put,Path,Request, System_DB, Auth) :-
     collect_posted_named_files(Request,Files),
     do_or_die(_{ commit_info : Commit_Info } :< Document,
               error(bad_api_document(Document,[commit_info]),_)),
-
     catch_with_backtrace(
         (   csv_load(System_DB, Auth, Path, Commit_Info, Files, Document),
             cors_reply_json(Request, _{'@type' : 'api:CSVInsertResponse',

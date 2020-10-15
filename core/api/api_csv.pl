@@ -71,16 +71,19 @@ csv_update(System_DB, Auth, Path, Commit_Info, Files, Options) :-
 
 csv_update_into_context(Files, Context, Options) :-
     get_dict(prefixes, Context, Prefixes),
+
     default_options(Options, Prefixes, Default_Options),
 
     open_memory_store(Store),
     open_write(Store, Builder),
 
     (   query_default_schema_write_graph(Context, Schema_Read_Write_Obj)
-    ->  read_write_obj_builder(Schema_Read_Write_Obj, Schema_Builder),
+    ->  read_write_obj_builder(Schema_Read_Write_Obj, CSV_Schema_Builder),
         open_write(Store, Schema_Builder)
     ;   Schema_Builder = false
     ),
+
+
 
     forall(
         member(Name=Path, Files),
@@ -103,7 +106,7 @@ csv_update_into_context(Files, Context, Options) :-
             nb_apply_diff(CSV_Builder,Layer),
             (   Schema_Builder = false
             ->  true
-            ;   nb_apply_diff(Schema_Builder,Schema_Layer)
+            ;   nb_apply_diff(CSV_Schema_Builder,Schema_Layer)
             )
         ),
         _).
