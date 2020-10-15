@@ -1,9 +1,11 @@
-# TerminusDB Server v3.0.8 Release Notes
+# TerminusDB Server v4.0.0 Release Notes
 
 ## New
 
 + Added "typeof" to WOQL allowing extraction or filtering of types from arbitrary nodes or datapoints
 + Added some CURL connection examples
++ Automatic CSV schema generation
++ Allow embedded usings with appriopriate expansion of prefixes according to which database is referred to in the using
 
 ## Bug fixes
 
