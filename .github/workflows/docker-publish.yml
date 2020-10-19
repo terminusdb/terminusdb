@@ -217,10 +217,14 @@ jobs:
 
     - run: npm install
 
-    - run: |
+    - name: Compile DMG
+      run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
         bash build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
         mv dist/*.dmg dist/terminusdb-desktop.dmg
+
+    - name: Run tests
+      run: |
         export TERMINUSDB_SERVER_PACK_DIR=./public/pack
         public/SWI-Prolog.app/Contents/MacOS/swipl public/terminusdb-server/utils/db_init -s localhost -k root
         public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl -O
