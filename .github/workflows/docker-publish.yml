@@ -202,6 +202,35 @@ jobs:
         name: terminusdb-desktop.AppImage
         path: distribution/desktop/dist/terminusdb-desktop.AppImage
 
+  mac_os_desktop:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: distribution/desktop
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js 12
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12
+
+    - run: npm install
+
+    - run: |
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        bash build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        mv dist/*.dmg dist/terminusdb-desktop.dmg
+        export TERMINUSDB_SERVER_PACK_DIR=./public/pack
+        public/SWI-Prolog.app/Contents/MacOS/swipl public/terminusdb-server/utils/db_init -s localhost -k root
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl -O
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-desktop.dmg
+        path: distribution/desktop/dist/terminusdb-desktop.dmg
+
   deploy:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
