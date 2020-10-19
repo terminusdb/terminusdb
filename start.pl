@@ -51,6 +51,7 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(server(routes)).
 :- use_module(server(main)).
+:- use_module(cli(main)).
 
 % Plugins
 %:- use_module(plugins(registry)).
@@ -73,11 +74,11 @@ main(Argv) :-
     initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    terminus_server(Argv),
     run(Argv).
 
 run([test]) :-
-  run_tests.
+    run_tests.
 run([serve]) :-
-  thread_get_message(stop).
-run(_).
+    terminus_server([server]).
+run(Args) :-
+    process_cli(Args).

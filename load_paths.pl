@@ -23,6 +23,13 @@ add_server_path :-
 
 :- add_server_path.
 
+add_cli_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/cli',Core),
+    asserta(user:file_search_path(cli, Core)).
+
+:- add_cli_path.
+
 add_jwt_path :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/prolog_jwt/prolog',Library),
