@@ -14,4 +14,4 @@ bash public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh
 cp -r /Applications/SWI-Prolog.app public/
 mkdir -p public/pack/terminus_store_prolog/lib/x86_64-darwin
 curl -L "https://github.com/terminusdb/terminus_store_prolog/releases/download/$1/libterminus_store.dylib" > public/pack/terminus_store_prolog/lib/x86_64-darwin/libterminus_store.dylib
-npx electron-builder build
+npm run build-mac-os
