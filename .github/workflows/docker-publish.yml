@@ -237,7 +237,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
+    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop, mac_os_desktop]
     if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
 
     steps:
@@ -275,3 +275,4 @@ jobs:
           terminusdb-desktop.AppImage/terminusdb-desktop.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
+          terminusdb-desktop.dmg/terminusdb-desktop.dmg
