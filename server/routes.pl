@@ -4319,11 +4319,15 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
         error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
-        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit),
-            cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
+        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit)
+        ->  cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
                                        'api:commit' : Commit,
                                        'api:old_commit' : Old_Commit,
-                                       'api:status' : "api:success"})),
+                                       'api:status' : "api:success"})
+        ;   cors_reply_json(Request, _{'@type' : 'api:EmptySquashResponse',
+                                       'api:empty_commit' : true,
+                                       'api:status' : "api:success"})
+        ),
         Error,
         do_or_die(squash_error_handler(Error, Request),
                   Error)).
