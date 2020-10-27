@@ -10,6 +10,10 @@
  *
  **/
 
+process_cli([build]) :-
+    initialise_woql_contexts,
+    qsave_program('terminusdb',[foreign(save)]),
+    halt.
 process_cli(_) :-
     format("~nUsage: terminusdb [OPTION]~n",[]),
     format("~n~n",[]),

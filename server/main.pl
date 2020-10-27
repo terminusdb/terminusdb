@@ -48,8 +48,9 @@ terminus_server(_Argv) :-
     ;   HTTPOptions = [port(Port), workers(Workers)]
     ),
     catch(http_server(http_dispatch, HTTPOptions),
-          _E,
+          E,
           (
+              writeq(E),
               format(user_error, "Error: Port ~d is already in use.", [Port]),
               halt(98) % EADDRINUSE
           )),
