@@ -4441,6 +4441,28 @@ test(squash_a_branch, [
     resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
     commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
 
+
+test(squash_empty_branch, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
+
+    Commit_Info = commit_info{
+                      author : "me",
+                      message: "Squash"
+                  },
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_info: Commit_Info}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON.'@type' = "api:EmptySquashResponse".
+
 :- end_tests(squash_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
