@@ -387,11 +387,15 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   between(0,5,_),
         random_between(49152, 65535, Port)),
 
-    expand_file_search_path(terminus_home('start.pl'), Start_Script),
-
     index_path(INDEX_PATH),
 
     current_prolog_flag(executable, Swipl_Path),
+
+    directory_file_path(_, Exe, Swipl_Path),
+    (   Exe = swipl
+    ->  expand_file_search_path(terminus_home('start.pl'), Argument)
+    ;   Argument = serve
+    ),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
 
@@ -423,7 +427,7 @@ spawn_server_1(Path, URL, PID, Options) :-
                      ],
                      Env_List),
 
-    process_create(Swipl_Path, [Start_Script],
+    process_create(Swipl_Path, [Argument],
                    [
                        process(PID),
                        env(Env_List),
