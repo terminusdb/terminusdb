@@ -11,6 +11,8 @@
  **/
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
+:- use_module(core(api)).
+:- use_module(core(triple)).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -36,10 +38,13 @@ run([serve|Args]) :-
     (   member(interactive, Args)
     ->  prolog
     ;   read_loop).
-run([ls|_Databases]) :-
+run([list|Databases]) :-
     !,
-    % show beautiful tree diagram with databases and branches
-    true.
+    % What username / ks to use?
+    % user_key_user_id(System_Database, Username, KS, Auth),
+    super_user_authority(Auth),
+    list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
+    pretty_print_databases(Database_Objects).
 run(Args) :-
     process_cli(Args).
 
@@ -71,7 +76,7 @@ process_cli(_) :-
     format("~nUsage: terminusdb [OPTION]~n",[]),
     format("~n~n",[]),
     format("serve\t\t\trun the terminusdb server~n",[]),
-    format("list\t\t\tlist databases~n",[]),
+    format("list [Databases]\t\tlist databases~n",[]),
     format("query [QUERY]\trun query~n",[]),
     format("test\t\t\trun tests~n",[]),
     halt.

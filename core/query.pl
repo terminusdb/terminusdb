@@ -3,6 +3,7 @@
               ask/2,
               ask/3,
               ask_ast/3,
+              askable_prefixes/2,
               create_context/2,
               create_context/3,
               askable_context/4,

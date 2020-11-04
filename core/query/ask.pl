@@ -2,6 +2,7 @@
               ask/2,
               ask/3,
               ask_ast/3,
+              askable_prefixes/2,
               create_context/2,
               create_context/3,
               askable_context/4,
@@ -91,6 +92,17 @@ pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out
         mapm(pre_term_to_term_and_bindings(Ctx,Options),Args,New_Args,Bindings_In,Bindings_Out),
         Term =.. [F|New_Args]
     ).
+
+askable_prefixes(Context,Prefixes) :-
+    query_context{} :< Context,
+    !,
+    Prefixes = (Context.prefixes).
+askable_prefixes(Transaction_Object,Prefixes) :-
+    transaction_object{ descriptor : Descriptor } :< Transaction_Object,
+    !,
+    collection_descriptor_prefixes(Descriptor, Prefixes).
+askable_prefixes(Descriptor,Prefixes) :-
+    collection_descriptor_prefixes(Descriptor, Prefixes).
 
 create_context(Layer, Context) :-
     blob(Layer, layer),

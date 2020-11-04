@@ -81,7 +81,12 @@
               csv_dump/6,
 
               % api_prefixes
-              get_prefixes/4
+              get_prefixes/4,
+
+              % api_db
+              list_databases/4,
+              pretty_print_databases/1
+
           ]).
 
 :- use_module(api/init).
@@ -106,3 +111,4 @@
 :- use_module(api/api_optimize).
 :- use_module(api/api_csv).
 :- use_module(api/api_prefixes).
+:- use_module(api/api_db).
