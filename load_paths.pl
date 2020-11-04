@@ -4,7 +4,6 @@
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
-
     asserta(user:file_search_path(terminus_home, Dir)).
 
 :- add_terminus_home_path.
@@ -22,6 +21,13 @@ add_server_path :-
     asserta(user:file_search_path(server, Server)).
 
 :- add_server_path.
+
+add_cli_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/cli',Core),
+    asserta(user:file_search_path(cli, Core)).
+
+:- add_cli_path.
 
 add_jwt_path :-
     user:file_search_path(terminus_home, Dir),
