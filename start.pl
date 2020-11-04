@@ -18,8 +18,8 @@
  *
  */
 
-:- [load_paths].
-:- initialization(main).
+%:- [load_paths].
+%:- initialization(start).
 
 initialise_hup :-
     (   current_prolog_flag(unix, true)
@@ -28,14 +28,13 @@ initialise_hup :-
 
 :- initialise_hup.
 
-
 initialise_log_settings :-
     (   getenv('TERMINUSDB_LOG_PATH', Log_Path)
     ->  set_setting(http:logfile, Log_Path)
     ;   get_time(Time),
         asserta(http_log:log_stream(user_error, Time))).
 
-:-multifile prolog:message//1.
+:- multifile prolog:message//1.
 
 prolog:message(server_missing_config(BasePath)) -->
     [
@@ -70,15 +69,25 @@ filter_argv(Argv_In,Argv) :-
     ->  true
     ;   Argv_In=Argv).
 
-main(Argv_In) :-
+start :-
+    current_prolog_flag(argv, Argv),
     initialise_log_settings,
-    filter_argv(Argv_In,Argv),
+    debug(terminus(main), 'initialise_log_settings completed', []),
+    initialise_woql_contexts,
+    debug(terminus(main), 'initialise_woql_contexts completed', []),
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
-    debug(terminus(main), 'initialise_woql_contexts completed', []),
-    debug(terminus(main), 'initialise_log_settings completed', []),
+    run(Argv).
+
+main :-
+    [load_paths],
+    current_prolog_flag(argv, Argv),
+    get_time(Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
+             [StrTime, Now, Argv]),
     run(Argv).
 
 run([test]) :-
@@ -87,9 +96,18 @@ run([test]) :-
     halt.
 run([serve]) :-
     !,
-    trace(terminus_server),
-    trace(http_server),
-    trace(http_handler),
-    terminus_server([server]).
+    terminus_server([server]),
+    % Maybe read stdin here?
+    prolog.
+run([compile]) :-
+    !,
+    qsave_program(terminusdb, [
+                      foreign(save),
+                      undefined(error),
+                      toplevel(main),
+                      autoload(true),
+                      stand_alone(true)
+                  ]),
+    halt.
 run(Args) :-
     process_cli(Args).

@@ -16,6 +16,10 @@
 % configuration predicates
 :- use_module(config(terminus_config),[]).
 
+% Sockets
+:- use_module(library(socket)).
+:- use_module(library(ssl)).
+
 % http server
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).

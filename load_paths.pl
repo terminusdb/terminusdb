@@ -4,7 +4,6 @@
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
-
     asserta(user:file_search_path(terminus_home, Dir)).
 
 :- add_terminus_home_path.
