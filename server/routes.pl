@@ -2749,10 +2749,8 @@ unpack_error_handler(error(invalid_absolute_path(Path),_), Request) :-
                      },
                     [status(404)]).
 
-:- begin_tests(unpack_endpoint).
-
-
-:- end_tests(unpack_endpoint).
+%:- begin_tests(unpack_endpoint).
+%:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
