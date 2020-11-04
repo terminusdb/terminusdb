@@ -51,7 +51,6 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(server(routes)).
 :- use_module(server(main)).
-:- use_module(cli(main)).
 
 % Plugins
 %:- use_module(plugins(registry)).
@@ -65,31 +64,20 @@ prolog:message(server_missing_config(BasePath)) -->
 hup(_Signal) :-
   thread_send_message(main, stop).
 
-filter_argv(Argv_In,Argv) :-
-    (   Argv_In = [--|Argv]
-    ->  true
-    ;   Argv_In=Argv).
-
-main(Argv_In) :-
+main(Argv) :-
     initialise_log_settings,
-    filter_argv(Argv_In,Argv),
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
              [StrTime, Now, Argv]),
+    initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
+    terminus_server(Argv),
     run(Argv).
 
 run([test]) :-
-    !,
-    run_tests,
-    halt.
+  run_tests.
 run([serve]) :-
-    !,
-    trace(terminus_server),
-    trace(http_server),
-    trace(http_handler),
-    terminus_server([server]).
-run(Args) :-
-    process_cli(Args).
+  thread_get_message(stop).
+run(_).
