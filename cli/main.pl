@@ -18,10 +18,6 @@ cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_woql_contexts,
     initialise_log_settings,
-    get_time(Now),
-    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
-    http_log('% TerminusDB server started at ~w (utime ~w) args ~w~n',
-             [StrTime, Now, Argv]),
     run(Argv).
 
 read_loop :-

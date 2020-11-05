@@ -40,7 +40,7 @@ load_jwt_conditionally :-
 
 :- load_jwt_conditionally.
 
-terminus_server(_Argv) :-
+terminus_server(Argv) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
@@ -67,7 +67,7 @@ terminus_server(_Argv) :-
                        prefix
                      ]),
         (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-            welcome_banner(Server)
+            welcome_banner(Server,Argv)
         ),
         http_delete_handler(id(busy_loading))).
 
@@ -86,7 +86,11 @@ loading_page -->
         p('TerminusDB is still synchronizing backing store')
     ]).
 
-welcome_banner(Server) :-
+welcome_banner(Server,Argv) :-
     % Test utils currently reads this so watch out if you change it!
-    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
+    get_time(Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
+           [StrTime, Now, Argv]),
+    format(user_error,'% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
     format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
