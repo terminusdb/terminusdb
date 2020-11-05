@@ -17,6 +17,7 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_woql_contexts,
+    initialise_log_settings,
     get_time(Now),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
     http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
@@ -45,8 +46,8 @@ run([list|Databases]) :-
     super_user_authority(Auth),
     list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
     pretty_print_databases(Database_Objects).
-run(Args) :-
-    process_cli(Args).
+run(_) :-
+    help_screen.
 
 initialise_hup :-
     (   current_prolog_flag(unix, true)
@@ -72,12 +73,11 @@ prolog:message(server_missing_config(BasePath)) -->
     nl
     ].
 
-process_cli(_) :-
+help_screen :-
     format("~nUsage: terminusdb [OPTION]~n",[]),
     format("~n~n",[]),
     format("serve\t\t\trun the terminusdb server~n",[]),
     format("list [Databases]\t\tlist databases~n",[]),
     format("query [QUERY]\trun query~n",[]),
-    format("test\t\t\trun tests~n",[]),
-    halt.
+    format("test\t\t\trun tests~n",[]).
 

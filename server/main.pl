@@ -67,7 +67,7 @@ terminus_server(_Argv) :-
                        prefix
                      ]),
         (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-            print_message(banner, welcome('terminusdb-server', Server))
+            welcome_banner(Server)
         ),
         http_delete_handler(id(busy_loading))).
 
@@ -86,10 +86,9 @@ loading_page -->
         p('TerminusDB is still synchronizing backing store')
     ]).
 
-:- multifile prolog:message//1.
-
-prolog:message(welcome('terminusdb-server', Server)) -->
-         [ '~N% Welcome to TerminusDB\'s terminusdb-server!',
+welcome_banner(Server) :- 
+    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!',[]),
+    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!',[]),
          nl,
          '% You can view your server in a browser at \'~s\''-[Server],
          nl,
