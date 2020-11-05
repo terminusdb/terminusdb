@@ -60,7 +60,7 @@ db_path(Path) :-
     (   re_matchsub('\\./(.*)', PathWithoutSlash, Dict, []),
         get_dict(1,Dict,Sub)
     ->  working_directory(CWD, CWD),
-        atomic_list_concat([CWD, Sub], Path)
+        atomic_list_concat([CWD, Sub, '/'], Path)
     ;   atomic_list_concat([PathWithoutSlash, '/'], Path)
     ).
 
