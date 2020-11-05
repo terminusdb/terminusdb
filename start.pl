@@ -66,18 +66,14 @@ hup(_Signal) :-
 
 main(Argv) :-
     initialise_log_settings,
-    get_time(Now),
-    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
-    http_log('terminusdb-server started at ~w (utime ~w) args ~w~n',
-             [StrTime, Now, Argv]),
     initialise_woql_contexts,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    terminus_server(Argv),
     run(Argv).
 
 run([test]) :-
-  run_tests.
+    run_tests.
 run([serve]) :-
-  thread_get_message(stop).
-run(_).
+    terminus_server([serve],true).
+run(Argv) :-
+    terminus_server(Argv,false).

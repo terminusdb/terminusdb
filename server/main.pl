@@ -1,4 +1,4 @@
-:- module(server, [terminus_server/1]).
+:- module(server, [terminus_server/2]).
 
 /** <module> HTTP server module
  *
@@ -40,7 +40,7 @@ load_jwt_conditionally :-
 
 :- load_jwt_conditionally.
 
-terminus_server(Argv) :-
+terminus_server(Argv,Wait) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
@@ -67,9 +67,15 @@ terminus_server(Argv) :-
                        prefix
                      ]),
         (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-            welcome_banner(Server,Argv)
+            welcome_banner(Server,Argv),
+            (   Wait = true
+            ->  http_current_worker(Port,ThreadID),
+                thread_join(ThreadID, _Status)
+            ;   true
+            )
         ),
         http_delete_handler(id(busy_loading))).
+
 
 
 % See https://github.com/terminusdb/terminusdb-server/issues/91

@@ -20,28 +20,37 @@ cli_toplevel :-
     initialise_log_settings,
     run(Argv).
 
-read_loop :-
-    read(_),
-    read_loop.
-
 run([test]) :-
     !,
     run_tests,
     halt.
 run([serve|Args]) :-
     !,
-    terminus_server([server]),
-    % Maybe read stdin here?
     (   member(interactive, Args)
-    ->  prolog
-    ;   read_loop).
+    ->  terminus_server([serve|Args], false),
+        prolog
+    ;   terminus_server([serve|Args], true)).
+% run([describe|Args]) :- true.
 run([list|Databases]) :-
     !,
-    % What username / ks to use?
-    % user_key_user_id(System_Database, Username, KS, Auth),
     super_user_authority(Auth),
     list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
     pretty_print_databases(Database_Objects).
+run([optimize|_Databases]) :-
+    !,
+    %optimize_stuff_here
+    true.
+% run([push|_Databases])
+% run([pull|_Databases])
+% run([query|_Query])
+%% run([query|Args]) :-
+%%     (   Args = ['--js',Query]
+%%     ->  run_js_code(Query, JSON)
+%%     ;   Args = ['--python',Query]
+%%     ->  run_python_code(Query, JOSN)
+%%     ;   Args = [Query]
+%%     ->  run_prolog(Query)
+%%     ).
 run(_) :-
     help_screen.
 
@@ -74,6 +83,6 @@ help_screen :-
     format("~n~n",[]),
     format("serve\t\t\trun the terminusdb server~n",[]),
     format("list [Databases]\t\tlist databases~n",[]),
-    format("query [QUERY]\trun query~n",[]),
+    format("query [QUERY]\t\trun query~n",[]),
     format("test\t\t\trun tests~n",[]).
 
