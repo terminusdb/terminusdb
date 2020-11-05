@@ -45,8 +45,7 @@ index_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_INDEX_PATH', Path, Value).
 
 default_database_path(Value) :-
-    once(expand_file_search_path(terminus_home(storage/db), Path)),
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', Path, Value).
+    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
 
 jwt_public_key_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).

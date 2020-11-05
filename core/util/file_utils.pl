@@ -57,7 +57,12 @@ terminus_path(Path) :-
  */
 db_path(Path) :-
     config:default_database_path(PathWithoutSlash),
-    atomic_list_concat([PathWithoutSlash, '/'], Path).
+    (   re_matchsub('\\./(.*)', PathWithoutSlash, Dict, []),
+        get_dict(1,Dict,Sub)
+    ->  working_directory(CWD, CWD),
+        atomic_list_concat([CWD, Sub], Path)
+    ;   atomic_list_concat([PathWithoutSlash, '/'], Path)
+    ).
 
 /**
  * terminus_schema_path(Path) is det.
