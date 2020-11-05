@@ -86,11 +86,7 @@ loading_page -->
         p('TerminusDB is still synchronizing backing store')
     ]).
 
-welcome_banner(Server) :- 
-    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!',[]),
-    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!',[]),
-         nl,
-         '% You can view your server in a browser at \'~s\''-[Server],
-         nl,
-         nl
-         ].
+welcome_banner(Server) :-
+    % Test utils currently reads this so watch out if you change it!
+    format(user_error,'~N% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
+    format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
