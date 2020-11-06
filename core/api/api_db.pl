@@ -66,7 +66,7 @@ arm(true," ").
 arm(false,"│").
 
 pretty_print_databases(Databases) :-
-    format("TerminusDB~n", []),
+    format("TerminusDB~n│~n", []),
     forall(
         member_last(Database_Object, Databases, Last_DB),
         (

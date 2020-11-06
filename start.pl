@@ -61,6 +61,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- set_test_options([run(manual)]).
 
+:- use_module(cli(main)).
+
 hup(_Signal) :-
   thread_send_message(main, stop).
 
@@ -70,10 +72,3 @@ main(Argv) :-
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
     run(Argv).
-
-run([test]) :-
-    run_tests.
-run([serve]) :-
-    terminus_server([serve],true).
-run(Argv) :-
-    terminus_server(Argv,false).
