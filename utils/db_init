@@ -15,7 +15,7 @@
 :- use_module(core(triple/literals)).
 :- use_module(core(triple/triplestore)).
 :- use_module(core(triple/constants)).
-:- use_module(core(api/init)).
+:- use_module(core(api/db_init)).
 
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).

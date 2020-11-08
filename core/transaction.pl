@@ -53,6 +53,7 @@
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,
+              delete_branch_object/2,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
               insert_base_commit_object/5,

@@ -21,6 +21,7 @@
 
               % db_branch.pl
               branch_create/5,
+              branch_delete/3,
 
               % db_rebase.pl
               rebase_on_branch/9,
@@ -89,7 +90,7 @@
 
           ]).
 
-:- use_module(api/init).
+:- use_module(api/api_init).
 :- use_module(api/db_create).
 :- use_module(api/db_delete).
 :- use_module(api/db_graph).

@@ -1,4 +1,4 @@
-:- module(db_branch, [branch_create/5]).
+:- module(db_branch, [branch_create/5, branch_delete/3]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -143,6 +143,41 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
     do_or_die(
         branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_Uri),
         error(origin_cannot_be_branched(Origin_Descriptor),_)).
+
+branch_delete_(Branch_Descriptor) :-
+    Branch_Name = (Branch_Descriptor.branch_name),
+    Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
+    create_context(Repository_Descriptor,Repository_Context),
+    with_transaction(
+        Repository_Context,
+        (   branch_name_uri(Repository_Context, Branch_Name, Branch_Uri),
+            delete_branch_object(Repository_Context,
+                                 Branch_Uri)
+        ),
+        _).
+
+
+/* delete a branch in the given repository.  */
+branch_delete(System_DB, Auth, Path) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_target_absolute_descriptor(Path),_)),
+
+    do_or_die(
+        branch_descriptor{
+            branch_name : Branch_Name,
+            repository_descriptor: Repository_Descriptor
+        }:< Descriptor,
+        error(not_a_branch_descriptor(Descriptor), _)),
+
+    check_descriptor_auth(System_DB, Descriptor, system:branch, Auth),
+
+    do_or_die(
+        has_branch(Repository_Descriptor, Branch_Name),
+        error(branch_does_not_exist(Branch_Name),_)),
+
+    branch_delete_(Descriptor).
 
 :- begin_tests(branch_api).
 :- use_module(core(util/test_utils)).

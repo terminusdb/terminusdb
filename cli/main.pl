@@ -20,14 +20,35 @@ cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_woql_contexts,
     initialise_log_settings,
-    run(Argv).
+    % Better error handling here...
+    catch(
+        run(Argv),
+        Exception,
+        format(current_output, "~NError: ~q~n~n", [Exception])).
 
+key_value_args(Key,Value,[Key,Value|_Args]) :-
+    !.
+key_value_args(Key,Value,[_,_|Args]) :-
+    key_value_args(Key,Value,Args).
 
+% Key-value arguments
 key_value_args_default(_,Default,[],Default).
 key_value_args_default(Key,Value,[Key,Value|_Args],_Default) :-
     !.
 key_value_args_default(Key,Value,[_,_|Args],Default) :-
     key_value_args_default(Key,Value,Args,Default).
+
+% For boolean switches
+switch_args_default(_,[],true).
+switch_args_default(Key,[Key|_Args],_) :-
+    !.
+switch_args_default(Key,[_|Args],Default) :-
+    switch_args_default(Key,Args,Default).
+
+switch_args_default_boolean(Key,Args,Default,Bool) :-
+    (   switch_args_default(Key,Args,Default)
+    ->  Bool = true
+    ;   Bool = false).
 
 run([test]) :-
     !,
@@ -35,7 +56,7 @@ run([test]) :-
     halt.
 run([serve|Args]) :-
     !,
-    (   member(interactive, Args)
+    (   member('--interactive', Args)
     ->  terminus_server([serve|Args], false),
         prolog
     ;   terminus_server([serve|Args], true)).
@@ -60,19 +81,25 @@ run([branch,create,Path|Args]) :-
     ->  Origin_Option = none
     ;   Origin_Option = some(Origin_Base)),
     branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri).
+run([branch,delete,Path]) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    branch_delete(System_DB, Auth, Path).
 run([db,create,DB_Path|Args]) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+
     (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
     ->  Organization = (Match.1),
         DB = (Match.2)
     ;   DB = DB_Path,
         key_value_args_default('--organization', Organization, Args, admin)
     ),
+
     key_value_args_default('--label', Label, Args, ''),
     key_value_args_default('--comment', Comment, Args, 'command line update'),
-    key_value_args_default('--public', Public, Args, false),
-    key_value_args_default('--schema', Schema, Args, true),
+    switch_args_default_boolean('--public', Args, false, Public),
+    switch_args_default_boolean('--schema', Args, true, Schema),
     key_value_args_default('--prefixes', Prefixes_Atom, Args, '{}'),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes).
@@ -87,7 +114,25 @@ run([db,delete,DB_Path]) :-
     ),
     key_value_args_default('--force', Force_Delete, Args, false),
     delete_db(System_DB, Auth, Organization, DB, Force_Delete).
+run([store,init|Args]) :-
+    !,
+    (   key_value_args('--key',Key,Args)
+    ->  true
+    ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
+        fail),
+    key_value_args_default('--server',Server, Args, '127.0.0.1'),
+    key_value_args_default('--port',Port, Args, 6363),
+    key_value_args_default('--protocol',Protocol, Args, 'https'),
+    key_value_args_default('--autologin', Autologin, Args, false),
+    format(atom(SERVER_URL), '~s://~s:~d', [Protocol, Server, Port]),
 
+    initialize_registry,
+    initialize_index(Key, [autologin(Autologin)]),
+    (   switch_args_default('--onlyconfig', Args, false)
+    ->  true
+    ;   initialize_database(SERVER_URL, Key),
+        format('Successfully initialised database!!!~n')
+    ).
 % run([push|_Databases])
 % run([pull|_Databases])
 % run([query|_Query])
@@ -130,8 +175,25 @@ help_screen :-
     format("~nUsage: terminusdb [OPTION]~n",[]),
     format("~n~n",[]),
     format("serve~` t~40|run the terminusdb server~n",[]),
+    format("~` t~10|--interactive~` t~40|run server with interactive REPL~n",[]),
     format("list [Databases]~` t~40|list databases~n",[]),
     format("optimize [Databases]~` t~40|optimize the given databases~n",[]),
-    format("query [Query]~` t~40|run query~n",[]),
+    %format("query [Query]~` t~40|run query~n",[]),
+    format("db delete [Database]~` t~40|delete a database~n",[]),
+    format("db create [Database]~` t~40|create a database~n",[]),
+    format("~` t~10|--label [Label]~` t~40|database label~n",[]),
+    format("~` t~10|--comment [Comment]~` t~40|database comment~n",[]),
+    format("~` t~10|--public~` t~40|whether the database is public (default: false)~n",[]),
+    format("~` t~10|--schema~` t~40|whether to include a schema (default: true)~n",[]),
+    format("~` t~10|--prefixes [Prefixes]~` t~40|a JSON of prefixes~n",[]),
+    format("branch create [Branch]~` t~40|create a branch~n",[]),
+    format("~` t~10|--origin [Ref]~` t~40|ref origin of the new branch~n",[]),
+    format("branch delete [Branch]~` t~40|delete a branch~n",[]),
+    format("store init~` t~40|initialize a database~n",[]),
+    format('~` t~10|--key [key]~` t~40|admin login key~n',[]),
+    format('~` t~10|--server [server]~` t~40|server address~n',[]),
+    format('~` t~10|--port [port]~` t~40|server port~n',[]),
+    format('~` t~10|--protocol [protocol]~` t~40|http or https~n',[]),
+    format('~` t~10|--autologin~` t~40|whether to login immediately~n',[]),
     format("test~` t~40|run tests~n",[]).
 

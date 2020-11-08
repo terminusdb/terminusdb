@@ -1,4 +1,4 @@
-:- module(init, [
+:- module(api_init, [
               initialize_config/4,
               initialize_registry/0,
               initialize_index/2,
@@ -8,10 +8,12 @@
           ]).
 
 :- use_module(core(triple)).
+:- use_module(core(util)).
 
 :- use_module(library(semweb/turtle)).
 
 :- use_module(library(terminus_store)).
+
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -133,7 +135,7 @@ initialize_registry :-
     ).
 
 initialize_database(Public_URL, Key) :-
-    config:default_database_path(DB_Path),
+    db_path(DB_Path),
     initialize_database_with_path(Public_URL, Key, DB_Path).
 
 initialize_database_with_path(Public_URL, Key, DB_Path) :-
