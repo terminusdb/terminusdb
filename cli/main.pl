@@ -39,16 +39,14 @@ key_value_args_default(Key,Value,[_,_|Args],Default) :-
     key_value_args_default(Key,Value,Args,Default).
 
 % For boolean switches
-switch_args_default(_,[],true).
-switch_args_default(Key,[Key|_Args],_) :-
+switch_args_boolean(_,[],false).
+switch_args_boolean(Key,[Key|_Args],true) :-
     !.
-switch_args_default(Key,[_|Args],Default) :-
-    switch_args_default(Key,Args,Default).
+switch_args_boolean(Key,[_|Args],Default) :-
+    switch_args_boolean(Key,Args,Default).
 
-switch_args_default_boolean(Key,Args,Default,Bool) :-
-    (   switch_args_default(Key,Args,Default)
-    ->  Bool = true
-    ;   Bool = false).
+not(true,false).
+not(false,true).
 
 run([test]) :-
     !,
@@ -98,8 +96,9 @@ run([db,create,DB_Path|Args]) :-
 
     key_value_args_default('--label', Label, Args, ''),
     key_value_args_default('--comment', Comment, Args, 'command line update'),
-    switch_args_default_boolean('--public', Args, false, Public),
-    switch_args_default_boolean('--schema', Args, true, Schema),
+    switch_args_boolean('--public', Args, Public),
+    switch_args_boolean('--no-schema', Args, No_Schema),
+    not(No_Schema,Schema),
     key_value_args_default('--prefixes', Prefixes_Atom, Args, '{}'),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes).
@@ -178,8 +177,8 @@ help_screen :-
     format("db create [Database]~` t~40|create a database~n",[]),
     format("~` t~10|--label [Label]~` t~40|database label~n",[]),
     format("~` t~10|--comment [Comment]~` t~40|database comment~n",[]),
-    format("~` t~10|--public~` t~40|whether the database is public (default: false)~n",[]),
-    format("~` t~10|--schema~` t~40|whether to include a schema (default: true)~n",[]),
+    format("~` t~10|--public~` t~40|Ensure database is public~n",[]),
+    format("~` t~10|--no-schema~` t~40|Exclude schema from database~n",[]),
     format("~` t~10|--prefixes [Prefixes]~` t~40|a JSON of prefixes~n",[]),
     format("branch create [Branch]~` t~40|create a branch~n",[]),
     format("~` t~10|--origin [Ref]~` t~40|ref origin of the new branch~n",[]),
@@ -190,5 +189,7 @@ help_screen :-
     format('~` t~10|--port [port]~` t~40|server port~n',[]),
     format('~` t~10|--protocol [protocol]~` t~40|http or https~n',[]),
     format('~` t~10|--autologin~` t~40|whether to login immediately~n',[]),
-    format("test~` t~40|run tests~n",[]).
+    (   prolog_flag(optimise, false)
+    ->  format("test~` t~40|run tests~n",[])
+    ;   true).
 
