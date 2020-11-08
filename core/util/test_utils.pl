@@ -387,14 +387,13 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   between(0,5,_),
         random_between(49152, 65535, Port)),
 
-    index_path(INDEX_PATH),
-
     current_prolog_flag(executable, Swipl_Path),
 
     directory_file_path(_, Exe, Swipl_Path),
     (   Exe = swipl
-    ->  expand_file_search_path(terminus_home('start.pl'), Argument)
-    ;   Argument = serve
+    ->  expand_file_search_path(terminus_home('start.pl'), Argument),
+        Args = [Argument]
+    ;   Args = [serve]
     ),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
@@ -408,7 +407,6 @@ spawn_server_1(Path, URL, PID, Options) :-
         'LC_PAPER'='en_US.UTF-8',
 
         'TERMINUSDB_SERVER_PORT'=Port,
-        'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
         'TERMINUSDB_HTTPS_ENABLED'='false'
     ],
@@ -427,7 +425,7 @@ spawn_server_1(Path, URL, PID, Options) :-
                      ],
                      Env_List),
 
-    process_create(Swipl_Path, [Argument],
+    process_create(Swipl_Path, Args,
                    [
                        process(PID),
                        env(Env_List),
@@ -441,6 +439,7 @@ spawn_server_1(Path, URL, PID, Options) :-
     % This is very fragile though.
     read_line_to_string(Error, _First_Line),
     read_line_to_string(Error, _Second_Line),
+
     sleep(0.01),
     process_wait(PID, Status, [timeout(0)]),
     (   Status = exit(98)

@@ -4,7 +4,7 @@
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              index_path/1,
+              index_template/1,
               default_database_path/1,
               jwt_public_key_path/1,
               jwt_public_key_id/1,
@@ -40,9 +40,17 @@ worker_amount(Value) :-
 max_transaction_retries(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
 
-index_path(Value) :-
-    once(expand_file_search_path(config('index.html'), Path)),
-    getenv_default('TERMINUSDB_SERVER_INDEX_PATH', Path, Value).
+:- dynamic index_template_/1.
+
+index_template(Value) :-
+    index_template_(Value),
+    !.
+index_template(Value) :-
+    once(expand_file_search_path(config('index.tpl'), Template_Path)),
+    open(Template_Path, read, Template_Stream),
+    read_string(Template_Stream, _, Value),
+    assertz(index_template_(Value)),
+    close(Template_Stream).
 
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).

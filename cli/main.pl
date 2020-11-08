@@ -123,16 +123,11 @@ run([store,init|Args]) :-
     key_value_args_default('--server',Server, Args, '127.0.0.1'),
     key_value_args_default('--port',Port, Args, 6363),
     key_value_args_default('--protocol',Protocol, Args, 'https'),
-    key_value_args_default('--autologin', Autologin, Args, false),
+
     format(atom(SERVER_URL), '~s://~s:~d', [Protocol, Server, Port]),
 
-    initialize_registry,
-    initialize_index(Key, [autologin(Autologin)]),
-    (   switch_args_default('--onlyconfig', Args, false)
-    ->  true
-    ;   initialize_database(SERVER_URL, Key),
-        format('Successfully initialised database!!!~n')
-    ).
+    initialize_database(SERVER_URL, Key),
+    format('Successfully initialised database!!!~n').
 % run([push|_Databases])
 % run([pull|_Databases])
 % run([query|_Query])

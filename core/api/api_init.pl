@@ -1,7 +1,6 @@
 :- module(api_init, [
               initialize_config/4,
               initialize_registry/0,
-              initialize_index/2,
               initialize_database/2,
               initialize_database_with_path/3,
               initialize_database_with_store/3
@@ -189,9 +188,3 @@ initialize_database_with_store(Public_URL, Key, Store) :-
     repository_ontology(Repository_Name),
     create_graph_from_turtle(Store,Repository_Name,System_Repository_TTL).
 
-
-initialize_index(Key, Opts) :-
-    index_key(Key, Password, Opts),
-    index_template_path(IndexTplPath),
-    config:index_path(IndexPath),
-    write_index_file(IndexTplPath, IndexPath, Password).

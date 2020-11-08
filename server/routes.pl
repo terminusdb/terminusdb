@@ -4729,9 +4729,13 @@ test(optimize_system, [
  * console_handler(+Method,+Request) is det.
  */
 console_handler(get,Request, _System_DB, _Auth) :-
-    config:index_path(Index_Path),
+    config:index_template(Tpl_String),
+    config:console_base_url(BaseURL),
+
+    format(string(Index), Tpl_String, [BaseURL, false, BaseURL]),
+
     write_cors_headers(Request),
-    throw(http_reply(file('text/html', Index_Path))).
+    throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).
 :- use_module(core(util/test_utils)).
