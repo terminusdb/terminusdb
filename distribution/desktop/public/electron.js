@@ -17,6 +17,8 @@ electron.app.on('certificate-error',
 )
 
 electron.app.on('ready', () => {
+  electron.session.defaultSession.clearCache()
+
   const appDir = path.dirname(require.main.filename)
   const appImagePath = `${appDir}/TerminusDB-amd64.AppImage`
   const exePath = `${appDir}/windows/start_windows.bat`
