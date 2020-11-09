@@ -1692,13 +1692,23 @@ visible_vars(VL) -->
               Bindings,
               VL) }.
 
+order_select_([],_B0,[]).
+order_select_([v(V)|Vs],B0,[Record|B1]) :-
+    member(Record,B0),
+    get_dict(var_name, Record, V),
+    !,
+    order_select_(Vs,B0,B1).
+order_select_([_|Vs],B0,B1) :-
+    order_select_(Vs,B0,B1).
+
+order_select(Vs,B0,B1) :-
+    order_select_(Vs,B0,B_Out),
+    reverse(B_Out,B1).
+
 restrict(VL) -->
     update(bindings,B0,B1),
     {
-        include({VL}/[Record]>>(
-                    get_dict(var_name, Record, Name),
-                    member(v(Name),VL)
-                ), B0, B1)
+        order_select(VL,B0,B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
@@ -2911,6 +2921,7 @@ test(select, []) :-
                                  }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
+
     [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
 
 
