@@ -153,6 +153,7 @@ graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
 
 open_read_write_obj(Openable, Read_Write_Obj) :-
     open_read_write_obj(Openable, Read_Write_Obj, [], _).
+
 open_read_write_obj(Layer, Read_Write_Obj, Map, New_Map) :-
     blob(Layer, layer),
     !,
@@ -179,7 +180,6 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     ;   Type = inference,
         Name = "main",
         system_inference_name(Graph_Name)),
-
     storage(Store),
     safe_open_named_graph(Store, Graph_Name, Graph),
     head(Graph, Layer),

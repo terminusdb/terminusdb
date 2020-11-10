@@ -51,14 +51,6 @@ list_database(Database, Database_Object) :-
     Database_Object = _{ database_name: Database,
                          branch_name: Branches }.
 
-member_last(X,List,Last) :-
-    member_last_(List,X,Last).
-
-member_last_([A],A,true).
-member_last_([A,_|_],A,false).
-member_last_([_|Rest],A,Last) :-
-    member_last_(Rest,A,Last).
-
 joint(true,"└──").
 joint(false,"├──").
 

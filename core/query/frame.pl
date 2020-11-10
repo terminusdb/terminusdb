@@ -395,12 +395,14 @@ property_restriction_(P,Schema,R) :-
  * excluding owl:Nothing or abstract classes.
  */
 classes_below(Class,Database,BelowList) :-
-    unique_solutions(Below,subsumption_of(Below,Class,Database),Classes),
-    exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
     database_schema(Database,Schema),
-    exclude({Database, Schema}/[X]>>(
-                xrdf(Schema,
-                     X,system:tag,system:abstract)),
+    classes_below(Class,Schema,BelowList).
+
+classes_below_(Class,Schema,BelowList) :-
+    unique_solutions(Below,validate_schema:subsumption_of_(Below,Class,Schema),Classes),
+    exclude([X]>>(X='http://www.w3.org/2002/07/owl#Nothing'), Classes, ClassesNoBottom),
+    exclude({Schema}/[X]>>(
+                xrdf(Schema,X,system:tag,system:abstract)),
             ClassesNoBottom,
             BelowList).
 
@@ -564,7 +566,7 @@ apply_restriction_(object,Class,Property,Schema,Inference,
                     frame=Frame,
                     restriction=Restriction
                     |Record_Remainder]) :-
-    once(classes_below(Range,Schema,Below)),
+    once(classes_below_(Range,Schema,Below)),
     (   [NextClass] = Below
         % singleton choice of class class should just be rendered.
     ->  class_frame_aux(NextClass,Schema,Inference,Frame)

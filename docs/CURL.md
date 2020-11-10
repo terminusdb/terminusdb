@@ -32,6 +32,11 @@ curl -X PUT "https://127.0.0.1:6363/api/csv/admin/TEST_DB" -u "admin:root" -k -F
 curl -X POST "https://127.0.0.1:6363/api/csv/admin/TEST_DB" -u "admin:root" -k -F "csv=@test/0CE.csv" -F 'payload={"commit_info" : {"author" : "Author", "message" : "Message"}}'
 ```
 
+# Delete CSV
+```bash
+curl -X DELETE "https://127.0.0.1:6363/api/csv/admin/TEST_DB" -u "admin:root" -k -F "csv=@test/0CE.csv" -F 'payload={"commit_info" : {"author" : "Author", "message" : "Message"}}'
+```
+
 # Get CSV
 
 ```bash

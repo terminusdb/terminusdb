@@ -83,8 +83,6 @@ csv_update_into_context(Files, Context, Options) :-
     ;   Schema_Builder = false
     ),
 
-
-
     forall(
         member(Name=Path, Files),
         (   Schema_Builder = false
@@ -103,13 +101,22 @@ csv_update_into_context(Files, Context, Options) :-
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
-            nb_apply_diff(CSV_Builder,Layer),
+            % delete every csv object
+            delete_csvs(Context,Files,Prefixes),
+            nb_apply_delta(CSV_Builder,Layer),
             (   Schema_Builder = false
             ->  true
             ;   nb_apply_diff(CSV_Schema_Builder,Schema_Layer)
             )
         ),
         _).
+
+delete_csvs(Context, Files, Prefixes) :-
+    forall(
+        member(Name=_, Files),
+        (   get_dict(doc,Prefixes,Prefix),
+            csv_iri(Name,Prefix,Iri),
+            delete_object(Iri,Context))).
 
 csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
@@ -227,6 +234,7 @@ test(csv_load,
     resolve_absolute_string_descriptor(Path, Desc),
 
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+
     Triples = [
         (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_header)-("2"^^xsd:string),
         (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_some)-("1"^^xsd:string),
@@ -280,6 +288,7 @@ test(csv_update,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+    writeq(Triples),
     Triples = [
         (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
         (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),

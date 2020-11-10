@@ -79,6 +79,7 @@
 
               % query_response.pl
               run_context_ast_jsonld_response/3,
+              pretty_print_query_response/3,
 
               % resolve_query_resource.pl
               resolve_string_descriptor/3,

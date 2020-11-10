@@ -36,17 +36,25 @@ key_value_args(Key,Value,[_,_|Args]) :-
 
 % Key-value arguments
 key_value_args_default(_,Default,[],Default).
+key_value_args_default(_,Default,['--'|_],Default).
 key_value_args_default(Key,Value,[Key,Value|_Args],_Default) :-
     !.
-key_value_args_default(Key,Value,[_,_|Args],Default) :-
+key_value_args_default(Key,Value,[_|Args],Default) :-
     key_value_args_default(Key,Value,Args,Default).
 
 % For boolean switches
 switch_args_boolean(_,[],false).
 switch_args_boolean(Key,[Key|_Args],true) :-
     !.
-switch_args_boolean(Key,[_|Args],Default) :-
-    switch_args_boolean(Key,Args,Default).
+switch_args_boolean(Key,[_|Args],Bool) :-
+    switch_args_boolean(Key,Args,Bool).
+
+non_switch_args(['--'|Rest], Rest).
+non_switch_args([Switch,_Next|Rest], Result) :-
+    re_match('^--',Switch),
+    !,
+    non_switch_args(Rest, Result).
+non_switch_args(Result, Result).
 
 not(true,false).
 not(false,true).
@@ -75,6 +83,7 @@ run([optimize|Databases]) :-
                format(current_output, "~N~s optimized~n", [Path])
            )).
 run([branch,create,Path|Args]) :-
+    !,
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     key_value_args_default('--origin', Origin_Base, Args, false),
@@ -83,10 +92,12 @@ run([branch,create,Path|Args]) :-
     ;   Origin_Option = some(Origin_Base)),
     branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri).
 run([branch,delete,Path]) :-
+    !,
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     branch_delete(System_DB, Auth, Path).
 run([db,create,DB_Path|Args]) :-
+    !,
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
@@ -102,10 +113,14 @@ run([db,create,DB_Path|Args]) :-
     switch_args_boolean('--public', Args, Public),
     switch_args_boolean('--no-schema', Args, No_Schema),
     not(No_Schema,Schema),
+    key_value_args_default('--data-prefix', Data_Prefix, Args, 'terminusdb:///data/'),
+    key_value_args_default('--schema-prefix', Schema_Prefix, Args, 'terminusdb:///schema#'),
     key_value_args_default('--prefixes', Prefixes_Atom, Args, '{}'),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
-    create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes).
+    put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
+    create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged).
 run([db,delete,DB_Path]) :-
+    !,
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
@@ -124,17 +139,60 @@ run([store,init|Args]) :-
         fail),
     initialize_database(Key),
     format('Successfully initialised database!!!~n').
+%run([csv,list])
+%run([csv,delete,Path,Name])
+run([csv,load,Path|Args]) :-
+    !,
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    key_value_args_default('--commit-message',Message, Args, "loaded from terminusdb CLI"),
+    key_value_args_default('--commit-author',Author, Args, "admin"),
+    non_switch_args(Args,Files),
+    maplist([File,File_Name=File]>>file_base_name('test/test2.csv', File_Name),
+            Files,
+            File_Map),
+    csv_load(System_DB, Auth, Path, _{ message : Message,
+                                       author : Author},
+             File_Map, _{}),
+    format(current_output,'Successfully loaded CSVs~n',[]).
+run([csv,update,Path|Args]) :-
+    !,
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    key_value_args_default('--commit-message',Msg, Args, "loaded from terminusdb CLI"),
+    key_value_args_default('--commit-author',Auth, Args, "admin"),
+    non_switch_args(Args,Files),
+    maplist([File,File_Name=File]>>file_base_name('test/test2.csv', File_Name),
+            Files,
+            File_Map),
+    csv_update(System_DB, Auth, Path, _{ message : Msg,
+                                       author : Auth},
+               File_Map, _{}),
+    format(current_output,'Successfully updated CSVs~n',[]).
+run([csv,dump,Path,File|Args]) :-
+    !,
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    csv_dump(System_DB, Auth, Path, File, Temp, []),
+    key_value_args_default('--output', Output, Args, File),
+    copy_file(Temp, Output),
+    format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
+% turtle
 % run([push|_Databases])
 % run([pull|_Databases])
-% run([query|_Query])
-%% run([query|Args]) :-
-%%     (   Args = ['--js',Query]
-%%     ->  run_js_code(Query, JSON)
-%%     ;   Args = ['--python',Query]
-%%     ->  run_python_code(Query, JOSN)
-%%     ;   Args = [Query]
-%%     ->  run_prolog(Query)
-%%     ).
+% run([clone|_Databases])
+run([query,Database,Query]) :-
+    !,
+    resolve_absolute_string_descriptor(Database,Descriptor),
+    create_context(Descriptor,commit_info{ author : "cli",
+                                           message : "testing"}, Context),
+    woql_context(Prefixes),
+    context_extend_prefixes(Context,Prefixes,Context0),
+    read_term_from_atom(Query, AST, []),
+    query_response:run_context_ast_jsonld_response(Context0, AST, Response),
+    Final_Prefixes = (Context0.prefixes),
+    pretty_print_query_response(Response,Final_Prefixes,String),
+    write(String).
 run(_) :-
     help_screen.
 
@@ -177,6 +235,8 @@ help_screen :-
     format("~` t~10|--public~` t~40|Ensure database is public~n",[]),
     format("~` t~10|--no-schema~` t~40|Exclude schema from database~n",[]),
     format("~` t~10|--prefixes [Prefixes]~` t~40|a JSON of prefixes~n",[]),
+    format("~` t~10|--data-prefix~` t~40|default data prefix~n", []),
+    format("~` t~10|--schema-prefix~` t~40|default schema prefix~n", []),
     format("branch create [Branch]~` t~40|create a branch~n",[]),
     format("~` t~10|--origin [Ref]~` t~40|ref origin of the new branch~n",[]),
     format("branch delete [Branch]~` t~40|delete a branch~n",[]),
