@@ -392,7 +392,7 @@ spawn_server_1(Path, URL, PID, Options) :-
     directory_file_path(_, Exe, Swipl_Path),
     (   Exe = swipl
     ->  expand_file_search_path(terminus_home('start.pl'), Argument),
-        Args = [Argument]
+        Args = [Argument, serve, '--interactive']
     ;   Args = [serve,'--interactive']
     ),
 
