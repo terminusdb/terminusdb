@@ -112,6 +112,18 @@ create_context(Layer, Context) :-
 create_context(Context, Context) :-
     query_context{} :< Context,
     !.
+create_context(Validation,Context) :-
+    validation_object{ inference_objects : Inf,
+                       instance_objects : Inst,
+                       schema_objects : Schema,
+                       descriptor : Desc } :< Validation,
+    !,
+    Transaction_Object = transaction_object{
+                             inference_objects : Inf,
+                             instance_objects : Inst,
+                             schema_objects : Schema,
+                             descriptor : Desc },
+    create_context(Transaction_Object,Context).
 create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,

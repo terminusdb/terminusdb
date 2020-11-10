@@ -791,7 +791,6 @@ refute_validation_object(Validation_Object, Witness) :-
     % Do not proceed if we have a broken schema
     !.
 refute_validation_object(Validation_Object, Witness) :-
-    % Pre Schema
     needs_schema_instance_validation(Validation_Object),
     refute_instance_schema(Validation_Object, Witness).
 refute_validation_object(Validation_Object, Witness) :-

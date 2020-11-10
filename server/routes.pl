@@ -656,18 +656,17 @@ test(csv_load, [
             ask(DB,
                 t(X, Y, Z)),
             Triples),
-
     Triples = [
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_bar)-("2"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_foo)-("1"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_60518c1c11dc0452be71a7118a43ab68e3451b82'),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_bar)-("4"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_foo)-("3"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_60518c1c11dc0452be71a7118a43ab68e3451b82'),
+        (Row1)-(scm:column_bar)-("2"^^xsd:string),
+        (Row1)-(scm:column_foo)-("1"^^xsd:string),
+        (Row1)-(rdf:type)-(Row_Type),
+        (Row2)-(scm:column_bar)-("4"^^xsd:string),
+        (Row2)-(scm:column_foo)-("3"^^xsd:string),
+        (Row2)-(rdf:type)-(Row_Type),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_bar'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_foo'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row1),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row2),
         (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
         (doc:'ColumnObject_csv_bar')-(scm:csv_column_index)-(1^^xsd:integer),
@@ -720,7 +719,7 @@ test(csv_update, [
      ])
 :-
 
-    create_db_without_schema(admin, 'TEST_DB'),
+    create_db_with_empty_schema(admin, 'TEST_DB'),
 
     % We actually have to create the graph before we can post to it!
     % First make the schema graph

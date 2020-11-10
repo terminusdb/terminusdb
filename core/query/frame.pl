@@ -768,8 +768,8 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
     !, % no turning back if we are an object property
     memberchk(property=Prop, P),
     once(select(frame=Frame,P,_FrameLessP)),
-    (   setof(New_Realiser,
-              V^(inferredEdge(Elt, Prop, V, Database),
+    (   findall(New_Realiser,
+                (inferredEdge(Elt, Prop, V, Database),
                  (   document(V,Database)
                  ->  (   Depth =< 1
                      ->  New_Realiser=[V]
@@ -788,9 +788,9 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
 realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Database,Depth,Realisers) :-
     !, % no turning back if we are a datatype property
     memberchk(property=Prop, P),
-    (   setof(V,
-              inferredEdge(Elt, Prop, V, Database),
-              RealiserValues)
+    (   findall(V,
+                inferredEdge(Elt, Prop, V, Database),
+                RealiserValues)
     ->  (   RealiserValues = [Val]
         ->  Realisers = [Prop=Val|RealiserTail]
         ;   Realisers = [Prop=RealiserValues|RealiserTail]
@@ -935,23 +935,21 @@ realise_quads(Elt,[[type=objectProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFT
 
     member(property=Prop, P),
     select(frame=Frame,P,_FrameLessP),
-    (   setof(New_Realiser,
-              V^(inferredQuad(G, Elt, Prop, V, Database),
-                 (   is_dict(G)
-                 ->  get_dict(descriptor,G,G_Desc)
-                 ;   G = inferred
-                 ->  G = G_Desc
-                 ;   throw(error(unexpected_graph_object(G),_))),
-                 (   document(V,Database)
-                 ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
-                 ;   realise_quads(V,Frame,Database,Below),
-                     New_Realiser=[(G_Desc,Elt,Prop,V)|Below])),
-              RealiserLists)
-    ->  append(RealiserLists,Realisers_on_P),
-        realise_quads(Elt,Rest,Database,Realiser_Tail),
-        append(Realisers_on_P, Realiser_Tail, Realiser)
-    ;   realise_quads(Elt,Rest,Database,Realiser)
-    ).
+    findall(New_Realiser,
+            (inferredQuad(G, Elt, Prop, V, Database),
+             (   is_dict(G)
+             ->  get_dict(descriptor,G,G_Desc)
+             ;   G = inferred
+             ->  G = G_Desc
+             ;   throw(error(unexpected_graph_object(G),_))),
+             (   document(V,Database)
+             ->  New_Realiser=[(G_Desc,Elt,Prop,V)]
+             ;   realise_quads(V,Frame,Database,Below),
+                 New_Realiser=[(G_Desc,Elt,Prop,V)|Below])),
+            RealiserLists),
+    append(RealiserLists,Realisers_on_P),
+    realise_quads(Elt,Rest,Database,Realiser_Tail),
+    append(Realisers_on_P, Realiser_Tail, Realiser).
 realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RDFType,Type)|Realiser]) :-
     !, % no turning back if we are a datatype property
     database_instance(Database,Gs),
@@ -961,19 +959,17 @@ realise_quads(Elt,[[type=datatypeProperty|P]|Rest],Database,[(G_Type_Desc,Elt,RD
     G_Type_Desc = G_Type.descriptor,
 
     member(property=Prop, P),
-    (   setof((G_Desc,Elt,Prop,V),
-              V^(   inferredQuad(G, Elt, Prop, V, Database),
-                    (   is_dict(G)
-                    ->  get_dict(descriptor,G,G_Desc)
-                    ;   G = inferred
-                    ->  G = G_Desc
-                    ;   throw(error(unexpected_graph_object(G),_)))
-                ),
-              Realisers_on_P)
-    ->  realise_quads(Elt,Rest,Database,Realiser_Tail),
-        append(Realisers_on_P,Realiser_Tail,Realiser)
-    ;   realise_quads(Elt,Rest,Database,Realiser)
-    ).
+    findall((G_Desc,Elt,Prop,V),
+            (   inferredQuad(G, Elt, Prop, V, Database),
+                (   is_dict(G)
+                ->  get_dict(descriptor,G,G_Desc)
+                ;   G = inferred
+                ->  G = G_Desc
+                ;   throw(error(unexpected_graph_object(G),_)))
+            ),
+            Realisers_on_P),
+    realise_quads(Elt,Rest,Database,Realiser_Tail),
+    append(Realisers_on_P,Realiser_Tail,Realiser).
 realise_quads(Elt,[[type=restriction|_R]|Rest],Database,Realiser) :-
     % We are a bare restriction, not applied to any property
     !,

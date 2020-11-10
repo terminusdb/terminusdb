@@ -88,7 +88,10 @@ test(list_all,
 
     super_user_authority(Auth),
     list_databases(system_descriptor{}, Auth, [], Database_Objects),
-    Database_Objects = [_{branch_name:["main"],database_name:"admin/bar"},
-                        _{branch_name:["main"],database_name:"admin/foo"}].
+    Expected_Objects = [_{branch_name:["main"],database_name:"admin/bar"},
+                        _{branch_name:["main"],database_name:"admin/foo"}],
+
+    forall(member(Object, Database_Objects),
+           member(Object, Expected_Objects)).
 
 :- end_tests(db).

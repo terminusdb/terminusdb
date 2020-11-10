@@ -116,7 +116,8 @@ delete_csvs(Context, Files, Prefixes) :-
         member(Name=_, Files),
         (   get_dict(doc,Prefixes,Prefix),
             csv_iri(Name,Prefix,Iri),
-            delete_object(Iri,Context))).
+            atom_string(Node,Iri),
+            delete_object(Node,Context))).
 
 csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
@@ -236,16 +237,16 @@ test(csv_load,
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
     Triples = [
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_header)-("2"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_some)-("1"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (Row1)-(scm:column_header)-("2"^^xsd:string),
+        (Row1)-(scm:column_some)-("1"^^xsd:string),
+        (Row1)-(rdf:type)-(Row_Type2),
+        (Row2)-(scm:column_header)-("4"^^xsd:string),
+        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(rdf:type)-(Row_Type2),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row1),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row2),
         (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
         (doc:'ColumnObject_csv_header')-(scm:csv_column_index)-(1^^xsd:integer),
@@ -258,7 +259,7 @@ test(csv_load,
 
 test(csv_update,
      [setup((setup_temp_store(State),
-             create_db_without_schema("admin", "testdb")
+             create_db_with_empty_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]
     ) :-
@@ -288,15 +289,15 @@ test(csv_update,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-    writeq(Triples),
+
     Triples = [
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
+        (Row2)-(scm:column_header)-("4"^^xsd:string),
+        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(rdf:type)-(Row_Type1),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
-        (doc:'CSV_csv')-(scm:csv_row)-(doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row2),
+        (doc:'CSV_csv')-(scm:csv_row)-(Row3),
         (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
         (doc:'ColumnObject_csv_header')-(scm:csv_column_index)-(1^^xsd:integer),
@@ -305,9 +306,9 @@ test(csv_update,
         (doc:'ColumnObject_csv_some')-(scm:csv_column_index)-(0^^xsd:integer),
         (doc:'ColumnObject_csv_some')-(scm:csv_column_name)-("some"^^xsd:string),
         (doc:'ColumnObject_csv_some')-(rdf:type)-(scm:'Column'),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_header)-("9"^^xsd:string),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_some)-("1"^^xsd:string),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7')
+        (Row3)-(scm:column_header)-("9"^^xsd:string),
+        (Row3)-(scm:column_some)-("1"^^xsd:string),
+        (Row3)-(rdf:type)-(Row_Type1)
     ].
 
 test(csv_dump,
@@ -341,7 +342,7 @@ test(csv_dump,
 
 test(csv_load_multiple,
      [setup((setup_temp_store(State),
-             create_db_without_schema("admin", "testdb")
+             create_db_with_empty_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]
     ) :-
@@ -373,29 +374,29 @@ test(csv_load_multiple,
 
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
-    Triples = [
-        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(scm:column_another)-("888.8"^^xsd:string),
-        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(scm:column_one)-("Goofball"^^xsd:string),
-        (doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_header)-("2"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(scm:column_some)-("1"^^xsd:string),
-        (doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_another)-("99.9"^^xsd:string),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_one)-("Fuzzbucket"^^xsd:string),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+    Prototype_Triples = [
+        (Row4)-(scm:column_another)-("888.8"^^xsd:string),
+        (Row4)-(scm:column_one)-("Goofball"^^xsd:string),
+        (Row4)-(rdf:type)-(Row_Type3),
+        (Row1)-(scm:column_header)-("2"^^xsd:string),
+        (Row1)-(scm:column_some)-("1"^^xsd:string),
+        (Row1)-(rdf:type)-(Row_Type1),
+        (Row2)-(scm:column_header)-("4"^^xsd:string),
+        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(rdf:type)-(Row_Type1),
+        (Row5)-(scm:column_another)-("99.9"^^xsd:string),
+        (Row5)-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (Row5)-(rdf:type)-(Row_Type3),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
-        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_7b52009b64fd0a2a49e6d8a939753077792b0554'),
-        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(Row1),
+        (doc:'CSV_csv1')-(scm:csv_row)-(Row2),
         (doc:'CSV_csv1')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv1')-(rdfs:label)-("csv1"@en),
         (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_another'),
         (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_one'),
-        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_61a9be6a4ed0500fd8cbad8a734b2b6613cee256'),
-        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(Row4),
+        (doc:'CSV_csv2')-(scm:csv_row)-(Row5),
         (doc:'CSV_csv2')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv2')-(rdfs:label)-("csv2"@en),
         (doc:'ColumnObject_csv1_header')-(scm:csv_column_index)-(1^^xsd:integer),
@@ -410,11 +411,14 @@ test(csv_load_multiple,
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_index)-(1^^xsd:integer),
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_name)-("one"^^xsd:string),
         (doc:'ColumnObject_csv2_one')-(rdf:type)-(scm:'Column')
-    ].
+    ],
+
+    forall(member(Triple, Triples),
+           member(Triple,Prototype_Triples)).
 
 test(csv_update_multiple,
      [setup((setup_temp_store(State),
-             create_db_without_schema("admin", "testdb")
+             create_db_with_empty_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State))]
     ) :-
@@ -458,23 +462,24 @@ test(csv_update_multiple,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-    Triples = [
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_header)-("4"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(scm:column_some)-("3"^^xsd:string),
-        (doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7'),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_another)-("99.9"^^xsd:string),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(scm:column_one)-("Fuzzbucket"^^xsd:string),
-        (doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
+
+    Expected_Triples = [
+        (Row2)-(scm:column_header)-("4"^^xsd:string),
+        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(rdf:type)-(Row_Type1),
+        (Row5)-(scm:column_another)-("99.9"^^xsd:string),
+        (Row5)-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (Row5)-(rdf:type)-(Row_Type3),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
-        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_f1f836cb4ea6efb2a0b1b99f41ad8b103eff4b59'),
-        (doc:'CSV_csv1')-(scm:csv_row)-(doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f'),
+        (doc:'CSV_csv1')-(scm:csv_row)-(Row2),
+        (doc:'CSV_csv1')-(scm:csv_row)-(Row3),
         (doc:'CSV_csv1')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv1')-(rdfs:label)-("csv1"@en),
         (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_another'),
         (doc:'CSV_csv2')-(scm:csv_column)-(doc:'ColumnObject_csv2_one'),
-        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_ff4486a1156a60f60967e314f083cb2b26c37bfe'),
-        (doc:'CSV_csv2')-(scm:csv_row)-(doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c'),
+        (doc:'CSV_csv2')-(scm:csv_row)-(Row5),
+        (doc:'CSV_csv2')-(scm:csv_row)-(Row6),
         (doc:'CSV_csv2')-(rdf:type)-(scm:'CSV'),
         (doc:'CSV_csv2')-(rdfs:label)-("csv2"@en),
         (doc:'ColumnObject_csv1_header')-(scm:csv_column_index)-(1^^xsd:integer),
@@ -489,13 +494,16 @@ test(csv_update_multiple,
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_index)-(1^^xsd:integer),
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_name)-("one"^^xsd:string),
         (doc:'ColumnObject_csv2_one')-(rdf:type)-(scm:'Column'),
-        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(scm:column_another)-("666"^^xsd:string),
-        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(scm:column_one)-("Goofball"^^xsd:string),
-        (doc:'CSVRow_127d3117b32a00b1042b6c64186080ae36f4a14c')-(rdf:type)-(scm:'CSVRow_fed7a6d119f9a3c725a6939b8b5c3f0fa6305031'),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_header)-("9"^^xsd:string),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(scm:column_some)-("1"^^xsd:string),
-        (doc:'CSVRow_b3f0c7f6bb763af1be91d9e74eabfeb199dc1f1f')-(rdf:type)-(scm:'CSVRow_c40ce0246f480cd2baca44a7477fee98662917b7')
-    ].
+        (Row6)-(scm:column_another)-("666"^^xsd:string),
+        (Row6)-(scm:column_one)-("Goofball"^^xsd:string),
+        (Row6)-(rdf:type)-(Row_Type3),
+        (Row3)-(scm:column_header)-("9"^^xsd:string),
+        (Row3)-(scm:column_some)-("1"^^xsd:string),
+        (Row3)-(rdf:type)-(Row_Type1)
+    ],
+
+    forall(member(Triple, Triples),
+           member(Triple, Expected_Triples)).
 
 test(csv_load_with_schema,
      [setup((setup_temp_store(State),
