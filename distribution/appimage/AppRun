@@ -15,7 +15,4 @@ export TERMINUSDB_LOG_PATH=$(pwd)/httpd.log
 export TERMINUSDB_SERVER_TMP_PATH=/tmp
 export TERMINUSDB_SSL_CERT=$SOURCE/usr/share/terminusdb/localhost.crt
 export TERMINUSDB_SSL_CERT_KEY=$SOURCE/usr/share/terminusdb/localhost.key
-if [ ! -d storage ]; then
-	$SOURCE/usr/share/terminusdb/utils/terminusdb store init --server localhost --key root --autologin=true
-fi
-$SOURCE/usr/share/terminusdb/terminusdb $#
+$SOURCE/usr/share/terminusdb/terminusdb "$@"
