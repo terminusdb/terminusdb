@@ -120,7 +120,8 @@ run([store,init|Args]) :-
     ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
         fail),
     key_value_args_default('--server',Server, Args, '127.0.0.1'),
-    key_value_args_default('--port',Port, Args, 6363),
+    key_value_args_default('--port',Port_Atom, Args, '6363'),
+    atom_number(Port_Atom, Port),
     key_value_args_default('--protocol',Protocol, Args, 'https'),
 
     format(atom(SERVER_URL), '~s://~s:~d', [Protocol, Server, Port]),
