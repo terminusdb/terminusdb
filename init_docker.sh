@@ -8,8 +8,6 @@ TERMINUSDB_ENABLE_WELCOME_SCREEN=${TERMINUSDB_ENABLE_WELCOME_SCREEN:-false}
 
 if [ ! -d /app/terminusdb/storage/db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
     /app/terminusdb/start.pl store init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH"
-elif [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
-    /app/terminusdb/start.pl store init -s "$TERMINUSDB_SERVER_NAME" -k "$TERMINUSDB_ADMIN_PASS" --port "$TERMINUSDB_SERVER_PORT" --autologin="$TERMINUSDB_AUTOLOGIN" --autoattach="$TERMINUSDB_AUTOATTACH" --only-config
 fi
 
 if [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = true ]; then
