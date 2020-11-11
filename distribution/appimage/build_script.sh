@@ -17,7 +17,7 @@ cp -L /usr/lib/x86_64-linux-gnu/libbsd.so.0 app_dir/usr/lib/swi-prolog/lib/x86_6
 rm -rf app_dir/usr/lib/swi-prolog/bin/x86_64-linux/swipl-ld
 git clone https://github.com/terminusdb/terminus_store_prolog.git "$TERMINUSDB_STORE_PROLOG_DIR"
 cd "$TERMINUSDB_STORE_PROLOG_DIR"
-export TERMINUSDB_SERVER_PACK_DIR=$(realpath ".")
+export TERMINUSDB_SERVER_PACK_DIR=$(realpath "../")
 git checkout "$TERMINUSDB_STORE_PROLOG_VERSION"
 ./make.sh
 rm -rf rust/target/release/build
