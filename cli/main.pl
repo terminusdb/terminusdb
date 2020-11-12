@@ -18,7 +18,6 @@
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
-    initialise_woql_contexts,
     initialise_log_settings,
     % Better error handling here...
     catch(

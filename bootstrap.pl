@@ -25,12 +25,14 @@
 :- use_module(server(routes)).
 :- use_module(server(main)).
 :- use_module(cli(main)).
+:- use_module(core(query)).
 
 :- use_module(library(http/http_log)).
 
 :- set_test_options([run(manual)]).
 
 main :-
+    initialise_woql_contexts,
     qsave_program(terminusdb, [
                       foreign(save),
                       undefined(error),
