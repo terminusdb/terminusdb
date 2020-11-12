@@ -5,6 +5,7 @@ TERMINUSDB_STORE_PROLOG_VERSION=$2
 TERMINUSDB_STORE_PROLOG_DIR="app_dir/usr/lib/swi-prolog/pack/terminus_store_prolog"
 SOURCE="${BASH_SOURCE[0]}"
 mkdir -p app_dir/usr/share/terminusdb
+mkdir -p app_dir/usr/bin
 mkdir -p app_dir/usr/lib/swi-prolog/pack
 mkdir -p app_dir/usr/lib/x86_64-linux-gnu
 git clone https://github.com/terminusdb/terminusdb-server.git
