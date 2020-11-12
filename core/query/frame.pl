@@ -639,7 +639,7 @@ class_frame_aux(Class, Schema, Inference, Frame) :-
               'Class: ~q~n Formula: ~q~n Properties ~q~n',[Class,Formula,Properties]),
         debug(terminus(frame(restriction)),'Restriction: ~p',[RestrictionFormula]),
         calculate_frame_(Properties,Class,RestrictionFormula,Schema,Inference,Frame)
-    ;   Frame = [type=failure, message='No Class Formula!', class=Class]).
+    ;   throw(error(no_class_formula(Class)))).
 
 /**
  * fill_class_frame(+Elt,+Database,-Frame,-Filled) is det.

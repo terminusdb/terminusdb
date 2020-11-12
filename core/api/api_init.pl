@@ -144,7 +144,6 @@ initialize_config(PUBLIC_URL, Server, Port, Workers) :-
     write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
                       Port, Workers).
 
-
 initialize_registry :-
     config:registry_path(Registry_Path),
     (   exists_file(Registry_Path)

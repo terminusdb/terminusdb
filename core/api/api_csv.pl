@@ -1,10 +1,42 @@
-:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6]).
+:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6,csv_delete/6]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+
+csv_delete(System_DB, Auth, Path, Commit_Info, Name, Options) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
+        error(invalid_graph_descriptor(Path),_)),
+
+    askable_settings_context(
+        Descriptor,
+        _{ system : System_DB,
+           authorization : Auth,
+           commit_info: Commit_Info,
+           files : [],
+           filter : type_name_filter{ type: (Graph.type),
+                                      names : [Graph.name]}},
+        Context),
+
+    assert_write_access(Context),
+
+    csv_delete_into_context(Name,Context,Options).
+
+csv_delete_into_context(File, Context, _Options) :-
+    get_dict(prefixes, Context, Prefixes),
+
+    do_or_die(
+        query_default_schema_write_graph(Context, _),
+        error(no_schema(Context.default_descriptor))),
+
+    with_transaction(
+        Context,
+        delete_csvs(Context,[File],Prefixes),
+        _).
 
 csv_load(System_DB, Auth, Path, Commit_Info, Files, Options) :-
 
@@ -77,47 +109,46 @@ csv_update_into_context(Files, Context, Options) :-
     open_memory_store(Store),
     open_write(Store, Builder),
 
-    (   query_default_schema_write_graph(Context, Schema_Read_Write_Obj)
-    ->  read_write_obj_builder(Schema_Read_Write_Obj, CSV_Schema_Builder),
-        open_write(Store, Schema_Builder)
-    ;   Schema_Builder = false
-    ),
+    do_or_die(
+        query_default_schema_write_graph(Context, _),
+        error(no_schema(Context.default_collection))),
+
+    read_write_obj_builder(Schema_Read_Write_Obj, Schema_Builder),
 
     forall(
         member(Name=Path, Files),
-        (   Schema_Builder = false
-        ->  csv_builder(Name, Path, Builder, Default_Options)
-        ;   csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
-        )
+        csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
     ),
     nb_commit(Builder, Layer),
-
-    (   Schema_Builder = false
-    ->  true
-    ;   nb_commit(Schema_Builder, Schema_Layer)
-    ),
+    nb_commit(Schema_Builder, Schema_Layer),
 
     with_transaction(
         Context,
         (   query_default_write_graph(Context, Read_Write_Obj),
+            query_default_schema_write_graph(Context, Schema_Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
+            read_write_obj_builder(Schema_Read_Write_Obj, CSV_Schema_Builder),
             % delete every csv object
-            delete_csvs(Context,Files,Prefixes),
+            maplist([File=_,File]>>true,Files,File_Names),
+            delete_csvs(Context,File_Names,Prefixes),
             nb_apply_delta(CSV_Builder,Layer),
-            (   Schema_Builder = false
-            ->  true
-            ;   nb_apply_diff(CSV_Schema_Builder,Schema_Layer)
-            )
+            nb_apply_delta(CSV_Schema_Builder,Schema_Layer)
         ),
         _).
 
-delete_csvs(Context, Files, Prefixes) :-
+delete_csvs(Context, File_Names, Prefixes) :-
     forall(
-        member(Name=_, Files),
+        member(Name, File_Names),
         (   get_dict(doc,Prefixes,Prefix),
             csv_iri(Name,Prefix,Iri),
             atom_string(Node,Iri),
-            delete_object(Node,Context))).
+            % Delete instance data
+            delete_object(Node,Context),
+            % Delete schema data ...
+            true % * delete_schema_rows(Iri,Context)
+        )
+    ).
+
 
 csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
@@ -289,7 +320,7 @@ test(csv_update,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-
+    writeq(Triples),
     Triples = [
         (Row2)-(scm:column_header)-("4"^^xsd:string),
         (Row2)-(scm:column_some)-("3"^^xsd:string),
@@ -462,7 +493,6 @@ test(csv_update_multiple,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-
     Expected_Triples = [
         (Row2)-(scm:column_header)-("4"^^xsd:string),
         (Row2)-(scm:column_some)-("3"^^xsd:string),

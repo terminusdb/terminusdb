@@ -538,7 +538,7 @@ test(db_auth_test, [
                 [method(Method),
                  prefix,
                  time_limit(infinite),
-                 methods([options,post,put,get])]).
+                 methods([options,post,put,get,delete])]).
 
 /*
  * csv_handler(Mode,DB,Request) is det.
@@ -576,6 +576,16 @@ csv_handler(get,Path,Request, System_DB, Auth) :-
         error(no_csv_name_supplied)),
     catch_with_backtrace(
         (   csv_dump(System_DB, Auth, Path, Name, CSV_Path, _{}),
+            throw(http_reply(file('application/binary', CSV_Path)))),
+        Error,
+        do_or_die(csv_error_handler(Error, Request),
+                  Error)).
+csv_handler(delete,Path,Request, System_DB, Auth) :-
+    do_or_die(
+        get_param(name, Request, Name),
+        error(no_csv_name_supplied)),
+    catch_with_backtrace(
+        (   csv_delete(System_DB, Auth, Path, Name, CSV_Path, _{}),
             throw(http_reply(file('application/binary', CSV_Path)))),
         Error,
         do_or_die(csv_error_handler(Error, Request),

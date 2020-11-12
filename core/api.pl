@@ -79,6 +79,7 @@
               csv_load/6,
               csv_update/6,
               csv_dump/6,
+              csv_delete/6,
 
               % api_prefixes
               get_prefixes/4,
