@@ -177,7 +177,7 @@ setup_unattached_store(Store-Dir) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
-    initialize_database_with_store('http://localhost:1234', 'root', Store).
+    initialize_database_with_store('root', Store).
 
 setup_temp_store(Store-Dir) :-
     setup_unattached_store(Store-Dir),

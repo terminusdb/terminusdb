@@ -38,7 +38,7 @@ doc:admin
   rdfs:label "Server Admin User"@en ;
   system:role doc:admin_role ;
   system:agent_name "admin"^^xsd:string ;
-  system:user_key_hash "SEKRET_ADMIN_KEY"^^xsd:string .
+  system:user_key_hash "~s"^^xsd:string .
 
 doc:anonymous
   a system:User ;

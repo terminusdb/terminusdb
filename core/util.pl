@@ -14,6 +14,7 @@
               files/2,
               directories/2,
               terminus_schema_path/1,
+              file_to_predicate/2,
 
               % types.pl
               is_literal/1,

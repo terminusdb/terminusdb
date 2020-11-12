@@ -1,4 +1,5 @@
 :- module(api, [
+              bootstrap_files/0,
               % db_delete.pl
               delete_db/5,
               force_delete_db/2,
@@ -10,9 +11,8 @@
               % init.pl
               initialize_config/4,
               initialize_registry/0,
-              initialize_database/2,
-              initialize_database_with_path/3,
-              initialize_database_with_store/3,
+              initialize_database/1,
+              initialize_database_with_store/2,
 
               % db_graph.pl
               create_graph/5,
