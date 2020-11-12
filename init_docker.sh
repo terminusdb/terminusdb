@@ -19,5 +19,5 @@ echo "SERVER_PORT $TERMINUSDB_SERVER_PORT"
 echo "AUTO_ATTACH $TERMINUSDB_AUTOATTACH"
 echo "AUTO_LOGIN $TERMINUSDB_AUTOLOGIN"
 echo "ENABLE_WELCOME_SCREEN $TERMINUSDB_ENABLE_WELCOME_SCREEN"
-swipl --tty=false /app/terminusdb/start.pl serve --interactive
+/app/terminusdb/terminusdb serve
 

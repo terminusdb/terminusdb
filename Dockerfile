@@ -11,5 +11,5 @@ COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
 RUN cp /usr/share/swi-prolog/pack/jwt_io/jwt_io.so . \
         && apt-get update && apt-get install -y --no-install-recommends libjwt0 \
-        && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
+        && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && ./make.sh
 CMD /app/terminusdb/init_docker.sh
