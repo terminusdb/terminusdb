@@ -61,6 +61,12 @@
 :- use_module(library(solution_sequences)).
 :- use_module(library(http/http_log)).
 
+
+:- use_module(library(csv)).
+:- use_module(library(isub)).
+:- use_module(library(lists)).
+:- use_module(library(aggregate)).
+
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
@@ -1410,7 +1416,7 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
     {
-        marshall_args(sumlist(XE,YE), Goal),
+        marshall_args(sum_list(XE,YE), Goal),
         Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
