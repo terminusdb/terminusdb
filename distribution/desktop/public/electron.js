@@ -31,10 +31,10 @@ electron.app.on('ready', () => {
     binArgs = ['serve']
   } else if (fs.existsSync(exePath)) {
     binPath = exePath
-    binArgs = []
+    binArgs = ['serve']
   } else if (fs.existsSync(macOSPath)) {
     binPath = macOSPath
-    binArgs = [`${appDir}/terminusdb-server/start.pl`]
+    binArgs = [`${appDir}/terminusdb-server/start.pl`, 'serve']
     const homeDir = process.env.HOME
     const cwd = `${homeDir}/.terminusdb`
     process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
@@ -43,8 +43,8 @@ electron.app.on('ready', () => {
     process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
     if (!fs.existsSync(`${cwd}/db`)) {
       fs.mkdirSync(cwd)
-      const initDb = execFile(macOSPath, [`${appDir}/terminusdb-server/utils/db_init`, '-s', 'localhost',
-        '-k', 'root', '--autologin=true'])
+      const initDb = execFile(macOSPath, [`${appDir}/terminusdb-server/start.pl`, 'store', 'init',
+                                          '--server', 'localhost', '--key', 'root', '--autologin=true'])
       initDb.stdout.on('data', (data) => console.log(data))
       initDb.stderr.on('data', (data) => console.log(data))
     }
