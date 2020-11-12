@@ -18,6 +18,8 @@
  *
  */
 
+:- set_test_options([run(manual), load(always)]).
+
 :- [load_paths].
 
 :- reexport(core(util/syntax)).
@@ -29,8 +31,6 @@
 :- use_module(core(api)).
 
 :- use_module(library(http/http_log)).
-
-:- set_test_options([run(manual)]).
 
 main :-
     initialise_woql_contexts,

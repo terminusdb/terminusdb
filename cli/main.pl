@@ -19,9 +19,13 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
+
     % Better error handling here...
     catch(
-        run(Argv),
+        (   set_prolog_flag(verbose, true),
+            run(Argv),
+            set_prolog_flag(verbose, false)
+        ),
         Exception,
         format(current_output, "~NError: ~q~n~n", [Exception])).
 
@@ -182,7 +186,5 @@ help_screen :-
     format('~` t~10|--port [port]~` t~40|server port~n',[]),
     format('~` t~10|--protocol [protocol]~` t~40|http or https~n',[]),
     format('~` t~10|--autologin~` t~40|whether to login immediately~n',[]),
-    (   prolog_flag(optimise, false)
-    ->  format("test~` t~40|run tests~n",[])
-    ;   true).
+    format("test~` t~40|run tests~n",[]).
 
