@@ -58,7 +58,6 @@ terminus_server(Argv,Wait) :-
               format(user_error, "Error: Port ~d is already in use.", [Port]),
               halt(98) % EADDRINUSE
           )),
-    setup_call_cleanup(
         http_handler(root(.), busy_loading,
                      [ priority(1000),
                        hide_children(true),
@@ -68,14 +67,13 @@ terminus_server(Argv,Wait) :-
                      ]),
         (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
             welcome_banner(Server,Argv),
+            http_delete_handler(id(busy_loading)),
             (   Wait = true
             ->  http_current_worker(Port,ThreadID),
                 thread_join(ThreadID, _Status)
             ;   true
             )
-        ),
-        http_delete_handler(id(busy_loading))).
-
+        ).
 
 
 % See https://github.com/terminusdb/terminusdb-server/issues/91
