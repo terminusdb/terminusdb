@@ -10,7 +10,6 @@
               terminus_schema_path/1
           ]).
 
-:- use_module(config(terminus_config)).
 :- use_module(utils).
 
 :- use_module(library(apply)).
@@ -46,10 +45,11 @@
  * terminus_path(-Path) is det.
  *
  * Fully qualified path name to current terminus installation.
- * Deprecated, but still here for backwards compatibility
  */
 terminus_path(Path) :-
-    config:terminusdb_path(Path).
+    once(
+        file_search_path(terminus_home,Path)
+    ).
 
 /**
  * db_path(-Path) is det.

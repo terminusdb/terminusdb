@@ -7,7 +7,6 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SOURCE="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 export SWI_HOME_DIR=$SOURCE/usr/lib/swi-prolog
-export TERMINUSDB_PATH=$SOURCE/usr/share/terminusdb
 export TERMINUSDB_SERVER_PACK_DIR=$SOURCE/usr/lib/swi-prolog/pack
 export TERMINUSDB_SERVER_INDEX_PATH=$(pwd)/index.html
 export TERMINUSDB_SERVER_DB_PATH=$(pwd)/storage
@@ -16,4 +15,4 @@ export TERMINUSDB_LOG_PATH=$(pwd)/httpd.log
 export TERMINUSDB_SERVER_TMP_PATH=/tmp
 export TERMINUSDB_SSL_CERT=$SOURCE/usr/share/terminusdb/localhost.crt
 export TERMINUSDB_SSL_CERT_KEY=$SOURCE/usr/share/terminusdb/localhost.key
-$SOURCE/usr/bin/terminusdb "$@"
+$SOURCE/usr/share/terminusdb/terminusdb "$@"
