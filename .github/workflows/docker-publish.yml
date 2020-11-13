@@ -25,7 +25,7 @@ jobs:
 
     env:
       IMAGE_NAME: terminusdb/terminusdb-server
-      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false"
+      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false -n terminusdb"
 
 
     steps:
@@ -36,6 +36,15 @@ jobs:
 
       - name: Run tests
         run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root --server localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
+
+      - name: Copy binary to local filesystem
+        run: docker cp terminusdb:/app/terminusdb/terminusdb .
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: terminusdb-linux
+          path: terminusdb
 
       - name: Log into Docker Container Registry
         if: github.event_name != 'pull_request'
