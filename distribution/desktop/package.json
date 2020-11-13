@@ -18,7 +18,8 @@
         "appId": "com.terminusdb.TerminusDB-Desktop",
         "mac": {
             "category": "public.app-category.database",
-            "icon": "icon.icns"
+            "icon": "icon.icns",
+            "asar": false
         },
         "win": {
             "asar": false,
