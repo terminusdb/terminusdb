@@ -25,7 +25,7 @@ jobs:
 
     env:
       IMAGE_NAME: terminusdb/terminusdb-server
-      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false -n terminusdb"
+      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false --name terminusdb"
 
 
     steps:
@@ -38,7 +38,10 @@ jobs:
         run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root --server localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
 
       - name: Copy binary to local filesystem
-        run: docker cp terminusdb:/app/terminusdb/terminusdb .
+        run: |
+          id=$(docker create terminusdb/terminusdb-server)
+          docker cp $id:/app/terminusdb/terminusdb terminusdb
+          docker rm -v $id
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v1
