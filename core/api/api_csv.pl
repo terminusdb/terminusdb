@@ -108,12 +108,11 @@ csv_update_into_context(Files, Context, Options) :-
 
     open_memory_store(Store),
     open_write(Store, Builder),
+    open_write(Store, Schema_Builder),
 
     do_or_die(
-        query_default_schema_write_graph(Context, _),
+        query_default_schema_write_graph(Context, Schema_Read_Write_Obj),
         error(no_schema(Context.default_collection))),
-
-    read_write_obj_builder(Schema_Read_Write_Obj, Schema_Builder),
 
     forall(
         member(Name=Path, Files),
@@ -320,7 +319,7 @@ test(csv_update,
 
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
-    writeq(Triples),
+
     Triples = [
         (Row2)-(scm:column_header)-("4"^^xsd:string),
         (Row2)-(scm:column_some)-("3"^^xsd:string),
