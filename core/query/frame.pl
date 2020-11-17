@@ -777,7 +777,8 @@ realise_frame(Elt,[[type=objectProperty|P]|Rest],Database,Depth,Realisers) :-
                          document_object(Database,V,New_Depth,Object),
                          Object = [_Type,_Id|New_Realiser])
                  ;   realiser(V,Frame,Database,Depth,New_Realiser))),
-              RealiserValues)
+                RealiserValues),
+        RealiserValues \= []
     ->  (   RealiserValues = [Val]
         ->  Realisers = [Prop=Val|RealiserTail]
         ;   Realisers = [Prop=RealiserValues|RealiserTail]
@@ -790,7 +791,8 @@ realise_frame(Elt,[[type=datatypeProperty|P]|Rest],Database,Depth,Realisers) :-
     memberchk(property=Prop, P),
     (   findall(V,
                 inferredEdge(Elt, Prop, V, Database),
-                RealiserValues)
+                RealiserValues),
+        RealiserValues \= []
     ->  (   RealiserValues = [Val]
         ->  Realisers = [Prop=Val|RealiserTail]
         ;   Realisers = [Prop=RealiserValues|RealiserTail]
