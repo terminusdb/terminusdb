@@ -623,13 +623,13 @@ woql:AddedTriple
 
 woql:AddQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Add quad"@en ;
   rdfs:comment "Add a quad"@en .
 
 woql:AddedQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Added quad"@en ;
   rdfs:comment "A quad which was added to this commit on this graph"@en .
 
@@ -641,7 +641,7 @@ woql:DeleteQuad
 
 woql:DeletedQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Deleted quad"@en ;
   rdfs:comment "A quad which was deleted from this commit"@en .
 
