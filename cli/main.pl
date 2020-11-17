@@ -30,33 +30,6 @@ cli_toplevel :-
         Exception,
         format(current_output, "~NError: ~q~n~n", [Exception])).
 
-key_value_args(Key,Value,[Key,Value|_Args]) :-
-    !.
-key_value_args(Key,Value,[_,_|Args]) :-
-    key_value_args(Key,Value,Args).
-
-% Key-value arguments
-key_value_args_default(_,Default,[],Default).
-key_value_args_default(_,Default,['--'|_],Default).
-key_value_args_default(Key,Value,[Key,Value|_Args],_Default) :-
-    !.
-key_value_args_default(Key,Value,[_|Args],Default) :-
-    key_value_args_default(Key,Value,Args,Default).
-
-% For boolean switches
-switch_args_boolean(_,[],false).
-switch_args_boolean(Key,[Key|_Args],true) :-
-    !.
-switch_args_boolean(Key,[_|Args],Bool) :-
-    switch_args_boolean(Key,Args,Bool).
-
-non_switch_args(['--'|Rest], Rest).
-non_switch_args([Switch,_Next|Rest], Result) :-
-    re_match('^--',Switch),
-    !,
-    non_switch_args(Rest, Result).
-non_switch_args(Result, Result).
-
 not(true,false).
 not(false,true).
 
@@ -468,39 +441,3 @@ prolog:message(server_missing_config(BasePath)) -->
     'Run: `terminusdb store init` first'-[BasePath],
     nl
     ].
-
-help_screen :-
-    format("~nUsage: terminusdb [OPTION]~n",[]),
-    format("~n~n",[]),
-    format("serve~` t~40|run the terminusdb server~n",[]),
-    format("~` t~10|--interactive~` t~40|run server with interactive REPL~n",[]),
-    format("list [Databases]~` t~40|list databases~n",[]),
-    format("optimize [Databases]~` t~40|optimize the given databases~n",[]),
-    %format("query [Query]~` t~40|run query~n",[]),
-    format("db delete [Database]~` t~40|delete a database~n",[]),
-    format("db create [Database]~` t~40|create a database~n",[]),
-    format("~` t~10|--label [Label]~` t~40|database label~n",[]),
-    format("~` t~10|--comment [Comment]~` t~40|database comment~n",[]),
-    format("~` t~10|--public~` t~40|Ensure database is public~n",[]),
-    format("~` t~10|--no-schema~` t~40|Exclude schema from database~n",[]),
-    format("~` t~10|--prefixes [Prefixes]~` t~40|a JSON of prefixes~n",[]),
-    format("~` t~10|--data-prefix~` t~40|default data prefix~n", []),
-    format("~` t~10|--schema-prefix~` t~40|default schema prefix~n", []),
-    format("branch create [Branch]~` t~40|create a branch~n",[]),
-    format("~` t~10|--origin [Ref]~` t~40|ref origin of the new branch~n",[]),
-    format("branch delete [Branch]~` t~40|delete a branch~n",[]),
-    format("store init~` t~40|initialize a database~n",[]),
-    format('~` t~10|--key [key]~` t~40|admin login key~n',[]),
-    format('~` t~10|--server [server]~` t~40|server address~n',[]),
-    format('~` t~10|--port [port]~` t~40|server port~n',[]),
-    format('~` t~10|--protocol [protocol]~` t~40|http or https~n',[]),
-    format('~` t~10|--autologin~` t~40|whether to login immediately~n',[]),
-    format('csv dump [Database] [CSV]~` t~40|dump a named csv~n', []),
-    format('csv load [Database] [CSV]~` t~40|load or append a csv~n', []),
-    format('~` t~10|--message [message]~` t~40|commit message~n',[]),
-    format('~` t~10|--author [author]~` t~40|commit author~n',[]),
-    format('csv update [Database] [CSV]~` t~40|update a csv~n', []),
-    format('~` t~10|--message [message]~` t~40|commit message~n',[]),
-    format('~` t~10|--author [author]~` t~40|commit author~n',[]),
-    format("test~` t~40|run tests~n",[]).
-

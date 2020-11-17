@@ -113,7 +113,9 @@ pretty_print_query_response(Response, Prefixes, String) :-
             ),Bindings,Format_Bindings),
     maplist({Format_Bindings}/[Name,Size]>>column_size(Name,Format_Bindings,Size),Names,Sizes),
     maplist([Size,New_Size]>>(New_Size is Size + 1),Sizes,New_Sizes),
-    maplist([Size,Format]>>atomic_list_concat(['~w~` t~',Size,'+'],Format),New_Sizes,Formats),
+    append(Offset_Sizes,[_],New_Sizes),
+    maplist([Size,Format]>>atomic_list_concat(['~w~` t~',Size,'+'],Format),Offset_Sizes,Offset_Formats),
+    append(Offset_Formats,['~w'],Formats),
     atomic_list_concat(Formats,Format_String),
 
     with_output_to(
