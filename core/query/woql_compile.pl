@@ -1040,11 +1040,8 @@ compile_wf(addition(X,P,Y),Goal) -->
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        append([New_Transaction_Object.instance_objects,
-                New_Transaction_Object.schema_objects,
-                New_Transaction_Object.inference_objects], Objects),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_added(Objects, XE, PE, YE))
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_added(RWOs, XE, PE, YE))
     }.
 compile_wf(addition(X,P,Y,G),Goal) -->
     {
@@ -1064,11 +1061,8 @@ compile_wf(removal(X,P,Y),Goal) -->
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        append([New_Transaction_Object.instance_objects,
-                New_Transaction_Object.schema_objects,
-                New_Transaction_Object.inference_objects], Objects),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(Objects, XE, PE, YE))
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(RWOs, XE, PE, YE))
     }.
 compile_wf(removal(X,P,Y,G),Goal) -->
     {
