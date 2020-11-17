@@ -139,7 +139,7 @@ jobs:
     - name: Run tests
       run: |
         swipl\bin\swipl -g halt start.pl store init --key root --server localhost
-        swipl\bin\swipl -g run_tests -g halt start.pl -O
+        swipl\bin\swipl -g run_tests -g halt start.pl
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
