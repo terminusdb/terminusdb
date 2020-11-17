@@ -15,6 +15,7 @@
 :- use_module(core(triple)).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
+:- use_module(library(optparse)).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -59,130 +60,276 @@ non_switch_args(Result, Result).
 not(true,false).
 not(false,true).
 
-run([test]) :-
-    !,
-    run_tests,
-    halt.
-run([serve|Args]) :-
-    !,
-    (   member('--interactive', Args)
-    ->  terminus_server([serve|Args], false),
+command(test).
+command(serve).
+command(list).
+command(optimize).
+command(branch).
+command(db).
+command(store).
+command(csv).
+command(query).
+command(help).
+
+% commands
+opt_spec(test,'terminusdb test OPTIONS',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for `test` command')],
+          [opt(test),
+           type(term),
+           default([]),
+           help('run tests')]]).
+opt_spec(serve,'terminusdb serve OPTIONS',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for `serve` command')],
+          [opt(interactive),
+           shortflags([i]),
+           longflags([interactive]),
+           default(false),
+           help('run server in interactive mode')]]).
+opt_spec(list,'terminusdb list OPTIONS',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `list` command')]]).
+opt_spec(optimize,'terminusdb optimize OPTIONS',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `optimize` command')]]).
+opt_spec(query,'terminusdb query QUERY OPTIONS',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `query` command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli load'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default('admin'),
+           help('author to place on the commit')]]).
+% subcommands
+opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `branch create` sub command')],
+          [opt(origin),
+           type(term),
+           shortflags([o]),
+           longflags([origin]),
+           default(false),
+           help('the origin branch to use')]]).
+opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `branch delete` sub command')]]).
+opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `db create` sub command')],
+          [opt(organization),
+           type(term),
+           longflags([organization]),
+           shortflags([o]),
+           default(admin),
+           help('organizational owner of the database')],
+          [opt(label),
+           type(atom),
+           longflags([label]),
+           shortflags([l]),
+           default(''),
+           help('label to use for this database')],
+          [opt(comment),
+           type(atom),
+           longflags([comment]),
+           shortflags([c]),
+           default(''),
+           help('long description of this database')],
+          [opt(public),
+           type(boolean),
+           longflags([public]),
+           shortflags([p]),
+           default(false),
+           help('whether this database is to be public')],
+          [opt(schema),
+           type(boolean),
+           longflags([schema]),
+           default(true),
+           help('whether to use a schema')],
+          [opt(data_prefix),
+           type(atom),
+           longflags(['data-prefix']),
+           shortflags([d]),
+           default('terminusdb:///data/'),
+           help('uri prefix to use for data')],
+          [opt(schema_prefix),
+           type(atom),
+           longflags(['schema-prefix']),
+           shortflags([s]),
+           default('terminusdb:///schema#'),
+           help('uri prefix to use for schema')],
+          [opt(prefixes),
+           type(atom),
+           longflags(['prefixes']),
+           shortflags([x]),
+           default('{}'),
+           help('additional defined prefixes in JSON')]]).
+opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `db delete` sub command')],
+          [opt(organization),
+           type(term),
+           longflags([organization]),
+           shortflags([o]),
+           default(admin),
+           help('organizational owner of the database')],
+          [opt(force),
+           type(boolean),
+           longflags([force]),
+           shortflags([f]),
+           default(false),
+           help('force the deletion of the database (unsafe)')]]).
+opt_spec(store,init,'terminusdb store init OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `store init` sub command')],
+          [opt(key),
+           type(atom),
+           longflags([key]),
+           shortflags([k]),
+           default(root),
+           help('key to use for admin login')]]).
+opt_spec(csv,load,'terminusdb csv load DB_SPEC FILES OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `csv load` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli load'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default('admin'),
+           help('author to place on the commit')]]).
+opt_spec(csv,update,'terminusdb csv update DB_SPEC FILES OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `csv update` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli load'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default('admin'),
+           help('author to place on the commit')]]).
+opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `csv dump` sub command')],
+          [opt(output),
+           type(atom),
+           longflags([output]),
+           shortflags([o]),
+           default('_'),
+           help('file name to use for csv output')]]).
+
+run([Command|Rest]) :-
+    opt_spec(Command,Command_String,Spec),
+    opt_parse(Spec,Rest,Opts,Positional),
+    (   member(help(true), Opts)
+    ->  opt_help(Spec,Help),
+        format(current_output,"~s~n",[Command_String]),
+        format(current_output,Help,[])
+    ;   run_command(Command,Positional,Opts)).
+run([Command,Subcommand|Rest]) :-
+    opt_spec(Command,Subcommand,Command_String,Spec),
+    opt_parse(Spec,Rest,Opts,Positional),
+    (   member(help(true), Opts)
+    ->  opt_help(Spec,Help),
+        format(current_output,"~s~n",[Command_String]),
+        format(current_output,Help,[])
+    ;   run_command(Command,Subcommand,Positional,Opts)).
+run(_) :-
+    findall(Command, command(Command), Commands),
+    format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
+    format(current_output, "type: terminusdb [command] --help for more details~n", []).
+
+% Commands
+run_command(test,_Positional,Opts) :-
+    (   member(test([]),Opts)
+    ->  run_tests
+    ;   member(test(Test), Opts),
+        run_tests(Test)).
+run_command(serve,_Positional,Opts) :-
+    (   member(interactive(true),Opts)
+    ->  terminus_server([serve|Opts], false),
         prolog
-    ;   terminus_server([serve|Args], true)).
-% run([describe|Args]) :- true.
-run([list|Databases]) :-
-    !,
+    ;   terminus_server([serve|Opts], true)).
+run_command(list,Databases,_Opts) :-
     super_user_authority(Auth),
     list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
     pretty_print_databases(Database_Objects).
-run([optimize|Databases]) :-
-    !,
+run_command(optimize,Databases,_Opts) :-
     super_user_authority(Auth),
     forall(member(Path, Databases),
            (   api_optimize(system_descriptor{}, Auth, Path),
                format(current_output, "~N~s optimized~n", [Path])
            )).
-run([branch,create,Path|Args]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    key_value_args_default('--origin', Origin_Base, Args, false),
-    (   Origin_Base = false
-    ->  Origin_Option = none
-    ;   Origin_Option = some(Origin_Base)),
-    branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri).
-run([branch,delete,Path]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    branch_delete(System_DB, Auth, Path).
-run([db,create,DB_Path|Args]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-
-    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
-    ->  Organization = (Match.1),
-        DB = (Match.2)
-    ;   DB = DB_Path,
-        key_value_args_default('--organization', Organization, Args, admin)
-    ),
-
-    key_value_args_default('--label', Label, Args, ''),
-    key_value_args_default('--comment', Comment, Args, 'command line update'),
-    switch_args_boolean('--public', Args, Public),
-    switch_args_boolean('--no-schema', Args, No_Schema),
-    not(No_Schema,Schema),
-    key_value_args_default('--data-prefix', Data_Prefix, Args, 'terminusdb:///data/'),
-    key_value_args_default('--schema-prefix', Schema_Prefix, Args, 'terminusdb:///schema#'),
-    key_value_args_default('--prefixes', Prefixes_Atom, Args, '{}'),
-    atom_json_dict(Prefixes_Atom, Prefixes, []),
-    put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
-    create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged).
-run([db,delete,DB_Path]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
-    ->  Organization = (Match.1),
-        DB = (Match.2)
-    ;   DB = DB_Path,
-        key_value_args_default('--organization', Organization, Args, admin)
-    ),
-    key_value_args_default('--force', Force_Delete, Args, false),
-    delete_db(System_DB, Auth, Organization, DB, Force_Delete).
-run([store,init|Args]) :-
-    !,
-    (   key_value_args('--key',Key,Args)
-    ->  true
-    ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
-        fail),
-    initialize_database(Key),
-    format('Successfully initialised database!!!~n').
-%run([csv,list])
-%run([csv,delete,Path,Name])
-run([csv,load,Path|Args]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    key_value_args_default('--commit-message',Message, Args, "loaded from terminusdb CLI"),
-    key_value_args_default('--commit-author',Author, Args, "admin"),
-    non_switch_args(Args,Files),
-    maplist([File,File_Name=File]>>file_base_name(File, File_Name),
-            Files,
-            File_Map),
-    csv_load(System_DB, Auth, Path, _{ message : Message,
-                                       author : Author},
-             File_Map, _{}),
-    format(current_output,'Successfully loaded CSVs~n',[]).
-run([csv,update,Path|Args]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    key_value_args_default('--message',Msg, Args, "loaded from terminusdb CLI"),
-    key_value_args_default('--author',Author, Args, "admin"),
-    non_switch_args(Args,Files),
-    maplist([File,File_Name=File]>>file_base_name(File, File_Name),
-            Files,
-            File_Map),
-    csv_update(System_DB, Auth, Path, _{ message : Msg,
-                                         author : Author},
-               File_Map, _{}),
-    format(current_output,'Successfully updated CSVs~n',[]).
-run([csv,dump,Path,File|Args]) :-
-    !,
-    super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
-    csv_dump(System_DB, Auth, Path, File, Temp, []),
-    key_value_args_default('--output', Output, Args, File),
-    copy_file(Temp, Output),
-    format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
-% turtle
-% run([push|_Databases])
-% run([pull|_Databases])
-% run([clone|_Databases])
-run([query,Database,Query]) :-
-    !,
+run_command(query,[Database,Query],_Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
     create_context(Descriptor,commit_info{ author : "cli",
                                            message : "testing"}, Context),
@@ -193,8 +340,110 @@ run([query,Database,Query]) :-
     Final_Prefixes = (Context0.prefixes),
     pretty_print_query_response(Response,Final_Prefixes,String),
     write(String).
-run(_) :-
-    help_screen.
+run_command(Command,_Args,_Opts) :-
+    opt_spec(Command,Command_String,Spec),
+    opt_help(Spec,Help),
+    format(current_output,"~s~n",[Command_String]),
+    format(current_output,Help,[]).
+
+% Subcommands
+run_command(branch,create,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    member(origin(Origin_Base), Opts),
+    (   Origin_Base = false
+    ->  Origin_Option = none
+    ;   Origin_Option = some(Origin_Base)),
+    branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+    format(current_output, "~N~s branch created~n", [Path]).
+run_command(branch,delete,[Path],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    branch_delete(System_DB, Auth, Path),
+    format(current_output, "~N~s branch deleted~n", [Path]).
+run_command(db,create,[DB_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    ->  Organization = (Match.1),
+        DB = (Match.2)
+    ;   DB = DB_Path,
+        member(organization(Organization),Opts)
+    ),
+    member(label(Label), Opts),
+    member(comment(Comment), Opts),
+    member(public(Public), Opts),
+    member(schema(Schema), Opts),
+    member(data_prefix(Data_Prefix), Opts),
+    member(schema_prefix(Schema_Prefix), Opts),
+    member(prefixes(Prefixes_Atom), Opts),
+    atom_json_dict(Prefixes_Atom, Prefixes, []),
+    put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
+    create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged).
+run_command(db,delete,[DB_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    ->  Organization = (Match.1),
+        DB = (Match.2)
+    ;   DB = DB_Path,
+        member(organization(Organization), Opts)
+    ),
+    member(force(Force_Delete), Opts),
+    delete_db(System_DB, Auth, Organization, DB, Force_Delete).
+run_command(store,init, _, Opts) :-
+    (   member(key(Key), Opts)
+    ->  true
+    ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
+        fail),
+    initialize_database(Key),
+    format('Successfully initialised database!!!~n').
+%run_command(csv,list,_,_,_)
+%run_command(csv,delete,Path,Name,_)
+run_command(csv,load,[Path|Files],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    member(message(Message), Opts),
+    member(author(Author), Opts),
+    maplist([File,File_Name=File]>>file_base_name(File, File_Name),
+            Files,
+            File_Map),
+    csv_load(System_DB, Auth, Path, _{ message : Message,
+                                       author : Author},
+             File_Map, _{}),
+    format(current_output,'Successfully loaded CSVs: ~s~n',[Files]).
+run_command(csv,update,[Path|Files],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    member(message(Message), Opts),
+    member(author(Author), Opts),
+    maplist([File,File_Name=File]>>file_base_name(File, File_Name),
+            Files,
+            File_Map),
+    csv_update(System_DB, Auth, Path, _{ message : Message,
+                                         author : Author},
+               File_Map, _{}),
+    format(current_output,'Successfully updated CSVs: ~s~n',[Files]).
+run_command(csv,dump,[Path,File],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    csv_dump(System_DB, Auth, Path, File, Temp, []),
+    member(output(Output), Opts),
+    ignore(Output = File),
+    copy_file(Temp, Output),
+    format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
+% turtle
+% run_command(push,_Databases])
+% run_command(pull,_Databases])
+% run_command(clone,_Databases])
+run_command(Command,Sub_Command,_Args,_Opts) :-
+    opt_spec(Command,Sub_Command,Command_String,Spec),
+    opt_help(Spec,Help),
+    format(current_output,"~s~n",[Command_String]),
+    format(current_output,Help,[]).
 
 initialise_hup :-
     (   current_prolog_flag(unix, true)
@@ -216,7 +465,7 @@ prolog:message(server_missing_config(BasePath)) -->
     'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
     nl,
     nl,
-    'Run: ~s/utils/db_init first'-[BasePath],
+    'Run: `terminusdb store init` first'-[BasePath],
     nl
     ].
 

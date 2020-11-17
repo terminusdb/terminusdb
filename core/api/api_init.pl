@@ -152,6 +152,7 @@ initialize_registry :-
         copy_file(Example_Registry_Path, Registry_Path)
     ).
 
+
 initialize_database(Key) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path).
