@@ -285,7 +285,7 @@ run([Command|_Rest]) :-
     format(current_output, "terminusdb ~s [subcommand]~n~twhere subcommand is one of: ~q~n", [Command, Subcommands]),
     format(current_output, "type: terminusdb ~s [subcommand] --help for more details~n", [Command]).
 run(_) :-
-    findall(Command, command(Command), Commands),
+    setof(Command, command(Command), Commands),
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
