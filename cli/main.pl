@@ -197,7 +197,13 @@ opt_spec(store,init,'terminusdb store init OPTIONS',
            longflags([key]),
            shortflags([k]),
            default(root),
-           help('key to use for admin login')]]).
+           help('key to use for admin login')],
+          [opt(force),
+           type(boolean),
+           longflags([force]),
+           shortflags([f]),
+           default(false),
+           help('force the creation of a new store even when one already exists')]]).
 opt_spec(csv,load,'terminusdb csv load DB_SPEC FILES OPTIONS',
          [[opt(help),
            type(boolean),
@@ -374,7 +380,8 @@ run_command(store,init, _, Opts) :-
     ->  true
     ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
         fail),
-    initialize_database(Key),
+    member(force(Force), Opts),
+    initialize_database(Key,Force),
     format('Successfully initialised database!!!~n').
 %run_command(csv,list,_,_,_)
 %run_command(csv,delete,Path,Name,_)

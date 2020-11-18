@@ -11,7 +11,7 @@
               % init.pl
               initialize_config/4,
               initialize_registry/0,
-              initialize_database/1,
+              initialize_database/2,
               initialize_database_with_store/2,
 
               % db_graph.pl
