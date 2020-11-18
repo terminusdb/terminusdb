@@ -33,17 +33,6 @@ cli_toplevel :-
 not(true,false).
 not(false,true).
 
-command(test).
-command(serve).
-command(list).
-command(optimize).
-command(branch).
-command(db).
-command(store).
-command(csv).
-command(query).
-command(help).
-
 % commands
 opt_spec(test,'terminusdb test OPTIONS',
          [[opt(help),
@@ -261,6 +250,14 @@ opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
            default('_'),
            help('file name to use for csv output')]]).
 
+command(Command) :-
+    opt_spec(Command,_,_).
+command(Command) :-
+    opt_spec(Command,_,_,_).
+
+command_subcommand(Command,Subcommand) :-
+    opt_spec(Command,Subcommand,_,_).
+
 run([Command|Rest]) :-
     opt_spec(Command,Command_String,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
@@ -277,6 +274,10 @@ run([Command,Subcommand|Rest]) :-
         format(current_output,"~s~n",[Command_String]),
         format(current_output,Help,[])
     ;   run_command(Command,Subcommand,Positional,Opts)).
+run([Command|_Rest]) :-
+    setof(Subcommand, command_subcommand(Command,Subcommand), Subcommands),
+    format(current_output, "terminusdb ~s [subcommand]~n~twhere subcommand is one of: ~q~n", [Command, Subcommands]),
+    format(current_output, "type: terminusdb ~s [subcommand] --help for more details~n", [Command]).
 run(_) :-
     findall(Command, command(Command), Commands),
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
