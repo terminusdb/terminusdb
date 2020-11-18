@@ -44,7 +44,7 @@ electron.app.on('ready', () => {
     if (!fs.existsSync(`${cwd}/db`)) {
       fs.mkdirSync(cwd)
       const initDb = execFile(macOSPath, [`${appDir}/terminusdb-server/start.pl`, 'store', 'init',
-                                          '--server', 'localhost', '--key', 'root', '--autologin=true'])
+                                          '--key', 'root'])
       initDb.stdout.on('data', (data) => console.log(data))
       initDb.stderr.on('data', (data) => console.log(data))
     }

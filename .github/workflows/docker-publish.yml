@@ -35,7 +35,7 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
 
       - name: Run tests
-        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root --server localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
 
       - name: Copy binary to local filesystem
         run: |
@@ -138,7 +138,7 @@ jobs:
 
     - name: Run tests
       run: |
-        swipl\bin\swipl -g halt start.pl store init --key root --server localhost
+        swipl\bin\swipl -g halt start.pl store init --key root
         swipl\bin\swipl -g run_tests -g halt start.pl
 
     - name: Archive production artifacts
@@ -238,8 +238,8 @@ jobs:
     - name: Run tests
       run: |
         export TERMINUSDB_SERVER_PACK_DIR=./public/pack
-        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/start.pl store init --server localhost --key root
-        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl -O
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/start.pl store init --key root
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4

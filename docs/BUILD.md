@@ -81,7 +81,7 @@ configure the server name, as shown in the example. It will also
 create the system database.
 
 ```
-./terminusdb store init --key "my_password_here" --server "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -150,7 +150,7 @@ configure the server name, as shown in the example. It will also
 create the system database.
 
 ```
-./terminusdb store init --key "my_password_here" --server "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -217,7 +217,7 @@ configure the server name, as shown in the example. It will also
 create the system database.
 
 ```
-./terminusdb store init --key "my_password_here" --server "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
@@ -262,7 +262,7 @@ the system database:
 git clone https://github.com/terminusdb/terminusdb-server.git
 cd terminusdb-server
 make
-./terminusdb store init --server localhost --key root
+./terminusdb store init --key root
 ./terminusdb serve
 ```
 
