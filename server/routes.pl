@@ -585,11 +585,11 @@ csv_handler(delete,Path,Request, System_DB, Auth) :-
     do_or_die(_{ commit_info : Commit_Info } :< Document,
               error(bad_api_document(Document,[commit_info]),_)),
     do_or_die(_{ name : Name} :< Document,
-              error(no_csv_name_supplied),_),
+              error(no_csv_name_supplied,_)),
 
     catch_with_backtrace(
         (   csv_delete(System_DB, Auth, Path, Commit_Info, Name, _{}),
-            throw(http_reply(file('application/binary', CSV_Path)))),
+            throw(http_reply(file('application/binary', Name)))),
         Error,
         do_or_die(csv_error_handler(Error, Request),
                   Error)).
