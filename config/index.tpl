@@ -34,7 +34,7 @@
       ;((key) => {
         window.TERMINUSDB = { user: { username: "admin" }}
         if (key) window.TERMINUSDB.user.password = key
-      })("~s")
+      })(~w)
     </script>
     <!--
       This HTML file is a template.

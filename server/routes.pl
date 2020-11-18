@@ -4740,8 +4740,11 @@ test(optimize_system, [
 console_handler(get,Request, _System_DB, _Auth) :-
     config:index_template(Tpl_String),
     config:console_base_url(BaseURL),
+    (   config:autologin_enabled
+    ->  Key = '"root"'
+    ;   Key = false),
 
-    format(string(Index), Tpl_String, [BaseURL, false, BaseURL]),
+    format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
 
     write_cors_headers(Request),
     throw(http_reply(bytes('text/html', Index))).

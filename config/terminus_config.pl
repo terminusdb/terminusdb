@@ -14,6 +14,7 @@
               ssl_cert_key/1,
               pack_dir/1,
               https_enabled/0,
+              autologin_enabled/0,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -66,6 +67,10 @@ console_base_url(Value) :-
 
 https_enabled :-
     getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
+    Value = 'true'.
+
+autologin_enabled :-
+    getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', 'false', Value),
     Value = 'true'.
 
 ssl_cert(Value) :-
