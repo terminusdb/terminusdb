@@ -40,6 +40,7 @@ electron.app.on('ready', () => {
     process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
     process.env.TERMINUSDB_SERVER_PACK_DIR = `${appDir}/pack`
     process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
+    process.env.TERMINUSDB_SERVER_AUTOLOGIN_ENABLED = 'true'
     process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
     if (!fs.existsSync(`${cwd}/db`)) {
       fs.mkdirSync(cwd)
