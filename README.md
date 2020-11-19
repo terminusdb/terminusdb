@@ -1,6 +1,6 @@
 ![](terminusdb.png)
 
-# TerminusDB Server
+# TerminusDB
 
 [![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
