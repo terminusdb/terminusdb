@@ -31,7 +31,7 @@ csv_delete_into_context(File, Context, _Options) :-
 
     do_or_die(
         query_default_schema_write_graph(Context, _),
-        error(no_schema(Context.default_descriptor))),
+        error(no_schema(Context.default_collection))),
 
     with_transaction(
         Context,

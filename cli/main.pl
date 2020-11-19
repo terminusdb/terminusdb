@@ -16,11 +16,11 @@
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 :- use_module(library(optparse)).
+:- use_module(core(util), [do_or_die/2]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
-
     % Better error handling here...
     catch(
         (   set_prolog_flag(verbose, true),
@@ -306,21 +306,26 @@ run_command(list,Databases,_Opts) :-
     pretty_print_databases(Database_Objects).
 run_command(optimize,Databases,_Opts) :-
     super_user_authority(Auth),
-    forall(member(Path, Databases),
-           (   api_optimize(system_descriptor{}, Auth, Path),
-               format(current_output, "~N~s optimized~n", [Path])
-           )).
+    api_report_errors(
+        optimize,
+        forall(member(Path, Databases),
+               (   api_optimize(system_descriptor{}, Auth, Path),
+                   format(current_output, "~N~s optimized~n", [Path])
+               ))).
 run_command(query,[Database,Query],_Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
     create_context(Descriptor,commit_info{ author : "cli",
                                            message : "testing"}, Context),
-    woql_context(Prefixes),
-    context_extend_prefixes(Context,Prefixes,Context0),
-    read_term_from_atom(Query, AST, []),
-    query_response:run_context_ast_jsonld_response(Context0, AST, Response),
-    Final_Prefixes = (Context0.prefixes),
-    pretty_print_query_response(Response,Final_Prefixes,String),
-    write(String).
+    api_report_errors(
+        woql,
+        (   woql_context(Prefixes),
+            context_extend_prefixes(Context,Prefixes,Context0),
+            read_term_from_atom(Query, AST, []),
+            query_response:run_context_ast_jsonld_response(Context0, AST, Response),
+            Final_Prefixes = (Context0.prefixes),
+            pretty_print_query_response(Response,Final_Prefixes,String),
+            write(String)
+        )).
 run_command(Command,_Args,_Opts) :-
     opt_spec(Command,Command_String,Spec),
     opt_help(Spec,Help),
@@ -336,12 +341,16 @@ run_command(branch,create,[Path],Opts) :-
     (   Origin_Base = false
     ->  Origin_Option = none
     ;   Origin_Option = some(Origin_Base)),
-    branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+    api_report_errors(
+        branch_create,
+        branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
     format(current_output, "~N~s branch created~n", [Path]).
 run_command(branch,delete,[Path],_Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    branch_delete(System_DB, Auth, Path),
+    api_report_errors(
+        branch_delete,
+        branch_delete(System_DB, Auth, Path)),
     format(current_output, "~N~s branch deleted~n", [Path]).
 run_command(db,create,[DB_Path],Opts) :-
     super_user_authority(Auth),
@@ -362,7 +371,9 @@ run_command(db,create,[DB_Path],Opts) :-
     member(prefixes(Prefixes_Atom), Opts),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
-    create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged).
+    api_report_errors(
+        create_db,
+        create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged)).
 run_command(db,delete,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -374,14 +385,18 @@ run_command(db,delete,[DB_Path],Opts) :-
         member(organization(Organization), Opts)
     ),
     member(force(Force_Delete), Opts),
-    delete_db(System_DB, Auth, Organization, DB, Force_Delete).
+    api_report_errors(
+        delete_db,
+        delete_db(System_DB, Auth, Organization, DB, Force_Delete)).
 run_command(store,init, _, Opts) :-
     (   member(key(Key), Opts)
     ->  true
     ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
         fail),
     member(force(Force), Opts),
-    initialize_database(Key,Force),
+    api_report_errors(
+        store_init,
+        initialize_database(Key,Force)),
     format('Successfully initialised database!!!~n').
 %run_command(csv,list,_,_,_)
 %run_command(csv,delete,Path,Name,_)
@@ -393,9 +408,11 @@ run_command(csv,load,[Path|Files],Opts) :-
     maplist([File,File_Name=File]>>file_base_name(File, File_Name),
             Files,
             File_Map),
-    csv_load(System_DB, Auth, Path, _{ message : Message,
-                                       author : Author},
-             File_Map, _{}),
+    api_report_errors(
+        csv,
+        csv_load(System_DB, Auth, Path, _{ message : Message,
+                                           author : Author},
+                 File_Map, _{})),
     format(current_output,'Successfully loaded CSVs: ~s~n',[Files]).
 run_command(csv,update,[Path|Files],Opts) :-
     super_user_authority(Auth),
@@ -405,14 +422,18 @@ run_command(csv,update,[Path|Files],Opts) :-
     maplist([File,File_Name=File]>>file_base_name(File, File_Name),
             Files,
             File_Map),
-    csv_update(System_DB, Auth, Path, _{ message : Message,
-                                         author : Author},
-               File_Map, _{}),
+    api_report_errors(
+        csv,
+        csv_update(System_DB, Auth, Path, _{ message : Message,
+                                             author : Author},
+                   File_Map, _{})),
     format(current_output,'Successfully updated CSVs: ~s~n',[Files]).
 run_command(csv,dump,[Path,File],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    csv_dump(System_DB, Auth, Path, File, Temp, []),
+    api_report_errors(
+        csv,
+        csv_dump(System_DB, Auth, Path, File, Temp, [])),
     member(output(Output), Opts),
     ignore(Output = File),
     copy_file(Temp, Output),
@@ -426,6 +447,22 @@ run_command(Command,Sub_Command,_Args,_Opts) :-
     opt_help(Spec,Help),
     format(current_output,"~s~n",[Command_String]),
     format(current_output,Help,[]).
+
+:- meta_predicate api_report_errors(?,0).
+api_report_errors(API,Goal) :-
+    catch_with_backtrace(
+        Goal,
+        Error,
+        do_or_die(api_error_cli(API,Error),
+                  Error)
+    ).
+
+api_error_cli(API, Error) :-
+    api_error_jsonld(API,Error,JSON),
+    json_cli_code(JSON,Status),
+    Msg = (JSON.'api:message'),
+    format(user_error,"Error: ~s~n",[Msg]),
+    halt(Status).
 
 initialise_hup :-
     (   current_prolog_flag(unix, true)

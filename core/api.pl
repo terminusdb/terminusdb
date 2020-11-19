@@ -86,8 +86,16 @@
 
               % api_db
               list_databases/4,
-              pretty_print_databases/1
+              pretty_print_databases/1,
 
+              % api_error.pl
+              api_error_jsonld/3,
+              api_error_jsonld/4,
+              status_http_code/2,
+              status_cli_code/2,
+              generic_exception_jsonld/2,
+              json_http_code/2,
+              json_cli_code/2
           ]).
 
 :- use_module(api/api_init).
@@ -113,3 +121,4 @@
 :- use_module(api/api_csv).
 :- use_module(api/api_prefixes).
 :- use_module(api/api_db).
+:- use_module(api/api_error).
