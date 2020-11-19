@@ -33,7 +33,7 @@ v4.0.0
 
 ## Getting Started
 
-For Windows and Linux, Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
+Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
 For development and testing, as well as Mac users, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
