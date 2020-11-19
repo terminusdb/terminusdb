@@ -8,7 +8,7 @@ if [[ $2 == "" ]]; then
     exit 1
 fi
 mkdir public/pack
-git clone --single-branch --branch "$2" https://github.com/terminusdb/terminusdb-server.git public/terminusdb-server
+git clone --single-branch --branch "$2" https://github.com/terminusdb/terminusdb.git public/terminusdb-server
 git clone https://github.com/terminusdb/terminus_store_prolog.git public/pack/terminus_store_prolog
 bash public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh
 cp -r /Applications/SWI-Prolog.app public/

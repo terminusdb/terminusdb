@@ -8,9 +8,9 @@ mkdir -p app_dir/usr/share/terminusdb
 mkdir -p app_dir/usr/bin
 mkdir -p app_dir/usr/lib/swi-prolog/pack
 mkdir -p app_dir/usr/lib/x86_64-linux-gnu
-git clone https://github.com/terminusdb/terminusdb-server.git
-cd terminusdb-server && git checkout $TERMINUSDB_BRANCH && cd ..
-cp -r terminusdb-server/* app_dir/usr/share/terminusdb/
+git clone https://github.com/terminusdb/terminusdb.git
+cd terminusdb && git checkout $TERMINUSDB_BRANCH && cd ..
+cp -r terminusdb/* app_dir/usr/share/terminusdb/
 cp -r /usr/lib/swi-prolog app_dir/usr/lib/
 cp -L /usr/lib/x86_64-linux-gnu/libedit.so.2 app_dir/usr/lib/swi-prolog/lib/x86_64-linux/
 cp -L /lib/x86_64-linux-gnu/libpcre.so.3 app_dir/usr/lib/swi-prolog/lib/x86_64-linux/
