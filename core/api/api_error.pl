@@ -608,7 +608,7 @@ api_error_jsonld(branch,error(source_database_does_not_exist(Org,DB), _), JSON) 
             }.
 api_error_jsonld(branch,error(repository_is_not_local(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
-    format(string(Msg), "Attempt to branch from remote repository", [Path]),
+    format(string(Msg), "Attempt to branch from remote repository ~s", [Path]),
     JSON = _{'@type' : "api:BranchErrorResponse",
              'api:status' : "api:failure",
              'api:message' : Msg,

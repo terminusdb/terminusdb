@@ -22,13 +22,20 @@ cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
     % Better error handling here...
-    catch(
+    catch_with_backtrace(
         (   set_prolog_flag(verbose, true),
             run(Argv),
-            set_prolog_flag(verbose, false)
+            set_prolog_flag(verbose, false),
+            halt(0)
         ),
         Exception,
-        format(current_output, "~NError: ~q~n~n", [Exception])).
+        (   Exception = error(Error,Ctx)
+        ->  print_prolog_backtrace(user_error, Ctx),
+            format(user_error, "~NError: ~q~n~n", [Error]),
+            halt(1)
+        ;   format(user_error, "~NError: ~q~n~n", [Error]),
+            halt(1)
+        )).
 
 not(true,false).
 not(false,true).
@@ -342,14 +349,14 @@ run_command(branch,create,[Path],Opts) :-
     ->  Origin_Option = none
     ;   Origin_Option = some(Origin_Base)),
     api_report_errors(
-        branch_create,
+        branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
     format(current_output, "~N~s branch created~n", [Path]).
 run_command(branch,delete,[Path],_Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
-        branch_delete,
+        branch,
         branch_delete(System_DB, Auth, Path)),
     format(current_output, "~N~s branch deleted~n", [Path]).
 run_command(db,create,[DB_Path],Opts) :-
@@ -373,7 +380,8 @@ run_command(db,create,[DB_Path],Opts) :-
     put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
     api_report_errors(
         create_db,
-        create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged)).
+        create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged)),
+    format(current_output,"Database ~s/~s created~n",[Organization,DB]).
 run_command(db,delete,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -387,7 +395,8 @@ run_command(db,delete,[DB_Path],Opts) :-
     member(force(Force_Delete), Opts),
     api_report_errors(
         delete_db,
-        delete_db(System_DB, Auth, Organization, DB, Force_Delete)).
+        delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
+    format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
 run_command(store,init, _, Opts) :-
     (   member(key(Key), Opts)
     ->  true
