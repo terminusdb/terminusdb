@@ -27,10 +27,6 @@ TerminusDB's *delta-encoding* approach makes possible branch, merge,
 push, pull, clone, time-travel and other git-like operations on a fully
 featured graph database.
 
-## Latest Version
-
-v4.0.0
-
 ## Getting Started
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
