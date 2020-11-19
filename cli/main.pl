@@ -107,7 +107,7 @@ opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
            default(false),
            help('print help for the `branch create` sub command')],
           [opt(origin),
-           type(term),
+           type(atom),
            shortflags([o]),
            longflags([origin]),
            default(false),
@@ -319,17 +319,19 @@ run_command(optimize,Databases,_Opts) :-
                (   api_optimize(system_descriptor{}, Auth, Path),
                    format(current_output, "~N~s optimized~n", [Path])
                ))).
-run_command(query,[Database,Query],_Opts) :-
+run_command(query,[Database,Query],Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
-    create_context(Descriptor,commit_info{ author : "cli",
-                                           message : "testing"}, Context),
+    member(author(Author), Opts),
+    member(author(Message), Opts),
+    create_context(Descriptor,commit_info{ author : Author,
+                                           message : Message}, Context),
     api_report_errors(
         woql,
         (   woql_context(Prefixes),
             context_extend_prefixes(Context,Prefixes,Context0),
             read_term_from_atom(Query, AST, []),
             query_response:run_context_ast_jsonld_response(Context0, AST, Response),
-            Final_Prefixes = (Context0.prefixes),
+            get_dict(prefixes,Context0, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
             write(String)
         )).
@@ -422,7 +424,7 @@ run_command(csv,load,[Path|Files],Opts) :-
         csv_load(System_DB, Auth, Path, _{ message : Message,
                                            author : Author},
                  File_Map, _{})),
-    format(current_output,'Successfully loaded CSVs: ~s~n',[Files]).
+    format(current_output,'Successfully loaded CSVs: ~q~n',[Files]).
 run_command(csv,update,[Path|Files],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -436,7 +438,7 @@ run_command(csv,update,[Path|Files],Opts) :-
         csv_update(System_DB, Auth, Path, _{ message : Message,
                                              author : Author},
                    File_Map, _{})),
-    format(current_output,'Successfully updated CSVs: ~s~n',[Files]).
+    format(current_output,'Successfully updated CSVs: ~q~n',[Files]).
 run_command(csv,dump,[Path,File],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
