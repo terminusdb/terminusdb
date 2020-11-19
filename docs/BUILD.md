@@ -68,8 +68,8 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
 make
 ```
 
@@ -137,8 +137,8 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
 make
 ```
 
@@ -204,8 +204,8 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
 make
 ```
 
@@ -259,8 +259,8 @@ Clone the Git repository and execute the `terminusdb` binary file, the `terminus
 the system database:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server.git
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb.git
+cd terminusdb
 make
 ./terminusdb store init --key root
 ./terminusdb serve
