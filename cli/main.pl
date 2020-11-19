@@ -33,7 +33,7 @@ cli_toplevel :-
         ->  print_prolog_backtrace(user_error, Ctx),
             format(user_error, "~NError: ~q~n~n", [Error]),
             halt(1)
-        ;   format(user_error, "~NError: ~q~n~n", [Error]),
+        ;   format(user_error, "~NError: ~q~n~n", [Exception]),
             halt(1)
         )).
 
