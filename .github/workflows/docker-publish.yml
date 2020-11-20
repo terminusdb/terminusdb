@@ -257,6 +257,10 @@ jobs:
 
     - uses: actions/download-artifact@v2
 
+    - name: Rename terminusdb binary
+      run: |
+        mv terminusdb-linux/terminusdb terminusdb-linux-amd64
+
     - name: Set release name
       id: release_name
       run: |
@@ -288,4 +292,4 @@ jobs:
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
-          terminusdb-linux/terminusdb
+          terminusdb-linux-amd64
