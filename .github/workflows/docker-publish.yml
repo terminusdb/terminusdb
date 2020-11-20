@@ -288,3 +288,4 @@ jobs:
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
+          terminusdb-linux/terminusdb
