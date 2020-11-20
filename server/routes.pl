@@ -3790,7 +3790,12 @@ customise_exception(error(E)) :-
                [status(500)]).
 customise_exception(error(E, CTX)) :-
     http_log('~N[Exception] ~q~n',[error(E,CTX)]),
-    format(atom(EM),'Error: ~q in CTX ~q', [E, CTX]),
+    (   CTX = context(prolog_stack(Stack),_)
+    ->  with_output_to(
+            string(Ctx_String),
+            print_prolog_backtrace(current_output,Stack))
+    ;   format(string(Ctx_String), "~q", [CTX])),
+    format(atom(EM),'Error: ~q~n~s~n', [E, Ctx_String]),
     reply_json(_{'api:status' : 'api:server_error',
                  'api:message' : EM},
                [status(500)]).
