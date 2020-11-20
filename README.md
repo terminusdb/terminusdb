@@ -2,7 +2,7 @@
 
 # TerminusDB
 
-[![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
+[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
 TerminusDB is an open source, model driven, revision controlled RDF
 graph database for distributed collaboration designed for the web-age.
