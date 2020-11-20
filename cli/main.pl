@@ -41,17 +41,20 @@ not(true,false).
 not(false,true).
 
 % commands
+opt_spec(help,'terminusdb help',
+         [[opt(markdown),
+           type(boolean),
+           shortflags([m]),
+           longflags([markdown]),
+           default(false),
+           help('generate help as markdown')]]).
 opt_spec(test,'terminusdb test OPTIONS',
          [[opt(help),
            type(boolean),
            shortflags([h]),
            longflags([help]),
            default(false),
-           help('print help for `test` command')],
-          [opt(test),
-           type(term),
-           default([]),
-           help('run tests')]]).
+           help('print help for `test` command')]]).
 opt_spec(serve,'terminusdb serve OPTIONS',
          [[opt(help),
            type(boolean),
@@ -153,6 +156,7 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
           [opt(schema),
            type(boolean),
            longflags([schema]),
+           shortflags([k]),
            default(true),
            help('whether to use a schema')],
           [opt(data_prefix),
@@ -297,6 +301,9 @@ run(_) :-
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
 % Commands
+run_command(help,_Positional,Opts) :-
+    member(markdown(true),Opts),
+    terminusdb_help_markdown.
 run_command(test,_Positional,Opts) :-
     (   member(test([]),Opts)
     ->  run_tests
@@ -498,3 +505,57 @@ prolog:message(server_missing_config(BasePath)) -->
     'Run: `terminusdb store init` first'-[BasePath],
     nl
     ].
+
+%% Generate help markdown to standard output
+terminusdb_help_markdown :-
+    forall(
+        opt_spec(Command,_,_),
+        (
+            format(current_output,'### ~s~n~n',[Command]),
+            opt_spec(Command,Command_String,OptSpec),
+            embellish_flags(OptSpec,OptSpec0),
+            format(current_output,'`~s`~n~n',[Command_String]),
+            forall(
+                member(Option,OptSpec0),
+                format_markdown_opt(Option)
+            )
+        )
+    ),
+    forall(
+        command_subcommand(Command,Subcommand),
+        (
+            format(current_output,'### ~s ~s~n~n',[Command,Subcommand]),
+            opt_spec(Command,Subcommand,Command_String,OptSpec),
+            embellish_flags(OptSpec,OptSpec0),
+            format(current_output,'`~s`~n~n',[Command_String]),
+            forall(
+                member(Option,OptSpec0),
+                format_markdown_opt(Option)
+            )
+        )
+    ).
+
+embellish_flags(OptsSpec0,OptsSpec2) :-
+    maplist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
+    maplist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
+
+format_markdown_opt(Opt) :-
+
+    memberchk(shortflags(SFlags0),Opt),
+    memberchk(longflags(LFlags0),Opt),
+
+    atomic_list_concat(['`',SFlags0,'`'],SFlags),
+
+
+    maplist([LFlag_In,LFlag_Out]>>
+            atomic_list_concat(['`',LFlag_In,'`'],LFlag_Out),
+            LFlags0,LFlags1
+           ),
+    utils:intersperse(', ',LFlags1,LFlags2),
+    atomic_list_concat(LFlags2, LFlags),
+
+    memberchk(help(Help), Opt),
+
+    format(current_output, '  * ~s, ~s=[<value>]:~n', [SFlags,LFlags]),
+    format(current_output, '  ~s~n~n', [Help]).
+

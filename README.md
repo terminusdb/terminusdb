@@ -53,11 +53,18 @@ TerminusDB will:
 * Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
+## Command Line
+
+In order to start the terminusdb server or simply to explore a store
+from the command line, you can use the [TerminusDB Command Line
+Interface](https://github.com/terminusdb/terminusdb/docs/CLI.md).
+
 ## Client
 
 In order to begin manipulating and querying your database you can
-simply point your browser to `"http://SERVER:PORT/"` which should
-allow you to manage and query your database.
+start the TerminusDB server (using the CLI) and then simply point your
+browser to `"http://SERVER:PORT/"` which should allow you to manage
+and query your database.
 
 You can also perform all configuration, querying and management
 functions via the RESTful API. We have a number of client libraries to
