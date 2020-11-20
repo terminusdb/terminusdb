@@ -31,7 +31,7 @@ featured graph database.
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
-For development and testing, as well as Mac users, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
+For development and testing we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
 ### Building from source
 
