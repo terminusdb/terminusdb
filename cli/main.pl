@@ -556,6 +556,6 @@ format_markdown_opt(Opt) :-
 
     memberchk(help(Help), Opt),
 
-    format(current_output, '  * ~s, ~s=[<value>]:~n', [SFlags,LFlags]),
+    format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 

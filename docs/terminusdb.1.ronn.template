@@ -3,7 +3,7 @@ terminusdb -- command line interface to the terminusdb Graph DBMS
 
 ## SYNOPSIS
 
-`terminusdb` [command <subcommand> positional_arguments] <flags>
+`terminusdb [command subcommand positional_arguments] flags`
 
 ## DESCRIPTION
 
@@ -28,29 +28,29 @@ requires the use of an appropriate descriptor path.
   This is the system meta-data, which contains the user information,
   organization information and database records.
 
-  * <organization>`/`<database>:
+  * `<organization>/<database>`:
   This is the most basic descriptor path and actually refers to
-  the more specific default path <organization>`/`<database>`/local/branch/main`.
+  the more specific default path `<organization>/<database>/local/branch/main`.
 
-  * <organization>`/`<database>`/_meta`:
+  * `<organization>/<database>/_meta`:
   This is the repository graph associated with `database`. It contains
   information about the local repository and all known remotes.
 
-  * <organization>`/`<database>`/`<repository>:
+  * `<organization>/<database>/<repository>`:
   This is a longer form database designator which specifies which
   respository we would like to address. It refers implicitly to
-  <organization>`/`<database>`/`<repository>`/branch/main`.
+  `<organization>/<database>/<repository>/branch/main`.
 
-  * <organization>`/`<database>`/`<repository>`/_commits`:
+  * `<organization>/<database>/<repository>/_commits`:
   The commit graph associated with a given database. This graph
   contains metadata about branch histories with their commit objects
   including the authorship and time.
 
-  * <organization>`/`<database>`/`<repository>`/branch/`<branch>:
+  * `<organization>/<database>/<repository>/branch/<branch>`:
   The most specific branch descriptor, allows you to address a
   branch other than main.
 
-  * <organization>`/`<database>`/`<repository>`/commit/`<commit>:
+  * `<organization>/<database>/<repository>/commit/<commit>`:
   The descriptor which allows an individual commit to be addressed
   directly.
 

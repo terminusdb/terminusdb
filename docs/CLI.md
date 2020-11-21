@@ -3,7 +3,7 @@ terminusdb -- command line interface to the terminusdb Graph DBMS
 
 ## SYNOPSIS
 
-`terminusdb` [command <subcommand> positional_arguments] <flags>
+`terminusdb [command subcommand positional_arguments] flags`
 
 ## DESCRIPTION
 
@@ -20,161 +20,161 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb help`
 
-  * `-m`, `--markdown`=[<value>]:
+  * `-m`, `--markdown`=[value]:
   generate help as markdown
 
 ### test
 
 `terminusdb test OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for `test` command
 
 ### serve
 
 `terminusdb serve OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for `serve` command
 
-  * `-i`, `--interactive`=[<value>]:
+  * `-i`, `--interactive`=[value]:
   run server in interactive mode
 
 ### list
 
 `terminusdb list OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `list` command
 
 ### optimize
 
 `terminusdb optimize OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `optimize` command
 
 ### query
 
 `terminusdb query QUERY OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `query` command
 
-  * `-m`, `--message`=[<value>]:
+  * `-m`, `--message`=[value]:
   message to associate with the commit
 
-  * `-a`, `--author`=[<value>]:
+  * `-a`, `--author`=[value]:
   author to place on the commit
 
 ### branch create
 
 `terminusdb branch create BRANCH_SPEC OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `branch create` sub command
 
-  * `-o`, `--origin`=[<value>]:
+  * `-o`, `--origin`=[value]:
   the origin branch to use
 
 ### branch delete
 
 `terminusdb branch delete BRANCH_SPEC OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `branch delete` sub command
 
 ### db create
 
 `terminusdb db create DATABASE_SPEC OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `db create` sub command
 
-  * `-o`, `--organization`=[<value>]:
+  * `-o`, `--organization`=[value]:
   organizational owner of the database
 
-  * `-l`, `--label`=[<value>]:
+  * `-l`, `--label`=[value]:
   label to use for this database
 
-  * `-c`, `--comment`=[<value>]:
+  * `-c`, `--comment`=[value]:
   long description of this database
 
-  * `-p`, `--public`=[<value>]:
+  * `-p`, `--public`=[value]:
   whether this database is to be public
 
-  * `-k`, `--schema`=[<value>]:
+  * `-k`, `--schema`=[value]:
   whether to use a schema
 
-  * `-d`, `--data-prefix`=[<value>]:
+  * `-d`, `--data-prefix`=[value]:
   uri prefix to use for data
 
-  * `-s`, `--schema-prefix`=[<value>]:
+  * `-s`, `--schema-prefix`=[value]:
   uri prefix to use for schema
 
-  * `-x`, `--prefixes`=[<value>]:
+  * `-x`, `--prefixes`=[value]:
   additional defined prefixes in JSON
 
 ### db delete
 
 `terminusdb db delete DATABASE_SPEC OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `db delete` sub command
 
-  * `-o`, `--organization`=[<value>]:
+  * `-o`, `--organization`=[value]:
   organizational owner of the database
 
-  * `-f`, `--force`=[<value>]:
+  * `-f`, `--force`=[value]:
   force the deletion of the database (unsafe)
 
 ### store init
 
 `terminusdb store init OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
-  * `-k`, `--key`=[<value>]:
+  * `-k`, `--key`=[value]:
   key to use for admin login
 
-  * `-f`, `--force`=[<value>]:
+  * `-f`, `--force`=[value]:
   force the creation of a new store even when one already exists
 
 ### csv load
 
 `terminusdb csv load DB_SPEC FILES OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `csv load` sub command
 
-  * `-m`, `--message`=[<value>]:
+  * `-m`, `--message`=[value]:
   message to associate with the commit
 
-  * `-a`, `--author`=[<value>]:
+  * `-a`, `--author`=[value]:
   author to place on the commit
 
 ### csv update
 
 `terminusdb csv update DB_SPEC FILES OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `csv update` sub command
 
-  * `-m`, `--message`=[<value>]:
+  * `-m`, `--message`=[value]:
   message to associate with the commit
 
-  * `-a`, `--author`=[<value>]:
+  * `-a`, `--author`=[value]:
   author to place on the commit
 
 ### csv dump
 
 `terminusdb csv dump DB_SPEC FILES OPTIONS`
 
-  * `-h`, `--help`=[<value>]:
+  * `-h`, `--help`=[value]:
   print help for the `csv dump` sub command
 
-  * `-o`, `--output`=[<value>]:
+  * `-o`, `--output`=[value]:
   file name to use for csv output
 
 ## SYNTAX
@@ -187,29 +187,29 @@ requires the use of an appropriate descriptor path.
   This is the system meta-data, which contains the user information,
   organization information and database records.
 
-  * <organization>`/`<database>:
+  * `<organization>/<database>`:
   This is the most basic descriptor path and actually refers to
-  the more specific default path <organization>`/`<database>`/local/branch/main`.
+  the more specific default path `<organization>/<database>/local/branch/main`.
 
-  * <organization>`/`<database>`/_meta`:
+  * `<organization>/<database>/_meta`:
   This is the repository graph associated with `database`. It contains
   information about the local repository and all known remotes.
 
-  * <organization>`/`<database>`/`<repository>:
+  * `<organization>/<database>/<repository>`:
   This is a longer form database designator which specifies which
   respository we would like to address. It refers implicitly to
-  <organization>`/`<database>`/`<repository>`/branch/main`.
+  `<organization>/<database>/<repository>/branch/main`.
 
-  * <organization>`/`<database>`/`<repository>`/_commits`:
+  * `<organization>/<database>/<repository>/_commits`:
   The commit graph associated with a given database. This graph
   contains metadata about branch histories with their commit objects
   including the authorship and time.
 
-  * <organization>`/`<database>`/`<repository>`/branch/`<branch>:
+  * `<organization>/<database>/<repository>/branch/<branch>`:
   The most specific branch descriptor, allows you to address a
   branch other than main.
 
-  * <organization>`/`<database>`/`<repository>`/commit/`<commit>:
+  * `<organization>/<database>/<repository>/commit/<commit>`:
   The descriptor which allows an individual commit to be addressed
   directly.
 
