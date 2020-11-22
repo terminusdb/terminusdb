@@ -37,6 +37,12 @@ For development and testing we recommend our [TerminusDB Bootstrap](https://gith
 
 In order to build from source, follow the [build from source](docs/BUILD.md) directions.
 
+### Command Line
+
+In order to start the terminusdb server or simply to explore a store
+from the command line, you can use the [TerminusDB Command Line
+Interface](https://github.com/terminusdb/terminusdb/docs/CLI.md).
+
 ### Open Console
 
 Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [http://localhost:6363/](http://localhost:6363/)).
@@ -52,12 +58,6 @@ TerminusDB will:
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
 * Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
-
-## Command Line
-
-In order to start the terminusdb server or simply to explore a store
-from the command line, you can use the [TerminusDB Command Line
-Interface](https://github.com/terminusdb/terminusdb/docs/CLI.md).
 
 ## Client
 
