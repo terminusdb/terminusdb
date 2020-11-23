@@ -56,7 +56,13 @@ opt_spec(test,'terminusdb test OPTIONS',
            shortflags([h]),
            longflags([help]),
            default(false),
-           help('print help for `test` command')]]).
+           help('print help for `test` command')],
+          [opt(test),
+           type(term),
+           shortflags([t]),
+           longflags([test]),
+           default([]),
+           help('Run a specific test')]]).
 opt_spec(serve,'terminusdb serve OPTIONS',
          'Run the TerminusDB server.',
          [[opt(help),
@@ -342,6 +348,7 @@ run(_) :-
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
 run_command(test,_Positional,Opts) :-
+    writeq(Opts),
     (   member(test([]),Opts)
     ->  run_tests
     ;   member(test(Test), Opts),
