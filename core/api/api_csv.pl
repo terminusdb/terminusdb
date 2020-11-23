@@ -1,10 +1,44 @@
-:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6,csv_delete/6]).
+:- module(api_csv, [csv_load/6,csv_update/6,csv_dump/6,csv_delete/6,csv_list/5]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+
+csv_list(System_DB, Auth, Path, Names, Options) :-
+    do_or_die(
+        resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
+        error(invalid_graph_descriptor(Path),_)),
+
+    askable_settings_context(
+        Descriptor,
+        _{ system : System_DB,
+           authorization : Auth,
+           files : [],
+           filter : type_name_filter{ type: (Graph.type),
+                                      names : [Graph.name]}},
+        Context),
+
+    assert_write_access(Context),
+
+    csv_list_from_context(Context,Names,Options).
+
+csv_list_from_context(Context,Names,_Options) :-
+
+    with_transaction(
+        Context,
+        findall(
+            Name,
+            ask(Context,
+                (   t(CSV_Node, rdf:type, scm:'CSV'),
+                    t(CSV_Node, rdfs:label, Name)
+                )
+               ),
+            Names),
+        _),
+
+    writeq(Names), nl.
 
 csv_delete(System_DB, Auth, Path, Commit_Info, Name, Options) :-
 
