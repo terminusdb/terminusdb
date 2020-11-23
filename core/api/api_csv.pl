@@ -21,24 +21,17 @@ csv_list(System_DB, Auth, Path, Names, Options) :-
         Context),
 
     assert_write_access(Context),
-
     csv_list_from_context(Context,Names,Options).
 
 csv_list_from_context(Context,Names,_Options) :-
-
-    with_transaction(
-        Context,
-        findall(
-            Name,
-            ask(Context,
-                (   t(CSV_Node, rdf:type, scm:'CSV'),
-                    t(CSV_Node, rdfs:label, Name@en)
-                )
-               ),
-            Names),
-        _),
-
-    writeq(Names), nl.
+    findall(
+        Name,
+        ask(Context,
+            (   t(CSV_Node, rdf:type, scm:'CSV'),
+                t(CSV_Node, rdfs:label, Name@en)
+            )
+           ),
+        Names).
 
 csv_delete(System_DB, Auth, Path, Commit_Info, Name, Options) :-
 

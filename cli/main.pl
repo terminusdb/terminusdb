@@ -471,8 +471,6 @@ run_command(csv,delete,[Path,Name],Opts) :-
 run_command(csv,list,[Path],_Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    trace(csv_list),
-    trace(api_csv:csv_list_from_context),
     api_report_errors(
         csv,
         csv_list(System_DB, Auth, Path, Names,_{})),
