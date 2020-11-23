@@ -70,14 +70,14 @@ cumulative(List,Cum) :-
 
 column_size(Name,Bindings,Size) :-
     atom_length(Name,Name_Length),
-    foldl({Name,Name_Length}/[Binding,R,Max]>>(
+    foldl({Name}/[Binding,R,Max]>>(
               get_dict(Name,Binding,Res),
               format(atom(Val),"~w", Res),
               atom_length(Val,Length),
-              Max is max(Name_Length,max(R,Length))
+              Max is max(R,Length)
           ),
           Bindings,
-          0,
+          Name_Length,
           Size).
 
 pretty_print_value(Value,Prefixes,Compressed) :-

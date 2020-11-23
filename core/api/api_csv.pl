@@ -32,7 +32,7 @@ csv_list_from_context(Context,Names,_Options) :-
             Name,
             ask(Context,
                 (   t(CSV_Node, rdf:type, scm:'CSV'),
-                    t(CSV_Node, rdfs:label, Name)
+                    t(CSV_Node, rdfs:label, Name@en)
                 )
                ),
             Names),

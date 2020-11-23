@@ -42,6 +42,7 @@ not(false,true).
 
 % commands
 opt_spec(help,'terminusdb help',
+         'Display help regarding terminusdb.',
          [[opt(markdown),
            type(boolean),
            shortflags([m]),
@@ -49,6 +50,7 @@ opt_spec(help,'terminusdb help',
            default(false),
            help('generate help as markdown')]]).
 opt_spec(test,'terminusdb test OPTIONS',
+         'Run internal TerminusDB tests.',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -56,6 +58,7 @@ opt_spec(test,'terminusdb test OPTIONS',
            default(false),
            help('print help for `test` command')]]).
 opt_spec(serve,'terminusdb serve OPTIONS',
+         'Run the TerminusDB server.',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -69,6 +72,7 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            default(false),
            help('run server in interactive mode')]]).
 opt_spec(list,'terminusdb list OPTIONS',
+         'List databases.',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -76,6 +80,7 @@ opt_spec(list,'terminusdb list OPTIONS',
            default(false),
            help('print help for the `list` command')]]).
 opt_spec(optimize,'terminusdb optimize OPTIONS',
+         'Optimize a database (including _system and _meta).',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -83,6 +88,7 @@ opt_spec(optimize,'terminusdb optimize OPTIONS',
            default(false),
            help('print help for the `optimize` command')]]).
 opt_spec(query,'terminusdb query QUERY OPTIONS',
+         'Query a database.',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -103,6 +109,7 @@ opt_spec(query,'terminusdb query QUERY OPTIONS',
            help('author to place on the commit')]]).
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
+         'Create a branch.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -116,6 +123,7 @@ opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
            default(false),
            help('the origin branch to use')]]).
 opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
+         'Delete a branch.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -123,6 +131,7 @@ opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
            default(false),
            help('print help for the `branch delete` sub command')]]).
 opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
+         'Create a database.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -178,6 +187,7 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
            default('{}'),
            help('additional defined prefixes in JSON')]]).
 opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
+         'Delete a database.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -197,6 +207,7 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            default(false),
            help('force the deletion of the database (unsafe)')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
+         'Initialize a store for TerminusDB.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -215,7 +226,36 @@ opt_spec(store,init,'terminusdb store init OPTIONS',
            shortflags([f]),
            default(false),
            help('force the creation of a new store even when one already exists')]]).
+opt_spec(csv,list,'terminusdb csv list DB_SPEC',
+         'List CSVs in the given DB.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `csv load` sub command')]]).
+opt_spec(csv,delete,'terminusdb csv delete DB_SPEC FILE OPTIONS',
+         'Delete a CSV file from the given database.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `csv load` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli load'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default('admin'),
+           help('author to place on the commit')]]).
 opt_spec(csv,load,'terminusdb csv load DB_SPEC FILES OPTIONS',
+         'Load a CSV file (appends new lines if already existing).',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -235,6 +275,7 @@ opt_spec(csv,load,'terminusdb csv load DB_SPEC FILES OPTIONS',
            default('admin'),
            help('author to place on the commit')]]).
 opt_spec(csv,update,'terminusdb csv update DB_SPEC FILES OPTIONS',
+         'Update a CSV file (equivalent to delete / load but with a minimal delta).',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -254,6 +295,7 @@ opt_spec(csv,update,'terminusdb csv update DB_SPEC FILES OPTIONS',
            default('admin'),
            help('author to place on the commit')]]).
 opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
+         'Dump a CSV file from the database.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -268,28 +310,24 @@ opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
            help('file name to use for csv output')]]).
 
 command(Command) :-
-    opt_spec(Command,_,_).
-command(Command) :-
     opt_spec(Command,_,_,_).
+command(Command) :-
+    opt_spec(Command,_,_,_,_).
 
 command_subcommand(Command,Subcommand) :-
-    opt_spec(Command,Subcommand,_,_).
+    opt_spec(Command,Subcommand,_,_,_).
 
 run([Command|Rest]) :-
-    opt_spec(Command,Command_String,Spec),
+    opt_spec(Command,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
     (   member(help(true), Opts)
-    ->  opt_help(Spec,Help),
-        format(current_output,"~s~n",[Command_String]),
-        format(current_output,Help,[])
+    ->  terminusdb_help(Command,Opts)
     ;   run_command(Command,Positional,Opts)).
 run([Command,Subcommand|Rest]) :-
-    opt_spec(Command,Subcommand,Command_String,Spec),
+    opt_spec(Command,Subcommand,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
     (   member(help(true), Opts)
-    ->  opt_help(Spec,Help),
-        format(current_output,"~s~n",[Command_String]),
-        format(current_output,Help,[])
+    ->  terminusdb_help(Command,Subcommand,Opts)
     ;   run_command(Command,Subcommand,Positional,Opts)).
 run([Command|_Rest]) :-
     setof(Subcommand, command_subcommand(Command,Subcommand), Subcommands),
@@ -302,8 +340,7 @@ run(_) :-
 
 % Commands
 run_command(help,_Positional,Opts) :-
-    member(markdown(true),Opts),
-    terminusdb_help_markdown.
+    terminusdb_help(Opts).
 run_command(test,_Positional,Opts) :-
     (   member(test([]),Opts)
     ->  run_tests
@@ -342,11 +379,8 @@ run_command(query,[Database,Query],Opts) :-
             pretty_print_query_response(Response,Final_Prefixes,String),
             write(String)
         )).
-run_command(Command,_Args,_Opts) :-
-    opt_spec(Command,Command_String,Spec),
-    opt_help(Spec,Help),
-    format(current_output,"~s~n",[Command_String]),
-    format(current_output,Help,[]).
+run_command(Command,_Args, Opts) :-
+    terminusdb_help(Command,Opts).
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-
@@ -416,8 +450,28 @@ run_command(store,init, _, Opts) :-
         store_init,
         initialize_database(Key,Force)),
     format('Successfully initialised database!!!~n').
-%run_command(csv,list,_,_,_)
-%run_command(csv,delete,Path,Name,_)
+run_command(csv,delete,[Path,Name],Opts) :-
+    super_user_authority(Auth),
+    member(message(Message), Opts),
+    member(author(Author), Opts),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        csv,
+        csv_delete(System_DB, Auth, Path, _{ message : Message,
+                                             author : Author},
+                   Name, _{})),
+    format(current_output,'Successfully delete CSV: ~q~n',[Name]).
+run_command(csv,list,[Path],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    trace(csv_list),
+    trace(api_csv:csv_list_from_context),
+    api_report_errors(
+        csv,
+        csv_list(System_DB, Auth, Path, Names,_{})),
+    forall(
+        member(Name, Names),
+        format(current_output,'~q~n',[Name])).
 run_command(csv,load,[Path|Files],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -460,11 +514,8 @@ run_command(csv,dump,[Path,File],Opts) :-
 % run_command(push,_Databases])
 % run_command(pull,_Databases])
 % run_command(clone,_Databases])
-run_command(Command,Sub_Command,_Args,_Opts) :-
-    opt_spec(Command,Sub_Command,Command_String,Spec),
-    opt_help(Spec,Help),
-    format(current_output,"~s~n",[Command_String]),
-    format(current_output,Help,[]).
+run_command(Command,Subcommand,_Args,_Opts) :-
+    format_help(Command,Subcommand).
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
@@ -506,40 +557,70 @@ prolog:message(server_missing_config(BasePath)) -->
     nl
     ].
 
-%% Generate help markdown to standard output
-terminusdb_help_markdown :-
+%% Generate help
+terminusdb_help(Opts) :-
     forall(
-        opt_spec(Command,_,_),
-        (
-            format(current_output,'### ~s~n~n',[Command]),
-            opt_spec(Command,Command_String,OptSpec),
-            embellish_flags(OptSpec,OptSpec0),
-            format(current_output,'`~s`~n~n',[Command_String]),
-            forall(
-                member(Option,OptSpec0),
-                format_markdown_opt(Option)
-            )
-        )
+        opt_spec(Command,_,_,_),
+        terminusdb_help(Command,Opts)
     ),
     forall(
         command_subcommand(Command,Subcommand),
-        (
-            format(current_output,'### ~s ~s~n~n',[Command,Subcommand]),
-            opt_spec(Command,Subcommand,Command_String,OptSpec),
-            embellish_flags(OptSpec,OptSpec0),
-            format(current_output,'`~s`~n~n',[Command_String]),
-            forall(
-                member(Option,OptSpec0),
-                format_markdown_opt(Option)
-            )
-        )
+        terminusdb_help(Command,Subcommand,Opts)
+    ).
+
+terminusdb_help(Command,Opts) :-
+    (   member(markdown(true),Opts)
+    ->  format_help_markdown(Command)
+    ;   format_help(Command)
+    ).
+
+terminusdb_help(Command,Subcommand,Opts) :-
+    (   member(markdown(true),Opts)
+    ->  format_help_markdown(Command,Subcommand)
+    ;   format_help(Command,Subcommand)
+    ).
+
+format_help(Command) :-
+    opt_spec(Command,Command_String,Help_String,Spec),
+    opt_help(Spec,Help),
+    format(current_output,"~n~s~n~n",[Command_String]),
+    format(current_output,"~s~n~n",[Help_String]),
+    format(current_output,Help,[]).
+
+format_help(Command,Subcommand) :-
+    opt_spec(Command,Subcommand,Command_String,Help_String,Spec),
+    opt_help(Spec,Help),
+    format(current_output,"~n~s~n~n",[Command_String]),
+    format(current_output,"~s~n~n",[Help_String]),
+    format(current_output,Help,[]).
+
+format_help_markdown(Command) :-
+    format(current_output,'### ~s~n~n',[Command]),
+    opt_spec(Command,Command_String,Help_String,OptSpec),
+    embellish_flags(OptSpec,OptSpec0),
+    format(current_output,'`~s`~n~n',[Command_String]),
+    format(current_output,'~s~n~n',[Help_String]),
+    forall(
+        member(Option,OptSpec0),
+        format_help_markdown_opt(Option)
+    ).
+
+format_help_markdown(Command,Subcommand) :-
+    format(current_output,'### ~s ~s~n~n',[Command,Subcommand]),
+    opt_spec(Command,Subcommand,Command_String,Help_String,OptSpec),
+    embellish_flags(OptSpec,OptSpec0),
+    format(current_output,'`~s`~n~n',[Command_String]),
+    format(current_output,'~s~n~n',[Help_String]),
+    forall(
+        member(Option,OptSpec0),
+        format_help_markdown_opt(Option)
     ).
 
 embellish_flags(OptsSpec0,OptsSpec2) :-
     maplist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
     maplist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
 
-format_markdown_opt(Opt) :-
+format_help_markdown_opt(Opt) :-
 
     memberchk(shortflags(SFlags0),Opt),
     memberchk(longflags(LFlags0),Opt),
