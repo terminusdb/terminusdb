@@ -6,6 +6,9 @@
 + Added some CURL connection examples
 + Automatic CSV schema generation
 + Allow embedded usings with appriopriate expansion of prefixes according to which database is referred to in the using
++ New CLI interface
++ Mac OS version released
+
 
 ## Bug fixes
 
