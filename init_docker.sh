@@ -5,7 +5,7 @@ TERMINUSDB_AUTOLOGIN=${TERMINUSDB_AUTOLOGIN:-false}
 TERMINUSDB_ENABLE_WELCOME_SCREEN=${TERMINUSDB_WELCOME_SCREEN:-false}
 
 if [ ! -d /app/terminusdb/storage/db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
-    /app/terminusdb/start.pl store init --key "$TERMINUSDB_ADMIN_PASS"
+    /app/terminusdb/terminusdb store init --key "$TERMINUSDB_ADMIN_PASS"
 fi
 
 echo "SERVER_PORT $TERMINUSDB_SERVER_PORT"
