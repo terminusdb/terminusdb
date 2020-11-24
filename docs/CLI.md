@@ -20,6 +20,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb help`
 
+Display help regarding terminusdb.
+
   * `-m`, `--markdown`=[value]:
   generate help as markdown
 
@@ -27,12 +29,16 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb test OPTIONS`
 
+Run internal TerminusDB tests.
+
   * `-h`, `--help`=[value]:
   print help for `test` command
 
 ### serve
 
 `terminusdb serve OPTIONS`
+
+Run the TerminusDB server.
 
   * `-h`, `--help`=[value]:
   print help for `serve` command
@@ -44,6 +50,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb list OPTIONS`
 
+List databases.
+
   * `-h`, `--help`=[value]:
   print help for the `list` command
 
@@ -51,12 +59,16 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb optimize OPTIONS`
 
+Optimize a database (including _system and _meta).
+
   * `-h`, `--help`=[value]:
   print help for the `optimize` command
 
 ### query
 
 `terminusdb query QUERY OPTIONS`
+
+Query a database.
 
   * `-h`, `--help`=[value]:
   print help for the `query` command
@@ -71,6 +83,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb branch create BRANCH_SPEC OPTIONS`
 
+Create a branch.
+
   * `-h`, `--help`=[value]:
   print help for the `branch create` sub command
 
@@ -81,12 +95,16 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb branch delete BRANCH_SPEC OPTIONS`
 
+Delete a branch.
+
   * `-h`, `--help`=[value]:
   print help for the `branch delete` sub command
 
 ### db create
 
 `terminusdb db create DATABASE_SPEC OPTIONS`
+
+Create a database.
 
   * `-h`, `--help`=[value]:
   print help for the `db create` sub command
@@ -119,6 +137,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb db delete DATABASE_SPEC OPTIONS`
 
+Delete a database.
+
   * `-h`, `--help`=[value]:
   print help for the `db delete` sub command
 
@@ -132,6 +152,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb store init OPTIONS`
 
+Initialize a store for TerminusDB.
+
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
@@ -141,9 +163,35 @@ accepted commands are given here, along with their arguments.
   * `-f`, `--force`=[value]:
   force the creation of a new store even when one already exists
 
+### csv list
+
+`terminusdb csv list DB_SPEC`
+
+List CSVs in the given DB.
+
+  * `-h`, `--help`=[value]:
+  print help for the `csv load` sub command
+
+### csv delete
+
+`terminusdb csv delete DB_SPEC FILE OPTIONS`
+
+Delete a CSV file from the given database.
+
+  * `-h`, `--help`=[value]:
+  print help for the `csv load` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
 ### csv load
 
 `terminusdb csv load DB_SPEC FILES OPTIONS`
+
+Load a CSV file (appends new lines if already existing).
 
   * `-h`, `--help`=[value]:
   print help for the `csv load` sub command
@@ -158,6 +206,8 @@ accepted commands are given here, along with their arguments.
 
 `terminusdb csv update DB_SPEC FILES OPTIONS`
 
+Update a CSV file (equivalent to delete / load but with a minimal delta).
+
   * `-h`, `--help`=[value]:
   print help for the `csv update` sub command
 
@@ -170,6 +220,8 @@ accepted commands are given here, along with their arguments.
 ### csv dump
 
 `terminusdb csv dump DB_SPEC FILES OPTIONS`
+
+Dump a CSV file from the database.
 
   * `-h`, `--help`=[value]:
   print help for the `csv dump` sub command
