@@ -4,11 +4,11 @@
 
 + Added "typeof" to WOQL allowing extraction or filtering of types from arbitrary nodes or datapoints
 + Added some CURL connection examples
++ CSV loading and updating
 + Automatic CSV schema generation
-+ Allow embedded usings with appriopriate expansion of prefixes according to which database is referred to in the using
++ Allow embedded "usings" with appriopriate expansion of prefixes according to which database is referred to in the using
 + New CLI interface
 + Mac OS version released
-
 
 ## Bug fixes
 
@@ -217,8 +217,3 @@ Several new querying capabilities have been added:
   backtracking over inserts. We currently treat inserts as
   non-backtracking destructive updates.
 + WOQL.when is not required in order to perform updates.
-
-
-
-
-
