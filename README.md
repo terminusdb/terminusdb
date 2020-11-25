@@ -41,7 +41,7 @@ In order to build from source, follow the [build from source](docs/BUILD.md) dir
 
 In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
-Interface](https://github.com/terminusdb/terminusdb/docs/CLI.md).
+Interface](docs/CLI.md).
 
 ### Open Console
 
