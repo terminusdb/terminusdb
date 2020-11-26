@@ -218,6 +218,8 @@ with_transaction_(Query_Context,
     ;   !,
         fail).
 
+:- use_module(core(util/test_utils)).
+:- use_module(library(http/json)).
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
  *
@@ -226,6 +228,19 @@ with_transaction_(Query_Context,
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     validate_validation_objects(Validations, All_Witnesses, Witnesses),
+    /*
+    with_output_to(
+        user_error,
+        (   format("~n~nXXXXXXXXXXXXXXX~n",[]),
+            maplist(
+                [Askable]>>print_all_triples(Askable,schema),
+                Validations),
+            format(user_error,"~n~nYYYYYYYYYYYYYYY~n",[]),
+            maplist(
+                [Askable]>>print_all_triples(Askable),
+                Validations))
+    ),*/
+
     (   Witnesses = []
     ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),
