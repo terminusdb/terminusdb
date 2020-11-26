@@ -476,7 +476,7 @@ run_command(csv,list,[Path],_Opts) :-
         csv_list(System_DB, Auth, Path, Names,_{})),
     forall(
         member(Name, Names),
-        format(current_output,'~q~n',[Name])).
+        format(current_output,'~w~n',[Name])).
 run_command(csv,load,[Path|Files],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
