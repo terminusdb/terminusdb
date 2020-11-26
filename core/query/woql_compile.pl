@@ -469,6 +469,7 @@ partition(update_object(A,B,C), Reads, Writes) :-
     Reads = [],
     Writes = [update_object(A,B,C)].
 partition(delete_object(A), Reads, Writes) :-
+    !,
     Reads = [],
     Writes = [delete_object(A)].
 partition(T,[T],[]) :-
