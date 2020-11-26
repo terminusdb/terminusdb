@@ -102,7 +102,8 @@ csv_load_into_context(Files, Context, Options) :-
                 member(Name=Path, Files),
                 (   Schema_Builder = false
                 ->  csv_builder(Name, Path, Builder, Default_Options)
-                ;   csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
+                ;   delete_schema_rows(Name,Context),
+                    csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
                 )
             )
         ),
@@ -150,13 +151,15 @@ csv_update_into_context(Files, Context, Options) :-
 
     with_transaction(
         Context,
-        (   query_default_write_graph(Context, Read_Write_Obj),
+        (   % delete every csv object
+            maplist([File=_,File]>>true,Files,File_Names),
+            delete_csvs(Context,File_Names,Prefixes),
+            % Get the instance and schema graphs
+            query_default_write_graph(Context, Read_Write_Obj),
             query_default_schema_write_graph(Context, Schema_Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
             read_write_obj_builder(Schema_Read_Write_Obj, CSV_Schema_Builder),
-            % delete every csv object
-            maplist([File=_,File]>>true,Files,File_Names),
-            delete_csvs(Context,File_Names,Prefixes),
+            % apply the new schema and instance data
             nb_apply_delta(CSV_Builder,Layer),
             nb_apply_delta(CSV_Schema_Builder,Schema_Layer)
         ),
@@ -171,10 +174,28 @@ delete_csvs(Context, File_Names, Prefixes) :-
             % Delete instance data
             delete_object(Node,Context),
             % Delete schema data ...
-            true % * delete_schema_rows(Iri,Context)
+            delete_schema_rows(Name,Context)
         )
     ).
 
+
+delete_schema_rows(Name,Context) :-
+    (   ask(Context,
+            t(Row_Type_Iri, system:csv_name, Name@en,schema))
+    ->  forall(
+            ask(Context,
+                (   t(Row_Type_Iri, Predicate, Object,schema),
+                    delete(Row_Type_Iri, Predicate, Object,schema))),
+            true),
+
+        forall(
+             ask(Context,
+                 (   t(Subject, Predicate, Row_Type_Iri,schema),
+                     delete(Subject,Predicate,Row_Type_Iri,schema))
+                ),
+             true)
+    % Nothing to delete...
+    ;   true).
 
 csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
@@ -367,6 +388,40 @@ test(csv_update,
         (Row3)-(scm:column_some)-("1"^^xsd:string),
         (Row3)-(rdf:type)-(Row_Type1)
     ].
+
+test(csv_update_change_column,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
+    format(Stream, "some,header~n", []),
+    format(Stream, "1,2~n", []),
+    format(Stream, "3,4~n", []),
+    close(Stream),
+
+    Path = 'admin/testdb',
+    Files = ['csv'=Filename],
+    Commit_Info = _{ author : "me", message : "a message"},
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
+
+    tmp_file_stream(Filename2, Stream2, [encoding(utf8)]),
+    format(Stream2, "some,another~n", []),
+    format(Stream2, "1,9~n", []),
+    format(Stream2, "3,4~n", []),
+    close(Stream2),
+
+    Files2 = ['csv'=Filename2],
+    open_descriptor(system_descriptor{}, System_DB2),
+    csv_update(System_DB2, Auth, Path, Commit_Info, Files2, []),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+    writeq(Triples).
 
 test(csv_dump,
      [setup((setup_temp_store(State),
