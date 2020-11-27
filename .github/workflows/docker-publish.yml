@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.13.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.13.5
 
 jobs:
   test_and_push_docker:
