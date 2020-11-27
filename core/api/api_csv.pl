@@ -11,14 +11,15 @@ csv_list(System_DB, Auth, Path, Names, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           files : [],
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
     csv_list_from_context(Context,Names,Options).
@@ -39,15 +40,16 @@ csv_delete(System_DB, Auth, Path, Commit_Info, Name, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           commit_info: Commit_Info,
-           files : [],
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
 
@@ -71,15 +73,17 @@ csv_load(System_DB, Auth, Path, Commit_Info, Files, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           commit_info: Commit_Info,
-           files : Files,
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               files : Files,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
 
@@ -115,15 +119,17 @@ csv_update(System_DB, Auth, Path, Commit_Info, Files, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           files : Files,
-           commit_info: Commit_Info,
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               files : Files,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor))),
 
     assert_write_access(Context),
 

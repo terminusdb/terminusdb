@@ -655,8 +655,6 @@ test(csv_delete, [
 
     create_db_with_empty_schema(admin, 'TEST_DB'),
 
-    % We actually have to create the graph before we can post to it!
-    % First make the schema graph
     terminus_path(Path),
     interpolate([Path, '/test/test.csv'], CSV_File),
     atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),

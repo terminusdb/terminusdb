@@ -96,6 +96,14 @@ api_error_jsonld(csv,error(no_csv_name_supplied, _), JSON) :-
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:NoCsvName'},
              'api:message' : Msg}.
+api_error_jsonld(csv,error(unresolvable_absolute_descriptor(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Unable to resolve an invalid absolute path for descriptor ~q", [Path]),
+    JSON = _{'@type' : 'api:CsvErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg}.
 % Triples
 api_error_jsonld(triples,error(unknown_format(Format), _), JSON) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
