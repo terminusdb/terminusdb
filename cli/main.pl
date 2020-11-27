@@ -348,7 +348,6 @@ run(_) :-
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
 run_command(test,_Positional,Opts) :-
-    writeq(Opts),
     (   member(test([]),Opts)
     ->  run_tests
     ;   member(test(Test), Opts),
