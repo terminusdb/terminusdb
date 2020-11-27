@@ -15,4 +15,4 @@ export TERMINUSDB_LOG_PATH=$(pwd)/httpd.log
 export TERMINUSDB_SERVER_TMP_PATH=/tmp
 export TERMINUSDB_SSL_CERT=$SOURCE/usr/share/terminusdb/localhost.crt
 export TERMINUSDB_SSL_CERT_KEY=$SOURCE/usr/share/terminusdb/localhost.key
-$SOURCE/usr/bin/swipl $SOURCE/usr/share/terminusdb/start.pl "$@"
+$SOURCE/usr/bin/swipl -g halt $SOURCE/usr/share/terminusdb/start.pl "$@"
