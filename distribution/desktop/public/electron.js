@@ -76,22 +76,23 @@ electron.app.on('ready', () => {
   const homeDir = process.env.HOME
   const cwd = `${homeDir}/.terminusdb`
 
-  process.env.TERMINUSDB_SERVER_PACK_DIR = `${appDir}/pack`
-  process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
-  process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
-  process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
-  process.env.TERMINUSDB_AUTOLOGIN_ENABLED = 'true'
+  if (homeDir) {
+    process.env.TERMINUSDB_SERVER_PACK_DIR = `${appDir}/pack`
+    process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
+    process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
+    process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
+    process.env.TERMINUSDB_AUTOLOGIN_ENABLED = 'true'
 
-  if (!fs.existsSync(`${cwd}`)) {
-    fs.mkdirSync(cwd)
+    if (!fs.existsSync(`${cwd}`)) {
+        fs.mkdirSync(cwd)
+    }
+
+    if (!fs.existsSync(`${cwd}/db`)) {
+        const initDb = execFile(binPath, binInitArgs)
+        initDb.stdout.on('data', (data) => console.log(data))
+        initDb.stderr.on('data', (data) => console.log(data))
+    }
   }
-
-  if (!fs.existsSync(`${cwd}/db`)) {
-    const initDb = execFile(binPath, binInitArgs)
-    initDb.stdout.on('data', (data) => console.log(data))
-    initDb.stderr.on('data', (data) => console.log(data))
-  }
-
   if (binPath) {
     console.log('PATH', binPath)
     let serverReady = false
