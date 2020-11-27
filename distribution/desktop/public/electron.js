@@ -12,25 +12,25 @@ let QUITTING = false
 electron.app.on('will-quit', (event) => {
   if (!QUITTING) {
     event.preventDefault()
-  }
-  ps.lookup({
-    command: 'swipl',
-    arguments: 'serve'
-  }, (err, list) => {
-    if (err) throw new Error( err )
-    console.log('finding DB process...')
-    list.forEach((p) => {
-      if (p) {
-        console.log('found', p.pid)
-        console.log( 'PID: %s, COMMAND: %s, ARGUMENTS: %s',
-          p.pid, p.command, p.arguments)
-        process.kill(p.pid, 'SIGINT')
-      }
+    ps.lookup({
+      command: 'swipl',
+      arguments: 'serve'
+    }, (err, list) => {
+      if (err) throw new Error(err)
+      console.log('finding DB process...')
+      list.forEach((p) => {
+        if (p) {
+          console.log('found', p.pid)
+          console.log( 'PID: %s, COMMAND: %s, ARGUMENTS: %s',
+            p.pid, p.command, p.arguments)
+          process.kill(p.pid, 'SIGINT')
+        }
+      })
+      QUITTING = true
+      console.log('Quitting...')
+      electron.app.quit() 
     })
-    QUITTING = true
-    console.log('Quitting...')
-    electron.app.quit() 
-  })
+  }
 })
 
 
