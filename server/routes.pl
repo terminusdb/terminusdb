@@ -507,7 +507,10 @@ csv_handler(delete,Path,Request, System_DB, Auth) :-
         csv,
         Request,
         (   csv_delete(System_DB, Auth, Path, Commit_Info, Name, _{}),
-            throw(http_reply(file('application/binary', Name))))).
+            cors_reply_json(Request, _{'@type' : 'api:CsvDeleteResponse',
+                                       'api:status' : "api:success"}))).
+
+
 
 :- begin_tests(csv_endpoint).
 
@@ -671,7 +674,7 @@ test(csv_delete, [
 
     Document = _{commit_info : _{ author : "admin",
                                   message : "deleting" },
-                 name : 'test.csv'},
+                 name : csv},
 
     http_get(URI,
              _Result2,
@@ -679,7 +682,6 @@ test(csv_delete, [
               post(json(Document)),
               cert_verify_hook(cert_accept_any),
               authorization(basic(admin, Key))]).
-
 
 :- end_tests(csv_endpoint).
 
