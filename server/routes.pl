@@ -492,8 +492,14 @@ csv_handler(get,Path,Request, System_DB, Auth) :-
             throw(http_reply(file('application/binary', CSV_Path))))).
 csv_handler(delete,Path,Request, System_DB, Auth) :-
     get_payload(Document,Request),
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
-              error(bad_api_document(Document,[commit_info]),_)),
+    do_or_die(
+        (   _{ commit_info : Commit_Info } :< Document
+        ->  true
+        ;   _{ author : _Author,
+               message : _Message } :< Document
+        ->  Commit_Info = Document),
+        error(bad_api_document(Document,[commit_info]),_)),
+
     do_or_die(_{ name : Name} :< Document,
               error(no_csv_name_supplied,_)),
 
@@ -641,6 +647,40 @@ test(csv_update, [
 
     CSV = 'foo,bar\r\n1,2\r\n2,1\r\n'.
 
+test(csv_delete, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+    create_db_with_empty_schema(admin, 'TEST_DB'),
+
+    % We actually have to create the graph before we can post to it!
+    % First make the schema graph
+    terminus_path(Path),
+    interpolate([Path, '/test/test.csv'], CSV_File),
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    atom_json_term(JSON, _{ commit_info : _{ author : "admin",
+                                             message : "insert"}}, []),
+
+    http_put(URI, form_data([ payload = JSON,
+                              csv     = file(CSV_File)
+                            ]),
+             _Result1,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]),
+
+    Document = _{commit_info : _{ author : "admin",
+                                  message : "deleting" },
+                 name : 'test.csv'},
+
+    http_get(URI,
+             _Result2,
+             [method(delete),
+              post(json(Document)),
+              cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]).
 
 
 :- end_tests(csv_endpoint).
