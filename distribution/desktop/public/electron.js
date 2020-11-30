@@ -23,7 +23,11 @@ electron.app.on('will-quit', (event) => {
           console.log('found', p.pid)
           console.log( 'PID: %s, COMMAND: %s, ARGUMENTS: %s',
             p.pid, p.command, p.arguments)
-          process.kill(p.pid, 'SIGTERM')
+          try {
+            process.kill(p.pid, 'SIGTERM')
+          } catch (e) {
+            console.log('error', e)
+          }
         }
       })
       QUITTING = true
