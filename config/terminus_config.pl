@@ -63,7 +63,7 @@ jwt_public_key_id(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dl.bintray.com/terminusdb/terminusdb/canary', Value).
+    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dl.bintray.com/terminusdb/terminusdb/rc', Value).
 
 https_enabled :-
     getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
