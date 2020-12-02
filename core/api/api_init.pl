@@ -156,8 +156,8 @@ initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
 
-server_version_path(DB_Path,Path) :-
-    atomic_list_concat([DB_Path,'/SERVER_VERSION'],Path).
+storage_version_path(DB_Path,Path) :-
+    atomic_list_concat([DB_Path,'/STORAGE_VERSION'],Path).
 
 /*
  * initialize_database_with_path(Key,DB_Path,Force) is det+error.
@@ -165,18 +165,18 @@ server_version_path(DB_Path,Path) :-
  * initialize the database unless it already exists or Force is false.
  */
 initialize_database_with_path(_, DB_Path, false) :-
-    server_version_path(DB_Path, Version),
+    storage_version_path(DB_Path, Version),
     exists_file(Version),
     throw(error(storage_already_exists(DB_Path),_)).
 initialize_database_with_path(Key, DB_Path, _) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
-    initialize_server_version(DB_Path),
+    initialize_storage_version(DB_Path),
     open_directory_store(DB_Path, Store),
     initialize_database_with_store(Key, Store).
 
-initialize_server_version(DB_Path) :-
-    server_version_path(DB_Path,Path),
+initialize_storage_version(DB_Path) :-
+    storage_version_path(DB_Path,Path),
     open(Path, write, FileStream),
     writeq(FileStream, 1),
     close(FileStream).
