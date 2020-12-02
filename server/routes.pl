@@ -37,6 +37,10 @@
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
 
+% chunked
+:- use_module(library(http/http_header)).
+:- use_module(library(http/http_stream)).
+
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
@@ -2092,6 +2096,7 @@ test(rebase_divergent_history, [
 :- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  time_limit(infinite),
+                 chunked,
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -2108,8 +2113,12 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
              Path, Repo_Head_Option, Payload_Option)),
 
     (   Payload_Option = some(Payload)
-    ->  throw(http_reply(bytes('application/octets',Payload)))
-    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
+    ->  format('Content-type: application/octets~n', []),
+        format('Status: 200 OK~n~n', []),
+        format('~s', [Payload])
+    ;   format('Content-type: application/octets~n', []),
+        format('Status: 204 No Response~n~n', [])
+    ).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -2203,6 +2212,7 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 chunked,
                  time_limit(infinite),
                  methods([options,post])]).
 
