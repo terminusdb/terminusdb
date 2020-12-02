@@ -810,6 +810,16 @@ api_error_jsonld(store_init,error(storage_already_exists(Path),_),JSON) :-
              'api:error' : _{ '@type' : "api:StorageAlreadyInitializedError",
                               'api:path' : Path}
             }.
+api_error_jsonld(info,error(access_not_authorized(Auth),_),JSON) :-
+    format(string(Msg), "Access to `info` is not authorised with auth ~q",
+           [Auth]),
+    term_string(Auth, Auth_String),
+    JSON = _{'api:status' : 'api:forbidden',
+             'api:message' : Msg,
+             'auth' : Auth_String,
+             'action' : 'info',
+             'scope' : 'system:system'
+            }.
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
