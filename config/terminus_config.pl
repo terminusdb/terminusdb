@@ -1,4 +1,5 @@
 :- module(config,[
+              version/1,
               server/1,
               server_name/1,
               server_port/1,
@@ -23,6 +24,8 @@
           ]).
 
 :- use_module(core(util/utils)).
+
+version('4.0.0').
 
 server_protocol(Value) :-
     (   https_enabled

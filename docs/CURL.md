@@ -47,3 +47,9 @@ curl -X GET "https://127.0.0.1:6363/api/csv/admin/TEST_DB?name=csv" -u "admin:ro
 ```bash
 curl -X GET "https://127.0.0.1:6363/api/prefixes/admin/movie_graph" -u "admin:root" -k -H "Content-Type: application/json"
 ```
+
+# Get Version
+
+```bash
+curl -X GET "https://127.0.0.1:6363/api/info" -u "admin:root" -k -H "Content-Type: application/json"
+```

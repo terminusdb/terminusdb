@@ -96,7 +96,10 @@
               status_cli_code/2,
               generic_exception_jsonld/2,
               json_http_code/2,
-              json_cli_code/2
+              json_cli_code/2,
+
+              % api_info.pl
+              info/3
           ]).
 
 :- use_module(api/api_init).
@@ -123,3 +126,4 @@
 :- use_module(api/api_prefixes).
 :- use_module(api/api_db).
 :- use_module(api/api_error).
+:- use_module(api/api_info).

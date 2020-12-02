@@ -61,7 +61,7 @@ database_version('1.0.0').
  */
 get_db_version(Version) :-
     db_path(DB_Path),
-    interpolate([DB_Path,'VERSION'],Version_File),
+    interpolate([DB_Path,'STORAGE_VERSION'],Version_File),
     (   exists_file(Version_File)
     ->  setup_call_cleanup(
             open(Version_File,read,Stream),
@@ -70,7 +70,7 @@ get_db_version(Version) :-
             ),
             close(Stream)
         )
-    ;   Version = none).
+    ;   Version = 1).
 
 /*
  * set_db_version(+Version) is det.
@@ -79,7 +79,7 @@ get_db_version(Version) :-
  */
 set_db_version(Version) :-
     db_path(DB_Path),
-    interpolate([DB_Path,'VERSION'],Version_File),
+    interpolate([DB_Path,'STORAGE_VERSION'],Version_File),
     setup_call_cleanup(
         open(Version_File,update, Stream),
         write(Stream,Version),
