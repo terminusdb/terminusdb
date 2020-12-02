@@ -157,6 +157,20 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
 
     reply_json(_{'api:status' : 'api:success'}).
 
+%%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(info), cors_handler(Method, info_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+info_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        info,
+        Request,
+        (   info(System_DB, Auth, Info),
+            cors_reply_json(Request, _{'@type' : 'api:InfoResponse',
+                                       'api:info' : Info,
+                                       'api:status' : 'api:success'}))).
+
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
