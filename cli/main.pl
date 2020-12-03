@@ -16,7 +16,7 @@
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 :- use_module(library(optparse)).
-:- use_module(core(util), [do_or_die/2]).
+:- use_module(core(util), [do_or_die/2, basic_authorization/3]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),

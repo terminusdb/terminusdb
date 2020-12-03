@@ -1701,9 +1701,6 @@ remote_pack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
 
-is_local_https(URL) :-
-    re_match('^https://127.0.0.1', URL, []).
-
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head }
