@@ -154,10 +154,10 @@ opt_spec(push,'terminusdb push DB_SPEC',
           [opt(password),
            type(atom),
            shortflags([p]),
-           longflags([user]),
+           longflags([password]),
            default('_'),
            help('the password on the remote')]]).
-opt_spec(clone,'terminusdb clone URI DB_SPEC',
+opt_spec(clone,'terminusdb clone URI <DB_SPEC>',
          'Clone a database (into DB_SPEC).',
          [[opt(help),
            type(boolean),
@@ -174,7 +174,7 @@ opt_spec(clone,'terminusdb clone URI DB_SPEC',
           [opt(password),
            type(atom),
            shortflags([p]),
-           longflags([user]),
+           longflags([password]),
            default('_'),
            help('the password on the remote')],
           [opt(organization),
@@ -187,7 +187,7 @@ opt_spec(clone,'terminusdb clone URI DB_SPEC',
            type(atom),
            longflags([label]),
            shortflags([l]),
-           default(''),
+           default('_'),
            help('label to use for this database')],
           [opt(comment),
            type(atom),
@@ -198,7 +198,7 @@ opt_spec(clone,'terminusdb clone URI DB_SPEC',
           [opt(public),
            type(boolean),
            longflags([public]),
-           shortflags([p]),
+           shortflags([b]),
            default(false),
            help('whether the cloned database is to be public')]]).
 opt_spec(pull,'terminusdb pull BRANCH_SPEC',
@@ -547,8 +547,6 @@ run_command(query,[Database,Query],Opts) :-
             pretty_print_query_response(Response,Final_Prefixes,String),
             write(String)
         )).
-run_command(Command,_Args, Opts) :-
-    terminusdb_help(Command,Opts).
 run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -578,26 +576,37 @@ run_command(push,[Path],Opts) :-
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
     format(current_output, "~N~s pushed: ~q", [Path, Result]).
-run_command(clone,[DB_Path],Opts) :-
+run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
-    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    (   DB_Path_List = [],
+        re_matchsub('^.*/([^/]*)$', Remote_URL, Match, [])
+    % Get the DB name from the URI and organization from switches
+    ->  DB = (Match.1),
+        member(organization(Organization),Opts)
+    ;   DB_Path_List = [DB_Path],
+        re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    % Get the DB and organization name from the argument
     ->  Organization = (Match.1),
         DB = (Match.2)
-    ;   DB = DB_Path,
+    % Get the DB from argument and organization from switches
+    ;   DB_Path_List = [DB_Path],
+        DB = DB_Path,
         member(organization(Organization),Opts)
     ),
+
     member(label(Label), Opts),
+    (   var(Label)
+    ->  Label = DB
+    ;   true),
     member(comment(Comment), Opts),
     member(public(Public), Opts),
-
     member(user(User), Opts),
     (   var(User)
     ->  prompt(_,'Username: '),
         read_string(user_input, ['\n'], [], _, User)
     ;   true),
-
     member(password(Password), Opts),
     (   var(Password)
     ->  prompt(_,'Password: '),
@@ -610,7 +619,10 @@ run_command(clone,[DB_Path],Opts) :-
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
-    format(current_output, "~NCloned: ~q into ~s/~s", [Remote_URL, Organization, DB]).
+    format(current_output, "~NCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
+run_command(Command,_Args, Opts) :-
+    terminusdb_help(Command,Opts).
+
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
