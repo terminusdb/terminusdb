@@ -37,7 +37,6 @@ electron.app.on('will-quit', (event) => {
   }
 })
 
-
 electron.app.on('certificate-error',
   (event, webContents, url, error, certificate, accept) => {
     if (url.startsWith('https://127.0.0.1')) {
@@ -94,6 +93,7 @@ electron.app.on('ready', () => {
           initDb.stderr.on('data', (data) => console.log(data))
       }
     }  
+
     console.log('binPath', binPath)
     console.log('binArgs', binArgs)
     console.log('binInitArgs', binInitArgs)
@@ -154,7 +154,7 @@ function createWindow () {
     const appMenu = new electron.Menu()
     appMenu.append(new electron.MenuItem({
       label: 'Reload (Ctrl+R)',
-      accelerator: 'CommandOrControl+R',
+      accelerator: 'Control+R',
       click () {
         MAIN_WINDOW.reload()
       }
@@ -181,7 +181,7 @@ function createWindow () {
       }
     }))
     appMenu.append(new electron.MenuItem({
-      accelerator: 'CommandOrControl+B',
+      accelerator: 'Control+B',
       label: 'Open in Browser',
       click () {
         electron.shell.openExternal('https://127.0.0.1:6363')
