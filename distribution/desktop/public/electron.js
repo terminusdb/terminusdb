@@ -7,10 +7,10 @@ const ps = require('ps-node')
 let MAIN_WINDOW
 let SYSTEM_TRAY
 
-let QUITTING = false
+let QUIT_OK = false
 
 electron.app.on('will-quit', (event) => {
-  if (!QUITTING) {
+  if (!QUIT_OK) {
     event.preventDefault()
     ps.lookup({
       command: 'swipl',
@@ -30,13 +30,12 @@ electron.app.on('will-quit', (event) => {
           }
         }
       })
-      QUITTING = true
+      QUIT_OK = true
       console.log('Quitting...')
       electron.app.quit() 
     })
   }
 })
-
 
 electron.app.on('certificate-error',
   (event, webContents, url, error, certificate, accept) => {
@@ -73,32 +72,32 @@ electron.app.on('ready', () => {
       'store', 'init', '--key', 'root']
   }
 
-  console.log('binPath', binPath)
-  console.log('binArgs', binArgs)
-  console.log('binInitArgs', binInitArgs)
-
   const homeDir = process.env.HOME
   const cwd = `${homeDir}/.terminusdb`
 
-  if (homeDir) {
-    process.env.TERMINUSDB_SERVER_PACK_DIR = `${appDir}/pack`
-    process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
-    process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
-    process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
-    process.env.TERMINUSDB_AUTOLOGIN_ENABLED = 'true'
-
-    if (!fs.existsSync(`${cwd}`)) {
-        fs.mkdirSync(cwd)
-    }
-
-    if (!fs.existsSync(`${cwd}/db`)) {
-        const initDb = execFile(binPath, binInitArgs)
-        initDb.stdout.on('data', (data) => console.log(data))
-        initDb.stderr.on('data', (data) => console.log(data))
-    }
-  }
   if (binPath) {
-    console.log('PATH', binPath)
+    if (homeDir) {
+      process.env.TERMINUSDB_SERVER_PACK_DIR = `${appDir}/pack`
+      process.env.TERMINUSDB_SERVER_DB_PATH = `${cwd}/db`
+      process.env.TERMINUSDB_SERVER_REGISTRY_PATH = `${cwd}/registry.pl`
+      process.env.TERMINUSDB_SERVER_INDEX_PATH = `${cwd}/index.html`
+      process.env.TERMINUSDB_AUTOLOGIN_ENABLED = 'true'
+
+      if (!fs.existsSync(`${cwd}`)) {
+          fs.mkdirSync(cwd)
+      }
+
+      if (!fs.existsSync(`${cwd}/db`)) {
+          const initDb = execFile(binPath, binInitArgs)
+          initDb.stdout.on('data', (data) => console.log(data))
+          initDb.stderr.on('data', (data) => console.log(data))
+      }
+    }  
+
+    console.log('binPath', binPath)
+    console.log('binArgs', binArgs)
+    console.log('binInitArgs', binInitArgs)
+
     let serverReady = false
     console.log('Starting TerminusDB')
     const child = execFile(binPath, binArgs)
@@ -113,6 +112,7 @@ electron.app.on('ready', () => {
       }
     })
   } else {
+    QUIT_OK = true
     console.log('TerminusDB not found in path')
     console.log('Please start TerminusDB')
     createWindow()
@@ -150,53 +150,54 @@ function createWindow () {
 
   MAIN_WINDOW.loadURL('https://127.0.0.1:6363/')
 
-  const appMenu = new electron.Menu()
+  if (process.platform !== 'darwin') {
+    const appMenu = new electron.Menu()
+    appMenu.append(new electron.MenuItem({
+      label: 'Reload (Ctrl+R)',
+      accelerator: 'Control+R',
+      click () {
+        MAIN_WINDOW.reload()
+      }
+    }))
+    appMenu.append(new electron.MenuItem({
+      label: 'Reload (F5)',
+      accelerator: 'f5',
+      click () {
+        MAIN_WINDOW.reload()
+      }
+    }))
+    appMenu.append(new electron.MenuItem({
+      label: 'Back',
+      accelerator: 'Alt+Left',
+      click () {
+        MAIN_WINDOW.webContents.goBack()
+      }
+    }))
+    appMenu.append(new electron.MenuItem({
+      label: 'Back',
+      accelerator: 'Alt+Right',
+      click () {
+        MAIN_WINDOW.webContents.goForward()
+      }
+    }))
+    appMenu.append(new electron.MenuItem({
+      accelerator: 'Control+B',
+      label: 'Open in Browser',
+      click () {
+        electron.shell.openExternal('https://127.0.0.1:6363')
+      }
+    }))
+    appMenu.append(new electron.MenuItem({
+      accelerator: 'Ctrl+Shift+I',
+      label: 'Developer Tools',
+      click () {
+        MAIN_WINDOW.webContents.toggleDevTools()
+      }
+    }))
 
-  appMenu.append(new electron.MenuItem({
-    label: 'Reload (Ctrl+R)',
-    accelerator: 'CommandOrControl+R',
-    click () {
-      MAIN_WINDOW.reload()
-    }
-  }))
-  appMenu.append(new electron.MenuItem({
-    label: 'Reload (F5)',
-    accelerator: 'f5',
-    click () {
-      MAIN_WINDOW.reload()
-    }
-  }))
-  appMenu.append(new electron.MenuItem({
-    label: 'Back',
-    accelerator: 'Alt+Left',
-    click () {
-      MAIN_WINDOW.webContents.goBack()
-    }
-  }))
-  appMenu.append(new electron.MenuItem({
-    label: 'Back',
-    accelerator: 'Alt+Right',
-    click () {
-      MAIN_WINDOW.webContents.goForward()
-    }
-  }))
-  appMenu.append(new electron.MenuItem({
-    accelerator: 'CommandOrControl+B',
-    label: 'Open in Browser',
-    click () {
-      electron.shell.openExternal('https://127.0.0.1:6363')
-    }
-  }))
-  appMenu.append(new electron.MenuItem({
-    accelerator: 'Ctrl+Shift+I',
-    label: 'Developer Tools',
-    click () {
-      MAIN_WINDOW.webContents.toggleDevTools()
-    }
-  }))
-
-  electron.Menu.setApplicationMenu(appMenu)
-  MAIN_WINDOW.setMenuBarVisibility(false)
+    electron.Menu.setApplicationMenu(appMenu)
+    MAIN_WINDOW.setMenuBarVisibility(false)
+  }
 
   const trayMenu = new electron.Menu()
 
