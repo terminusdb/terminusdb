@@ -134,10 +134,10 @@ opt_spec(push,'terminusdb push DB_SPEC',
            default('_'),
            help('set the branch on the remote for push')],
           [opt(remote),
-           type(atom),
+           type(string),
            shortflags([r]),
            longflags([remote]),
-           default(origin),
+           default("origin"),
            help('the name of the remote to use')],
           [opt(prefixes),
            type(boolean),
@@ -216,10 +216,10 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            default('_'),
            help('set the branch on the remote for push')],
           [opt(remote),
-           type(atom),
+           type(string),
            shortflags([r]),
            longflags([remote]),
-           default(origin),
+           default("origin"),
            help('the name of the remote to use')],
           [opt(user),
            type(atom),
@@ -230,7 +230,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
           [opt(password),
            type(atom),
            shortflags([p]),
-           longflags([user]),
+           longflags([password]),
            default('_'),
            help('the password on the remote')]]).
 
@@ -575,7 +575,7 @@ run_command(push,[Path],Opts) :-
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
-    format(current_output, "~N~s pushed: ~q", [Path, Result]).
+    format(current_output, "~N~s pushed: ~q~n", [Path, Result]).
 run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -620,9 +620,6 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
     format(current_output, "~NCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
-run_command(Command,_Args, Opts) :-
-    terminusdb_help(Command,Opts).
-
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -660,11 +657,10 @@ run_command(pull,[Path],Opts) :-
         pull,
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
-    format(current_output, "~N~s pulled: ~q", [Path, Result]).
+    format(current_output, "~N~s pulled: ~q~n", [Path, Result]).
+run_command(Command,_Args, Opts) :-
+    terminusdb_help(Command,Opts).
 
-% run_command(push,_Databases])
-% run_command(pull,_Databases])
-% run_command(clone,_Databases])
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-

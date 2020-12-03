@@ -8,6 +8,7 @@
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
+:- use_module(core(query)).
 :- use_module(core(account)).
 
 add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
