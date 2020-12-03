@@ -1697,35 +1697,6 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
                   'api:head_has_changed' : Head_Has_Updated,
                   'api:head' : New_Head_Layer_Id}))).
 
-remote_pack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
-
-authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
-    (   some(Repository_Head) = Repository_Head_Option
-    ->  Document = _{ repository_head: Repository_Head }
-    ;   Document = _{}),
-
-    (   is_local_https(URL)
-    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
-    ;   Additional_Options = []),
-
-    remote_pack_url(URL,Pack_URL),
-
-    http_post(Pack_URL,
-              json(Document),
-              Payload,
-              [request_header('Authorization'=Authorization),
-               json_object(dict),
-               status_code(Status)
-              |Additional_Options]),
-
-    (   Status = 200
-    ->  Payload_Option = some(Payload)
-    ;   Status = 204
-    ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload),_))).
-
 :- begin_tests(fetch_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).

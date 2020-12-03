@@ -157,6 +157,83 @@ opt_spec(push,'terminusdb push DB_SPEC',
            longflags([user]),
            default('_'),
            help('the password on the remote')]]).
+opt_spec(clone,'terminusdb clone URI DB_SPEC',
+         'Clone a database (into DB_SPEC).',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `clone` command')],
+          [opt(user),
+           type(atom),
+           shortflags([u]),
+           longflags([user]),
+           default('_'),
+           help('the user on the remote')],
+          [opt(password),
+           type(atom),
+           shortflags([p]),
+           longflags([user]),
+           default('_'),
+           help('the password on the remote')],
+          [opt(organization),
+           type(term),
+           longflags([organization]),
+           shortflags([o]),
+           default(admin),
+           help('organizational owner of the cloned database')],
+          [opt(label),
+           type(atom),
+           longflags([label]),
+           shortflags([l]),
+           default(''),
+           help('label to use for this database')],
+          [opt(comment),
+           type(atom),
+           longflags([comment]),
+           shortflags([c]),
+           default(''),
+           help('long description of the cloned database')],
+          [opt(public),
+           type(boolean),
+           longflags([public]),
+           shortflags([p]),
+           default(false),
+           help('whether the cloned database is to be public')]]).
+opt_spec(pull,'terminusdb pull BRANCH_SPEC',
+         'Pull a branch from a database.',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `pull` command')],
+          [opt(remote_branch),
+           type(atom),
+           shortflags([e]),
+           longflags(['remote-branch']),
+           default('_'),
+           help('set the branch on the remote for push')],
+          [opt(remote),
+           type(atom),
+           shortflags([r]),
+           longflags([remote]),
+           default(origin),
+           help('the name of the remote to use')],
+          [opt(user),
+           type(atom),
+           shortflags([u]),
+           longflags([user]),
+           default('_'),
+           help('the user on the remote')],
+          [opt(password),
+           type(atom),
+           shortflags([p]),
+           longflags([user]),
+           default('_'),
+           help('the password on the remote')]]).
+
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
          'Create a branch.',
@@ -501,6 +578,78 @@ run_command(push,[Path],Opts) :-
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
     format(current_output, "~N~s pushed: ~q", [Path, Result]).
+run_command(clone,[DB_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    ->  Organization = (Match.1),
+        DB = (Match.2)
+    ;   DB = DB_Path,
+        member(organization(Organization),Opts)
+    ),
+    member(label(Label), Opts),
+    member(comment(Comment), Opts),
+    member(public(Public), Opts),
+
+    member(user(User), Opts),
+    (   var(User)
+    ->  prompt(_,'Username: '),
+        read_string(user_input, ['\n'], [], _, User)
+    ;   true),
+
+    member(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+
+    basic_authorization(User,Password,Authorization),
+
+    api_report_errors(
+        clone,
+        clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
+              authorized_fetch(Authorization), _Meta_Data)),
+    format(current_output, "~NCloned: ~q into ~s/~s", [Remote_URL, Organization, DB]).
+run_command(pull,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    api_report_errors(
+        pull,
+        do_or_die(
+            (   resolve_absolute_string_descriptor(Path,Descriptor),
+                _{ branch_name : Branch} :< Descriptor
+            ),
+            error(not_a_valid_local_branch(Descriptor), _))
+    ),
+
+    member(remote(Remote_Name), Opts),
+    member(remote_branch(Remote_Branch), Opts),
+    (   var(Remote_Branch)
+    ->  Branch = Remote_Branch
+    ;   true),
+
+    member(user(User), Opts),
+    (   var(User)
+    ->  prompt(_,'Username: '),
+        read_string(user_input, ['\n'], [], _, User)
+    ;   true),
+
+    member(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+
+    basic_authorization(User,Password,Authorization),
+
+    api_report_errors(
+        pull,
+        pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+             authorized_fetch(Authorization), Result)),
+    format(current_output, "~N~s pulled: ~q", [Path, Result]).
+
 % run_command(push,_Databases])
 % run_command(pull,_Databases])
 % run_command(clone,_Databases])

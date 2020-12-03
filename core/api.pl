@@ -39,6 +39,7 @@
 
               % db_fetch.pl
               remote_fetch/6,
+              authorized_fetch/4,
 
               % db_clone.pl
               clone/10,
