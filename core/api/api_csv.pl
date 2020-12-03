@@ -11,14 +11,15 @@ csv_list(System_DB, Auth, Path, Names, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           files : [],
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
     csv_list_from_context(Context,Names,Options).
@@ -39,15 +40,16 @@ csv_delete(System_DB, Auth, Path, Commit_Info, Name, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           commit_info: Commit_Info,
-           files : [],
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
 
@@ -71,15 +73,17 @@ csv_load(System_DB, Auth, Path, Commit_Info, Files, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           commit_info: Commit_Info,
-           files : Files,
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               files : Files,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
     assert_write_access(Context),
 
@@ -102,7 +106,8 @@ csv_load_into_context(Files, Context, Options) :-
                 member(Name=Path, Files),
                 (   Schema_Builder = false
                 ->  csv_builder(Name, Path, Builder, Default_Options)
-                ;   csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
+                ;   delete_schema_rows(Name,Context),
+                    csv_builder(Name, Path, Builder, Schema_Builder, Default_Options)
                 )
             )
         ),
@@ -114,15 +119,17 @@ csv_update(System_DB, Auth, Path, Commit_Info, Files, Options) :-
         resolve_absolute_string_descriptor_and_default_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path),_)),
 
-    askable_settings_context(
-        Descriptor,
-        _{ system : System_DB,
-           authorization : Auth,
-           files : Files,
-           commit_info: Commit_Info,
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
-        Context),
+    do_or_die(
+        askable_settings_context(
+            Descriptor,
+            _{ system : System_DB,
+               authorization : Auth,
+               commit_info: Commit_Info,
+               files : Files,
+               filter : type_name_filter{ type: (Graph.type),
+                                          names : [Graph.name]}},
+            Context),
+        error(unresolvable_absolute_descriptor(Descriptor))),
 
     assert_write_access(Context),
 
@@ -150,13 +157,15 @@ csv_update_into_context(Files, Context, Options) :-
 
     with_transaction(
         Context,
-        (   query_default_write_graph(Context, Read_Write_Obj),
+        (   % delete every csv object
+            maplist([File=_,File]>>true,Files,File_Names),
+            delete_csvs(Context,File_Names,Prefixes),
+            % Get the instance and schema graphs
+            query_default_write_graph(Context, Read_Write_Obj),
             query_default_schema_write_graph(Context, Schema_Read_Write_Obj),
             read_write_obj_builder(Read_Write_Obj, CSV_Builder),
             read_write_obj_builder(Schema_Read_Write_Obj, CSV_Schema_Builder),
-            % delete every csv object
-            maplist([File=_,File]>>true,Files,File_Names),
-            delete_csvs(Context,File_Names,Prefixes),
+            % apply the new schema and instance data
             nb_apply_delta(CSV_Builder,Layer),
             nb_apply_delta(CSV_Schema_Builder,Schema_Layer)
         ),
@@ -171,10 +180,35 @@ delete_csvs(Context, File_Names, Prefixes) :-
             % Delete instance data
             delete_object(Node,Context),
             % Delete schema data ...
-            true % * delete_schema_rows(Iri,Context)
+            delete_schema_rows(Name,Context)
         )
     ).
 
+
+delete_schema_rows(Name,Context) :-
+    (   ask(Context,
+            t(Row_Type_Iri, system:csv_name, Name@en,schema))
+    ->  forall(
+            ask(Context,
+                (   t(Predicate, rdfs:domain, Row_Type_Iri, schema),
+                    t(Predicate, Meta, Val, schema),
+                    delete(Predicate, Meta, Val, schema))),
+            true),
+
+        forall(
+            ask(Context,
+                (   t(Row_Type_Iri, Predicate, Object,schema),
+                    delete(Row_Type_Iri, Predicate, Object,schema))),
+            true),
+
+        forall(
+             ask(Context,
+                 (   t(Subject, Predicate, Row_Type_Iri,schema),
+                     delete(Subject,Predicate,Row_Type_Iri,schema))
+                ),
+             true)
+    % Nothing to delete...
+    ;   true).
 
 csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
@@ -241,7 +275,8 @@ csv_columns(Name, Context, Sorted_Columns) :-
                         t(ColumnObject, csv:csv_column_index, Column_Index^^_)
                     )),
                 uri_encoded(query_value, Column_Name, Column_Encoded),
-                atomic_list_concat([column_, Column_Encoded], Col),
+                uri_encoded(query_value, Name, Name_Encoded),
+                atomic_list_concat([Name_Encoded, '_column_', Column_Encoded], Col),
                 prefixed_to_uri(csv:Col, Prefixes, Predicate)
             ),
             Columns),
@@ -294,11 +329,11 @@ test(csv_load,
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
     Triples = [
-        (Row1)-(scm:column_header)-("2"^^xsd:string),
-        (Row1)-(scm:column_some)-("1"^^xsd:string),
+        (Row1)-(scm:csv_column_header)-("2"^^xsd:string),
+        (Row1)-(scm:csv_column_some)-("1"^^xsd:string),
         (Row1)-(rdf:type)-(Row_Type2),
-        (Row2)-(scm:column_header)-("4"^^xsd:string),
-        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(scm:csv_column_header)-("4"^^xsd:string),
+        (Row2)-(scm:csv_column_some)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type2),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
@@ -348,8 +383,8 @@ test(csv_update,
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
     Triples = [
-        (Row2)-(scm:column_header)-("4"^^xsd:string),
-        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(scm:csv_column_header)-("4"^^xsd:string),
+        (Row2)-(scm:csv_column_some)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type1),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_header'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
@@ -363,9 +398,63 @@ test(csv_update,
         (doc:'ColumnObject_csv_some')-(scm:csv_column_index)-(0^^xsd:integer),
         (doc:'ColumnObject_csv_some')-(scm:csv_column_name)-("some"^^xsd:string),
         (doc:'ColumnObject_csv_some')-(rdf:type)-(scm:'Column'),
-        (Row3)-(scm:column_header)-("9"^^xsd:string),
-        (Row3)-(scm:column_some)-("1"^^xsd:string),
+        (Row3)-(scm:csv_column_header)-("9"^^xsd:string),
+        (Row3)-(scm:csv_column_some)-("1"^^xsd:string),
         (Row3)-(rdf:type)-(Row_Type1)
+    ].
+
+test(csv_update_change_column,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
+    format(Stream, "some,header~n", []),
+    format(Stream, "1,2~n", []),
+    format(Stream, "3,4~n", []),
+    close(Stream),
+
+    Path = 'admin/testdb',
+    Files = ['csv'=Filename],
+    Commit_Info = _{ author : "me", message : "a message"},
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    csv_load(System_DB, Auth, Path, Commit_Info, Files, []),
+
+    tmp_file_stream(Filename2, Stream2, [encoding(utf8)]),
+    format(Stream2, "some,another~n", []),
+    format(Stream2, "1,9~n", []),
+    format(Stream2, "3,4~n", []),
+    close(Stream2),
+
+    Files2 = ['csv'=Filename2],
+    open_descriptor(system_descriptor{}, System_DB2),
+    csv_update(System_DB2, Auth, Path, Commit_Info, Files2, []),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
+
+    Triples = [
+        (doc:Row1)-(scm:csv_column_some)-("3"^^xsd:string),
+        (doc:Row1)-(rdf:type)-(scm:Row_Type),
+        (doc:Row1)-(scm:csv_column_another)-("4"^^xsd:string),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_some'),
+        (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_another'),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:Row1),
+        (doc:'CSV_csv')-(scm:csv_row)-(doc:Row2),
+        (doc:'CSV_csv')-(rdf:type)-(scm:'CSV'),
+        (doc:'CSV_csv')-(rdfs:label)-("csv"@en),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_index)-(0^^xsd:integer),
+        (doc:'ColumnObject_csv_some')-(scm:csv_column_name)-("some"^^xsd:string),
+        (doc:'ColumnObject_csv_some')-(rdf:type)-(scm:'Column'),
+        (doc:Row2)-(scm:csv_column_some)-("1"^^xsd:string),
+        (doc:Row2)-(rdf:type)-(scm:Row_Type),
+        (doc:Row2)-(scm:csv_column_another)-("9"^^xsd:string),
+        (doc:'ColumnObject_csv_another')-(scm:csv_column_index)-(1^^xsd:integer),
+        (doc:'ColumnObject_csv_another')-(scm:csv_column_name)-("another"^^xsd:string),
+        (doc:'ColumnObject_csv_another')-(rdf:type)-(scm:'Column')
     ].
 
 test(csv_dump,
@@ -432,17 +521,17 @@ test(csv_load_multiple,
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
     Prototype_Triples = [
-        (Row4)-(scm:column_another)-("888.8"^^xsd:string),
-        (Row4)-(scm:column_one)-("Goofball"^^xsd:string),
+        (Row4)-(scm:csv2_column_another)-("888.8"^^xsd:string),
+        (Row4)-(scm:csv2_column_one)-("Goofball"^^xsd:string),
         (Row4)-(rdf:type)-(Row_Type3),
-        (Row1)-(scm:column_header)-("2"^^xsd:string),
-        (Row1)-(scm:column_some)-("1"^^xsd:string),
+        (Row1)-(scm:csv1_column_header)-("2"^^xsd:string),
+        (Row1)-(scm:csv1_column_some)-("1"^^xsd:string),
         (Row1)-(rdf:type)-(Row_Type1),
-        (Row2)-(scm:column_header)-("4"^^xsd:string),
-        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(scm:csv1_column_header)-("4"^^xsd:string),
+        (Row2)-(scm:csv1_column_some)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type1),
-        (Row5)-(scm:column_another)-("99.9"^^xsd:string),
-        (Row5)-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (Row5)-(scm:csv2_column_another)-("99.9"^^xsd:string),
+        (Row5)-(scm:csv2_column_one)-("Fuzzbucket"^^xsd:string),
         (Row5)-(rdf:type)-(Row_Type3),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
@@ -520,11 +609,11 @@ test(csv_update_multiple,
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
     Expected_Triples = [
-        (Row2)-(scm:column_header)-("4"^^xsd:string),
-        (Row2)-(scm:column_some)-("3"^^xsd:string),
+        (Row2)-(scm:csv1_column_header)-("4"^^xsd:string),
+        (Row2)-(scm:csv1_column_some)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type1),
-        (Row5)-(scm:column_another)-("99.9"^^xsd:string),
-        (Row5)-(scm:column_one)-("Fuzzbucket"^^xsd:string),
+        (Row5)-(scm:csv2_column_another)-("99.9"^^xsd:string),
+        (Row5)-(scm:csv2_column_one)-("Fuzzbucket"^^xsd:string),
         (Row5)-(rdf:type)-(Row_Type3),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_header'),
         (doc:'CSV_csv1')-(scm:csv_column)-(doc:'ColumnObject_csv1_some'),
@@ -550,11 +639,11 @@ test(csv_update_multiple,
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_index)-(1^^xsd:integer),
         (doc:'ColumnObject_csv2_one')-(scm:csv_column_name)-("one"^^xsd:string),
         (doc:'ColumnObject_csv2_one')-(rdf:type)-(scm:'Column'),
-        (Row6)-(scm:column_another)-("666"^^xsd:string),
-        (Row6)-(scm:column_one)-("Goofball"^^xsd:string),
+        (Row6)-(scm:csv2_column_another)-("666"^^xsd:string),
+        (Row6)-(scm:csv2_column_one)-("Goofball"^^xsd:string),
         (Row6)-(rdf:type)-(Row_Type3),
-        (Row3)-(scm:column_header)-("9"^^xsd:string),
-        (Row3)-(scm:column_some)-("1"^^xsd:string),
+        (Row3)-(scm:csv1_column_header)-("9"^^xsd:string),
+        (Row3)-(scm:csv1_column_some)-("1"^^xsd:string),
         (Row3)-(rdf:type)-(Row_Type1)
     ],
 

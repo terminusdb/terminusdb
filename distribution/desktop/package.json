@@ -1,6 +1,7 @@
 {
     "name": "terminusdb-desktop",
-    "version": "3.0.1",
+    "productName": "TerminusDB",
+    "version": "4.0.0",
     "private": true,
     "main": "public/electron.js",
     "scripts": {
@@ -12,7 +13,8 @@
         "electron-builder": "^22.8.1"
     },
     "dependencies": {
-        "electron-is-dev": "^1.2.0"
+        "electron-is-dev": "^1.2.0",
+        "ps-node": "^0.1.6"
     },
     "build": {
         "appId": "com.terminusdb.TerminusDB-Desktop",

@@ -383,8 +383,8 @@ spawn_server_1(Path, URL, PID, Options) :-
     directory_file_path(_, Exe, Swipl_Path),
     (   Exe = swipl
     ->  expand_file_search_path(terminus_home('start.pl'), Argument),
-        Args = [Argument, serve, '--interactive']
-    ;   Args = [serve,'--interactive']
+        Args = [Argument, serve]
+    ;   Args = [serve]
     ),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
@@ -430,7 +430,7 @@ spawn_server_1(Path, URL, PID, Options) :-
     % This is very fragile though.
     read_line_to_string(Error, _First_Line),
     read_line_to_string(Error, _Second_Line),
-    read_line_to_string(Error, _Third_Line),
+    %read_line_to_string(Error, _Third_Line),
 
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),

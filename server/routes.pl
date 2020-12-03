@@ -157,6 +157,20 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
 
     reply_json(_{'api:status' : 'api:success'}).
 
+%%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(info), cors_handler(Method, info_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+info_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        info,
+        Request,
+        (   info(System_DB, Auth, Info),
+            cors_reply_json(Request, _{'@type' : 'api:InfoResponse',
+                                       'api:info' : Info,
+                                       'api:status' : 'api:success'}))).
+
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
@@ -492,8 +506,14 @@ csv_handler(get,Path,Request, System_DB, Auth) :-
             throw(http_reply(file('application/binary', CSV_Path))))).
 csv_handler(delete,Path,Request, System_DB, Auth) :-
     get_payload(Document,Request),
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
-              error(bad_api_document(Document,[commit_info]),_)),
+    do_or_die(
+        (   _{ commit_info : Commit_Info } :< Document
+        ->  true
+        ;   _{ author : _Author,
+               message : _Message } :< Document
+        ->  Commit_Info = Document),
+        error(bad_api_document(Document,[commit_info]),_)),
+
     do_or_die(_{ name : Name} :< Document,
               error(no_csv_name_supplied,_)),
 
@@ -501,7 +521,10 @@ csv_handler(delete,Path,Request, System_DB, Auth) :-
         csv,
         Request,
         (   csv_delete(System_DB, Auth, Path, Commit_Info, Name, _{}),
-            throw(http_reply(file('application/binary', Name))))).
+            cors_reply_json(Request, _{'@type' : 'api:CsvDeleteResponse',
+                                       'api:status' : "api:success"}))).
+
+
 
 :- begin_tests(csv_endpoint).
 
@@ -542,11 +565,11 @@ test(csv_load, [
                 t(X, Y, Z)),
             Triples),
     Triples = [
-        (Row1)-(scm:column_bar)-("2"^^xsd:string),
-        (Row1)-(scm:column_foo)-("1"^^xsd:string),
+        (Row1)-(scm:csv_column_bar)-("2"^^xsd:string),
+        (Row1)-(scm:csv_column_foo)-("1"^^xsd:string),
         (Row1)-(rdf:type)-(Row_Type),
-        (Row2)-(scm:column_bar)-("4"^^xsd:string),
-        (Row2)-(scm:column_foo)-("3"^^xsd:string),
+        (Row2)-(scm:csv_column_bar)-("4"^^xsd:string),
+        (Row2)-(scm:csv_column_foo)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_bar'),
         (doc:'CSV_csv')-(scm:csv_column)-(doc:'ColumnObject_csv_foo'),
@@ -641,7 +664,38 @@ test(csv_update, [
 
     CSV = 'foo,bar\r\n1,2\r\n2,1\r\n'.
 
+test(csv_delete, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
 
+    create_db_with_empty_schema(admin, 'TEST_DB'),
+
+    terminus_path(Path),
+    interpolate([Path, '/test/test.csv'], CSV_File),
+    atomic_list_concat([Server, '/api/csv/admin/TEST_DB'], URI),
+    admin_pass(Key),
+    atom_json_term(JSON, _{ commit_info : _{ author : "admin",
+                                             message : "insert"}}, []),
+
+    http_put(URI, form_data([ payload = JSON,
+                              csv     = file(CSV_File)
+                            ]),
+             _Result1,
+             [cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]),
+
+    Document = _{commit_info : _{ author : "admin",
+                                  message : "deleting" },
+                 name : csv},
+
+    http_get(URI,
+             _Result2,
+             [method(delete),
+              post(json(Document)),
+              cert_verify_hook(cert_accept_any),
+              authorization(basic(admin, Key))]).
 
 :- end_tests(csv_endpoint).
 

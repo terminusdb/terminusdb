@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.13.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.13.5
 
 jobs:
   test_and_push_docker:
@@ -169,7 +169,7 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
-        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup.exe"
+        for file in dist/terminusdb-desktop\ Setup*.exe; do mv "$file" "dist/terminusdb-desktop Setup.exe"; done
       shell: bash
 
     - name: Upload a Build Artifact
