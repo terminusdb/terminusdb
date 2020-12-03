@@ -144,7 +144,10 @@
               benchmark_subject_start/1,
               benchmark_subject_stop/1,
               benchmark/1,
-              benchmark/0
+              benchmark/0,
+
+              % http_utils.pl
+              basic_authorization/3
           ]).
 
 % note: test_utils is intentionally omitted
@@ -156,3 +159,4 @@
 :- use_module(util/speculative_parse).
 :- use_module(util/xsd_parser).
 :- use_module(util/benchmark).
+:- use_module(util/http_utils).

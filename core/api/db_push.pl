@@ -1,5 +1,6 @@
 :- module(db_push, [
-              push/8
+              push/8,
+              authorized_push/3
           ]).
 
 :- use_module(core(util)).
@@ -141,6 +142,45 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
         update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
         run_transactions([Database_Transaction_Object], true, _),
         Result = new(Current_Head_Id)
+    ).
+
+remote_unpack_url(URL, Pack_URL) :-
+    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","unpack"|Rest]).
+
+% NOTE: What do we do with the remote branch? How do we send it?
+authorized_push(Authorization, Remote_URL, Payload) :-
+
+    (   is_local_https(Remote_URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
+
+    remote_unpack_url(Remote_URL, Unpack_URL),
+
+    catch(http_post(Unpack_URL,
+                    bytes('application/octets',Payload),
+                    Result,
+                    [request_header('Authorization'=Authorization),
+                     json_object(dict),
+                     timeout(infinite),
+                     status_code(Status_Code)
+                     |Additional_Options]),
+          E,
+          throw(error(communication_failure(E),_))),
+
+    (   200 = Status_Code
+    ->  true
+    ;   400 = Status_Code,
+        _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
+    ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
+        ->  throw(error(history_diverged,_))
+        ;   _{'@type' : "api:UnpackDestinationDatabaseNotFound"} :< Error
+        ->  throw(error(remote_unknown,_))
+        ;   throw(error(unknown_status_code(Status_Code, Result),_))
+        )
+    ;   403 = Status_Code
+    ->  throw(error(remote_authorization_failure(Result),_))
+    ;   throw(error(unknown_status_code,_))
     ).
 
 :- begin_tests(push).

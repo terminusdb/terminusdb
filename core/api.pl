@@ -45,6 +45,7 @@
 
               % db_push.pl
               push/8,
+              authorized_push/3,
 
               % db_unpack.pl
               unpack/4,

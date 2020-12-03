@@ -113,6 +113,50 @@ opt_spec(query,'terminusdb query QUERY OPTIONS',
            shortflags([a]),
            default('admin'),
            help('author to place on the commit')]]).
+opt_spec(push,'terminusdb push DB_SPEC',
+         'Push a branch.',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `push` command')],
+          [opt(branch),
+           type(atom),
+           shortflags([b]),
+           longflags([branch]),
+           default(main),
+           help('set the origin branch for push')],
+          [opt(remote_branch),
+           type(atom),
+           shortflags([e]),
+           longflags(['remote-branch']),
+           default('_'),
+           help('set the branch on the remote for push')],
+          [opt(remote),
+           type(atom),
+           shortflags([r]),
+           longflags([remote]),
+           default(origin),
+           help('the name of the remote to use')],
+          [opt(prefixes),
+           type(boolean),
+           shortflags([x]),
+           longflags([prefixes]),
+           default(false),
+           help('send prefixes for database')],
+          [opt(user),
+           type(atom),
+           shortflags([u]),
+           longflags([user]),
+           default('_'),
+           help('the user on the remote')],
+          [opt(password),
+           type(atom),
+           shortflags([p]),
+           longflags([user]),
+           default('_'),
+           help('the password on the remote')]]).
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
          'Create a branch.',
@@ -387,6 +431,38 @@ run_command(query,[Database,Query],Opts) :-
         )).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
+run_command(push,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    member(remote(Remote_Name), Opts),
+    member(branch(Branch), Opts),
+    member(remote_branch(Remote_Branch), Opts),
+    (   var(Remote_Branch)
+    ->  Branch = Remote_Branch
+    ;   true),
+
+    member(user(User), Opts),
+    (   var(User)
+    ->  prompt(_,'Username: '),
+        read_string(user_input, ['\n'], [], _, User)
+    ;   true),
+
+    member(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+
+    basic_authorization(User,Password,Authorization),
+
+    api_report_errors(
+        push,
+        push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
+    format(current_output, "~N~s pushed: ~q", [Path, Result]).
+% run_command(push,_Databases])
+% run_command(pull,_Databases])
+% run_command(clone,_Databases])
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-
@@ -515,9 +591,6 @@ run_command(csv,dump,[Path,File],Opts) :-
     copy_file(Temp, Output),
     format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
 % turtle
-% run_command(push,_Databases])
-% run_command(pull,_Databases])
-% run_command(clone,_Databases])
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
 
