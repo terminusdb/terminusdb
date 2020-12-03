@@ -358,6 +358,47 @@ opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
            shortflags([o]),
            default('_'),
            help('file name to use for csv output')]]).
+opt_spec(remote,add,'terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS',
+         'Add a remote.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `remote add` sub command')]]).
+opt_spec(remote,remove,'terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS',
+         'Remove a remote.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `remote remove` sub command')]]).
+opt_spec(remote,'set-url','terminusdb remote set-url DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS',
+         'Set the URL of a remote.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `remote set-url` sub command')]]).
+opt_spec(remote,'get-url','terminusdb remote get-url DATABASE_SPEC REMOTE_NAME OPTIONS',
+         'Get the URL of a remote.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `remote get-url` sub command')]]).
+opt_spec(remote,list,'terminusdb remote list DATABASE_SPEC OPTIONS',
+         'List remotes.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `remote list` sub command')]]).
+
 
 command(Command) :-
     opt_spec(Command,_,_,_).
@@ -590,6 +631,42 @@ run_command(csv,dump,[Path,File],Opts) :-
     ignore(Output = File),
     copy_file(Temp, Output),
     format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
+run_command(remote,add,[Path,Remote_Name,URL],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        remote,
+        add_remote(System_DB, Auth, Path, Remote_Name, URL)),
+    format(current_output,'Successfully added remote ~s with url ~s~n',[Remote_Name,URL]).
+run_command(remote,remove,[Path,Remote_Name],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        remote,
+        remove_remote(System_DB, Auth, Path, Remote_Name)),
+    format(current_output,'Successfully added remote ~s~n',[Remote_Name]).
+run_command(remote,'set-url',[Path,Remote_Name,URL],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        remote,
+        update_remote(System_DB, Auth, Path, Remote_Name, URL)),
+    format(current_output,'Successfully set remote url to ~s~n',[URL]).
+run_command(remote,'get-url',[Path,Remote_Name],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        remote,
+        show_remote(System_DB, Auth, Path, Remote_Name, URL)),
+    format(current_output,'Remote ~s associated with url ~s~n',[Remote_Name,URL]).
+run_command(remote,list,[Path],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        remote,
+        list_remotes(System_DB, Auth, Path, Remote_Names)),
+    format(current_output,'Remotes: ~q~n',[Remote_Names]).
+
 % turtle
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).

@@ -820,6 +820,39 @@ api_error_jsonld(info,error(access_not_authorized(Auth),_),JSON) :-
              'action' : 'info',
              'scope' : 'system:system'
             }.
+api_error_jsonld(remote,error(invalid_absolute_path(Repo_Path),_), JSON) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Repo_Path]),
+    JSON = _{'@type' : 'api:RemoteErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                              'api:absolute_descriptor' : Repo_Path},
+             'api:message' : Msg
+            }.
+api_error_jsonld(remote,error(unresolvable_descriptor(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The repository does not exist for ~q", [Path]),
+    JSON = _{'@type' : 'api:RemoteErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld(remote,error(remote_does_not_exist(Name),_), JSON) :-
+    format(string(Msg), "The remote does not exist for ~q", [Name]),
+    JSON = _{'@type' : 'api:RemoteErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteDoesNotExist",
+                              'api:remote_name' : Name}
+            }.
+api_error_jsonld(remote,error(remote_exists(Name),_), JSON) :-
+    format(string(Msg), "The remote already exist for ~q", [Name]),
+    JSON = _{'@type' : 'api:RemoteErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteExists",
+                              'api:remote_name' : Name}
+            }.
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -875,6 +908,7 @@ api_error_jsonld(graph,error(graph_already_exists(Descriptor,Graph_Name), _), Ty
                               'api:graph_name' : Graph_Name,
                               'api:absolute_descriptor' : Path}
             }.
+
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
