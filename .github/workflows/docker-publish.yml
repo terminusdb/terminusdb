@@ -169,7 +169,7 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
-        for file in dist/TerminusDB Setup*.exe; do mv "$file" "dist/terminusdb-desktop Setup.exe"; done
+        for file in dist/TerminusDB\ Setup*.exe; do mv "$file" "dist/terminusdb-desktop Setup.exe"; done
       shell: bash
 
     - name: Upload a Build Artifact
