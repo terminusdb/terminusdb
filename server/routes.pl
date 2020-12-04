@@ -2853,7 +2853,7 @@ test(pull_from_something_to_something_equal_other_branch,
 :- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
-                 methods([options,post])]).
+                 methods([options,post,delete])]).
 
 branch_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die(
@@ -2864,11 +2864,19 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
     ->  Origin_Option = some(Origin_Path)
     ;   Origin_Option = none),
 
-    % DUBIOUS are we even doing authentication here?
     api_report_errors(
         branch,
         Request,
         (   branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:BranchResponse',
+                              'api:status' : "api:success"}))).
+branch_handler(delete, Path, Request, System_DB, Auth) :-
+    get_payload(_Document, Request),
+    api_report_errors(
+        branch,
+        Request,
+        (   branch_delete(System_DB, Auth, Path),
             cors_reply_json(Request,
                             _{'@type' : 'api:BranchResponse',
                               'api:status' : "api:success"}))).
@@ -3000,6 +3008,35 @@ test(create_branch_from_commit_graph_error, [
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
+    \+ has_branch(Repository_Descriptor, "foo").
+
+test(delete_empty_branch, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{prefixes : _{ doc : "https://terminushub.com/document",
+                                   scm : "https://terminushub.com/schema"}
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    has_branch(Repository_Descriptor, "foo"),
+
+    http_get(URI,
+             JSON2,
+             [method(delete),
+              status_code(_),
+              json_object(dict),
+              authorization(basic(admin,Key))]),
+    writeq(JSON2),nl,
+    (JSON2.'api:status' = "api:success"),
     \+ has_branch(Repository_Descriptor, "foo").
 
 :- end_tests(branch_endpoint).
