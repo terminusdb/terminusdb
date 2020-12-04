@@ -85,7 +85,7 @@
  */
 
 /*******
- * Mondic DCG management
+ * Monadic DCG management
  *
  * We use DCG's to simplify tracking the state of the WOQL query compiler.
  */

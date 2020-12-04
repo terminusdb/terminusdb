@@ -39,12 +39,14 @@
 
               % db_fetch.pl
               remote_fetch/6,
+              authorized_fetch/4,
 
               % db_clone.pl
               clone/10,
 
               % db_push.pl
               push/8,
+              authorized_push/3,
 
               % db_unpack.pl
               unpack/4,
@@ -99,7 +101,15 @@
               json_cli_code/2,
 
               % api_info.pl
-              info/3
+              info/3,
+
+              % api_remote.pl
+              add_remote/5,
+              remove_remote/4,
+              update_remote/5,
+              show_remote/5,
+              list_remotes/4
+
           ]).
 
 :- use_module(api/api_init).
@@ -127,3 +137,4 @@
 :- use_module(api/api_db).
 :- use_module(api/api_error).
 :- use_module(api/api_info).
+:- use_module(api/api_remote).

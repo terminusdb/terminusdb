@@ -95,6 +95,9 @@
               insert_remote_repository/4,
               insert_remote_repository/5,
 
+              remove_local_repository/2,
+              remove_remote_repository/2,
+
               update_repository_head/3,
               update_repository_remote_url/3,
 

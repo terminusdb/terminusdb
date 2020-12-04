@@ -187,6 +187,7 @@ try_prefix_uri(X,_,X) :-
 try_prefix_uri(URI,[],URI) :-
     !.
 try_prefix_uri(URI,[Prefix-URI_Base|_], Prefixed) :-
+    atom(URI_Base),
     escape_pcre(URI_Base,URI_Escaped),
     atomic_list_concat(['^(?P<base>',URI_Escaped,')(?P<rest>.*)$'], Pattern),
     re_matchsub(Pattern, URI, Match, []),
