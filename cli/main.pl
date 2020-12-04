@@ -37,9 +37,6 @@ cli_toplevel :-
             halt(1)
         )).
 
-not(true,false).
-not(false,true).
-
 % commands
 opt_spec(help,'terminusdb help',
          'Display help regarding terminusdb.',
