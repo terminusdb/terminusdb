@@ -34,6 +34,9 @@ Run internal TerminusDB tests.
   * `-h`, `--help`=[value]:
   print help for `test` command
 
+  * `-t`, `--test`=[value]:
+  Run a specific test
+
 ### serve
 
 `terminusdb serve OPTIONS`
@@ -78,6 +81,81 @@ Query a database.
 
   * `-a`, `--author`=[value]:
   author to place on the commit
+
+### push
+
+`terminusdb push DB_SPEC`
+
+Push a branch.
+
+  * `-h`, `--help`=[value]:
+  print help for the `push` command
+
+  * `-b`, `--branch`=[value]:
+  set the origin branch for push
+
+  * `-e`, `--remote-branch`=[value]:
+  set the branch on the remote for push
+
+  * `-r`, `--remote`=[value]:
+  the name of the remote to use
+
+  * `-x`, `--prefixes`=[value]:
+  send prefixes for database
+
+  * `-u`, `--user`=[value]:
+  the user on the remote
+
+  * `-p`, `--password`=[value]:
+  the password on the remote
+
+### clone
+
+`terminusdb clone URI <DB_SPEC>`
+
+Clone a database (into DB_SPEC).
+
+  * `-h`, `--help`=[value]:
+  print help for the `clone` command
+
+  * `-u`, `--user`=[value]:
+  the user on the remote
+
+  * `-p`, `--password`=[value]:
+  the password on the remote
+
+  * `-o`, `--organization`=[value]:
+  organizational owner of the cloned database
+
+  * `-l`, `--label`=[value]:
+  label to use for this database
+
+  * `-c`, `--comment`=[value]:
+  long description of the cloned database
+
+  * `-b`, `--public`=[value]:
+  whether the cloned database is to be public
+
+### pull
+
+`terminusdb pull BRANCH_SPEC`
+
+Pull a branch from a database.
+
+  * `-h`, `--help`=[value]:
+  print help for the `pull` command
+
+  * `-e`, `--remote-branch`=[value]:
+  set the branch on the remote for push
+
+  * `-r`, `--remote`=[value]:
+  the name of the remote to use
+
+  * `-u`, `--user`=[value]:
+  the user on the remote
+
+  * `-p`, `--password`=[value]:
+  the password on the remote
 
 ### branch create
 
@@ -228,6 +306,51 @@ Dump a CSV file from the database.
 
   * `-o`, `--output`=[value]:
   file name to use for csv output
+
+### remote add
+
+`terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS`
+
+Add a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote add` sub command
+
+### remote remove
+
+`terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS`
+
+Remove a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote remove` sub command
+
+### remote set-url
+
+`terminusdb remote set-url DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS`
+
+Set the URL of a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote set-url` sub command
+
+### remote get-url
+
+`terminusdb remote get-url DATABASE_SPEC REMOTE_NAME OPTIONS`
+
+Get the URL of a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote get-url` sub command
+
+### remote list
+
+`terminusdb remote list DATABASE_SPEC OPTIONS`
+
+List remotes.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote list` sub command
 
 ## SYNTAX
 

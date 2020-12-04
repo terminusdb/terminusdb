@@ -37,6 +37,10 @@
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
 
+% chunked
+:- use_module(library(http/http_header)).
+:- use_module(library(http/http_stream)).
+
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
 % Results should be cached!
@@ -1693,38 +1697,6 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
                   'api:head_has_changed' : Head_Has_Updated,
                   'api:head' : New_Head_Layer_Id}))).
 
-remote_pack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
-
-is_local_https(URL) :-
-    re_match('^https://127.0.0.1', URL, []).
-
-authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
-    (   some(Repository_Head) = Repository_Head_Option
-    ->  Document = _{ repository_head: Repository_Head }
-    ;   Document = _{}),
-
-    (   is_local_https(URL)
-    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
-    ;   Additional_Options = []),
-
-    remote_pack_url(URL,Pack_URL),
-
-    http_post(Pack_URL,
-              json(Document),
-              Payload,
-              [request_header('Authorization'=Authorization),
-               json_object(dict),
-               status_code(Status)
-              |Additional_Options]),
-
-    (   Status = 200
-    ->  Payload_Option = some(Payload)
-    ;   Status = 204
-    ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload),_))).
-
 :- begin_tests(fetch_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -2092,6 +2064,7 @@ test(rebase_divergent_history, [
 :- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  time_limit(infinite),
+                 chunked,
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -2108,8 +2081,12 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
              Path, Repo_Head_Option, Payload_Option)),
 
     (   Payload_Option = some(Payload)
-    ->  throw(http_reply(bytes('application/octets',Payload)))
-    ;   throw(http_reply(bytes('application/octets',"No content"),[status(204)]))).
+    ->  format('Content-type: application/octets~n', []),
+        format('Status: 200 OK~n~n', []),
+        format('~s', [Payload])
+    ;   format('Content-type: application/octets~n', []),
+        format('Status: 204 No Response~n~n', [])
+    ).
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -2203,6 +2180,7 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 chunked,
                  time_limit(infinite),
                  methods([options,post])]).
 
@@ -2263,45 +2241,6 @@ push_handler(post,Path,Request, System_DB, Auth) :-
             cors_reply_json(Request,
                             Response,
                             [status(200)]))).
-
-remote_unpack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","unpack"|Rest]).
-
-% NOTE: What do we do with the remote branch? How do we send it?
-authorized_push(Authorization, Remote_URL, Payload) :-
-
-    (   is_local_https(Remote_URL)
-    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
-    ;   Additional_Options = []),
-
-    remote_unpack_url(Remote_URL, Unpack_URL),
-
-    catch(http_post(Unpack_URL,
-                    bytes('application/octets',Payload),
-                    Result,
-                    [request_header('Authorization'=Authorization),
-                     json_object(dict),
-                     timeout(infinite),
-                     status_code(Status_Code)
-                     |Additional_Options]),
-          E,
-          throw(error(communication_failure(E),_))),
-
-    (   200 = Status_Code
-    ->  true
-    ;   400 = Status_Code,
-        _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
-    ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
-        ->  throw(error(history_diverged,_))
-        ;   _{'@type' : "api:UnpackDestinationDatabaseNotFound"} :< Error
-        ->  throw(error(remote_unknown,_))
-        ;   throw(error(unknown_status_code(Status_Code, Result),_))
-        )
-    ;   403 = Status_Code
-    ->  throw(error(remote_authorization_failure(Result),_))
-    ;   throw(error(unknown_status_code,_))
-    ).
 
 :- begin_tests(push_endpoint, []).
 :- use_module(core(util/test_utils)).

@@ -1,5 +1,6 @@
 :- module(db_fetch, [
-              remote_fetch/6
+              remote_fetch/6,
+              authorized_fetch/4
           ]).
 
 
@@ -8,14 +9,14 @@
 :- use_module(core(account)).
 :- use_module(core(transaction)).
 :- use_module(db_pack).
+:- use_module(library(http/http_client)).
 
-% Dubious! Why no auth?
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
 remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Repository_Descriptor),
         error(invalid_absolute_path(Path),_)),
- 
+
     do_or_die(
         (repository_descriptor{} :< Repository_Descriptor),
         error(fetch_requires_repository(Repository_Descriptor),_)),
@@ -55,6 +56,35 @@ remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has
             ->  Head_Has_Updated = false
             ;   throw(error(unexpected_pack_missing(Repository_Descriptor),_)))),
         _Meta_Data).
+
+remote_pack_url(URL, Pack_URL) :-
+    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
+    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
+
+authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
+    (   some(Repository_Head) = Repository_Head_Option
+    ->  Document = _{ repository_head: Repository_Head }
+    ;   Document = _{}),
+
+    (   is_local_https(URL)
+    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
+    ;   Additional_Options = []),
+
+    remote_pack_url(URL,Pack_URL),
+
+    http_post(Pack_URL,
+              json(Document),
+              Payload,
+              [request_header('Authorization'=Authorization),
+               json_object(dict),
+               status_code(Status)
+              |Additional_Options]),
+
+    (   Status = 200
+    ->  Payload_Option = some(Payload)
+    ;   Status = 204
+    ->  Payload_Option = none
+    ;   throw(error(remote_connection_error(Payload),_))).
 
 :- begin_tests(fetch_api).
 :- use_module(core(util/test_utils)).

@@ -239,7 +239,7 @@ csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
     % collect header predicates
 
     % write headers
-    maplist([_-Name-_,Name]>>true,Columns,Column_Names),
+    maplist([_-CName-_,CName]>>true,Columns,Column_Names),
     Header =.. [row|Column_Names],
     csv_write_stream(Stream, [Header], []),
 
@@ -247,11 +247,12 @@ csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
     forall(
         (   ask(Context,
                 (   t(CSV, rdfs:label, Name@en),
-                    t(CSV, csv:csv_row, Row)
+                    t(CSV, scm:csv_row, Row)
                 )),
 
             findall(RowDatum,
                     (   member(Predicate-_-_, Columns),
+                        %format(user_error, "Predicate: ~s~n", [Predicate]),
                         ask(Context,
                             t(Row, Predicate, RowDatumTyped)),
                         RowDatum^^_ = RowDatumTyped
@@ -274,8 +275,8 @@ csv_columns(Name, Context, Sorted_Columns) :-
                         t(ColumnObject, csv:csv_column_name, Column_Name^^_),
                         t(ColumnObject, csv:csv_column_index, Column_Index^^_)
                     )),
-                uri_encoded(query_value, Column_Name, Column_Encoded),
-                uri_encoded(query_value, Name, Name_Encoded),
+                www_form_encode(Column_Name, Column_Encoded),
+                www_form_encode(Name, Name_Encoded),
                 atomic_list_concat([Name_Encoded, '_column_', Column_Encoded], Col),
                 prefixed_to_uri(csv:Col, Prefixes, Predicate)
             ),
