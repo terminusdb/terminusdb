@@ -252,7 +252,7 @@ csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
 
             findall(RowDatum,
                     (   member(Predicate-_-_, Columns),
-                        format(user_error, "Predicate: ~s~n", [Predicate]),
+                        %format(user_error, "Predicate: ~s~n", [Predicate]),
                         ask(Context,
                             t(Row, Predicate, RowDatumTyped)),
                         RowDatum^^_ = RowDatumTyped
