@@ -463,7 +463,13 @@ opt_spec(remote,'get-url','terminusdb remote get-url DATABASE_SPEC REMOTE_NAME O
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `remote get-url` sub command')]]).
+           help('print help for the `remote get-url` sub command')],
+          [opt(remote),
+           type(string),
+           shortflags([r]),
+           longflags([remote]),
+           default("origin"),
+           help('the name of the remote to use')]]).
 opt_spec(remote,list,'terminusdb remote list DATABASE_SPEC OPTIONS',
          'List remotes.',
          [[opt(help),
@@ -616,7 +622,7 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
-    format(current_output, "~NCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
+    format(current_output, "~nCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -806,9 +812,14 @@ run_command(remote,'set-url',[Path,Remote_Name,URL],_Opts) :-
         remote,
         update_remote(System_DB, Auth, Path, Remote_Name, URL)),
     format(current_output,'Successfully set remote url to ~s~n',[URL]).
-run_command(remote,'get-url',[Path,Remote_Name],_Opts) :-
+run_command(remote,'get-url',[Path|Remote_Name_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+
+    (   Remote_Name_List = []
+    ->  member(remote(Remote_Name), Opts)
+    ;   Remote_Name_List = [Remote_Name]),
+
     api_report_errors(
         remote,
         show_remote(System_DB, Auth, Path, Remote_Name, URL)),
