@@ -63,5 +63,6 @@ curl -X POST "https://127.0.0.1:6363/api/branch/admin/foo/local/branch/bar" -u "
 # Delete Branch
 
 ```bash
-curl -X DELETE "https://127.0.0.1:6363/api/branch/admin/foo/local/branch/bar" -u "admin:root" -k -H "Content-Type: application/json"
+curl -X DELETE "https://127.0.0.1:6363/api/branch/admin/foo/local/branch/bar" -d '{}' -u "admin:root" -k -H "Content-Type: application/json"
 ```
+
