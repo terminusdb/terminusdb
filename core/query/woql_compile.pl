@@ -12,23 +12,6 @@
  *
  * Core compiler for the WOQL query language.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(inference).
@@ -60,6 +43,12 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(http/http_log)).
+
+
+:- use_module(library(csv)).
+:- use_module(library(isub)).
+:- use_module(library(lists)).
+:- use_module(library(aggregate)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -96,7 +85,7 @@
  */
 
 /*******
- * Mondic DCG management
+ * Monadic DCG management
  *
  * We use DCG's to simplify tracking the state of the WOQL query compiler.
  */
@@ -233,7 +222,7 @@ lookup_backwards(Prolog_Var,Var_Name,[_|Records]) :-
 resolve_prefix(Pre,Suf,URI) -->
     view(prefixes,Prefixes),
     {
-        (   Full_Prefix = Prefixes.get(Pre)
+        (   Full_Prefix = (Prefixes.get(Pre))
         ->  true
         ;   throw(error(woql_syntax_error(unresolvable_prefix(Pre,Suf)),_)))
     },
@@ -344,69 +333,165 @@ var_record_pl_var(Var_Name,
 var_compare(Op, Left, Right) :-
     compare(Op, Left.var_name, Right.var_name).
 
-bt_conjunctive_head_nb_tail(A, B, (AHead,BHead), true) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,true),
+/* This partitions a tree cleanly into two segments or fails:
+   Reads:  read only
+   Writes: write only
+*/
+partition((A,B), Reads, Writes) :-
+    partition(A, A_Reads, []),
+    !,
+    partition(B, B_Reads, Writes),
+    append(A_Reads, B_Reads, Reads).
+partition((A,B), Reads, Writes) :-
+    partition(B, [], B_Writes),
+    !,
+    partition(A, Reads, A_Writes),
+    append(A_Writes, B_Writes, Writes).
+partition((A;B), [(A;B)], []) :-
+    /* just fail if we are doing disjunctive writes */
+    !,
+    partition(A, _, []),
+    partition(B, _, []).
+partition(not(Q), [not(Q)], []) :-
+    /* just fail if we have a write in a not. */
+    !,
+    partition(Q, _, []).
+partition(once(Q), [once(Q)], []) :-
+    !,
+    partition(Q, _, []).
+partition(once(Q), [], [once(Q)]) :-
+    partition(Q, [], _),
     !.
-bt_conjunctive_head_nb_tail(A, B, AHead, BTail) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,true,BTail),
+partition(limit(N,Q), [limit(N,Q)], []) :-
+    /* just fail if we have a limit on a write */
+    !,
+    partition(Q, _, []).
+partition(select(V,Q), [select(V,Q)], []) :-
+    /* just fail if we have a select on a write */
+    !,
+    partition(Q, _, []).
+partition(opt(P), [opt(P)], []) :-
+    /* just fail if we have an opt on a write */
+    !,
+    partition(P, _, []).
+partition(when(A,B), Reads, Writes) :-
+    /* assume "when"s have a read only head */
+    !,
+    partition(A, A_Reads, []),
+    partition(B, B_Reads, Writes),
+    append(A_Reads, B_Reads, Reads).
+partition(using(C,P), Reads, Writes) :-
+    !,
+    partition(P, P_Reads, P_Writes),
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [using(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [using(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [using(C,A)],
+        Writes = [using(C,B)]
+    ).
+partition(from(C,P), Reads, Writes) :-
+    partition(P, P_Reads, P_Writes),
+    !,
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [from(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [from(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [from(C,A)],
+        Writes = [from(C,B)]
+    ).
+partition(start(N,P), [start(N,P)], []) :-
+    partition(P, _, []),
     !.
-bt_conjunctive_head_nb_tail(A, B, (AHead, BHead), BTail) :-
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,BTail),
+partition(count(P,N), [count(P,N)], []) :-
+    partition(P, _, []),
     !.
-bt_conjunctive_head_nb_tail(A, B, true, (ATail,BTail)) :-
-    bt_head_nb_tail(A,true,ATail),
-    bt_head_nb_tail(B,true,BTail),
+partition(where(P), Reads, Writes) :-
+    % where means nothing
+    partition(P, Reads, Writes),
     !.
-bt_conjunctive_head_nb_tail(A, B, AHead, (ATail,BTail)) :-
-    bt_head_nb_tail(A,AHead,ATail),
-    bt_head_nb_tail(B,true,BTail).
-
-% unfortunately defaulty. We could add more clauses...
-bt_head_nb_tail((A,B),Head,Tail) :-
+partition(order_by(L,S), [order_by(L,S)], []) :-
+    partition(S, _, []),
+    !.
+partition(into(C,P), Reads, Writes) :-
+    partition(P, P_Reads, P_Writes),
     !,
-    bt_conjunctive_head_nb_tail(A,B,Head,Tail).
-bt_head_nb_tail((A;B),(AHead;BHead),true) :-
+    (   P_Reads = []
+    ->  Reads = [],
+        xfy_list(',', Q, P_Writes),
+        Writes = [into(C,Q)]
+    ;   P_Writes = []
+    ->  Writes = [],
+        xfy_list(',', Q, P_Reads),
+        Reads = [into(C,Q)]
+    ->  xfy_list(',', A, P_Reads),
+        xfy_list(',', B, P_Writes),
+        Reads = [into(C,A)],
+        Writes = [into(C,B)]
+    ).
+partition(group_by(L,S), [group_by(L,S)], []) :-
+    partition(S, _, []),
+    !.
+partition(insert(A,B,C), Reads, Writes) :-
     !,
-    bt_head_nb_tail(A,AHead,true),
-    bt_head_nb_tail(B,BHead,true).
-bt_head_nb_tail(insert(A,B,C),Head,Result) :-
+    Reads = [],
+    Writes = [insert(A,B,C)].
+partition(insert(A,B,C,D), Reads, Writes) :-
     !,
-    Head = true,
-    Result = insert(A,B,C).
-bt_head_nb_tail(insert(A,B,C,D),Head,Result) :-
+    Reads = [],
+    Writes = [insert(A,B,C,D)].
+partition(delete(A,B,C), Reads, Writes) :-
     !,
-    Head = true,
-    Result = insert(A,B,C,D).
-bt_head_nb_tail(delete(A,B,C),Head,Result) :-
+    Reads = [],
+    Writes = [delete(A,B,C)].
+partition(delete(A,B,C,D), Reads, Writes) :-
     !,
-    Head = true,
-    Result = delete(A,B,C).
-bt_head_nb_tail(delete(A,B,C,D),Head,Result) :-
+    Reads = [],
+    Writes = [delete(A,B,C,D)].
+partition(update_object(A,B), Reads, Writes) :-
     !,
-    Head = true,
-    Result = delete(A,B,C,D).
-bt_head_nb_tail(update_object(A,B),Head,Result) :-
+    Reads = [],
+    Writes = [update_object(A,B)].
+partition(update_object(A,B,C), Reads, Writes) :-
     !,
-    Head = true,
-    Result = update_object(A,B).
-bt_head_nb_tail(update_object(A,B,C),Head,Result) :-
+    Reads = [],
+    Writes = [update_object(A,B,C)].
+partition(delete_object(A), Reads, Writes) :-
     !,
-    Head = true,
-    Result = update_object(A,B,C).
-bt_head_nb_tail(delete_object(A),Head,Result) :-
-    !,
-    Head = true,
-    Result = delete_object(A).
-bt_head_nb_tail(Term, Term, true).
+    Reads = [],
+    Writes = [delete_object(A)].
+partition(T,[T],[]) :-
+    /* Everything else should be read only
+     * Note: A bit more energy here would remove the default case and need for cuts.
+     */
+    !.
 
 /*
  * safe_guard_removal(Term, NewTerm) is det.
  */
-safe_guard_removal(Term, (Head,immediately(Tail))) :-
-    bt_head_nb_tail(Term,Head,Tail),
+safe_guard_removal(Term, Prog) :-
+    partition(Term,Reads,Writes),
+    (   Writes = []
+    ->  xfy_list(',', Prog, Reads)
+    ;   Reads = []
+    ->  xfy_list(',', Write_Term, Writes),
+        Prog = immediately(Write_Term)
+    ;   xfy_list(',', A, Reads),
+        xfy_list(',', B, Writes),
+        Prog = (A,immediately(B))
+    ),
     !.
 safe_guard_removal(Term, Term).
 
@@ -433,6 +518,7 @@ test(guard_removal_is_safe, []) :-
     ),
 
     safe_guard_removal(AST, AST2),
+
     AST2 = ((
                    t(a,b,c),
                    t(e,f,g)),
@@ -478,26 +564,26 @@ test(guard_single_query, []) :-
 
     AST = t(a,b,c),
 
-    safe_guard_removal(AST, (t(a,b,c),immediately(true))).
+    safe_guard_removal(AST, (t(a,b,c))).
 
 
 test(guard_single_insertion, []) :-
 
     AST = insert(a,b,c),
 
-    safe_guard_removal(AST, (true,immediately(insert(a,b,c)))).
+    safe_guard_removal(AST, immediately(insert(a,b,c))).
 
 test(guard_single_deletion, []) :-
 
     AST = delete(a,b,c),
 
-    safe_guard_removal(AST, (true,immediately(delete(a,b,c)))).
+    safe_guard_removal(AST, immediately(delete(a,b,c))).
 
 test(guard_double_insertion, []) :-
 
     AST = (insert(a,b,c),insert(d,e,f)),
 
-    safe_guard_removal(AST, (true,immediately((insert(a,b,c),insert(d,e,f))))).
+    safe_guard_removal(AST, (immediately((insert(a,b,c),insert(d,e,f))))).
 
 :- end_tests(guards).
 
@@ -938,11 +1024,8 @@ compile_wf(addition(X,P,Y),Goal) -->
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        append([New_Transaction_Object.instance_objects,
-                New_Transaction_Object.schema_objects,
-                New_Transaction_Object.inference_objects], Objects),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_added(Objects, XE, PE, YE))
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_added(RWOs, XE, PE, YE))
     }.
 compile_wf(addition(X,P,Y,G),Goal) -->
     {
@@ -962,11 +1045,8 @@ compile_wf(removal(X,P,Y),Goal) -->
     {
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
-        filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        append([New_Transaction_Object.instance_objects,
-                New_Transaction_Object.schema_objects,
-                New_Transaction_Object.inference_objects], Objects),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(Objects, XE, PE, YE))
+        filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
+        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(RWOs, XE, PE, YE))
     }.
 compile_wf(removal(X,P,Y,G),Goal) -->
     {
@@ -1027,6 +1107,8 @@ compile_wf((A;B),(ProgA;ProgB)) -->
     return(S0),
     compile_wf(B,ProgB),
     merge(S1). % merges S1 back in to current state.
+compile_wf(once(A),once(ProgA)) -->
+    compile_wf(A,ProgA).
 compile_wf((A,B),(ProgA,ProgB)) -->
     compile_wf(A,ProgA),
     compile_wf(B,ProgB),
@@ -1257,7 +1339,9 @@ compile_wf(re(P,S,L),Re) -->
     resolve(P,PE),
     resolve(S,SE),
     resolve(L,LE),
-    { marshall_args(utils:re(PE,SE,LE),Re) }.
+    { marshall_args(utils:re(PE,SE,LE),Re),
+      debug(compilation,"re: ~q",[Re])
+    }.
 compile_wf(split(S,P,L),Split) -->
     resolve(S,SE),
     resolve(P,PE),
@@ -1311,7 +1395,7 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
     {
-        marshall_args(sumlist(XE,YE), Goal),
+        marshall_args(sum_list(XE,YE), Goal),
         Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
@@ -1370,12 +1454,38 @@ compile_wf(triple_count(Path,Count),Goal) -->
                     unliterally(Numerical_Count,CountE))
         )
     }.
-compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, Arguments)) -->
-    [].
+compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, ArgumentsE)) -->
+    resolve(Arguments, ArgumentsE).
+compile_wf(typeof(X,T), typeof(XE,TE)) -->
+    resolve(X,XE),
+    resolve(T,TE).
 compile_wf(false,false) -->
     [].
 compile_wf(true,true) -->
     [].
+
+typeof(X,T) :-
+    var(X),
+    var(T),
+    !,
+    when(nonvar(X), typeof(X,T)),
+    when(nonvar(T), typeof(X,T)).
+typeof(X,T) :-
+    var(X),
+    !,
+    (   T = 'http://www.w3.org/2002/07/owl#Thing'
+    ->  when(nonvar(X), atom(X))
+    ;   base_type(T)
+    ->  when(nonvar(X),
+             X = _^^T)
+    ;   X = _@T).
+typeof(_@T,T) :-
+    !.
+typeof(_^^T,T) :-
+    !.
+typeof(A,T) :-
+    atom(A),
+    T = 'http://www.w3.org/2002/07/owl#Thing'.
 
 :- meta_predicate ensure_mode(0,+,+,+).
 ensure_mode(Goal,Mode,Args,Names) :-
@@ -1561,13 +1671,23 @@ visible_vars(VL) -->
               Bindings,
               VL) }.
 
+order_select_([],_B0,[]).
+order_select_([v(V)|Vs],B0,[Record|B1]) :-
+    member(Record,B0),
+    get_dict(var_name, Record, V),
+    !,
+    order_select_(Vs,B0,B1).
+order_select_([_|Vs],B0,B1) :-
+    order_select_(Vs,B0,B1).
+
+order_select(Vs,B0,B1) :-
+    order_select_(Vs,B0,B_Out),
+    reverse(B_Out,B1).
+
 restrict(VL) -->
     update(bindings,B0,B1),
     {
-        include({VL}/[Record]>>(
-                    get_dict(var_name, Record, Name),
-                    member(v(Name),VL)
-                ), B0, B1)
+        order_select(VL,B0,B1)
     }.
 
 % Could be a single fold, but then we always get a conjunction with true
@@ -2699,6 +2819,60 @@ test(group_by, [
                    [p,z]],
        'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
 
+test(group_by_simple_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q),
+                      insert(y,p,z),
+                      insert(y,p,w))),
+        _Meta),
+
+    Query = _{'@type' : "GroupBy",
+              group_by : [_{ '@type' : "VariableListElement",
+                             index : _{'@type' : "xsd:integer",
+                                       '@value' : 0},
+                             variable_name : _{ '@type' : "xsd:string",
+                                                '@value' : "Subject"}}],
+              group_template :  _{ '@type' : "Variable",
+                                   variable_name : _{ '@type' : "xsd:string",
+                                                      '@value' : "Predicate"}},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "Variable",
+                                     variable_name :
+                                     _{'@type' : "xsd:string",
+                                       '@value' : "Subject"}},
+                         predicate : _{'@type' : "Variable",
+                                       variable_name :
+                                       _{'@type' : "xsd:string",
+                                         '@value' : "Predicate"}},
+                         object : _{'@type' : "Variable",
+                                    variable_name :
+                                    _{'@type' : "xsd:string",
+                                      '@value' : "Object"}}
+                       },
+              grouped : _{'@type' : "Variable",
+                          variable_name :
+                          _{'@type' : "xsd:string",
+                            '@value' : "Grouped"}}},
+
+    query_test_response(Descriptor, Query, JSON),
+
+    [_{'Grouped': [p,p,p],
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
+     _{'Grouped': [p,p],
+       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
+
 test(select, []) :-
 
     Query = _{'@type' : "Limit",
@@ -2726,6 +2900,7 @@ test(select, []) :-
                                  }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
+
     [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
 
 
@@ -4280,6 +4455,67 @@ test(using_multiple_prefixes, [
     create_context(Descriptor,Commit_Info, Context),
 
     query_response:run_context_ast_jsonld_response(Context, AST, _).
+
+
+
+test(typeof, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type' : "And",
+              query_list :
+              [_{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 0},
+                 query : _{'@type' : "Equals",
+                           left : _{'@type' : "xsd:string",
+                                    '@value' : "test"},
+                           right : _{'@type' : "Variable",
+                                     variable_name : "X"}}},
+               _{'@type' : "QueryListElement",
+                 index : _{'@type' : "xsd:integer",
+                           '@value' : 1},
+                 query : _{'@type' : "TypeOf",
+                           type : _{'@type' : "Variable",
+                                     variable_name : "Type"},
+                           value : _{'@type' : "Variable",
+                                     variable_name : "X"}}}]},
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Result] = (JSON.bindings),
+    Result.'Type' = 'http://www.w3.org/2001/XMLSchema#string'.
+
+
+test(once, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type' : "Once",
+              query: _{'@type' : "Or",
+                       query_list :
+                       [_{'@type' : "QueryListElement",
+                          index : _{'@type' : "xsd:integer",
+                                    '@value' : 0},
+                          query : _{'@type' : "Equals",
+                                    left : _{'@type' : "xsd:string",
+                                             '@value' : "foo"},
+                                    right : _{'@type' : "Variable",
+                                              variable_name : "X"}}},
+                        _{'@type' : "QueryListElement",
+                          index : _{'@type' : "xsd:integer",
+                                    '@value' : 1},
+                          query : _{'@type' : "Equals",
+                                    left : _{'@type' : "xsd:string",
+                                             '@value' : "bar"},
+                                    right : _{'@type' : "Variable",
+                                              variable_name : "X"}}}]
+                      }
+             },
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Result] = (JSON.bindings),
+    Result.'X'.'@value' = "foo".
 
 
 :- end_tests(woql).

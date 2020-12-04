@@ -55,30 +55,14 @@
               sol_bag/2,
               optional/1,
               chunk/2,
-              chunk/3
+              chunk/3,
+              member_last/3
           ]).
 
 /** <module> Utils
  *
  * Utility predicates
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(library(pcre)).
@@ -815,3 +799,17 @@ chunk(String,Chunk,Size) :-
     ->  sub_string(String,Offset,_,0,Chunk),
         !
     ;   sub_string(String,Offset,Size,_,Chunk)).
+
+/*
+ * member_last(X,List,Last) is nondet.
+ *
+ * Binds `X` to every member of a list `List`,
+ * with a boolean about whether it is the last.
+ */
+member_last(X,List,Last) :-
+    member_last_(List,X,Last).
+
+member_last_([A],A,true).
+member_last_([A,_|_],A,false).
+member_last_([_|Rest],A,Last) :-
+    member_last_(Rest,A,Last).

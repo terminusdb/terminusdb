@@ -11,23 +11,6 @@
  * This file contains the code for conversion of JSON-LD to the WOQL
  * AST.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(jsonld).
@@ -408,7 +391,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedQuad',JSON,WOQL,Pa
     _{'http://terminusdb.com/schema/woql#subject' : Subject,
       'http://terminusdb.com/schema/woql#predicate' : Predicate,
       'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph' : Graph
+      'http://terminusdb.com/schema/woql#graph_filter' : Graph
      } :< JSON,
     json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
                                   |Path]),
@@ -416,19 +399,19 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedQuad',JSON,WOQL,Pa
                                     |Path]),
     json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph_filter'
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
                                 Graph), _)),
     WOQL = addition(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedQuad',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#subject' : Subject,
       'http://terminusdb.com/schema/woql#predicate' : Predicate,
       'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph' : Graph
+      'http://terminusdb.com/schema/woql#graph_filter' : Graph
      } :< JSON,
     json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
                                   |Path]),
@@ -436,12 +419,12 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedQuad',JSON,WOQL,
                                     |Path]),
     json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph_filter'
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
                                 Graph), _)),
     WOQL = removal(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteTriple',JSON,WOQL,Path) :-
@@ -889,6 +872,12 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Not',JSON,WOQL,Path) :-
     json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
                            |Path]),
     WOQL = not(WQ).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#Once',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#query' : Q
+     } :< JSON,
+    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+                           |Path]),
+    WOQL = once(WQ).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Immediately',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#query' : Q
      } :< JSON,
@@ -983,7 +972,17 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#Variable',JSON,WOQL,Pat
     Result = String_or_Atom_Name^^_,
     coerce_atom(String_or_Atom_Name, Atom_Name),
     WOQL = v(Atom_Name).
-
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#value' : Value,
+      'http://terminusdb.com/schema/woql#type' : Type
+     } :< JSON,
+    json_to_woql_ast(Value,WOQL_Value,
+                     ['http://terminusdb.com/schema/woql#value'
+                      |Path]),
+    json_to_woql_ast(Type,WOQL_Type,
+                     ['http://terminusdb.com/schema/woql#type'
+                      |Path]),
+    WOQL = typeof(WOQL_Value,WOQL_Type).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),

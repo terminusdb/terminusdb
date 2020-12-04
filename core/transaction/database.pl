@@ -12,23 +12,6 @@
  * their associated graphs by bundling them as objects with some convenience
  * operators and accessors.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(transaction/descriptor)).
@@ -235,6 +218,8 @@ with_transaction_(Query_Context,
     ;   !,
         fail).
 
+:- use_module(core(util/test_utils)).
+:- use_module(library(http/json)).
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
  *
@@ -243,6 +228,19 @@ with_transaction_(Query_Context,
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     validate_validation_objects(Validations, All_Witnesses, Witnesses),
+    /*
+    with_output_to(
+        user_error,
+        (   format("~n~nXXXXXXXXXXXXXXX~n",[]),
+            maplist(
+                [Askable]>>print_all_triples(Askable,schema),
+                Validations),
+            format(user_error,"~n~nYYYYYYYYYYYYYYY~n",[]),
+            maplist(
+                [Askable]>>print_all_triples(Askable),
+                Validations))
+    ),*/
+
     (   Witnesses = []
     ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),

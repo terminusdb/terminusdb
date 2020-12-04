@@ -1,17 +1,18 @@
-:- module(init, [
+:- module(api_init, [
+              bootstrap_files/0,
               initialize_config/4,
               initialize_registry/0,
-              initialize_index/2,
               initialize_database/2,
-              initialize_database_with_path/3,
-              initialize_database_with_store/3
+              initialize_database_with_store/2
           ]).
 
 :- use_module(core(triple)).
+:- use_module(core(util)).
 
 :- use_module(library(semweb/turtle)).
 
 :- use_module(library(terminus_store)).
+
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -35,6 +36,26 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
     nb_set_head(Graph_Obj, Layer).
+
+:- dynamic template_system_instance/1.
+:- dynamic system_inference/1.
+:- dynamic system_schema/1.
+:- dynamic repo_schema/1.
+:- dynamic layer_schema/1.
+:- dynamic ref_schema/1.
+bootstrap_files :-
+    template_system_instance_ttl(InstancePath),
+    file_to_predicate(InstancePath, template_system_instance),
+    system_inference_ttl(InferencePath),
+    file_to_predicate(InferencePath, system_inference),
+    system_schema_ttl(SchemaPath),
+    file_to_predicate(SchemaPath, system_schema),
+    repository_schema_ttl(RepoPath),
+    file_to_predicate(RepoPath, repo_schema),
+    layer_schema_ttl(LayerSchemaPath),
+    file_to_predicate(LayerSchemaPath, layer_schema),
+    ref_schema_ttl(RefSchemaPath),
+    file_to_predicate(RefSchemaPath, ref_schema).
 
 example_registry_path(Path) :-
     once(expand_file_search_path(template('example_registry.pl'), Path)).
@@ -123,7 +144,6 @@ initialize_config(PUBLIC_URL, Server, Port, Workers) :-
     write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
                       Port, Workers).
 
-
 initialize_registry :-
     config:registry_path(Registry_Path),
     (   exists_file(Registry_Path)
@@ -132,64 +152,67 @@ initialize_registry :-
         copy_file(Example_Registry_Path, Registry_Path)
     ).
 
-initialize_database(Public_URL, Key) :-
-    config:default_database_path(DB_Path),
-    initialize_database_with_path(Public_URL, Key, DB_Path).
+initialize_database(Key,Force) :-
+    db_path(DB_Path),
+    initialize_database_with_path(Key, DB_Path, Force).
 
-initialize_database_with_path(Public_URL, Key, DB_Path) :-
+storage_version_path(DB_Path,Path) :-
+    atomic_list_concat([DB_Path,'/STORAGE_VERSION'],Path).
+
+/*
+ * initialize_database_with_path(Key,DB_Path,Force) is det+error.
+ *
+ * initialize the database unless it already exists or Force is false.
+ */
+initialize_database_with_path(_, DB_Path, false) :-
+    storage_version_path(DB_Path, Version),
+    exists_file(Version),
+    throw(error(storage_already_exists(DB_Path),_)).
+initialize_database_with_path(Key, DB_Path, _) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
-    initialize_server_version(DB_Path),
+    initialize_storage_version(DB_Path),
     open_directory_store(DB_Path, Store),
-    initialize_database_with_store(Public_URL, Key, Store).
+    initialize_database_with_store(Key, Store).
 
-initialize_server_version(DB_Path) :-
-    atomic_list_concat([DB_Path,'/SERVER_VERSION'],Path),
+initialize_storage_version(DB_Path) :-
+    storage_version_path(DB_Path,Path),
     open(Path, write, FileStream),
     writeq(FileStream, 1),
     close(FileStream).
 
-initialize_database_with_store(Public_URL, Key, Store) :-
-    template_system_instance_ttl(Example_Instance_TTL),
-
-    system_inference_ttl(System_Inference_TTL),
-    system_schema_ttl(System_Schema_TTL),
-
-    ref_schema_ttl(System_Ref_TTL),
-    layer_schema_ttl(System_Layer_TTL),
-    repository_schema_ttl(System_Repository_TTL),
-
-
-    instance_path(Instance_TTL_Path),
-
+initialize_database_with_store(Key, Store) :-
     crypto_password_hash(Key,Hash, [cost(15)]),
 
-    % Need to copy this one from a template as we alter it.
-    copy_file(Example_Instance_TTL, Instance_TTL_Path),
-    replace_in_file(Instance_TTL_Path, "SEKRET_ADMIN_KEY", Hash),
-    replace_in_file(Instance_TTL_Path, "SERVER_NAME", Public_URL),
+    template_system_instance(Template_Instance_String),
+    format(string(Instance_String), Template_Instance_String, [Hash]),
+    open_string(Instance_String, Instance_Stream),
 
     system_instance_name(Instance_Name),
-    create_graph_from_turtle(Store,Instance_Name,Instance_TTL_Path),
+    create_graph_from_turtle(Store,Instance_Name,Instance_Stream),
 
+    system_schema(System_Schema_String),
+    open_string(System_Schema_String, System_Schema_Stream),
     system_schema_name(Schema_Name),
-    create_graph_from_turtle(Store,Schema_Name,System_Schema_TTL),
+    create_graph_from_turtle(Store,Schema_Name,System_Schema_Stream),
 
+    system_inference(System_Inference_String),
+    open_string(System_Inference_String, System_Inference_Stream),
     system_inference_name(Inference_Name),
-    create_graph_from_turtle(Store,Inference_Name,System_Inference_TTL),
+    create_graph_from_turtle(Store,Inference_Name,System_Inference_Stream),
 
+    layer_schema(Layer_Schema_String),
+    open_string(Layer_Schema_String, Layer_Schema_Stream),
     layer_ontology(Layer_Name),
-    create_graph_from_turtle(Store,Layer_Name,System_Layer_TTL),
+    create_graph_from_turtle(Store,Layer_Name,Layer_Schema_Stream),
 
+    ref_schema(Ref_Schema_String),
+    open_string(Ref_Schema_String, Ref_Schema_Stream),
     ref_ontology(Ref_Name),
-    create_graph_from_turtle(Store,Ref_Name,System_Ref_TTL),
+    create_graph_from_turtle(Store,Ref_Name,Ref_Schema_Stream),
 
+    repo_schema(Repo_Schema_String),
+    open_string(Repo_Schema_String, Repo_Schema_Stream),
     repository_ontology(Repository_Name),
-    create_graph_from_turtle(Store,Repository_Name,System_Repository_TTL).
+    create_graph_from_turtle(Store,Repository_Name,Repo_Schema_Stream).
 
-
-initialize_index(Key, Opts) :-
-    index_key(Key, Password, Opts),
-    index_template_path(IndexTplPath),
-    config:index_path(IndexPath),
-    write_index_file(IndexTplPath, IndexPath, Password).

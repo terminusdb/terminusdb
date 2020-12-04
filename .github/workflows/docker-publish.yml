@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.12.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.13.5
 
 jobs:
   test_and_push_docker:
@@ -25,7 +25,7 @@ jobs:
 
     env:
       IMAGE_NAME: terminusdb/terminusdb-server
-      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false"
+      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false --name terminusdb"
 
 
     steps:
@@ -35,7 +35,19 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
 
       - name: Run tests
-        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/utils/db_init -k root -s localhost && swipl -g run_tests -g halt /app/terminusdb/start.pl"
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
+
+      - name: Copy binary to local filesystem
+        run: |
+          id=$(docker create terminusdb/terminusdb-server)
+          docker cp $id:/app/terminusdb/terminusdb terminusdb
+          docker rm -v $id
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: terminusdb-linux
+          path: terminusdb
 
       - name: Log into Docker Container Registry
         if: github.event_name != 'pull_request'
@@ -114,12 +126,12 @@ jobs:
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
+        md lib/x64-win64 -ea 0
+        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile lib/x64-win64/libterminus_store.dll
         cd "$env:GITHUB_WORKSPACE"
         mkdir swipl
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
         cd swipl\bin
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile libterminus_store.dll
-        Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/terminus_store_prolog.dll" -OutFile terminus_store_prolog.dll
 
     - name: Package windows tar
       run: |
@@ -127,7 +139,7 @@ jobs:
 
     - name: Run tests
       run: |
-        swipl\bin\swipl utils\db_init -s localhost -k root
+        swipl\bin\swipl -g halt start.pl store init --key root
         swipl\bin\swipl -g run_tests -g halt start.pl
 
     - name: Archive production artifacts
@@ -157,7 +169,7 @@ jobs:
         cd ../../
         npm i
         npx electron-builder build -p never
-        mv "dist/terminusdb-desktop Setup 3.0.1.exe" "dist/terminusdb-desktop Setup.exe"
+        for file in dist/TerminusDB\ Setup*.exe; do mv "$file" "dist/terminusdb-desktop Setup.exe"; done
       shell: bash
 
     - name: Upload a Build Artifact
@@ -203,15 +215,52 @@ jobs:
         name: terminusdb-desktop.AppImage
         path: distribution/desktop/dist/terminusdb-desktop.AppImage
 
+  mac_os_desktop:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: distribution/desktop
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js 12
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12
+
+    - run: npm install
+
+    - name: Compile DMG
+      run: |
+        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        bash build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        mv dist/*.dmg dist/terminusdb-desktop.dmg
+
+    - name: Run tests
+      run: |
+        export TERMINUSDB_SERVER_PACK_DIR=./public/pack
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/start.pl store init --key root
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-desktop.dmg
+        path: distribution/desktop/dist/terminusdb-desktop.dmg
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop]
+    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop, mac_os_desktop]
     if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
 
     steps:
     - uses: actions/checkout@v2
 
     - uses: actions/download-artifact@v2
+
+    - name: Rename terminusdb binary
+      run: |
+        mv terminusdb-linux/terminusdb terminusdb-linux-amd64
 
     - name: Set release name
       id: release_name
@@ -243,3 +292,5 @@ jobs:
           terminusdb-desktop.AppImage/terminusdb-desktop.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
+          terminusdb-desktop.dmg/terminusdb-desktop.dmg
+          terminusdb-linux-amd64

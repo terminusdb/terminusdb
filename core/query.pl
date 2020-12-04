@@ -3,6 +3,7 @@
               ask/2,
               ask/3,
               ask_ast/3,
+              askable_prefixes/2,
               create_context/2,
               create_context/3,
               askable_context/4,
@@ -14,6 +15,7 @@
               empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2,
+              query_default_schema_write_graph/2,
 
               % frame.pl
               class_frame/3,
@@ -77,6 +79,7 @@
 
               % query_response.pl
               run_context_ast_jsonld_response/3,
+              pretty_print_query_response/3,
 
               % resolve_query_resource.pl
               resolve_string_descriptor/3,
@@ -87,6 +90,7 @@
               resolve_absolute_graph_descriptor/2,
               resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
+              resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_filter/2,
 
               % woql_compile.pl

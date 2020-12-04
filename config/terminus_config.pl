@@ -1,10 +1,11 @@
 :- module(config,[
+              version/1,
               server/1,
               server_name/1,
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              index_path/1,
+              index_template/1,
               default_database_path/1,
               jwt_public_key_path/1,
               jwt_public_key_id/1,
@@ -14,6 +15,7 @@
               ssl_cert_key/1,
               pack_dir/1,
               https_enabled/0,
+              autologin_enabled/0,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -22,6 +24,8 @@
           ]).
 
 :- use_module(core(util/utils)).
+
+version('4.0.0').
 
 server_protocol(Value) :-
     (   https_enabled
@@ -40,13 +44,20 @@ worker_amount(Value) :-
 max_transaction_retries(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
 
-index_path(Value) :-
-    once(expand_file_search_path(config('index.html'), Path)),
-    getenv_default('TERMINUSDB_SERVER_INDEX_PATH', Path, Value).
+:- dynamic index_template_/1.
+
+index_template(Value) :-
+    index_template_(Value),
+    !.
+index_template(Value) :-
+    once(expand_file_search_path(config('index.tpl'), Template_Path)),
+    open(Template_Path, read, Template_Stream),
+    read_string(Template_Stream, _, Value),
+    assertz(index_template_(Value)),
+    close(Template_Stream).
 
 default_database_path(Value) :-
-    once(expand_file_search_path(terminus_home(storage/db), Path)),
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', Path, Value).
+    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
 
 jwt_public_key_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).
@@ -55,10 +66,14 @@ jwt_public_key_id(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
 
 console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dcm.ist/console/v3.0.0', Value).
+    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://dcm.ist/console/v4.0.0', Value).
 
 https_enabled :-
     getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
+    Value = 'true'.
+
+autologin_enabled :-
+    getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', 'false', Value),
     Value = 'true'.
 
 ssl_cert(Value) :-

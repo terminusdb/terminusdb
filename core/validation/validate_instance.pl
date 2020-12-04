@@ -10,23 +10,6 @@
  *
  * This module deals with instance checking as against a given schema.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(validate_schema).
@@ -180,18 +163,35 @@ refute_insertion(Database,X,P,Y,Reason) :-
  */
 refute_node_at_class(Database,X,Class,Reason) :-
     (   instance_class(X,IC,Database)
-    ->  (   subsumption_of(IC,Class,Database)
-        ->  subsumption_of(IC,Super,Database),
-            domain(P,Super,Database),
-            refute_all_restrictions(Database,X,P,Reason)
-        ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
-            Reason = _{
-                         '@type' : 'vio:InstanceSubsumptionViolation',
-                         'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
-                         'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
-                         'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
-                         'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
-                     })
+    ->  (   class(IC, Database)
+        ->  (   subsumption_of(IC,Class,Database)
+            ->  subsumption_of(IC,Super,Database),
+                domain(P,Super,Database),
+                refute_all_restrictions(Database,X,P,Reason)
+            ;   format(atom(Message),'The subject ~q has a class ~q not subsumed by ~q.',[X,IC,Class]),
+                Reason = _{
+                             '@type' : 'vio:InstanceSubsumptionViolation',
+                             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                             'vio:subject' : _{ '@value' : X, '@type' : 'xsd:anyURI' },
+                             'vio:class' : _{ '@value' : IC, '@type' : 'xsd:anyURI' },
+                             'vio:parent' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
+                         })
+        ;   (   \+ atom(Class)
+            ->  format(atom(Message), 'The term ~q is not a valid class', [Class]),
+                term_string(Class, Term_String),
+                Reason = _{
+                             '@type' : 'vio:InvalidClassViolation',
+                             'vio:message' : _{ '@value' : Message,
+                                                '@type' : 'xsd:string'},
+                             'vio:class' : _{ '@value' : Term_String,
+                                              '@type' : 'xsd:anyURI' }
+                         }
+            ;   format(atom(Message), 'The class ~q is not found in the schema', [Class]),
+                Reason = _{
+                             '@type' : 'vio:InvalidClassViolation',
+                             'vio:message' : _{ '@value' : Message, '@type' : 'xsd:string'},
+                             'vio:class' : _{ '@value' : Class, '@type' : 'xsd:anyURI' }
+                         }))
     ;   format(atom(Message),'The subject ~q has no defined class.',[X]),
         Reason = _{
                      '@type' : 'vio:UntypedInstance',

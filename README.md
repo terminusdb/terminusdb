@@ -1,8 +1,8 @@
 ![](terminusdb.png)
 
-# TerminusDB Server
+# TerminusDB
 
-[![Build Status](https://travis-ci.com/terminusdb/terminusdb-server.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
+[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
 TerminusDB is an open source, model driven, revision controlled RDF
 graph database for distributed collaboration designed for the web-age.
@@ -27,23 +27,28 @@ TerminusDB's *delta-encoding* approach makes possible branch, merge,
 push, pull, clone, time-travel and other git-like operations on a fully
 featured graph database.
 
-## Latest Version
-
-v3.0.7
-
 ## Getting Started
 
-For Windows and Linux, Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
+Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
-For development and testing, as well as Mac users, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
+For development and testing we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
 ### Building from source
 
 In order to build from source, follow the [build from source](docs/BUILD.md) directions.
 
+### Command Line
+
+In order to start the terminusdb server or simply to explore a store
+from the command line, you can use the [TerminusDB Command Line
+Interface](docs/CLI.md).
+
 ### Open Console
 
 Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [http://localhost:6363/](http://localhost:6363/)).
+
+### Known Issues
+On Linux, the AppImage for the desktop client may fail to start, with a message about an incorrectly configured SUID sandbox helper binary. We are looking into this issue. For now, you can work around this issue by starting the binary with the `--no-sandbox` flag.
 
 ## Why
 
@@ -60,8 +65,9 @@ TerminusDB will:
 ## Client
 
 In order to begin manipulating and querying your database you can
-simply point your browser to `"http://SERVER:PORT/"` which should
-allow you to manage and query your database.
+start the TerminusDB server (using the CLI) and then simply point your
+browser to `"http://SERVER:PORT/"` which should allow you to manage
+and query your database.
 
 You can also perform all configuration, querying and management
 functions via the RESTful API. We have a number of client libraries to

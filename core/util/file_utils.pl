@@ -7,7 +7,8 @@
               subdirectories/2,
               files/2,
               directories/2,
-              terminus_schema_path/1
+              terminus_schema_path/1,
+              file_to_predicate/2
           ]).
 
 :- use_module(utils).
@@ -57,7 +58,12 @@ terminus_path(Path) :-
  */
 db_path(Path) :-
     config:default_database_path(PathWithoutSlash),
-    atomic_list_concat([PathWithoutSlash, '/'], Path).
+    (   re_matchsub('\\./(.*)', PathWithoutSlash, Dict, []),
+        get_dict(1,Dict,Sub)
+    ->  working_directory(CWD, CWD),
+        atomic_list_concat([CWD, Sub, '/'], Path)
+    ;   atomic_list_concat([PathWithoutSlash, '/'], Path)
+    ).
 
 /**
  * terminus_schema_path(Path) is det.
@@ -149,3 +155,21 @@ directories(Dir, Directories) :-
                 exists_directory(FullPath)
             ),
             Files, Directories).
+
+/**
+ * file_to_predicate(+Path, +Predicate) is det.
+ *
+ * Convert a file into a predicate
+*/
+:- meta_predicate file_to_predicate(?,1).
+file_to_predicate(Path,Predicate) :-
+    strip_module(Predicate, Module, P),
+    Predicate_Retractall =.. [P, _],
+    setup_call_cleanup(
+        open(Path, read, Out),
+        (   retractall(Module:Predicate_Retractall),
+            read_string(Out,_,String),
+            Predicate_Assert =.. [P, String],
+            assertz(Module:Predicate_Assert)),
+        close(Out)
+    ).

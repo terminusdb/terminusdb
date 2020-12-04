@@ -292,6 +292,18 @@ api:TriplesUnknownFormat
 api:WithAbsoluteGraphDescriptor
   a owl:Class .
 
+api:CsvErrorResponse
+  a owl:Class ;
+  rdfs:label "Csv Error Response"@en ;
+  rdfs:comment "Error response document for csv API endpoint."@en ;
+  rdfs:subClassOf api:ErrorResponse .
+
+api:NoCsvName
+  a owl:Class ;
+  rdfs:label "No CSV name"@en ;
+  rdfs:comment "The CSV GET endpoint was called without specifying the 'name' paramter in the query string."@en ;
+  rdfs:subClassOf api:Error .
+
 api:absolute_graph_descriptor
   a owl:DatatypeProperty ;
   rdfs:label "absolute graph descriptor"@en ;
@@ -566,14 +578,30 @@ api:commit
   rdfs:domain api:WitCommit ;
   rdfs:range xsd:string .
 
-api:WithCommit
+api:WithEmptyCommit
+  a owl:Class .
+
+api:empty_commit
+  a owl:DatatypeProperty ;
+  rdfs:comment "The property points to true if an empty commit"@en ;
+  rdfs:label "empty commit"@en ;
+  rdfs:domain api:WithOldCommit ;
+  rdfs:range xsd:boolean .
+
+api:WithEmptyCommit
   a owl:Class .
 
 api:SquashResponse
   a owl:Class ;
   rdfs:label "Squash Response"@en ;
   rdfs:comment "Response document from Squash API."@en ;
-  rdfs:subClassOf api:WithOldCommit, api:WithCommit  .
+  rdfs:subClassOf api:WithOldCommit, api:WithCommit, api:Response .
+
+api:EmptySquashResponse
+  a owl:Class ;
+  rdfs:label "Empty Squash Response"@en ;
+  rdfs:comment "Response document from Squash API."@en ;
+  rdfs:subClassOf api:WithEmptyCommit, api:Response  .
 
 api:ResetResponse
   a owl:Class ;

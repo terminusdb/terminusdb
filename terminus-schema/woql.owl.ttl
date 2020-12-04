@@ -623,13 +623,13 @@ woql:AddedTriple
 
 woql:AddQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Add quad"@en ;
   rdfs:comment "Add a quad"@en .
 
 woql:AddedQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Added quad"@en ;
   rdfs:comment "A quad which was added to this commit on this graph"@en .
 
@@ -641,7 +641,7 @@ woql:DeleteQuad
 
 woql:DeletedQuad
   a owl:Class ;
-  rdfs:subClassOf woql:Triple, woql:QueryWithGraph ;
+  rdfs:subClassOf woql:Triple, woql:QueryWithGraphFilter ;
   rdfs:label "Deleted quad"@en ;
   rdfs:comment "A quad which was deleted from this commit"@en .
 
@@ -1199,6 +1199,12 @@ woql:Not
   rdfs:comment "Not the query"@en ;
   rdfs:subClassOf woql:QueryWithSubQuery .
 
+woql:Once
+  a owl:Class ;
+  rdfs:label "Once"@en ;
+  rdfs:comment "One solution of the the query"@en ;
+  rdfs:subClassOf woql:QueryWithSubQuery .
+
 woql:Immediately
   a owl:Class ;
   rdfs:label "Not"@en ;
@@ -1449,3 +1455,24 @@ woql:With
   rdfs:subClassOf woql:QueryWithSubQuery ;
   rdfs:label "With"@en ;
   rdfs:comment "Add a new addressable temporary graph resource"@en .
+
+woql:TypeOf
+  a owl:Class ;
+  rdsf:subClassOf woql:Query, woql:HasValue, woql:HasType ;
+  rdfs:label "TypeOf"@en ;
+  rdsf:comment "Find the type of a node or literal"@en .
+
+woql:value
+  rdfs:label "value"@en ;
+  rdfs:comment "The value associated with a query"@en ;
+  a owl:ObjectProperty ;
+  rdfs:domain woql:HasValue ;
+  rdfs:range woql:Value .
+
+woql:type
+  rdfs:label "type"@en ;
+  rdfs:comment "The type associated with a query"@en ;
+  a owl:DatatypeProperty ;
+  rdfs:domain woql:HasType ;
+  rdfs:range xsd:string .
+

@@ -2,6 +2,7 @@
               ask/2,
               ask/3,
               ask_ast/3,
+              askable_prefixes/2,
               create_context/2,
               create_context/3,
               askable_context/4,
@@ -12,30 +13,14 @@
               context_default_prefixes/2,
               empty_context/1,
               query_default_collection/2,
-              query_default_write_graph/2
+              query_default_write_graph/2,
+              query_default_schema_write_graph/2
           ]).
 
 /** <module> Ask
  *
  * Prolog interface to ask queries
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- reexport(core(util/syntax)).
@@ -53,6 +38,8 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
            ;   Woql_Var = [_|_]
            ->  maplist(prefix_preterm(Ctx),Woql_Var,Pre_Term)
            ;   number(Woql_Var)
+           ->  Woql_Var = Pre_Term
+           ;   Woql_Var =.. [date|_]
            ->  Woql_Var = Pre_Term
            ;   Woql_Var = _@_
            ->  Pre_Term = Woql_Var
@@ -89,6 +76,17 @@ pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out
         Term =.. [F|New_Args]
     ).
 
+askable_prefixes(Context,Prefixes) :-
+    query_context{} :< Context,
+    !,
+    Prefixes = (Context.prefixes).
+askable_prefixes(Transaction_Object,Prefixes) :-
+    transaction_object{ descriptor : Descriptor } :< Transaction_Object,
+    !,
+    collection_descriptor_prefixes(Descriptor, Prefixes).
+askable_prefixes(Descriptor,Prefixes) :-
+    collection_descriptor_prefixes(Descriptor, Prefixes).
+
 create_context(Layer, Context) :-
     blob(Layer, layer),
     !,
@@ -97,6 +95,18 @@ create_context(Layer, Context) :-
 create_context(Context, Context) :-
     query_context{} :< Context,
     !.
+create_context(Validation,Context) :-
+    validation_object{ inference_objects : Inf,
+                       instance_objects : Inst,
+                       schema_objects : Schema,
+                       descriptor : Desc } :< Validation,
+    !,
+    Transaction_Object = transaction_object{
+                             inference_objects : Inf,
+                             instance_objects : Inst,
+                             schema_objects : Schema,
+                             descriptor : Desc },
+    create_context(Transaction_Object,Context).
 create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
@@ -242,13 +252,47 @@ query_default_collection(Query_Context, Collection) :-
                                              Collection).
 
 /*
- * query_default_write_graph(Query_Context, Graph) is semidet.
+ * query_default_write_graph(Query_Context, Graph) is det.
  *
- * Finds the transaction object for the default collection if it exists.
+ * Finds the transaction object for the default collection if it exists
+ * and errors otherwise
  */
 query_default_write_graph(Query_Context, Write_Graph) :-
-    Graph_Descriptor = Query_Context.write_graph,
-    Transaction_Objects = Query_Context.transaction_objects,
+    Graph_Descriptor = (Query_Context.write_graph),
+    Transaction_Objects = (Query_Context.transaction_objects),
+    do_or_die(
+        graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
+                                                               Transaction_Objects,
+                                                               Write_Graph),
+        error(unknown_graph(Graph_Descriptor))).
+
+/*
+ * query_default_schema_write_graph(Query_Context, Write_Graph) is semidet.
+ *
+ * fails if no default schema write graph is found
+ */
+query_default_schema_write_graph(Query_Context, Write_Graph) :-
+    Default_Collection = (Query_Context.default_collection),
+    do_or_die(
+        branch_descriptor{
+            branch_name : Branch_Name,
+            repository_descriptor : Repository_Descriptor
+        } :< Default_Collection,
+        error(not_a_branch_descriptor(Default_Collection))),
+    Repository_Descriptor = (Default_Collection.repository_descriptor),
+    Repository_Name = (Repository_Descriptor.repository_name),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    Database_Name = (Database_Descriptor.database_name),
+    Organization_Name = (Database_Descriptor.organization_name),
+    Graph_Descriptor = branch_graph{
+                           organization_name : Organization_Name,
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           branch_name : Branch_Name,
+                           type : schema,
+                           name : "main"
+                       },
+    Transaction_Objects = (Query_Context.transaction_objects),
     graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,
                                                            Transaction_Objects,
                                                            Write_Graph).

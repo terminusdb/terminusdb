@@ -12,6 +12,9 @@
               insert_remote_repository/4,
               insert_remote_repository/5,
 
+              remove_local_repository/2,
+              remove_remote_repository/2,
+
               update_repository_head/3,
               update_repository_remote_url/3
           ]).
@@ -105,6 +108,22 @@ update_repository_remote_url(Context, Repo_Name, Remote_Url) :-
                  delete(Repo_Uri, repo:remote_url, Old_Remote_Url^^xdd:url),
                  insert(Repo_Uri, repo:remote_url, Remote_Url^^xdd:url)))).
 
+
+remove_local_repository(Context, Repo_Name) :-
+    repository_name_uri(Context, Repo_Name, Repo_Uri),
+    once(ask(Context,
+             (   delete(Repo_Uri, rdf:type, repo:'Local'),
+                 delete(Repo_Uri, repo:repository_name, Repo_Name^^xsd:string)))).
+
+remove_remote_repository(Context, Repo_Name) :-
+    repository_name_uri(Context, Repo_Name, Repo_Uri),
+    once(ask(Context,
+             (   t(Repo_Uri, repo:remote_url, Old_Remote_Url^^xdd:url),
+                 delete(Repo_Uri, rdf:type, repo:'Remote'),
+                 delete(Repo_Uri, repo:repository_name, Repo_Name^^xsd:string),
+                 delete(Repo_Uri, repo:remote_url, Old_Remote_Url^^xdd:url)))).
+
+
 :- begin_tests(local_repo_objects).
 :- use_module(core(util/test_utils)).
 :- use_module(database).
@@ -114,7 +133,7 @@ test(local_repo_insert,
       cleanup(teardown_temp_store(State))]) :-
     Descriptor = label_descriptor{label:"testlabel"},
     repo_schema_context_from_label_descriptor(Descriptor, Context),
-    
+
     with_transaction(Context,
                      (   insert_local_repository(Context, "foo", _),
                          insert_local_repository(Context, "bar", _),

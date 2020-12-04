@@ -16,6 +16,7 @@
               repo_schema_context_from_label_descriptor/3,
               create_db_with_test_schema/2,
               create_db_without_schema/2,
+              create_db_with_empty_schema/2,
               create_public_db_without_schema/2,
               print_all_triples/1,
               print_all_triples/2,
@@ -49,23 +50,6 @@
  *
  * Debug output should go through `debug/3`
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                     *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify   *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, either version 3 of the License, or    *
- *  (at your option) any later version.                                  *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,        *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>. *
- *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  */
 
@@ -177,7 +161,7 @@ setup_unattached_store(Store-Dir) :-
     tmp_file(temporary_terminus_store, Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
-    initialize_database_with_store('http://localhost:1234', 'root', Store).
+    initialize_database_with_store('root', Store).
 
 setup_temp_store(Store-Dir) :-
     setup_unattached_store(Store-Dir),
@@ -275,6 +259,13 @@ create_db_without_schema(Organization, Db_Name) :-
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
+
+create_db_with_empty_schema(Organization, Db_Name) :-
+    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
+                  scm : 'http://somewhere.for.now/schema#' },
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
 
 create_public_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ doc : 'http://somewhere.for.now/document/',
@@ -387,11 +378,14 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   between(0,5,_),
         random_between(49152, 65535, Port)),
 
-    expand_file_search_path(terminus_home('start.pl'), Start_Script),
-
-    index_path(INDEX_PATH),
-
     current_prolog_flag(executable, Swipl_Path),
+
+    directory_file_path(_, Exe, Swipl_Path),
+    (   Exe = swipl
+    ->  expand_file_search_path(terminus_home('start.pl'), Argument),
+        Args = [Argument, serve]
+    ;   Args = [serve]
+    ),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
 
@@ -404,7 +398,6 @@ spawn_server_1(Path, URL, PID, Options) :-
         'LC_PAPER'='en_US.UTF-8',
 
         'TERMINUSDB_SERVER_PORT'=Port,
-        'TERMINUSDB_SERVER_INDEX_PATH'=INDEX_PATH,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
         'TERMINUSDB_HTTPS_ENABLED'='false'
     ],
@@ -423,11 +416,11 @@ spawn_server_1(Path, URL, PID, Options) :-
                      ],
                      Env_List),
 
-    process_create(Swipl_Path, [Start_Script],
+    process_create(Swipl_Path, Args,
                    [
                        process(PID),
                        env(Env_List),
-                       stdin(pipe(_Stream)),
+                       stdin(pipe(Input)),
                        stdout(pipe(_)),
                        stderr(pipe(Error))
                    ]),
@@ -437,6 +430,11 @@ spawn_server_1(Path, URL, PID, Options) :-
     % This is very fragile though.
     read_line_to_string(Error, _First_Line),
     read_line_to_string(Error, _Second_Line),
+    %read_line_to_string(Error, _Third_Line),
+
+    ignore(memberchk(error(Error), Options)),
+    ignore(memberchk(input(Input), Options)),
+
     sleep(0.01),
     process_wait(PID, Status, [timeout(0)]),
     (   Status = exit(98)

@@ -21,7 +21,7 @@ https://www.rust-lang.org/tools/install
 
 ### swi-prolog
 
-To use Terminus Server, you will need the swi-prolog installation of
+To use TerminusDB Server, you will need the swi-prolog installation of
 prolog. The TerminusDB team tends to use the latest stable for local
 development and packaging, but likely, other versions of swi-prolog since
 8.0.3 will work as well.
@@ -63,28 +63,31 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 % Contacting server ....
 ```
 
-### Terminus Server
+### TerminusDB Server
 
-The Terminus Server source tree should then be cloned from GitHub:
+The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
+make
 ```
 
+This will create a binary called `terminusdb`.
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_init` script. The script should also be used to
-configure the server name, as shown in the example.
+`terminusdb` binary. The script should also be used to
+configure the server name, as shown in the example. It will also
+create the system database.
 
 ```
-utils/db_init -k "my_password_here" -s "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
 
 ```
-./start.pl
+./terminusdb serve
 ```
 
 Now you are ready to interact with the HTTP server.
@@ -129,28 +132,31 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 ```
 
 
-### Terminus Server
+### TerminusDB Server
 
-The Terminus Server source tree should then be cloned from GitHub:
+The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
+make
 ```
 
+This will create a binary called `terminusdb`.
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_init` script. The script should also be used to
-configure the server name, as shown in the example.
+`terminusdb` binary. The script should also be used to
+configure the server name, as shown in the example. It will also
+create the system database.
 
 ```
-utils/db_init -k "my_password_here" -s "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
 
 ```
-./start.pl
+./terminusdb serve
 ```
 
 Now you are ready to interact with the HTTP server.
@@ -193,28 +199,31 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 ```
 
 
-### Terminus Server
+### TerminusDB Server
 
-The Terminus Server source tree should then be cloned from GitHub:
+The TerminusDB Server source tree should then be cloned from GitHub and compiled:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server
-cd terminusdb-server
+git clone https://github.com/terminusdb/terminusdb
+cd terminusdb
+make
 ```
 
+This will create a binary called `terminusdb`.
 You need to set the admin user password which is used as a
 super-user API key for access. This can be done with the
-`db_init` script. The script should also be used to
-configure the server name, as shown in the example.
+`terminusdb` binary. The script should also be used to
+configure the server name, as shown in the example. It will also
+create the system database.
 
 ```
-utils/db_init -k "my_password_here" -s "my_server_name_here"
+./terminusdb store init --key "my_password_here"
 ```
 
 At this point you can enter the terminusDB directory and start the server:
 
 ```
-./start.pl
+./terminusdb serve
 ```
 
 Now you are ready to interact with the HTTP server.
@@ -246,14 +255,15 @@ If the compilation has finished, press Ctrl+D to exit the SWI Prolog interactive
 
 ### Running TerminusDB-server
 
-Clone the Git repository and execute the `start.pl` file with SWI Prolog, the `db_init` script will initialize
+Clone the Git repository and execute the `terminusdb` binary file, the `terminusdb store init` command  will initialize
 the system database:
 
 ```
-git clone https://github.com/terminusdb/terminusdb-server.git
-cd terminusdb-server
-./utils/db_init -s localhost -k root
-./start.pl
+git clone https://github.com/terminusdb/terminusdb.git
+cd terminusdb
+make
+./terminusdb store init --key root
+./terminusdb serve
 ```
 
 It should now start on https://127.0.0.1:6363.

@@ -12,6 +12,7 @@
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,
+              delete_branch_object/2,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
               insert_base_commit_object/5,
@@ -117,6 +118,14 @@ insert_branch_object(Context, Branch_Name, Branch_Uri) :-
              (   idgen(doc:'Branch', [Branch_Name^^xsd:string], Branch_Uri),
                  insert(Branch_Uri, rdf:type, ref:'Branch'),
                  insert(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string)))).
+
+delete_branch_object(Context, Branch_Uri) :-
+    once(ask(Context,
+             (   t(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
+                 t(Branch_Uri, ref:ref_commit, Commit_Uri),
+                 delete(Branch_Uri, rdf:type, ref:'Branch'),
+                 delete(Branch_Uri, ref:branch_name, Branch_Name^^xsd:string),
+                 delete(Branch_Uri, ref:ref_commit, Commit_Uri)))).
 
 insert_base_commit_object(Context, Commit_Id, Commit_Uri) :-
     insert_base_commit_object(Context, Context.commit_info, Commit_Id, Commit_Uri).

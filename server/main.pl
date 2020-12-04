@@ -1,4 +1,4 @@
-:- module(server, [terminus_server/1]).
+:- module(server, [terminus_server/2]).
 
 /** <module> HTTP server module
  *
@@ -8,30 +8,17 @@
  * communication via *API* and not as a fully fledged high performance
  * server.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                      *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
- *                                                                       *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+ **/
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[]).
+
+% Sockets
+:- use_module(library(socket)).
+:- use_module(library(ssl)).
 
 % http server
 :- use_module(library(http/thread_httpd)).
@@ -53,7 +40,7 @@ load_jwt_conditionally :-
 
 :- load_jwt_conditionally.
 
-terminus_server(_Argv) :-
+terminus_server(Argv,Wait) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
@@ -65,12 +52,12 @@ terminus_server(_Argv) :-
     ;   HTTPOptions = [port(Port), workers(Workers)]
     ),
     catch(http_server(http_dispatch, HTTPOptions),
-          _E,
+          E,
           (
+              writeq(E),
               format(user_error, "Error: Port ~d is already in use.", [Port]),
               halt(98) % EADDRINUSE
           )),
-    setup_call_cleanup(
         http_handler(root(.), busy_loading,
                      [ priority(1000),
                        hide_children(true),
@@ -79,9 +66,14 @@ terminus_server(_Argv) :-
                        prefix
                      ]),
         (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-            print_message(banner, welcome('terminusdb-server', Server))
-        ),
-        http_delete_handler(id(busy_loading))).
+            welcome_banner(Server,Argv),
+            http_delete_handler(id(busy_loading)),
+            (   Wait = true
+            ->  http_current_worker(Port,ThreadID),
+                thread_join(ThreadID, _Status)
+            ;   true
+            )
+        ).
 
 
 % See https://github.com/terminusdb/terminusdb-server/issues/91
@@ -98,12 +90,11 @@ loading_page -->
         p('TerminusDB is still synchronizing backing store')
     ]).
 
-:- multifile prolog:message//1.
-
-prolog:message(welcome('terminusdb-server', Server)) -->
-         [ '~N% Welcome to TerminusDB\'s terminusdb-server!',
-         nl,
-         '% You can view your server in a browser at \'~s\''-[Server],
-         nl,
-         nl
-         ].
+welcome_banner(Server,Argv) :-
+    % Test utils currently reads this so watch out if you change it!
+    get_time(Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
+           [StrTime, Now, Argv]),
+    format(user_error,'% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
+    format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).

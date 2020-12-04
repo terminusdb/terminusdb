@@ -1,3 +1,21 @@
+# TerminusDB Server v4.0.0 Release Notes
+
+## New
+
++ Added "typeof" to WOQL allowing extraction or filtering of types from arbitrary nodes or datapoints
++ Added some CURL connection examples
++ CSV loading and updating
++ Automatic CSV schema generation
++ Allow embedded "usings" with appriopriate expansion of prefixes according to which database is referred to in the using
++ New CLI interface
++ Mac OS version released
+
+## Bug fixes
+
++ Fix CORS headers on get request for CSV
++ Fixed handling of dates in typecasting
++ Schema validation error handling improved
+
 # TerminusDB Server v3.0.7 Release Notes
 
 ## Bug fixes
@@ -198,8 +216,3 @@ Several new querying capabilities have been added:
   backtracking over inserts. We currently treat inserts as
   non-backtracking destructive updates.
 + WOQL.when is not required in order to perform updates.
-
-
-
-
-

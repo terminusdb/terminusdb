@@ -14,6 +14,7 @@
               files/2,
               directories/2,
               terminus_schema_path/1,
+              file_to_predicate/2,
 
               % types.pl
               is_literal/1,
@@ -88,6 +89,7 @@
               sol_bag/2,
               sol_set/2,
               optional/1,
+              member_last/3,
 
               % speculative_parse.pl
               guess_date/2,
@@ -142,7 +144,12 @@
               benchmark_subject_start/1,
               benchmark_subject_stop/1,
               benchmark/1,
-              benchmark/0
+              benchmark/0,
+
+              % http_utils.pl
+              basic_authorization/3,
+              is_local_https/1
+
           ]).
 
 % note: test_utils is intentionally omitted
@@ -154,3 +161,4 @@
 :- use_module(util/speculative_parse).
 :- use_module(util/xsd_parser).
 :- use_module(util/benchmark).
+:- use_module(util/http_utils).

@@ -53,6 +53,7 @@
               graph_for_commit/5,
               layer_uri_for_graph/3,
               insert_branch_object/3,
+              delete_branch_object/2,
               insert_base_commit_object/3,
               insert_base_commit_object/4,
               insert_base_commit_object/5,
@@ -93,6 +94,9 @@
               insert_local_repository/4,
               insert_remote_repository/4,
               insert_remote_repository/5,
+
+              remove_local_repository/2,
+              remove_remote_repository/2,
 
               update_repository_head/3,
               update_repository_remote_url/3,
