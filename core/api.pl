@@ -75,7 +75,7 @@
               api_reset/4,
 
               % api_optimize.pl
-              api_optimize/3
+              api_optimize/3,
 
               % api_csv
               csv_load/6,
