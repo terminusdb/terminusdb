@@ -2872,7 +2872,6 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
                             _{'@type' : 'api:BranchResponse',
                               'api:status' : "api:success"}))).
 branch_handler(delete, Path, Request, System_DB, Auth) :-
-    get_payload(_Document, Request),
     api_report_errors(
         branch,
         Request,
@@ -3015,6 +3014,7 @@ test(delete_empty_branch, [
          cleanup(teardown_temp_server(State))
      ])
 :-
+
     create_db_without_schema("admin", "test"),
     atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
     admin_pass(Key),
@@ -3032,10 +3032,10 @@ test(delete_empty_branch, [
     http_get(URI,
              JSON2,
              [method(delete),
-              status_code(_),
               json_object(dict),
+              status_code(_Code),
               authorization(basic(admin,Key))]),
-    writeq(JSON2),nl,
+
     (JSON2.'api:status' = "api:success"),
     \+ has_branch(Repository_Descriptor, "foo").
 
