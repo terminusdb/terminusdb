@@ -3033,7 +3033,6 @@ test(delete_empty_branch, [
              JSON2,
              [method(delete),
               json_object(dict),
-              status_code(_Code),
               authorization(basic(admin,Key))]),
 
     (JSON2.'api:status' = "api:success"),
