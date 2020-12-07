@@ -544,7 +544,7 @@ run_command(query,[Database,Query],Opts) :-
         woql,
         (   woql_context(Prefixes),
             context_extend_prefixes(Context,Prefixes,Context0),
-            read_term_from_atom(Query, AST, []),
+            read_query_term_from_atom(Query,AST),
             query_response:run_context_ast_jsonld_response(Context0, AST, Response),
             get_dict(prefixes,Context0, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
@@ -959,3 +959,12 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
+
+bind_vars([],_).
+bind_vars([Name=Var|Tail],AST) :-
+    Var = v(Name),
+    bind_vars(Tail,AST).
+
+read_query_term_from_atom(Query, AST) :-
+    read_term_from_atom(Query, AST, [variable_names(Names)]),
+    bind_vars(Names,AST).
