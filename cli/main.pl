@@ -90,7 +90,7 @@ opt_spec(optimize,'terminusdb optimize OPTIONS',
            longflags([help]),
            default(false),
            help('print help for the `optimize` command')]]).
-opt_spec(query,'terminusdb query QUERY OPTIONS',
+opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
          'Query a database.',
          [[opt(help),
            type(boolean),
@@ -230,6 +230,21 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
+opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
+         'List remotes.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `rebase` command')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('The author of the rebase')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -661,6 +676,23 @@ run_command(pull,[Path],Opts) :-
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
     format(current_output, "~N~s pulled: ~q~n", [Path, Result]).
+run_command(rebase,[Path,From_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    memberchk(author(Author),Opts),
+
+    api_report_errors(
+        rebase,
+        (   Strategy_Map = [],
+            rebase_on_branch(System_DB, Auth, Path, From_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports))),
+    format(current_output, "~nRebased from: ~q to ~q~n", [From_Path, Path]),
+    format(current_output, "Forwarded_Commits: ~q~n", [Forwarded_Commits]),
+    (   Common_Commit_ID_Option = some(Common_Commit_ID)
+    ->  format(current_output, "From common commit: ~q~n", [Common_Commit_ID])
+    ;   true),
+    format(current_output, "Reports: ", []),
+    json_write(current_output,Reports),
+    format(current_output, "~n", []).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
