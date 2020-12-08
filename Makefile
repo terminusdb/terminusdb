@@ -1,4 +1,4 @@
-VERSION=4.0.0
+VERSION=4.0.1
 LICENSE=Apache-2.0
 MAINTAINER="TerminusDB Team <team@terminusdb.com>"
 
