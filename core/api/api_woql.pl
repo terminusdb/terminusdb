@@ -12,7 +12,9 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
                   error(invalid_absolute_path(Path),_)),
         do_or_die(askable_context(Descriptor, System_DB, Auth, Commit_Info, Context0),
                   error(unresolvable_collection(Descriptor),_)),
-        Context = (Context0.put(_{files:Files}))
+        Context = (Context0.put(_{files:Files,
+                                  all_witnesses : All_Witnesses
+                                 }))
     ;   none = Path_Option
     ->  empty_context(Empty),
         Context = (Empty.put(_{system: System_DB,

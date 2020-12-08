@@ -1534,6 +1534,50 @@ test(get_object, [
       'system:role': _}
     :< Result.'Document'.
 
+test(multiple_witnesses, [
+         setup((setup_temp_server(State, Server),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+    Query0 =
+    _{'@type' : 'And',
+      query_list : [
+          _{'@type' : 'QueryListElement',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 0},
+            query : First_Insert},
+          _{'@type' : 'QueryListElement',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 1},
+            query : Second_Insert}]},
+    First_Insert =
+    _{ '@type' : "AddTriple",
+       subject : "doc:test_subject",
+       predicate : "rdf:type",
+       object : "scm:BS"
+     },
+
+    Second_Insert =
+    _{ '@type' : "AddTriple",
+       subject : "doc:test_subject",
+       predicate : "rdf:label",
+       object : _{ '@type' : "xsd:integer",
+                   '@value' : "asdf"}},
+
+    admin_pass(Key),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
+    http_post(URI,
+              json(_{query : Query0, all_witnesses: true}),
+              JSON0,
+              [json_object(dict),
+               status_code(_),
+               authorization(basic(admin,Key))]),
+    Witnesses = (JSON0.'api:error'.'api:witnesses'),
+    length(Witnesses, N),
+    N > 1.
+
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
