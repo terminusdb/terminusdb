@@ -1087,3 +1087,25 @@ api:APIEndpointFailed
   rdfs:comment "The endpoint goal failed for an unknown reason"@en ;
   rdfs:subClassOf api:Error .
 
+api:BadCast
+  a owl:Class ;
+  rdfs:label "An invalid cast"@en ;
+  rdfs:comment "A value could not be cast to a particular type"@en ;
+  rdfs:subClassOf api:Error, api:WithType, api:WithValue .
+
+api:WithType
+  a owl:Class .
+
+api:type
+  a owl:ObjectProperty ;
+  rdfs:label "type"@en ;
+  rdfs:comment "An associated type."@en ;
+  rdfs:domain api:WithValue ;
+  rdfs:range api:anyURI .
+
+api:value
+  a owl:ObjectProperty ;
+  rdfs:label "value"@en ;
+  rdfs:comment "An associated value."@en ;
+  rdfs:domain api:WithValue ;
+  rdfs:range api:anyURI .

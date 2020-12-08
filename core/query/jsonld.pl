@@ -553,7 +553,8 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
                   '@value' : Data
                  }
         ->  atom_string(Atom_Type,Type),
-            Triples = [(ID,Pred,Data^^Atom_Type)]
+            once(typecast(Data, Atom_Type, [], Val)),
+            Triples = [(ID,Pred,Val)]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
         ->  atom_string(Atom_Lang,Lang),
@@ -572,6 +573,39 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
     ;   atom(V)
     ->  Triples = [(ID,Pred,V)]
     ;   Triples = [(ID,Pred,V)]).
+
+
+:- begin_tests(jsonld_triples).
+:- use_module(core(util/test_utils)).
+
+test(test_jsonld_string, []) :-
+    JSON = _464{'@context':
+                _310{
+                    api:'http://terminusdb.com/schema/api#',
+                    system:'http://terminusdb.com/schema/system#',
+                    doc:'terminusdb:///system/data/',
+                    rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+                    rdfs:'http://www.w3.org/2000/01/rdf-schema#',
+                    xsd:'http://www.w3.org/2001/XMLSchema#'},
+                '@id':'terminusdb:///system/data/new_user',
+                '@type':"system:User",
+                'rdfs:comment':_544{'@language':"en",
+                                    '@value':"This is a test user."},
+                'rdfs:label':_572{'@language':"en",
+                                  '@value':"Test User"},
+                'system:agent_name':_656{'@type':"xsd:string",
+                                         '@value':"test"}},
+    jsonld_triples(JSON, _{}, Triples),
+
+    Expected = [('terminusdb:///system/data/new_user','http://terminusdb.com/schema/system#agent_name',"test"^^'http://www.w3.org/2001/XMLSchema#string'),
+     ('terminusdb:///system/data/new_user','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#User'),
+     ('terminusdb:///system/data/new_user','http://www.w3.org/2000/01/rdf-schema#comment',"This is a test user."@en),
+     ('terminusdb:///system/data/new_user','http://www.w3.org/2000/01/rdf-schema#label',"Test User"@en)],
+    forall(member(Triple, Triples),
+           member(Triple, Expected)).
+
+:- end_tests(jsonld_triples).
+
 
 /*
  * get_key_document(Key,Ctx,Document,Value)
