@@ -116,8 +116,7 @@ typecast(Val, Type, Hint, Cast) :-
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
         ;   Promoted = Bare_Literal@Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
-        ;   format(atom(M), 'No possible cast ~q', [typecast(Val, Type, Hint, Cast)]),
-            throw(error(M))
+        ;   throw(error(casting_error(Val, Type), _))
         )
     ).
 typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Val) :-
@@ -129,22 +128,12 @@ typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime',
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
     ->  !
-    ;   format(atom(M),'Unable to cast as (xsd:dateTime): ~q~n',
-               [Val]),
-        term_jsonld(Val,JVal),
-        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                              'vio:literal' : JVal,
-                                              'vio:message' : M})))
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))
     ).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
     ->  !
-    ;   format(atom(M),'Unable to cast as (xsd:integer): ~q~n',
-               [Val]),
-        term_jsonld(Val,JVal),
-        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                              'vio:literal' : JVal,
-                                              'vio:message' : M})))
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#integer'),_))
     ).
 typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
                 _ST,
@@ -157,12 +146,7 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :
     !,
     (   guess_number(Val,Cast)
     ->  true
-    ;   format(atom(M),'Unable to cast as (xsd:decimal): ~q~n',
-               [Val]),
-        term_jsonld(Val,JVal),
-        throw(http_reply(method_not_allowed(_{'@type' : 'vio:ViolationWithDatatypeObject',
-                                              'vio:literal' : JVal,
-                                              'vio:message' : M})))
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))
     ).
 typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
                 String^^'http://www.w3.org/2001/XMLSchema#string') :-
@@ -179,9 +163,7 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Ca
     !,
     (   guess_integer_range(Val,Cast)
     ->  true
-    ;    format(atom(M),'Unable to cast as (xdd:integerRange): ~q~n',
-                [Val]),
-         throw(map_error([type=cast_error,message=M]))
+    ;   throw(error(casting_error(Val, 'http://terminusdb.com/schema/xdd#integerRange'), _))
     ).
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
     integer(Val),
@@ -194,9 +176,7 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Ca
     !,
     (   guess_decimal_range(Val,Cast)
     ->  true
-    ;   format(atom(M),'Unable to cast as (xdd:decimalRange): ~q~n',
-               [Val]),
-        throw(map_error([type=cast_error,message=M]))
+    ;   throw(error(casting_error(Val, 'http://terminusdb.com/schema/xdd#integerRange'), _))
     ).
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Cast) :-
     number(Val),

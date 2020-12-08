@@ -630,7 +630,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#boolean',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#decimal',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:decimal(_),C,[]))
+    (   \+ number(S)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed decimal.',
@@ -639,7 +639,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#decimal',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#integer',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
+    (   \+ integer(S)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed integer.',
@@ -648,7 +648,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#integer',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:double(_,_,_),C,[]))
+    (   \+ float(S)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed double.',
@@ -656,53 +656,11 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
                  }
     ).
-refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
-    (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
-        abs(M) > 2 ^ 53
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed double: Mantisa is massive.',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
-                 }
-    ).
-refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#double',Reason) :-
-    (   atom_codes(S,C), phrase(xsd_parser:double(_,E,_),C,[]),
-        (   E > 970
-        ;   E < -1075)
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-			         'vio:message' : 'Not a well formed double: exponent excessive.',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
-                 }
-    ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:double(_,_,_),C,[]))
+    (   \+ float(S)
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed float.',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
-                 }
-    ).
-refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
-    (   atom_codes(S,C), phrase(xsd_parser:double(M,_,_),C,[]),
-        abs(M) > 2 ^ 24
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed float: mantisa is massive.',
-                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
-                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
-                 }
-    ).
-refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#float',Reason) :-
-    (   atom_codes(S,C), phrase(xsd_parser:double(_,E,_),C,[]),
-        (   E > 104
-        ;   E < -149)
-    ->  Reason = _{
-                     '@type' : 'vio:ViolationWithDatatypeObject',
-                     'vio:message' : 'Not a well formed float: exponent excessive.',
                      'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : S},
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
                  }
@@ -949,7 +907,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#byte',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#short',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:short',
@@ -968,7 +926,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#short',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#int',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:int',
@@ -988,7 +946,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#int',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#long',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:integer(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:long',
@@ -1008,7 +966,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#long',Reason) :-
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:unsignedByte',
@@ -1027,7 +985,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedByte',Reason)
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:unsignedShort',
@@ -1046,7 +1004,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedShort',Reason
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:unsignedInt',
@@ -1065,7 +1023,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedInt',Reason) 
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:unsignedLong',
@@ -1084,7 +1042,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#unsignedLong',Reason)
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#positiveInteger',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:positiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:positiveInteger',
@@ -1112,7 +1070,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',R
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#negativeInteger',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:negativeInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:negativeInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:negativeInteger',
@@ -1121,7 +1079,7 @@ refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#negativeInteger',Reas
                  }
     ).
 refute_basetype_elt(S^^_,'http://www.w3.org/2001/XMLSchema#nonPositiveInteger',Reason) :-
-    (   \+ (atom_codes(S,C), phrase(xsd_parser:nonPositiveInteger(_),C,[]))
+    (   \+ (integer(S), atom_codes(S,C), phrase(xsd_parser:nonPositiveInteger(_),C,[]))
     ->  Reason = _{
                      '@type' : 'vio:ViolationWithDatatypeObject',
                      'vio:message' : 'Not a well formed xsd:nonPositiveInteger',
