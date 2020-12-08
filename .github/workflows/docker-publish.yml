@@ -71,6 +71,29 @@ jobs:
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
+  deb:
+    runs-on: ubuntu-latest
+    needs: test_and_push_docker
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: terminusdb-linux
+
+    - run: sudo gem install --no-document fpm
+
+    - run: make deb
+
+    - name: Upload deb Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-deb
+        path: terminusdb*.deb
+
+
+
   appimage:
     runs-on: ubuntu-latest
 
