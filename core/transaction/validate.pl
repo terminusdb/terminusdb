@@ -941,11 +941,11 @@ test(cardinality_error,
                      _).
 
 
-test(cardinality_error,
+test(casting_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(schema_check_failure(_), _))])
+      error(casting_error("Dubhlinn",'http://www.w3.org/2001/XMLSchema#integer'),_)])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
@@ -986,7 +986,7 @@ test(cardinality_min_error,
                'worldOnt:personal_name': [_{'@type' : "xsd:string",
                                             '@value' : "Duke"
                                            },
-                                          _{'@type' : "xsd:integer",
+                                          _{'@type' : "xsd:string",
                                             '@value' : "Doug"
                                            }]
               },

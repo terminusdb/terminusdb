@@ -187,6 +187,16 @@ api_error_jsonld(frame,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld(woql,error(casting_error(Val,Type),_), JSON) :-
+    format(string(ValS), "~q", [Val]),
+    format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
+    JSON = _{'@type' : 'api:FrameErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : ValS,
+                              'api:type' : Type},
+             'api:message' : Msg
+            }.
 api_error_jsonld(woql,error(invalid_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:WoqlErrorResponse',
@@ -255,6 +265,16 @@ api_error_jsonld(woql,error(unresolvable_absolute_descriptor(Descriptor), _), JS
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld(woql,error(casting_error(Val,Type),_), JSON) :-
+    format(string(ValS), "~q", [Val]),
+    format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : ValS,
+                              'api:type' : Type},
+             'api:message' : Msg
             }.
 api_error_jsonld(clone,error(no_remote_authorization,_),JSON) :-
     format(string(Msg), "No remote authorization supplied", []),
