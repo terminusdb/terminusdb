@@ -76,7 +76,7 @@ jobs:
     needs: test_and_push_docker
     steps:
       - uses: actions/checkout@v2
-      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb docker.pkg.github.com/terminusdb-labs/fedora-swipl/fedora-swipl:latest bash -c "cd /app/terminusdb && make bin"
+      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb ghcr.io/terminusdb-labs/fedora-swipl/fedora-swipl:latest bash -c "cd /app/terminusdb && make bin"
       - run: sudo docker cp fedora:/app/terminusdb/terminusdb fedora-bin
       - name: Upload rpm Artifact
         uses: actions/upload-artifact@v2.1.4
