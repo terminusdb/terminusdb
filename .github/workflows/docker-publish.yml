@@ -86,7 +86,7 @@ jobs:
 
   deb_and_rpm:
     runs-on: ubuntu-latest
-    needs: test_and_push_docker
+    needs: [test_and_push_docker, fedora_bin]
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
