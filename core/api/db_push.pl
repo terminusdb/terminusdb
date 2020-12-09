@@ -99,7 +99,8 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
         ->  do_or_die(Remote_Branch_Path = [],
                       error(remote_diverged(Remote_Repository,Remote_Branch_Path),_))
         % No shared history
-        ;   true),
+        ;   throw(
+                error(no_common_history(Remote_Repository),_))),
 
         (   (   Remote_Commit_Uri_Option = none
             ;   Remote_Commit_Id \= Local_Commit_Id)
