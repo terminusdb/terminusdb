@@ -323,3 +323,4 @@ jobs:
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
           terminusdb-linux-amd64
+          terminusdb-deb/terminusdb*.deb
