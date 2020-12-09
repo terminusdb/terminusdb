@@ -20,6 +20,12 @@ deb: $(TARGET)
 		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
 		./terminusdb=/usr/local/bin/
 
+rpm: $(TARGET)
+	 fpm -f -s dir -t rpm -d gperftools-libs -n terminusdb -v $(VERSION) \
+		--license $(LICENSE) -m $(MAINTAINER) \
+		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
+		./terminusdb=/usr/local/bin/
+
 
 debug:
 	echo "main, halt." | swipl -f bootstrap.pl
