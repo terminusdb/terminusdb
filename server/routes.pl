@@ -3893,6 +3893,16 @@ test(remote_list, [
 
 :- end_tests(remote_endpoint).
 
+%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root('worker.js'), cors_handler(Method, worker_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+worker_handler(get,Request, _System_DB, _Auth) :-
+    config:worker_js(Value),
+    write_cors_headers(Request),
+    throw(http_reply(bytes('text/html', Value))).
+
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
