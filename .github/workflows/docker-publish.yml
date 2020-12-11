@@ -95,6 +95,8 @@ jobs:
       with:
         name: terminusdb-linux
 
+    - run: chmod +x terminusdb
+
     - uses: actions/download-artifact@v2
       with:
         name: terminusdb-fedora-bin
