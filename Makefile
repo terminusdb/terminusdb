@@ -15,7 +15,7 @@ $(TARGET):
 bin: $(TARGET)
 
 deb: $(TARGET)
-	 fpm -f -s dir -t deb -d libtcmalloc-minimal4 -n terminusdb -v $(VERSION) \
+	 fpm -f -s dir -t deb -d libtcmalloc-minimal4 -d libarchive13 -n terminusdb -v $(VERSION) \
 		--license $(LICENSE) -m $(MAINTAINER) \
 		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
 		./terminusdb=/usr/local/bin/
