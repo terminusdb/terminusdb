@@ -24,7 +24,7 @@ rpm: $(TARGET)
 	 fpm -f -s dir -t rpm -d pl -n terminusdb -v $(VERSION) \
 		--license $(LICENSE) -m $(MAINTAINER) \
 		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
-		./terminusdb=/usr/local/bin/
+		./terminusdb=/usr/bin/
 
 
 debug:
