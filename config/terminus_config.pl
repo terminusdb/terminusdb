@@ -101,22 +101,26 @@ autologin_enabled :-
     Value = 'true'.
 
 ssl_cert(Filename) :-
-    https_cert(Value),
-    open_string(Value, Stream),
-    tmp_file_stream(text, File, TmpStream),
-    copy_stream_data(Stream, TmpStream),
-    close(TmpStream),
-    close(Stream),
-    Filename = File.
+    (   getenv('TERMINUSDB_SSL_CERT', Filename)
+    ->  true
+    ;   https_cert(Value),
+        open_string(Value, Stream),
+        tmp_file_stream(text, File, TmpStream),
+        copy_stream_data(Stream, TmpStream),
+        close(TmpStream),
+        close(Stream),
+        Filename = File).
 
 ssl_cert_key(Filename) :-
-    https_certkey(Value),
-    open_string(Value, Stream),
-    tmp_file_stream(text, File, TmpStream),
-    copy_stream_data(Stream, TmpStream),
-    close(TmpStream),
-    close(Stream),
-    Filename = File.
+    (   getenv('TERMINUSDB_SSL_CERT_KEY', Filename)
+    ->  true
+    ;   https_certkey(Value),
+        open_string(Value, Stream),
+        tmp_file_stream(text, File, TmpStream),
+        copy_stream_data(Stream, TmpStream),
+        close(TmpStream),
+        close(Stream),
+        Filename = File).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
