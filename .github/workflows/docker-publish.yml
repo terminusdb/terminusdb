@@ -128,7 +128,7 @@ jobs:
           VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
           GIT_HASH=$(git rev-parse --short "$GITHUB_SHA")
           # Upload to dev/canary/rc repo
-          if [ echo "$BRANCH" | grep -P "dev|canary|rc" ] then
+          if [ echo "$BRANCH" | grep -P "dev|canary|rc" ]; then
             curl -T terminusdb*.deb -u "rrooij:$BINTRAY_API_TOKEN" "https://api.bintray.com/content/terminusdb/terminusdb-$BRANCH-deb/terminusdb/$VERSION-$GIT_HASH/pool/main/m/terminusdb-$VERSION-$GIT_HASH_amd64.deb;deb_distribution=buster,bullseye;deb_component=main;deb_architecture=amd64?publish=1"
           fi
 
