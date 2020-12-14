@@ -131,8 +131,6 @@ jobs:
           echo "$BRANCH" | grep "dev|canary|rc" && \
           curl -T terminusdb*.deb -u "rrooij:$BINTRAY_API_TOKEN" "https://api.bintray.com/content/terminusdb/terminusdb-$BRANCH-deb/terminusdb/$VERSION-$GIT_HASH/pool/main/m/terminusdb-$VERSION-$GIT_HASH_amd64.deb;deb_distribution=buster,bullseye;deb_component=main;deb_architecture=amd64"
 
-;deb_distribution=<DISTRIBUTIONS>;deb_component=<COMPONENTS>;deb_architecture=<ARCHITECTURES>"
-
 
 
   appimage:
