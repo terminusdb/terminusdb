@@ -127,7 +127,11 @@ jobs:
           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
           GIT_HASH=$(git rev-parse --short "$GITHUB_SHA")
-          # Upload to dev/canary/rc repo
+
+          if [ $(echo "${{ github.ref }}" | grep "tag") ]; then
+            curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-production-deb/terminusdb/${VERSION}/pool/main/t/terminusdb-${VERSION}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
+          fi
+          # Upload to dev/canary/rc/production repo
           if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
             curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-deb/terminusdb/${VERSION}-${GIT_HASH}/pool/main/t/terminusdb-${VERSION}-${GIT_HASH}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
           fi
