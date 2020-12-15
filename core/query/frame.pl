@@ -978,7 +978,7 @@ realise_quads(Elt,Frame,Database,Realisers) :-
     append(Realiser_List,Realisers).
 realise_quads(_Elt,F,_Database,[]) :-
     member(type=Type, F),
-    member(Type,[oneOf,document]),
+    member(Type,[oneOf,document,bareClass]),
     % is a one-of or document (don't backtrack over member)
     !.
 
