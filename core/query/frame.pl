@@ -621,7 +621,10 @@ class_frame_aux(Class, Schema, Inference, Frame) :-
         debug(terminus(frame(restriction)),
               'Class: ~q~n Formula: ~q~n Properties ~q~n',[Class,Formula,Properties]),
         debug(terminus(frame(restriction)),'Restriction: ~p',[RestrictionFormula]),
-        calculate_frame_(Properties,Class,RestrictionFormula,Schema,Inference,Frame)
+        calculate_frame_(Properties,Class,RestrictionFormula,Schema,Inference,Pre_Frame),
+        (   Pre_Frame = []
+        ->  Frame = [type=bareClass, class=Class]
+        ;   Frame = Pre_Frame)
     ;   throw(error(no_class_formula(Class)))).
 
 /**
