@@ -504,6 +504,7 @@ calculate_property_restriction_(Property,Restriction_Formula,Schema,Restriction)
 
 apply_restiction_(annotation,Class,Property,_Schema,_Inference,
                   Restriction,Range,Record_Remainder,
+                  _Seen,
                   [type=datatypeProperty,
                    property=Property,
                    domain=Class,
@@ -512,6 +513,7 @@ apply_restiction_(annotation,Class,Property,_Schema,_Inference,
                    |Record_Remainder]).
 apply_restriction_(datatype,Class,Property,_Schema,_Inference,
                    Restriction,Range,Record_Remainder,
+                   _Seen,
                    [type=datatypeProperty,
                     property=Property,
                     domain=Class,
@@ -520,6 +522,7 @@ apply_restriction_(datatype,Class,Property,_Schema,_Inference,
                     |Record_Remainder]).
 apply_restriction_(document,Class,Property,Schema,_Inference,
                    Restriction,Range,Record_Remainder,
+                   _Seen,
                    [type=objectProperty,
                     property=Property,
                     domain=Class,
@@ -532,6 +535,7 @@ apply_restriction_(document,Class,Property,Schema,_Inference,
     append(RLabel, RComment, RTail).
 apply_restriction_(one_of(OneList),Class,Property,Schema,_Inference,
                    Restriction,Range,Record_Remainder,
+                   _Seen,
                    [type=objectProperty,
                     property=Property,
                     domain=Class,
@@ -542,6 +546,7 @@ apply_restriction_(one_of(OneList),Class,Property,Schema,_Inference,
     once(decorate_elements_(OneList,Schema,DecoratedOneList)).
 apply_restriction_(object,Class,Property,Schema,Inference,
                    Restriction,Range,Record_Remainder,
+                   Seen,
                    [type=objectProperty,
                     property=Property,
                     domain=Class,
@@ -552,9 +557,9 @@ apply_restriction_(object,Class,Property,Schema,Inference,
     once(classes_below_(Range,Schema,Below)),
     (   [NextClass] = Below
         % singleton choice of class class should just be rendered.
-    ->  class_frame_aux(NextClass,Schema,Inference,Frame)
+    ->  class_frame_aux(NextClass,Schema,Inference,Seen,Frame)
         % We can't decide from here...
-    ;   convlist({Schema,Inference}/[C,F]>>(class_frame_aux(C,Schema,Inference,F)),Below,Frames),
+    ;   maplist([C,[type=clippedClass, class=C]]>>true, Below, Frames),
         Frame=[type=class_choice,operands=Frames]
     ).
 
@@ -564,7 +569,7 @@ apply_restriction_(object,Class,Property,Schema,Inference,
  *
  *
  */
-apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Frame) :-
+apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Seen,Frame) :-
     validate_schema:most_specific_range_(Property,Range,Schema,Inference),
     (   validate_schema:annotation_property_(Property,Schema)
     ->  Type = annotation
@@ -578,7 +583,7 @@ apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Frame) :-
     once(calculate_property_restriction_(Property,Restriction_Formula,Schema,Restriction)),
     once(property_record_(Schema,Property,Record_Remainder)),
     apply_restriction_(Type,Class,Property,Schema,Inference,
-                       Restriction,Range,Record_Remainder,Frame).
+                       Restriction,Range,Record_Remainder,Seen,Frame).
 
 /*
  * calculate_frame(+Class:uri,+Properties:list(uri),
@@ -589,12 +594,12 @@ apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Frame) :-
 calculate_frame(Class,Properties,Restriction_Formula,Database,Frames) :-
     database_schema(Database,Schema),
     database_schema(Database,Inference),
-    calculate_frame_(Properties,Class,Restriction_Formula,Schema,Inference,Frames).
+    calculate_frame_(Properties,Class,Restriction_Formula,Schema,Inference,[],Frames).
 
-calculate_frame_([],_Class,_Restriction_Formula,_Schema,_Inference,[]).
-calculate_frame_([Property|Property_Rest],Class,Restriction_Formula,Schema,Inference,[Property_Frame|Frame_Rest]) :-
-    apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Property_Frame),
-    calculate_frame_(Property_Rest,Class,Restriction_Formula,Schema,Inference,Frame_Rest).
+calculate_frame_([],_Class,_Restriction_Formula,_Schema,_Inference,_,[]).
+calculate_frame_([Property|Property_Rest],Class,Restriction_Formula,Schema,Inference,Seen,[Property_Frame|Frame_Rest]) :-
+    apply_restriction(Class,Property,Schema,Inference,Restriction_Formula,Seen,Property_Frame),
+    calculate_frame_(Property_Rest,Class,Restriction_Formula,Schema,Inference,Seen,Frame_Rest).
 
 /*
  * We can't actually check types here because tabling doesn't work with
@@ -612,17 +617,44 @@ class_frame(Class,Database,Frame) :-
 
 :- table class_frame_/4.
 class_frame_(Class, Schema, Inference, Frame) :-
-    class_frame_aux(Class, Schema, Inference, Frame).
+    class_frame_aux(Class, Schema, Inference, [], Frame).
 
-class_frame_aux(Class, Schema, Inference, Frame) :-
+class_frame_aux(Pre_Class, _Schema, _Inference, Seen, Frame) :-
+    atom_string(Class,Pre_Class),
+    memberchk(Class, Seen),
+    !,
+    Frame = [type=clippedClass, class=Class].
+class_frame_aux(Pre_Class, Schema, Inference, Seen, Frame) :-
+    atom_string(Class,Pre_Class),
     (   class_formula(Class,Schema,Formula)
     ->  restriction_formula(Formula,RestrictionFormula),
         class_properties(Class,Schema,Properties),
         debug(terminus(frame(restriction)),
               'Class: ~q~n Formula: ~q~n Properties ~q~n',[Class,Formula,Properties]),
         debug(terminus(frame(restriction)),'Restriction: ~p',[RestrictionFormula]),
-        calculate_frame_(Properties,Class,RestrictionFormula,Schema,Inference,Frame)
+        once(classes_below_(Class,Schema,Below)),
+        append(Below,Seen,Combined),
+        sort(Combined,Sorted_Seen),
+        debug(terminus(frame(restriction)),'Seen: ~p',[Sorted_Seen]),
+        calculate_frame_(Properties,Class,RestrictionFormula,Schema,Inference,Sorted_Seen,Pre_Frame),
+        (   Pre_Frame = []
+        ->  Frame = [type=bareClass, class=Class]
+        ;   Frame = Pre_Frame)
     ;   throw(error(no_class_formula(Class)))).
+
+classes_above(Class<Solns, [Class|Above]) :-
+    maplist([C,A]>>classes_above(C,A), Solns, AllAbove),
+    append(AllAbove,Above).
+classes_above(Class=and(_), [Class]).
+classes_above(Class=oneOf(OneList), [Class|OneList]).
+classes_above(Class=or(Solns), [Class|Above]) :-
+    maplist([C,A]>>classes_above(C,A), Solns, AllAbove),
+    append(AllAbove,Above).
+classes_above(Class=xor(Solns), [Class|Above]) :-
+    maplist([C,A]>>classes_above(C,A), Solns, AllAbove),
+    append(AllAbove,Above).
+classes_above(class(Class), [Class]).
+
 
 /**
  * fill_class_frame(+Elt,+Database,-Frame,-Filled) is det.
@@ -683,7 +715,7 @@ fill_class_frame(Elt,Database,C,[type=Type,frames=Fsp]) :-
     maplist({Elt,Database}/[Fin,Fout]>>(fill_class_frame(Elt,Database,Fin,Fout)),Fs,Fsp).
 fill_class_frame(Elt,_,F,DocumentFrame) :-
     memberchk(type=Type, F),
-    memberchk(Type,[oneOf,document]),
+    memberchk(Type,[oneOf,document,bareClass,clippedClass]),
     % Just need one type
     !,
     append(F,[domainValue=Elt],DocumentFrame).
@@ -799,6 +831,17 @@ realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     !, % We're an operator, so stick with it
     maplist({Elt,Database,Depth}/[TheFrame,New_Realiser]
             >>(realiser(Elt,TheFrame,Database,Depth,New_Realiser)),Fs,Realisers).
+realise_frame(_Elt,F,_Database,_Depth,[]) :-
+    memberchk(type=bareClass, F),
+    !.
+realise_frame(Elt,F,Database,Depth,New_Realiser) :-
+    memberchk(type=clippedClass, F),
+    !,
+    % Don't increase depth
+    % NOTE: very dodgy unless we are checking to make sure
+    % we aren't following a cycle!  We should check the realiser.
+    document_object(Database,Elt,Depth,Object),
+    Object = [_Type,_Id|New_Realiser].
 realise_frame(_Elt,F,_Database,_Depth,[]) :-
     memberchk(type=oneOf, F),
     !.
@@ -973,9 +1016,14 @@ realise_quads(Elt,Frame,Database,Realisers) :-
     maplist({Elt,Database}/[TheFrame,New_Realiser]
             >>(realise_quads(Elt,TheFrame,Database,New_Realiser)),Fs,Realiser_List),
     append(Realiser_List,Realisers).
+realise_quads(Elt,Frame,Database,Realisers) :-
+    member(type=clippedClass, Frame),
+    !,
+    % NOTE: This requires cycle detection!
+    object_edges(Elt,Database,Realisers).
 realise_quads(_Elt,F,_Database,[]) :-
     member(type=Type, F),
-    member(Type,[oneOf,document]),
+    member(Type,[oneOf,document,bareClass]),
     % is a one-of or document (don't backtrack over member)
     !.
 
@@ -1207,6 +1255,7 @@ document_filled_class_frame_jsonld(Document,Ctx,Database,JSON_LD) :-
 :- use_module(core(util/test_utils)).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
+:- use_module(core(transaction)).
 
 test(update_object,
      [setup((setup_temp_store(State))),
@@ -1305,5 +1354,38 @@ test(delete_object, [
     create_context(Descriptor, Query_Context2),
 
     \+ document_jsonld(Query_Context2, "doc:new_user", 1, _JSON).
+
+
+test(loopy_object, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+
+    resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
+    create_context(Descriptor, _{author: me, message: yo}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(scm:'Foo', rdf:type, owl:'Class', schema),
+                insert(scm:foo, rdf:type, owl:'ObjectProperty', schema),
+                insert(scm:foo, rdfs:domain, scm:'Foo', schema),
+                insert(scm:foo, rdfs:range, scm:'Foo', schema))),
+        _),
+
+    open_descriptor(Descriptor, Transaction),
+    database_schema(Transaction, Schema),
+    class_frame_aux('http://example.com/data/worldOntology#Foo', Schema, [], [], Frame),
+
+    Frame = [[type=objectProperty,
+              property='http://example.com/data/worldOntology#foo',
+              domain='http://example.com/data/worldOntology#Foo',
+              range='http://example.com/data/worldOntology#Foo',
+              frame=[type=clippedClass,
+                     class='http://example.com/data/worldOntology#Foo'],
+              restriction=true]].
+
 
 :- end_tests(documents).

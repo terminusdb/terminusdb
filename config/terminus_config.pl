@@ -1,5 +1,6 @@
 :- module(config,[
               version/1,
+              bootstrap_config_files/0,
               server/1,
               server_name/1,
               server_port/1,
@@ -23,9 +24,19 @@
               ignore_ref_and_repo_schema/0
           ]).
 
-:- use_module(core(util/utils)).
+:- use_module(core(util)).
 
-version('4.0.0').
+version('4.0.2').
+
+:- dynamic https_cert/1.
+:- dynamic https_certkey/1.
+bootstrap_config_files :-
+    expand_file_search_path(terminus_home('localhost.crt'), DefaultCert),
+    getenv_default('TERMINUSDB_SSL_CERT', DefaultCert, Cert),
+    expand_file_search_path(terminus_home('localhost.key'), DefaultKey),
+    getenv_default('TERMINUSDB_SSL_CERT_KEY', DefaultKey, Key),
+    file_to_predicate(Cert, https_cert),
+    file_to_predicate(Key, https_certkey).
 
 server_protocol(Value) :-
     (   https_enabled
@@ -56,6 +67,19 @@ index_template(Value) :-
     assertz(index_template_(Value)),
     close(Template_Stream).
 
+:- dynamic worker_js_/1.
+
+worker_js(Value) :-
+    worker_js_(Value),
+    !.
+worker_js(Value) :-
+    once(expand_file_search_path(config('worker.js'), Template_Path)),
+    open(Template_Path, read, Template_Stream),
+    read_string(Template_Stream, _, Value),
+    assertz(worker_js_(Value)),
+    close(Template_Stream).
+
+
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
 
@@ -76,13 +100,27 @@ autologin_enabled :-
     getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', 'false', Value),
     Value = 'true'.
 
-ssl_cert(Value) :-
-    expand_file_search_path(terminus_home('localhost.crt'), Default),
-    getenv_default('TERMINUSDB_SSL_CERT', Default, Value).
+ssl_cert(Filename) :-
+    (   getenv('TERMINUSDB_SSL_CERT', Filename)
+    ->  true
+    ;   https_cert(Value),
+        open_string(Value, Stream),
+        tmp_file_stream(text, File, TmpStream),
+        copy_stream_data(Stream, TmpStream),
+        close(TmpStream),
+        close(Stream),
+        Filename = File).
 
-ssl_cert_key(Value) :-
-    expand_file_search_path(terminus_home('localhost.key'), Default),
-    getenv_default('TERMINUSDB_SSL_CERT_KEY', Default, Value).
+ssl_cert_key(Filename) :-
+    (   getenv('TERMINUSDB_SSL_CERT_KEY', Filename)
+    ->  true
+    ;   https_certkey(Value),
+        open_string(Value, Stream),
+        tmp_file_stream(text, File, TmpStream),
+        copy_stream_data(Stream, TmpStream),
+        close(TmpStream),
+        close(Stream),
+        Filename = File).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
