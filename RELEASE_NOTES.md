@@ -1,4 +1,4 @@
-# TerminusDB Server v4.0.2 Release Notes
+# TerminusDB Server v4.1.0 Release Notes
 
 ## New
 
