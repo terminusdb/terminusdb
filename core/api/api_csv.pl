@@ -383,7 +383,7 @@ test(csv_update,
     resolve_absolute_string_descriptor(Path, Desc),
     findall(X-Y-Z, ask(Desc,t(X, Y, Z)), Triples),
 
-    Triples = [
+    Expected = [
         (Row2)-(scm:csv_column_header)-("4"^^xsd:string),
         (Row2)-(scm:csv_column_some)-("3"^^xsd:string),
         (Row2)-(rdf:type)-(Row_Type1),
@@ -402,7 +402,10 @@ test(csv_update,
         (Row3)-(scm:csv_column_header)-("9"^^xsd:string),
         (Row3)-(scm:csv_column_some)-("1"^^xsd:string),
         (Row3)-(rdf:type)-(Row_Type1)
-    ].
+    ],
+
+    forall(member(Triple,Triples),
+           member(Triple,Expected)).
 
 test(csv_update_change_column,
      [setup((setup_temp_store(State),

@@ -32,6 +32,8 @@
 
 :- use_module(core(util/utils)).
 :- use_module(core(util/speculative_parse)).
+:- use_module(core(validation)).
+
 :- reexport(core(util/syntax)).
 
 :- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.
@@ -85,36 +87,15 @@ hash(Base,Args,Output) :-
     atom_concat(Base,Hash,Output).
 
 /*
- * Type promotion is intended to give a type to bare literals
- * who have not had a specified type for some reason (integers
- * or booleans perhaps).
- */
-maybe_promote(X^^Type,X^^Type) :-
-    !.
-maybe_promote(X@Lang,X@Lang) :-
-    !.
-maybe_promote(S,S^^'http://www.w3.org/2001/XMLSchema#string') :-
-    string(S),
-    !.
-maybe_promote(A,S^^'http://www.w3.org/2001/XMLSchema#string') :-
-    atom(A),
-    !,
-    atom_string(A,S).
-maybe_promote(N,N^^'http://www.w3.org/2001/XMLSchema#decimal') :-
-    number(N),
-    !.
-
-/*
  * Presumably this should record into prov on failure.
  */
 typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
     ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
         throw(error(M))
-    ;   maybe_promote(Val,Promoted),
-        (   Promoted = Bare_Literal^^Source_Type
+    ;   (   Val = Bare_Literal^^Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
-        ;   Promoted = Bare_Literal@Source_Type
+        ;   Val = Bare_Literal@Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
         ;   throw(error(casting_error(Val, Type), _))
         )
@@ -142,19 +123,27 @@ typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
                 Num^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
     date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
-typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#decimal', _, Cast) :-
+typecast_switch(Val, _ST, Type, _, Cast^^Type) :-
+    basetype_subsumption_of(Type,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
-    (   guess_number(Val,Cast)
+    (   guess_number(Val,Cast^^_)
     ->  true
-    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))
+    ;   throw(error(casting_error(Val,Type),_))
     ).
 typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
                 String^^'http://www.w3.org/2001/XMLSchema#string') :-
     Date = date(_Y,_M,_D,_HH,_MM,_SS,_Z,_OH,_OM),
     !,
     date_string(Date,String).
-typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
-                String^^'http://www.w3.org/2001/XMLSchema#string') :-
+typecast_switch(Val, _ST, Type, _,
+                Val^^Type) :-
+    string(Val),
+    basetype_subsumption_of(Type,'http://www.w3.org/2001/XMLSchema#string'),
+    !.
+typecast_switch(Val, _ST, Type, _,
+                String^^Type) :-
+    basetype_subsumption_of(Type,'http://www.w3.org/2001/XMLSchema#string'),
+    !,
     format(string(String), '~w', [Val]).
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#integerRange', _, Cast) :-
     (   atom(Val)

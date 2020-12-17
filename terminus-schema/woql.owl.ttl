@@ -806,14 +806,14 @@ woql:element
   rdfs:label "element"@en ;
   rdfs:comment "The element of an IsA being type checked"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Value .
+  rdfs:range woql:Value .
 
 woql:of_type
   a owl:ObjectProperty ;
   rdfs:label "of type"@en ;
   rdfs:comment "Element is 'of type'"@en ;
   rdfs:domain woql:IsA ;
-  rdfs:range owl:Value .
+  rdfs:range woql:Value .
 
 woql:Like
   a owl:Class ;
@@ -1440,8 +1440,8 @@ woql:size
 woql:TripleCount
   a owl:Class ;
   rdfs:subClassOf woql:HasResource ;
-  rdfs:comment "Size of a resource"@en ;
-  rdfs:label "Size"@en .
+  rdfs:comment "Triple Count of a resource"@en ;
+  rdfs:label "Triple Count"@en .
 
 woql:triple_count
   a owl:ObjectProperty ;
@@ -1462,12 +1462,24 @@ woql:TypeOf
   rdfs:label "TypeOf"@en ;
   rdsf:comment "Find the type of a node or literal"@en .
 
+woql:HasValue
+  a owl:Class ;
+  system:tag system:abstract ;
+  rdfs:label "Has Value"@en ;
+  rdfs:comment "Abstract mixin with a value"@en .
+
 woql:value
   rdfs:label "value"@en ;
   rdfs:comment "The value associated with a query"@en ;
   a owl:ObjectProperty ;
   rdfs:domain woql:HasValue ;
   rdfs:range woql:Value .
+
+woql:HasType
+  a owl:Class ;
+  system:tag system:abstract ;
+  rdfs:label "Has Type"@en ;
+  rdfs:comment "Abstract mixin with a type"@en .
 
 woql:type
   rdfs:label "type"@en ;
