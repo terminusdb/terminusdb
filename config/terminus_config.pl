@@ -26,7 +26,7 @@
 
 :- use_module(core(util)).
 
-version('4.0.0').
+version('4.0.1').
 
 :- dynamic https_cert/1.
 :- dynamic https_certkey/1.
