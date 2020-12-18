@@ -31,9 +31,9 @@ version('4.1.0').
 :- dynamic https_cert/1.
 :- dynamic https_certkey/1.
 bootstrap_config_files :-
-    expand_file_search_path(terminus_home('localhost.crt'), DefaultCert),
+    expand_file_search_path(terminus_home('config/localhost.crt'), DefaultCert),
     getenv_default('TERMINUSDB_SSL_CERT', DefaultCert, Cert),
-    expand_file_search_path(terminus_home('localhost.key'), DefaultKey),
+    expand_file_search_path(terminus_home('config/localhost.key'), DefaultKey),
     getenv_default('TERMINUSDB_SSL_CERT_KEY', DefaultKey, Key),
     file_to_predicate(Cert, https_cert),
     file_to_predicate(Key, https_certkey).
