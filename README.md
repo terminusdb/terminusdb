@@ -97,37 +97,12 @@ directly through clients you should look at the documentation on our
 
 [Release Notes](RELEASE_NOTES.md)
 
-## Contact
+## Community
 
 Come visit us on our [discord server](https://discord.gg/yTJKAma)
 or our [forum!](https://discuss.terminusdb.com)
 
-## Authors
 
-Gavin Mendel-Gleason <gavin@terminusdb.com>
 
-Matthijs van Otterdijk <matthijs@terminusdb.com>
 
-Robin de Rooij <robin@terminusdb.com>
 
-Anne Ogborn <anne@swi-prolog.org>
-
-Dmytri Kleiner <dk@terminusdb.com>
-
-[Paulo Moura](https://github.com/pmoura)
-
-Put your Name here by contributing!
-
-## Copyright
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
