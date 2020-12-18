@@ -4,8 +4,13 @@
 
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
 
-TerminusDB is an open source, model driven, revision controlled RDF
-graph database for distributed collaboration designed for the web-age.
+TerminusDB is a graph database. It is designed for collaboratively building and curating knowledge graphs. 
+
+It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
+
+TerminusDB's is also a document store.
+
+Data collaboration is facilitated through TerminusHub, which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
 
 TerminusDB allows you to push, pull, time-travel and merge graphs,
 much in the way that is possible in git.
