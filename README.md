@@ -45,7 +45,7 @@ Interface](docs/CLI.md).
 
 ### Open Console
 
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [https://127.0.0.1:6363/](https://127.0.0.1:6363/).
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [https://127.0.0.1:6363/](https://127.0.0.1:6363/)).
 
 ### Known Issues
 On Linux, the AppImage for the desktop client may fail to start, with a message about an incorrectly configured SUID sandbox helper binary. We are looking into this issue. For now, you can work around this issue by starting the binary with the `--no-sandbox` flag.
