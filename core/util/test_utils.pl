@@ -435,7 +435,9 @@ spawn_server_1(Path, URL, PID, Options) :-
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),
 
-    sleep(0.1),
+    (   current_prolog_flag(windows, true)
+    ->  sleep(0.1)
+    ;   true),
     process_wait(PID, Status, [timeout(0)]),
     (   Status = exit(98)
     ->  fail
