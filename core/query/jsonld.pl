@@ -553,7 +553,7 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
                   '@value' : Data
                  }
         ->  atom_string(Atom_Type,Type),
-            once(typecast(Data, Atom_Type, [], Val)),
+            once(typecast(Data^^'http://www.w3.org/2001/XMLSchema#string', Atom_Type, [], Val)),
             Triples = [(ID,Pred,Val)]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
@@ -603,6 +603,44 @@ test(test_jsonld_string, []) :-
      ('terminusdb:///system/data/new_user','http://www.w3.org/2000/01/rdf-schema#label',"Test User"@en)],
     forall(member(Triple, Triples),
            member(Triple, Expected)).
+
+
+test(jsonld_long, []) :-
+    Document = _{'@id':'terminusdb:///data/My_doc_vc25bd1608035634029',
+                 '@type':'terminusdb:///schema#My_doc',
+                 'http://www.w3.org/2000/01/rdf-schema#comment':
+                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"23423"},
+                 'http://www.w3.org/2000/01/rdf-schema#label':
+                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"This is my name"},
+                 'terminusdb:///schema#my_prop':
+                 _{'@type':"http://www.w3.org/2001/XMLSchema#long",
+                   '@value':"234234234"},
+                 'terminusdb:///schema#prop':
+                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"asdf"}},
+
+    jsonld_triples(Document,_{},Triples),
+
+    Expected = [('terminusdb:///data/My_doc_vc25bd1608035634029',
+                 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                 'terminusdb:///schema#My_doc'),
+                ('terminusdb:///data/My_doc_vc25bd1608035634029',
+                 'http://www.w3.org/2000/01/rdf-schema#comment',
+                 "23423"^^'http://www.w3.org/2001/XMLSchema#string'),
+                ('terminusdb:///data/My_doc_vc25bd1608035634029',
+                 'http://www.w3.org/2000/01/rdf-schema#label',
+                 "This is my name"^^'http://www.w3.org/2001/XMLSchema#string'),
+                ('terminusdb:///data/My_doc_vc25bd1608035634029',
+                 'terminusdb:///schema#my_prop',
+                 234234234^^'http://www.w3.org/2001/XMLSchema#long'),
+                ('terminusdb:///data/My_doc_vc25bd1608035634029',
+                 'terminusdb:///schema#prop',
+                 "asdf"^^'http://www.w3.org/2001/XMLSchema#string')], 
+    forall(member(T, Triples),
+           member(T, Expected)).
+
 
 :- end_tests(jsonld_triples).
 

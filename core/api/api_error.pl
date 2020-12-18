@@ -389,7 +389,7 @@ api_error_jsonld(rebase,error(unresolvable_source_descriptor(Descriptor),_), JSO
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld(rebase,error(rebase_commit_application_failed(continue_on_valid_commit(Their_Commit_Id)),_), JSON) :-
+api_error_jsonld(rebase,error(rebase_commit_application_failed(continue_on_valid_commit(Their_Commit_Id), _Commits),_), JSON) :-
     format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'continue' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
              'api:status' : 'api:failure',
@@ -397,7 +397,7 @@ api_error_jsonld(rebase,error(rebase_commit_application_failed(continue_on_valid
                               'api:their_commit' : Their_Commit_Id},
              'api:message' : Msg
             }.
-api_error_jsonld(rebase,error(rebase_commit_application_failed(fixup_on_valid_commit(Their_Commit_Id)),_), JSON) :-
+api_error_jsonld(rebase,error(rebase_commit_application_failed(fixup_on_valid_commit(Their_Commit_Id), _Commits),_), JSON) :-
     format(string(Msg), "While rebasing, commit ~q applied cleanly, but the 'fixup' strategy was specified, indicating this should have errored", [Their_Commit_Id]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
              'api:status' : 'api:failure',
@@ -405,7 +405,7 @@ api_error_jsonld(rebase,error(rebase_commit_application_failed(fixup_on_valid_co
                               'api:their_commit' : Their_Commit_Id},
              'api:message' : Msg
             }.
-api_error_jsonld(rebase,error(rebase_commit_application_failed(schema_validation_error(Their_Commit_Id, Fixup_Witnesses)),_), JSON) :-
+api_error_jsonld(rebase,error(rebase_commit_application_failed(schema_validation_error(Their_Commit_Id, Fixup_Witnesses),_Commits),_), JSON) :-
     format(string(Msg), "Rebase failed on commit ~q due to schema validation errors", [Their_Commit_Id]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
              'api:status' : 'api:failure',
@@ -414,7 +414,7 @@ api_error_jsonld(rebase,error(rebase_commit_application_failed(schema_validation
                               'api:witness' : Fixup_Witnesses},
              'api:message' : Msg
             }.
-api_error_jsonld(rebase,error(rebase_commit_application_failed(fixup_error(Their_Commit_Id, Fixup_Witnesses)),_), JSON) :-
+api_error_jsonld(rebase,error(rebase_commit_application_failed(fixup_error(Their_Commit_Id, Fixup_Witnesses), _Commits),_), JSON) :-
     format(string(Msg), "Rebase failed on commit ~q due to fixup error: ~q", [Their_Commit_Id,Fixup_Witnesses]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
              'api:status' : 'api:failure',

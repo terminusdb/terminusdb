@@ -29,9 +29,9 @@ cli_toplevel :-
             halt(0)
         ),
         Exception,
-        (   Exception = error(Error,Ctx)
-        ->  print_prolog_backtrace(user_error, Ctx),
-            format(user_error, "~NError: ~q~n~n", [Error]),
+        (   Exception = error(Error,context(prolog_stack(Stack),_)),
+            print_prolog_backtrace(user_error, Stack)
+        ->  format(user_error, "~NError: ~q~n~n", [Error]),
             halt(1)
         ;   format(user_error, "~NError: ~q~n~n", [Exception]),
             halt(1)
@@ -90,7 +90,7 @@ opt_spec(optimize,'terminusdb optimize OPTIONS',
            longflags([help]),
            default(false),
            help('print help for the `optimize` command')]]).
-opt_spec(query,'terminusdb query QUERY OPTIONS',
+opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
          'Query a database.',
          [[opt(help),
            type(boolean),
@@ -131,10 +131,10 @@ opt_spec(push,'terminusdb push DB_SPEC',
            default('_'),
            help('set the branch on the remote for push')],
           [opt(remote),
-           type(string),
+           type(atom),
            shortflags([r]),
            longflags([remote]),
-           default("origin"),
+           default(origin),
            help('the name of the remote to use')],
           [opt(prefixes),
            type(boolean),
@@ -213,10 +213,10 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            default('_'),
            help('set the branch on the remote for push')],
           [opt(remote),
-           type(string),
+           type(atom),
            shortflags([r]),
            longflags([remote]),
-           default("origin"),
+           default(origin),
            help('the name of the remote to use')],
           [opt(user),
            type(atom),
@@ -230,6 +230,47 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
+opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
+         'fetch data from a remote.',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `fetch` command')],
+          [opt(remote),
+           type(atom),
+           shortflags([r]),
+           longflags([remote]),
+           default(origin),
+           help('the name of the remote to use')],
+          [opt(user),
+           type(atom),
+           shortflags([u]),
+           longflags([user]),
+           default('_'),
+           help('the user on the remote')],
+          [opt(password),
+           type(atom),
+           shortflags([p]),
+           longflags([password]),
+           default('_'),
+           help('the password on the remote')]]).
+opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
+         'Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `rebase` command')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('The author of the rebase')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -432,6 +473,72 @@ opt_spec(csv,dump,'terminusdb csv dump DB_SPEC FILES OPTIONS',
            shortflags([o]),
            default('_'),
            help('file name to use for csv output')]]).
+opt_spec(triples,dump,'terminusdb triples dump GRAPH_SPEC',
+         'Dump an RDF string.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `triples dump` sub command')],
+          [opt(format),
+           type(atom),
+           longflags([format]),
+           shortflags([f]),
+           default(turtle),
+           help('format of RDF (can be one of: [turtle])')]]).
+opt_spec(triples,update,'terminusdb triples update GRAPH_SPEC FILE',
+         'Update from an RDF file (replaces current content).',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `triples update` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: triples update'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(format),
+           type(atom),
+           longflags([format]),
+           shortflags([f]),
+           default(turtle),
+           help('format of RDF (can be one of: [turtle])')]]).
+opt_spec(triples,load,'terminusdb triples load GRAPH_SPEC FILE',
+         'Load triples from RDF file (Appending new).',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `triples load` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: triples load'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(format),
+           type(atom),
+           longflags([format]),
+           shortflags([f]),
+           default(turtle),
+           help('format of RDF (can be one of: [turtle])')]]).
 opt_spec(remote,add,'terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS',
          'Add a remote.',
          [[opt(help),
@@ -463,7 +570,13 @@ opt_spec(remote,'get-url','terminusdb remote get-url DATABASE_SPEC REMOTE_NAME O
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `remote get-url` sub command')]]).
+           help('print help for the `remote get-url` sub command')],
+          [opt(remote),
+           type(string),
+           shortflags([r]),
+           longflags([remote]),
+           default("origin"),
+           help('the name of the remote to use')]]).
 opt_spec(remote,list,'terminusdb remote list DATABASE_SPEC OPTIONS',
          'List remotes.',
          [[opt(help),
@@ -538,7 +651,7 @@ run_command(query,[Database,Query],Opts) :-
         woql,
         (   woql_context(Prefixes),
             context_extend_prefixes(Context,Prefixes,Context0),
-            read_term_from_atom(Query, AST, []),
+            read_query_term_from_atom(Query,AST),
             query_response:run_context_ast_jsonld_response(Context0, AST, Response),
             get_dict(prefixes,Context0, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
@@ -548,7 +661,9 @@ run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
-    member(remote(Remote_Name), Opts),
+    member(remote(Remote_Name_Atom), Opts),
+    atom_string(Remote_Name_Atom,Remote_Name),
+
     member(branch(Branch), Opts),
     member(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
@@ -572,7 +687,7 @@ run_command(push,[Path],Opts) :-
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
-    format(current_output, "~N~s pushed: ~q~n", [Path, Result]).
+    format(current_output, "~n~s pushed: ~q~n", [Path, Result]).
 run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -616,7 +731,7 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
-    format(current_output, "~NCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
+    format(current_output, "~nCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -630,7 +745,8 @@ run_command(pull,[Path],Opts) :-
             error(not_a_valid_local_branch(Descriptor), _))
     ),
 
-    member(remote(Remote_Name), Opts),
+    member(remote(Remote_Name_Atom), Opts),
+    atom_string(Remote_Name_Atom,Remote_Name),
     member(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
     ->  Branch = Remote_Branch
@@ -655,6 +771,62 @@ run_command(pull,[Path],Opts) :-
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
     format(current_output, "~N~s pulled: ~q~n", [Path, Result]).
+run_command(fetch,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    api_report_errors(
+        pull,
+        do_or_die(
+            (   resolve_absolute_string_descriptor(Path,Descriptor),
+                _{ branch_name : _} :< Descriptor
+            ),
+            error(not_a_valid_local_branch(Descriptor), _))
+    ),
+
+    member(remote(Remote_Name_Atom), Opts),
+    atom_string(Remote_Name_Atom, Remote_Name),
+    % FIXME NOTE: This is very awkward and brittle.
+    atomic_list_concat([Path,'/',Remote_Name,'/_commits'], Remote_Path),
+
+    member(user(User), Opts),
+    (   var(User)
+    ->  prompt(_,'Username: '),
+        read_string(user_input, ['\n'], [], _, User)
+    ;   true),
+
+    member(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+
+    basic_authorization(User,Password,Authorization),
+
+    api_report_errors(
+        fetch,
+        remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
+                     New_Head_Layer_Id, Head_Has_Updated)
+    ),
+    format(current_output, "~N~s fetch: ~q with ~q~n",
+           [Path, New_Head_Layer_Id, Head_Has_Updated]).
+run_command(rebase,[Path,From_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    memberchk(author(Author),Opts),
+    trace(rebase_on_branch),
+    api_report_errors(
+        rebase,
+        (   Strategy_Map = [],
+            rebase_on_branch(System_DB, Auth, Path, From_Path, Author, Strategy_Map, Common_Commit_ID_Option, Forwarded_Commits, Reports))),
+    format(current_output, "~nRebased from: ~q to ~q~n", [From_Path, Path]),
+    format(current_output, "Forwarded_Commits: ~q~n", [Forwarded_Commits]),
+    (   Common_Commit_ID_Option = some(Common_Commit_ID)
+    ->  format(current_output, "From common commit: ~q~n", [Common_Commit_ID])
+    ;   true),
+    format(current_output, "Reports: ", []),
+    json_write(current_output,Reports),
+    format(current_output, "~n", []).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
@@ -806,9 +978,14 @@ run_command(remote,'set-url',[Path,Remote_Name,URL],_Opts) :-
         remote,
         update_remote(System_DB, Auth, Path, Remote_Name, URL)),
     format(current_output,'Successfully set remote url to ~s~n',[URL]).
-run_command(remote,'get-url',[Path,Remote_Name],_Opts) :-
+run_command(remote,'get-url',[Path|Remote_Name_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+
+    (   Remote_Name_List = []
+    ->  member(remote(Remote_Name), Opts)
+    ;   Remote_Name_List = [Remote_Name]),
+
     api_report_errors(
         remote,
         show_remote(System_DB, Auth, Path, Remote_Name, URL)),
@@ -820,8 +997,53 @@ run_command(remote,list,[Path],_Opts) :-
         remote,
         list_remotes(System_DB, Auth, Path, Remote_Names)),
     format(current_output,'Remotes: ~q~n',[Remote_Names]).
+run_command(triples,dump,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    member(format(Format_Atom), Opts),
+    atom_string(Format_Atom,Format),
+    api_report_errors(
+        triples,
+        graph_dump(System_DB, Auth, Path, Format, String)),
+    format(current_output,'~s',[String]).
+run_command(triples,update,[Path,File],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    member(message(Message), Opts),
+    member(author(Author), Opts),
+    member(format(Format_Atom), Opts),
+    atom_string(Format_Atom,Format),
+    open(File,read,Stream),
+    read_string(Stream, _, TTL),
+    close(Stream),
+    api_report_errors(
+        triples,
+        graph_update(System_DB, Auth, Path, _{ message : Message,
+                                               author : Author},
+                     Format,TTL)),
+    format(current_output,'~nSuccessfully updated triples from ~q~n',[File]).
+run_command(triples,load,[Path,File],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    member(message(Message), Opts),
+    member(author(Author), Opts),
+    member(format(Format_Atom), Opts),
+    atom_string(Format_Atom,Format),
+    open(File,read,Stream),
+    read_string(Stream, _, TTL),
+    close(Stream),
+    api_report_errors(
+        triples,
+        graph_insert(System_DB, Auth, Path, _{ message : Message,
+                                               author : Author},
+                     Format,TTL)),
+    format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
+
 
 % turtle
+% user
+% document
+
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
 
@@ -948,3 +1170,12 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
+
+bind_vars([],_).
+bind_vars([Name=Var|Tail],AST) :-
+    Var = v(Name),
+    bind_vars(Tail,AST).
+
+read_query_term_from_atom(Query, AST) :-
+    read_term_from_atom(Query, AST, [variable_names(Names)]),
+    bind_vars(Names,AST).

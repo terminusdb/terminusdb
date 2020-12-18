@@ -1,3 +1,18 @@
+# TerminusDB Server v4.1.0 Release Notes
+
+## New
+
++ Add deb repo
++ Multiple witness flag, it allows to return all witnesses of failure during a WOQL query
+
+## Bug fixes
+
++ Bug in push fixed related to push histories
++ Fix frame logic
++ Fix certificate bug on compiled versions
++ Error response on rebase is fixed
+
+
 # TerminusDB Server v4.0.0 Release Notes
 
 ## New

@@ -71,6 +71,72 @@ jobs:
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
+  fedora_bin:
+    runs-on: ubuntu-latest
+    needs: test_and_push_docker
+    steps:
+      - uses: actions/checkout@v2
+      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && make bin"
+      - run: sudo docker cp fedora:/app/terminusdb/terminusdb fedora-bin
+      - name: Upload rpm Artifact
+        uses: actions/upload-artifact@v2.1.4
+        with:
+            name: terminusdb-fedora-bin
+            path: fedora-bin
+
+  deb_and_rpm:
+    runs-on: ubuntu-latest
+    needs: [test_and_push_docker, fedora_bin]
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: terminusdb-linux
+
+    - run: chmod +x terminusdb
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: terminusdb-fedora-bin
+
+    - run: sudo apt install rpm && sudo gem install --no-document fpm
+
+    - run: make deb
+
+    - name: Upload deb Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-deb
+        path: terminusdb*.deb
+
+    - name: Rename fedora bin and give executable permissions
+      run: mv fedora-bin terminusdb && chmod +x terminusdb
+
+    - run: make rpm
+
+    - name: Upload rpm Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        name: terminusdb-rpm
+        path: terminusdb*.rpm
+
+    - name: Upload to bintray repo
+      run: |
+          BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
+          GIT_HASH=$(git rev-parse --short "$GITHUB_SHA")
+
+          if [ $(echo "${{ github.ref }}" | grep "tag") ]; then
+            curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-production-deb/terminusdb/${VERSION}/pool/main/t/terminusdb-${VERSION}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
+          fi
+          # Upload to dev/canary/rc/production repo
+          if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
+            curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-deb/terminusdb/${VERSION}-${GIT_HASH}/pool/main/t/terminusdb-${VERSION}-${GIT_HASH}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
+          fi
+
+
   appimage:
     runs-on: ubuntu-latest
 
@@ -294,3 +360,4 @@ jobs:
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
           terminusdb-linux-amd64
+          terminusdb-deb/terminusdb*.deb

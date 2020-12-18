@@ -21,6 +21,7 @@
 main :-
     initialise_woql_contexts,
     bootstrap_files,
+    bootstrap_config_files,
     qsave_program(terminusdb, [
                       foreign(save),
                       undefined(error),
