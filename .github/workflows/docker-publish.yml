@@ -35,7 +35,7 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME
 
       - name: Run tests
-        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "swipl -g halt /app/terminusdb/start.pl store init --key root && swipl -g run_tests -g halt /app/terminusdb/start.pl -O"
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/terminusdb test"
 
       - name: Copy binary to local filesystem
         run: |
