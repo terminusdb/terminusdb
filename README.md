@@ -76,8 +76,8 @@ help you get started:
 The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programatic access.
 
-The [JavaScript dashboard](https://github.com/terminusdb/terminusdb-dashboard) is an example
-application allowing manipulation of the database using the javascript client fluent syntax.
+The [JavaScript Console](https://github.com/terminusdb/terminusdb-console) allows manipulation 
+of the database using the javascript client fluent syntax.
 
 The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allow
 you to use a pythonic syntax to query the database.
