@@ -1,4 +1,4 @@
-![](terminusdb.png)
+![](docs/terminusdb.png)
 
 # TerminusDB
 
