@@ -715,6 +715,29 @@ refute_basetype_elt(date_time(SY,Mo,D,H,M,S)^^_,'http://www.w3.org/2001/XMLSchem
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
                  }
     ).
+refute_basetype_elt(date(SY,Mo,D,H,M,S,Off,TZ,DST)^^_,'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
+    (   (   Mo > 12
+        ;   Mo < 1
+        ;   days_in_month(SY,Mo,Days), D > Days
+        ;   D < 1
+        ;   H < 0
+        ;   H > 23
+        ;   M < 0
+        ;   M > 59
+        ;   S < 0
+        ;   S > 59
+        ;   Off >= 43200
+        ;   Off =< -43200
+        ;   \+ TZ = 0, \+ atom(TZ)
+        ;   \+ member(DST, [true,false,-,0]))
+    ->  term_to_atom(date(SY,Mo,D,H,M,S,Off,TZ,DST), Atom),
+        Reason = _{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:dateTime : parameter out of range.',
+                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : Atom},
+                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
+                 }
+    ).
 refute_basetype_elt(Atom^^_,'http://www.w3.org/2001/XMLSchema#dateTime',Reason) :-
     (   atom(Atom), \+ (atom_codes(Atom,C), phrase(xsd_parser:dateTime(_,_,_,_,_,_,_,_,_),C,[]))
     ->  Reason = _{
