@@ -22,7 +22,7 @@ deb: $(TARGET)
 
 rpm: $(TARGET)
 	 fpm -f -s dir -t rpm -d pl -n terminusdb -v $(VERSION) \
-		--license $(LICENSE) -m $(MAINTAINER) \
+		--license $(LICENSE) -m $(MAINTAINER) --rpm-rpmbuild-define "_build_id_links none"  \
 		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
 		./terminusdb=/usr/bin/
 
