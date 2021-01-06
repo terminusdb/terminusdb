@@ -361,3 +361,4 @@ jobs:
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
           terminusdb-linux-amd64
           terminusdb-deb/terminusdb*.deb
+          terminusdb-rpm/terminusdb*.rpm
