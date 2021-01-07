@@ -271,6 +271,15 @@ opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
            default(admin),
            help('The author of the rebase')]
          ]).
+opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
+         'Creates an optimisation layer for queries on the given database head.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `rollup` command')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -814,7 +823,6 @@ run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     memberchk(author(Author),Opts),
-    trace(rebase_on_branch),
     api_report_errors(
         rebase,
         (   Strategy_Map = [],
@@ -827,6 +835,15 @@ run_command(rebase,[Path,From_Path],Opts) :-
     format(current_output, "Reports: ", []),
     json_write(current_output,Reports),
     format(current_output, "~n", []).
+run_command(rollup,[Path],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    api_report_errors(
+        rollup,
+        api_rollup(System_DB, Auth, Path, [], _Status_List)),
+
+    format(current_output, "~nRollup performed~n", []).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 

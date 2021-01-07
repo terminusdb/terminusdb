@@ -111,7 +111,7 @@
               list_remotes/4,
 
               % api_rollup.pl
-              api_rollup/4
+              api_rollup/5
           ]).
 
 :- use_module(api/api_init).

@@ -873,6 +873,23 @@ api_error_jsonld(remote,error(remote_exists(Name),_), JSON) :-
              'api:error' : _{ '@type' : "api:RemoteExists",
                               'api:remote_name' : Name}
             }.
+api_error_jsonld(rollup,error(invalid_absolute_path(Path),_), JSON) :-
+    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
+    JSON = _{'@type' : 'api:RollupErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_error_jsonld(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    JSON = _{'@type' : 'api:RollupErrorResponse',
+             'api:status' : 'api:not_found',
+             'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
