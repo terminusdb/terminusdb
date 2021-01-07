@@ -108,8 +108,10 @@
               remove_remote/4,
               update_remote/5,
               show_remote/5,
-              list_remotes/4
+              list_remotes/4,
 
+              % api_rollup.pl
+              api_rollup/4
           ]).
 
 :- use_module(api/api_init).
@@ -138,3 +140,4 @@
 :- use_module(api/api_error).
 :- use_module(api/api_info).
 :- use_module(api/api_remote).
+:- use_module(api/api_rollup).
