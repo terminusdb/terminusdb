@@ -9,7 +9,6 @@ tmp/*
 TAGS
 httpd.log
 transcript.pl
-index.html
 storage/
 nohup.out
 plugins/registry.pl
