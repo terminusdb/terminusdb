@@ -34,3 +34,6 @@ docs:
 	utils/compile_docs.sh
 	ronn docs/terminusdb.1.ronn --roff
 	cp docs/terminusdb.1.ronn docs/CLI.md
+
+clean:
+	rm terminusdb
