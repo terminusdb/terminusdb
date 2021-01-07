@@ -32,10 +32,10 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Build image
-        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME:local
 
       - name: Run tests
-        run: docker run $DOCKERENVS terminusdb/terminusdb-server:latest bash -c "/app/terminusdb/terminusdb test"
+        run: docker run $DOCKERENVS terminusdb/terminusdb-server:local bash -c "/app/terminusdb/terminusdb test"
 
       - name: Copy binary to local filesystem
         run: |
