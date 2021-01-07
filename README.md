@@ -15,7 +15,7 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/GitHub.gif)
 
 
-TerminusDB is a lightweight, high-speed immutable database. Our *[delta-encoding]*(docs/whitepaper/terminusdb.pdf) approach makes possible branch, merge, push, pull, clone, time-travel and other git-like operations on a fully featured database.
+TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes possible branch, merge, push, pull, clone, time-travel and other git-like operations on a fully featured database.
 
 ## Getting Started
 
