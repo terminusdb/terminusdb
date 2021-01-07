@@ -1,6 +1,6 @@
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/main_lockup.png)
 
-# TerminusDB - Making Collaboration Easy
+# TerminusDB - Making Data Collaboration Easy
 
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
 
@@ -15,7 +15,7 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/GitHub.gif)
 
 
-TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes possible branch, merge, push, pull, clone, time-travel and other git-like operations on a fully featured database.
+TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel and other git-like operations possible.
 
 ## Getting Started
 
@@ -52,13 +52,13 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 
 TerminusDB will:
 
-* Give you collaboration features currently available in git, but designed to work well with large datasets
-* Make complex data models easy, maintainable and enforced.
-* Overcome the Object Impedance mismatch without turning your Database into an incomprehensible soup.
-* Allow you to search for repeating patterns using recursion.
-* Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
-* Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
-* Help you automate the production of UI and data-entry by *knowing* what data *means*.
+* Quick to get started and spin up your prototype data-intensive application or service
+* All low code and with data model library you can build from
+* Forms, validation, and a flexible document interface too
+* Once you get going you get all that good data science/engineering functionality directly in the database and via TerminusHub 
+* Clone the production db, branch, merge, collaboration, lineage, versioning 
+* New paradigm in data-centric application development
+
 
 ## Client
 
