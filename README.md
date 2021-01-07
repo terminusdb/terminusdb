@@ -1,14 +1,14 @@
-![](terminusdb.png)
+![](https://en.wikipedia.org/wiki/TerminusDB#/media/File:TerminusDB.png)
 
 # TerminusDB
 
-[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server)
+[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
 
-TerminusDB is a graph database. It is designed for collaboratively building and curating knowledge graphs. 
+TerminusDB is a open source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive. 
 
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
 
-TerminusDB's is also a document store.
+
 
 Data collaboration is facilitated through TerminusHub, which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
 
