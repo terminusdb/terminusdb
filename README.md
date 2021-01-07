@@ -1,36 +1,21 @@
-![](https://en.wikipedia.org/wiki/TerminusDB#/media/File:TerminusDB.png)
+![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/main_lockup.png)
 
-# TerminusDB
+# TerminusDB - Making Collaboration Easy
 
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://travis-ci.com/terminusdb/terminusdb-server) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
+
 
 TerminusDB is a open source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive. 
 
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
 
+TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain which utilise the powerful features of TerminusDB.
 
 
-Data collaboration is facilitated through TerminusHub, which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
+![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/GitHub.gif)
 
-TerminusDB allows you to push, pull, time-travel and merge graphs,
-much in the way that is possible in git.
 
-TerminusDB Server provides TerminusDB with a RESTful API for
-interacting with knowledge graphs via the JSON-LD exchange
-format. This means you can easily compose applications within your own
-toolchain which utilise the powerful features of graph search and
-graph storage.
-
-We use an advanced git-like model, storing append only changes to
-graphs represented in succinct datastructures using
-[terminusdb-store](https://github.com/terminusdb/terminusdb-store). You
-can read a description of the architecture in our [Succinct Data
-Structures and Delta Encoding for Modern
-Databases](docs/whitepaper/terminusdb.pdf) whitepaper.
-
-TerminusDB's *delta-encoding* approach makes possible branch, merge,
-push, pull, clone, time-travel and other git-like operations on a fully
-featured graph database.
+TerminusDB is a lightweight, high-speed immutable database. Our *[delta-encoding]*(docs/whitepaper/terminusdb.pdf) approach makes possible branch, merge, push, pull, clone, time-travel and other git-like operations on a fully featured database.
 
 ## Getting Started
 
@@ -48,12 +33,20 @@ In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
-### Open Console
+![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/CLI.gif)
 
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [http://localhost:6363/](http://localhost:6363/)).
 
-### Known Issues
-On Linux, the AppImage for the desktop client may fail to start, with a message about an incorrectly configured SUID sandbox helper binary. We are looking into this issue. For now, you can work around this issue by starting the binary with the `--no-sandbox` flag.
+
+
+Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
+
+
+
+
+
+
+
+
 
 ## Why
 
