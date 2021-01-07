@@ -158,7 +158,9 @@ admin_pass(Pass) :-
     ;   Pass='root').
 
 setup_unattached_store(Store-Dir) :-
-    tmp_file(temporary_terminus_store, Dir),
+    tmp_file(temporary_terminus_store, TmpName),
+    random_string(RandomString),
+    atomic_list_concat([TmpName, RandomString], Dir),
     make_directory(Dir),
     open_directory_store(Dir, Store),
     initialize_database_with_store('root', Store).
