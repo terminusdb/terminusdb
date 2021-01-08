@@ -215,7 +215,7 @@ jobs:
 
     - name: Run tests
       run: |
-        $TERMINUSDB_SERVER_PACK_DIR="swipl\pack"
+        $env:TERMINUSDB_SERVER_PACK_DIR="swipl\pack"
         swipl\bin\swipl -g halt start.pl store init --key root
         swipl\bin\swipl -g run_tests -g halt start.pl
 
