@@ -39,7 +39,7 @@ jobs:
 
       - name: Copy binary to local filesystem
         run: |
-          id=$(docker create terminusdb/terminusdb-server)
+          id=$(docker create terminusdb/terminusdb-server:local)
           docker cp $id:/app/terminusdb/terminusdb terminusdb
           docker rm -v $id
 
