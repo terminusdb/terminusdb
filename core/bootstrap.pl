@@ -4,7 +4,7 @@
  *
  */
 
-:- set_test_options([run(manual), load(always)]).
+:- set_test_options([run(manual), load(always), concurrent(true)]).
 
 :- [load_paths].
 
