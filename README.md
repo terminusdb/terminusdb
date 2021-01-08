@@ -42,17 +42,10 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 
 
 
+## Why TerminusDB
 
 
-
-
-
-
-## Why
-
-TerminusDB will:
-
-* Quick to get started and spin up your prototype data-intensive application or service
+* Get started in minutes. Whatever language you are using or if you prefer our low-code console, TerminusDB is easy to use - you can have your database running in just a few minutes.
 * All low code and with data model library you can build from
 * Forms, validation, and a flexible document interface too
 * Once you get going you get all that good data science/engineering functionality directly in the database and via TerminusHub 
@@ -74,10 +67,9 @@ help you get started:
 The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programatic access.
 
-The [JavaScript dashboard](https://github.com/terminusdb/terminusdb-dashboard) is an example
-application allowing manipulation of the database using the javascript client fluent syntax.
+The [TerminusDB Console](https://github.com/terminusdb/terminusdb-dashboard) allows low-code manipulation of the database.
 
-The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allow
+The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allows
 you to use a pythonic syntax to query the database.
 
 ## Documentation
