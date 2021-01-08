@@ -199,8 +199,8 @@ jobs:
     - name: Download Windows requirements
       run: |
         $SWI_INSTALL_DIR="C:\Program Files\swipl"
-        cd "$SWI_INSTALL_DIR"
-        ls
+        mkdir swipl
+        cd swipl
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
         cd terminus_store_prolog
@@ -208,9 +208,7 @@ jobs:
         md lib/x64-win64 -ea 0
         Invoke-WebRequest -Uri "https://github.com/terminusdb/terminus_store_prolog/releases/download/$env:TERMINUSDB_STORE_PROLOG_VERSION/libterminus_store.dll" -OutFile lib/x64-win64/libterminus_store.dll
         cd "$env:GITHUB_WORKSPACE"
-        mkdir swipl
         xcopy /E /q "$SWI_INSTALL_DIR" swipl\
-        cd swipl\bin
 
     - name: Package windows tar
       run: |
