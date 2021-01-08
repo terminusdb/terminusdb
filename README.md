@@ -79,14 +79,15 @@ In order to use your TerminusDB through the console rather than
 directly through clients you should look at the documentation on our
 [TerminusDB documentation](https://terminusdb.com/documentation/) website.
 
-## Changes in this Version
-
-[Release Notes](RELEASE_NOTES.md)
-
 ## Community
 
 Come visit us on our [discord server](https://discord.gg/yTJKAma)
-or our [forum!](https://discuss.terminusdb.com)
+or our [forum](https://discuss.terminusdb.com). We are also on [twitter](https://twitter.com/TerminusDB)
+<img align="right" src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/TerminusDB%20color%20mascot.png" width="256px"/>
+
+## Changes in this Version
+
+[Release Notes](RELEASE_NOTES.md)
 
 ## Copyright
 
