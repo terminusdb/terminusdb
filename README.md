@@ -10,11 +10,11 @@ TerminusDB is a open source graph database and document store. It is designed fo
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain which utilise the powerful features of TerminusDB.
-
+<br/><br/>
 
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/Git%20for%20GitHub-480p-210108.gif)
 
-
+<br/>
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel and other git-like operations possible.
 
@@ -44,7 +44,7 @@ In order to build from source, follow the [build from source](docs/BUILD.md) dir
 
 ### Open Console
 
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
+Once you have installed terminusdb-server either from the docker image or built from source you can enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
 
 ### Command Line
 
