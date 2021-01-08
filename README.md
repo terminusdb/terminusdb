@@ -17,7 +17,21 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel and other git-like operations possible.
 
+Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
+
+## Why TerminusDB
+
+
+* Get started in minutes. Whatever language you are using or if you prefer to use our low-code console, TerminusDB is easy to use - you can have your database running in just a few minutes.
+* Generate forms, get validation, and a flexible surfable document interface
+* Built in data science/data engineering functionality directly in the database and via TerminusHub 
+* Clone the production db, branch, merge, collaboration, lineage, versioning 
+* New paradigm in data-centric application development
+
+
 ## Getting Started
+
+We encourage you to read our [Quick Start](https://github.com/terminusdb/terminusdb-bootstrap) guide to better understand how to get started with TerminusDB.
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
@@ -27,6 +41,10 @@ For development and testing we recommend our [TerminusDB Bootstrap](https://gith
 
 In order to build from source, follow the [build from source](docs/BUILD.md) directions.
 
+### Open Console
+
+Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
+
 ### Command Line
 
 In order to start the terminusdb server or simply to explore a store
@@ -34,23 +52,6 @@ from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/CLI.gif)
-
-
-
-
-Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
-
-
-
-## Why TerminusDB
-
-
-* Get started in minutes. Whatever language you are using or if you prefer our low-code console, TerminusDB is easy to use - you can have your database running in just a few minutes.
-* All low code and with data model library you can build from
-* Forms, validation, and a flexible document interface too
-* Once you get going you get all that good data science/engineering functionality directly in the database and via TerminusHub 
-* Clone the production db, branch, merge, collaboration, lineage, versioning 
-* New paradigm in data-centric application development
 
 
 ## Client
@@ -87,7 +88,9 @@ directly through clients you should look at the documentation on our
 Come visit us on our [discord server](https://discord.gg/yTJKAma)
 or our [forum!](https://discuss.terminusdb.com)
 
+## Copyright
 
-
-
-
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+```
+http://www.apache.org/licenses/LICENSE-2.0
+```
