@@ -181,8 +181,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Get SWI Prolog package hash
-      run: choco info swi-prolog | grep Checksum | awk '{ print $3 }' > hash
-      shell: bash
+      run: Invoke-WebRequest -Uri "https://raw.githubusercontent.com/brunoyb/chocolatey-packages/master/swi-prolog/swi-prolog.nuspec" -OutFile package
 
     - name: Cache multiple paths
       id: cache_windows_swipl
@@ -190,7 +189,7 @@ jobs:
       with:
         path: |
           C:\Program Files\swipl
-        key: swi-windows-${{ hashFiles('./hash') }}
+        key: swi-windows-${{ hashFiles('./package') }}
 
     - name: Install SWI Prolog
       if: steps.cache_windows_swipl.outputs.cache-hit != 'true'
