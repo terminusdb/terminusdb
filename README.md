@@ -1,4 +1,4 @@
-![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/main_lockup.png)
+<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/main_lockup.png" width="700px"/>
 
 # For Data-Intensive Applications
 
@@ -10,7 +10,6 @@ TerminusDB is a open source graph database and document store. It is designed fo
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain which utilise the powerful features of TerminusDB.
-
 
 ![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/Git%20for%20GitHub-480p-210108.gif)
 
@@ -51,8 +50,7 @@ In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
-![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/CLI.gif)
-
+<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/CLI.gif" width="700px"/>
 
 ## Client
 
