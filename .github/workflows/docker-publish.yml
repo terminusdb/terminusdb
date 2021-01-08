@@ -180,7 +180,20 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Get SWI Prolog package hash
+      run: choco info swi-prolog | grep Checksum | awk '{ print $3 }' > hash
+      shell: bash
+
+    - name: Cache multiple paths
+      id: cache_windows_swipl
+      uses: actions/cache@v2
+      with:
+        path: |
+          C:\Program Files\swipl
+        key: swi-windows-${{ hashFiles('./hash') }}
+
     - name: Install SWI Prolog
+      if: steps.cache_windows_swipl.outputs.cache-hit != 'true'
       run: choco install swi-prolog
 
     - name: Download Windows requirements
