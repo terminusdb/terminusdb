@@ -32,11 +32,3 @@ api_rollup(System_DB, Auth, Path, _Options, Status_List) :-
             ),
             Read_Write_Objects,
             Status_List).
-
-:- begin_tests(rollup).
-:- use_module(core(util/test_utils)).
-:- use_module(core(query)).
-:- use_module(core(triple)).
-:- use_module(core(transaction)).
-
-:- end_tests(rollup).
