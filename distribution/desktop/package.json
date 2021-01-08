@@ -21,7 +21,8 @@
         "mac": {
             "category": "public.app-category.database",
             "icon": "icon.icns",
-            "asar": false
+            "asar": false,
+            "writeUpdateInfo": false
         },
         "win": {
             "asar": false,
