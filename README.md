@@ -52,7 +52,7 @@ In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
-<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/CLI.gif" width="700px"/>
+<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/cli-github.gif" width="500px"/>
 
 ## Client
 
