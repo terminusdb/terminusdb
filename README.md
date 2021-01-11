@@ -1,4 +1,4 @@
-<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/main_lockup.png" width="700px"/>
+<img src="https://assets.terminusdb.com/images/main_lockup.png" width="700px"/>
 
 # For Data-Intensive Applications
 
