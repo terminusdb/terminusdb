@@ -23,16 +23,16 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 ## Why TerminusDB
 
 
-* Get started in minutes. Whatever language you are using or if you prefer to use our low-code console, TerminusDB is easy to use - you can have your database running in just a few minutes.
-* Generate forms, get validation, and a flexible surfable document interface
-* Built in data science/data engineering functionality directly in the database and via TerminusHub 
-* Clone the production db, branch, merge, collaboration, lineage, versioning 
+* Get started in minutes. Whatever language you're using or if you prefer our low-code console, TerminusDB is easy - you can have your database running in just a few minutes.
+* Generate forms, get validation, and use the flexible, surfable document interface (in console)
+* Data science/data engineering functionality directly in the database and via TerminusHub 
+* Clone the production db, branch, merge, collaboration, lineage, versioning
 * New paradigm in data-centric application development
 
 
 ## Getting Started
 
-We encourage you to read our [Quick Start](https://github.com/terminusdb/terminusdb-bootstrap) guide to better understand how to get started with TerminusDB.
+We encourage you to read our [Quick Start](https://terminusdb.com/docs/quickstart/) guide to better understand how to get started with TerminusDB.
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
