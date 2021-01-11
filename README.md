@@ -12,7 +12,7 @@ It is a native revision control database that is architecturally similar to Git 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain which utilise the powerful features of TerminusDB.
 <br/><br/>
 
-![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/Git%20for%20GitHub-480p-210108.gif)
+![](https://assets.terminusdb.com/images/Git%20for%20GitHub-480p-210108.gif)
 
 <br/>
 
@@ -53,6 +53,7 @@ from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ### Open Console
 
 Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [https://127.0.0.1:6363/](https://127.0.0.1:6363/)).
@@ -71,9 +72,8 @@ TerminusDB will:
 * Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
 * Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
 * Help you automate the production of UI and data-entry by *knowing* what data *means*.
-=======
-<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/cli-github.gif" width="500px"/>
->>>>>>> 18ba0b4 (Update README.md)
+
+<img src="https://assets.terminusdb.com/images/cli-github.gif" width="500px"/>
 
 ## Client
 
