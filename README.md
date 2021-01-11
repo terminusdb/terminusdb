@@ -12,7 +12,7 @@ It is a native revision control database that is architecturally similar to Git 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain which utilise the powerful features of TerminusDB.
 <br/><br/>
 
-![](https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/Git%20for%20GitHub-480p-210108.gif)
+![](https://assets.terminusdb.com/images/Git%20for%20GitHub-480p-210108.gif)
 
 <br/>
 
@@ -52,7 +52,7 @@ In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
-<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/cli-github.gif" width="500px"/>
+<img src="https://assets.terminusdb.com/images/cli-github.gif" width="500px"/>
 
 ## Client
 
