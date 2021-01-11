@@ -18,21 +18,23 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel and other git-like operations possible.
 
-Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
+Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium service that allows users to manage access to databases and collaboratively work on shared resources. 
 
 ## Why TerminusDB
 
 
-* Get started in minutes. Whatever language you are using or if you prefer to use our low-code console, TerminusDB is easy to use - you can have your database running in just a few minutes.
-* Generate forms, get validation, and a flexible surfable document interface
-* Built in data science/data engineering functionality directly in the database and via TerminusHub 
-* Clone the production db, branch, merge, collaboration, lineage, versioning 
+* Get started in minutes. Whatever language you're using or if you prefer our low-code console, TerminusDB is easy - you can have your database running in just a few minutes. And nothing will make you more productive
+* Powerful query allow you to search for repeating patterns using recursion
+* Generate forms, get data validation, and a flexible & surfable document interface (in console)
+* Visual tool to build complex data models, which are easy, maintainable and enforced
+* Data science/data engineering functionality directly in the database and via TerminusHub 
+* Clone the production db, branch, merge, collaboration, lineage, versioning and time travel - Git-like revision control for large databases
 * New paradigm in data-centric application development
 
 
 ## Getting Started
 
-We encourage you to read our [Quick Start](https://github.com/terminusdb/terminusdb-bootstrap) guide to better understand how to get started with TerminusDB.
+We encourage you to read our [Quick Start](https://terminusdb.com/docs/quickstart/) guide to better understand how to get started with TerminusDB.
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
@@ -51,25 +53,6 @@ Once you have installed terminusdb-server either from the docker image or built 
 In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
-
-### Open Console
-
-Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [https://127.0.0.1:6363/](https://127.0.0.1:6363/)).
-
-### Known Issues
-On Linux, the AppImage for the desktop client may fail to start, with a message about an incorrectly configured SUID sandbox helper binary. We are looking into this issue. For now, you can work around this issue by starting the binary with the `--no-sandbox` flag.
-
-## Why
-
-TerminusDB will:
-
-* Give you collaboration features currently available in git, but designed to work well with large datasets
-* Make complex data models easy, maintainable and enforced.
-* Overcome the Object Impedance mismatch without turning your Database into an incomprehensible soup.
-* Allow you to search for repeating patterns using recursion.
-* Enable the sharing of data using linked open data formats RDF and JSON-LD making scientific or organisational information sharing easy.
-* Branch, clone, merge, time-travel, push and pull all facilitated by our delta-encoding approach
-* Help you automate the production of UI and data-entry by *knowing* what data *means*.
 
 <img src="https://assets.terminusdb.com/images/cli-github.gif" width="500px"/>
 
