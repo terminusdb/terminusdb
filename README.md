@@ -52,8 +52,6 @@ In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
 Interface](docs/CLI.md).
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ### Open Console
 
 Once you have installed terminusdb-server either from the docker image or built from source you can go simply enter the server location into your browser to view your database from the console `"http://SERVER:PORT/"`. (the default is: [https://127.0.0.1:6363/](https://127.0.0.1:6363/)).
@@ -89,12 +87,8 @@ help you get started:
 The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programatic access.
 
-<<<<<<< HEAD
 The [JavaScript Console](https://github.com/terminusdb/terminusdb-console) allows manipulation 
 of the database using the javascript client fluent syntax.
-=======
-The [TerminusDB Console](https://github.com/terminusdb/terminusdb-dashboard) allows low-code manipulation of the database.
->>>>>>> 18ba0b4 (Update README.md)
 
 The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allows
 you to use a pythonic syntax to query the database.
