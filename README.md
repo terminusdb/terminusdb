@@ -18,15 +18,17 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel and other git-like operations possible.
 
-Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium SaaS that allows users to manage access to databases and collaboratively work on shared resources. 
+Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium service that allows users to manage access to databases and collaboratively work on shared resources. 
 
 ## Why TerminusDB
 
 
-* Get started in minutes. Whatever language you're using or if you prefer our low-code console, TerminusDB is easy - you can have your database running in just a few minutes.
-* Generate forms, get validation, and use the flexible, surfable document interface (in console)
+* Get started in minutes. Whatever language you're using or if you prefer our low-code console, TerminusDB is easy - you can have your database running in just a few minutes. And nothing will make you more productive
+* Powerful query allow you to search for repeating patterns using recursion
+* Generate forms, get data validation, and a flexible & surfable document interface (in console)
+* Visual tool to build complex data models, which are easy, maintainable and enforced
 * Data science/data engineering functionality directly in the database and via TerminusHub 
-* Clone the production db, branch, merge, collaboration, lineage, versioning
+* Clone the production db, branch, merge, collaboration, lineage, versioning and time travel - Git-like revision control for large databases
 * New paradigm in data-centric application development
 
 
