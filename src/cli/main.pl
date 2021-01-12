@@ -272,13 +272,37 @@ opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
            help('The author of the rebase')]
          ]).
 opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
-         'Creates an optimisation layer for queries on the given database head.',
+         'Creates an optimisation layer for queries on the given commit.',
          [[opt(help),
            type(boolean),
            longflags([help]),
            shortflags([h]),
            default(false),
            help('print help for the `rollup` command')]
+         ]).
+opt_spec(bundle,'terminusdb bundle DATABASE_SPEC OPTIONS',
+         'Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `bundle` command')],
+          [opt(output),
+           type(atom),
+           longflags([output]),
+           shortflags([o]),
+           default('_'),
+           help('file name to use for pack output file (defaults to descriptor based name).')]
+         ]).
+opt_spec(unbundle,'terminusdb unbundle DATABASE_SPEC FILE OPTIONS',
+         'Unpack .',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `unbundle` command')]
          ]).
 
 % subcommands
@@ -607,13 +631,13 @@ command_subcommand(Command,Subcommand) :-
 run([Command|Rest]) :-
     opt_spec(Command,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
-    (   member(help(true), Opts)
+    (   option(help(true), Opts)
     ->  terminusdb_help(Command,Opts)
     ;   run_command(Command,Positional,Opts)).
 run([Command,Subcommand|Rest]) :-
     opt_spec(Command,Subcommand,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
-    (   member(help(true), Opts)
+    (   option(help(true), Opts)
     ->  terminusdb_help(Command,Subcommand,Opts)
     ;   run_command(Command,Subcommand,Positional,Opts)).
 run([Command|_Rest]) :-
@@ -629,12 +653,12 @@ run(_) :-
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
 run_command(test,_Positional,Opts) :-
-    (   member(test([]),Opts)
+    (   option(test([]),Opts)
     ->  run_tests
-    ;   member(test(Test), Opts),
+    ;   option(test(Test), Opts),
         run_tests(Test)).
 run_command(serve,_Positional,Opts) :-
-    (   member(interactive(true),Opts)
+    (   option(interactive(true),Opts)
     ->  terminus_server([serve|Opts], false),
         prolog
     ;   terminus_server([serve|Opts], true)).
@@ -652,8 +676,8 @@ run_command(optimize,Databases,_Opts) :-
                ))).
 run_command(query,[Database,Query],Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
-    member(author(Author), Opts),
-    member(author(Message), Opts),
+    option(author(Author), Opts),
+    option(author(Message), Opts),
     create_context(Descriptor,commit_info{ author : Author,
                                            message : Message}, Context),
     api_report_errors(
@@ -662,7 +686,9 @@ run_command(query,[Database,Query],Opts) :-
             context_extend_prefixes(Context,Prefixes,Context0),
             read_query_term_from_atom(Query,AST),
             query_response:run_context_ast_jsonld_response(Context0, AST, Response),
-            get_dict(prefixes,Context0, Final_Prefixes),
+            get_dict(prefixes, Context0, Context_Prefixes),
+            default_prefixes(Defaults),
+            put_dict(Defaults, Context_Prefixes, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
             write(String)
         )).
@@ -670,22 +696,22 @@ run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
-    member(remote(Remote_Name_Atom), Opts),
+    option(remote(Remote_Name_Atom), Opts),
     atom_string(Remote_Name_Atom,Remote_Name),
 
-    member(branch(Branch), Opts),
-    member(remote_branch(Remote_Branch), Opts),
+    option(branch(Branch), Opts),
+    option(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
     ->  Branch = Remote_Branch
     ;   true),
 
-    member(user(User), Opts),
+    option(user(User), Opts),
     (   var(User)
     ->  prompt(_,'Username: '),
         read_string(user_input, ['\n'], [], _, User)
     ;   true),
 
-    member(password(Password), Opts),
+    option(password(Password), Opts),
     (   var(Password)
     ->  prompt(_,'Password: '),
         read_string(user_input, ['\n'], [], _, Password)
@@ -705,7 +731,7 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
         re_matchsub('^.*/([^/]*)$', Remote_URL, Match, [])
     % Get the DB name from the URI and organization from switches
     ->  DB = (Match.1),
-        member(organization(Organization),Opts)
+        option(organization(Organization),Opts)
     ;   DB_Path_List = [DB_Path],
         re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
     % Get the DB and organization name from the argument
@@ -714,21 +740,21 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     % Get the DB from argument and organization from switches
     ;   DB_Path_List = [DB_Path],
         DB = DB_Path,
-        member(organization(Organization),Opts)
+        option(organization(Organization),Opts)
     ),
 
-    member(label(Label), Opts),
+    option(label(Label), Opts),
     (   var(Label)
     ->  Label = DB
     ;   true),
-    member(comment(Comment), Opts),
-    member(public(Public), Opts),
-    member(user(User), Opts),
+    option(comment(Comment), Opts),
+    option(public(Public), Opts),
+    option(user(User), Opts),
     (   var(User)
     ->  prompt(_,'Username: '),
         read_string(user_input, ['\n'], [], _, User)
     ;   true),
-    member(password(Password), Opts),
+    option(password(Password), Opts),
     (   var(Password)
     ->  prompt(_,'Password: '),
         read_string(user_input, ['\n'], [], _, Password)
@@ -754,20 +780,20 @@ run_command(pull,[Path],Opts) :-
             error(not_a_valid_local_branch(Descriptor), _))
     ),
 
-    member(remote(Remote_Name_Atom), Opts),
+    option(remote(Remote_Name_Atom), Opts),
     atom_string(Remote_Name_Atom,Remote_Name),
-    member(remote_branch(Remote_Branch), Opts),
+    option(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
     ->  Branch = Remote_Branch
     ;   true),
 
-    member(user(User), Opts),
+    option(user(User), Opts),
     (   var(User)
     ->  prompt(_,'Username: '),
         read_string(user_input, ['\n'], [], _, User)
     ;   true),
 
-    member(password(Password), Opts),
+    option(password(Password), Opts),
     (   var(Password)
     ->  prompt(_,'Password: '),
         read_string(user_input, ['\n'], [], _, Password)
@@ -793,18 +819,18 @@ run_command(fetch,[Path],Opts) :-
             error(not_a_valid_local_branch(Descriptor), _))
     ),
 
-    member(remote(Remote_Name_Atom), Opts),
+    option(remote(Remote_Name_Atom), Opts),
     atom_string(Remote_Name_Atom, Remote_Name),
     % FIXME NOTE: This is very awkward and brittle.
     atomic_list_concat([Path,'/',Remote_Name,'/_commits'], Remote_Path),
 
-    member(user(User), Opts),
+    option(user(User), Opts),
     (   var(User)
     ->  prompt(_,'Username: '),
         read_string(user_input, ['\n'], [], _, User)
     ;   true),
 
-    member(password(Password), Opts),
+    option(password(Password), Opts),
     (   var(Password)
     ->  prompt(_,'Password: '),
         read_string(user_input, ['\n'], [], _, Password)
@@ -822,7 +848,7 @@ run_command(fetch,[Path],Opts) :-
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    memberchk(author(Author),Opts),
+    option(author(Author),Opts),
     api_report_errors(
         rebase,
         (   Strategy_Map = [],
@@ -844,6 +870,44 @@ run_command(rollup,[Path],_Opts) :-
         api_rollup(System_DB, Auth, Path, [], _Status_List)),
 
     format(current_output, "~nRollup performed~n", []).
+run_command(bundle,[Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(output(Filename), Opts),
+    (   var(Filename)
+    ->  www_form_encode(Path,Base),
+        atomic_list_concat([Base,".bundle"],Filename)
+    ;   true),
+
+    option(branch(Branch_Target), Opts),
+    api_report_errors(
+        bundle,
+        bundle(System_DB, Auth, Path, Option)),
+
+    (   some(Payload) = Option
+    ->  format(current_output, "~nBundle operation performed~n", []),
+        format(current_output, "~nExporting as ~s~n", [Filename]),
+        open(Filename, write, Stream),
+        format(Stream, "~s", [Payload])
+    ;   format(current_output, "~nNo data to be bundled~n", [])).
+run_command(unbundle,[Path, Filename], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    catch(
+        (   read_file_to_string(Filename, Payload, []),
+
+            api_report_errors(
+                unbundle,
+                unbundle(System_DB, Auth, Path, Payload)),
+
+            format(current_output, "~nUnbundle successful~n", [])),
+        E,
+        (   E = error(existence_error(source_sink, File), _)
+        ->  format(current_output, "~nFile ~s does not exist", [File])
+        ;   throw(E))).
+*/
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
@@ -853,7 +917,7 @@ run_command(branch,create,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
-    member(origin(Origin_Base), Opts),
+    option(origin(Origin_Base), Opts),
     (   Origin_Base = false
     ->  Origin_Option = none
     ;   Origin_Option = some(Origin_Base)),
@@ -876,15 +940,15 @@ run_command(db,create,[DB_Path],Opts) :-
     ->  Organization = (Match.1),
         DB = (Match.2)
     ;   DB = DB_Path,
-        member(organization(Organization),Opts)
+        option(organization(Organization),Opts)
     ),
-    member(label(Label), Opts),
-    member(comment(Comment), Opts),
-    member(public(Public), Opts),
-    member(schema(Schema), Opts),
-    member(data_prefix(Data_Prefix), Opts),
-    member(schema_prefix(Schema_Prefix), Opts),
-    member(prefixes(Prefixes_Atom), Opts),
+    option(label(Label), Opts),
+    option(comment(Comment), Opts),
+    option(public(Public), Opts),
+    option(schema(Schema), Opts),
+    option(data_prefix(Data_Prefix), Opts),
+    option(schema_prefix(Schema_Prefix), Opts),
+    option(prefixes(Prefixes_Atom), Opts),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
     api_report_errors(
@@ -899,27 +963,27 @@ run_command(db,delete,[DB_Path],Opts) :-
     ->  Organization = (Match.1),
         DB = (Match.2)
     ;   DB = DB_Path,
-        member(organization(Organization), Opts)
+        option(organization(Organization), Opts)
     ),
-    member(force(Force_Delete), Opts),
+    option(force(Force_Delete), Opts),
     api_report_errors(
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
 run_command(store,init, _, Opts) :-
-    (   member(key(Key), Opts)
+    (   option(key(Key), Opts)
     ->  true
     ;   format(current_output, "You must supply an administrator key to initialize the database!~n",[]),
         fail),
-    member(force(Force), Opts),
+    option(force(Force), Opts),
     api_report_errors(
         store_init,
         initialize_database(Key,Force)),
     format('Successfully initialised database!!!~n').
 run_command(csv,delete,[Path,Name],Opts) :-
     super_user_authority(Auth),
-    member(message(Message), Opts),
-    member(author(Author), Opts),
+    option(message(Message), Opts),
+    option(author(Author), Opts),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         csv,
@@ -934,13 +998,13 @@ run_command(csv,list,[Path],_Opts) :-
         csv,
         csv_list(System_DB, Auth, Path, Names,_{})),
     forall(
-        member(Name, Names),
+        option(Name, Names),
         format(current_output,'~w~n',[Name])).
 run_command(csv,load,[Path|Files],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    member(message(Message), Opts),
-    member(author(Author), Opts),
+    option(message(Message), Opts),
+    option(author(Author), Opts),
     maplist([File,File_Name=File]>>file_base_name(File, File_Name),
             Files,
             File_Map),
@@ -953,8 +1017,8 @@ run_command(csv,load,[Path|Files],Opts) :-
 run_command(csv,update,[Path|Files],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    member(message(Message), Opts),
-    member(author(Author), Opts),
+    option(message(Message), Opts),
+    option(author(Author), Opts),
     maplist([File,File_Name=File]>>file_base_name(File, File_Name),
             Files,
             File_Map),
@@ -970,7 +1034,7 @@ run_command(csv,dump,[Path,File],Opts) :-
     api_report_errors(
         csv,
         csv_dump(System_DB, Auth, Path, File, Temp, [])),
-    member(output(Output), Opts),
+    option(output(Output), Opts),
     ignore(Output = File),
     copy_file(Temp, Output),
     format(current_output,'Successfully dumped CSV to ~s~n',[Output]).
@@ -1000,7 +1064,7 @@ run_command(remote,'get-url',[Path|Remote_Name_List],Opts) :-
     create_context(system_descriptor{}, System_DB),
 
     (   Remote_Name_List = []
-    ->  member(remote(Remote_Name), Opts)
+    ->  option(remote(Remote_Name), Opts)
     ;   Remote_Name_List = [Remote_Name]),
 
     api_report_errors(
@@ -1017,7 +1081,7 @@ run_command(remote,list,[Path],_Opts) :-
 run_command(triples,dump,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    member(format(Format_Atom), Opts),
+    option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
     api_report_errors(
         triples,
@@ -1026,9 +1090,9 @@ run_command(triples,dump,[Path],Opts) :-
 run_command(triples,update,[Path,File],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    member(message(Message), Opts),
-    member(author(Author), Opts),
-    member(format(Format_Atom), Opts),
+    option(message(Message), Opts),
+    option(author(Author), Opts),
+    option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
     open(File,read,Stream),
     read_string(Stream, _, TTL),
@@ -1042,9 +1106,9 @@ run_command(triples,update,[Path,File],Opts) :-
 run_command(triples,load,[Path,File],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    member(message(Message), Opts),
-    member(author(Author), Opts),
-    member(format(Format_Atom), Opts),
+    option(message(Message), Opts),
+    option(author(Author), Opts),
+    option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
     open(File,read,Stream),
     read_string(Stream, _, TTL),
@@ -1078,6 +1142,7 @@ api_error_cli(API, Error) :-
     json_cli_code(JSON,Status),
     Msg = (JSON.'api:message'),
     format(user_error,"Error: ~s~n",[Msg]),
+    json_write_dict(user_error,JSON, []),
     halt(Status).
 
 initialise_hup :-
@@ -1116,13 +1181,13 @@ terminusdb_help(Opts) :-
     ).
 
 terminusdb_help(Command,Opts) :-
-    (   member(markdown(true),Opts)
+    (   option(markdown(true),Opts)
     ->  format_help_markdown(Command)
     ;   format_help(Command)
     ).
 
 terminusdb_help(Command,Subcommand,Opts) :-
-    (   member(markdown(true),Opts)
+    (   option(markdown(true),Opts)
     ->  format_help_markdown(Command,Subcommand)
     ;   format_help(Command,Subcommand)
     ).
@@ -1187,7 +1252,6 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
-
 bind_vars([],_).
 bind_vars([Name=Var|Tail],AST) :-
     Var = v(Name),
@@ -1196,3 +1260,5 @@ bind_vars([Name=Var|Tail],AST) :-
 read_query_term_from_atom(Query, AST) :-
     read_term_from_atom(Query, AST, [variable_names(Names)]),
     bind_vars(Names,AST).
+
+fetch_payload(Payload, _, none, some(Payload)).

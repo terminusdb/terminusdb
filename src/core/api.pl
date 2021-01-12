@@ -111,7 +111,13 @@
               list_remotes/4,
 
               % api_rollup.pl
-              api_rollup/5
+              api_rollup/5,
+
+              % api_bundle.pl
+              api_bundle/4,
+
+              % api_unbundle.pl
+              api_unbundle/4
           ]).
 
 :- use_module(api/api_init).
@@ -141,3 +147,5 @@
 :- use_module(api/api_info).
 :- use_module(api/api_remote).
 :- use_module(api/api_rollup).
+:- use_module(api/api_bundle).
+:- use_module(api/api_unbundle).

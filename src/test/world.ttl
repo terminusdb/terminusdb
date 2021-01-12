@@ -1,5 +1,5 @@
-@prefix world: <http://dacura.cs.tcd.ie/data/world#> .
-@prefix worldOnt: <http://dacura.cs.tcd.ie/data/worldOntology#> .
+@prefix world: <http://example.com/data/world/> .
+@prefix worldOnt: <http://example.com/schema/worldOntology#> .
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
@@ -8,36 +8,41 @@
 @prefix foaf: <http://xmlns.com/foaf/0.1/>.
 
 world:rome a worldOnt:City ;
-	rdfs:label "Rome" ;
+    rdfs:label "Rome"@en ;
+  	worldOnt:name "Rome"^^xsd:string ;
 	worldOnt:neighbour world:carthage ;
 	worldOnt:general world:scipio .
 
 world:scipio a worldOnt:Person ;
-	rdfs:label "Africanus" ;
+	rdfs:label "Africanus"@en ;
 	worldOnt:name "Scipio"^^xsd:string ;
-	worldOnt:age "30"^^xsd:integer ;
+    worldOnt:age "30"^^xsd:decimal ;
+    worldOnt:address "3 palace street, Rome"@en ;
 	worldOnt:child world:scipioJr ;
 	worldOnt:child world:scipioJrs .
 
 world:carthage a worldOnt:City ;
-	rdfs:label "Carthage" ;
+    rdfs:label "Carthage"@en ;
+  	worldOnt:name "Carthage"^^xsd:string ;
 	worldOnt:neighbour world:rome ;
 	worldOnt:general world:hannibal .
 
 world:hannibal a worldOnt:Person ;
-	rdfs:label "Hannibal" ;
-	worldOnt:name "Hannibal"^^xsd:string ;
-	worldOnt:age "30"^^xsd:integer .
+	rdfs:label "Hannibal"@en ;
+    worldOnt:name "Hannibal"^^xsd:string ;
+    worldOnt:address "45 temple road, Carthage"@en ;
+	worldOnt:age "30"^^xsd:decimal .
 
 world:scipioJr a worldOnt:Person ;
-	rdfs:label "Africanus Junior" ;
-	worldOnt:name "Scipio Junior"^^xsd:string ;
-	worldOnt:age "10"^^xsd:integer .
+	rdfs:label "Africanus Junior"@en ;
+    worldOnt:name "Scipio Junior"^^xsd:string ;
+    worldOnt:address "3 palace street, Rome"@en ;
+	worldOnt:age "10"^^xsd:decimal .
 
 world:scipioJrs a worldOnt:Person ;
-	rdfs:label "Africanus Junioress" ;
+    rdfs:label "Africanus Junioress"@en ;
+    worldOnt:address "3 palace street, Rome"@en ;
   	worldOnt:name "Scipio Junioress"^^xsd:string ;
-    worldOnt:personal_name "Mary-Anne Scipio"^^xsd:string ;
-	worldOnt:age "8"^^xsd:integer .
+	worldOnt:age "8"^^xsd:decimal .
 
 
