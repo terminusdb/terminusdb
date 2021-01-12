@@ -2,7 +2,7 @@
     "name": "terminusdb-desktop",
     "productName": "TerminusDB",
     "version": "4.1.0",
-    "private": true,
+    "license": "Apache-2.0",
     "main": "public/electron.js",
     "scripts": {
         "electron-dev": "electron --no-sandbox .",
