@@ -36,4 +36,4 @@ docs:
 	cp docs/terminusdb.1.ronn docs/CLI.md
 
 clean:
-	rm terminusdb
+	rm -f terminusdb
