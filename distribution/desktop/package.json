@@ -21,7 +21,8 @@
         "mac": {
             "category": "public.app-category.database",
             "icon": "icon.icns",
-            "asar": false
+            "asar": false,
+            "target": "dmg"
         },
         "dmg": {
             "writeUpdateInfo": false
