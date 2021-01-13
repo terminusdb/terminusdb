@@ -1,4 +1,4 @@
-@prefix worldOnt: <http://example.com/schema/worldOntology#> .
+@prefix worldOnt: <http://example.com/data/worldOntology#> .
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
@@ -11,13 +11,13 @@ worldOnt:OneName a owl:Restriction ;
 
 worldOnt:Entity a owl:Class ;
   rdfs:subClassOf worldOnt:OneName ;
-  rdfs:comment "Abstract superclass of a thingy"@en ;
-  rdfs:label "Entity"@en .
+  rdfs:comment "Abstract superclass of a thingy" ;
+  rdfs:label "Entity" .
 
 worldOnt:City a owl:Class ;
   rdfs:subClassOf worldOnt:Entity ;
-  rdfs:label "City"@en ;
-  rdfs:comment "A City"@en .
+  rdfs:label "City" ;
+  rdfs:comment "A City" .
 
 worldOnt:AtLeastOneAddress a owl:Restriction ;
   owl:onProperty worldOnt:address ;
@@ -25,45 +25,20 @@ worldOnt:AtLeastOneAddress a owl:Restriction ;
 
 worldOnt:Person a owl:Class ;
   rdfs:subClassOf worldOnt:Entity, worldOnt:AtLeastOneAddress ;
-  rdfs:label "Person"@en ;
-  rdfs:comment "A Person"@en .
+  rdfs:label "Person" ;
+  rdfs:comment "A Person" .
 
 worldOnt:name a owl:DatatypeProperty ;
-  rdfs:label "name"@en ;
-  rdfs:comment "Name of a person, place or thing"@en ;
   rdfs:domain worldOnt:Entity ;
   rdfs:range xsd:string .
 
-worldOnt:age a owl:DatatypeProperty ;
-  rdfs:label "age"@en ;
-  rdfs:comment "Age of a person"@en ;
-  rdfs:domain worldOnt:Entity ;
-  rdfs:range xsd:decimal .
-
-worldOnt:address
-  a owl:DatatypeProperty ;
-  rdfs:label "Address"@en ;
-  rdfs:comment "An address"@en ;
+worldOnt:personal_name a owl:DatatypeProperty ;
+  rdfs:subPropertyOf worldOnt:name ;
   rdfs:domain worldOnt:Person ;
   rdfs:range xsd:string .
 
-worldOnt:general
-  a owl:ObjectProperty ;
-  rdfs:label "general"@en ;
-  rdfs:comment "A general of a city"@en ;
-  rdfs:domain worldOnt:City ;
-  rdfs:range worldOnt:Person .
-
-worldOnt:neighbour
-  a owl:ObjectProperty ;
-  rdfs:label "general"@en ;
-  rdfs:comment "A general of a city"@en ;
-  rdfs:domain worldOnt:City ;
-  rdfs:range worldOnt:City .
-
-worldOnt:child
-  a owl:ObjectProperty ;
-  rdfs:label "child"@en ;
-  rdfs:comment "Object is a child of subject"@en ;
+worldOnt:address a owl:DatatypeProperty ;
+  rdfs:label "Address" ;
+  rdfs:comment "An address" ;
   rdfs:domain worldOnt:Person ;
-  rdfs:range worldOnt:Person .
+  rdfs:range xsd:string .

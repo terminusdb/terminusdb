@@ -32,13 +32,13 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                                   repository_descriptor : Their_Repository_Descriptor
                               },
 
-    %do_or_die(open_descriptor(Their_Branch_Descriptor, _),
-    %          error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
-
     resolve_absolute_string_descriptor(Their_Repository_Path, Their_Repository_Descriptor),
     % 1. fetch
     remote_fetch(System_DB, Local_Auth, Their_Repository_Path, Fetch_Predicate,
                  _New_Head_Layer_Id, Head_Has_Updated),
+
+    do_or_die(open_descriptor(Their_Branch_Descriptor, _),
+              error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
 
     % 2. try fast forward - alert front end if impossible.
     catch_with_backtrace(
