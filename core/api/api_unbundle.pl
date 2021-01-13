@@ -18,19 +18,19 @@ unbundle(System_DB, Auth, Path, Payload) :-
         (branch_descriptor{} :< Branch_Descriptor),
         error(push_requires_branch(Branch_Descriptor),_)),
 
-    % 1. Query for repo name (packed at beginning of file)
-    % (32 is length of md5 hash)
-    sub_string(Payload, 0, 32, After, Remote_Name),
-    sub_string(Payload, 32, After, 0, Pull_Payload),
-
     setup_call_cleanup(
-        % 2. create repo
-        add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle"),
-        % 3. pull from repo with fake remote predicate
+        % 1. create repo
+        (   random_string(String),
+            md5_hash(String, Remote_Name_Atom, []), % 32 chars.
+            atom_string(Remote_Name_Atom,Remote_Name),
+            add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle")
+        ),
+        % 2. pull from repo with fake remote predicate
         pull(System_DB, Auth, Path, Remote_Name, "main",
-             {Pull_Payload}/[_URL,_Repository_Head_Option,some(P)]>>(Pull_Payload = P),
+             {Payload}/[_URL,_Repository_Head_Option,some(P)]>>(
+                 Payload = P),
              _Result
             ),
-        % 4. remove repo
+        % 3. remove repo
         remove_remote(System_DB, Auth, Path, Remote_Name)
     ).

@@ -296,7 +296,7 @@ opt_spec(bundle,'terminusdb bundle DATABASE_SPEC OPTIONS',
            help('file name to use for pack output file (defaults to descriptor based name).')]
          ]).
 opt_spec(unbundle,'terminusdb unbundle DATABASE_SPEC FILE OPTIONS',
-         'Unpack .',
+         'Unbundle a bundle file.',
          [[opt(help),
            type(boolean),
            longflags([help]),

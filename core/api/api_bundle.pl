@@ -9,7 +9,7 @@
 :- use_module(core(api/api_remote)).
 :- use_module(core(api/db_push)).
 
-bundle(System_DB, Auth, Path, Final_Payload, Options) :-
+bundle(System_DB, Auth, Path, Payload, Options) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Path, Branch_Descriptor),
@@ -23,7 +23,8 @@ bundle(System_DB, Auth, Path, Final_Payload, Options) :-
     setup_call_cleanup(
         % Setup
         (   random_string(String),
-            md5_hash(String, Remote_Name, []), % 32 chars.
+            md5_hash(String, Remote_Name_Atom, []), % 32 chars.
+            atom_string(Remote_Name_Atom,Remote_Name),
             add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle"),
             % This is crazy stupid... It should be possible to work with a repository without
             % creating empty layers.
@@ -32,8 +33,7 @@ bundle(System_DB, Auth, Path, Final_Payload, Options) :-
         % Call
         (   push(System_DB, Auth, Path, Remote_Name, "main", Options,
                  {Payload}/[_,P]>>(P = Payload),
-                 _),
-            format(string(Final_Payload),'~s~s', [Remote_Name, Payload])
+                 _)
         ),
         % Cleanup
         remove_remote(System_DB, Auth, Path, Remote_Name)
