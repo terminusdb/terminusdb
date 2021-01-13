@@ -1811,6 +1811,10 @@ filter_transaction(type_name_filter{ type : inference, names : Names}, Transacti
 :- use_module(core(api)).
 :- use_module(core(transaction)).
 
+query_test_response_test_branch(Query, Response) :-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    query_test_response(Descriptor, Query, Response).
+
 query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
@@ -1842,7 +1846,11 @@ test(subsumption, [])
     ord_seteq(Bindings_Set,Expected).
 
 
-test(substring, [])
+test(substring, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query = _{'@type' : "Substring",
               string : _{ '@type' : "Datatype",
@@ -1863,13 +1871,17 @@ test(substring, [])
                             _{'@type' : "xsd:string",
                               '@value' : "Substring"}}
              },
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':2},
       'Substring':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"es"}
      } :< Res.
 
-test(typecast_string_integer, [])
+test(typecast_string_integer, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query = _{'@type' : "Typecast",
               typecast_value : _{ '@type' : "Datatype",
@@ -1882,12 +1894,16 @@ test(typecast_string_integer, [])
                                   _{'@type' : "xsd:string",
                                     '@value' : "Casted"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Casted':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                  '@value':202}} :< Res.
 
-test(eval, [])
+test(eval, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query = _{'@type' : "Eval",
               expression :
@@ -1903,7 +1919,7 @@ test(eval, [])
                          _{'@type' : "xsd:string",
                            '@value' : "Sum"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -1949,7 +1965,11 @@ test(add_quad, [
     query_test_response(Descriptor, Query, JSON),
     JSON.inserts = 1.
 
-test(upper, []) :-
+test(upper, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Query = _{'@type' : "Upper",
               left : _{ '@type' : "Datatype",
                         datatype : _{ '@type' : "xsd:string",
@@ -1959,13 +1979,17 @@ test(upper, []) :-
                         _{'@type' : "xsd:string",
                           '@value' : "Upcased"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Upcased':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                   '@value': "AAAA"}} :< Res.
 
 
-test(unique, []) :-
+test(unique, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Query = _{'@type' : "Unique",
               base : _{ '@type' : "Datatype",
                         datatype : _{ '@type' : "xsd:string",
@@ -1989,11 +2013,15 @@ test(unique, []) :-
                       _{'@type' : "xsd:string",
                         '@value' : "URI"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
 
-test(split, []) :-
+test(split, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Query = _{'@type' : "Split",
               split_string : _{ '@type' : "Datatype",
                                 datatype : _{ '@type' : "xsd:string",
@@ -2006,7 +2034,7 @@ test(split, []) :-
                              _{'@type' : "xsd:string",
                                '@value' : "Split"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Split': [_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"you"},
                 _{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"should"},
@@ -2015,7 +2043,11 @@ test(split, []) :-
                  :< Res.
 
 
-test(join, []) :-
+test(join, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Query = _{'@type' : "Join",
               join_list : _{ '@type' : 'Array',
                              array_element :
@@ -2047,12 +2079,16 @@ test(join, []) :-
                        _{'@type' : "xsd:string",
                          '@value' : "Join"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
                 '@value':"you_should_be_joined"}} :< Res.
 
-test(like, []) :-
+test(like, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Query = _{'@type' : "Like",
               left : _{ '@type' : "Datatype",
                           datatype : _{ '@type' : "xsd:string",
@@ -2065,12 +2101,16 @@ test(like, []) :-
                                   _{'@type' : "xsd:string",
                                     '@value' : "Similarity"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                      '@value':1.0}} :< Res.
 
-test(exp, []) :-
+test(exp, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     Query = _{'@type' : "Eval",
               expression :
@@ -2086,7 +2126,7 @@ test(exp, []) :-
                          _{'@type' : "xsd:string",
                            '@value' : "Exp"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Exp':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value':4}} :< Res.
@@ -2094,7 +2134,8 @@ test(exp, []) :-
 test(limit, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))]) :-
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     make_branch_descriptor('admin', 'test', Descriptor),
     create_context(Descriptor, commit_info{ author : "test",
@@ -2135,7 +2176,11 @@ test(limit, [
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
-test(indexed_get, [])
+test(indexed_get,
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+    )
 :-
     Query =
     _{'@type' : 'Get',
@@ -2155,7 +2200,7 @@ test(indexed_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res|_] = JSON.bindings,
     % Should this really be without a header?
     _{'First':_{'@type':'http://www.w3.org/2001/XMLSchema#string','@value':"Duration"},
@@ -2187,7 +2232,11 @@ test(indexed_get, [])
 }
 */
 
-test(named_get, [])
+test(named_get, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query =
     _{'@type' : 'Get',
@@ -2208,7 +2257,7 @@ test(named_get, [])
         remote_uri : _{ '@type' : "xsd:anyURI",
                         '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [First|_] = JSON.bindings,
 
     _{'Bike_Number': _{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2217,7 +2266,11 @@ test(named_get, [])
                     '@value':"790"}
      } :< First.
 
-test(named_get_two, [])
+test(named_get_two, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query =
     _{
@@ -2299,7 +2352,7 @@ test(named_get_two, [])
          }
     },
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
 
     [Res|_] = JSON.bindings,
     _{'Bike':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2323,7 +2376,9 @@ test(named_get_two, [])
 
 
 test(turtle_get, [
-         %blocked('Turtle translation in JSON-LD not working yet')
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
      ]
     )
 :-
@@ -2358,14 +2413,18 @@ test(turtle_get, [
          }
     },
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     ['First','Second','Third'] = (JSON.'api:variable_names'),
     [One|_] = (JSON.'bindings'),
     One = _{'First':'http://terminusdb.com/schema/system',
             'Second':'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
             'Third':'http://www.w3.org/2002/07/owl#Ontology'}.
 
-test(concat, [])
+test(concat, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query =
     _{'@type' : 'Concatenate',
@@ -2393,7 +2452,11 @@ test(concat, [])
     _{'Concatenated':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                        '@value':"FirstSecond"}} :< Res.
 
-test(sum, [])
+test(sum, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query =
     _{'@type' : 'Sum',
@@ -2416,12 +2479,16 @@ test(sum, [])
         variable_name : _{ '@type' : "xsd:string",
                            '@value' : "Sum" }}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
               '@value': 3}} :< Res.
 
-test(length, [])
+test(length, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Query = _{'@type' : "Length",
               length_list : _{'@type' : 'Array',
@@ -2441,13 +2508,17 @@ test(length, [])
                           variable_name : _{ '@type' : "xsd:string",
                                              '@value'  : "Length"}}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                  '@value': 2}} :< Res.
 
 
-test(length_of_var, [])
+test(length_of_var, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
 :-
     Commit_Info = commit_info{ author : "automated test framework",
                                message : "testing"},
@@ -2464,7 +2535,11 @@ test(length_of_var, [])
     (First.'N'.'@value') = 3.
 
 
-test(order_by, []) :-
+test(order_by, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     Query = _{'@type' : "OrderBy",
               variable_ordering : [_{ '@type' : "VariableOrdering",
@@ -2498,13 +2573,17 @@ test(order_by, []) :-
                                        right : _{'@type' : "xsd:string",
                                                  '@value' : 20}}}]}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':10}},
                      _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
                              '@value':20}}].
 
-test(order_by_desc, []) :-
+test(order_by_desc, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     Query = _{'@type' : "OrderBy",
               variable_ordering : [_{ '@type' : "VariableOrdering",
@@ -2899,11 +2978,14 @@ test(select, []) :-
                                  }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-
     [_{'Subject':'terminusdb:///system/data/admin'}] = JSON.bindings.
 
 
-test(double_select, []) :-
+test(double_select, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     Query = _{ '@type': "woql:Using",
                'woql:collection': _{ '@type': "xsd:string",
@@ -3004,7 +3086,7 @@ test(double_select, []) :-
                 }
              },
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     forall(
         member(Elt,JSON.bindings),
         (   get_dict('X',Elt, _),
@@ -3012,13 +3094,17 @@ test(double_select, []) :-
     ).
 
 
-test(when, []) :-
+test(when, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
     Query = _{'@type' : "When",
               query : _{'@type' : "True"},
               consequent : _{'@type' : "True"}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [_{}] = JSON.bindings.
 
 
@@ -3511,7 +3597,11 @@ test(ast_when_test, [
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
 
 
-test(get_put, []) :-
+test(get_put, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     tmp_path(TempDir),
     atom_concat(TempDir, '/test.csv', TestFile),
     Query = _{ '@type': "woql:Put",
@@ -3640,11 +3730,14 @@ test(get_put, []) :-
                                        }
              },
 
-    resolve_absolute_string_descriptor("_system", Descriptor),
-    query_test_response(Descriptor, Query, _JSON),
+    query_test_response_test_branch(Query, _JSON),
     exists_file(TestFile).
 
-test(idgen, []) :-
+test(idgen, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Atom = '{
   "@type": "woql:IDGenerator",
   "woql:base": {
@@ -3679,12 +3772,15 @@ test(idgen, []) :-
   }
 }',
     atom_json_dict(Atom, Query, []),
-    resolve_absolute_string_descriptor("_system", Descriptor),
-    query_test_response(Descriptor, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Value] = (JSON.bindings),
-    (Value.'Journey_ID') = 'terminusdb:///system/data/Journey_test'.
+    (Value.'Journey_ID') = 'http://somewhere.for.now/document/Journey_test'.
 
-test(isa_literal, []) :-
+test(isa_literal, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
     Atom = '{
   "@type": "woql:IsA",
   "woql:element": {
@@ -3703,8 +3799,7 @@ test(isa_literal, []) :-
   }
 }',
     atom_json_dict(Atom, Query, []),
-    resolve_absolute_string_descriptor("_system", Descriptor),
-    query_test_response(Descriptor, Query, JSON),
+    query_test_response_test_branch(Query, JSON),
     [Value] = (JSON.bindings),
     (Value.'Type') = 'http://www.w3.org/2001/XMLSchema#string'.
 
