@@ -9,7 +9,8 @@ FROM terminusdb/terminus_store_prolog:v0.14.3
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
-RUN cp /usr/share/swi-prolog/pack/jwt_io/jwt_io.so . \
+RUN cp /usr/share/swi-prolog/pack/jwt_io/jwt_io.so src/ \
         && apt-get update && apt-get install -y --no-install-recommends libjwt0 make \
-        && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && make
+        && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && cd src \
+        && make && mv terminusdb ../
 CMD ["/app/terminusdb/distribution/init_docker.sh"]

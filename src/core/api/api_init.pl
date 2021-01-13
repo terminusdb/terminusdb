@@ -100,19 +100,6 @@ index_key(_, "", _).
 index_template_path(Path) :-
     once(expand_file_search_path(terminus_home('index.tpl'), Path)).
 
-%% I find it highly dubious that these 3 files should be in a directory called tmp
-instance_path(Path) :-
-    config:tmp_path(Tmp),
-    atomic_list_concat([Tmp, '/instance.ttl'], Path).
-
-inference_path(Path) :-
-    config:tmp_path(Tmp),
-    atomic_list_concat([Tmp, '/inference.ttl'], Path).
-
-schema_path(Path) :-
-    config:tmp_path(Tmp),
-    atomic_list_concat([Tmp, '/schema.ttl'], Path).
-
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
     atomic_list_concat(Split, Pattern, FileString),

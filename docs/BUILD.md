@@ -69,7 +69,7 @@ The TerminusDB Server source tree should then be cloned from GitHub and compiled
 
 ```
 git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
+cd terminusdb/src
 make
 ```
 
@@ -138,7 +138,7 @@ The TerminusDB Server source tree should then be cloned from GitHub and compiled
 
 ```
 git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
+cd terminusdb/src
 make
 ```
 
@@ -205,7 +205,7 @@ The TerminusDB Server source tree should then be cloned from GitHub and compiled
 
 ```
 git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
+cd terminusdb/src
 make
 ```
 
@@ -260,7 +260,7 @@ the system database:
 
 ```
 git clone https://github.com/terminusdb/terminusdb.git
-cd terminusdb
+cd terminusdb/src
 make
 ./terminusdb store init --key root
 ./terminusdb serve

@@ -3599,11 +3599,11 @@ test(ast_when_test, [
 
 test(get_put, [
          setup((setup_temp_store(State),
+                tmp_file('test.csv', TestFile),
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    tmp_path(TempDir),
-    atom_concat(TempDir, '/test.csv', TestFile),
+
     Query = _{ '@type': "woql:Put",
                'woql:as_vars':
                [ _{ '@type': "woql:NamedAsVar",
