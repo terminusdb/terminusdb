@@ -90,7 +90,7 @@ directly through clients you should look at the documentation on our
 
 ## Changes in this Version
 
-[Release Notes](RELEASE_NOTES.md)
+[Release Notes](docs/RELEASE_NOTES.md)
 
 ## Contact
 
