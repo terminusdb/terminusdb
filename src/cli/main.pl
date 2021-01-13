@@ -630,7 +630,9 @@ command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
 run(Argv) :-
-    (   open_descriptor(system_descriptor{}, _)
+    (   (   Argv = [Cmd|_],
+            member(Cmd, [help, store, test])
+        ;   open_descriptor(system_descriptor{}, _))
     ->  run_(Argv)
     ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
         halt(1)).
