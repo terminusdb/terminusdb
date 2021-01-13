@@ -100,6 +100,7 @@ pretty_print_value(Value,_Prefixes,_Compressed) :-
     throw(error(no_case_coverage_for_pretty_printer(Value))).
 
 pretty_print_query_response(Response, Prefixes, String) :-
+
     Names = (Response.'api:variable_names'),
     Bindings = (Response.bindings),
     maplist({Prefixes,Names}/[Binding,New_Binding]>>(
@@ -113,10 +114,14 @@ pretty_print_query_response(Response, Prefixes, String) :-
             ),Bindings,Format_Bindings),
     maplist({Format_Bindings}/[Name,Size]>>column_size(Name,Format_Bindings,Size),Names,Sizes),
     maplist([Size,New_Size]>>(New_Size is Size + 1),Sizes,New_Sizes),
-    append(Offset_Sizes,[_],New_Sizes),
-    maplist([Size,Format]>>atomic_list_concat(['~w~` t~',Size,'+'],Format),Offset_Sizes,Offset_Formats),
-    append(Offset_Formats,['~w'],Formats),
-    atomic_list_concat(Formats,Format_String),
+
+    (   append(Offset_Sizes,[_],New_Sizes)
+
+    ->  maplist([Size,Format]>>atomic_list_concat(['~w~` t~',Size,'+'],Format),Offset_Sizes,Offset_Formats),
+
+        append(Offset_Formats,['~w'],Formats),
+        atomic_list_concat(Formats,Format_String)
+    ;   Format_String = 'No results'),
 
     with_output_to(
         string(String),
@@ -128,7 +133,17 @@ pretty_print_query_response(Response, Prefixes, String) :-
                     maplist({Binding}/[Name,Value]>>
                             get_dict(Name,Binding,Value), Names, Values),
                     format(current_output,Format_String, Values),
-                    format(current_output,"~n",[]))
-            )
+                        format(current_output,"~n",[]))
+            ),
+
+            get_dict(inserts, Response, Inserts),
+            (   Inserts > 0
+            ->  format(current_output, "Inserts: ~s~n", [Inserts])
+            ;   true),
+
+            get_dict(deletes, Response, Deletes),
+            (   Deletes > 0
+            ->  format(current_output, "Deletes: ~s", [Deletes])
+            ;   true)
         )
     ).

@@ -15,6 +15,7 @@
 :- use_module(core(triple)).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
+:- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(library(optparse)).
 :- use_module(core(util), [do_or_die/2, basic_authorization/3]).
 
@@ -628,23 +629,29 @@ command(Command) :-
 command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
-run([Command|Rest]) :-
+run(Argv) :-
+    (   open_descriptor(system_descriptor{}, _)
+    ->  run_(Argv)
+    ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
+        halt(1)).
+
+run_([Command|Rest]) :-
     opt_spec(Command,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
     (   option(help(true), Opts)
     ->  terminusdb_help(Command,Opts)
     ;   run_command(Command,Positional,Opts)).
-run([Command,Subcommand|Rest]) :-
+run_([Command,Subcommand|Rest]) :-
     opt_spec(Command,Subcommand,_,_,Spec),
     opt_parse(Spec,Rest,Opts,Positional),
     (   option(help(true), Opts)
     ->  terminusdb_help(Command,Subcommand,Opts)
     ;   run_command(Command,Subcommand,Positional,Opts)).
-run([Command|_Rest]) :-
+run_([Command|_Rest]) :-
     setof(Subcommand, command_subcommand(Command,Subcommand), Subcommands),
     format(current_output, "terminusdb ~s [subcommand]~n~twhere subcommand is one of: ~q~n", [Command, Subcommands]),
     format(current_output, "type: terminusdb ~s [subcommand] --help for more details~n", [Command]).
-run(_) :-
+run_(_) :-
     setof(Command, command(Command), Commands),
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
