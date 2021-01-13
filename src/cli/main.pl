@@ -880,12 +880,11 @@ run_command(bundle,[Path], Opts) :-
         atomic_list_concat([Base,".bundle"],Filename)
     ;   true),
 
-    option(branch(Branch_Target), Opts),
     api_report_errors(
         bundle,
-        bundle(System_DB, Auth, Path, Option)),
+        bundle(System_DB, Auth, Path, Result, [])),
 
-    (   some(Payload) = Option
+    (   some(Payload) = Result
     ->  format(current_output, "~nBundle operation performed~n", []),
         format(current_output, "~nExporting as ~s~n", [Filename]),
         open(Filename, write, Stream),
@@ -907,7 +906,6 @@ run_command(unbundle,[Path, Filename], _Opts) :-
         (   E = error(existence_error(source_sink, File), _)
         ->  format(current_output, "~nFile ~s does not exist", [File])
         ;   throw(E))).
-*/
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 

@@ -1,4 +1,4 @@
-:- module(api_bundle, [bundle/4]).
+:- module(api_bundle, [bundle/5]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -6,8 +6,10 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+:- use_module(core(api/api_remote)).
+:- use_module(core(api/db_push)).
 
-bundle(System_DB, Auth, Path, Payload) :-
+bundle(System_DB, Auth, Path, Final_Payload, Options) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Path, Branch_Descriptor),
@@ -17,19 +19,18 @@ bundle(System_DB, Auth, Path, Payload) :-
         (branch_descriptor{} :< Branch_Descriptor),
         error(push_requires_branch(Branch_Descriptor),_)),
 
-    get_dict(branch_name, Branch_Descriptor, Branch_Target),
-
-    % This looks like it could have race conditions and consistent problems.
+    % This looks like it could have race conditions and consistency problems.
     setup_call_cleanup(
         % Setup
         (   random_string(String),
-            atomic_list_concat(['Bundle_', String], Remote_Name),
+            md5_hash(String, Remote_Name, []), % 32 chars.
             add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle")
         ),
         % Call
-        (   push(System_DB, Auth, Branch, Remote_Name, Branch_Target, Options,
-                 [_,Payload]>>true, _)
+        (   push(System_DB, Auth, Path, Remote_Name, "main", Options,
+                 [_,Payload]>>true, _),
+            format(string(Final_Payload),'~s~s', [Remote_Name, Payload])
         ),
         % Cleanup
-        remove_remote(SystemDB, Auth, Path, Remote_Name)
+        remove_remote(System_DB, Auth, Path, Remote_Name)
     ).

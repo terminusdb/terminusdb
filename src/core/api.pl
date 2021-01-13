@@ -114,10 +114,10 @@
               api_rollup/5,
 
               % api_bundle.pl
-              api_bundle/4,
+              bundle/5,
 
               % api_unbundle.pl
-              api_unbundle/4
+              unbundle/4
           ]).
 
 :- use_module(api/api_init).
