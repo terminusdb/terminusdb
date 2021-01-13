@@ -299,7 +299,7 @@ jobs:
     - name: Compile DMG
       run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        bash build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        bash ../mac/build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
         mv dist/*.dmg dist/terminusdb-desktop.dmg
 
     - name: Run tests
