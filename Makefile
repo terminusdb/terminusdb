@@ -10,7 +10,7 @@ TARGET=terminusdb
 all: bin deb docs
 
 $(TARGET):
-	$(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f core/bootstrap.pl
+	$(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f src/bootstrap.pl
 
 bin: $(TARGET)
 
@@ -28,7 +28,7 @@ rpm: $(TARGET)
 
 
 debug:
-	echo "main, halt." | swipl -f core/bootstrap.pl
+	echo "main, halt." | swipl -f src/bootstrap.pl
 
 docs:
 	utils/compile_docs.sh
