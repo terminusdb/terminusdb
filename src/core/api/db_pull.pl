@@ -32,8 +32,8 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
                                   repository_descriptor : Their_Repository_Descriptor
                               },
 
-    do_or_die(open_descriptor(Their_Branch_Descriptor, _),
-              error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
+    %do_or_die(open_descriptor(Their_Branch_Descriptor, _),
+    %          error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
 
     resolve_absolute_string_descriptor(Their_Repository_Path, Their_Repository_Descriptor),
     % 1. fetch

@@ -28,7 +28,7 @@ unbundle(System_DB, Auth, Path, Payload) :-
         add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle"),
         % 3. pull from repo with fake remote predicate
         pull(System_DB, Auth, Path, Remote_Name, "main",
-             [_URL,_Repository_Head_Option,some(Pull_Payload)]>>true,
+             {Pull_Payload}/[_URL,_Repository_Head_Option,some(P)]>>(Pull_Payload = P),
              _Result
             ),
         % 4. remove repo
