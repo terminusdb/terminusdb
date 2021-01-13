@@ -316,10 +316,27 @@ jobs:
 
     - run: npm install
 
-    - name: Compile DMG
+    - name: Install terminusdb-store-prolog
       run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        bash ../mac/build_mac_os.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        bash ../mac/install_terminusdb_store_prolog.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+
+    - name: Cache SWI Prolog on Mac
+      id: cache_mac_swipl
+      uses: actions/cache@v2
+      env:
+        cache-name: cache-node-modules
+      with:
+        path: public/SWI-Prolog.app
+        key: ${{ runner.os }}-swipl-terminusdb-desktop-${{ hashFiles('distribution/desktop/public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh }}
+
+    - name: Install SWI Prolog if cache does not hit
+      if: steps.cache_mac_swipl.outputs.cache-hit != 'true'
+      run: bash ../mac/install_swipl.sh
+
+    - name: Compile dmg
+      run: |
+        npm run build-mac-os
         mv dist/*.dmg dist/terminusdb-desktop.dmg
 
     - name: Run tests
