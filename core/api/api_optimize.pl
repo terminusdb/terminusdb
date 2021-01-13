@@ -24,6 +24,9 @@ api_optimize(SystemDB, Auth, Path) :-
         ;   repository_descriptor{} :< Descriptor,
             check_descriptor_auth(SystemDB, Descriptor,
                                   system:commit_write_access, Auth)
+        ;   branch_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  system:commit_write_access, Auth)
         ),
         error(not_a_valid_descriptor_for_optimization(Descriptor),_)),
 
@@ -66,14 +69,22 @@ descriptor_optimize(repository_descriptor{
     open_descriptor(Descriptor, Transaction_Object),
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
-    squash(Layer,New_Layer),
-    layer_to_id(New_Layer,Layer_Id),
-    /* Do something special... что делать! */
-    create_context(Database_Descriptor, Context),
-    with_transaction(
-        Context,
-        update_repository_head(Context, Repository_Name, Layer_Id),
-        _
+    rollup(Layer).
+descriptor_optimize(branch_descriptor{
+                        repository_descriptor : Repository_Descriptor,
+                        branch_name : Branch_Name
+                    }) :-
+    Descriptor = branch_descriptor{
+                        repository_descriptor : Repository_Descriptor,
+                        branch_name : Branch_Name
+                    },
+
+    open_descriptor(Descriptor, Transaction_Object),
+    Instance_Objects = (Transaction_Object.instance_objects),
+    forall(
+        (   member(Instance, Instance_Objects),
+            Layer = (Instance.read)),
+        rollup(Layer)
     ).
 
 :- begin_tests(optimize).
@@ -143,13 +154,6 @@ test(optimize_repo,
 
     api_optimize(system_descriptor{}, Auth, Repo_Path),
 
-    open_descriptor(Repository_Descriptor, Transaction),
-    [Instance_Object] = (Transaction.instance_objects),
-    Layer = (Instance_Object.read),
-    % No parent
-    \+ parent(Layer,_),
-
-    has_branch(Repository_Descriptor, "main"),
     findall(X-Y-Z,
             ask(Descriptor,
                 t(X,Y,Z)),
@@ -213,5 +217,52 @@ test(optimize_db,
     sort(Triples,Sorted),
     sort([a-b-c,e-f-g],Correct),
     ord_seteq(Sorted, Correct).
+
+test(optimize_branch,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2,
+            insert(d,e,f)),
+        _),
+
+    api_optimize(system_descriptor{}, Auth, Path),
+
+    resolve_absolute_string_descriptor(Repository_Path,Repository_Descriptor),
+    api_optimize(system_descriptor{}, Auth, Repository_Path),
+
+    resolve_absolute_string_descriptor(Database_Path,Database_Descriptor),
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    resolve_absolute_string_descriptor(System_Path,system_descriptor{}),
+    api_optimize(system_descriptor{}, Auth, System_Path).
+
 
 :- end_tests(optimize).
