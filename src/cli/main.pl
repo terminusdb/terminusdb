@@ -882,14 +882,15 @@ run_command(bundle,[Path], Opts) :-
 
     api_report_errors(
         bundle,
-        bundle(System_DB, Auth, Path, Result, [])),
+        bundle(System_DB, Auth, Path, Payload, [])),
 
-    (   some(Payload) = Result
-    ->  format(current_output, "~nBundle operation performed~n", []),
+    (   var(Payload)
+    ->  format(current_output, "~nNo data to be bundled~n", [])
+    ;   format(current_output, "~nBundle operation performed~n", []),
         format(current_output, "~nExporting as ~s~n", [Filename]),
         open(Filename, write, Stream),
         format(Stream, "~s", [Payload])
-    ;   format(current_output, "~nNo data to be bundled~n", [])).
+    ).
 run_command(unbundle,[Path, Filename], _Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),

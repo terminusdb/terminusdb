@@ -24,13 +24,30 @@ bundle(System_DB, Auth, Path, Final_Payload, Options) :-
         % Setup
         (   random_string(String),
             md5_hash(String, Remote_Name, []), % 32 chars.
-            add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle")
+            add_remote(System_DB, Auth, Path, Remote_Name, "terminusdb:///bundle"),
+            % This is crazy stupid... It should be possible to work with a repository without
+            % creating empty layers.
+            create_fake_repo_head(Branch_Descriptor, Remote_Name)
         ),
         % Call
         (   push(System_DB, Auth, Path, Remote_Name, "main", Options,
-                 [_,Payload]>>true, _),
+                 {Payload}/[_,P]>>(P = Payload),
+                 _),
             format(string(Final_Payload),'~s~s', [Remote_Name, Payload])
         ),
         % Cleanup
         remove_remote(System_DB, Auth, Path, Remote_Name)
     ).
+
+create_fake_repo_head(Branch_Descriptor, Remote_Name) :-
+    triple_store(Store),
+    open_write(Store, Builder),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Layer_Id),
+    get_dict(repository_descriptor, Branch_Descriptor, Repository_Descriptor),
+    get_dict(database_descriptor, Repository_Descriptor, Database_Descriptor),
+    create_context(Database_Descriptor, Context),
+    with_transaction(
+        Context,
+        update_repository_head(Context, Remote_Name, Layer_Id),
+        _).
