@@ -325,8 +325,8 @@ jobs:
     - name: Run tests
       run: |
         export TERMINUSDB_SERVER_PACK_DIR=./public/pack
-        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/start.pl store init --key root
-        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/start.pl
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/src/start.pl store init --key root
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/src/start.pl
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
