@@ -1300,7 +1300,9 @@ test(update_object,
 
     _{'@id':'doc:new_user'} :< JSON_LD.
 
-test(document_jsonld_depth, [])
+test(document_jsonld_depth, [setup(setup_temp_store(State)),
+                             cleanup(teardown_temp_store(State))
+                            ])
 :-
     Descriptor = system_descriptor{},
     User_ID = 'terminusdb:///system/data/admin',

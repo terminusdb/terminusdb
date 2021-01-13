@@ -1824,7 +1824,9 @@ query_test_response(Descriptor, Query, Response) :-
     json_woql(Query, Context0.prefixes, AST),
     query_response:run_context_ast_jsonld_response(Context0, AST, Response).
 
-test(subsumption, [])
+test(subsumption, [setup(setup_temp_store(State)),
+                   cleanup(teardown_temp_store(State))
+                  ])
 :-
     Query = _{'@type' : "Subsumption",
               child : _{ '@type' : "Node",
@@ -2624,8 +2626,10 @@ test(order_by_desc, [
                              '@value':10}}].
 
 
-test(path, []) :-
-
+test(path, [setup(setup_temp_store(State)),
+            cleanup(teardown_temp_store(State))
+           ])
+:-
     % Pattern is:
     % system:role , (   system:capability_scope
     %                ;  system:capability_scope, plus(system:resource_includes))
@@ -2951,7 +2955,9 @@ test(group_by_simple_template, [
      _{'Grouped': [p,p],
        'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
 
-test(select, []) :-
+test(select, [setup(setup_temp_store(State)),
+              cleanup(teardown_temp_store(State))
+             ]) :-
 
     Query = _{'@type' : "Limit",
               limit : _{'@type' : "xsd:integer",
@@ -3803,7 +3809,9 @@ test(isa_literal, [
     [Value] = (JSON.bindings),
     (Value.'Type') = 'http://www.w3.org/2001/XMLSchema#string'.
 
-test(isa_node, []) :-
+test(isa_node, [setup(setup_temp_store(State)),
+                cleanup(teardown_temp_store(State))
+               ]) :-
     Atom = '{
   "@type": "woql:IsA",
   "woql:element": {
