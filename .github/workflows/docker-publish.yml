@@ -324,11 +324,9 @@ jobs:
     - name: Cache SWI Prolog on Mac
       id: cache_mac_swipl
       uses: actions/cache@v2
-      env:
-        cache-name: cache-node-modules
       with:
-        path: public/SWI-Prolog.app
-        key: ${{ runner.os }}-swipl-terminusdb-desktop-${{ hashFiles('distribution/desktop/public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh') }}
+        path: distribution/desktop/public/SWI-Prolog.app
+        key: ${{ runner.os }}-swipl2-terminusdb-desktop-${{ hashFiles('distribution/desktop/public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh') }}
 
     - name: Install SWI Prolog if cache does not hit
       if: steps.cache_mac_swipl.outputs.cache-hit != 'true'
