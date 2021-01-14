@@ -53,11 +53,11 @@ prolog:message(server_missing_config(BasePath)) -->
 hup(_Signal) :-
   thread_send_message(main, stop).
 
-main(Argv) :-
+main(_Argv) :-
     initialise_log_settings,
     initialise_woql_contexts,
     bootstrap_config_files,
     bootstrap_files,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
     debug(terminus(main), 'initialise_log_settings completed', []),
-    run(Argv).
+    cli_toplevel.

@@ -24,7 +24,6 @@ get_user_databases(System_DB, Auth, User_Databases) :-
             get_dict('@id',DB,ID),
             prefix_expand(ID, Prefixes, Ex_ID),
             organization_database_name_uri(Context, Organization, Name, Ex_ID),
-
             format(string(Path),"~s/~s",[Organization,Name])),
         User_Databases).
 
