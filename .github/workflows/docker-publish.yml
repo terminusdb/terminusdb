@@ -216,7 +216,7 @@ jobs:
     - name: Run tests
       run: |
         $env:TERMINUSDB_SERVER_PACK_DIR="swipl\pack"
-        swipl\bin\swipl -g run_tests -g halt src/start.pl
+        swipl\bin\swipl src/start.pl test
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
@@ -339,7 +339,7 @@ jobs:
     - name: Run tests
       run: |
         export TERMINUSDB_SERVER_PACK_DIR=./public/pack
-        public/SWI-Prolog.app/Contents/MacOS/swipl -g run_tests -g halt public/terminusdb-server/src/start.pl
+        public/SWI-Prolog.app/Contents/MacOS/swipl public/terminusdb-server/src/start.pl test
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.1.4
