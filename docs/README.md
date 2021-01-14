@@ -90,7 +90,7 @@ or our [forum](https://discuss.terminusdb.com). We are also on [twitter](https:/
 
 ## Changes in this Version
 
-[Release Notes](RELEASE_NOTES.md)
+[Release Notes](https://github.com/terminusdb/terminusdb/blob/master/RELEASE_NOTES.md)
 
 ## Copyright
 
