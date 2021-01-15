@@ -123,6 +123,11 @@ typecast_switch(date(Y,M,D,HH,MM,SS,Z,_,_),
                 Num^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
     date_time_stamp(date(Y,M,D,HH,MM,SS,Z,-,-), Num).
+typecast_switch(date(Y,M,D,HH,MM,SS,Z,OH,OM),
+                _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
+                String^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    date_string(date(Y,M,D,HH,MM,SS,Z,OH,OM),String).
 typecast_switch(Val, _ST, Type, _, Cast^^Type) :-
     basetype_subsumption_of(Type,'http://www.w3.org/2001/XMLSchema#decimal'),
     !,
@@ -130,11 +135,6 @@ typecast_switch(Val, _ST, Type, _, Cast^^Type) :-
     ->  true
     ;   throw(error(casting_error(Val,Type),_))
     ).
-typecast_switch(Date, _ST, 'http://www.w3.org/2001/XMLSchema#string', _,
-                String^^'http://www.w3.org/2001/XMLSchema#string') :-
-    Date = date(_Y,_M,_D,_HH,_MM,_SS,_Z,_OH,_OM),
-    !,
-    date_string(Date,String).
 typecast_switch(Val, _ST, Type, _,
                 Val^^Type) :-
     string(Val),
@@ -171,3 +171,27 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Ca
     number(Val),
     !,
     Cast = Val^^'http://terminusdb.com/schema/xdd#decimalRange'.
+typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#url', _, Cast) :-
+    is_absolute_url(Val),
+    !,
+    Cast = Val^^'http://terminusdb.com/schema/xdd#url'.
+
+
+
+:- begin_tests(typecast).
+
+:- use_module(core(util/test_utils)).
+
+test(anyURI_url,[]) :-
+    typecast("terminusdb:///schema#gitHub_user_html_url"^^'http://www.w3.org/2001/XMLSchema#anyURI', 'http://terminusdb.com/schema/xdd#url', [], "terminusdb:///schema#gitHub_user_html_url"^^'http://terminusdb.com/schema/xdd#url').
+
+test(decimal_long,[]) :-
+    typecast(12^^'http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#long', [], 12^^'http://www.w3.org/2001/XMLSchema#long').
+
+test(string_long,[]) :-
+    typecast("12"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#long', [], 12^^'http://www.w3.org/2001/XMLSchema#long').
+
+test(string_dateTime,[]) :-
+    typecast("2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTime', [], date(2012, 10, 9, 0, 0, 0, 1, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
+
+:- end_tests(typecast).
