@@ -1469,9 +1469,9 @@ woql:HasValue
   rdfs:comment "Abstract mixin with a value"@en .
 
 woql:value
+  a owl:ObjectProperty ;
   rdfs:label "value"@en ;
   rdfs:comment "The value associated with a query"@en ;
-  a owl:ObjectProperty ;
   rdfs:domain woql:HasValue ;
   rdfs:range woql:Value .
 
@@ -1482,9 +1482,9 @@ woql:HasType
   rdfs:comment "Abstract mixin with a type"@en .
 
 woql:type
+  a owl:DatatypeProperty ;
   rdfs:label "type"@en ;
   rdfs:comment "The type associated with a query"@en ;
-  a owl:DatatypeProperty ;
   rdfs:domain woql:HasType ;
   rdfs:range xsd:string .
 
