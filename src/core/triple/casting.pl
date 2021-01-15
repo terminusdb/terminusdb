@@ -194,4 +194,7 @@ test(string_long,[]) :-
 test(string_dateTime,[]) :-
     typecast("2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTime', [], date(2012, 10, 9, 0, 0, 0, 1, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
 
+test(dateTime_string,[]) :-
+    typecast(date(2012, 10, 9, 0, 0, 0, 1, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', 'http://www.w3.org/2001/XMLSchema#string', [], "2012-10-09T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string').
+
 :- end_tests(typecast).
