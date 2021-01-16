@@ -48,6 +48,7 @@
 :- use_module(core(validation)).
 :- use_module(core(transaction)).
 
+:- use_module(library(http/json)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -1175,7 +1176,13 @@ insert_edges([(G_Desc,X,Y,Z)|Edges], Transaction_Objects) :-
 
 type_to_type_word(Type, Type_Word) :-
     pattern_string_split('#', Type, Segments),
-    append(_, [Type_Word], Segments).
+    append([_|_], [Type_Word], Segments),
+    !.
+type_to_type_word(Type, Type_Word) :-
+    pattern_string_split('/', Type, Segments),
+    append([_|_], [Type_Word], Segments),
+    !.
+type_to_type_word(Type, Type).
 
 /*
  * update_object(Obj:dict,Query_Context) is det.
@@ -1187,13 +1194,50 @@ type_to_type_word(Type, Type_Word) :-
  * Deletes := triples(New) / triples(New)
  */
 update_object(Obj, Query_Context) :-
-    (   jsonld_id(Obj,ID)
-    ->  true
-    ;   jsonld_type(Obj, Full_Type),
-        type_to_type_word(Full_Type, Type),
-        get_dict(doc, Query_Context.prefixes, Doc_Prefix),
-        random_idgen(Doc_Prefix, [Type], ID)),
-    update_object(ID,Obj,Query_Context).
+    get_dict(prefixes,Query_Context,Prefixes),
+    autogenerate_ids(Obj,Prefixes,New_Obj),
+    jsonld_id(New_Obj,ID),
+    update_object(ID,New_Obj,Query_Context).
+
+/*
+ * autogenerate_ids(Obj, Obj_With_Ids) is det.
+ *
+ * Add ids wherever they do not exist by creating a
+ * hash of the subobject.
+ */
+autogenerate_ids(Obj, _, Obj) :-
+    is_dict(Obj),
+    % if we are a value we must have no id.
+    get_dict('@value', Obj, _),
+    !.
+autogenerate_ids(Obj, Prefixes, Obj_With_Ids) :-
+    is_dict(Obj),
+    !,
+
+    dict_pairs(Obj, _, Pairs),
+    maplist(
+        {Prefixes}/[Key-Value, Key-IDed_Value]>>(
+            autogenerate_ids(Value, Prefixes, IDed_Value)
+        ),
+        Pairs, New_Pairs),
+    dict_pairs(New_Obj, _, New_Pairs),
+
+    ensure_id(New_Obj, Prefixes, Obj_With_Ids).
+autogenerate_ids(Obj, _, Obj).
+
+ensure_id(Obj, _, Obj) :-
+    jsonld_id(Obj, _),
+    !.
+ensure_id(Obj, Prefixes, Obj_With_Ids) :-
+    atom_json_dict(JSON, Obj, [as(atom)]),
+    md5_hash(JSON, Hash, []),
+    get_dict(doc, Prefixes, Doc_Prefix),
+    jsonld_type(Obj, Type),
+    type_to_type_word(Type, Type_Word),
+    atomic_list_concat([Doc_Prefix, Type_Word], Base),
+    idgen(Base, [Hash], ID),
+    put_dict(Obj, _{'@id' : ID}, Obj_With_Ids).
+
 
 /*
  * update_object(ID:url,Obj:dict,Query_Context) is det.

@@ -311,14 +311,16 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#ReadObject',JSON,WOQL,P
     json_to_woql_ast(Doc, WDoc, ['http://terminusdb.com/schema/woql#document'
                                  |Path]),
     WOQL = read_object(WID,WDoc).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL,Path) :-
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL,_) :-
     _{'http://terminusdb.com/schema/woql#document' : Doc
      } :< JSON,
+    /*
     do_or_die(
         (_{'@id' : _ID} :< Doc),
         error(woql_syntax_error(JSON,
                                 ['@id'|Path],
                                 Doc), _)),
+    */
     WOQL = update_object(Doc).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteObject',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#document_uri' : Doc
