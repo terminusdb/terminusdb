@@ -2,6 +2,21 @@
 
 :- use_module(library(thread)).
 
+:- redefine_system_predicate(plunit:passed(_,_,_,_,_)).
+:- redefine_system_predicate(plunit:failed(_,_,_,_)).
+:- redefine_system_predicate(plunit:failed_assertion(_,_,_,_,_,_,_)).
+:- redefine_system_predicate(plunit:blocked(_,_,_,_)).
+:- redefine_system_predicate(plunit:sto(_,_,_,_)).
+:- redefine_system_predicate(plunit:fixme(_,_,_,_,_)).
+
+:- dynamic
+    plunit:passed/5,                       % Unit, Test, Line, Det, Time
+    plunit:failed/4,                       % Unit, Test, Line, Reason
+    plunit:failed_assertion/7,             % Unit, Test, Line, ALoc, STO, Reason, Goal
+    plunit:blocked/4,                      % Unit, Test, Line, Reason
+    plunit:sto/4,                          % Unit, Test, Line, Results
+    plunit:fixme/5.                        % Unit, Test, Line, Reason, Status
+
 :- redefine_system_predicate(plunit:global_test_option(_)).
 
 plunit:global_test_option(X) :- global_test_option(X).
