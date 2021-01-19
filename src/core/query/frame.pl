@@ -1038,7 +1038,7 @@ document_object(DB, Document, Depth, Realiser) :-
 
     most_specific_type(Document,Class,DB),
     class_frame(Class,DB,Frame),
-
+    debug(frame, "Class Frame: ~q~n", [Frame]),
     % TODO: There really should not be epic loads of
     % choice points placed by realiser, but apparently
     % there are...
@@ -1066,6 +1066,7 @@ document_jsonld(Query_Context, Document, Depth, JSON_LD) :-
     query_default_collection(Query_Context, Collection),
     prefix_expand(Document,Prefixes,Document_Ex),
     document_object(Collection, Document_Ex, Depth, Realiser),
+    debug(frame,"Realiser: ~q~n",[Realiser]),
     term_jsonld(Realiser, JSON_Ex),
     compress(JSON_Ex,Prefixes,JSON_LD).
 
