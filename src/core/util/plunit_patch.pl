@@ -47,6 +47,10 @@ plunit:report_result(A,B) :- report_result(A,B).
 
 plunit:assert_cyclic(A) :- assert_cyclic(A).
 
+:- redefine_system_predicate(plunit:report_blocked).
+
+plunit:report_blocked :- report_blocked.
+
 global_test_option(load(Load)) :-
     must_be(oneof([never,always,normal]), Load).
 global_test_option(run(When)) :-
@@ -189,3 +193,16 @@ assert_cyclic(Term) :-
     length(NewArgs, Arity),
     Head =.. [Functor|NewArgs],
     assert((Head :- recorded(_, Var, Id), Var = NewArgs)).
+
+report_blocked :-
+    number_of_clauses(blocked/4,N),
+    N > 0,
+    !,
+    plunit:info(plunit(blocked(N))),
+    (   blocked(Unit, Name, Line, Reason),
+        plunit:unit_file(Unit, File),
+        print_message(informational,
+                      plunit(blocked(File:Line, Name, Reason))),
+        fail ; true
+    ).
+report_blocked.
