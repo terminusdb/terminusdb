@@ -1216,11 +1216,12 @@ autogenerate_ids(Obj, Prefixes, Obj_With_Ids) :-
     !,
 
     dict_pairs(Obj, _, Pairs),
+    exclude(['@context'-_]>>true, Pairs, Filtered_Pairs),
     maplist(
         {Prefixes}/[Key-Value, Key-IDed_Value]>>(
             autogenerate_ids(Value, Prefixes, IDed_Value)
         ),
-        Pairs, New_Pairs),
+        Filtered_Pairs, New_Pairs),
     dict_pairs(New_Obj, _, New_Pairs),
 
     ensure_id(New_Obj, Prefixes, Obj_With_Ids).
