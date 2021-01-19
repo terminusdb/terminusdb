@@ -662,10 +662,12 @@ run_(_) :-
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
 run_command(test,_Positional,Opts) :-
-    (   option(test([]),Opts)
-    ->  run_tests
-    ;   option(test(Test), Opts),
-        run_tests(Test)).
+    (   (   option(test([]),Opts)
+        ->  run_tests
+        ;   option(test(Test), Opts),
+            run_tests(Test))
+    ->  halt(0)
+    ;   halt(1)).
 run_command(serve,_Positional,Opts) :-
     (   option(interactive(true),Opts)
     ->  terminus_server([serve|Opts], false),
