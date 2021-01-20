@@ -1467,39 +1467,24 @@ test(woql_object, [
                     true,
                     Get_Response),
 
-    Get_Response =
-    _{
-        '@type':'api:WoqlResponse',
-        'api:status':'api:success',
-        'api:variable_names':['X'],
-        bindings:[
-            _{ 'X':_{ '@context': _,
-			          '@id':_,
-			          '@type':'woql:Triple',
-			          'woql:object':_{ '@id':_,
-					                   '@type':'woql:Variable',
-					                   'woql:variable_name':_{ '@type':'xsd:string',
-								                               '@value':"Z"
-							                                 }
-				                     },
-			          'woql:predicate':_{ '@id':_,
-					                      '@type':'woql:Variable',
-					                      'woql:variable_name':_{ '@type':'xsd:string',
-								                                  '@value':"Y"
-								                                }
-					                    },
-			          'woql:subject':_{ '@id':_,
-					                    '@type':'woql:Variable',
-					                    'woql:variable_name':_{ '@type':'xsd:string',
-								                                '@value':"X"
-								                              }
-					                  }
-		            }
-	         }
-	    ],
-        deletes:0,
-        inserts:0,
-        transaction_retry_count:0
-    }.
+    [Binding] = (Get_Response.bindings),
+
+    % Name underscore variables due to bug in compilation on swip 8.2.3
+    _V0{ 'X':_V1{'@context': _A,
+             '@id':_B,
+             '@type':'woql:Triple',
+             'woql:object':_V2{'@id':_C,
+                             '@type':'woql:Variable',
+                             'woql:variable_name':_V3{'@type':'xsd:string',
+                                                    '@value':"Z"}},
+             'woql:predicate':_V4{'@id':_D,
+                                '@type':'woql:Variable',
+                                'woql:variable_name':_V5{'@type':'xsd:string',
+                                                       '@value':"Y"}},
+             'woql:subject':_V7{'@id':_E,
+                              '@type':'woql:Variable',
+                              'woql:variable_name':_V6{'@type':'xsd:string',
+                                                     '@value':"X"}}}
+     } :< Binding.
 
 :- end_tests(documents).
