@@ -771,6 +771,7 @@ realiser(Elt,Frame,Database,Depth,['@type'=Class,
                                    '@id'=Elt
                                    |Realisers]) :-
     instance_class(Elt,Class,Database),
+    !,
     realise_frame(Elt,Frame,Database,Depth,Realisers).
 
 /*
@@ -820,11 +821,11 @@ realise_frame(Elt,[[type=restriction|_R]|Rest],Database,Depth,Realisers) :-
     % We are a bare restriction, not applied to any property
     !,
     realise_frame(Elt,Rest,Database,Depth,Realisers).
-realise_frame(Elt,[[type=class_choice,operands=_]|Rest],Database,Depth,[Realiser|Realisers]) :-
+realise_frame(Elt,[type=class_choice,operands=_],Database,Depth,Realiser) :-
     % We are a bare class_choice, not applied to any property
     !,
-    document_object(Database,Elt,Depth,Realiser),
-    realise_frame(Elt,Rest,Database,Depth,Realisers).
+    document_object(Database,Elt,Depth,Object),
+    Object = [_Type,_Id|Realiser].
 realise_frame(Elt,Frame,Database,Depth,Realisers) :-
     % We should be able to assume correctness of operator here...
     % member(type=Type, Frame),
@@ -835,14 +836,14 @@ realise_frame(Elt,Frame,Database,Depth,Realisers) :-
 realise_frame(_Elt,F,_Database,_Depth,[]) :-
     memberchk(type=bareClass, F),
     !.
-realise_frame(Elt,F,Database,Depth,New_Realiser) :-
+realise_frame(Elt,F,Database,Depth,Realiser) :-
     memberchk(type=clippedClass, F),
     !,
     % Don't increase depth
     % NOTE: very dodgy unless we are checking to make sure
     % we aren't following a cycle!  We should check the realiser.
     document_object(Database,Elt,Depth,Object),
-    Object = [_Type,_Id|New_Realiser].
+    Object = [_Type,_Id|Realiser].
 realise_frame(_Elt,F,_Database,_Depth,[]) :-
     memberchk(type=oneOf, F),
     !.
@@ -1003,12 +1004,10 @@ realise_quads(Elt,[[type=restriction|_R]|Rest],Database,Realiser) :-
     % We are a bare restriction, not applied to any property
     !,
     realise_quads(Elt,Rest,Database,Realiser).
-realise_quads(Elt,[[type=class_choice,operands=_]|Rest],Database,Realiser) :-
+realise_quads(Elt,[type=class_choice,operands=_],Database,Realiser) :-
     % We are a bare class choice, not applied to any property
     !,
-    object_edges(Elt,Database,Edges),
-    realise_quads(Elt,Rest,Database,Realiser_Tail),
-    append(Edges,Realiser_Tail,Realiser).
+    object_edges(Elt,Database,Realiser).
 realise_quads(Elt,Frame,Database,Realisers) :-
     % We should be able to assume correctness of operator here...
     % member(type=Type, Frame),
@@ -1035,7 +1034,6 @@ realise_quads(_Elt,F,_Database,[]) :-
  * Document
  */
 document_object(DB, Document, Depth, Realiser) :-
-
     most_specific_type(Document,Class,DB),
     class_frame(Class,DB,Frame),
     debug(frame, "Class Frame: ~q~n", [Frame]),
@@ -1118,7 +1116,7 @@ object_references(URI,Database,Edges) :-
                 ->  get_dict(descriptor,G,G_Desc)
                 ;   G = inferred
                 ->  G = G_Desc
-                ;   throw(error(unexpected_graph_object(G, context(realise_quads/4, _)))))),
+                ;   throw(error(unexpected_graph_object(G, _))))),
             Edges).
 
 /*
@@ -1435,5 +1433,73 @@ test(loopy_object, [
                      class='http://example.com/data/worldOntology#Foo'],
               restriction=true]].
 
+:- use_module(core(api/api_woql)).
+test(woql_object, [
+         setup((setup_temp_store(State),
+                create_db_with_ttl_schema("admin", "woql", "/terminus-schema/woql.owl.ttl"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    % query = WQ().update_object(WQ().triple("v:X", "v:Y", "v:Z").to_dict())
+    Insert_Query = '{"@type": "woql:UpdateObject", "woql:document": {"@type": "woql:Triple", "woql:subject": {"@type": "woql:Variable", "woql:variable_name": {"@value": "X", "@type": "xsd:string"}}, "woql:predicate": {"@type": "woql:Variable", "woql:variable_name": {"@value": "Y", "@type": "xsd:string"}}, "woql:object": {"@type": "woql:Variable", "woql:variable_name": {"@value": "Z", "@type": "xsd:string"}}}}',
+
+    atom_json_dict(Insert_Query, Insert_JSON, []),
+
+    super_user_authority(Auth),
+    woql_query_json(system_descriptor{}, Auth, some("admin/woql"), Insert_JSON,
+                    _{author : me, message: yo},
+                    [],
+                    true,
+                    Insert_Response),
+    Insert_Response = _{'@type':'api:WoqlResponse',
+                        'api:status':'api:success',
+                        'api:variable_names':[],
+                        bindings:[_{}],
+                        deletes:0,
+                        inserts:10,
+                        transaction_retry_count:0},
+
+    Get_Query = '{"@type": "woql:ReadObject", "woql:document_uri" : "doc:Triple_b975f26907b64367c87013ff3f772286", "woql:document": {"@type": "woql:Variable", "woql:variable_name": {"@value": "X", "@type": "xsd:string"}}}',
+    atom_json_dict(Get_Query, Get_JSON, []),
+    woql_query_json(system_descriptor{}, Auth, some("admin/woql"), Get_JSON,
+                    _{author : me, message: yo},
+                    [],
+                    true,
+                    Get_Response),
+
+    Get_Response =
+    _{
+        '@type':'api:WoqlResponse',
+        'api:status':'api:success',
+        'api:variable_names':['X'],
+        bindings:[
+            _{ 'X':_{ '@context': _,
+			          '@id':_,
+			          '@type':'woql:Triple',
+			          'woql:object':_{ '@id':_,
+					                   '@type':'woql:Variable',
+					                   'woql:variable_name':_{ '@type':'xsd:string',
+								                               '@value':"Z"
+							                                 }
+				                     },
+			          'woql:predicate':_{ '@id':_,
+					                      '@type':'woql:Variable',
+					                      'woql:variable_name':_{ '@type':'xsd:string',
+								                                  '@value':"Y"
+								                                }
+					                    },
+			          'woql:subject':_{ '@id':_,
+					                    '@type':'woql:Variable',
+					                    'woql:variable_name':_{ '@type':'xsd:string',
+								                                '@value':"X"
+								                              }
+					                  }
+		            }
+	         }
+	    ],
+        deletes:0,
+        inserts:0,
+        transaction_retry_count:0
+    }.
 
 :- end_tests(documents).

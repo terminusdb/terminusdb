@@ -313,7 +313,7 @@ compress(JSON,Context,JSON_LD) :-
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_dict(JSON_Pre),
     !,
-    merge_dictionaries(_{'@context' : Context}, JSON_Pre, JSON_LD).
+    put_dict(_{'@context' : Context}, JSON_Pre, JSON_LD).
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_list(JSON_Pre),
 
