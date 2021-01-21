@@ -35,7 +35,6 @@ load_jwt_conditionally :-
     (   config:jwt_enabled
     ->  config:jwt_public_key_id(Public_Key_Id),
         config:jwt_public_key_path(JWTPubKeyPath),
-        writeq(JWTPubKeyPath),
         set_setting(jwt_io:keys, [_{kid: Public_Key_Id,
                                     type: 'RSA',
                                     algorithm: 'RS256',
