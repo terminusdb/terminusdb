@@ -4131,7 +4131,7 @@ fetch_authorization_data(Request, Username, KS) :-
     http_authorization_data(Text, basic(Username, Key)),
     coerce_literal_string(Key, KS).
 
-:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
+:- if(config:jwt_enabled).
 /*
  *  fetch_jwt_data(+Request, -Username) is semi-determinate.
  *
