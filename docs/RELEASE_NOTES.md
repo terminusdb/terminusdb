@@ -1,3 +1,14 @@
+# TerminusDB Server v4.1.1 Release Notes
+
+## New
+
++ Add rpm build
++ Optimize uses delta rollups
+
+## Bug fixes
+
++ JWT support was not working in the compiled binary, it is working now
+
 # TerminusDB Server v4.1.0 Release Notes
 
 ## New
