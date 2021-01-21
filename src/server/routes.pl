@@ -47,7 +47,7 @@
 :- use_module(library(http/http_authenticate)).
 
 % Conditional loading of the JWT IO library...
-:- if(\+((config:jwt_public_key_path(Path), Path = ''))).
+:- if(config:jwt_enabled).
 :- use_module(library(jwt_io)).
 :- endif.
 

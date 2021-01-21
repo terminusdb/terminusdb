@@ -10,6 +10,7 @@
               default_database_path/1,
               jwt_public_key_path/1,
               jwt_public_key_id/1,
+              jwt_enabled/0,
               registry_path/1,
               console_base_url/1,
               ssl_cert/1,
@@ -81,6 +82,10 @@ worker_js(Value) :-
 
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
+
+jwt_enabled :-
+    getenv_default('TERMINUSDB_JWT_ENABLED', false, Value),
+    Value = true.
 
 jwt_public_key_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).

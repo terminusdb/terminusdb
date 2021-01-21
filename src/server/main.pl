@@ -26,13 +26,16 @@
 :- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
+% Conditional loading of the JWT IO library...
+:- if(config:jwt_enabled).
+:- use_module(library(jwt_io)).
+:- endif.
 
 load_jwt_conditionally :-
     config:jwt_public_key_path(JWTPubKeyPath),
     (   JWTPubKeyPath = ''
     ->  true
-    ;   use_module(library(jwt_io)),
-        config:jwt_public_key_id(Public_Key_Id),
+    ;   config:jwt_public_key_id(Public_Key_Id),
         set_setting(jwt_io:keys, [_{kid: Public_Key_Id,
                                     type: 'RSA',
                                     algorithm: 'RS256',
