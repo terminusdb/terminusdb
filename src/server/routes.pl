@@ -77,7 +77,7 @@ connect_handler(get, Request, System_DB, Auth) :-
     reply_json(User_Obj2).
 
 :- begin_tests(jwt_auth, [
-                   condition(getenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", testkey))
+                   condition(config:jwt_enabled)
                ]
               ).
 

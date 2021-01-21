@@ -434,6 +434,7 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TERMINUSDB_SERVER_PACK_DIR',
                          'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
                          'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID',
+                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH'
                      ],
                      Env_List),
