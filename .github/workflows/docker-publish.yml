@@ -35,7 +35,7 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME:local
 
       - name: Run tests
-        run: eval docker run $DOCKERENVS terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
+        run: eval docker run $DOCKER_ENVS terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
 
       - name: Copy binary to local filesystem
         run: |
