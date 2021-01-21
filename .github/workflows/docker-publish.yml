@@ -25,7 +25,6 @@ jobs:
 
     env:
       IMAGE_NAME: terminusdb/terminusdb-server
-      DOCKER_ENVS: "-e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=/app/terminusdb/src/test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false -e TERMINUSDB_JWT_ENABLED=true --name terminusdb"
 
 
     steps:
@@ -35,7 +34,7 @@ jobs:
         run: docker build . --file Dockerfile --tag $IMAGE_NAME:local
 
       - name: Run tests
-        run: eval docker run $DOCKER_ENVS terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
+        run: docker run -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH=/app/terminusdb/src/test/public_key_test.key.pub -e TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID=testkey -e TERMINUSDB_HTTPS_ENABLED=false -e TERMINUSDB_JWT_ENABLED=true --name terminusdb terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
 
       - name: Copy binary to local filesystem
         run: |
