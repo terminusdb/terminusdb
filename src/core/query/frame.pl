@@ -1470,20 +1470,20 @@ test(woql_object, [
     [Binding] = (Get_Response.bindings),
 
     % Name underscore variables due to bug in compilation on swip 8.2.3
-    _V0{ 'X':_V1{'@context': _A,
-             '@id':_B,
+    _{ 'X':_{'@context': _,
+             '@id':_,
              '@type':'woql:Triple',
-             'woql:object':_V2{'@id':_C,
+             'woql:object':_{'@id':_,
                              '@type':'woql:Variable',
-                             'woql:variable_name':_V3{'@type':'xsd:string',
+                             'woql:variable_name':_{'@type':'xsd:string',
                                                     '@value':"Z"}},
-             'woql:predicate':_V4{'@id':_D,
+             'woql:predicate':_{'@id':_,
                                 '@type':'woql:Variable',
-                                'woql:variable_name':_V5{'@type':'xsd:string',
+                                'woql:variable_name':_{'@type':'xsd:string',
                                                        '@value':"Y"}},
-             'woql:subject':_V7{'@id':_E,
+             'woql:subject':_{'@id':_,
                               '@type':'woql:Variable',
-                              'woql:variable_name':_V6{'@type':'xsd:string',
+                              'woql:variable_name':_{'@type':'xsd:string',
                                                      '@value':"X"}}}
      } :< Binding.
 

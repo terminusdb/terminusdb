@@ -553,7 +553,8 @@ json_value_triples(ID,Pred,V,Ctx,Triples) :-
                   '@value' : Data
                  }
         ->  atom_string(Atom_Type,Type),
-            once(typecast(Data^^'http://www.w3.org/2001/XMLSchema#string', Atom_Type, [], Val)),
+            once(typecast(Data^^'http://www.w3.org/2001/XMLSchema#string',
+                          Atom_Type, [], Val)),
             Triples = [(ID,Pred,Val)]
         ;   V = _{'@language' : Lang,
                   '@value' : Data}
@@ -640,6 +641,40 @@ test(jsonld_long, []) :-
                  "asdf"^^'http://www.w3.org/2001/XMLSchema#string')], 
     forall(member(T, Triples),
            member(T, Expected)).
+
+:- use_module(core(query/json_woql)).
+test(hub_json, []) :-
+    woql_context(Context),
+
+    Document = _{'@id':'terminusdb:///data/Database_test00_hubtest0061611314927.557',
+                 '@type':'http://terminusdb.com/schema/system#Database',
+                 'http://terminusdb.com/schema/system#database_name':
+                 _11332{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"hubtest006"},
+                 'http://terminusdb.com/schema/system#public':
+                 _11308{'@type':'http://www.w3.org/2001/XMLSchema#boolean',
+                        '@value':true},
+                 'http://terminusdb.com/schema/system#status':
+                 _19714{'@id':'http://terminusdb.com/schema/system#active',
+                        '@type':'http://terminusdb.com/schema/system#Status'},
+                 'http://www.w3.org/2000/01/rdf-schema#label':
+                 _11252{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"hubtest006"}},
+
+    jsonld_triples(
+        Document,
+        Context,
+        Result),
+
+    Expected = [('http://terminusdb.com/schema/system#active','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#Status'),
+                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#database_name',"hubtest006"^^'http://www.w3.org/2001/XMLSchema#string'),
+                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#public',true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#status','http://terminusdb.com/schema/system#active'),
+                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#Database'),
+                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://www.w3.org/2000/01/rdf-schema#label',"hubtest006"^^'http://www.w3.org/2001/XMLSchema#string')],
+
+    forall(member(Triple, Result),
+           member(Triple, Expected)).
 
 
 :- end_tests(jsonld_triples).

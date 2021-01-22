@@ -103,9 +103,23 @@ typecast(Val, Type, Hint, Cast) :-
 typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Val) :-
     /* It might be wise to check URI validity */
     !.
-typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#dateTime',
-                'http://www.w3.org/2001/XMLSchema#dateTime', _, Val^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
+typecast_switch(Val, Type, Type, _, Val^^Type) :-
+    /* self cast */
     !.
+typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#boolean', 'http://www.w3.org/2001/XMLSchema#string', _, Casted^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    (   member(Val, ["0","false",false,0])
+    ->  Casted = "false"
+    ;   member(Val, ["1","true",true,1])
+    ->  Casted = "true"
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#boolean'),_))).
+typecast_switch(Val, 'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', _, Casted^^'http://www.w3.org/2001/XMLSchema#boolean') :-
+    !,
+    (   member(Val, ["0","false",false,0])
+    ->  Casted = false
+    ;   member(Val, ["1","true",true,1])
+    ->  Casted = true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#boolean'),_))).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) :-
     (   guess_date(Val,Cast)
     ->  !
@@ -196,5 +210,15 @@ test(string_dateTime,[]) :-
 
 test(dateTime_string,[]) :-
     typecast(date(2012, 10, 9, 0, 0, 0, 1, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', 'http://www.w3.org/2001/XMLSchema#string', [], "2012-10-09T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(boolean_string, []) :-
+    typecast(true^^'http://www.w3.org/2001/XMLSchema#boolean', 'http://www.w3.org/2001/XMLSchema#string', [], "true"^^'http://www.w3.org/2001/XMLSchema#string'),
+    typecast(false^^'http://www.w3.org/2001/XMLSchema#boolean', 'http://www.w3.org/2001/XMLSchema#string', [], "false"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(string_boolean, []) :-
+    typecast("true"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+    typecast("1"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+    typecast("false"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], false^^'http://www.w3.org/2001/XMLSchema#boolean'),
+    typecast("0"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], false^^'http://www.w3.org/2001/XMLSchema#boolean').
 
 :- end_tests(typecast).
