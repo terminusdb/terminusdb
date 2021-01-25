@@ -134,7 +134,7 @@ jobs:
           # Upload to dev/canary/rc/production repo
           if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
             curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-deb/terminusdb/${VERSION}-${GIT_HASH}/pool/main/t/terminusdb-${VERSION}-${GIT_HASH}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
-            curl -T terminusdb*.rpm -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}"  "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-rpm/terminusdb/${VERSION}-${GIT_HASH}/fedora_33/terminusdb.rpm?publish=1
+            curl -T terminusdb*.rpm -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}"  "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-rpm/terminusdb/${VERSION}-${GIT_HASH}/fedora_33/terminusdb.rpm?publish=1"
           fi
 
 
