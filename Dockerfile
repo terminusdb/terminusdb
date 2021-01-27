@@ -1,5 +1,5 @@
 FROM terminusdb/terminus_store_prolog:v0.14.3
-ENV TUS_VERSION v0.0.3
+ENV TUS_VERSION v0.0.4
 WORKDIR /app/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
