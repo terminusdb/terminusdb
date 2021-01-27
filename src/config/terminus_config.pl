@@ -21,7 +21,8 @@
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
-              ignore_ref_and_repo_schema/0
+              ignore_ref_and_repo_schema/0,
+              file_upload_storage_path/1
           ]).
 
 :- use_module(core(util)).
@@ -137,6 +138,9 @@ tmp_path(Value) :-
     user:file_search_path(terminus_home, Dir),
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
+
+file_upload_storage_path(Path) :-
+    getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
 
 server(Server) :-
     server_protocol(Protocol),

@@ -9,6 +9,8 @@
 :- use_module(db_pack).
 :- use_module(core(account)).
 
+:- use_module(library(tus)).
+
 child_parent_linear_history(Child,Parent,Graph) :-
     memberchk(Child-some(Parent), Graph),
     !.
@@ -21,7 +23,8 @@ child_parent_linear_history(Child,Parent,Graph) :-
 % - history diverged
 % - (note, in routes we also check that the descriptor is valid)
 % NOTE: There is an unpack/1 in db_pack
-unpack(System_DB, Auth, Path, Payload) :-
+unpack(System_DB, Auth, Path, Resource_URL) :-
+
     string_concat(Path, "/local/_commits", Full_Path),
     do_or_die(
         resolve_absolute_string_descriptor(Full_Path,Repository_Descriptor),
@@ -34,6 +37,11 @@ unpack(System_DB, Auth, Path, Payload) :-
                           system:commit_write_access,
                           Auth),
 
+    % 0. Get Payload
+    tus_uri_resource(Resource_URL, Resource),
+    www_form_encode(Auth, Domain),
+    tus_resource_path(Resource, Resource_Path, [domain(Domain)]),
+    read_file_to_string(Resource_Path, Payload, [encoding(octet)]),
     % 1. Deconstruct Payload, as head and tgz
     payload_repository_head_and_pack(Payload,New_Head,Pack),
     % 2. linear future for current repository head
@@ -53,7 +61,6 @@ unpack(System_DB, Auth, Path, Payload) :-
                 error(not_a_linear_history_in_unpack(Layer_Parents),_)),
             % 3. unpack
             unpack(Pack),
-
             % 4. advance repository head.
             update_repository_head(Database_Context, "local", New_Head)
         ),

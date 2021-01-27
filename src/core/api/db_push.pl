@@ -13,6 +13,8 @@
 :- use_module(core(account)).
 :- use_module(library(http/http_client)).
 
+:- use_module(library(tus)).
+
 % error conditions:
 % - branch to push does not exist
 % - repository does not exist
@@ -153,6 +155,10 @@ remote_unpack_url(URL, Pack_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
     merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","unpack"|Rest]).
 
+remote_tus_url(URL, TUS_URL) :-
+    pattern_string_split('/', URL, [Protocol,Blank,Server|_Rest]),
+    merge_separator_split(TUS_URL,'/',[Protocol,Blank,Server,"api","files"]).
+
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
 
@@ -160,10 +166,20 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
     ;   Additional_Options = []),
 
-    remote_unpack_url(Remote_URL, Unpack_URL),
+    remote_tus_url(Remote_URL, TUS_URL),
 
+    setup_call_cleanup(
+        (   tmp_file('authorized_push', Tmp_File),
+            open(Tmp_File, write, Stream, [encoding(octet)])),
+        format(Stream, "~s", Payload),
+        close(Stream)
+    ),
+
+    tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
+
+    remote_unpack_url(Remote_URL, Unpack_URL),
     catch(http_post(Unpack_URL,
-                    bytes('application/octets',Payload),
+                    json(_{resource_uri : Resource_URL}),
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),

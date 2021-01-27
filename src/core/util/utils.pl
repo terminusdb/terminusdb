@@ -148,8 +148,8 @@ zip([],[],[]).
  * Puts an element between every element of a list.
  */
 intersperse(Item, List, Output) :-
-    (   List == [] ->
-        Output = []
+    (   List == []
+    ->  Output = []
     ;   List = [X| Xs],
         intersperse_(Xs, X, Item, Output)
     ).

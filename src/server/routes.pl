@@ -38,8 +38,14 @@
 :- use_module(library(http/http_multipart_plugin)).
 
 % chunked
-:- use_module(library(http/http_header)).
-:- use_module(library(http/http_stream)).
+%:- use_module(library(http/http_header)).
+%:- use_module(library(http/http_stream)).
+
+% TUS
+:- use_module(library(tus)).
+:- (   file_upload_storage_path(Path)
+   ->  set_tus_options([tus_storage_path(Path)])
+   ;   true).
 
 % Authentication library is only half used.
 % and Auth is custom, not actually "Basic"
@@ -117,7 +123,6 @@ test(connection_authorised_user_http_basic, [
      ]) :-
     admin_pass(Key),
     atomic_list_concat([Server, '/api'], URL),
-
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
@@ -128,7 +133,6 @@ test(connection_result_dbs, [
 :-
     admin_pass(Key),
     atomic_list_concat([Server, '/api'], URL),
-
     http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     * json_write_dict(current_output, Result, []),
@@ -786,7 +790,7 @@ test(triples_update, [
                           turtle : TTL}),
               _In, [json_object(dict),
                     authorization(basic(admin, Key)),
-                    reply_header(_Fields)]),
+                    reply_header(_)]),
 
     findall(A-B-C,
             ask(Branch_Descriptor,
@@ -2229,12 +2233,18 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Payload, Request),
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ resource_uri : Resource_Uri } :< Document
+        ),
+        error(bad_api_document(Document,[resource]),_)),
+
+    get_payload(Document, Request),
 
     api_report_errors(
         unpack,
         Request,
-        (   unpack(System_DB, Auth, Path, Payload),
+        (   unpack(System_DB, Auth, Path, Resource_Uri),
             cors_reply_json(Request,
                             _{'@type' : 'api:UnpackResponse',
                               'api:status' : "api:success"},
@@ -2243,6 +2253,28 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 
 %:- begin_tests(unpack_endpoint).
 %:- end_tests(unpack_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(files), auth_wrapper(tus_dispatch),
+                [ methods([options,head,post,patch]),
+                  prefix
+                ]).
+
+:- meta_predicate auth_wrapper(2,?).
+auth_wrapper(Goal,Request) :-
+    open_descriptor(system_descriptor{}, System_Database),
+    catch((      authenticate(System_Database, Request, Auth),
+                 www_form_encode(Auth, Domain),
+                 call(Goal, [domain(Domain)], Request)),
+          error(authentication_incorrect(Reason),_),
+          (   http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+              reply_json(_{'@type' : 'api:ErrorResponse',
+                           'api:status' : 'api:failure',
+                           'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
+                           'api:message' : 'Incorrect authentication information'
+                          },
+                         [status(401)]))),
+    !.
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),

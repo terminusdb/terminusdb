@@ -29,8 +29,10 @@
               spawn_server/4,
               kill_server/1,
               setup_temp_server/2,
+              setup_temp_server/3,
               teardown_temp_server/1,
               setup_temp_unattached_server/3,
+              setup_temp_unattached_server/4,
               teardown_temp_unattached_server/1,
               setup_cloned_situation/4,
               setup_cloned_nonempty_situation/4
@@ -480,17 +482,23 @@ kill_server(PID) :-
     process_kill(PID),
     process_wait(PID, _).
 
-setup_temp_server(Store-Dir-PID, URL) :-
+setup_temp_server(Store-Dir-PID, URL, Options) :-
     setup_temp_store(Store-Dir),
-    spawn_server(Dir, URL, PID, []).
+    spawn_server(Dir, URL, PID, Options).
+
+setup_temp_server(Store-Dir-PID, URL) :-
+    setup_temp_server(Store-Dir-PID, URL, []).
 
 teardown_temp_server(Store-Dir-PID) :-
     kill_server(PID),
     teardown_temp_store(Store-Dir).
 
-setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
+setup_temp_unattached_server(Store-Dir-PID, Store, URL, Options) :-
     setup_unattached_store(Store-Dir),
-    spawn_server(Dir, URL, PID, []).
+    spawn_server(Dir, URL, PID, Options).
+
+setup_temp_unattached_server(Store-Dir-PID, Store, URL) :-
+    setup_temp_unattached_server(Store-Dir-PID, Store, URL, []).
 
 teardown_temp_unattached_server(Store-Dir-PID) :-
     kill_server(PID),

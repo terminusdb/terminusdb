@@ -1469,22 +1469,36 @@ test(woql_object, [
 
     [Binding] = (Get_Response.bindings),
 
-    % Name underscore variables due to bug in compilation on swip 8.2.3
-    _{ 'X':_{'@context': _,
-             '@id':_,
-             '@type':'woql:Triple',
-             'woql:object':_{'@id':_,
-                             '@type':'woql:Variable',
-                             'woql:variable_name':_{'@type':'xsd:string',
-                                                    '@value':"Z"}},
-             'woql:predicate':_{'@id':_,
-                                '@type':'woql:Variable',
-                                'woql:variable_name':_{'@type':'xsd:string',
-                                                       '@value':"Y"}},
-             'woql:subject':_{'@id':_,
-                              '@type':'woql:Variable',
-                              'woql:variable_name':_{'@type':'xsd:string',
-                                                     '@value':"X"}}}
-     } :< Binding.
+    /* Assigning this to a variable, and then comparing will
+       not yeild the same failing behaviour. Neither will
+       checking with dictionary subsumption. */
+    Doc1 = _{'X':_{'@context':_,
+                   '@id':_,
+                   '@type':'woql:Triple',
+                   'woql:object':_{'@id':_,
+                                   '@type':'woql:Variable',
+                                   'woql:variable_name':_{'@type':'xsd:string',
+                                                          '@value':"Z"}},
+                   'woql:predicate':_{'@id':_,
+                                      '@type':'woql:Variable',
+                                      'woql:variable_name':_{'@type':'xsd:string',
+                                                             '@value':"Y"}},
+                   'woql:subject':_{'@id':_,
+                                    '@type':'woql:Variable',
+                                    'woql:variable_name':_{'@type':'xsd:string',
+                                                           '@value':"X"}}}},
+    Doc1 = Binding.
 
 :- end_tests(documents).
+
+/*
+
+_2592{'X':_2600{'@context':_2628{api:'http://terminusdb.com/schema/api#',
+                                doc:'system://worldOnt/document/',
+                                layer:'http://terminusdb.com/schema/layer#',
+                                owl:'http://www.w3.org/2002/07/owl#',rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',rdfs:'http://www.w3.org/2000/01/rdf-schema#',ref:'http://terminusdb.com/schema/ref#',repo:'http://terminusdb.com/schema/repository#',scm:'http://example.com/data/worldOntology#',system:'http://terminusdb.com/schema/system#',terminus:'http://terminusdb.com/schema/system#',vio:'http://terminusdb.com/schema/vio#',woql:'http://terminusdb.com/schema/woql#',xdd:'http://terminusdb.com/schema/xdd#',xsd:'http://www.w3.org/2001/XMLSchema#'},
+    '@id':'doc:Triple_b975f26907b64367c87013ff3f772286',
+    '@type':'woql:Triple',
+    'woql:object':_2760{'@id':'doc:Variable_4d7e113ebfdca7a6052ca6817ac93047','@type':'woql:Variable','woql:variable_name':_2776{'@type':'xsd:string','@value':"Z"}},'woql:predicate':_2726{'@id':'doc:Variable_b37499f2a3f77a6590c7ae80523ba665','@type':'woql:Variable','woql:variable_name':_2742{'@type':'xsd:string','@value':"Y"}},'woql:subject':_2692{'@id':'doc:Variable_96dd1292b44ce04cf18b5a608fc997f6','@type':'woql:Variable','woql:variable_name':_2708{'@type':'xsd:string','@value':"X"}}}}
+
+*/
