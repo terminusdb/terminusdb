@@ -38,6 +38,8 @@
 
 :- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.
 
+:- use_module(library(lists)).
+
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
