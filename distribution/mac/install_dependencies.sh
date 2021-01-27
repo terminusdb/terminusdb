@@ -9,6 +9,6 @@ fi
 mkdir public/pack
 git clone --single-branch --branch "$2" https://github.com/terminusdb/terminusdb.git public/terminusdb-server
 git clone --single-branch --branch "$1" https://github.com/terminusdb/terminus_store_prolog.git public/pack/terminus_store_prolog
-git clone https://github.com/terminusdb/tus.git
+git clone https://github.com/terminusdb/tus.git public/pack/tus
 mkdir -p public/pack/terminus_store_prolog/lib/x86_64-darwin
 curl -L "https://github.com/terminusdb/terminus_store_prolog/releases/download/$1/libterminus_store.dylib" > public/pack/terminus_store_prolog/lib/x86_64-darwin/libterminus_store.dylib
