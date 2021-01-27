@@ -97,3 +97,53 @@ curl -X POST "https://127.0.0.1:6363/api/woql/admin/test_schema" -u "admin:root"
   ]
 }}' -k -H "Content-Type: application/json"
 ```
+
+# Optimize
+
+## System
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/optimize/_system" -u "admin:root" -k
+```
+## Meta
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/optimize/admin/foo/_meta" -d '{}' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+## Commit
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/optimize/admin/foo/local/_commits" -d '{}' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+## Branch
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/optimize/admin/foo/local/branch/main" -d '{}' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+# Squash
+
+Creates the new layer but does not put it anywhere (should use reset to afix it).
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/squash/admin/foo/local/branch/main" -d '{ "commit_info" : { "author" : "me", "message" : "yo"}}}' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+*Returns:*
+
+```javascript
+{"@type" : "api:SquashResponse",
+ "api:commit" : Commit,
+ "api:old_commit" : Old_Commit,
+ "api:status" : "api:success"}
+```
+
+# Reset
+
+You will need to fill in COMMIT with a valid commit descriptor (for instance one return from squash)
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/squash/admin/foo/local/branch/main" -d '{ "commit_descriptor" : COMMIT}' -u "admin:root" -k -H "Content-Type: application/json"
+```
