@@ -76,7 +76,7 @@ jobs:
     needs: test_and_push_docker
     steps:
       - uses: actions/checkout@v2
-      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && make bin"
+      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && swipl -g \"pack_install('https://terminusdb/tus.git', [interactive(false)])\" -g halt && make bin"
       - run: sudo docker cp fedora:/app/terminusdb/terminusdb fedora-bin
       - name: Upload rpm Artifact
         uses: actions/upload-artifact@v2.1.4
