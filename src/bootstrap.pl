@@ -21,7 +21,6 @@
 :- use_module(library(http/http_log)).
 
 main :-
-    ignore(pack_install('https://github.com/terminusdb/tus.git', [interactive(false)])),
     initialise_woql_contexts,
     bootstrap_files,
     bootstrap_config_files,
