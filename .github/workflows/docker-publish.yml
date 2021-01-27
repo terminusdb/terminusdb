@@ -4,7 +4,6 @@ on:
   push:
     # Publish `master` as Docker `latest` image.
     branches:
-      - ci_test
       - dev
       - canary
       - rc
@@ -19,6 +18,7 @@ on:
 
 env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.14.3
+  TUS_VERSION: v0.0.3
 
 jobs:
   test_and_push_docker:
@@ -76,7 +76,8 @@ jobs:
     needs: test_and_push_docker
     steps:
       - uses: actions/checkout@v2
-      - run: sudo docker run --name=fedora -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && swipl -g \"pack_install('https://terminusdb/tus.git', [interactive(false)])\" -g halt && make bin"
+      - run: git clone --single-branch --branch "$TUS_VERSION" 'https://github.com/terminusdb/tus.git'
+      - run: sudo docker run --name=fedora -v $(pwd)/tus:/usr/share/swi-prolog/pack/tus -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && make bin"
       - run: sudo docker cp fedora:/app/terminusdb/terminusdb fedora-bin
       - name: Upload rpm Artifact
         uses: actions/upload-artifact@v2.1.4
@@ -204,7 +205,7 @@ jobs:
         cd swipl
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
-        git clone https://github.com/terminusdb/tus.git
+        git clone --single-branch --branch "$TUS_VERSION" https://github.com/terminusdb/tus.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         md lib/x64-win64 -ea 0
@@ -321,7 +322,7 @@ jobs:
     - name: Install terminusdb-store-prolog
       run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
 
     - name: Cache SWI Prolog on Mac
       id: cache_mac_swipl
