@@ -322,7 +322,7 @@ jobs:
     - name: Install terminusdb-store-prolog
       run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
+        bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG" "$TUS_VERSION"
 
     - name: Cache SWI Prolog on Mac
       id: cache_mac_swipl
