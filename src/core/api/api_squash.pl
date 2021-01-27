@@ -72,6 +72,7 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
                         insert_layer_object(Context, Layer_Id, Layer_Uri),
                         insert_graph_object(Context, Commit_Uri, Commit_Id, Type, Name, Layer_Uri, New_Graph_Uri),
                         ref_entity:attach_graph_to_commit(Context,Commit_Uri,Type,Name, New_Graph_Uri)
+                    ;   true
                     )
                 )
             )
