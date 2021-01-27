@@ -4,6 +4,7 @@ on:
   push:
     # Publish `master` as Docker `latest` image.
     branches:
+      - ci_test
       - dev
       - canary
       - rc
@@ -203,6 +204,7 @@ jobs:
         cd swipl
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
+        git clone https://github.com/terminusdb/tus.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         md lib/x64-win64 -ea 0
@@ -319,7 +321,7 @@ jobs:
     - name: Install terminusdb-store-prolog
       run: |
         TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        bash ../mac/install_terminusdb_store_prolog.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
+        bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG"
 
     - name: Cache SWI Prolog on Mac
       id: cache_mac_swipl
