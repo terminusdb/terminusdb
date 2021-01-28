@@ -2256,7 +2256,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(files), auth_wrapper(tus_dispatch),
-                [ methods([options,head,post,patch]),
+                [ methods([options,head,post,patch,delete]),
                   prefix
                 ]).
 
