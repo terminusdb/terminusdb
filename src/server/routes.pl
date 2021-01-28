@@ -3292,7 +3292,7 @@ user_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
     do_or_die(_{ agent_name : Agent_Name } :< Document,
-              error(malformed_update_user_document(Document))
+              error(malformed_update_user_document(Document, [agent_name]))
              ),
 
     api_report_errors(

@@ -677,12 +677,12 @@ api_error_jsonld(user_update,error(user_update_failed_without_error(Name,Documen
              'api:error' : _{ '@type' : "api:UserUpdateFailedWithoutError",
                               'api:user_name' : Name}
             }.
-api_error_jsonld(user_update,error(malformed_add_user_document(Document),_),JSON) :-
-    atom_json_dict(Atom, Document,[]),
-    format(string(Msg), "An update to a user which does not already exist was attempted with the incomplete document ~q", [Atom]),
+api_error_jsonld(user_update,error(malformed_update_user_document(Document,Expected),_),JSON) :-
+    format(string(Msg), "An update to a user which does not already exist was attempted with a document missing required fields ~q", [Expected]),
     JSON = _{'@type' : "api:UserUpdateErrorResponse",
              'api:status' : "api:failure",
              'api:message' : Msg,
+             'api:document' : Document,
              'api:error' : _{ '@type' : "api:MalformedAddUserDocument"}
             }.
 api_error_jsonld(user_delete,error(user_delete_failed_without_error(Name),_),JSON) :-

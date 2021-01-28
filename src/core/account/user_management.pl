@@ -296,7 +296,11 @@ update_user(SystemDB, Name, Document) :-
     do_or_die((_{ user_identifier : ID,
                   agent_name : Name,
                   comment : Comment} :< Document),
-              error(malformed_add_user_document(Document),_)),
+              error(malformed_update_user_document(Document,[user_identifier,
+                                                             agent_name,
+                                                             comment
+                                                            ]),
+                    _)),
 
     (   _{ password : Password } :< Document
     ->  Password_Option = some(Password)
@@ -945,5 +949,19 @@ test(add_user_organization, [
     agent_name_uri(system_descriptor{}, "Kevin", User_Uri),
     organization_name_uri(system_descriptor{}, "Fantasy", Organization_Uri),
     once(user_managed_resource(system_descriptor{}, User_Uri, Organization_Uri)).
+
+
+test(bad_add_user_document, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State)),
+         error(malformed_update_user_document(_660{agent_name:'Gavin',comment:'some comment',user_piedentifier:gavin},[user_identifier,agent_name,comment]),_)
+     ]) :-
+
+    User_Document = _{ user_piedentifier : gavin,
+                       agent_name : 'Gavin',
+                       comment : 'some comment'},
+
+    super_user_authority(Auth),
+    update_user_transaction(system_descriptor{}, Auth, gavin, User_Document).
 
 :- end_tests(user_management).
