@@ -2,7 +2,9 @@
 CURRENT_DIR=$(pwd)
 TERMINUSDB_BRANCH=$1
 TERMINUSDB_STORE_PROLOG_VERSION=$2
+TUS_VERSION=$3
 TERMINUSDB_STORE_PROLOG_DIR="app_dir/usr/lib/swi-prolog/pack/terminus_store_prolog"
+TUS_DIR="app_dir/usr/lib/swi-prolog/pack/tus"
 SOURCE="${BASH_SOURCE[0]}"
 mkdir -p app_dir/usr/share/terminusdb
 mkdir -p app_dir/usr/bin
@@ -17,6 +19,7 @@ cp -L /lib/x86_64-linux-gnu/libpcre.so.3 app_dir/usr/lib/swi-prolog/lib/x86_64-l
 cp -L /usr/lib/x86_64-linux-gnu/libbsd.so.0 app_dir/usr/lib/swi-prolog/lib/x86_64-linux/
 rm -rf app_dir/usr/lib/swi-prolog/bin/x86_64-linux/swipl-ld
 git clone https://github.com/terminusdb/terminus_store_prolog.git "$TERMINUSDB_STORE_PROLOG_DIR"
+git clone https://github.com/terminusdb/tus.git --single-branch --branch "$TUS_VERSION" "$TUS_DIR"
 cd "$TERMINUSDB_STORE_PROLOG_DIR"
 export TERMINUSDB_SERVER_PACK_DIR=$(realpath "../")
 git checkout "$TERMINUSDB_STORE_PROLOG_VERSION"
