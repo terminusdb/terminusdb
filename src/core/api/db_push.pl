@@ -192,7 +192,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     (   200 = Status_Code
     ->  tus_delete(Resource_URL, [tus_extension([termination])],
                    % assume extension to avoid pointless pre-flight
-                   [request_header('Authorization'=Authorization)]),
+                   [request_header('Authorization'=Authorization)])
     ;   400 = Status_Code,
         _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
     ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
