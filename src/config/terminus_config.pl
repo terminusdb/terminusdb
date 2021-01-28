@@ -36,8 +36,14 @@ bootstrap_config_files :-
     getenv_default('TERMINUSDB_SSL_CERT', DefaultCert, Cert),
     expand_file_search_path(terminus_home('config/localhost.key'), DefaultKey),
     getenv_default('TERMINUSDB_SSL_CERT_KEY', DefaultKey, Key),
+    initialize_system_ssl_certs,
     file_to_predicate(Cert, https_cert),
     file_to_predicate(Key, https_certkey).
+
+initialize_system_ssl_certs :-
+    (   getenv('TERMINUSDB_SYSTEM_SSL_CERTS', Value)
+    ->  set_prolog_flag(system_cacert_filename, Value)
+    ;   true).
 
 server_protocol(Value) :-
     (   https_enabled
