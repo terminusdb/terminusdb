@@ -720,8 +720,8 @@ test(csv_delete, [
  * Get or update a graph with turtle.
  */
 triples_handler(get,Path,Request, System_DB, Auth) :-
-    (   get_param('format', Request, Format)
-    ->  true
+    (   get_param('format', Request, Format_Atom)
+    ->  atom_string(Format_Atom,Format)
     ;   Format = "turtle"
     ),
     api_report_errors(
