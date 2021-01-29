@@ -18,7 +18,7 @@ on:
 
 env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.14.3
-  TUS_VERSION: v0.0.4
+  TUS_VERSION: v0.0.5
 
 jobs:
   test_and_push_docker:
