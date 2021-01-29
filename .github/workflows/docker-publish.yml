@@ -169,7 +169,7 @@ jobs:
         mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
     - name: Run AppImage tests
-      run: chmod +x TerminusDB-amd64.AppImage && ./TerminusDB-amd64.AppImage test
+      run: cd distribution/appimage && chmod +x TerminusDB-amd64.AppImage && ./TerminusDB-amd64.AppImage test
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
