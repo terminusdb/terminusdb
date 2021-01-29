@@ -168,6 +168,9 @@ jobs:
         ./build_script.sh "$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')" "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
         mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
+    - name: Run AppImage tests
+      run: chmod +x TerminusDB-amd64.AppImage && ./TerminusDB-amd64.AppImage test
+
     - name: Archive production artifacts
       uses: actions/upload-artifact@v1
       with:
