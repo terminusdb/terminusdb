@@ -145,5 +145,5 @@ curl -X POST "https://127.0.0.1:6363/api/squash/admin/foo/local/branch/main" -d 
 You will need to fill in COMMIT with a valid commit descriptor (for instance one return from squash)
 
 ```bash
-curl -X POST "https://127.0.0.1:6363/api/squash/admin/foo/local/branch/main" -d '{ "commit_descriptor" : COMMIT}' -u "admin:root" -k -H "Content-Type: application/json"
+curl -X POST "https://127.0.0.1:6363/api/reset/admin/foo/local/branch/main" -d '{ "commit_descriptor" : COMMIT}' -u "admin:root" -k -H "Content-Type: application/json"
 ```
