@@ -19,6 +19,8 @@
 :- use_module(core(api)).
 
 :- use_module(library(http/http_log)).
+:- use_module(library(qsave)).
+
 
 main :-
     initialise_woql_contexts,
