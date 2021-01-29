@@ -15,6 +15,8 @@
 
 :- use_module(jsonld).
 
+:- use_module(library(sort)).
+
 :- use_module(core(util)).
 :- reexport(core(util/syntax)).
 
