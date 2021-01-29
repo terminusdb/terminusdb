@@ -32,7 +32,7 @@ electron.app.on('will-quit', (event) => {
       })
       QUIT_OK = true
       console.log('Quitting...')
-      electron.app.quit() 
+      electron.app.quit()
     })
   }
 })
@@ -92,7 +92,7 @@ electron.app.on('ready', () => {
           initDb.stdout.on('data', (data) => console.log(data))
           initDb.stderr.on('data', (data) => console.log(data))
       }
-    }  
+    }
 
     console.log('binPath', binPath)
     console.log('binArgs', binArgs)
@@ -130,18 +130,19 @@ function createWindow () {
     icon: path.join(__dirname, 'assets/icons/favicon.png')
   })
 
-  MAIN_WINDOW.on('minimize', function (event) {
-    event.preventDefault()
-    MAIN_WINDOW.hide()
-  })
-
-  MAIN_WINDOW.on('close', function (event) {
-    if (!electron.app.isQuiting) {
+  MAIN_WINDOW.on('close', (event) => {
+    if (electron.app.quitting) {
+      MAIN_WINDOW = null
+    } else {
       event.preventDefault()
       MAIN_WINDOW.hide()
     }
-    return false
   })
+
+  electron.app.on('before-quit', function (evt) {
+        electron.app.quitting = true
+        trayMenu.destroy();
+  });
 
   MAIN_WINDOW.webContents.on('new-window', function (e, url) {
     e.preventDefault()
@@ -201,12 +202,12 @@ function createWindow () {
 
   const trayMenu = new electron.Menu()
 
-  trayMenu.append(new electron.MenuItem({
+  /*trayMenu.append(new electron.MenuItem({
     label: 'TerminusDB',
     click () {
       MAIN_WINDOW.show()
     }
-  }))
+  }))*/
   trayMenu.append(new electron.MenuItem({ type: 'separator' }))
   trayMenu.append(new electron.MenuItem({
     label: 'Hide',
@@ -234,7 +235,6 @@ function createWindow () {
 
   SYSTEM_TRAY.setContextMenu(trayMenu)
   SYSTEM_TRAY.setToolTip('TerminusDB')
-
-  SYSTEM_TRAY.on('click', () => SYSTEM_TRAY.popUpContextMenu(trayMenu))
+  SYSTEM_TRAY.on('click', () =>  MAIN_WINDOW.show())
+  SYSTEM_TRAY.on('right-click', () => SYSTEM_TRAY.popUpContextMenu(trayMenu))
 }
-
