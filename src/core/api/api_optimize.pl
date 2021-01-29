@@ -83,7 +83,9 @@ descriptor_optimize(branch_descriptor{
     Instance_Objects = (Transaction_Object.instance_objects),
     forall(
         (   member(Instance, Instance_Objects),
-            Layer = (Instance.read)),
+            Layer = (Instance.read),
+            ground(Layer)
+        ),
         rollup(Layer)
     ).
 
