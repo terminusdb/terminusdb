@@ -67,7 +67,7 @@ electron.app.on('ready', () => {
     binInitArgs = ['store', 'init', '--key', 'root']
   } else if (fs.existsSync(macOSPath)) {
     binPath = macOSPath
-    binArgs = [`${appDir}/terminusdb-server/src/start.pl`, 'serve']
+    binArgs = ['-O', `${appDir}/terminusdb-server/src/start.pl`, 'serve']
     binInitArgs = ['-g', 'halt', `${appDir}/terminusdb-server/src/start.pl`,
       'store', 'init', '--key', 'root']
   }

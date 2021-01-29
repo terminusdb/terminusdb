@@ -9,4 +9,4 @@ set TERMINUSDB_LOG_PATH=%APPDATA%\TerminusDB\httpd.log
 set TERMINUSDB_SERVER_PACK_DIR=%ScriptDir%swipl\pack
 set TERMINUSDB_AUTOLOGIN_ENABLED=true
 if not exist "%TERMINUSDB_SERVER_DB_PATH%" "%ScriptDir%swipl\bin\swipl" -g halt "%ScriptDir%src\start.pl" store init --key root
-"%ScriptDir%swipl\bin\swipl.exe" "%ScriptDir%src\start.pl" serve
+"%ScriptDir%swipl\bin\swipl.exe" -O "%ScriptDir%src\start.pl" serve
