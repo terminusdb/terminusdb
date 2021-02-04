@@ -2239,7 +2239,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
         (   get_payload(Document, Request),
             (   (   is_dict(Document),
                     _{ resource_uri : Resource_Uri } :< Document,
-                    Resource_Or_Payload = resource(Resource_URI)
+                    Resource_Or_Payload = resource(Resource_Uri)
                 )
             ->  true
             ;   Resource_Or_Payload = payload(Document)
