@@ -166,20 +166,26 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
     ;   Additional_Options = []),
 
-    remote_tus_url(Remote_URL, TUS_URL),
+    catch(
+        (   % Try TUS protocol
+            remote_tus_url(Remote_URL, TUS_URL),
 
-    setup_call_cleanup(
-        (   tmp_file('authorized_push', Tmp_File),
-            open(Tmp_File, write, Stream, [encoding(octet)])),
-        format(Stream, "~s", Payload),
-        close(Stream)
+            setup_call_cleanup(
+                tmp_file_stream(Tmp_File, Stream, [encoding(octet)]),
+                format(Stream, "~s", Payload),
+                close(Stream)
+            ),
+
+            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
+            Data = json(_{resource_uri : Resource_URL})
+        ),
+        _, % TUS failed, fall back to old style
+        Data = bytes('application/octets',Payload)
     ),
-
-    tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
 
     remote_unpack_url(Remote_URL, Unpack_URL),
     catch(http_post(Unpack_URL,
-                    json(_{resource_uri : Resource_URL}),
+                    Data,
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),

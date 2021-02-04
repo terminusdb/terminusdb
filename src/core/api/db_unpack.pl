@@ -23,7 +23,7 @@ child_parent_linear_history(Child,Parent,Graph) :-
 % - history diverged
 % - (note, in routes we also check that the descriptor is valid)
 % NOTE: There is an unpack/1 in db_pack
-unpack(System_DB, Auth, Path, Resource_URL) :-
+unpack(System_DB, Auth, Path, Payload_or_Resource) :-
 
     string_concat(Path, "/local/_commits", Full_Path),
     do_or_die(
@@ -38,10 +38,16 @@ unpack(System_DB, Auth, Path, Resource_URL) :-
                           Auth),
 
     % 0. Get Payload
-    tus_uri_resource(Resource_URL, Resource),
-    www_form_encode(Auth, Domain),
-    tus_resource_path(Resource, Resource_Path, [domain(Domain)]),
-    read_file_to_string(Resource_Path, Payload, [encoding(octet)]),
+    (   resource(Resource_URL) = Payload_or_Resource
+        % We are TUS!
+    ->  tus_uri_resource(Resource_URL, Resource),
+        www_form_encode(Auth, Domain),
+        tus_resource_path(Resource, Resource_Path, [domain(Domain)]),
+        read_file_to_string(Resource_Path, Payload, [encoding(octet)])
+        % We are a raw payload
+    ;   payload(Payload) = Payload_or_Resource
+    ),
+
     % 1. Deconstruct Payload, as head and tgz
     payload_repository_head_and_pack(Payload,New_Head,Pack),
     % 2. linear future for current repository head

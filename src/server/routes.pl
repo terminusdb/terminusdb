@@ -2233,18 +2233,24 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
+
+    % This really should use API versioning
     do_or_die(
         (   get_payload(Document, Request),
-            _{ resource_uri : Resource_Uri } :< Document
+            (   (   is_dict(Document),
+                    _{ resource_uri : Resource_Uri } :< Document,
+                    Resource_Or_Payload = resource(Resource_URI)
+                )
+            ->  true
+            ;   Resource_Or_Payload = payload(Document)
+            )
         ),
-        error(bad_api_document(Document,[resource]),_)),
-
-    get_payload(Document, Request),
+        error(bad_api_document(Document,[resource_uri]),_)),
 
     api_report_errors(
         unpack,
         Request,
-        (   unpack(System_DB, Auth, Path, Resource_Uri),
+        (   unpack(System_DB, Auth, Path, Resource_Or_Payload),
             cors_reply_json(Request,
                             _{'@type' : 'api:UnpackResponse',
                               'api:status' : "api:success"},
