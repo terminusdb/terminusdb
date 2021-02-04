@@ -51,5 +51,49 @@ curl -X GET "https://127.0.0.1:6363/api/prefixes/admin/movie_graph" -u "admin:ro
 # Get Version
 
 ```bash
-curl -X GET "https://127.0.0.1:6363/api/info" -u "admin:root" -k -H "Content-Type: application/json"`
+curl -X GET "https://127.0.0.1:6363/api/info" -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+# Create Branch
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/branch/admin/foo/local/branch/bar" -u "admin:root" -d '{"origin" : "admin/foo/local/branch/main"}' -k -H "Content-Type: application/json"
+```
+
+# Delete Branch
+
+```bash
+curl -X DELETE "https://127.0.0.1:6363/api/branch/admin/foo/local/branch/bar" -d '{}' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+# Test WOQL multi-error response
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/woql/admin/test_schema" -u "admin:root" -d '{ 
+  "all_witnesses" : true,
+  "query" : {
+  "@type":"And",
+  "query_list": [
+    {
+      "@type":"QueryListElement",
+      "index": {"@type":"xsd:integer", "@value":0},
+      "query": {
+	"@type":"AddTriple",
+	"object":"scm:BS",
+	"predicate":"rdf:type",
+	"subject":"doc:test_subject"
+      }
+    },
+    {
+      "@type":"QueryListElement",
+      "index": {"@type":"xsd:integer", "@value":1},
+      "query": {
+	"@type":"AddTriple",
+	"object": {"@type":"xsd:integer", "@value":"asdf"},
+	"predicate":"rdf:label",
+	"subject":"doc:test_subject"
+      }
+    }
+  ]
+}}' -k -H "Content-Type: application/json"
 ```

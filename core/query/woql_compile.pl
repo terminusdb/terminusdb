@@ -1148,7 +1148,6 @@ compile_wf(from(Filter_String,P),Goal) -->
     update(filter,_,Old_Default_Filter).
 compile_wf(prefixes(NS,S), Prog) -->
     % Need to convert the datatype of prefixes here.
-    debug_wf('DO YOU HEAR ME ~q', [NS]),
     update(prefixes,NS_Old,NS_New),
     { append(NS, NS_Old, NS_New) },
     compile_wf(S, Prog),
@@ -4456,6 +4455,25 @@ test(using_multiple_prefixes, [
 
     query_response:run_context_ast_jsonld_response(Context, AST, _).
 
+test(bad_class_vio, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(doc:'Dublin', rdf:type, scm:'City_State'),
+           insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string)),
+
+    resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    catch(
+        query_response:run_context_ast_jsonld_response(Context, AST, _Result),
+        error(schema_check_failure([Failure]),_),
+        get_dict('@type', Failure, 'vio:InvalidClassViolation')).
 
 
 test(typeof, [

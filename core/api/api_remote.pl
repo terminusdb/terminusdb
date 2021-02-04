@@ -117,10 +117,6 @@ list_remotes(SystemDB, Auth, Path, Remote_Names) :-
         create_context(Descriptor, Context),
         error(unresolvable_target_descriptor(Descriptor),_)),
 
-    do_or_die(
-        has_remote_repository(Context, Remote_Name),
-        error(remote_does_not_exist(Remote_Name),_)),
-
     findall(Remote_Name,
             has_remote_repository(Context, Remote_Name),
             Remote_Names).

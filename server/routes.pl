@@ -1534,6 +1534,50 @@ test(get_object, [
       'system:role': _}
     :< Result.'Document'.
 
+test(multiple_witnesses, [
+         setup((setup_temp_server(State, Server),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+    Query0 =
+    _{'@type' : 'And',
+      query_list : [
+          _{'@type' : 'QueryListElement',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 0},
+            query : First_Insert},
+          _{'@type' : 'QueryListElement',
+            index : _{'@type' : "xsd:integer",
+                      '@value' : 1},
+            query : Second_Insert}]},
+    First_Insert =
+    _{ '@type' : "AddTriple",
+       subject : "doc:test_subject",
+       predicate : "rdf:type",
+       object : "scm:BS"
+     },
+
+    Second_Insert =
+    _{ '@type' : "AddTriple",
+       subject : "doc:test_subject",
+       predicate : "rdf:label",
+       object : _{ '@type' : "xsd:integer",
+                   '@value' : "asdf"}},
+
+    admin_pass(Key),
+    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
+    http_post(URI,
+              json(_{query : Query0, all_witnesses: true}),
+              JSON0,
+              [json_object(dict),
+               status_code(_),
+               authorization(basic(admin,Key))]),
+    Witnesses = (JSON0.'api:error'.'api:witnesses'),
+    length(Witnesses, N),
+    N > 1.
+
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2853,7 +2897,7 @@ test(pull_from_something_to_something_equal_other_branch,
 :- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
-                 methods([options,post])]).
+                 methods([options,post,delete])]).
 
 branch_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die(
@@ -2864,11 +2908,18 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
     ->  Origin_Option = some(Origin_Path)
     ;   Origin_Option = none),
 
-    % DUBIOUS are we even doing authentication here?
     api_report_errors(
         branch,
         Request,
         (   branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri),
+            cors_reply_json(Request,
+                            _{'@type' : 'api:BranchResponse',
+                              'api:status' : "api:success"}))).
+branch_handler(delete, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        branch,
+        Request,
+        (   branch_delete(System_DB, Auth, Path),
             cors_reply_json(Request,
                             _{'@type' : 'api:BranchResponse',
                               'api:status' : "api:success"}))).
@@ -3000,6 +3051,35 @@ test(create_branch_from_commit_graph_error, [
 
     resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
 
+    \+ has_branch(Repository_Descriptor, "foo").
+
+test(delete_empty_branch, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
+    admin_pass(Key),
+    http_post(URI,
+              json(_{prefixes : _{ doc : "https://terminushub.com/document",
+                                   scm : "https://terminushub.com/schema"}
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
+
+    has_branch(Repository_Descriptor, "foo"),
+
+    http_get(URI,
+             JSON2,
+             [method(delete),
+              json_object(dict),
+              authorization(basic(admin,Key))]),
+
+    (JSON2.'api:status' = "api:success"),
     \+ has_branch(Repository_Descriptor, "foo").
 
 :- end_tests(branch_endpoint).
@@ -3590,6 +3670,239 @@ test(optimize_system, [
     \+ parent(Layer,_).
 
 :- end_tests(optimize_endpoint).
+
+
+%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post,put,get,delete])]).
+
+/*
+ * reset_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+remote_handler(post, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ remote_name : Remote_Name,
+               remote_location : URL
+             } :< Document),
+        error(bad_api_document(Document, [remote_name, remote_location]), _)),
+
+    api_report_errors(
+        remote,
+        Request,
+        (   add_remote(System_DB, Auth, Path, Remote_Name, URL),
+            cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
+                                       'api:status' : "api:success"}))).
+remote_handler(delete, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ remote_name : Remote_Name } :< Document),
+        error(bad_api_document(Document, [remote_name]), _)),
+
+    api_report_errors(
+        remote,
+        Request,
+        (   remove_remote(System_DB, Auth, Path, Remote_Name),
+            cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
+                                       'api:status' : "api:success"}))).
+remote_handler(put, Path, Request, System_DB, Auth) :-
+
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ remote_name : Remote_Name,
+               remote_location : URL
+             } :< Document),
+        error(bad_api_document(Document, [remote_name]), _)),
+
+    api_report_errors(
+        remote,
+        Request,
+        (   update_remote(System_DB, Auth, Path, Remote_Name, URL),
+            cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
+                                       'api:status' : "api:success"}))).
+remote_handler(get, Path, Request, System_DB, Auth) :-
+
+    api_report_errors(
+        remote,
+        Request,
+        (   get_param(remote_name,Request,Remote_Name)
+        ->  show_remote(System_DB, Auth, Path, Remote_Name, Remote_URL),
+            cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
+                                       'api:remote_name' : Remote_Name,
+                                       'api:remote_url' : Remote_URL,
+                                       'api:status' : "api:success"})
+        ;   list_remotes(System_DB, Auth, Path, Remote_Names),
+            cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
+                                       'api:remote_names' : Remote_Names,
+                                       'api:status' : "api:success"}))).
+
+
+:- begin_tests(remote_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(remote_add, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
+
+    Origin = "http://somewhere.com/admin/foo",
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ remote_name : origin,
+                      remote_location : Origin
+                    }),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:RemoteResponse",
+             'api:status':"api:success"},
+
+    super_user_authority(Auth),
+    show_remote(system_descriptor{}, Auth, 'admin/test', origin, Origin).
+
+test(remote_remove, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
+
+    Origin = "http://somewhere.com/admin/foo",
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ remote_name : origin,
+                      remote_location : Origin
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    http_get(URI,
+             JSON,
+             [method(delete),
+              post(json(_{ remote_name : origin })),
+              json_object(dict),
+              authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:RemoteResponse",
+             'api:status':"api:success"},
+
+    super_user_authority(Auth),
+    list_remotes(system_descriptor{}, Auth, 'admin/test', []).
+
+test(remote_set, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
+
+    Origin = "http://somewhere.com/admin/foo",
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ remote_name : origin,
+                      remote_location : Origin
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    New_Origin = "http://somewhere.com/admin/foo",
+
+    http_put(URI,
+             json(_{ remote_name : origin,
+                           remote_location : New_Origin
+                   }),
+             JSON,
+             [json_object(dict),
+              authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:RemoteResponse",
+             'api:status':"api:success"},
+
+    super_user_authority(Auth),
+    show_remote(system_descriptor{}, Auth, 'admin/test', origin, New_Origin).
+
+test(remote_get, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
+
+    Origin = "http://somewhere.com/admin/foo",
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ remote_name : origin,
+                      remote_location : Origin
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    atomic_list_concat([URI, '?remote_name=origin'], GET_URI),
+    http_get(GET_URI,
+             JSON,
+             [json_object(dict),
+              authorization(basic(admin,Key))]),
+
+    _{ 'api:remote_name' : "origin",
+       'api:remote_url' : Origin } :< JSON.
+
+test(remote_list, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
+
+    Origin = "http://somewhere.com/admin/foo",
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ remote_name : origin,
+                      remote_location : Origin
+                    }),
+              _JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    http_get(URI,
+             JSON,
+             [json_object(dict),
+              authorization(basic(admin,Key))]),
+
+    _{ 'api:remote_names' : ["origin"]} :< JSON.
+
+
+
+:- end_tests(remote_endpoint).
+
+%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(root('worker.js'), cors_handler(Method, worker_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+worker_handler(get,Request, _System_DB, _Auth) :-
+    config:worker_js(Value),
+    write_cors_headers(Request),
+    throw(http_reply(bytes('text/html', Value))).
+
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
