@@ -128,15 +128,14 @@ jobs:
           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
           GIT_HASH=$(git rev-parse --short "$GITHUB_SHA")
+          DEB_DISTRIBUTIONS="deb.distribution=buster;deb.distribution=bullseye;deb.distribution=groovy;deb.distribution=focal;deb.distribution=bionic"
 
           if [ $(echo "${{ github.ref }}" | grep "tag") ]; then
-            curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-production-deb/terminusdb/${VERSION}/pool/main/t/terminusdb-${VERSION}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
-            curl -T terminusdb*.rpm -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-production-rpm/terminusdb/${VERSION}/fedora_33/terminusdb.rpm?publish=1"
+            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb/pool/terminusdb_$VERSION.deb;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
           # Upload to dev/canary/rc/production repo
           if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
-            curl -T terminusdb*.deb -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}" "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-deb/terminusdb/${VERSION}-${GIT_HASH}/pool/main/t/terminusdb-${VERSION}-${GIT_HASH}_amd64.deb;deb_distribution=buster,bullseye,groovy,focal,bionic;deb_component=main;deb_architecture=amd64?publish=1"
-            curl -T terminusdb*.rpm -u "rrooij:${{ secrets.BINTRAY_API_TOKEN }}"  "https://api.bintray.com/content/terminusdb/terminusdb-${BRANCH}-rpm/terminusdb/${VERSION}-${GIT_HASH}/fedora_33/terminusdb.rpm?publish=1"
+            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb-$BRANCH/pool/terminusdb_$VERSION;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
 
 
