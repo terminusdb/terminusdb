@@ -89,6 +89,43 @@ descriptor_optimize(branch_descriptor{
         rollup(Layer)
     ).
 
+
+% Write a generator that gives us back Start and Stop positions as commit_ids
+% based on a heuristic of exponential rollup
+%
+% i.e. r layers without a rollup needs a rollup
+%      r rollups needs a rollup.
+%
+/*
+
+Example with r = 3
+
+      .
+     / \
+    /   \
+   /     \
+  .   .   .   .   .
+ / \ / \ / \ / \ / \
+ ... ... ... ... ...  ..
+
+Sizes: [ Commit1_ID-9, Commit2_ID-3, Commit3_ID-3, Commit4_ID-1, Commit5_ID-1 ]
+
+Partitions: [ Commit1_ID-9 ], [ Commit2_ID-3, Commit3_ID-3 ], [Commit4_ID-1, Commit5_ID-1 ]
+
+Concurrent Rollup Algorithm:
+
+1. Get sizes
+2. Get partitions
+3. forall partitions:
+     If len(partition) >= r,
+     rollup(partition[0], partition[r])
+
+
+*/
+
+
+
+
 :- begin_tests(optimize).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
