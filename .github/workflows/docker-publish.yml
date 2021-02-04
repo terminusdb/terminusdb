@@ -131,11 +131,11 @@ jobs:
           DEB_DISTRIBUTIONS="deb.distribution=buster;deb.distribution=bullseye;deb.distribution=groovy;deb.distribution=focal;deb.distribution=bionic"
 
           if [ $(echo "${{ github.ref }}" | grep "tag") ]; then
-            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb/pool/terminusdb_$VERSION_amd64.deb;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
+            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb/pool/terminusdb_${VERSION}_amd64.deb;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
           # Upload to dev/canary/rc/production repo
           if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
-            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb-$BRANCH/pool/terminusdb_$VERSION_amd64;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
+            curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb-$BRANCH/pool/terminusdb_${VERSION}_amd64;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
 
 
