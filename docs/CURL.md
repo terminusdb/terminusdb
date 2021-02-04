@@ -147,3 +147,11 @@ You will need to fill in COMMIT with a valid commit descriptor (for instance one
 ```bash
 curl -X POST "https://127.0.0.1:6363/api/reset/admin/foo/local/branch/main" -d '{ "commit_descriptor" : COMMIT}' -u "admin:root" -k -H "Content-Type: application/json"
 ```
+
+# Rebase
+
+Rebase a branch on a path
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/rebase/admin/foo/local/branch/main" -d '{ "author" : "gavin@terminusdb.com", "rebase_from" : "admin/foo/local/branch/other" }' -u "admin:root" -k -H "Content-Type: application/json"
+```
