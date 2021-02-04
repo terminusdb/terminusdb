@@ -9,5 +9,6 @@
   - [Fedora / Red Hat](BUILD?id=fedora-or-red-hat)
   - [Arch Linux](BUILD?id=arch-linux)
   - [Mac OS](BUILD?id=mac-os)
+  - Sreya
 - [Contributing](CONTRIBUTING.md)
 - [curl](CURL.md)
