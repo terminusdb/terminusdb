@@ -3936,9 +3936,8 @@ test(remote_list, [
                 [method(Method),
                  methods([options,get])]).
 
-worker_handler(get,Request, _System_DB, _Auth) :-
+worker_handler(get, _Request, _System_DB, _Auth) :-
     config:worker_js(Value),
-    write_cors_headers(Request),
     throw(http_reply(bytes('text/html', Value))).
 
 
@@ -3978,7 +3977,7 @@ worker_handler(get,Request, _System_DB, _Auth) :-
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(get,Request, _System_DB, _Auth) :-
+console_handler(get, _Request, _System_DB, _Auth) :-
     config:index_template(Tpl_String),
     config:console_base_url(BaseURL),
     (   config:autologin_enabled
@@ -3987,7 +3986,6 @@ console_handler(get,Request, _System_DB, _Auth) :-
 
     format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
 
-    write_cors_headers(Request),
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).
