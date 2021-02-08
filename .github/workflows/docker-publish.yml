@@ -44,7 +44,7 @@ jobs:
           docker rm -v $id
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: terminusdb-linux
           path: terminusdb
@@ -80,7 +80,7 @@ jobs:
       - run: sudo docker run --name=fedora -v $(pwd)/tus:/usr/share/swi-prolog/pack/tus -v $(pwd):/app/terminusdb ghcr.io/terminusdb/terminus_store_prolog/terminus_store_prolog_fedora:latest bash -c "cd /app/terminusdb && make bin"
       - run: sudo docker cp fedora:/app/terminusdb/terminusdb fedora-bin
       - name: Upload rpm Artifact
-        uses: actions/upload-artifact@v2.1.4
+        uses: actions/upload-artifact@v2
         with:
             name: terminusdb-fedora-bin
             path: fedora-bin
@@ -107,7 +107,7 @@ jobs:
     - run: make deb
 
     - name: Upload deb Artifact
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v2
       with:
         name: terminusdb-deb
         path: terminusdb*.deb
@@ -118,7 +118,7 @@ jobs:
     - run: make rpm
 
     - name: Upload rpm Artifact
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v2
       with:
         name: terminusdb-rpm
         path: terminusdb*.rpm
@@ -171,7 +171,7 @@ jobs:
       run: cd distribution/appimage && chmod +x TerminusDB-amd64.AppImage && ./TerminusDB-amd64.AppImage test
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v2
       with:
         name: TerminusDB-amd64.AppImage
         path: distribution/appimage/TerminusDB-amd64.AppImage
@@ -225,7 +225,7 @@ jobs:
         swipl\bin\swipl -O src/start.pl test
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v2
       with:
         name: TerminusDB-server-windows.tar.gz
         path: extracted\terminusdb_windows.tar.gz
@@ -255,7 +255,7 @@ jobs:
       shell: bash
 
     - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v2
       with:
         name: "terminusdb-desktop Setup.exe"
         path: "distribution/desktop/dist/terminusdb-desktop Setup.exe"
@@ -292,7 +292,7 @@ jobs:
 
 
     - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v2
       with:
         name: terminusdb-desktop.AppImage
         path: distribution/desktop/dist/terminusdb-desktop.AppImage
@@ -348,7 +348,7 @@ jobs:
         public/SWI-Prolog.app/Contents/MacOS/swipl -O public/terminusdb-server/src/start.pl test
 
     - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v2
       with:
         name: terminusdb-desktop.dmg
         path: distribution/desktop/dist/terminusdb-desktop.dmg
