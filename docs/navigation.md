@@ -9,7 +9,7 @@
   - [Community](README?id=community)
   - [Roadmap](README?id=roadmap)
 - [TUTORIALS.md](TUTORIALS.md)
-  - [Getting Started](TUTORIALS?id=getting-started)
+  - [Getting Started](Intro_Tutorials/Getting_Started.md)
       - [Start With JS](Intro_Tutorials/Start_with_JS.md)
       - [Start With Python](Intro_Tutorials/Start_With_Python.md)
       - [Start With CLI](Intro_Tutorials/Start_With_CLI.md)
