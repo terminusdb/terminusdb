@@ -16,7 +16,7 @@
       - [Start With Console](Intro_Tutorials/Start_With_Console.md)
   - [More Tutorials](https://github.com/terminusdb/terminusdb-tutorials)
 - [HOW TO GUIDE.md](HOWTO.md)
-  - [How To](HOWTO?id=)
+  - [How To Install TerminusDB](How_To/Install.md)
 - [REFERENCE.md](REFERENCE.md)
   - [API](REFERENCE?id=api)
   - [JSON-LD](REFERENCE?id=json-ld)
