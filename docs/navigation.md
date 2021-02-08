@@ -15,7 +15,7 @@
       - [Start With CLI](Intro_Tutorials/Start_With_CLI.md)
       - [Start With Console](Intro_Tutorials/Start_With_Console.md)
   - [More Tutorials](https://github.com/terminusdb/terminusdb-tutorials)
-- [How To...](How_To/intro.md)
+- [How To...](How_To/Intro.md)
   - [Install TerminusDB](How_To/Install.md)
   - [Write A Client for TerminusDB](How_To/client.md)
   - [Build an Application](How_To/build_application.md)
