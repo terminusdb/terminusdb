@@ -17,6 +17,7 @@
   - [More Tutorials](https://github.com/terminusdb/terminusdb-tutorials)
 - [HOW TO GUIDE.md](HOWTO.md)
   - [How To Install TerminusDB](How_To/Install.md)
+  - [How To Write A Client for TerminusDB](How_To/client.md)
 - [REFERENCE.md](REFERENCE.md)
   - [API](REFERENCE?id=api)
   - [JSON-LD](REFERENCE?id=json-ld)
