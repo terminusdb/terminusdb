@@ -1,3 +1,8 @@
+# TerminusDB Server v4.1.1 Release Notes
+
+## Bug fixes
++ Fix double-cors header problem
+
 # TerminusDB Server v4.1.0 Release Notes
 
 ## New
