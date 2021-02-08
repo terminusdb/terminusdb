@@ -18,6 +18,8 @@
 - [HOW TO GUIDE.md](HOWTO.md)
   - [How To Install TerminusDB](How_To/Install.md)
   - [How To Write A Client for TerminusDB](How_To/client.md)
+  - [How To Build an Application](How_To/build_application.md)
+  - [How To Visualize Schema](How_To/visualize_schema.md)
 - [REFERENCE.md](REFERENCE.md)
   - [API](REFERENCE?id=api)
   - [JSON-LD](REFERENCE?id=json-ld)
