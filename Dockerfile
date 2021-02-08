@@ -3,7 +3,7 @@ WORKDIR /usr/share/swi-prolog/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
         && git clone https://github.com/terminusdb-labs/jwt_io.git \
-        && cd jwt_io && make
+        && cd jwt_io && git checkout 4a13d0a88abea557ba7e71412127a80960c44103 && make
 
 FROM terminusdb/terminus_store_prolog:v0.13.5
 WORKDIR /app/terminusdb
