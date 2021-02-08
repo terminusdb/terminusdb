@@ -10,7 +10,7 @@
   - [Roadmap](README?id=roadmap)
 - [TUTORIALS.md](TUTORIALS.md)
   - [Getting Started](TUTORIALS?id=getting-started)
-      - [Start With JS](Start_with_JS.md)
+      - [Start With JS](Intro_Tutorials/Start_with_JS.md)
       - [Getting Started with the JS Client](TUTORIALS?id=start-with-js)
       - [Getting Started with the CLI](TUTORIALS?id=start-with-cli)
   - [Tutorial Repo](TUTORIALS?id=tutorial-repo)
