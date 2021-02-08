@@ -14,7 +14,7 @@
       - [Start With Python](Intro_Tutorials/Start_With_Python.md)
       - [Start With CLI](Intro_Tutorials/Start_With_CLI.md)
       - [Start With Console](Intro_Tutorials/Start_With_Console.md)
-  - [More Tutorials](terminusdb/terminusdb-tutorials)
+  - [More Tutorials](https://github.com/terminusdb/terminusdb-tutorials)
 - [HOW TO GUIDE.md](HOWTO.md)
   - [How To](HOWTO?id=)
 - [REFERENCE.md](REFERENCE.md)
