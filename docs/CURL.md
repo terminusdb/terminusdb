@@ -155,3 +155,17 @@ Rebase a branch on a path
 ```bash
 curl -X POST "https://127.0.0.1:6363/api/rebase/admin/foo/local/branch/main" -d '{ "author" : "gavin@terminusdb.com", "rebase_from" : "admin/foo/local/branch/other" }' -u "admin:root" -k -H "Content-Type: application/json"
 ```
+
+# Class Frame
+
+Obtain the class frame of a class in a schema.
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "class" : "scm:SomeClass" } -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+Obtain the class frame of an instance
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "instance" : "doc:InstanceOfSomeClass" } -u "admin:root" -k -H "Content-Type: application/json"
+```
