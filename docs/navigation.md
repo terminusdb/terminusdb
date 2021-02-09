@@ -3,7 +3,7 @@
   - [Installation](README?id=getting-started)
       - [Download Center](https://terminusdb.com/hub/download)
       - [Build from Source](BUILD.md)
-      - [Bootstrap - Docker](terminusdb/terminusdb-bootstrap)
+      - [Bootstrap - Docker](terminusdb/terminusdb-bootstrap/README.md)
   - [Community](README?id=community)
   - [Roadmap](README?id=roadmap)
 - [Tutorials](TUTORIALS.md)
@@ -50,3 +50,4 @@
 - [Explanation](EXPLANATION.md)
 - [Release Notes](RELEASE_NOTES.md)
 - [Contributing](CONTRIBUTING.md)
+  - [Store](terminusdb/terminusdb-store/CONTRIBUTING.md)
