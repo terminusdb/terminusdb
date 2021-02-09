@@ -5,7 +5,7 @@
       - [Build from Source](BUILD.md)
       - [Bootstrap - Docker](terminusdb/terminusdb-bootstrap/README.md)
   - [Community](README?id=community)
-  - [Roadmap](README?id=roadmap)
+  - [Roadmap](ROADMAP.md)
 - [Tutorials](TUTORIALS.md)
   - [Getting Started](Intro_Tutorials/Getting_Started.md)
       - [Start With JS](Intro_Tutorials/Start_with_JS.md)
