@@ -1,3 +1,9 @@
+# TerminusDB Server v4.1.2 Release Notes
+
+## Bug fixes
+
++ Update Electron for security fixes
+
 # TerminusDB Server v4.1.1 Release Notes
 
 ## Bug fixes
