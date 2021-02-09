@@ -9,7 +9,7 @@
         "build-mac-os": "npx png2icns public/logo512.png -s 16,32,64,128,256 && npx electron-builder build"
     },
     "devDependencies": {
-        "electron": "^10.1.2",
+        "electron": "^10.2.0",
         "electron-builder": "^22.8.1"
     },
     "dependencies": {
