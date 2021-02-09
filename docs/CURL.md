@@ -161,11 +161,11 @@ curl -X POST "https://127.0.0.1:6363/api/rebase/admin/foo/local/branch/main" -d 
 Obtain the class frame of a class in a schema.
 
 ```bash
-curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "class" : "scm:SomeClass" } -u "admin:root" -k -H "Content-Type: application/json"
+curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "class" : "scm:SomeClass" }' -u "admin:root" -k -H "Content-Type: application/json"
 ```
 
 Obtain the class frame of an instance
 
 ```bash
-curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "instance" : "doc:InstanceOfSomeClass" } -u "admin:root" -k -H "Content-Type: application/json"
+curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "instance" : "doc:InstanceOfSomeClass" }' -u "admin:root" -k -H "Content-Type: application/json"
 ```
