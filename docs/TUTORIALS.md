@@ -6,6 +6,6 @@ The idea is to provide you with a guide that you can repeat exactly. It should g
 
 We are always trying to improve so let us know if this section could be better. We want your tutorial, so make it and we will publish.
 
-There is als0 a [tutorial repo]((https://github.com/terminusdb/terminusdb-tutorials) - check it out for more examples
+There is also a [tutorial repo]((https://github.com/terminusdb/terminusdb-tutorials) - check it out for more examples
 
 We use the ['The documentation system'](https://documentation.divio.com/) to organise the TerminusDB docs.
