@@ -67,6 +67,7 @@
      - [Low Code](explanation/LOWCODE.md)
   - [Clients](explanation/CLIENTS.md)
      - [Write a Client](explanation/WRITECLIENT.md)
+  - [Research Papers](RESEARCH.md)
 - [Release Notes](RELEASE_NOTES.md)
 - [Contributing](CONTRIBUTING.md)
   - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/CONTRIBUTING.md)
