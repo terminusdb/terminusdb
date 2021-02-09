@@ -68,6 +68,6 @@
   - [Clients](explanation/CLIENTS.md)
      - [Write a Client](explanation/WRITECLIENT.md)
   - [Research Papers](explanation/RESEARCH.md)
-- [Release Notes](RELEASE_NOTES.md)
+- [Release Notes](terminusdb/RELEASE_NOTES.md)
 - [Contributing](CONTRIBUTING.md)
   - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/CONTRIBUTING.md)
