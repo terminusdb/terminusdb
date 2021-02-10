@@ -18,6 +18,7 @@
   - [Get Started](How_To/get_started.md)
       - [Install TerminusDB](How_To/Install.md)
       - [Startup Container Correctly](How_To/start_container.md)
+      - [Understand ENV Variables in Bootstrap](How_To/ENV.md)
   - [Query](How_To/query.md)
       - [Do a Graph Query](How_To/graph_query.md)
       - [Save a Query](How_To/save_query.md)
