@@ -57,7 +57,7 @@
   - [CLI](REFERENCE?id=cli)
   - [Store](REFERENCE?id=store)
 - [Explanation](EXPLANATION.md)
-  - [Query](explanation/QUERY.md)
+  - [Query](Explanation/QUERY.md)
      - [Datalog - What's that?](Explanation/DATALOG.MD)
      - [Unification... What?](Explanation/unification.md)
   - [Data Modelling](Explanation/MODELLING.MD)
