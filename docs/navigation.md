@@ -4,6 +4,8 @@
       - [Download Center](https://terminusdb.com/hub/download)
       - [Build from Source](BUILD.md)
       - [Bootstrap - Docker](https://github.com/terminusdb/terminusdb-bootstrap/blob/master/README.md)
+      - [JS Client](Install/JS_INSTALL.md)
+      - [Python Client](Install/PYTHON_INSTALL.md)
   - [Community](README?id=community)
   - [Roadmap](ROADMAP.md)
       - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/docs/ROADMAP.md)
