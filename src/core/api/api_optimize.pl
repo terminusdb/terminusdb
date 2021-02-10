@@ -147,7 +147,7 @@ positions(Length, Base, Start, End) :-
         Start is Shifted_Start + Offset,
         End is Shifted_End + Offset).
 
-rollup_base(4).
+rollup_base(3).
 
 exponential_rollup_strategy(Layer) :-
     triple_store(Store),
