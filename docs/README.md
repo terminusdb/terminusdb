@@ -86,7 +86,7 @@ directly through clients you should look at the documentation on our
 
 Come visit us on our [discord server](https://discord.gg/yTJKAma)
 or our [forum](https://discuss.terminusdb.com). We are also on [twitter](https://twitter.com/TerminusDB)
-<img align="right" src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/TerminusDB%20color%20mascot.png" width="256px"/>
+<img align="right" src="https://assets.terminusdb.com/images/TerminusDB%20color%20mascot.png" width="256px"/>
 
 ## Changes in this Version
 
