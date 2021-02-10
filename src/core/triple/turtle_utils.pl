@@ -20,6 +20,10 @@
 :- use_module(core(triple/casting)).
 :- use_module(library(semweb/turtle)).
 
+:- multifile user:portray/1.
+user:portray(turtle_utils:open_string(_, Stream)) :-
+    format("~q", [turtle_utils:open_string("... string elided...", Stream)]).
+
 /*
  * update_turtle_graph(+Context,+TTL) is det.
  *
