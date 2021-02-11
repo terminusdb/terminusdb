@@ -817,6 +817,89 @@ validation_objects_to_transaction_objects(Validation_Objects, Transaction_Object
 :- use_module(core(transaction)).
 :- use_module(library(terminus_store)).
 
+test(commit_two_transactions_on_empty, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'Boo'),
+    resolve_absolute_string_descriptor("admin/Boo", Branch_Descriptor),
+
+    create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context1),
+    create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context2),
+
+    ask(Context1,
+        insert(doc:a,doc:b,doc:c)),
+    query_context_transaction_objects(Context1, Transactions1),
+
+    ask(Context2,
+        insert(doc:e,doc:f,doc:g)),
+    query_context_transaction_objects(Context2, Transactions2),
+
+    run_transactions(Transactions1,(Context1.all_witnesses),_),
+
+    retry_transaction(Context2, _),
+
+    ask(Context2,
+        insert(doc:e,doc:f,doc:g)),
+
+    run_transactions(Transactions2,(Context2.all_witnesses),_),
+    !,
+
+    findall(t(X,Y,Z),
+            ask(Branch_Descriptor,
+                t(X, Y, Z)),
+            Triples),
+
+    Triples = [t(doc:a,doc:b,doc:c),
+               t(doc:e,doc:f,doc:g)].
+
+test(commit_two_transactions_on_existing, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'Boo'),
+    resolve_absolute_string_descriptor("admin/Boo", Branch_Descriptor),
+
+
+    create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(doc:asdf,doc:fdsa,doc:baz)),
+        _),
+
+    create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context1),
+    create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context2),
+
+    ask(Context1,
+        insert(doc:a,doc:b,doc:c)),
+    query_context_transaction_objects(Context1, Transactions1),
+
+    ask(Context2,
+        insert(doc:e,doc:f,doc:g)),
+    query_context_transaction_objects(Context2, Transactions2),
+
+    run_transactions(Transactions1,(Context1.all_witnesses),_),
+
+    retry_transaction(Context2, _),
+
+    ask(Context2,
+        insert(doc:e,doc:f,doc:g)),
+
+    run_transactions(Transactions2,(Context2.all_witnesses),_),
+    !,
+
+    findall(t(X,Y,Z),
+            ask(Branch_Descriptor,
+                t(X, Y, Z)),
+            Triples),
+
+    Triples = [t(doc:asdf,doc:fdsa,doc:baz),
+               t(doc:a,doc:b,doc:c),
+               t(doc:e,doc:f,doc:g)].
+
 test(insert_on_branch_descriptor, [
          setup(setup_temp_store(State)),
          all( t(X, Y, Z) == [t(doc:asdf,doc:fdsa,doc:baz)]),

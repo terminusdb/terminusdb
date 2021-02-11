@@ -69,7 +69,7 @@ descriptor_optimize(repository_descriptor{
     open_descriptor(Descriptor, Transaction_Object),
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
-    rollup(Layer).
+    exponential_rollup_strategy(Layer).
 descriptor_optimize(branch_descriptor{
                         repository_descriptor : Repository_Descriptor,
                         branch_name : Branch_Name
@@ -86,7 +86,7 @@ descriptor_optimize(branch_descriptor{
             Layer = (Instance.read),
             ground(Layer)
         ),
-        rollup(Layer)
+        exponential_rollup_strategy(Layer)
     ).
 
 
@@ -94,7 +94,7 @@ descriptor_optimize(branch_descriptor{
 % based on a heuristic of exponential rollup
 %
 % i.e. r layers without a rollup needs a rollup
-%      r rollups needs a rollup.
+%      r rollups needs a rollup, etc.
 %
 /*
 
@@ -120,17 +120,84 @@ Concurrent Rollup Algorithm:
      If len(partition) >= r,
      rollup(partition[0], partition[r])
 
-
 */
 
+/*
+ * An integer log
+ */
+log(N,B,0) :-
+    B > N,
+    !.
+log(N,B,Ans) :-
+    N1 is N // B,
+    N1 > 0,
+    log(N1, B, A),
+    Ans is A + 1.
 
+/* true if some rollup could occur upto distance */
+positions(Length, Base, Start, End) :-
+    Length >= Base,
+    log(Length, Base, Exp),
+    Offset is Base ** Exp,
+    (   Start = 0,
+        End is Offset - 1
+    ;   Offset < Length,
+        New_Length is Length - Offset,
+        positions(New_Length, Base, Shifted_Start, Shifted_End),
+        Start is Shifted_Start + Offset,
+        End is Shifted_End + Offset).
 
+rollup_base(3).
+
+exponential_rollup_strategy(Layer) :-
+    triple_store(Store),
+    % Names = [Oldest, ... , Newest]
+    layer_stack_names(Layer, Names),
+    length(Names, Size),
+    rollup_base(B),
+    forall(
+        (   nth1(N,Names,Name),
+            positions(Size, B, Start, N),
+            true
+            % format(user_error, "About to optimize from Start: ~q to End: ~q~n", [Start, N])
+        ),
+        (   Start = 0 % rollup everything
+        ->  store_id_layer(Store, Name, This_Layer),
+            rollup(This_Layer)
+        ;   store_id_layer(Store, Name, This_Layer),
+            nth0(Start, Names, Upto_Id),
+            store_id_layer(Store, Upto_Id, Upto),
+            rollup_upto(This_Layer, Upto)
+        )
+    ).
 
 :- begin_tests(optimize).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+
+test(partition,[]) :-
+    B1 = 2,
+    findall(
+        Start-End,
+        (   positions(10, B1, Start, End)),
+        Positions1),
+    Positions1 = [0-7,8-9],
+
+    B2 = 3,
+    findall(
+        Start-End,
+        (   positions(27, B2, Start, End)),
+        Positions2),
+    Positions2 = [0-26],
+
+    B3 = 3,
+    findall(
+        Start-End,
+        (   positions(30, B3, Start, End)),
+        Positions3),
+    Positions3 = [0-26, 27-29].
 
 test(optimize_system,
      [setup((setup_temp_store(State),

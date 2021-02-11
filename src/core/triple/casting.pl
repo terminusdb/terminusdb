@@ -99,12 +99,21 @@ typecast(Val, Type, Hint, Cast) :-
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
         ;   Val = Bare_Literal@Source_Type
         ->  typecast_switch(Bare_Literal,Source_Type,Type,Hint,Cast)
+        ;   atom(Val)
+        ->  typecast_switch(Val,'http://www.w3.org/2002/07/owl#Thing',Type,Hint,Cast)
         ;   throw(error(casting_error(Val, Type), _))
         )
     ).
-typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Val) :-
+
+/* This should be type indexed! */
+typecast_switch(Val, 'http://www.w3.org/2002/07/owl#Thing', 'http://www.w3.org/2001/XMLSchema#string', _, String^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom(Val),
+    !,
+    atom_string(Val,String).
+typecast_switch(Val, _ST, 'http://www.w3.org/2002/07/owl#Thing', _, Atom) :-
     /* It might be wise to check URI validity */
-    !.
+    !,
+    format(atom(Atom), '~w', [Val]).
 typecast_switch(Val, Type, Type, _, Val^^Type) :-
     /* self cast */
     !.
@@ -222,5 +231,16 @@ test(string_boolean, []) :-
     typecast("1"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], true^^'http://www.w3.org/2001/XMLSchema#boolean'),
     typecast("false"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], false^^'http://www.w3.org/2001/XMLSchema#boolean'),
     typecast("0"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#boolean', [], false^^'http://www.w3.org/2001/XMLSchema#boolean').
+
+test(uri_string, []) :-
+    typecast('https://bar/foo', 'http://www.w3.org/2001/XMLSchema#string', [], Cast),
+    Cast = "https://bar/foo"^^'http://www.w3.org/2001/XMLSchema#string'.
+
+test(bool_uri, []) :-
+    /* This is clearly terrifying.  Should we not restrict to plausible castables? 
+       ... or some restriction on the form of URIs? */
+    typecast(1^^'http://www.w3.org/2001/XMLSchema#boolean',
+             'http://www.w3.org/2002/07/owl#Thing', [], Cast),
+    Cast = '1'.
 
 :- end_tests(typecast).

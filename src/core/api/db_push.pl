@@ -167,8 +167,10 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   Additional_Options = []),
 
     catch(
-        (   % Try TUS protocol
+        (   % Try TUS protocol (we could check resulting options too for create etc...)
             remote_tus_url(Remote_URL, TUS_URL),
+            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
+
 
             setup_call_cleanup(
                 tmp_file_stream(Tmp_File, Stream, [encoding(octet)]),
@@ -179,7 +181,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
             tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
             Data = json(_{resource_uri : Resource_URL})
         ),
-        _, % TUS failed, fall back to old style
+        error(existence_error(url,_),_),
+        % TUS failed, fall back to old style
         Data = bytes('application/octets',Payload)
     ),
 
