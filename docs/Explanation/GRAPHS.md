@@ -67,7 +67,7 @@ Each commit object is associated with layers which represent the
 branch of interest, as well as potentially containing parent commits,
 if the commit has a history.
 
-# The Branch graphs
+## The Branch graphs
 
 The Branch graphs are responsible for doing the heavy lifting of
 storing our data in a querable way and ensuring correctness of the
@@ -78,14 +78,14 @@ arbitrary name which we use to refer to the branch of interest, and
 which defaults to `main`. For instance, we might have a branch whose
 full path is: `admin/foo/local/branch/main`.
 
-# Layers
+## Layers
 
 The lowest level of the hieraharchy is (conceptually) a single graph
 which is composed of a sequence of layers. The layers specify each
 change which has taken place to the data - including additions and
 deletions.
 
-# Transactions
+## Transactions
 
 A transaction in the graph is also a hierarchical operation, which
 ensures we keep ACID properties. The stages are as follows:
@@ -103,7 +103,7 @@ graph so we know the current most recent state of the repository.
   newest version into a *label* which is kept in our layer store as a
   named pointer to a layer.
 
-# Conclusion
+## Conclusion
 
 While somewhat intricate the collection of graphs enables us to have
 all of the machinery that one needs for a multi-master *collaboration*
