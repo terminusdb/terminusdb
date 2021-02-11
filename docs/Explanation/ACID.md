@@ -57,10 +57,10 @@ have changed mid-run.
 # Durability
 
 TerminusDB is very durable. Even transactions being stopped mid-swing
-are very unlikely to lead to any sort of corruption, and corruption
-that does not involve damage to the actual information storage or that
-caused by operating system bugs, is very unlikely. In the event of
-some partial commit, the previous layer remains completely unchanged
-and thereby recoverable. This also significantly simplifies backups -
-which need only copy storage in order to ensure a safely recoverable
-state.
+are very unlikely to lead to any sort of corruption, and data
+corruption that does not involve damage to the actual information
+storage or that caused by operating system bugs, is very unlikely. In
+the event of some partial commit, the previous layer remains
+completely unchanged and thereby recoverable. This also significantly
+simplifies backups - which need only copy storage in order to ensure a
+safely recoverable state.
