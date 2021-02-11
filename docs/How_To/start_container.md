@@ -5,6 +5,8 @@
 TerminusDB bootstrap is wrapper script around the Docker image which already sets sane defaults to make
 the experience as easy as possible. For instance, it automatically persists the data in a volume.
 
+Additional instructions on how to run TerminusDB-bootstrap can be found on the [repo](https://github.com/terminusdb/terminusdb-bootstrap)
+
 ## Running it manually with Docker (advanced users)
 
 The TerminusDB Docker image can be run with:
