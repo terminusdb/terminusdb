@@ -207,7 +207,7 @@ jobs:
         cd swipl
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
-        git clone --single-branch --branch "$TUS_VERSION" https://github.com/terminusdb/tus.git
+        git clone --single-branch --branch "$env:TUS_VERSION" https://github.com/terminusdb/tus.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         md lib/x64-win64 -ea 0
