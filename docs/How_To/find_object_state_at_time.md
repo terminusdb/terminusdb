@@ -13,6 +13,7 @@ import datetime
 from terminusdb_client import WOQLClient
 from terminusdb_client import WOQLQuery as WOQL
 
+# Connect to the server
 server_url = "https://127.0.0.1:6363"
 db = "seshat"
 user = "admin"
@@ -21,7 +22,7 @@ key = "root"
 client = WOQLClient(server_url)
 client.connect(user=user, account=account, key=key, db=db)
 
-
+# Find the first commit before this date (as a timestamp)
 date_string = "14/10/2020"
 timestamp = time.mktime(datetime.datetime.strptime(date_string,
                                                    "%d/%m/%Y").timetuple())
@@ -38,9 +39,11 @@ commit_query = WOQL().using("admin/seshat/local/_commits",
            WOQL().greater(timestamp, "v:TimeStamp"),
 )))
 
+# Extract the commit id
 results = client.query(commit_query)
 commit_id = results['bindings'][0]['TailID']['@value']
 
+# Read the object from this commit
 path = f"admin/seshat/local/commit/{commit_id}"
 object_query = WOQL().using(path,
         WOQL().read_object("terminusdb:///data/afghazn", "v:Document"))
