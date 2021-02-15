@@ -40,3 +40,14 @@ result = client.query(query)
 print(result['bindings'][0]['Band'])
 print(result['bindings'][0]['Path'])
 ```
+
+The answer we obtain for the band is `doc:Angelfire_(band)` with the path:
+
+```
+"doc:Whitesnake" - "scm:bandMember" -> "doc:Reb_Beach"
+"doc:Winger_(band)" - "scm:bandMember" -> "doc:Reb_Beach"
+"doc:Winger_(band)" - "scm:bandMember" -> "doc:Rod_Morgenstein"
+"doc:Dixie_Dregs" - "scm:bandMember" -> "doc:Rod_Morgenstein"
+"doc:Dixie_Dregs" - "scm:bandMember" -> "doc:Steve_Morse"
+"doc:Angelfire_(band)"- "scm:bandMember" -> "doc:Steve_Morse"
+```
