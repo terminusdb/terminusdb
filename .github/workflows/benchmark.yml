@@ -5,7 +5,7 @@ on:
       - dev
 
 jobs:
-  build-and-deploy:
+  run-benchmark:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
