@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613477982553,
+  "lastUpdate": 1613486426565,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -62,6 +62,37 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.01595998109358533",
             "extra": "mean: 150.59699553333274 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "distinct": true,
+          "id": "822b7f978e95c2b5e9c9c482b1b04e998f6a6c1e",
+          "message": "Fix pull error handling",
+          "timestamp": "2021-02-16T15:38:35+01:00",
+          "tree_id": "e1aa25a861d37dfe635be77d23999c9bc5e6dd11",
+          "url": "https://github.com/terminusdb/terminusdb/commit/822b7f978e95c2b5e9c9c482b1b04e998f6a6c1e"
+        },
+        "date": 1613486425645,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.068699411775536,
+            "unit": "iter/sec",
+            "range": "stddev: 0.019191559877066767",
+            "extra": "mean: 164.77995236666817 msec\nrounds: 30"
           }
         ]
       }
