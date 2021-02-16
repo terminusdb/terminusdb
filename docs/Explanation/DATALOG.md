@@ -9,41 +9,41 @@ query.
 
 Datalog, like its super-set prolog, is based on the use of
 predicates. These predicates fill a role similar to that of relations
-from the more familiar relational languages like SQL. Querys can use
+from the more familiar relational languages like SQL. Queries can use
 these predicates together with *logical variables* to represent
 unknowns to which we would like concrete referents which satisfy some
 logical formula.  This happens by joining together predicates with
 logical connectives such as `and` and `or` and *unifying* logical
-variables such that repeated occurances of the same variable *require*
+variables such that repeated occurrences of the same variable *require*
 the query has identical solutions at those points.
 
 ## Advantages of Datalog
 
-As against prolog, datalog has some advantages. All variables are only
+As against prolog, datalog has some advantages. Variables are only
 allowed to take on *atomic* values. In prolog, complex objects with
-deep structural matching can occur. By contrast, if atomic values are
-limited to finite sets, such as all nodes might occur in a graph, we
-can guarantee termination of queries, even in the face of
-recursion. This means we can also simplify the process of optimisation
-of queries and we can guarantee we will not "flounder" (flip-flop
-between alternative solutions).
+deep structural matching can occur. If atomic values are limited to
+finite sets, such as all nodes which might occur in a graph, we can
+guarantee termination of queries, even in the face of recursion. This
+means we can also simplify the process of optimisation of queries and
+(with some additional restrictions on the use of negation) we can
+guarantee we will not "flounder" (flip-flop between alternative
+solutions).
 
 The restriction to finite atomic values is relaxed in WOQL to give us
 lists, which are useful for aggregation queries (such as group-by) and
-disaggregation (such as member), in addition to useful objects such as
-natural numbers. We however retain the purely declarative properties
-of datalog.
+dis-aggregation (such as member), in addition to useful objects such as
+natural numbers. We however retain the pure declarative quality of
+datalog.
 
 As against relational languages, datalog provides a much more flexible
 logical framework. It is much easier to extend in a consistent fashion
 with recursive and path centric operations. In addition it allows
-joins to be provided in much more complicated fashion with a less
-verbose syntax and enables auxilliary calculational predicates to be
-added easily.
+complex joins to be provided in a more elegant fashion with a less
+verbose syntax.
 
-It can be seen as a sort of stepping stone from relational languages
-like SQL, towards a more fully featured programming language while
-retaining many of the nice declarative properties which has made
+Datalog can be seen as a sort of stepping stone from relational
+languages like SQL towards a more fully featured programming language
+while still retaining the nice declarative properties which has made
 relational approaches so robust, pervasive and resilient as query
 languages.
 
@@ -69,7 +69,7 @@ searching for the solutions to the query.
 ## An Example
 
 Perhaps the most important predicate in WOQL is `triple` which gives
-results about edges in the current graph. 
+results about edges in the current graph.
 
 Our logical variables are represented as strings with the prefix
 `"v:"`. Our edges are represented by having a position for the
@@ -83,8 +83,9 @@ triple("v:Subject", "v:Predicate", "v:Object")
 
 With this query we simply get back the solutions for every possible
 assignment of subjects, predicates and objects that our graph
-currently holds. The concrete referents are datapoints represented by
-an URI (a universal resource indicator).
+currently has, that is, all edges in the graph. The concrete referents
+for the subject, predicate and object are datapoints represented by a
+URI (a universal resource indicator).
 
 ```javascript
 triple("v:Subject", "v:Predicate", "v:Intermediate")
@@ -93,7 +94,7 @@ triple("v:Intermediate", "v:Predicate", "v:Object")
 
 In this second query we have *joined* two predicates together by
 requiring that the target of the first edge is the source of the
-second. This gives us back all two element paths possible in the
+second. This gives us back all two hop paths possible in the
 graph.
 
 ```javascript
@@ -102,13 +103,14 @@ triple("v:Intermediate", "v:Predicate", "v:Object")
 ```
 
 And here we refer to a specific starting node, and search for every
-two hop path starting from this object.
+two hop path starting from *this* object.
 
 ## Conclusion
 
 Datalog is a flexible but powerful declarative query language which
-excells at dealing with the kinds of complex and many-hop
-relationships that occur in graphs. While many graph query languages
-exist, those not based on datalog do not exibit the clarity,
-simplicity and logical underpinnings that were present in
-datalog. Datalog is Occam's razor for graphs.
+excels at dealing with the kinds of complex and many-hop relationships
+that occur in graphs. While many graph query languages exist, those
+not based on datalog do not exibit the clarity, simplicity and logical
+underpinnings that were present in datalog. Datalog is Occam's razor
+for graphs and its clarity and simplicity make it the *right*
+foundation for graph query.
