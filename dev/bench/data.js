@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613486426565,
+  "lastUpdate": 1613488955622,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -93,6 +93,37 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.019191559877066767",
             "extra": "mean: 164.77995236666817 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "distinct": true,
+          "id": "f7082a4f428fe12fa7e98fc6f744516f03a8e787",
+          "message": "Fix TUSless server for communicating push with TUS client",
+          "timestamp": "2021-02-16T16:20:28+01:00",
+          "tree_id": "0382de08cdabe7a876516ebec412237268e140ff",
+          "url": "https://github.com/terminusdb/terminusdb/commit/f7082a4f428fe12fa7e98fc6f744516f03a8e787"
+        },
+        "date": 1613488954739,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.706213568726697,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014265952881263021",
+            "extra": "mean: 149.11544193333364 msec\nrounds: 30"
           }
         ]
       }
