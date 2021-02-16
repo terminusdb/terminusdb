@@ -194,3 +194,63 @@ left_edges((X;Y),Rs) :-
     left_edges(X,Ps),
     left_edges(Y,Qs),
     append(Ps,Qs,Rs).
+
+:- begin_tests(path).
+
+:- use_module(core(util/test_utils)).
+:- use_module(ask).
+:- use_module(resolve_query_resource).
+
+test(n_m, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(c,d,e),
+           insert(e,f,g),
+           insert(g,h,a)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    AST2 = path(a, times((p(b);p(d);p(f);p(h)),1,3), v(x), v(p)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    query_response:run_context_ast_jsonld_response(Context2, AST2, Result),
+    get_dict(bindings,Result,Bindings),
+    length(Bindings, 3).
+
+test(n_m_loop, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(c,d,e),
+           insert(e,f,g),
+           insert(g,h,a)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+
+    AST2 = path(a, times((p(b);p(d);p(f);p(h)),1,5), v(x), v(p)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    query_response:run_context_ast_jsonld_response(Context2, AST2, Result),
+    get_dict(bindings,Result,Bindings),
+
+    % test that we aren't going in circles
+    length(Bindings, 4).
+
+:- end_tests(path).
