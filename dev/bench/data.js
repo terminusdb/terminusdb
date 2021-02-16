@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613474251164,
+  "lastUpdate": 1613477982553,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -31,6 +31,37 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.021680743871788484",
             "extra": "mean: 194.9337275999966 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "distinct": true,
+          "id": "175cdfbc8ab96f817f2f8355806f9142c0c93764",
+          "message": "Add tests to path patterns",
+          "timestamp": "2021-02-16T13:17:51+01:00",
+          "tree_id": "6fab27f0199602ea2637f9f69a56b3b6fee6d148",
+          "url": "https://github.com/terminusdb/terminusdb/commit/175cdfbc8ab96f817f2f8355806f9142c0c93764"
+        },
+        "date": 1613477982076,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.640238714315271,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01595998109358533",
+            "extra": "mean: 150.59699553333274 msec\nrounds: 30"
           }
         ]
       }
