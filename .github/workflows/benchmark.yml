@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v2.3.1
 
       - name: Build Docker image
-        run: docker build . --file Dockerfile --tag terminusdb:local
+        run: docker build . --file Dockerfile --tag terminusdb/terminusdb-server:local
       - name: Run server
         run: |
           docker run -d --name terminusdb -p 6363:6363 terminusdb/terminusdb-server:local /app/terminusdb/terminusdb serve
