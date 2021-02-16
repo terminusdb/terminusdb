@@ -3,7 +3,7 @@
 Datalog is an abstract declarative language family which is a *purely
 declarative* subset of prolog. It does not refer to a specific syntax,
 but rather a more or less defined semantics. Because of its purely
-declarative and relational nature it makes an excellent query
+declarative and logical nature it makes an excellent query
 language, particularly (but not limited to), its utility for graph
 query.
 
