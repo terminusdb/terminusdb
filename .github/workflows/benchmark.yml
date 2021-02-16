@@ -15,7 +15,7 @@ jobs:
         run: docker build . --file Dockerfile --tag terminusdb/terminusdb-server:local
       - name: Run server
         run: |
-          docker run -d --name terminusdb -p 6363:6363 terminusdb/terminusdb-server:local /app/terminusdb/terminusdb serve
+          docker run -d --name terminusdb -p 6363:6363 terminusdb/terminusdb-server:local
       - uses: actions/setup-python@v2
         with:
           python-version: '3.x'
