@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613555270030,
+  "lastUpdate": 1613560949498,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -155,6 +155,44 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.014559031497899385",
             "extra": "mean: 156.07467949999858 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "distinct": true,
+          "id": "7fdcc5f434d7fef95351cb1edba59b3f645ef0f0",
+          "message": "Add triple bulk load test",
+          "timestamp": "2021-02-17T12:20:46+01:00",
+          "tree_id": "2fe248540a4a523f4e31d5811891a3999ea47e88",
+          "url": "https://github.com/terminusdb/terminusdb/commit/7fdcc5f434d7fef95351cb1edba59b3f645ef0f0"
+        },
+        "date": 1613560949005,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.637714369681782,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011995352328486739",
+            "extra": "mean: 150.654268066666 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 6.226694345720579,
+            "unit": "iter/sec",
+            "range": "stddev: 0.005552891099514212",
+            "extra": "mean: 160.5988578333334 msec\nrounds: 30"
           }
         ]
       }
