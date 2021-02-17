@@ -241,7 +241,7 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
 
 create_db_with_test_schema(Organization, Db_Name) :-
     Prefixes = _{ doc  : 'system://worldOnt/document/',
-                  scm : 'http://example.com/data/worldOntology#'},
+                  scm : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
@@ -260,7 +260,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
 
 create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
     Prefixes = _{ doc  : 'system://worldOnt/document/',
-                  scm : 'http://example.com/data/worldOntology#'},
+                  scm : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),

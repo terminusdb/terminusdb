@@ -1423,14 +1423,14 @@ test(loopy_object, [
 
     open_descriptor(Descriptor, Transaction),
     database_schema(Transaction, Schema),
-    class_frame_aux('http://example.com/data/worldOntology#Foo', Schema, [], [], Frame),
+    class_frame_aux('http://example.com/schema/worldOntology#Foo', Schema, [], [], Frame),
 
     Frame = [[type=objectProperty,
-              property='http://example.com/data/worldOntology#foo',
-              domain='http://example.com/data/worldOntology#Foo',
-              range='http://example.com/data/worldOntology#Foo',
+              property='http://example.com/schema/worldOntology#foo',
+              domain='http://example.com/schema/worldOntology#Foo',
+              range='http://example.com/schema/worldOntology#Foo',
               frame=[type=clippedClass,
-                     class='http://example.com/data/worldOntology#Foo'],
+                     class='http://example.com/schema/worldOntology#Foo'],
               restriction=true]].
 
 :- use_module(core(api/api_woql)).

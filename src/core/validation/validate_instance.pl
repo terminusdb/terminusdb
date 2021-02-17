@@ -277,7 +277,8 @@ refute_deletion(Database,X,P,Y,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:someValuesFrom,C),
-    forall(inferredEdge(X,P,Y,Database),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
+    forall(inferredEdge(X,P_Actual,Y,Database),
            (   \+ refute_node_at_range(Database,Y,C,_Reason)
            )),
     Reason = _{
@@ -291,7 +292,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:allValuesFrom,C),
-    inferredEdge(X,P,Y,Database),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
+    inferredEdge(X,P_Actual,Y,Database),
     refute_node_at_range(Database,Y,C,Reason),
     interpolate(['Some values not from restriction class: ',CR],Msg),
     Reason = _{
@@ -305,8 +307,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:minCardinality,CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     coerce_number(CardStr,N),
-    card(X,P,_,Database,M),
+    card(X,P_Actual,_,Database,M),
     M < N, atom_number(A,M),
     interpolate(['Cardinality not great enough for restriction: ',CR],Msg),
     Reason = _{
@@ -320,8 +323,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:maxCardinality,CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     coerce_number(CardStr,N),
-    card(X,P,_,Database,M),
+    card(X,P_Actual,_,Database,M),
     N < M, atom_number(A,M),
     interpolate(['Cardinality too great for restriction: ',CR],Msg),
     Reason = _{
@@ -335,8 +339,9 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:cardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     coerce_number(CardStr,N),
-    card(X,P,_,Database,M),
+    card(X,P_Actual,_,Database,M),
     N \= M, atom_number(A,M),
     interpolate(['Cardinality does not match for restriction: ',CR],Msg),
     Reason = _{
@@ -350,9 +355,10 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:minQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
-    qualifiedCard(X,P,_,C,Database,M),
+    qualifiedCard(X,P_Actual,_,C,Database,M),
     M < N, atom_number(A,M),
     interpolate(['Cardinality too low for restriction: ',CR],Msg),
     Reason = _{
@@ -367,9 +373,10 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:maxQualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
-    qualifiedCard(X,P,_,C,Database,M),
+    qualifiedCard(X,P_Actual,_,C,Database,M),
     N < M, atom_number(A,M),
     interpolate(['Cardinality too high for restriction: ',CR],Msg),
     Reason = _{
@@ -384,9 +391,10 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:qualifiedCardinality, CardStr^^xsd:nonNegativeInteger),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
     xrdf(Schema,CR,owl:onClass,C),
     coerce_number(CardStr,N),
-    qualifiedCard(X,P,_,C,Database,N),
+    qualifiedCard(X,P_Actual,_,C,Database,N),
     N \= M, atom_number(A,M),
     interpolate(['Cardinality unequal on restriction: ',CR],Msg),
     Reason = _{
@@ -401,7 +409,8 @@ refute_restriction(Database,X,CR,P,Reason) :-
 refute_restriction(Database,X,CR,P,Reason) :-
     database_schema(Database,Schema),
     xrdf(Schema,CR,owl:hasValue,V),
-    inferredEdge(X,P,Y,Database),
+    xrdf(Schema,CR,owl:onProperty,P_Actual),
+    inferredEdge(X,P_Actual,Y,Database),
     Y \= V,
     interpolate(['Wrong value on restriction: ',CR],Msg),
     Reason = _{
