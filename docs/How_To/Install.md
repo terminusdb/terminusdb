@@ -2,13 +2,13 @@
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download) 
 
-Find the binary bundled with all the dependencies there or have a look in the [GitHub Releases](https://github.com/terminusdb/terminusdb/releases)
+Find the binary bundled with all the dependencies look there or have a look in the [GitHub Releases](https://github.com/terminusdb/terminusdb/releases)
 
 For development and testing, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
 
 ### Building from source
 
-In order to build from the source, follow the [build from source](docs/BUILD.md) directions.
+In order to build from the source, follow the [build from source](https://github.com/terminusdb/terminusdb/blob/master/docs/BUILD.md) directions.
 
 ### Open Console
 
@@ -18,7 +18,7 @@ Once you have installed terminusdb-server either from the docker image or built 
 
 In order to start the terminusdb server or simply to explore a store
 from the command line, you can use the [TerminusDB Command Line
-Interface](docs/CLI.md).
+Interface](https://github.com/terminusdb/terminusdb/blob/master/docs/CLI.md).
 
 ## Client
 
