@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613488955622,
+  "lastUpdate": 1613555270030,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -124,6 +124,37 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.014265952881263021",
             "extra": "mean: 149.11544193333364 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "c8804b94ed8b64d7842123d492ff3ad2f6ceb9aa",
+          "message": "api_init: remove index_template_path predicate",
+          "timestamp": "2021-02-17T10:46:07+01:00",
+          "tree_id": "e66653f06ae1743b3d04820a38ff5839d17b4cc9",
+          "url": "https://github.com/terminusdb/terminusdb/commit/c8804b94ed8b64d7842123d492ff3ad2f6ceb9aa"
+        },
+        "date": 1613555269102,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.407189194324177,
+            "unit": "iter/sec",
+            "range": "stddev: 0.014559031497899385",
+            "extra": "mean: 156.07467949999858 msec\nrounds: 30"
           }
         ]
       }
