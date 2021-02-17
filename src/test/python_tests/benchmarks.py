@@ -17,6 +17,14 @@ except:
     pass
 client.create_database(db, "admin", include_schema=False)
 
+schema_db = 'testdb_python_insert_schema_test'
+schema_client = WOQLClient("https://127.0.0.1:6363")
+schema_client.connect(user="admin", account="admin", key="root")
+try:
+    schema_client.delete_database(schema_db, "admin")
+except:
+    pass
+schema_client.create_database(schema_db, "admin")
 
 def random_string_number():
     return str(random.randint(1, 1000000))
@@ -52,3 +60,31 @@ def load_turtle_triples():
 
 def test_bulk_update(benchmark):
     benchmark.pedantic(load_turtle_triples, rounds=30)
+
+def load_schema():
+    filename = f'../worldOnt.ttl'
+    ttl_file = open(filename)
+    ttl_contents = ttl_file.read()
+    ttl_file.close()
+    schema_client.update_triples(
+        "schema","main",
+        ttl_contents,
+        "Adding schema")
+
+def test_create_schema(benchmark):
+    benchmark.pedantic(load_schema, rounds=30)
+
+def load_instance():
+    filename = f'../world.ttl'
+    ttl_file = open(filename)
+    ttl_contents = ttl_file.read()
+    ttl_file.close()
+    schema_client.update_triples(
+        "instance","main",
+        ttl_contents,
+        "Adding data")
+
+def test_schema_bulk_update(benchmark):
+    load_schema()
+    benchmark.pedantic(load_instance, rounds=30)
+
