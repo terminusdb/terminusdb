@@ -17,6 +17,8 @@
       - [Start With Console](Intro_Tutorials/Start_With_Console.md)
       - [Start With Query](Intro_Tutorials/START_QUERY.md)
       - [Start With Schema](Intro_Tutorials/START_SCHEMA.md)
+  - [JavaScript Tutorials](https://github.com/terminusdb/terminusdb-client-js/tree/master/docs/tutorials)
+  - [Python Tutorials](https://github.com/terminusdb/terminusdb-client-python/tree/master/docs/tutorials)
   - [More Tutorials](https://github.com/terminusdb/terminusdb-tutorials)
 - [How To...](How_To/Intro.md)
   - [Get Started](How_To/get_started.md)
