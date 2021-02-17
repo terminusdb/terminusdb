@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3b
 
 from terminusdb_client import WOQLClient, WOQLQuery
 import pytest
@@ -29,3 +29,26 @@ def insert_triple():
 
 def test_insert_triple_speed(benchmark):
     benchmark.pedantic(insert_triple, rounds=30)
+
+def generate_turtle_triple():
+    subj = random.randint(1, 1000)
+    pred = random.randint(1, 100)
+    value = random.randint(1, 1000)
+    return f"doc:subj{subj} scm:pred{pred} doc:value{value} .\n"
+
+def generate_turtle_string():
+    s = "@prefix doc: <http://example.com/data/> .\n"
+    s += "@prefix scm: <http://example.com/ontology#> .\n"
+    for i in range(0,100):
+        s += generate_turtle_triple()
+    return s
+
+def load_turtle_triples():
+    contents = generate_turtle_string()
+    client.insert_triples(
+        "instance","main",
+        contents,
+        f"Adding random turtle")
+
+def test_bulk_update(benchmark):
+    benchmark.pedantic(load_turtle_triples, rounds=30)
