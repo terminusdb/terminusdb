@@ -1,4 +1,4 @@
-# TerminusDB Server v4.1.2 Release Notes
+# TerminusDB Server v4.2.0 Release Notes
 
 ## New
 
@@ -11,6 +11,17 @@
 + Casting fixes
 + Improve error reporting in user creation
 + Improve robustness of transaction retry
++ Fix cardinality calculation for subproperties
+
+## Changes
+
++ Switch to google cdn
++ Various speedups
+
+## Improvements
+
++ Improved speed of database storage size calculation
+
 
 # TerminusDB Server v4.1.1 Release Notes
 
