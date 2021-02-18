@@ -16,7 +16,7 @@
 :- use_module(jsonld).
 
 :- use_module(library(sort)).
-
+:- use_module(core(triple)).
 :- use_module(core(util)).
 :- reexport(core(util/syntax)).
 
@@ -76,7 +76,10 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     ->  true
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
-        WOQL = '^^'(V,TE)
+        % Marshall to appropriate datatype
+        once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
+                      TE, [], Val)),
+        WOQL = Val
     ;   _{'@value' : V, '@language' : L } :< JSON
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
@@ -1054,7 +1057,6 @@ json_to_woql_path_pattern(JSON,Pattern,Path) :-
                 error(woql_syntax_error(JSON,
                                         ['http://terminusdb.com/schema/woql#path_maximum'|Path],
                                         M), _)),
-
             Pattern = times(PSubPattern,N_int,M_int)
     ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
     ).
@@ -1161,7 +1163,9 @@ json_to_woql_arith(JSON,WOQL,Path) :-
         WOQL = v(Atom_Name)
     ;   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
-        WOQL = '^^'(V,TE)
+        once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
+                      TE, [], Val)),
+        WOQL = Val
     ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
     ).
 json_to_woql_arith(JSON,_,Path) :-

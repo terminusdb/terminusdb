@@ -3730,7 +3730,7 @@ test(get_put, [
                               },
                'woql:query_resource': _{ '@type': "woql:FileResource",
                                          'woql:file':
-                                         _{ '@type': "xsd:anyURI",
+                                         _{ '@type': "xsd:string",
                                             '@value': TestFile
                                           }
                                        }
