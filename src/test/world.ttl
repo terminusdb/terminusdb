@@ -9,40 +9,28 @@
 
 world:rome a worldOnt:City ;
     rdfs:label "Rome"@en ;
-  	worldOnt:name "Rome"^^xsd:string ;
-	worldOnt:neighbour world:carthage ;
-	worldOnt:general world:scipio .
+  	worldOnt:name "Rome"^^xsd:string .
 
 world:scipio a worldOnt:Person ;
 	rdfs:label "Africanus"@en ;
-	worldOnt:name "Scipio"^^xsd:string ;
-    worldOnt:age "30"^^xsd:decimal ;
-    worldOnt:address "3 palace street, Rome"@en ;
-	worldOnt:child world:scipioJr ;
-	worldOnt:child world:scipioJrs .
+    worldOnt:name "Scipio"^^xsd:string ;
+    worldOnt:address "3 palace street, Rome"@en .
 
 world:carthage a worldOnt:City ;
     rdfs:label "Carthage"@en ;
-  	worldOnt:name "Carthage"^^xsd:string ;
-	worldOnt:neighbour world:rome ;
-	worldOnt:general world:hannibal .
+    worldOnt:name "Carthage"^^xsd:string .
 
 world:hannibal a worldOnt:Person ;
 	rdfs:label "Hannibal"@en ;
     worldOnt:name "Hannibal"^^xsd:string ;
-    worldOnt:address "45 temple road, Carthage"@en ;
-	worldOnt:age "30"^^xsd:decimal .
+    worldOnt:address "45 temple road, Carthage"@en .
 
 world:scipioJr a worldOnt:Person ;
 	rdfs:label "Africanus Junior"@en ;
     worldOnt:name "Scipio Junior"^^xsd:string ;
-    worldOnt:address "3 palace street, Rome"@en ;
-	worldOnt:age "10"^^xsd:decimal .
+    worldOnt:address "3 palace street, Rome"@en .
 
 world:scipioJrs a worldOnt:Person ;
     rdfs:label "Africanus Junioress"@en ;
     worldOnt:address "3 palace street, Rome"@en ;
-  	worldOnt:name "Scipio Junioress"^^xsd:string ;
-	worldOnt:age "8"^^xsd:decimal .
-
-
+    worldOnt:name "Scipio Junioress"^^xsd:string .

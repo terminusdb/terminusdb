@@ -196,6 +196,10 @@ typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#decimalRange', _, Ca
     number(Val),
     !,
     Cast = Val^^'http://terminusdb.com/schema/xdd#decimalRange'.
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#anyURI', _, Cast) :-
+    is_absolute_url(Val),
+    !,
+    Cast = Val^^'http://terminusdb.com/schema/xdd#url'.
 typecast_switch(Val, _ST, 'http://terminusdb.com/schema/xdd#url', _, Cast) :-
     is_absolute_url(Val),
     !,

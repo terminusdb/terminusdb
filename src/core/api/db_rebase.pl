@@ -485,7 +485,7 @@ test(rebase_conflicting_history_errors,
     Master_Path = "admin/test",
     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': _{'@type' : "xsd:string",
@@ -497,7 +497,7 @@ test(rebase_conflicting_history_errors,
                          update_object(Object)),
                     _),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context2_),
-    context_extend_prefixes(Master_Context2_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context2),
+    context_extend_prefixes(Master_Context2_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context2),
 
     once(ask(Master_Context2, t(City_Uri, worldOnt:name, "Dublin"^^xsd:string))),
     format(string(City_Uri_String), "~w", [City_Uri]),
@@ -511,7 +511,7 @@ test(rebase_conflicting_history_errors,
 
     % create a commit on the master branch, diverging history
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context3_),
-    context_extend_prefixes(Master_Context3_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context3),
+    context_extend_prefixes(Master_Context3_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context3),
 
     Object2 = _{'@type': "worldOnt:City",
                '@id': City_Uri_String,
@@ -531,7 +531,7 @@ test(rebase_conflicting_history_errors,
 
     % create a commit on the second branch, diverging history
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
-    context_extend_prefixes(Second_Context_, _{worldOnt: "http://example.com/data/worldOntology#"}, Second_Context),
+    context_extend_prefixes(Second_Context_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Second_Context),
 
     Object3 = _{'@type': "worldOnt:City",
                '@id': City_Uri_String,

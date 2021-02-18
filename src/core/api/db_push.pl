@@ -170,7 +170,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
         (   % Try TUS protocol (we could check resulting options too for create etc...)
             remote_tus_url(Remote_URL, TUS_URL),
             tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
-
+            Using_TUS = true,
 
             setup_call_cleanup(
                 tmp_file_stream(Tmp_File, Stream, [encoding(octet)]),
@@ -183,7 +183,9 @@ authorized_push(Authorization, Remote_URL, Payload) :-
         ),
         error(existence_error(url,_),_),
         % TUS failed, fall back to old style
-        Data = bytes('application/octets',Payload)
+        (   Data = bytes('application/octets',Payload),
+            Using_TUS = false
+        )
     ),
 
     remote_unpack_url(Remote_URL, Unpack_URL),
@@ -199,9 +201,11 @@ authorized_push(Authorization, Remote_URL, Payload) :-
           throw(error(communication_failure(E),_))),
 
     (   200 = Status_Code
-    ->  tus_delete(Resource_URL, [tus_extension([termination])],
-                   % assume extension to avoid pointless pre-flight
-                   [request_header('Authorization'=Authorization)])
+    ->  (   Using_TUS = true
+        ->  tus_delete(Resource_URL, [tus_extension([termination])],
+                       % assume extension to avoid pointless pre-flight
+                       [request_header('Authorization'=Authorization)])
+        ;   true)
     ;   400 = Status_Code,
         _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
     ->  (   _{'@type' : "api:NotALinearHistory"} :< Error

@@ -21,6 +21,7 @@
               mapm/4,
               mapm/5,
               mapm/6,
+              convlist/4,
               exists/2,
               find/3,
               trim/2,
@@ -74,7 +75,7 @@
 /*
  * Forget the next phrase.
  *
- * Ueful for declarative debugging.
+ * Useful for declarative debugging.
  */
 *_.
 
@@ -469,6 +470,21 @@ mapm_([],[],[],S,S,_P).
 mapm_([H|T],[HP|TP],[HM|TM],S0,SN,P) :-
     call(P,H,HP,HM,S0,S1),
     mapm_(T,TP,TM,S1,SN,P).
+
+
+:- meta_predicate convlist(3, +, +, -).
+convlist(Goal, ListIn1, ListIn2, ListOut) :-
+    convlist_(ListIn1, ListIn2, ListOut, Goal).
+
+convlist_([], [], [], _).
+convlist_([H0|T0], [H1|T1], ListOut, Goal) :-
+    (   call(Goal, H0, H1, H)
+    ->  ListOut = [H|T],
+        convlist_(T0, T1, T, Goal)
+    ;   convlist_(T0, T1, ListOut, Goal)
+    ).
+
+
 
 /*
  * exists(P:predicate,L:list)

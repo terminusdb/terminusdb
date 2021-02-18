@@ -52,7 +52,7 @@ add_config_path :-
 add_pack_path :-
     use_module(config(terminus_config)),
     (   pack_dir(PackDir)
-    ->  attach_packs(PackDir)
+    ->  attach_packs(PackDir, [duplicate(replace)])
     ;   true).
 
 :- add_pack_path.

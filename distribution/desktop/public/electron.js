@@ -7,36 +7,6 @@ const ps = require('ps-node')
 let MAIN_WINDOW
 let SYSTEM_TRAY
 
-let QUIT_OK = false
-
-electron.app.on('will-quit', (event) => {
-  if (!QUIT_OK) {
-    event.preventDefault()
-    ps.lookup({
-      command: 'swipl',
-      arguments: 'serve'
-    }, (err, list) => {
-      if (err) throw new Error(err)
-      console.log('finding DB process...')
-      list.forEach((p) => {
-        if (p) {
-          console.log('found', p.pid)
-          console.log( 'PID: %s, COMMAND: %s, ARGUMENTS: %s',
-            p.pid, p.command, p.arguments)
-          try {
-            process.kill(p.pid, 'SIGTERM')
-          } catch (e) {
-            console.log('error', e)
-          }
-        }
-      })
-      QUIT_OK = true
-      console.log('Quitting...')
-      electron.app.quit()
-    })
-  }
-})
-
 electron.app.on('certificate-error',
   (event, webContents, url, error, certificate, accept) => {
     if (url.startsWith('https://127.0.0.1')) {
@@ -59,15 +29,15 @@ electron.app.on('ready', () => {
   let binArgs
   if (fs.existsSync(appImagePath)) {
     binPath = appImagePath
-    binArgs = ['serve']
+      binArgs = ['serve', '--interactive']
     binInitArgs = ['store', 'init', '--key', 'root']
   } else if (fs.existsSync(exePath)) {
     binPath = exePath
-    binArgs = ['serve']
+    binArgs = ['serve', '--interactive']
     binInitArgs = ['store', 'init', '--key', 'root']
   } else if (fs.existsSync(macOSPath)) {
     binPath = macOSPath
-    binArgs = ['-O', `${appDir}/terminusdb-server/src/start.pl`, 'serve']
+    binArgs = ['-O', `${appDir}/terminusdb-server/src/start.pl`, 'serve', '--interactive']
     binInitArgs = ['-g', 'halt', `${appDir}/terminusdb-server/src/start.pl`,
       'store', 'init', '--key', 'root']
   }
@@ -112,7 +82,6 @@ electron.app.on('ready', () => {
       }
     })
   } else {
-    QUIT_OK = true
     console.log('TerminusDB not found in path')
     console.log('Please start TerminusDB')
     createWindow()

@@ -1538,7 +1538,7 @@ test(get_object, [
       'system:role': _}
     :< Result.'Document'.
 
-test(multiple_witnesses, [
+test(bad_cast, [
          setup((setup_temp_server(State, Server),
                 create_db_with_test_schema("admin", "test"))),
          cleanup(teardown_temp_server(State))
@@ -1578,9 +1578,7 @@ test(multiple_witnesses, [
               [json_object(dict),
                status_code(_),
                authorization(basic(admin,Key))]),
-    Witnesses = (JSON0.'api:error'.'api:witnesses'),
-    length(Witnesses, N),
-    N > 1.
+    "api:BadCast" = (JSON0.'api:error'.'@type').
 
 :- end_tests(woql_endpoint).
 

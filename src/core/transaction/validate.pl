@@ -1007,7 +1007,7 @@ test(cardinality_error,
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': [_{'@type' : "xsd:string",
@@ -1034,7 +1034,7 @@ test(casting_error,
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
 
     Object = _{'@type': "worldOnt:City",
                'worldOnt:name': [_{'@type' : "xsd:string",
@@ -1059,19 +1059,19 @@ test(cardinality_min_error,
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/data/worldOntology#"}, Master_Context1),
+    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
 
     Master_Context2 = (Master_Context1.put(_{ all_witnesses : true })),
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
     Object = _{'@type': "worldOnt:Person",
-               'worldOnt:personal_name': [_{'@type' : "xsd:string",
-                                            '@value' : "Duke"
-                                           },
-                                          _{'@type' : "xsd:string",
-                                            '@value' : "Doug"
-                                           }]
+               'worldOnt:name': [_{'@type' : "xsd:string",
+                                   '@value' : "Duke"
+                                  },
+                                 _{'@type' : "xsd:string",
+                                   '@value' : "Doug"
+                                  }]
               },
 
     catch(
@@ -1085,12 +1085,12 @@ test(cardinality_min_error,
 
     once((member(Witness0, Witnesses),
           Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness0.'vio:predicate'.'@value' = 'http://example.com/data/worldOntology#personal_name',
+          Witness0.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#name',
           '2' = Witness0.'vio:cardinality'.'@value'
          )),
     once((member(Witness1, Witnesses),
           Witness1.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness1.'vio:predicate'.'@value' = 'http://example.com/data/worldOntology#address',
+          Witness1.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#address',
           '0' = Witness1.'vio:cardinality'.'@value'
          )).
 

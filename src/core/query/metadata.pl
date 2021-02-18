@@ -31,27 +31,20 @@ transaction_object_size(Transaction, Size) :-
     maplist(read_object_size, Objects, Sizes),
     sumlist(Sizes, Size).
 
-layer_parents(Layer, [Parent|Parents]) :-
-    parent(Layer,Parent),
-    !,
-    layer_parents(Parent,Parents).
-layer_parents(_Layer, []).
-
 read_object_size(Object, Size) :-
     Layer = (Object.read),
     (   var(Layer)
     ->  Size = 0
-    ;   layer_parents(Layer, Parents),
-        maplist(layer_size,[Layer|Parents],Sizes),
+    ;   layer_stack_names(Layer, Names),
+        maplist(layer_size,Names,Sizes),
         sumlist(Sizes,Size)).
 
 % NOTE: Stub! Should be in store.
 layer_directory_prefix_length(3).
 
 % NOTE: Stub! layer_size Should be in store.
-layer_size(Layer,Size) :-
-    layer_to_id(Layer,ID),
-    layerid_to_directory(ID,Directory),
+layer_size(Layer_Name,Size) :-
+    layerid_to_directory(Layer_Name,Directory),
     size_directory(Directory,Size).
 
 :- thread_local current_db_path_pred/1.

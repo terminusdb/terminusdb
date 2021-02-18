@@ -93,6 +93,7 @@
               sol_set/2,
               optional/1,
               member_last/3,
+              convlist/4,
 
               % speculative_parse.pl
               guess_date/2,

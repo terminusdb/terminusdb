@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.16.1
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.16.3
   TUS_VERSION: v0.0.5
 
 jobs:
@@ -207,7 +207,7 @@ jobs:
         cd swipl
         mkdir pack && cd pack
         git clone https://github.com/terminusdb/terminus_store_prolog.git
-        git clone --single-branch --branch "$TUS_VERSION" https://github.com/terminusdb/tus.git
+        git clone --single-branch --branch "$env:TUS_VERSION" https://github.com/terminusdb/tus.git
         cd terminus_store_prolog
         git checkout $env:TERMINUSDB_STORE_PROLOG_VERSION
         md lib/x64-win64 -ea 0
@@ -222,7 +222,7 @@ jobs:
     - name: Run tests
       run: |
         $env:TERMINUSDB_SERVER_PACK_DIR="swipl\pack"
-        swipl\bin\swipl -O src/start.pl test
+        swipl\bin\swipl src/start.pl test
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v2
@@ -345,7 +345,7 @@ jobs:
     - name: Run tests
       run: |
         export TERMINUSDB_SERVER_PACK_DIR=./public/pack
-        public/SWI-Prolog.app/Contents/MacOS/swipl -O public/terminusdb-server/src/start.pl test
+        public/SWI-Prolog.app/Contents/MacOS/swipl -g halt public/terminusdb-server/src/start.pl test
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2
