@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613576573279,
+  "lastUpdate": 1613646100856,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -297,6 +297,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.02327162672620002",
             "extra": "mean: 60.813062333334265 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "distinct": true,
+          "id": "c35d28417a6b1a8f36f382158287430d1290e824",
+          "message": "Add typecast in the JSON WOQL- fixes path range bug",
+          "timestamp": "2021-02-18T11:59:55+01:00",
+          "tree_id": "0ca657b9156b11156f92510eedcd2c1deabc2518",
+          "url": "https://github.com/terminusdb/terminusdb/commit/c35d28417a6b1a8f36f382158287430d1290e824"
+        },
+        "date": 1613646100369,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 5.9131576787152005,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017738299092059737",
+            "extra": "mean: 169.11438089999962 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 5.70689715650441,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009728044134235137",
+            "extra": "mean: 175.22656753333195 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 14.251484121054071,
+            "unit": "iter/sec",
+            "range": "stddev: 0.023521101575488684",
+            "extra": "mean: 70.16813066666334 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 14.313917822755018,
+            "unit": "iter/sec",
+            "range": "stddev: 0.020578023530708266",
+            "extra": "mean: 69.86207496666546 msec\nrounds: 30"
           }
         ]
       }
