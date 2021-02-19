@@ -9,6 +9,20 @@
 
 + JWT support was not working in the compiled binary, it is working now
 
+# TerminusDB Server v4.2.0 Release Notes
+
+## New
+
++ Model Building Tool
++ Document interface with CRUD actions, support for adding CSV/ JSON documents, new frame for adding class choice
++ Branch management actions - squash, reset, delete, optimize
++ Refresh button to reload data in table
+
+## Bug fixes
++
+
+
+
 # TerminusDB Server v4.1.0 Release Notes
 
 ## New
