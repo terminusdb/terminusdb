@@ -30,6 +30,6 @@ main :-
                       foreign(save),
                       undefined(error),
                       toplevel(cli_toplevel),
-                      autoload(true),
+                      autoload(false),
                       stand_alone(true)
                   ]).
