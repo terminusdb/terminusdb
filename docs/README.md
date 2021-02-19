@@ -90,7 +90,7 @@ directly through clients you should look at the documentation on our
 
 ## Changes in this Version
 
-[Release Notes](RELEASE_NOTES.md)
+[Release Notes](docs/RELEASE_NOTES.md)
 
 ## Contact
 
@@ -101,17 +101,7 @@ or our [forum!](https://discuss.terminusdb.com)
 
 Gavin Mendel-Gleason <gavin@terminusdb.com>
 
-Matthijs van Otterdijk <matthijs@terminusdb.com>
-
-Robin de Rooij <robin@terminusdb.com>
-
-Anne Ogborn <anne@swi-prolog.org>
-
-Dmytri Kleiner <dk@terminusdb.com>
-
-[Paulo Moura](https://github.com/pmoura)
-
-Put your Name here by contributing!
+[Release Notes](https://github.com/terminusdb/terminusdb/blob/master/RELEASE_NOTES.md)
 
 ## Copyright
 

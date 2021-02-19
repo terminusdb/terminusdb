@@ -7,36 +7,6 @@ const ps = require('ps-node')
 let MAIN_WINDOW
 let SYSTEM_TRAY
 
-let QUIT_OK = false
-
-electron.app.on('will-quit', (event) => {
-  if (!QUIT_OK) {
-    event.preventDefault()
-    ps.lookup({
-      command: 'swipl',
-      arguments: 'serve'
-    }, (err, list) => {
-      if (err) throw new Error(err)
-      console.log('finding DB process...')
-      list.forEach((p) => {
-        if (p) {
-          console.log('found', p.pid)
-          console.log( 'PID: %s, COMMAND: %s, ARGUMENTS: %s',
-            p.pid, p.command, p.arguments)
-          try {
-            process.kill(p.pid, 'SIGTERM')
-          } catch (e) {
-            console.log('error', e)
-          }
-        }
-      })
-      QUIT_OK = true
-      console.log('Quitting...')
-      electron.app.quit() 
-    })
-  }
-})
-
 electron.app.on('certificate-error',
   (event, webContents, url, error, certificate, accept) => {
     if (url.startsWith('https://127.0.0.1')) {
@@ -59,16 +29,16 @@ electron.app.on('ready', () => {
   let binArgs
   if (fs.existsSync(appImagePath)) {
     binPath = appImagePath
-    binArgs = ['serve']
+      binArgs = ['serve', '--interactive']
     binInitArgs = ['store', 'init', '--key', 'root']
   } else if (fs.existsSync(exePath)) {
     binPath = exePath
-    binArgs = ['serve']
+    binArgs = ['serve', '--interactive']
     binInitArgs = ['store', 'init', '--key', 'root']
   } else if (fs.existsSync(macOSPath)) {
     binPath = macOSPath
-    binArgs = [`${appDir}/terminusdb-server/start.pl`, 'serve']
-    binInitArgs = ['-g', 'halt', `${appDir}/terminusdb-server/start.pl`,
+    binArgs = ['-O', `${appDir}/terminusdb-server/src/start.pl`, 'serve', '--interactive']
+    binInitArgs = ['-g', 'halt', `${appDir}/terminusdb-server/src/start.pl`,
       'store', 'init', '--key', 'root']
   }
 
@@ -92,7 +62,7 @@ electron.app.on('ready', () => {
           initDb.stdout.on('data', (data) => console.log(data))
           initDb.stderr.on('data', (data) => console.log(data))
       }
-    }  
+    }
 
     console.log('binPath', binPath)
     console.log('binArgs', binArgs)
@@ -112,7 +82,6 @@ electron.app.on('ready', () => {
       }
     })
   } else {
-    QUIT_OK = true
     console.log('TerminusDB not found in path')
     console.log('Please start TerminusDB')
     createWindow()
@@ -130,18 +99,19 @@ function createWindow () {
     icon: path.join(__dirname, 'assets/icons/favicon.png')
   })
 
-  MAIN_WINDOW.on('minimize', function (event) {
-    event.preventDefault()
-    MAIN_WINDOW.hide()
-  })
-
-  MAIN_WINDOW.on('close', function (event) {
-    if (!electron.app.isQuiting) {
+  MAIN_WINDOW.on('close', (event) => {
+    if (electron.app.quitting) {
+      MAIN_WINDOW = null
+    } else {
       event.preventDefault()
       MAIN_WINDOW.hide()
     }
-    return false
   })
+
+  electron.app.on('before-quit', function (evt) {
+        electron.app.quitting = true
+        trayMenu.destroy();
+  });
 
   MAIN_WINDOW.webContents.on('new-window', function (e, url) {
     e.preventDefault()
@@ -201,12 +171,12 @@ function createWindow () {
 
   const trayMenu = new electron.Menu()
 
-  trayMenu.append(new electron.MenuItem({
+  /*trayMenu.append(new electron.MenuItem({
     label: 'TerminusDB',
     click () {
       MAIN_WINDOW.show()
     }
-  }))
+  }))*/
   trayMenu.append(new electron.MenuItem({ type: 'separator' }))
   trayMenu.append(new electron.MenuItem({
     label: 'Hide',
@@ -234,7 +204,6 @@ function createWindow () {
 
   SYSTEM_TRAY.setContextMenu(trayMenu)
   SYSTEM_TRAY.setToolTip('TerminusDB')
-
-  SYSTEM_TRAY.on('click', () => SYSTEM_TRAY.popUpContextMenu(trayMenu))
+  SYSTEM_TRAY.on('click', () =>  MAIN_WINDOW.show())
+  SYSTEM_TRAY.on('right-click', () => SYSTEM_TRAY.popUpContextMenu(trayMenu))
 }
-

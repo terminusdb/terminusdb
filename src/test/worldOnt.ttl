@@ -1,0 +1,44 @@
+@prefix worldOnt: <http://example.com/schema/worldOntology#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix owl:  <http://www.w3.org/2002/07/owl#>.
+@prefix dc:   <http://purl.org/dc/elements/1.1/>.
+
+worldOnt:OneName a owl:Restriction ;
+  owl:onProperty worldOnt:name ;
+  owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+worldOnt:Entity a owl:Class ;
+  rdfs:subClassOf worldOnt:OneName ;
+  rdfs:comment "Abstract superclass of a thingy"@en ;
+  rdfs:label "Entity"@en .
+
+worldOnt:City a owl:Class ;
+  rdfs:subClassOf worldOnt:Entity ;
+  rdfs:label "City"@en ;
+  rdfs:comment "A City"@en .
+
+worldOnt:AtLeastOneAddress a owl:Restriction ;
+  owl:onProperty worldOnt:address ;
+  owl:minCardinality "1"^^xsd:nonNegativeInteger .
+
+worldOnt:Person a owl:Class ;
+  rdfs:subClassOf worldOnt:Entity, worldOnt:AtLeastOneAddress ;
+  rdfs:label "Person"@en ;
+  rdfs:comment "A Person"@en .
+
+worldOnt:name a owl:DatatypeProperty ;
+  rdfs:domain worldOnt:Entity ;
+  rdfs:range xsd:string .
+
+worldOnt:personal_name a owl:DatatypeProperty ;
+  rdfs:subPropertyOf worldOnt:name ;
+  rdfs:domain worldOnt:Person ;
+  rdfs:range xsd:string .
+
+worldOnt:address a owl:DatatypeProperty ;
+  rdfs:label "Address"@en ;
+  rdfs:comment "An address"@en ;
+  rdfs:domain worldOnt:Person ;
+  rdfs:range xsd:string .

@@ -1,0 +1,33 @@
+name: Benchmark
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  run-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.1
+
+      - name: Build Docker image
+        run: docker build . --file Dockerfile --tag terminusdb/terminusdb-server:local
+      - name: Run server
+        run: |
+          docker run -d --name terminusdb -p 6363:6363 terminusdb/terminusdb-server:local
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Run benchmarks
+        run: |
+          cd src/test/python_tests
+          pip install -r requirements.txt
+          python3 -m pytest benchmarks.py --benchmark-json output.json
+      - name: Store benchmark result
+        uses: rhysd/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: src/test/python_tests/output.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
