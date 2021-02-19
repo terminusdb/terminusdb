@@ -26,10 +26,10 @@ done
 SOURCE="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 export SWI_HOME_DIR=$SOURCE/usr/lib/swi-prolog
 export TERMINUSDB_SERVER_PACK_DIR=$SOURCE/usr/lib/swi-prolog/pack
-export TERMINUSDB_SERVER_DB_PATH=$(pwd)/storage
-export TERMINUSDB_SERVER_REGISTRY_PATH=$(pwd)/registry.pl
-export TERMINUSDB_LOG_PATH=$(pwd)/httpd.log
-export TERMINUSDB_SERVER_TMP_PATH=/tmp
+export TERMINUSDB_SERVER_DB_PATH=${TERMINUSDB_SERVER_DB_PATH:-$(pwd)/storage}
+export TERMINUSDB_SERVER_REGISTRY_PATH=${TERMINUSDB_SERVER_REGISTRY_PATH:-$(pwd)/registry.pl}
+export TERMINUSDB_LOG_PATH=${TERMINUSDB_SERVER_LOG_PATH:-$(pwd)/httpd.log}
+export TERMINUSDB_SERVER_TMP_PATH=${TERMINUSDB_SERVER_TMP_PATH:-/tmp}
 
 if [[ -z "${TERMINUSDB_SYSTEM_SSL_CERTS}" ]]; then
     set_cert_paths
