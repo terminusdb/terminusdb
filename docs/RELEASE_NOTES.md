@@ -5,8 +5,10 @@
 + Large data transfers over TUS protocol
 + Delta rollups are now used for more graph types
 + Optimize utilizes an exponential rollup strategy
-+ Document interface with CRUD actions, support for adding JSON documents, new frame for adding class choices
-+ Branch management actions - squash, reset, delete, optimize
++ Document interface with CRUD actions
++ Support for adding JSON documents
++ New frame for adding class choices
++ New branch management actions: squash, reset, delete, optimize
 + Refresh button to reload data in table
 
 ## Bug fixes
