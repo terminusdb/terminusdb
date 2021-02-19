@@ -8,4 +8,8 @@ You can access the JSON-LD from the javascript query object:
 let jsonld = query.json()
 ```
 
+```python
+jsonld = WOQLQuery().dict()
+```
+
 
