@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1613731755033,
+  "lastUpdate": 1613735120319,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -557,6 +557,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.022176171761717035",
             "extra": "mean: 63.68484500000307 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "e397b93b94bb5a728872e417a3ef19004cdfd801",
+          "message": "AppImage: allow env variables to override",
+          "timestamp": "2021-02-19T12:43:38+01:00",
+          "tree_id": "b46cf200a612a9e0a18e83cfe60504f6d08dcaf2",
+          "url": "https://github.com/terminusdb/terminusdb/commit/e397b93b94bb5a728872e417a3ef19004cdfd801"
+        },
+        "date": 1613735119851,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 7.97537055635232,
+            "unit": "iter/sec",
+            "range": "stddev: 0.012618934792383024",
+            "extra": "mean: 125.3860235 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 7.654608041126054,
+            "unit": "iter/sec",
+            "range": "stddev: 0.005863666566270735",
+            "extra": "mean: 130.64026199999813 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 18.446230451380963,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017941600066333694",
+            "extra": "mean: 54.2116180666677 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 18.40777823369122,
+            "unit": "iter/sec",
+            "range": "stddev: 0.016421214525814732",
+            "extra": "mean: 54.32486133333185 msec\nrounds: 30"
           }
         ]
       }
