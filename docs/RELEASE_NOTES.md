@@ -5,8 +5,7 @@
 + Large data transfers over TUS protocol
 + Delta rollups are now used for more graph types
 + Optimize utilizes an exponential rollup strategy
-+ Model Building Tool
-+ Document interface with CRUD actions, support for adding CSV/ JSON documents, new frame for adding class choice
++ Document interface with CRUD actions, support for adding JSON documents, new frame for adding class choices
 + Branch management actions - squash, reset, delete, optimize
 + Refresh button to reload data in table
 
@@ -16,6 +15,7 @@
 + Improve error reporting in user creation
 + Improve robustness of transaction retry
 + Fix cardinality calculation for subproperties
++ Fixed problem with prefixes parameter in query panel
 
 ## Changes
 
@@ -37,19 +37,6 @@
 ## Bug fixes
 
 + JWT support was not working in the compiled binary, it is working now
-
-# TerminusDB Server v4.2.0 Release Notes
-
-## New
-
-+ Model Building Tool
-+ Document interface with CRUD actions, support for adding CSV/ JSON documents, new frame for adding class choice
-+ Branch management actions - squash, reset, delete, optimize
-+ Refresh button to reload data in table
-
-## Bug fixes
-+
-
 
 
 # TerminusDB Server v4.1.0 Release Notes
@@ -78,6 +65,7 @@
 + Allow embedded "usings" with appriopriate expansion of prefixes according to which database is referred to in the using
 + New CLI interface
 + Mac OS version released
++ Model Building Tool
 
 ## Bug fixes
 
