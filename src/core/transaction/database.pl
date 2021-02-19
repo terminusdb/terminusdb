@@ -125,25 +125,32 @@ compute_backoff(Count, Time) :-
     slot_time(Slot_Time),
     Time is This_Slot * Slot_Time.
 
-reset_read_write_obj(Read_Write_Obj) :-
+reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
     nb_set_dict(read, Read_Write_Obj, _),
-    nb_set_dict(write, Read_Write_Obj, _).
+    nb_set_dict(write, Read_Write_Obj, _),
 
-reset_transaction_object_graph_descriptors(Transaction_Object) :-
+    open_read_write_obj(Read_Write_Obj.descriptor,Read_Write_Obj, Map, New_Map).
+
+reset_transaction_object_graph_descriptors(Transaction_Object, Map, New_Map) :-
     transaction_object{
         instance_objects : Instance_Objects,
         schema_objects : Schema_Objects,
         inference_objects : Inference_Objects
     } :< Transaction_Object,
-    maplist(reset_read_write_obj, Instance_Objects),
-    maplist(reset_read_write_obj, Schema_Objects),
-    maplist(reset_read_write_obj, Inference_Objects).
+
+    (   get_dict(parent,Transaction_Object,Parent_Transaction)
+    ->  reset_transaction_object_graph_descriptors(Parent_Transaction, Map, Map1)
+    ;   Map1 = Map),
+
+    mapm(reset_read_write_obj, Instance_Objects, Map1, Map2),
+    mapm(reset_read_write_obj, Schema_Objects, Map2, Map3),
+    mapm(reset_read_write_obj, Inference_Objects, Map3, New_Map).
 
 /**
  *
  */
 reset_transaction_objects_graph_descriptors(Transaction_Objects) :-
-    maplist(reset_transaction_object_graph_descriptors, Transaction_Objects).
+    mapm(reset_transaction_object_graph_descriptors, Transaction_Objects, [], _).
 
 /**
  * reset_query_context(Query_Context) is semidet.

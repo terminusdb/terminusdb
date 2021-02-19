@@ -40,13 +40,13 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
     do_or_die(open_descriptor(Their_Branch_Descriptor, _),
               error(not_a_valid_remote_branch(Their_Branch_Descriptor),_)),
 
+    Status = status{
+                 'api:pull_status': Inner_Status,
+                 'api:fetch_status' : Head_Has_Updated
+             },
     % 2. try fast forward - alert front end if impossible.
     catch_with_backtrace(
         (   fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids),
-            Status = status{
-                         'api:pull_status': Inner_Status,
-                         'api:fetch_status' : Head_Has_Updated
-                     },
             (   Applied_Commit_Ids = []
             ->  Inner_Status = "api:pull_unchanged"
             ;   Inner_Status = "api:pull_fast_forwarded"
@@ -54,7 +54,9 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
         ),
         E,
         (   E = error(Inner_E,Ctx),
-            (   Inner_E = divergent_history(Common_Commit)
+            (   Inner_E = divergent_history(Common_Commit,_,[])
+            ->  Inner_Status = "api:pull_ahead"
+            ;   Inner_E = divergent_history(Common_Commit,_,_)
             ->  throw(error(pull_divergent_history(Common_Commit,Head_Has_Updated),Ctx))
             ;   Inner_E = no_common_history
             ->  throw(error(pull_no_common_history(Head_Has_Updated),Ctx))

@@ -1,4 +1,4 @@
-@prefix worldOnt: <http://example.com/data/worldOntology#> .
+@prefix worldOnt: <http://example.com/schema/worldOntology#> .
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
@@ -11,13 +11,13 @@ worldOnt:OneName a owl:Restriction ;
 
 worldOnt:Entity a owl:Class ;
   rdfs:subClassOf worldOnt:OneName ;
-  rdfs:comment "Abstract superclass of a thingy" ;
-  rdfs:label "Entity" .
+  rdfs:comment "Abstract superclass of a thingy"@en ;
+  rdfs:label "Entity"@en .
 
 worldOnt:City a owl:Class ;
   rdfs:subClassOf worldOnt:Entity ;
-  rdfs:label "City" ;
-  rdfs:comment "A City" .
+  rdfs:label "City"@en ;
+  rdfs:comment "A City"@en .
 
 worldOnt:AtLeastOneAddress a owl:Restriction ;
   owl:onProperty worldOnt:address ;
@@ -25,8 +25,8 @@ worldOnt:AtLeastOneAddress a owl:Restriction ;
 
 worldOnt:Person a owl:Class ;
   rdfs:subClassOf worldOnt:Entity, worldOnt:AtLeastOneAddress ;
-  rdfs:label "Person" ;
-  rdfs:comment "A Person" .
+  rdfs:label "Person"@en ;
+  rdfs:comment "A Person"@en .
 
 worldOnt:name a owl:DatatypeProperty ;
   rdfs:domain worldOnt:Entity ;
@@ -38,7 +38,7 @@ worldOnt:personal_name a owl:DatatypeProperty ;
   rdfs:range xsd:string .
 
 worldOnt:address a owl:DatatypeProperty ;
-  rdfs:label "Address" ;
-  rdfs:comment "An address" ;
+  rdfs:label "Address"@en ;
+  rdfs:comment "An address"@en ;
   rdfs:domain worldOnt:Person ;
   rdfs:range xsd:string .

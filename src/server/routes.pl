@@ -1538,7 +1538,7 @@ test(get_object, [
       'system:role': _}
     :< Result.'Document'.
 
-test(multiple_witnesses, [
+test(bad_cast, [
          setup((setup_temp_server(State, Server),
                 create_db_with_test_schema("admin", "test"))),
          cleanup(teardown_temp_server(State))
@@ -1578,9 +1578,7 @@ test(multiple_witnesses, [
               [json_object(dict),
                status_code(_),
                authorization(basic(admin,Key))]),
-    Witnesses = (JSON0.'api:error'.'api:witnesses'),
-    length(Witnesses, N),
-    N > 1.
+    "api:BadCast" = (JSON0.'api:error'.'@type').
 
 :- end_tests(woql_endpoint).
 
@@ -2233,18 +2231,24 @@ test(pack_nothing, [
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
+
+    % This really should use API versioning
     do_or_die(
         (   get_payload(Document, Request),
-            _{ resource_uri : Resource_Uri } :< Document
+            (   (   is_dict(Document),
+                    _{ resource_uri : Resource_Uri } :< Document,
+                    Resource_Or_Payload = resource(Resource_Uri)
+                )
+            ->  true
+            ;   Resource_Or_Payload = payload(Document)
+            )
         ),
-        error(bad_api_document(Document,[resource]),_)),
-
-    get_payload(Document, Request),
+        error(bad_api_document(Document,[resource_uri]),_)),
 
     api_report_errors(
         unpack,
         Request,
-        (   unpack(System_DB, Auth, Path, Resource_Uri),
+        (   unpack(System_DB, Auth, Path, Resource_Or_Payload),
             cors_reply_json(Request,
                             _{'@type' : 'api:UnpackResponse',
                               'api:status' : "api:success"},
@@ -3930,9 +3934,8 @@ test(remote_list, [
                 [method(Method),
                  methods([options,get])]).
 
-worker_handler(get,Request, _System_DB, _Auth) :-
+worker_handler(get, _Request, _System_DB, _Auth) :-
     config:worker_js(Value),
-    write_cors_headers(Request),
     throw(http_reply(bytes('text/html', Value))).
 
 
@@ -3972,7 +3975,7 @@ worker_handler(get,Request, _System_DB, _Auth) :-
 /*
  * console_handler(+Method,+Request) is det.
  */
-console_handler(get,Request, _System_DB, _Auth) :-
+console_handler(get, _Request, _System_DB, _Auth) :-
     config:index_template(Tpl_String),
     config:console_base_url(BaseURL),
     (   config:autologin_enabled
@@ -3981,7 +3984,6 @@ console_handler(get,Request, _System_DB, _Auth) :-
 
     format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
 
-    write_cors_headers(Request),
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).

@@ -20,6 +20,10 @@
 :- use_module(core(triple/casting)).
 :- use_module(library(semweb/turtle)).
 
+:- multifile user:portray/1.
+user:portray(turtle_utils:open_string(_, Stream)) :-
+    format("~q", [turtle_utils:open_string("... string elided...", Stream)]).
+
 /*
  * update_turtle_graph(+Context,+TTL) is det.
  *
@@ -53,7 +57,8 @@ update_turtle_graph_(Database, Graph, New_Graph_Stream, Meta_Data) :-
                                object_storage(Y,S),
                                nb_add_triple(Builder, X, P, S)
                            ))),
-                [encoding(utf8)]),
+                [encoding(utf8),
+                 on_error(error)]),
 
             % commit this builder to a temporary layer to perform a diff.
             nb_commit(Builder,Layer),
@@ -105,7 +110,7 @@ insert_turtle_graph_(Database, Graph, New_Graph_Stream, Blank_Node_Prefix, Meta_
         (   rdf_process_turtle(
                 New_Graph_Stream,
                 add_all_turtle_triples(Graph),
-                [encoding(utf8),anon_prefix(Blank_Node_Prefix)])
+                [encoding(utf8),anon_prefix(Blank_Node_Prefix),on_error(error)])
         ),
         Meta_Data
     ).

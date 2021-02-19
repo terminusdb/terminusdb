@@ -68,7 +68,8 @@ inferredQuad(inferred,X,OP,Y,Database) :-
 inferred_quad_unchained(G,X,OP,Y,Database) :-
     % No inference
     database_instance(Database,Instance),
-    database_inference(Database,[]),
+    (   database_inference(Database,[])
+    ;   database_schema(Database, [])),
     !,
     xquad(Instance,G,X,OP,Y).
 inferred_quad_unchained(G,X,OP,Y,Database) :-

@@ -166,20 +166,31 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
     ;   Additional_Options = []),
 
-    remote_tus_url(Remote_URL, TUS_URL),
+    catch(
+        (   % Try TUS protocol (we could check resulting options too for create etc...)
+            remote_tus_url(Remote_URL, TUS_URL),
+            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
+            Using_TUS = true,
 
-    setup_call_cleanup(
-        (   tmp_file('authorized_push', Tmp_File),
-            open(Tmp_File, write, Stream, [encoding(octet)])),
-        format(Stream, "~s", Payload),
-        close(Stream)
+            setup_call_cleanup(
+                tmp_file_stream(Tmp_File, Stream, [encoding(octet)]),
+                format(Stream, "~s", Payload),
+                close(Stream)
+            ),
+
+            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
+            Data = json(_{resource_uri : Resource_URL})
+        ),
+        error(existence_error(url,_),_),
+        % TUS failed, fall back to old style
+        (   Data = bytes('application/octets',Payload),
+            Using_TUS = false
+        )
     ),
-
-    tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
 
     remote_unpack_url(Remote_URL, Unpack_URL),
     catch(http_post(Unpack_URL,
-                    json(_{resource_uri : Resource_URL}),
+                    Data,
                     Result,
                     [request_header('Authorization'=Authorization),
                      json_object(dict),
@@ -190,9 +201,11 @@ authorized_push(Authorization, Remote_URL, Payload) :-
           throw(error(communication_failure(E),_))),
 
     (   200 = Status_Code
-    ->  tus_delete(Resource_URL, [tus_extension([termination])],
-                   % assume extension to avoid pointless pre-flight
-                   [request_header('Authorization'=Authorization)])
+    ->  (   Using_TUS = true
+        ->  tus_delete(Resource_URL, [tus_extension([termination])],
+                       % assume extension to avoid pointless pre-flight
+                       [request_header('Authorization'=Authorization)])
+        ;   true)
     ;   400 = Status_Code,
         _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
     ->  (   _{'@type' : "api:NotALinearHistory"} :< Error

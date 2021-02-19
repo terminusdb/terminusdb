@@ -1,3 +1,28 @@
+# TerminusDB Server v4.2.0 Release Notes
+
+## New
+
++ Large data transfers over TUS protocol
++ Delta rollups are now used for more graph types
++ Optimize utilizes an exponential rollup strategy
+
+## Bug fixes
+
++ Casting fixes
++ Improve error reporting in user creation
++ Improve robustness of transaction retry
++ Fix cardinality calculation for subproperties
+
+## Changes
+
++ Switch to google cdn
++ Various speedups
+
+## Improvements
+
++ Improved speed of database storage size calculation
+
+
 # TerminusDB Server v4.1.1 Release Notes
 
 ## New

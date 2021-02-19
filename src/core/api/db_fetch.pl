@@ -9,6 +9,7 @@
 :- use_module(core(account)).
 :- use_module(core(transaction)).
 :- use_module(db_pack).
+:- use_module(library(ssl)).
 :- use_module(library(http/http_client)).
 
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
