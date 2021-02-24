@@ -78,9 +78,9 @@ To describe your Documents and to link them with each other, we need to add prop
 **ObjectProperty** : Enum/Link Property this property are special properties used to create relationship between elements. You can make any class into a relationship by adding Object Properties that point at the related entities.
 
 
-**Traslate a TerminusDB graph data model to a relational data model**
+### Translate a TerminusDB graph data model to a relational data model**
 
-If you are someone used to programming with an relational database management system, here a comparation that can help you. 
+If you are used to programming with a relational database management system, here is a comparison that can help you. 
 
 A relational database structures data into tables and rows, while TerminusDB structures data into Documents, Objects and Properties.
 
@@ -90,8 +90,7 @@ A relational database structures data into tables and rows, while TerminusDB str
 * Relationship properties replace foreign keys, 
 * In terminusDB we don't need to denormalize to improve performance, we can avoid data duplication creating a new entity.
 
-Now jump and see how model our database schema. [**How do I use the model builder tool?**]()
-
+Now jump and see how to model our database schema. [**How do I use the model builder tool?**]()
 
 
 
