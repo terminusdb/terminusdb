@@ -273,7 +273,7 @@ resolve(X^^T,Lit) -->
         ->  (   atom(XE)
             ->  atom_string(XE,XS)
             ;   XE=XS),
-            compile_representation(XS,TE,Lit)
+            Lit = XS^^TE
         ;   Lit = XE^^TE),
         !
     }.
@@ -300,23 +300,13 @@ resolve(X,X) -->
     !.
 resolve(X,X) -->
     {
+        is_date(X)
+    },
+    !.
+resolve(X,X) -->
+    {
         throw(error('How did we get here?', X))
     }.
-
-
-/*
- * compile_representation(S,T,V) is det.
- *
- * Gives the internal representation of some type T from some string S.
- */
-
-compile_representation(String,Type,String^^Type) :-
-    var(Type),
-    !.
-compile_representation(String,'http://www.w3.org/2001/XMLSchema#dateTime',Date) :-
-    !,
-    guess_date(String,Date).
-compile_representation(String,Type,String^^Type).
 
 var_record_pl_var(Var_Name,
                   var_binding{
@@ -4637,6 +4627,33 @@ test(once, [
     query_test_response(system_descriptor{}, Query, JSON),
     [Result] = (JSON.bindings),
     Result.'X'.'@value' = "foo".
+
+test(literal_datetime, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{
+                '@type': "woql:Equals",
+                'woql:left': _{
+                                 '@type': "woql:Variable",
+                                 'woql:variable_name': _{
+                                                           '@value': "X",
+                                                           '@type': "xsd:string"
+                                                       }
+                             },
+                'woql:right': _{
+                                  '@type': "woql:Datatype",
+                                  'woql:datatype': _{
+                                                       '@value': "2021-02-23T21:12:58",
+                                                       '@type': "xsd:dateTime"
+                                                   }
+                              }
+            },
+
+    query_test_response(system_descriptor{}, Query, _JSON),
+    !.
 
 
 :- end_tests(woql).
