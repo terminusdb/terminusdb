@@ -1,5 +1,4 @@
 
-
 ## Visualize a Schema
 
 The Console provides various ways in which a schema can be visualized.
@@ -12,4 +11,4 @@ The Console provides various ways in which a schema can be visualized.
 In the below screen shot, the example shows how the database has a model with Contract linked to an Agent (Person or Organization)
 via relationship Owner
 
-![](`r https://assets.terminusdb.com/schema_builder_screen_shots.PNG)
+![naming](https://assets.terminusdb.com/schema_builder_screen_shots.PNG)
