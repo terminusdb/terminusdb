@@ -38,11 +38,11 @@ woqlClient.resource('branch', sourceBranch)
 ```
 
 You can also rebase based on a particular commit ID, by using "ref" as the first parameter, in this case you will also require the
-commitID of interest.
+commit hash id of interest.
 
 ```javascript
-let commitID="jg9p1eleuae8fhajlyd7slwr0lirdnk"
-let refUrl=woqlClient.resource('ref', commitID)
+let commit="jg9p1eleuae8fhajlyd7slwr0lirdnk"
+let refUrl=woqlClient.resource('ref', commit)
 var rebase_source = {}
 rebase_source.rebase_from = refUrl
 ```
