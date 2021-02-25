@@ -1,0 +1,1 @@
+Explanation: TerminusDB Vocabulary
