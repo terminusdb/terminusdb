@@ -19,17 +19,17 @@ via relationship Owner
 
 The below screenshot shows a table view of Classes when you go to Schema Tab -> Classes
 
-![schema-classes-view](https://assets.terminusdb.com/docs/schema-classes-view.PNG)
+![schema-classes-view](https://assets.terminusdb.com/docs/schema-classes-view.JPG)
 
 ### Table/ Graph View for Properties
 
 On Schema Tab -> Properties, we can toggle between table and graph View.
 
-![schema-properties-table](https://assets.terminusdb.com/docs/schema-properties-table.PNG)
+![schema-properties-table](https://assets.terminusdb.com/docs/schema-properties-table.JPG)
 
 The graph view visually helps in identifying the relationships between various classes
 
-![schema-properties-graph](https://assets.terminusdb.com/docs/schema-properties-graph.PNG)
+![schema-properties-graph](https://assets.terminusdb.com/docs/schema-properties-graph.JPG)
 
 
 ### Query
