@@ -36,6 +36,7 @@
 
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
+:- use_module(library(http/mimepack)).
 
 % chunked
 %:- use_module(library(http/http_header)).

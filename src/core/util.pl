@@ -94,7 +94,8 @@
               optional/1,
               member_last/3,
               convlist/4,
-
+              is_date/1,
+              
               % speculative_parse.pl
               guess_date/2,
               guess_number/2,

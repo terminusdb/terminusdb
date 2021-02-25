@@ -57,7 +57,8 @@
               optional/1,
               chunk/2,
               chunk/3,
-              member_last/3
+              member_last/3,
+              is_date/1
           ]).
 
 /** <module> Utils
@@ -829,3 +830,11 @@ member_last_([A],A,true).
 member_last_([A,_|_],A,false).
 member_last_([_|Rest],A,Last) :-
     member_last_(Rest,A,Last).
+
+/*
+ * is_date(+Date) is semidet.
+ *
+ * Determines if `Date` is a date or date time object.
+ */
+is_date(date(_,_,_,_,_,_,_,_,_)).
+is_date(date(_,_,_)).

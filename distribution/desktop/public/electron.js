@@ -84,9 +84,22 @@ electron.app.on('ready', () => {
   } else {
     console.log('TerminusDB not found in path')
     console.log('Please start TerminusDB')
+    console.log("process.execPath", process.execPath)
+
+    electron.app.setUserTasks([{
+        program: process.execPath,
+        iconIndex: 1,
+        title: 'TerminusDB',
+        iconPath : process.execPath
+    }]);
+
+
     createWindow()
   }
 })
+
+
+
 
 function createWindow () {
   MAIN_WINDOW = new electron.BrowserWindow({
@@ -107,6 +120,8 @@ function createWindow () {
       MAIN_WINDOW.hide()
     }
   })
+
+  console.log("process.execPath", process.execPath)
 
   electron.app.on('before-quit', function (evt) {
         electron.app.quitting = true
