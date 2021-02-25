@@ -1,4 +1,4 @@
-# Eplaining WOQL
+# Explaining  WOQL
 
 
 ## Fluent Style
