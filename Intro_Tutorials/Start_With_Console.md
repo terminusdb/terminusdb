@@ -28,7 +28,7 @@ There are 2 ways in which you can create a schema
 
 #### First Method - use the schema builder
 
-Click on Schema Tab -> Schema Builder -> Click on Edit button and create 3 Document Classes - Station, Bikes, Journey as shown below
+Click on Schema Tab -> Schema Builder -> Click on Edit button and create 3 Document Classes - Station, Bikes, Journey as shown below. More details covered in https://terminusdb.com/blog/2020/11/19/model-builder-and-data-modeling/
 ![schema_builder](https://assets.terminusdb.com/docs/console-schema-builder.JPG)
 
 #### Second Method - Run a Query to create schema
@@ -157,5 +157,27 @@ Click on Add Files, you will be getting a file explorer from which you can opt t
 ![console-document-view](https://assets.terminusdb.com/docs/console-document-view.JPG)
 
 On click of Upload you will the csv file will be saved as a new CSV document type. Try this out.
+More details covered in https://terminusdb.com/blog/2020/11/23/creating-a-database-with-csvs-using-terminusdb-console/
 
 ![console-document-add-csv-json](https://assets.terminusdb.com/docs/console-document-add-csv-json.JPG)
+
+### Query the Data
+
+Here is a small query which display all the stations and their names. Go to Query Pane and paste the below query and click on Run.
+
+```javascript
+triple("v:A", "type", "scm:Station").
+triple("v:A", "label", "v:Names")
+```
+
+### Manage database
+
+This allows you to create a branch and perform various branch operations. Actions that can be performed are
+1. Merge a branch into current branch
+2. Reset a branch to a commit of interest
+3. Squash many commits to a single commit
+
+
+![console-manage](https://assets.terminusdb.com/docs/console-manage.JPG)
+
+![console-manage-detail](https://assets.terminusdb.com/docs/console-manage-detail.JPG)
