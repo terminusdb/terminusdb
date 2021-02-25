@@ -22,19 +22,21 @@ query=q.query // only take the query object from q
 query['@id'] = 'doc:my_triple_query' // add an id to the query object
 
 //saving query
-WOQL.update_object(query).execute(nClient).then((results) => {
+WOQL.update_object(query).execute(nClient)
+    .then((results) => {
 	console.log("Success in saving query, do something")
-})
-.catch((err) => {console.log("Error in saving query, do something")})
-.finally(() => {console.log("do something")})
+    })
+    .catch((err) => console.log("Error in saving query, do something"))
+    .finally(() => console.log("do something"))
 
 //reading query back
-WOQL.read_object('doc:my_triple_query', "v:Query").execute(nClient).then((results) => {
+WOQL.read_object('doc:my_triple_query', "v:Query").execute(nClient)
+    .then((results) => {
 	let my_triple_query = results['bindings'][0]['Query']
 	console.log("Printing query", my_triple_query)
-})
-.catch((err) => {console.log("Error in reading query, do something")})
-.finally(() => {console.log("do something")})
+    })
+    .catch((err) => console.log("Error in reading query, do something"))
+    .finally(() => console.log("do something"))
 ```
 
 Please visit https://github.com/terminusdb/terminusdb-tutorials/tree/master/woql for a working tutorial written in python.
