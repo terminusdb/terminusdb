@@ -68,11 +68,11 @@ classes and properties of the db respectively.
 
 Below is an image of table view for Properties
 
-![query_pane_schema](https://assets.terminusdb.com/docs/schema-properties-table-view.JPG)
+![schema_properties_table](https://assets.terminusdb.com/docs/schema-properties-table-view.JPG)
 
 Below is an image for the equivalent graph view for how Journey is related to End Station and Start Station
 
-![query_pane_schema](https://assets.terminusdb.com/docs/schema-properties-graph-view.JPG)
+![schema_properties_graph](https://assets.terminusdb.com/docs/schema-properties-graph-view.JPG)
 
 ### Add Documents
 
@@ -84,11 +84,11 @@ There are 3 ways in which you can create documents
 
 Here we are going to create a journey before which, create two stations - doc:Station_001 and doc:Station_002
 
-![query_pane_schema](https://assets.terminusdb.com/docs/console-create-journey.JPG)
+![create-journey](https://assets.terminusdb.com/docs/console-create-journey.JPG)
 
 On click of Save
 
-![query_pane_schema](https://assets.terminusdb.com/docs/console-view-journey.JPG)
+![view-journey](https://assets.terminusdb.com/docs/console-view-journey.JPG)
 
 #### Second Method - Create via Query
 
@@ -149,3 +149,13 @@ const inserts = WOQL.and(
 WOQL.and(inputs, inserts);
 
 ```
+
+#### Third Method - Add CSV or JSON files directly
+
+Click on Add Files, you will be getting a file explorer from which you can opt to choose both CSV or JSON documents.
+
+![console-document-view](https://assets.terminusdb.com/docs/console-document-view.JPG)
+
+On click of Upload you will the csv file will be saved as a new CSV document type. Try this out.
+
+![console-document-add-csv-json](https://assets.terminusdb.com/docs/console-document-add-csv-json.JPG)
