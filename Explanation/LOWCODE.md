@@ -27,7 +27,7 @@ Go to Document tab, click on Add Files, you will be getting a file explorer from
 
 The document API allows you to update the database one document at a time with the update_object, read_object and delete_object WOQL calls.
 
-## Defining Document Types
+## Using WOQL to define Documents
 
 Document types are defined in the schema: 
 
