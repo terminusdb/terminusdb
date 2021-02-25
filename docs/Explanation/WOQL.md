@@ -1,3 +1,6 @@
+# Eplaining WOQL
+
+
 ## Fluent Style
 
 The TerminusDB query libraries make extensive use of the fluent style to simplify the expression of complex compound queries. Many WOQL query words accept a sub-query as an argument and, rather than using a functional (Lisp-like) style of capturing containment, a style where sub-queries are appended to the initial function as a new function is preferred.
