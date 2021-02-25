@@ -25,44 +25,52 @@ So now that we have a schema, lets go ahead and create a hotel. Go to Document t
 You can also drag and drop files and add documents to your database.
 Go to Document tab, click on Add Files, you will be getting a file explorer from which you can opt to choose both CSV or JSON documents.
 
-## WOQL - no code
+The document API allows you to update the database one document at a time with the update_object, read_object and delete_object WOQL calls.
 
-We have WOQL queries which we can use to do various db operations such as
+## Defining Document Types
 
-### update_object()
+Document types are defined in the schema: 
 
-Updates a document (or any object) in the db with the passed json-ld
+```js
+doctype("MyDoc").label("My Document Type").property("age", "integer")
+```
+Will define a document of type MyDoc with an integer property called "age"
 
-```javascript
-let obj = {
-    "@id": "doc:joe",
-    "@type": "scm:Person",
-    "rdfs:label": {
-        "@type": "xsd:string",
-        "@value": "Joe"
-    }
-}
-update_object(obj)
+Documents are just made up of triples, so we can add documents just be adding the triples:
+```js
+add_triple("doc:test", "type", "MyDoc").add_triple("doc:test", "label", "Test Doc").add_triple("doc:test", "age", 23)
 ```
 
-###read_object()
+## read_object
 
-Saves the entire document with IRI DocumentIRI into the JSONLD variable
+Will create a document of type MyDoc. However, we can also just get the full document  
 
-```javascript
-let [mydoc] = vars("mydoc")
-
-read_object("doc:joe", mydoc)
-//mydoc will have the json-ld document with ID doc:x stored in it
+```js
+read_object("doc:test", "v:Document")
 ```
 
-### delete_object()
+Will return the jsonld for the full document in the v:Document variable
 
-Deletes the entire refered document and all references to it. You can pass either a full JSON-LD document, an IRI literal or a variable containing either
+## update_object
 
-```javascript
-delete_object("doc:joe")
+Will create or overwrite a full document in one call by passing the full JSON LD  
+
+```js
+update_object({
+   "@type": "scm:MyDoc",
+   "@id": "doc:test",
+   "scm:age": { "@value": 23, "@type": "xsd:integer"}
+})
 ```
+Will produce the same document as above (with triples)
+
+## delete_object
+
+```js
+delete_object("doc:test")
+```
+Will delete an entire document, including all properties and embedded objects and links from other documents and objects to the deleted document. 
+
 
 ### TerminusDB Console
 
