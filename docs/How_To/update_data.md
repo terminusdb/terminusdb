@@ -1,16 +1,35 @@
-# How to update a triple
+# How to update data
+
+To update a triple with an unknown value which may or may not exist we
+have to find the old value.
+
+NOTE: If there are multiple values, this will delete all and replace
+it with one.
 
 ## Python
 
+In the python client:
+
 ```python
-WOQL().woql_and(
-    WOQL().woql_or(
-        WOQL().woql_and(
-            WOQL().triple("doc:my_obj","scm:my_property","v:Old_Value"),
-            WOQL().delete_triple("doc:my_obj", "scm:my_property", "v:Old_Value")
-        ),
-        WOQL().true),
-    
-    WOQL().triple("doc:my_obj","scm:my_property","v:Old_Value")
-)
+query = WOQL().when(
+    WOQL().triple("doc:my_document","scm:my_property","v:Value"),
+    WOQL().woql_and(
+            WOQL().delete("doc:my_document","scm:my_property","v:Value"),
+            WOQL().insert("doc:my_document","scm:my_property",
+                                WOQL().literal("New Value","xsd:string"))
+    )),
+client.query(query)
+```
+
+## Javascript
+
+To update a triple in the python client:
+
+```javascript
+when(
+    triple("doc:Person_1","scm:gender","v:Value"),
+    and(
+        delete("doc:Person_1","scm:gender","v:Value"),
+        insert("doc:Person_1","scm:gender",literal("Male","string"))
+    ))
 ```

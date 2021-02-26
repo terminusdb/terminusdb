@@ -1105,7 +1105,7 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     {
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
-compile_wf(when(A,B),(ProgA,ProgB)) --> % forall(ProgA, ProgB)
+compile_wf(when(A,B),((ProgA, ProgB) ; true)) --> % forall(ProgA, ProgB)
     compile_wf(A,ProgA),
     compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
@@ -3591,6 +3591,39 @@ test(ast_when_test, [
             Triples),
 
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
+
+test(ast_when_update, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, p, c),
+                      insert(a, q, c),
+                      insert(a, r, e))),
+        _Meta_Data1
+    ),
+
+    create_context(Descriptor, Commit_Info, Context2),
+
+    AST = ((   v('P') = p
+           ;   v('P') = q),
+           when(t(a,v('P'),v('X')),
+                (   delete(a, v('P'), v('X')),
+                    insert(a, v('P'), g)))),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST, _JSON),
+
+    findall(t(X,P,Y),
+            ask(Descriptor, t(X, P, Y)),
+            Triples),
+
+    Triples = [t(a,p,g),t(a,q,g),t(a,r,e)].
 
 
 test(get_put, [
