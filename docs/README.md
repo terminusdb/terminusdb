@@ -34,8 +34,6 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 
 ## Getting Started
 
-We encourage you to read our [Quick Start](https://terminusdb.com/docs/quickstart/) guide to better understand how to get started with TerminusDB.
-
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
 
 For development and testing we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
