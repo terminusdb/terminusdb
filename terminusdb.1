@@ -1,6 +1,6 @@
 .\" generated with Ronn-NG/v0.8.0
 .\" http://github.com/apjanke/ronn-ng/tree/0.8.0
-.TH "TERMINUSDB" "1" "December 2020" "" ""
+.TH "TERMINUSDB" "1" "January 2021" "" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
 .SH "SYNOPSIS"
@@ -51,7 +51,7 @@ Optimize a database (including \fIsystem and\fRmeta)\.
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBoptimize\fR command
 .SS "query"
-\fBterminusdb query QUERY OPTIONS\fR
+\fBterminusdb query DB_SPEC QUERY OPTIONS\fR
 .P
 Query a database\.
 .TP
@@ -132,6 +132,56 @@ the user on the remote
 .TP
 \fB\-p\fR, \fB\-\-password\fR=[value]
 the password on the remote
+.SS "fetch"
+\fBterminusdb fetch BRANCH_SPEC\fR
+.P
+fetch data from a remote\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBfetch\fR command
+.TP
+\fB\-r\fR, \fB\-\-remote\fR=[value]
+the name of the remote to use
+.TP
+\fB\-u\fR, \fB\-\-user\fR=[value]
+the user on the remote
+.TP
+\fB\-p\fR, \fB\-\-password\fR=[value]
+the password on the remote
+.SS "rebase"
+\fBterminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS\fR
+.P
+Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrebase\fR command
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+The author of the rebase
+.SS "rollup"
+\fBterminusdb rollup DATABASE_SPEC OPTIONS\fR
+.P
+Creates an optimisation layer for queries on the given commit\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrollup\fR command
+.SS "bundle"
+\fBterminusdb bundle DATABASE_SPEC OPTIONS\fR
+.P
+Create a pack for a given DATABASE_SPEC that can then be reconsistuted with \fBterminusdb unpack\fR\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBbundle\fR command
+.TP
+\fB\-o\fR, \fB\-\-output\fR=[value]
+file name to use for pack output file (defaults to descriptor based name)\.
+.SS "unbundle"
+\fBterminusdb unbundle FILE DATABASE_SPEC OPTIONS\fR
+.P
+Unpack \.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBunbundle\fR command
 .SS "branch create"
 \fBterminusdb branch create BRANCH_SPEC OPTIONS\fR
 .P
@@ -262,6 +312,48 @@ print help for the \fBcsv dump\fR sub command
 .TP
 \fB\-o\fR, \fB\-\-output\fR=[value]
 file name to use for csv output
+.SS "triples dump"
+\fBterminusdb triples dump GRAPH_SPEC\fR
+.P
+Dump an RDF string\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBtriples dump\fR sub command
+.TP
+\fB\-f\fR, \fB\-\-format\fR=[value]
+format of RDF (can be one of: [turtle])
+.SS "triples update"
+\fBterminusdb triples update GRAPH_SPEC FILE\fR
+.P
+Update from an RDF file (replaces current content)\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBtriples update\fR sub command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-f\fR, \fB\-\-format\fR=[value]
+format of RDF (can be one of: [turtle])
+.SS "triples load"
+\fBterminusdb triples load GRAPH_SPEC FILE\fR
+.P
+Load triples from RDF file (Appending new)\.
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBtriples load\fR sub command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-f\fR, \fB\-\-format\fR=[value]
+format of RDF (can be one of: [turtle])
 .SS "remote add"
 \fBterminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS\fR
 .P
@@ -290,6 +382,9 @@ Get the URL of a remote\.
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote get\-url\fR sub command
+.TP
+\fB\-r\fR, \fB\-\-remote\fR=[value]
+the name of the remote to use
 .SS "remote list"
 \fBterminusdb remote list DATABASE_SPEC OPTIONS\fR
 .P
@@ -396,11 +491,13 @@ Create a database in the organization \fBadmin\fR with the identifier \fBfoo\fR\
 \fBterminusdb db create admin/foo \-\-label="Foo"\fR
 Create a database in the organization \fBadmin\fR with the identifier \fBfoo\fR and name \fBFoo\fR\.
 .SH "COPYRIGHT"
-TerminusDB is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 (GPLv3) as published by the Free Software Foundation\.
+Copyright 2021 TerminusDB
 .P
-TerminusDB is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE\. See the GNU General Public License for more details\.
+Licensed under the Apache License, Version 2\.0 (the "License"); you may not use this file except in compliance with the License\. You may obtain a copy of the License at
 .P
-You should have received a copy of the GNU General Public License along with TerminusDB\. If not, see \fI\%https://www\.gnu\.org/licenses/\fR\.
+http://www\.apache\.org/licenses/LICENSE\-2\.0
+.P
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied\. See the License for the specific language governing permissions and limitations under the License\.
 .SH "AUTHORS"
 Gavin Mendel\-Gleason \fI\%mailto:gavin@terminusdb\.com\fR
 .P
