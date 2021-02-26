@@ -42,7 +42,7 @@
   - [Store](How_To/store.md)
       - [Import JSON-LD from WOQL](How_To/jsonld_woql.md)
       - [Import Prov Ontology](How_To/prov_ontology.md)
-      - [Optimize you DB](How_To/delta_rollup.md)
+      - [Optimize your DB](How_To/delta_rollup.md)
       - [Access Deltas Directly](How_To/access_deltas.md)
       - [Load Turtle into a DB](How_To/load_turtle.md)
   - [Other](How_To/other.md)
