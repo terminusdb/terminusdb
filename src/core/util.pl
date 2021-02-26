@@ -95,9 +95,10 @@
               member_last/3,
               convlist/4,
               is_date/1,
-              
+
               % speculative_parse.pl
               guess_date/2,
+              guess_datetime_stamp/2,
               guess_number/2,
               guess_integer/2,
               guess_integer_range/2,
@@ -120,6 +121,7 @@
               year//1,
               date//6,
               dateTime//9,
+              dateTimeStamp//9,
               gYear//4,
               gYearMonth//5,
               gMonth//4,

@@ -1,4 +1,5 @@
 :- module(speculative_parse, [guess_date/2,
+                              guess_datetime_stamp/2,
                               guess_number/2,
                               guess_integer/2,
                               guess_integer_range/2,
@@ -41,6 +42,10 @@
 guess_date(Val,Date^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     atom_codes(Val,Codes),
     once(phrase(guess_date(Date),Codes)).
+
+guess_datetime_stamp(Val,date(Y,M,D,HH,MM,SS,Offset,Zone,DST)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp') :-
+    atom_codes(Val,Codes),
+    once(phrase(dateTimeStamp(Y,M,D,HH,MM,SS,Offset,Zone,DST),Codes)).
 
 guess_integer(Val,Val^^'http://www.w3.org/2001/XMLSchema#integer') :-
     integer(Val),

@@ -14,6 +14,7 @@
                        year//1,
                        date//6,
                        dateTime//9,
+                       dateTimeStamp//9,
                        gYear//4,
                        gYearMonth//5,
                        gMonth//4,
@@ -165,38 +166,70 @@ double(M,E,double) --> decimal(M), exp, integer(E) .
  *  Time + Date   *
  ******************/
 
-timeZone(1,0,0) --> "Z" .
-timeZone(1,ZH,ZM) --> "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM) .
-timeZone(-1,ZH,ZM) --> "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM) .
-timeZone(1,0,0) --> "" .
+% To make invertible we should process time zones and dst here correctly.
+timeZone(0,-,-) -->
+    "Z" .
+timeZone(S,-,-) -->
+    "+",
+    twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
+    { S is (ZH * 3600) + (ZM * 60) + ZS }.
+timeZone(S,-,-) -->
+    "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
+    { S is (ZH * 3600) + (ZM * 60) }.
+timeZone(S,-,-) -->
+    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
+    { S is (-1 * ((ZH * 3600) + (ZM * 60) + ZS)) }.
+timeZone(S,-,-) -->
+    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
+    { S is (-1 * ((ZH * 3600) + (ZM * 60))) }.
 
-% Hour, Minute, Second, ZoneSign, ZoneHour, ZoneMinute
-time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-			".", threeDigitNatural(_), timeZone(Z,ZH,ZM).
-time(H,M,S,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-			timeZone(Z,ZH,ZM) .
-time(H,M,0,Z,ZH,ZM) --> twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Z,ZH,ZM).
+optional_time_zone(Offset,TZ,DST) -->
+    timeZone(Offset,TZ,DST).
+optional_time_zone(0,-,-) -->
+    "".
+
+time_and_zone(H,M,S,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	".", threeDigitNatural(_), timeZone(Offset,Zone,DST).
+time_and_zone(H,M,S,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	timeZone(Offset,Zone,DST) .
+time_and_zone(H,M,0,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Offset,Zone,DST).
+
+% Hour, Minute, Second, Offset, Zone, DST
+time(H,M,S,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	".", threeDigitNatural(_), optional_time_zone(Offset,Zone,DST).
+time(H,M,S,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	optional_time_zone(Offset,Zone,DST) .
+time(H,M,0,Offset,Zone,DST) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), optional_time_zone(Offset,Zone,DST).
 
 year(SY) --> sign(S), fourDigitNatural(Y),
-	     { SY is S * Y }.
+	         { SY is S * Y }.
 
-date(SY,Mo,D,Z,ZH,ZM) -->
-    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Z,ZH,ZM).
+date(SY,Mo,D,Offset,Zone,DST) -->
+    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Offset,Zone,DST).
 
-dateTime(SY,Mo,D,H,M,S,Z,ZH,ZM) -->
+dateTime(SY,Mo,D,H,M,S,Offset,Zone,DST) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time(H,M,S,Z,ZH,ZM).
+    "T", time(H,M,S,Offset,Zone,DST).
 
+dateTimeStamp(SY,Mo,D,H,M,S,Offset,Zone,DST) -->
+    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
+    "T", time_and_zone(H,M,S,Offset,Zone,DST).
 
-gYear(Y,Z,ZH,ZM) --> year(Y), timeZone(Z,ZH,ZM) .
+gYear(Y,Offset,Zone,DST) --> year(Y), timeZone(Offset,Zone,DST) .
 
-gYearMonth(Y,M,Z,ZH,ZM) --> year(Y), "-", twoDigitNatural(M), timeZone(Z,ZH,ZM) .
+gYearMonth(Y,M,Offset,Zone,DST) --> year(Y), "-", twoDigitNatural(M), timeZone(Offset,Zone,DST) .
 
-gMonth(M,Z,ZH,ZM) --> "--", twoDigitNatural(M), timeZone(Z,ZH,ZM) .
+gMonth(M,Offset,Zone,DST) --> "--", twoDigitNatural(M), timeZone(Offset,Zone,DST) .
 
-gMonthDay(Mo,D,Z,ZH,ZM) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Z,ZH,ZM) .
+gMonthDay(Mo,D,Offset,Zone,DST) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Offset,Zone,DST) .
 
-gDay(D,Z,ZH,ZM) --> "---", twoDigitNatural(D), timeZone(Z,ZH,ZM) .
+gDay(D,Offset,Zone,DST) --> "---", twoDigitNatural(D), timeZone(Offset,Zone,DST) .
 
 
 maybeYear(Y) --> natural(Y), "Y" .

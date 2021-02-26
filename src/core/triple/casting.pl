@@ -136,6 +136,16 @@ typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTime', _, Cast) 
     ->  !
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))
     ).
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#dateTimeStamp', _, Ans) :-
+    (   guess_datetime_stamp(Val,Ans)
+    ->  !
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTimeStamp'),_))
+    ).
+typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#date', _, date(Y,M,D,0,0,0,Offset,Zone,DST)^^'http://www.w3.org/2001/XMLSchema#date') :-
+    (   guess_date(Val,date(Y, M, D, _, _, _, Offset, Zone, DST)^^_)
+    ->  !
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#date'),_))
+    ).
 typecast_switch(Val, _ST, 'http://www.w3.org/2001/XMLSchema#integer', _, Cast) :-
     (   guess_integer(Val,Cast)
     ->  !
