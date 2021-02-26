@@ -1,4 +1,4 @@
-VERSION=4.1.0
+VERSION=4.2.0
 LICENSE=Apache-2.0
 MAINTAINER="TerminusDB Team <team@terminusdb.com>"
 DEB_TARGET=terminusdb_$(VERSION)_amd64.deb
@@ -10,7 +10,7 @@ TARGET=terminusdb
 all: bin deb docs
 
 $(TARGET):
-	$(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f bootstrap.pl
+	$(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f src/bootstrap.pl
 
 bin: $(TARGET)
 
@@ -22,15 +22,18 @@ deb: $(TARGET)
 
 rpm: $(TARGET)
 	 fpm -f -s dir -t rpm -d pl -n terminusdb -v $(VERSION) \
-		--license $(LICENSE) -m $(MAINTAINER) \
+		--license $(LICENSE) -m $(MAINTAINER) --rpm-rpmbuild-define "_build_id_links none"  \
 		--vendor "TerminusDB" --description "TerminusDB, the revision control database" \
 		./terminusdb=/usr/bin/
 
 
 debug:
-	echo "main, halt." | swipl -f bootstrap.pl
+	echo "main, halt." | swipl -f src/bootstrap.pl
 
 docs:
 	utils/compile_docs.sh
 	ronn docs/terminusdb.1.ronn --roff
 	cp docs/terminusdb.1.ronn docs/CLI.md
+
+clean:
+	rm -f terminusdb

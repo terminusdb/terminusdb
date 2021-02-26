@@ -69,7 +69,7 @@ Optimize a database (including _system and _meta).
 
 ### query
 
-`terminusdb query QUERY OPTIONS`
+`terminusdb query DB_SPEC QUERY OPTIONS`
 
 Query a database.
 
@@ -156,6 +156,66 @@ Pull a branch from a database.
 
   * `-p`, `--password`=[value]:
   the password on the remote
+
+### fetch
+
+`terminusdb fetch BRANCH_SPEC`
+
+fetch data from a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `fetch` command
+
+  * `-r`, `--remote`=[value]:
+  the name of the remote to use
+
+  * `-u`, `--user`=[value]:
+  the user on the remote
+
+  * `-p`, `--password`=[value]:
+  the password on the remote
+
+### rebase
+
+`terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS`
+
+Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC.
+
+  * `-h`, `--help`=[value]:
+  print help for the `rebase` command
+
+  * `-a`, `--author`=[value]:
+  The author of the rebase
+
+### rollup
+
+`terminusdb rollup DATABASE_SPEC OPTIONS`
+
+Creates an optimisation layer for queries on the given commit.
+
+  * `-h`, `--help`=[value]:
+  print help for the `rollup` command
+
+### bundle
+
+`terminusdb bundle DATABASE_SPEC OPTIONS`
+
+Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.
+
+  * `-h`, `--help`=[value]:
+  print help for the `bundle` command
+
+  * `-o`, `--output`=[value]:
+  file name to use for pack output file (defaults to descriptor based name).
+
+### unbundle
+
+`terminusdb unbundle FILE DATABASE_SPEC OPTIONS`
+
+Unpack .
+
+  * `-h`, `--help`=[value]:
+  print help for the `unbundle` command
 
 ### branch create
 
@@ -307,6 +367,54 @@ Dump a CSV file from the database.
   * `-o`, `--output`=[value]:
   file name to use for csv output
 
+### triples dump
+
+`terminusdb triples dump GRAPH_SPEC`
+
+Dump an RDF string.
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples dump` sub command
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
+### triples update
+
+`terminusdb triples update GRAPH_SPEC FILE`
+
+Update from an RDF file (replaces current content).
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples update` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
+### triples load
+
+`terminusdb triples load GRAPH_SPEC FILE`
+
+Load triples from RDF file (Appending new).
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples load` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
 ### remote add
 
 `terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS`
@@ -342,6 +450,9 @@ Get the URL of a remote.
 
   * `-h`, `--help`=[value]:
   print help for the `remote get-url` sub command
+
+  * `-r`, `--remote`=[value]:
+  the name of the remote to use
 
 ### remote list
 
@@ -481,17 +592,20 @@ requires the use of an appropriate descriptor path.
 
 ## COPYRIGHT
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Copyright 2021 TerminusDB
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you
+may not use this file except in compliance with the License. You may
+obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License.
+
 ## AUTHORS
 
 Gavin Mendel-Gleason <gavin@terminusdb.com>

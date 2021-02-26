@@ -5,9 +5,9 @@
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
 
 
-TerminusDB is an open-source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive. 
+TerminusDB is an open-source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive.
 
-It is a native revision control database that is architecturally similar to Git and other distributed version control systems. 
+It is a native revision control database that is architecturally similar to Git and other distributed version control systems.
 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain that utilise the powerful features of TerminusDB.
 <br/><br/>
@@ -18,7 +18,7 @@ TerminusDB provides a RESTful API for interacting via the JSON-LD exchange forma
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible.
 
-Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium service that allows users to manage access to databases and collaboratively work on shared resources. 
+Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/hub), which is a freemium service that allows users to manage access to databases and collaboratively work on shared resources.
 
 ## Why TerminusDB
 
@@ -27,7 +27,7 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 * Powerful query allows you to search for repeating patterns using recursion
 * Generate forms, get data validation, and a flexible & surfable document interface (in the console)
 * Visual tool to build complex data models, which are easy, maintainable, and enforced
-* Data science/data engineering functionality directly in the database and via TerminusHub 
+* Data science/data engineering functionality directly in the database and via TerminusHub
 * Clone the production database, branch, merge, collaboration, lineage, versioning, and time travel - Git-like revision control for large databases
 * New paradigm in data-centric application development
 
@@ -36,9 +36,9 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 
 We encourage you to read our [Quick Start](https://terminusdb.com/docs/quickstart/) guide to better understand how to get started with TerminusDB.
 
-Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download)
+Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download).
 
-For development and testing, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image
+For development and testing, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image.
 
 ### Building from source
 
@@ -46,7 +46,7 @@ In order to build from the source, follow the [build from source](docs/BUILD.md)
 
 ### Open Console
 
-Once you have installed terminusdb-server either from the docker image or built from the source you can enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
+Once you have installed terminusdb-server either from the docker image or built from source you can enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
 
 ### Command Line
 
@@ -90,7 +90,7 @@ or our [forum](https://discuss.terminusdb.com). We are also on [twitter](https:/
 
 ## Changes in this Version
 
-[Release Notes](RELEASE_NOTES.md)
+[Release Notes](docs/RELEASE_NOTES.md)
 
 ## Copyright
 

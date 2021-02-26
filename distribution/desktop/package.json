@@ -1,16 +1,16 @@
 {
     "name": "terminusdb-desktop",
     "productName": "TerminusDB",
-    "version": "4.1.0",
-    "private": true,
+    "version": "4.2.0",
+    "license": "Apache-2.0",
     "main": "public/electron.js",
     "scripts": {
         "electron-dev": "electron --no-sandbox .",
         "build-mac-os": "npx png2icns public/logo512.png -s 16,32,64,128,256 && npx electron-builder build"
     },
     "devDependencies": {
-        "electron": "^10.2.0",
-        "electron-builder": "^22.8.1"
+        "electron": "^11.1.1",
+        "electron-builder": "^22.9.1"
     },
     "dependencies": {
         "electron-is-dev": "^1.2.0",
@@ -21,7 +21,11 @@
         "mac": {
             "category": "public.app-category.database",
             "icon": "icon.icns",
-            "asar": false
+            "asar": false,
+            "target": "dmg"
+        },
+        "dmg": {
+            "writeUpdateInfo": false
         },
         "win": {
             "asar": false,
