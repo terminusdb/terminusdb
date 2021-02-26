@@ -45,7 +45,7 @@
  # Limited-range integer numbers
  | xsd:byte	| -128…+127 (8 bit) |
  | xsd:short |	-32768…+32767 (16 bit) |
- | xsd:integer |	-2147483648…+2147483647 (32 bit) |
+ | xsd:int |	-2147483648…+2147483647 (32 bit) |
  | xsd:long |	-9223372036854775808…+9223372036854775807 (64 bit) |
  | xsd:unsignedByte |	0…255 (8 bit) |
  | xsd:unsignedShort |	0…65535 (16 bit) |
