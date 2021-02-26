@@ -1,3 +1,4 @@
+
 ## Import a Schema
 
 You can import a schema from a file dump of turtle format using insert_triples or update_triples
