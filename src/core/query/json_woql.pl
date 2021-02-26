@@ -1388,5 +1388,47 @@ test(id_simplification_2, []) :-
     WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
                  ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
                  v('Journey_ID')).
-
 :- end_tests(woql_jsonld).
+
+:- begin_tests(jsonld_ast).
+
+test(anySimpleType, []) :-
+
+    JSON_Atom= '_{"@type": "woql:Equals",
+              "woql:left": _{ "@type": "woql:Variable",
+                              "woql:variable_name": "X"},
+              "woql:right": _{ "@type": "woql:Datatype",
+                               "woql:datatype": _{ "@value": "Something",
+                                                   "@type": "xsd:anySimpleType"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    writeq(WOQL).
+
+test(string, []) :-
+
+    JSON_Atom= '_{"@type": "woql:Equals",
+              "woql:left": _{ "@type": "woql:Variable",
+                              "woql:variable_name": "X"},
+              "woql:right": _{ "@type": "woql:Datatype",
+                               "woql:datatype": _{ "@value": "Something",
+                                                   "@type": "xsd:string"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    writeq(WOQL).
+
+test(string, []) :-
+
+    JSON_Atom= '_{"@type": "woql:Equals",
+              "woql:left": _{ "@type": "woql:Variable",
+                              "woql:variable_name": "X"},
+              "woql:right": _{ "@type": "woql:Datatype",
+                               "woql:datatype": _{ "@value": "Something",
+                                                   "@type": "xsd:string"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    writeq(WOQL).
+
+:- end_tests(jsonld_ast).
