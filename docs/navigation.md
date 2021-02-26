@@ -81,6 +81,7 @@
      - [Low Code](Explanation/LOWCODE.md)
   - [Clients](Explanation/CLIENT.md)
      - [Write a Client](Explanation/WRITECLIENT.md)
+  - [FAQ](FAQ.md)
 - [Release Notes](https://github.com/terminusdb/terminusdb/blob/master/docs/RELEASE_NOTES.md)
 - [Contributing](CONTRIBUTING.md)
   - [Python Client](https://github.com/terminusdb/terminusdb-client-python/blob/master/Contributing.md)
