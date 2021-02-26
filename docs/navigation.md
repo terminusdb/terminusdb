@@ -57,6 +57,7 @@
       - [Use Branches for Deduplication](How_To/branch_deduplication.md)
 - [Reference](REFERENCE.md)
   - [API](reference/API.md)
+  - [WOQL_JSONLD](reference/WOQL_JSON.md)
   - [JS Client](https://terminusdb.github.io/terminusdb-client-js) 
   - [Python Client](https://terminusdb.github.io/terminusdb-client-python/modules.html)
   - [CLI](https://github.com/terminusdb/terminusdb/blob/dev/docs/CLI.md)
