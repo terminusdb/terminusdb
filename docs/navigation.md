@@ -61,6 +61,7 @@
   - [Python Client](https://terminusdb.github.io/terminusdb-client-python/modules.html)
   - [CLI](https://github.com/terminusdb/terminusdb/blob/dev/docs/CLI.md)
   - [Store](https://docs.rs/terminus-store/0.16.3/terminus_store/)
+  - [XSD Whitelist](reference/XSD_WHITELIST.md)
 - [Explanation](EXPLANATION.md)
   - [Query](Explanation/QUERY.md)
      - [Datalog - What's that?](Explanation/DATALOG.md)
