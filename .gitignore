@@ -13,3 +13,4 @@ storage/
 src/test/python_tests/venv
 nohup.out
 plugins/registry.pl
+docs/README.me
