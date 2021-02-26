@@ -4657,3 +4657,187 @@ test(literal_datetime, [
 
 
 :- end_tests(woql).
+
+:- begin_tests(store_load_data).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(library(terminus_store)).
+
+store_get_lit(Data, Literal) :-
+    setup_call_cleanup(
+        (   setup_temp_store(State),
+            create_db_without_schema(admin, test)),
+        (
+            resolve_absolute_string_descriptor("admin/test", Descriptor),
+            create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+            with_transaction(Context,
+                             ask(Context,
+                                 insert(a,b, Data)),
+                             _),
+
+            open_descriptor(Descriptor, Transaction),
+            [RWO] = (Transaction.instance_objects),
+            Layer = (RWO.read),
+
+            once(triple(Layer, a,b,value(Literal)))
+        ),
+        teardown_temp_store(State)).
+
+load_get_lit(Literal, Data) :-
+    setup_call_cleanup(
+        (   setup_temp_store(State),
+            create_db_without_schema(admin, test)),
+        (
+            resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+            create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+            [Transaction] = (Context.transaction_objects),
+            [RWO] = (Transaction.instance_objects),
+            read_write_obj_builder(RWO, Builder),
+
+            with_transaction(Context,
+                             nb_add_triple(Builder, "a", "b", value(Literal)),
+                             _),
+
+            once(ask(Descriptor,
+                     t("a", "b", Data)))
+
+        ),
+        teardown_temp_store(State)).
+
+test_lit(Data, Literal) :-
+    store_get_lit(Data, Literal),
+    load_get_lit(Literal, Data).
+
+test(string) :-
+    test_lit("a string"^^xsd:string, "\"a string\"^^'http://www.w3.org/2001/XMLSchema#string'").
+
+test(boolean_false) :-
+    test_lit(false^^xsd:boolean, "\"false\"^^'http://www.w3.org/2001/XMLSchema#boolean'").
+
+test(boolean_true) :-
+    test_lit(true^^xsd:boolean, "\"true\"^^'http://www.w3.org/2001/XMLSchema#boolean'").
+
+test(decimal_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:decimal, "123.456^^'http://www.w3.org/2001/XMLSchema#decimal'").
+
+test(decimal_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:decimal, "-123.456^^'http://www.w3.org/2001/XMLSchema#decimal'").
+
+test(integer_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(42^^xsd:integer, "42^^'http://www.w3.org/2001/XMLSchema#integer'").
+
+test(integer_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-42^^xsd:integer, "-42^^'http://www.w3.org/2001/XMLSchema#integer'").
+
+%% NOTE: doubles and floats actually have an alternative notation (2.7E10 etc), as well as special constants(Inf, NaN..), which are not currently supported.
+
+test(double_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:double, "123.456^^'http://www.w3.org/2001/XMLSchema#double'").
+
+test(double_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:double, "-123.456^^'http://www.w3.org/2001/XMLSchema#double'").
+
+test(float_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:float, "123.456^^'http://www.w3.org/2001/XMLSchema#float'").
+
+test(float_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:float, "-123.456^^'http://www.w3.org/2001/XMLSchema#float'").
+
+test(dateTime) :-
+    test_lit(date(2020,01,02,03,04,05,1,0,0)^^xsd:dateTime, "\"2020-01-02T03:04:05\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
+
+test(byte_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
+
+
+test(byte_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-127^^xsd:byte, "-127^^'http://www.w3.org/2001/XMLSchema#byte'").
+
+test(short_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(65535^^xsd:short, "65535^^'http://www.w3.org/2001/XMLSchema#short'").
+
+test(short_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-65535^^xsd:short, "-65535^^'http://www.w3.org/2001/XMLSchema#short'").
+
+test(int_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:int, "123456^^'http://www.w3.org/2001/XMLSchema#int'").
+
+test(int_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:int, "-123456^^'http://www.w3.org/2001/XMLSchema#int'").
+
+test(long_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:long, "123456^^'http://www.w3.org/2001/XMLSchema#long'").
+
+test(long_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:long, "-123456^^'http://www.w3.org/2001/XMLSchema#long'").
+
+test(unsignedByte) :-
+    % note that the number saved is not further quoted
+    test_lit(255^^xsd:unsignedByte, "255^^'http://www.w3.org/2001/XMLSchema#unsignedByte'").
+
+test(unsignedShort) :-
+    % note that the number saved is not further quoted
+    test_lit(65535^^xsd:unsignedShort, "65535^^'http://www.w3.org/2001/XMLSchema#unsignedShort'").
+
+test(unsignedInt) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:unsignedInt, "123456^^'http://www.w3.org/2001/XMLSchema#unsignedInt'").
+
+test(unsignedLong) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:unsignedLong, "123456^^'http://www.w3.org/2001/XMLSchema#unsignedLong'").
+
+test(positiveInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:positiveInteger, "123456^^'http://www.w3.org/2001/XMLSchema#positiveInteger'").
+
+test(nonNegativeInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:nonNegativeInteger, "123456^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'").
+
+test(negativeInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:negativeInteger, "-123456^^'http://www.w3.org/2001/XMLSchema#negativeInteger'").
+
+
+test(nonPositiveInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:nonPositiveInteger, "-123456^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'").
+
+test(hexBinary) :-
+    test_lit("abcd0123"^^xsd:hexBinary, "\"abcd0123\"^^'http://www.w3.org/2001/XMLSchema#hexBinary'").
+
+test(base64Binary) :-
+    test_lit("YXNkZg=="^^xsd:base64Binary, "\"YXNkZg==\"^^'http://www.w3.org/2001/XMLSchema#base64Binary'").
+
+test(anyURI) :-
+    test_lit("http://example.org/schema#thing"^^xsd:anyURI, "\"http://example.org/schema#thing\"^^'http://www.w3.org/2001/XMLSchema#anyURI'").
+
+test(language) :-
+    test_lit("en"^^xsd:language, "\"en\"^^'http://www.w3.org/2001/XMLSchema#language'").
+
+test(language_tagged) :-
+    test_lit("this is an english sentence"@en, "\"this is an english sentence\"@en").
+
+:- end_tests(store_load_data).
+
