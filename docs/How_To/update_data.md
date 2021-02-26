@@ -14,9 +14,9 @@ In the python client:
 query = WOQL().when(
     WOQL().triple("doc:my_document","scm:my_property","v:Value"),
     WOQL().woql_and(
-            WOQL().delete("doc:my_document","scm:my_property","v:Value"),
-            WOQL().insert("doc:my_document","scm:my_property",
-                                WOQL().literal("New Value","xsd:string"))
+            WOQL().delete_triple("doc:my_document","scm:my_property","v:Value"),
+            WOQL().add_triple("doc:my_document","scm:my_property",
+                                  WOQL().literal("New Value","xsd:string"))
     )),
 client.query(query)
 ```
@@ -29,7 +29,7 @@ To update a triple in the python client:
 when(
     triple("doc:Person_1","scm:gender","v:Value"),
     and(
-        delete("doc:Person_1","scm:gender","v:Value"),
-        insert("doc:Person_1","scm:gender",literal("Male","string"))
+        delete_triple("doc:Person_1","scm:gender","v:Value"),
+        add_triple("doc:Person_1","scm:gender",literal("Male","string"))
     ))
 ```
