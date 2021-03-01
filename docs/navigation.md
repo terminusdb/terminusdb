@@ -69,6 +69,7 @@
      - [Unification... What?](Explanation/unification.md)
   - [Data Modelling](Explanation/MODELLING.md)
      - [How should I model my data?](Explanation/MODELHOW.md)
+     - [How do I use the model builder tool?](Explanation/MODELHOW02.md)
      - [Closed World?](Explanation/CLOSED.md)
   - [Storage](Explanation/STORAGE.md)
      - [ACID and TerminusDB](Explanation/ACID.md)
