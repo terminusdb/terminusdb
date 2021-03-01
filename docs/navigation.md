@@ -51,7 +51,7 @@
       - [Select a Commit Message](How_To/select_commit.md)
       - [Update Previously Inserted Data](How_To/update_data.md)
       - [Merge back into Main](How_To/merge_main.md)
-      - [Set up a Remote](How_To/set_remote.md)
+      - [Set up a Remote](How_To/add_remote.md)
       - [Handle Merge Conflicts](How_To/merge_conflict.md)
       - [Deleting Works](How_To/delete.md)
       - [Use Branches for Deduplication](How_To/branch_deduplication.md)
