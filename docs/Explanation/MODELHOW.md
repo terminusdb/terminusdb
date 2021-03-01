@@ -90,7 +90,7 @@ A relational database structures data into tables and rows, while TerminusDB str
 * Relationship properties replace foreign keys, 
 * In terminusDB we don't need to denormalize to improve performance, we can avoid data duplication creating a new entity.
 
-Now jump and see how to model our database schema. [**How do I use the model builder tool?**]()
+Now jump and see how to model our database schema. [**How do I use the model builder tool?**](#/Explanation/MODELHOW02)
 
 
 
