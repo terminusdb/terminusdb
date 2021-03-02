@@ -6,7 +6,7 @@
 
 The TerminusDB Javascript Client has no external dependencies. It comes bundled with the axios libarary for communicating over HTTP, but otherwise has no third party dependencies.
 
-## Install from bintray
+## Install from npm
 
 Installation
 
