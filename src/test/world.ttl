@@ -33,4 +33,5 @@ world:scipioJr a worldOnt:Person ;
 world:scipioJrs a worldOnt:Person ;
     rdfs:label "Africanus Junioress"@en ;
     worldOnt:address "3 palace street, Rome"@en ;
-    worldOnt:name "Scipio Junioress"^^xsd:string .
+    worldOnt:name "Scipio Junioress"^^xsd:string ;
+    worldOnt:birthday "-0228-10-10T00:00:00Z"^^xsd:dateTime.

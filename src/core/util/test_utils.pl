@@ -240,7 +240,7 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
     create_context(Transaction_Object, Commit_Info, Context).
 
 create_db_with_test_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc  : 'system://worldOnt/document/',
+    Prefixes = _{ doc  : 'http://example.com/data/world/',
                   scm : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),
@@ -259,7 +259,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
     graph_update(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
 
 create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
-    Prefixes = _{ doc  : 'system://worldOnt/document/',
+    Prefixes = _{ doc  : 'http://example.com/data/world/',
                   scm : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),

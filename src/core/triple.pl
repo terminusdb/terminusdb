@@ -20,7 +20,7 @@
               iana/3,
 
               % literals.pl
-              fixup_schema_literal/2,
+              literal_to_turtle/2,
               normalise_triple/2,
               object_storage/2,
               ground_object_storage/2,

@@ -207,7 +207,7 @@ time(H,M,S,Offset,Zone,DST) -->
 time(H,M,0,Offset,Zone,DST) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), optional_time_zone(Offset,Zone,DST).
 
-year(SY) --> sign(S), fourDigitNatural(Y),
+year(SY) --> sign(S), natural(Y),
 	         { SY is S * Y }.
 
 date(SY,Mo,D,Offset,Zone,DST) -->

@@ -1,5 +1,5 @@
 :- module(literals, [
-              fixup_schema_literal/2,
+              literal_to_turtle/2,
               normalise_triple/2,
               object_storage/2,
               ground_object_storage/2,
@@ -19,6 +19,7 @@
 
 :- use_module(library(pcre)).
 :- use_module(core(util)).
+:- use_module(core(triple/casting), [typecast/4]).
 
 /*
  * date_string(-Date,+String) is det.
@@ -40,21 +41,30 @@ date_string(date(Y,M,D,HH,MM,SS,Z,ZH,ZM),String) :-
     phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Z,ZH,ZM),Codes).
 
 /*
- * fixup_schema_literal(+Literal,-Literal) is det.
+ * literal_to_turtle(+Literal,-Turtle_Literal) is det.
  *
  * Deal with precularities of rdf_process_turtle
  */
-fixup_schema_literal(literal(lang(Lang,S)),String@Lang) :-
+literal_to_turtle(String@Lang,literal(lang(Lang,S))) :-
+    atom_string(S,String).
+literal_to_turtle(Elt^^Type,literal(type(Type,S))) :-
+    typecast(Elt^^Type, 'http://www.w3.org/2001/XMLSchema#string', [], Val^^_),
+    atom_string(S,Val).
+
+/*
+ * turtle_to_literal(+Turtle_Literal,+Literal) is det.
+ *
+ * Deal with precularities of rdf_process_turtle
+ */
+turtle_to_literal(literal(lang(Lang,S)),String@Lang) :-
     (   atom(S)
     ->  atom_string(S,String)
     ;   S = String),
     !.
-fixup_schema_literal(literal(type(Type,S)),String^^Type) :-
-    (   atom(S)
-    ->  atom_string(S,String)
-    ;   S = String),
+turtle_to_literal(literal(type(Type,S)),Val^^Type) :-
+    typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
     !.
-fixup_schema_literal(literal(L),String@en) :-
+turtle_to_literal(literal(L),String@en) :-
     (   atom(L)
     ->  atom_string(L,String)
     ;   L = String).
@@ -68,7 +78,7 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
     ->  atomic_list_concat(['_:',M], YF)
     %   Bare atom literal needs to be lifted.
     ;   Y = literal(_)
-    ->  fixup_schema_literal(Y,YF)
+    ->  turtle_to_literal(Y,YF)
     %   Otherwise walk on by...
     ;   Y = YF).
 
@@ -229,3 +239,17 @@ prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
     !,
     atomic_list_concat([Base, Suffix], URI).
 prefixed_to_uri(URI, _, URI).
+
+
+:- begin_tests(turtle_literal_marshalling).
+
+test(date, []) :-
+    literal_to_turtle(date(-228, 10, 10, 0, 0, 0, 0, -, -)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00'))).
+
+test(bool, []) :-
+    literal_to_turtle(false^^'http://www.w3.org/2001/XMLSchema#boolean', literal(type('http://www.w3.org/2001/XMLSchema#boolean',false))).
+
+test(double, []) :-
+    literal_to_turtle(33.4^^'http://www.w3.org/2001/XMLSchema#double', literal(type('http://www.w3.org/2001/XMLSchema#double','33.4'))).
+
+:- end_tests(turtle_literal_marshalling).
