@@ -21,6 +21,8 @@
               mapm/4,
               mapm/5,
               mapm/6,
+              mapm/7,
+              mapm/8,
               convlist/4,
               exists/2,
               find/3,
@@ -472,6 +474,33 @@ mapm_([H|T],[HP|TP],[HM|TM],S0,SN,P) :-
     call(P,H,HP,HM,S0,S1),
     mapm_(T,TP,TM,S1,SN,P).
 
+/*
+ * mapm(P:predicate,L:list,O:list,M:list,N:list,S0:any,SN:any) is nondet.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(6,?,?,?,?,?,?).
+mapm(P,L1,L2,L3,L4,S0,SN) :-
+    mapm_(L1,L2,L3,L4,S0,SN,P).
+
+mapm_([],[],[],[],S,S,_P).
+mapm_([H|T],[HP|TP],[HM|TM],[HL|TL],S0,SN,P) :-
+    call(P,H,HP,HM,HL,S0,S1),
+    mapm_(T,TP,TM,TL,S1,SN,P).
+
+/*
+ * mapm(P:predicate,L:list,O:list,M:list,N:list,P:list,S0:any,SN:any) is nondet.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(7,?,?,?,?,?,?).
+mapm(P,L1,L2,L3,L4,L5,S0,SN) :-
+    mapm_(L1,L2,L3,L4,L5,S0,SN,P).
+
+mapm_([],[],[],[],[],S,S,_P).
+mapm_([H|T],[HP|TP],[HM|TM],[HL|TL],[HO|TO],S0,SN,P) :-
+    call(P,H,HP,HM,HL,HO,S0,S1),
+    mapm_(T,TP,TM,TL,TO,S1,SN,P).
 
 :- meta_predicate convlist(3, +, +, -).
 convlist(Goal, ListIn1, ListIn2, ListOut) :-
