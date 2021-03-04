@@ -53,7 +53,7 @@
       - [Merge back into Main](How_To/merge_main.md)
       - [Set up a Remote](How_To/add_remote.md)
       - [Handle Merge Conflicts](How_To/merge_conflict.md)
-      - [Deleting Works](How_To/delete.md)
+      - [Delete](How_To/delete.md)
       - [Use Branches for Deduplication](How_To/branch_deduplication.md)
 - [Reference](REFERENCE.md)
   - [API](reference/API.md)
