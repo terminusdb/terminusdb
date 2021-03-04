@@ -9,6 +9,7 @@
   - [Community](README?id=community)
   - [Roadmap](ROADMAP.md)
       - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/docs/ROADMAP.md)
+      - [Python Client](https://github.com/terminusdb/terminusdb-client-python/projects/1)
 - [Tutorials](TUTORIALS.md)
   - [Getting Started](Intro_Tutorials/Getting_Started.md)
       - [Start With JS](Intro_Tutorials/Start_with_JS.md)
