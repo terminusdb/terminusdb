@@ -61,7 +61,9 @@ json_woql(JSON,Ctx,WOQL) :-
 deindex_list(Key,List,Flatten) :-
     maplist({Key}/[Elt,Sub_Elt]>>(
                 get_dict(Key, Elt, Sub_Elt)
-            ), List, Flatten).
+            ), List, Flatten),
+    !.
+deindex_list(_Key,List,List). % maybe the list is already flattened?
 
 /*
  * json_to_woql_ast(+JSON:dict,-AST:any) is det.
@@ -994,6 +996,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path)
     json_to_woql_ast(Type,WOQL_Type,
                      ['http://terminusdb.com/schema/woql#type'
                       |Path]),
+
     WOQL = typeof(WOQL_Value,WOQL_Type).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-

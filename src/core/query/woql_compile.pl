@@ -1462,13 +1462,10 @@ typeof(X,T) :-
 typeof(X,T) :-
     var(X),
     !,
-    (   T = 'http://www.w3.org/2002/07/owl#Thing'
-    ->  when(nonvar(X), atom(X))
-    ;   base_type(T)
-    ->  when(nonvar(X),
-             X = _^^T)
-    ;   X = _@T).
-typeof(_@T,T) :-
+    when(nonvar(X),
+         typeof(X,T)).
+typeof(_@T,S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom_string(T,S),
     !.
 typeof(_^^T,T) :-
     !.
@@ -4687,6 +4684,144 @@ test(literal_datetime, [
 
     query_test_response(system_descriptor{}, Query, _JSON),
     !.
+
+test(language_en_variable, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type': "woql:Triple",
+               'woql:subject':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "s",
+                     '@type': "xsd:string"
+                   }
+                },
+               'woql:predicate':
+               _{ '@type': "woql:Node",
+                  'woql:node': "scm:title"
+                },
+               'woql:object':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "title",
+                     '@language' : "en"
+                     %'@type': "xsd:string"
+                   }
+                }
+             },
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, c),
+                insert(d, scm:title, f))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    !,
+    forall(member(Elt,(JSON.bindings)),
+           member(Elt, [_{s:a,title:c},_{s:d,title:f}])).
+
+test(language_en_variable, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type': "woql:Triple",
+               'woql:subject':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "s",
+                     '@type': "xsd:string"
+                   }
+                },
+               'woql:predicate':
+               _{ '@type': "woql:Node",
+                  'woql:node': "scm:title"
+                },
+               'woql:object':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "title",
+                     '@language' : "en"
+                     %'@type': "xsd:string"
+                   }
+                }
+             },
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, "asdf"@en),
+                insert(d, scm:title, "fdsa"@fr))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    !,
+    Bindings = (JSON.bindings),
+
+    forall(member(Elt, Bindings),
+           member(Elt, [_{s:a,title: _{'@language' : en, '@value' : "asdf"}},_{s:d,title: _{'@language' : fr, '@value' : "fdsa"}}])).
+
+
+test(and_type, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    And_Type = '{ "@type": "woql:And",
+  "woql:query_list": [
+   {"@type": "woql:Triple",
+    "woql:subject": {
+      "@type": "woql:Variable",
+      "woql:variable_name": "X"},
+    "woql:predicate": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "P"
+        },
+    "woql:object": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "Z"
+        }
+      },
+    { "@type": "woql:TypeOf",
+      "woql:value": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "Z"
+        },
+      "woql:type": {
+          "@type": "xsd:string",
+          "@value": "en"
+        }
+    }]}',
+    atom_json_dict(And_Type, Query, []),
+
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, "asdf"@en),
+                insert(d, scm:title, "fdsa"@fr))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    [Binding] = (JSON.bindings),
+    "asdf" = (Binding.'Z'.'@value').
+
+%    ask(Descriptor,
+%        (t(X, P, Z),
+%         typeof(Z, Type))),
+%    Type = "en"^^xsd:string.
 
 
 :- end_tests(woql).
