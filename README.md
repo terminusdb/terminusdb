@@ -4,17 +4,15 @@
 
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
 
+<img align="left" src="https://assets.terminusdb.com/images/Laptop.png" width="256px"/>
 
 TerminusDB is an open-source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive.
-
-<img align="left" src="https://assets.terminusdb.com/images/Laptop.png" width="256px"/>
 
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems.
 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain that utilise the powerful features of TerminusDB.
 
 Join us [on Discord](https://discord.gg/ZnmQvap) to hang out and ask questions!
-
 
 
 <br/><br/>
