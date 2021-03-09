@@ -85,5 +85,6 @@
   - [FAQ](FAQ.md)
 - [Release Notes](https://github.com/terminusdb/terminusdb/blob/master/docs/RELEASE_NOTES.md)
 - [Contributing](CONTRIBUTING.md)
+  - [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js/blob/master/Contributing.md)
   - [Python Client](https://github.com/terminusdb/terminusdb-client-python/blob/master/Contributing.md)
   - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/CONTRIBUTING.md)
