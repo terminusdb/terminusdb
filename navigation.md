@@ -83,7 +83,7 @@
   - [Clients](Explanation/CLIENT.md)
      - [Write a Client](Explanation/WRITECLIENT.md)
   - [FAQ](FAQ.md)
-- [Release Notes](https://github.com/terminusdb/terminusdb/blob/master/docs/RELEASE_NOTES.md)
+- [Release Notes](https://terminusdb.com/docs/terminusdb/#/RELEASE_NOTES)
 - [Contributing](CONTRIBUTING.md)
   - [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js/blob/master/Contributing.md)
   - [Python Client](https://github.com/terminusdb/terminusdb-client-python/blob/master/Contributing.md)
