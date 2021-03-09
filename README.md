@@ -7,9 +7,16 @@
 
 TerminusDB is an open-source graph database and document store. It is designed for collaboratively building data-intensive applications and knowledge graphs. If you want to collaborate with colleagues or build data-intensive applications, nothing will make you more productive.
 
+<img align="left" src="https://assets.terminusdb.com/images/Laptop.png" width="256px"/>
+
 It is a native revision control database that is architecturally similar to Git and other distributed version control systems.
 
 TerminusDB provides a RESTful API for interacting via the JSON-LD exchange format. You can easily compose applications within your own toolchain that utilise the powerful features of TerminusDB.
+
+Join us [on Discord](https://discord.gg/ZnmQvap) to hang out and ask questions!
+
+
+
 <br/><br/>
 
 ![](https://assets.terminusdb.com/images/Git%20for%20GitHub-480p-210108.gif)
