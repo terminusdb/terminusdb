@@ -231,72 +231,6 @@ jobs:
         path: extracted\terminusdb_windows.tar.gz
 
 
-  windows_desktop:
-    runs-on: windows-latest
-    needs: windows
-
-    steps:
-    - uses: actions/checkout@v2
-
-
-    - uses: actions/download-artifact@v2
-      with:
-        name: TerminusDB-server-windows.tar.gz
-
-    - run: |
-        cd distribution/desktop
-        mkdir public/windows
-        cd public/windows
-        tar xf ../../../../terminusdb_windows.tar.gz
-        cd ../../
-        npm i
-        npx electron-builder build -p never
-        for file in dist/TerminusDB\ Setup*.exe; do mv "$file" "dist/terminusdb-desktop Setup.exe"; done
-      shell: bash
-
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: "terminusdb-desktop Setup.exe"
-        path: "distribution/desktop/dist/terminusdb-desktop Setup.exe"
-
-
-  linux_desktop:
-    runs-on: ubuntu-latest
-    needs: appimage
-    defaults:
-      run:
-        working-directory: distribution/desktop
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Use Node.js 14
-      uses: actions/setup-node@v1
-      with:
-        node-version: 14
-
-    - run: npm install
-
-    - uses: actions/download-artifact@v2
-      with:
-        name: TerminusDB-amd64.AppImage
-        path: distribution/desktop/public
-
-    - run: chmod +x public/TerminusDB-amd64.AppImage
-
-    - run: |
-        npx electron-builder build --linux appimage -p never
-        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        mv dist/*.AppImage dist/terminusdb-desktop.AppImage
-
-
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: terminusdb-desktop.AppImage
-        path: distribution/desktop/dist/terminusdb-desktop.AppImage
-
   mac_os:
     runs-on: macos-latest
     defaults:
@@ -314,8 +248,8 @@ jobs:
       id: cache_mac_swipl
       uses: actions/cache@v2
       with:
-        path: distribution/desktop/public/SWI-Prolog.app
-        key: ${{ runner.os }}-swipl2-terminusdb-${{ hashFiles('distribution/mac/public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh') }}
+        path: distribution/mac/public/SWI-Prolog.app
+        key: ${{ runner.os }}-swipl3-terminusdb-${{ hashFiles('distribution/mac/public/pack/terminus_store_prolog/.ci/install_swipl_dmg.sh') }}
 
     - name: Install SWI Prolog if cache does not hit
       if: steps.cache_mac_swipl.outputs.cache-hit != 'true'
@@ -328,7 +262,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, appimage, windows, windows_desktop, linux_desktop, mac_os]
+    needs: [test_and_push_docker, appimage, windows, mac_os]
     if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
 
     steps:
@@ -366,8 +300,6 @@ jobs:
         tag_name: ${{ steps.release_name.outputs.tag }}
         prerelease: ${{ !contains(github.ref, 'tags') }}
         files: |
-          terminusdb-desktop Setup.exe/terminusdb-desktop Setup.exe
-          terminusdb-desktop.AppImage/terminusdb-desktop.AppImage
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-linux-amd64
