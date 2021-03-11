@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1615465805870,
+  "lastUpdate": 1615465915075,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -1337,6 +1337,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.020701456772428756",
             "extra": "mean: 91.62636746666522 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "8df30ceb2de3816d89b8133b08c09fb498ca973e",
+          "message": "ci: remove desktop from swi prolog cache key",
+          "timestamp": "2021-03-11T13:30:00+01:00",
+          "tree_id": "dd7e165ecc26a648666df8951bde77ef1eaa8de3",
+          "url": "https://github.com/terminusdb/terminusdb/commit/8df30ceb2de3816d89b8133b08c09fb498ca973e"
+        },
+        "date": 1615465914073,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.46846211889008,
+            "unit": "iter/sec",
+            "range": "stddev: 0.016527047947686304",
+            "extra": "mean: 154.59625203333331 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 6.348790923294425,
+            "unit": "iter/sec",
+            "range": "stddev: 0.009078792698431433",
+            "extra": "mean: 157.51030583333403 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 15.350847966898062,
+            "unit": "iter/sec",
+            "range": "stddev: 0.023105649928216343",
+            "extra": "mean: 65.14298116666642 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 11.257516932529763,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02145578621491349",
+            "extra": "mean: 88.82953549999968 msec\nrounds: 30"
           }
         ]
       }
