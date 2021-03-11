@@ -12,14 +12,14 @@
                        nonNegativeInteger//1,
                        unsignedDecimal//1,
                        year//1,
-                       date//6,
-                       dateTime//9,
-                       dateTimeStamp//9,
-                       gYear//4,
-                       gYearMonth//5,
-                       gMonth//4,
-                       gMonthDay//5,
-                       gDay//4,
+                       date//4,
+                       dateTime//7,
+                       dateTimeStamp//7,
+                       gYear//2,
+                       gYearMonth//3,
+                       gMonth//2,
+                       gMonthDay//3,
+                       gDay//2,
                        duration//7,
                        yearMonthDuration//3,
                        dayTimeDuration//5,
@@ -28,7 +28,7 @@
                        language//0,
                        whitespace//0,
                        anyBut//1,
-                       time//6,
+                       time//4,
                        coordinatePolygon//1,
                        dateRange//2,
                        decimalRange//2,
@@ -167,70 +167,69 @@ double(M,E,double) --> decimal(M), exp, integer(E) .
  ******************/
 
 % To make invertible we should process time zones and dst here correctly.
-timeZone(0,-,-) -->
+time_offset(0) -->
     "Z" .
-timeZone(S,-,-) -->
+time_offset(S) -->
     "+",
     twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
     { S is (ZH * 3600) + (ZM * 60) + ZS }.
-timeZone(S,-,-) -->
+time_offset(S) -->
     "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
     { S is (ZH * 3600) + (ZM * 60) }.
-timeZone(S,-,-) -->
+time_offset(S) -->
     "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
     { S is (-1 * ((ZH * 3600) + (ZM * 60) + ZS)) }.
-timeZone(S,-,-) -->
+time_offset(S) -->
     "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
     { S is (-1 * ((ZH * 3600) + (ZM * 60))) }.
 
-optional_time_zone(Offset,TZ,DST) -->
-    timeZone(Offset,TZ,DST).
-optional_time_zone(0,-,-) -->
+optional_time_offset(Offset) -->
+    time_offset(Offset).
+optional_time_offset(0) -->
     "".
 
-time_and_zone(H,M,S,Offset,Zone,DST) -->
+time_and_offset(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	".", threeDigitNatural(_), timeZone(Offset,Zone,DST).
-time_and_zone(H,M,S,Offset,Zone,DST) -->
+	".", threeDigitNatural(_), time_offset(Offset).
+time_and_offset(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	timeZone(Offset,Zone,DST) .
-time_and_zone(H,M,0,Offset,Zone,DST) -->
-    twoDigitNatural(H), ":", twoDigitNatural(M), timeZone(Offset,Zone,DST).
+	time_offset(Offset) .
+time_and_offset(H,M,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), time_offset(Offset).
 
 % Hour, Minute, Second, Offset, Zone, DST
-time(H,M,S,Offset,Zone,DST) -->
+time(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	".", threeDigitNatural(_), optional_time_zone(Offset,Zone,DST).
-time(H,M,S,Offset,Zone,DST) -->
+	".", threeDigitNatural(_), optional_time_offset(Offset).
+time(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	optional_time_zone(Offset,Zone,DST) .
-time(H,M,0,Offset,Zone,DST) -->
-    twoDigitNatural(H), ":", twoDigitNatural(M), optional_time_zone(Offset,Zone,DST).
+	optional_time_offset(Offset) .
+time(H,M,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), optional_time_offset(Offset).
 
 year(SY) --> sign(S), natural(Y),
 	         { SY is S * Y }.
 
-date(SY,Mo,D,Offset,Zone,DST) -->
-    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Offset,Zone,DST).
+date(SY,Mo,D,Offset) -->
+    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), optional_time_offset(Offset).
 
-dateTime(SY,Mo,D,H,M,S,Offset,Zone,DST) -->
+dateTime(SY,Mo,D,H,M,S,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time(H,M,S,Offset,Zone,DST).
+    "T", time(H,M,S,Offset).
 
-dateTimeStamp(SY,Mo,D,H,M,S,Offset,Zone,DST) -->
+dateTimeStamp(SY,Mo,D,H,M,S,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time_and_zone(H,M,S,Offset,Zone,DST).
+    "T", time_and_offset(H,M,S,Offset).
 
-gYear(Y,Offset,Zone,DST) --> year(Y), timeZone(Offset,Zone,DST) .
+gYear(Y,Offset) --> year(Y), time_offset(Offset) .
 
-gYearMonth(Y,M,Offset,Zone,DST) --> year(Y), "-", twoDigitNatural(M), timeZone(Offset,Zone,DST) .
+gYearMonth(Y,M,Offset) --> year(Y), "-", twoDigitNatural(M), time_offset(Offset) .
 
-gMonth(M,Offset,Zone,DST) --> "--", twoDigitNatural(M), timeZone(Offset,Zone,DST) .
+gMonth(M,Offset) --> "--", twoDigitNatural(M), time_offset(Offset) .
 
-gMonthDay(Mo,D,Offset,Zone,DST) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), timeZone(Offset,Zone,DST) .
+gMonthDay(Mo,D,Offset) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), time_offset(Offset) .
 
-gDay(D,Offset,Zone,DST) --> "---", twoDigitNatural(D), timeZone(Offset,Zone,DST) .
-
+gDay(D,Offset) --> "---", twoDigitNatural(D), time_offset(Offset) .
 
 maybeYear(Y) --> natural(Y), "Y" .
 maybeYear(0) --> "" .
@@ -383,16 +382,16 @@ integerRange(X,Y) --> "[" , whitespace, integer(X), whitespace,
 					 "," , whitespace, integer(Y), whitespace,
 					 "]" .
 
-gYearRange(X,X) --> gYear(X,_,_,_).
-gYearRange(X,Y) --> "[" , whitespace, gYear(X,_,_,_), whitespace,
-					"," , whitespace, gYear(Y,_,_,_), whitespace,
+gYearRange(X,X) --> gYear(X,_).
+gYearRange(X,Y) --> "[" , whitespace, gYear(X,_), whitespace,
+					"," , whitespace, gYear(Y,_), whitespace,
 					"]" .
 
-dateRange(date(Y,M,D,Z,HH,MM),date(Y,M,D,Z,HH,MM)) -->
-    date(Y,M,D,Z,HH,MM).
-dateRange(date(Y1,M1,D1,Z1,HH1,MM1),date(Y2,M2,D2,Z2,HH2,MM2)) -->
-    "[" , whitespace, date(Y1,M1,D1,Z1,HH1,MM1), whitespace,
-	"," , whitespace, date(Y2,M2,D2,Z2,HH2,MM2), whitespace,
+dateRange(date(Y,M,D,Offset),date(Y,M,D,Offset)) -->
+    date(Y,M,D,Offset).
+dateRange(date(Y1,M1,D1,Offset1),date(Y2,M2,D2,Offset2)) -->
+    "[" , whitespace, date(Y1,M1,D1,Offset1), whitespace,
+	"," , whitespace, date(Y2,M2,D2,Offset2), whitespace,
 	"]" .
 
 terminal([],_S).

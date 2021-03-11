@@ -5,6 +5,14 @@
               ground_object_storage/2,
               storage_object/2,
               date_string/2,
+              date_time_string/2,
+              time_string/2,
+              duration_string/2,
+              gyear_string/2,
+              gmonth_string/2,
+              gyear_month_string/2,
+              gmonth_day_string/2,
+              gday_string/2,
               uri_to_prefixed/3,
               prefixed_to_uri/3
           ]).
@@ -22,6 +30,26 @@
 :- use_module(core(triple/casting), [typecast/4]).
 
 /*
+ * date_time_string(-Date_Time,+String) is det.
+ * date_time_string(+Date_Time,-String) is det.
+ */
+date_time_string(Date_Time,String) :-
+    nonvar(Date_Time),
+    !,
+    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
+    Date_Time = date_time(Y,M,D,HH,MM,SS),
+    format(string(String),
+           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+           [Y,M,D,HH,MM,SS]).
+date_time_string(Date_Time,String) :-
+    % So expensive! Let's do this faster somehow.
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Offset),Codes),
+    datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,-,-), Date_Time).
+
+/*
  * date_string(-Date,+String) is det.
  * date_string(+Date,-String) is det.
  */
@@ -29,16 +57,167 @@ date_string(Date,String) :-
     nonvar(Date),
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
-    Date = date(Y,M,D,HH,MM,SS,_Z,_ZH,_ZM),
-    format(string(String),
-           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
-           [Y,M,D,HH,MM,SS]).
-date_string(date(Y,M,D,HH,MM,SS,Z,ZH,ZM),String) :-
+    Date = date(Y,M,D,Offset),
+    (   Offset =:= 0
+    ->  format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+',
+               [Y,M,D])
+    ;   offset_to_sign_hour_minute(Offset, Sign, Hour, Minute),
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+~w~|~`0t~d~2+:~|~`0t~d~2+',
+               [Y,M,D, Sign, Hour, Minute])
+    ).
+date_string(date(Y,M,D,Offset),String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Z,ZH,ZM),Codes).
+    phrase(xsd_parser:date(Y,M,D,Offset),Codes).
+
+gyear_string(GYear, String) :-
+    nonvar(GYear),
+    !,
+    GYear = gyear(Year,Offset),
+    (   Offset =:= 0
+    ->  format(string(String), '~|~`0t~d~4+', [Year])
+    ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
+        format(string(String), '~|~`0t~d~4+~|~`0t~d~2+:~|~`0t~d~2+', [Year,Sign,Hour,Minute])
+    ).
+gyear_string(gyear(Year,Offset), String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:gYear(Year,Offset),Codes).
+
+gmonth_string(GMonth, String) :-
+    nonvar(GMonth),
+    !,
+    GMonth = gmonth(Month,Offset),
+    (   Offset =:= 0
+    ->  format(string(String), '--~|~`0t~d~2+', [Month])
+    ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
+        format(string(String), '--~|~`0t~d~2+~w~|~`0t~d~2+:~|~`0t~d~2+', [Month,Sign,Hour,Minute])
+    ).
+gmonth_string(gmonth(Month,Offset), String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:gMonth(Month,Offset),Codes).
+
+
+gyear_month_string(GYearMonth, String) :-
+    nonvar(GYearMonth),
+    !,
+    GYearMonth = gyear_month(Year,Month,Offset),
+    (   Offset =:= 0
+    ->  format(string(String), '~|~`0t~d~4+-~|~`0t~d~2+', [Year,Month])
+    ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
+        format(string(String), '~|~`0t~d~4+-~|~`0t~d~2+~|~`0t~d~2+:~|~`0t~d~2+', [Year,Month,Sign,Hour,Minute])
+    ).
+gyear_month_string(gyear_month(Year,Month,Offset), String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:gYearMonth(Year,Month,Offset),Codes).
+
+gmonth_day_string(GMonthDay, String) :-
+    nonvar(GMonthDay),
+    !,
+    GMonthDay = gmonth_day(Month,Day,Offset),
+    (   Offset =:= 0
+    ->  format(string(String), '-~|~`0t~d~2+-~|~`0t~d~2+', [Month,Day])
+    ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
+        format(string(String), '-~|~`0t~d~2+-~|~`0t~d~2+~w~|~`0t~d~2+:~|~`0t~d~2+', [Month,Day,Sign,Hour,Minute])
+    ).
+gmonth_day_string(gmonth_day(Month,Day,Offset), String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:gMonthDay(Month,Day,Offset),Codes).
+
+gday_string(GDay, String) :-
+    nonvar(GDay),
+    !,
+    GDay = gday(Day,Offset),
+    (   Offset =:= 0
+    ->  format(string(String), '---~|~`0t~d~2+', [Day])
+    ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
+        format(string(String), '---~|~`0t~d~2+~w~|~`0t~d~2+:~|~`0t~d~2+', [Day,Sign,Hour,Minute])
+    ).
+gday_string(gday(Day,Offset), String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:gDay(Day,Offset),Codes).
+
+offset_to_sign_hour_minute(Offset, Sign, Hour, Minute) :-
+    nonvar(Offset),
+    !,
+    H_Off is Offset / 3600,
+    M_Off is (Offset - (H_Off * 3600)) / 60,
+    (   Offset >= 0
+    ->  Sign = '+',
+        Hour = H_Off,
+        Minute = M_Off
+    ;   Sign = '-',
+        Hour is -H_Off,
+        Minute is -M_Off).
+
+/*
+ * time_string(-Time,+String) is det.
+ * time_string(+Time,-String) is det.
+ */
+time_string(Time,String) :-
+    nonvar(Time),
+    !,
+    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
+    Time = time(HH,MM,SS),
+    format(string(String),
+           '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+               [HH,MM,SS]).
+time_string(Time,String) :-
+    % So expensive! Let's do this faster somehow.
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:time(HH,MM,SS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,Offset),Time).
+
+duration_string(Duration,String) :-
+    nonvar(Duration),
+    !,
+    Duration = duration(S,Y,M,D,HH,MM,SS),
+    (   S = 1
+    ->  SP = ''
+    ;   SP = '-'),
+    (   Y \= 0
+    ->  format(atom(YP),'~wY',[Y])
+    ;   YP = ''),
+    (   M \= 0
+    ->  format(atom(MP),'~wM',[M])
+    ;   MP = ''),
+    (   D \= 0
+    ->  format(atom(DP),'~wD',[D])
+    ;   DP = ''),
+    (   HH \= 0, MM \= 0, SS \= 0
+    ->  TP = 'T'
+    ;   TP = ''),
+    (   HH \= 0
+    ->  format(atom(HHP),'~wH',[HH])
+    ;   HHP = ''),
+    (   MM \= 0
+    ->  format(atom(MMP),'~wM',[MM])
+    ;   MMP = ''),
+    (   SS \= 0
+    ->  format(atom(SSP),'~wS',[SS])
+    ;   SSP = ''),
+    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom),
+    atom_string(Atom,String).
+duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:duration(Sign,Y,M,D,HH,MM,SS),Codes).
 
 /*
  * literal_to_turtle(+Literal,-Turtle_Literal) is det.
@@ -244,7 +423,7 @@ prefixed_to_uri(URI, _, URI).
 :- begin_tests(turtle_literal_marshalling).
 
 test(date, []) :-
-    literal_to_turtle(date(-228, 10, 10, 0, 0, 0, 0, -, -)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00'))).
+    literal_to_turtle(date(-228, 10, 10, 0, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00'))).
 
 test(bool, []) :-
     literal_to_turtle(false^^'http://www.w3.org/2001/XMLSchema#boolean', literal(type('http://www.w3.org/2001/XMLSchema#boolean',false))).

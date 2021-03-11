@@ -74,7 +74,7 @@ base_type('http://www.w3.org/2001/XMLSchema#decimal').
 base_type('http://www.w3.org/2001/XMLSchema#double').
 base_type('http://www.w3.org/2001/XMLSchema#float').
 base_type('http://www.w3.org/2001/XMLSchema#time').
-base_type('http://www.w3.org/2001/XMLSchema#date').  % Unimplemented!!! DDD
+base_type('http://www.w3.org/2001/XMLSchema#date').
 base_type('http://www.w3.org/2001/XMLSchema#dateTime').
 base_type('http://www.w3.org/2001/XMLSchema#dateTimeStamp').
 base_type('http://www.w3.org/2001/XMLSchema#gYear').
@@ -87,11 +87,13 @@ base_type('http://www.w3.org/2001/XMLSchema#yearMonthDuration').
 base_type('http://www.w3.org/2001/XMLSchema#dayTimeDuration').
 base_type('http://www.w3.org/2001/XMLSchema#byte').
 base_type('http://www.w3.org/2001/XMLSchema#short').
-base_type('http://www.w3.org/2001/XMLSchema#integer').
+base_type('http://www.w3.org/2001/XMLSchema#int').
 base_type('http://www.w3.org/2001/XMLSchema#long').
 base_type('http://www.w3.org/2001/XMLSchema#unsignedByte').
+base_type('http://www.w3.org/2001/XMLSchema#unsignedShort').
 base_type('http://www.w3.org/2001/XMLSchema#unsignedInt').
 base_type('http://www.w3.org/2001/XMLSchema#unsignedLong').
+base_type('http://www.w3.org/2001/XMLSchema#integer').
 base_type('http://www.w3.org/2001/XMLSchema#positiveInteger').
 base_type('http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
 base_type('http://www.w3.org/2001/XMLSchema#negativeInteger').
@@ -139,6 +141,10 @@ base_type_parent('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString','http:/
 base_type_parent('http://www.w3.org/2000/01/rdf-schema#XMLLiteral','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#anySimpleType','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#string','http://www.w3.org/2001/XMLSchema#anySimpleType').
+ base_type_parent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#string').
+ base_type_parent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#string').
+ base_type_parent('http://terminusdb.com/schema/xdd#json','http://www.w3.org/2001/XMLSchema#string').
+ base_type_parent('http://terminusdb.com/schema/xdd#html','http://www.w3.org/2001/XMLSchema#string').
  base_type_parent('http://www.w3.org/2001/XMLSchema#normalizedString', 'http://www.w3.org/2001/XMLSchema#string').
    base_type_parent('http://www.w3.org/2001/XMLSchema#token', 'http://www.w3.org/2001/XMLSchema#normalizedString').
       base_type_parent('http://www.w3.org/2001/XMLSchema#language', 'http://www.w3.org/2001/XMLSchema#token').
@@ -155,15 +161,15 @@ base_type_parent('http://www.w3.org/2001/XMLSchema#decimal','http://www.w3.org/2
     base_type_parent('http://www.w3.org/2001/XMLSchema#nonPositiveInteger','http://www.w3.org/2001/XMLSchema#integer').
       base_type_parent('http://www.w3.org/2001/XMLSchema#negativeInteger','http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
     base_type_parent('http://www.w3.org/2001/XMLSchema#long','http://www.w3.org/2001/XMLSchema#integer').
-      base_type_parent('http://www.w3.org/2001/XMLSchema#short','http://www.w3.org/2001/XMLSchema#long').
-        base_type_parent('http://www.w3.org/2001/XMLSchema#byte','http://www.w3.org/2001/XMLSchema#short').
+      base_type_parent('http://www.w3.org/2001/XMLSchema#int','http://www.w3.org/2001/XMLSchema#long').
+        base_type_parent('http://www.w3.org/2001/XMLSchema#short','http://www.w3.org/2001/XMLSchema#int').
+          base_type_parent('http://www.w3.org/2001/XMLSchema#byte','http://www.w3.org/2001/XMLSchema#short').
     base_type_parent('http://www.w3.org/2001/XMLSchema#nonNegativeInteger','http://www.w3.org/2001/XMLSchema#integer').
       base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedLong','http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
-        base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedInt','http://www.w3.org/2001/XMLSchema#unsginedLong').
+        base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedInt','http://www.w3.org/2001/XMLSchema#unsignedLong').
           base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedShort','http://www.w3.org/2001/XMLSchema#unsignedInt').
             base_type_parent('http://www.w3.org/2001/XMLSchema#unsignedByte','http://www.w3.org/2001/XMLSchema#unsignedShort').
       base_type_parent('http://www.w3.org/2001/XMLSchema#positiveInteger','http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
-    base_type_parent('http://terminusdb.com/schema/xdd#pesel','http://www.w3.org/2001/XMLSchema#integer').
 base_type_parent('http://www.w3.org/2001/XMLSchema#NOTATION','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
 base_type_parent('http://www.w3.org/2001/XMLSchema#QName','http://www.w3.org/2001/XMLSchema#anySimpleType'). % unimplemented.
 base_type_parent('http://www.w3.org/2001/XMLSchema#double','http://www.w3.org/2001/XMLSchema#anySimpleType').
@@ -190,7 +196,3 @@ base_type_parent('http://terminusdb.com/schema/xdd#dateRange','http://www.w3.org
 base_type_parent('http://terminusdb.com/schema/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
-base_type_parent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#anySimpleType').
-base_type_parent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#anySimpleType').
-base_type_parent('http://terminusdb.com/schema/xdd#json','http://www.w3.org/2001/XMLSchema#anySimpleType').
-base_type_parent('http://terminusdb.com/schema/xdd#html','http://www.w3.org/2001/XMLSchema#anySimpleType').

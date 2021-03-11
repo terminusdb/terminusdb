@@ -75,7 +75,7 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     !,
     (   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
-        % Marshall to appropriate datatype
+        % NOTE: TODO: Marshall to appropriate datatype when input is not a string
         once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
                       TE, [], Val)),
         WOQL = Val

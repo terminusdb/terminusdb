@@ -60,7 +60,8 @@
               chunk/2,
               chunk/3,
               member_last/3,
-              is_date/1
+              time_to_internal_time/2,
+              datetime_to_internal_datetime/2
           ]).
 
 /** <module> Utils
@@ -860,10 +861,15 @@ member_last_([A,_|_],A,false).
 member_last_([_|Rest],A,Last) :-
     member_last_(Rest,A,Last).
 
-/*
- * is_date(+Date) is semidet.
- *
- * Determines if `Date` is a date or date time object.
- */
-is_date(date(_,_,_,_,_,_,_,_,_)).
-is_date(date(_,_,_)).
+datetime_to_internal_datetime(Date,date_time(Y,M,D,HH,MM,SS)) :-
+    date_time_stamp(Date,TS),
+    stamp_date_time(TS,date(Y, M, D, HH, MM, SS, 0, 'UTC', -), 'UTC').
+
+time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
+    HHOff is Offset div 3600,
+    Offset1 is Offset - HHOff * 3600,
+    MMOff is Offset1 div 60,
+    SSOff is Offset1 - MMOff * 60,
+    HN is HH + HHOff mod 24,
+    MN is MM + MMOff mod 60,
+    SN is SS + SSOff mod 60.

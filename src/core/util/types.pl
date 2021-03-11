@@ -13,7 +13,36 @@
               is_empty_graph_name/1,
               is_database/1,
               is_read_obj/1,
-              is_write_obj/1
+              is_write_obj/1,
+              % prolog xsd type representations
+              is_date_time/1,
+              is_date/1,
+              is_point/1,
+              is_coordinate_polygon/1,
+              is_date_range/1,
+              is_integer_range/1,
+              is_decimal_range/1,
+              is_gyear/1,
+              is_gmonth/1,
+              is_gday/1,
+              is_gyear_month/1,
+              is_gmonth_day/1,
+              is_gyear_range/1,
+              is_time/1,
+              is_boolean/1,
+              is_duration/1,
+              is_byte/1,
+              is_short/1,
+              is_int/1,
+              is_long/1,
+              is_unsigned_byte/1,
+              is_unsigned_short/1,
+              is_unsigned_int/1,
+              is_unsigned_long/1,
+              is_positive_integer/1,
+              is_negative_integer/1,
+              is_nonpositive_integer/1,
+              is_nonnegative_integer/1
           ]).
 
 /** <module> Types
@@ -234,3 +263,176 @@ is_read_obj(read_obj{ dbid: N,
 
 error:has_type(read_obj, X) :-
     is_read_obj(X).
+
+
+days_in_month(_,1,31).
+days_in_month(Y,2,D) :- (Y mod 4 =:= 0 -> D = 29 ; D = 28).
+days_in_month(_,3,31).
+days_in_month(_,4,30).
+days_in_month(_,5,31).
+days_in_month(_,6,30).
+days_in_month(_,7,31).
+days_in_month(_,8,31).
+days_in_month(_,9,30).
+days_in_month(_,10,31).
+days_in_month(_,11,30).
+days_in_month(_,12,31).
+
+/*
+ * is_date_time(+DateTime) is semidet.
+ *
+ * Determines if `DateTime` is a valid date time object.
+ * We assume no DST, no zone, and offset of zero for normalised dates.
+ */
+is_date_time(date_time(Y,M,D,HH,MM,SS)) :-
+    integer(Y),
+    integer(M), M >= 1, M =< 12,
+    days_in_month(Y,M,Days), D >= 1, D =< Days,
+    integer(HH), HH >= 0, HH =< 24,
+    integer(MM), MM >= 0, MM =< 60,
+    number(SS), SS >= 0, HH =< 60.
+
+is_offset(Offset) :-
+    integer(Offset),
+    Offset =< 43200,
+    Offset >= -43200.
+
+is_date(date(Y,M,D,Offset)) :-
+    integer(Y),
+    integer(M), M >= 1, M =< 12,
+    days_in_month(Y,M,Days), D >= 1, D =< Days,
+    integer(Offset).
+
+is_point([X,Y]) :-
+    number(X),
+    number(Y).
+
+is_coordinate_polygon([]).
+is_coordinate_polygon([Point|T]) :-
+    is_point(Point),
+    is_coordinate_polygon(T).
+
+is_date_range([Date1,Date2]) :-
+    is_date(Date1),
+    is_date(Date2).
+
+is_integer_range([Integer1,Integer2]) :-
+    integer(Integer1),
+    integer(Integer2).
+
+is_decimal_range([Float1,Float2]) :-
+    number(Float1),
+    number(Float2).
+
+is_gyear(gyear(Year,Offset)) :-
+    integer(Year),
+    is_offset(Offset).
+
+is_gyear_range([Year1,Year2]) :-
+    is_gyear(Year1),
+    is_gyear(Year2).
+
+is_gyear_month(gyear_month(Year,Month,Offset)) :-
+    integer(Year),
+    integer(Month),
+    Month >= 1,
+    Month =< 12,
+    is_offset(Offset).
+
+is_gmonth(gmonth(Month,Offset)) :-
+    integer(Month),
+    Month >= 1,
+    Month =< 12,
+    is_offset(Offset).
+
+is_gmonth_day(gmonth_day(Month,Day,Offset)) :-
+    integer(Month),
+    integer(Day),
+    Month >= 1,
+    Month =< 12,
+    days_in_month(0,Month,Days),
+    Day >= 0,
+    Day =< Days,
+    is_offset(Offset).
+
+is_gday(gday(Day,Offset)) :-
+    integer(Day),
+    Day >= 1,
+    Day =< 31,
+    is_offset(Offset).
+
+is_time(time(HH,MM,SS)) :-
+    integer(HH),
+    HH >= 0, HH < 24,
+    integer(MM),
+    MM >= 0, MM < 60,
+    number(SS),
+    SS >= 0, SS < 60.
+
+is_boolean(true).
+is_boolean(false).
+
+is_duration(duration(Sign,Y,M,D,HH,MM,SS)) :-
+    member(Sign, [1,-1]),
+    integer(Y),
+    integer(M), M >= 1, M =< 12,
+    days_in_month(Y,M,Days), D >= 1, D =< Days,
+    integer(HH), HH >= 0, HH =< 24,
+    integer(MM), MM >= 0, MM =< 60,
+    number(SS), SS >= 0, HH =< 60.
+
+is_byte(S) :-
+    integer(S),
+    S >= -128,
+    S =< 127.
+
+is_short(S) :-
+    integer(S),
+    S >= -32768,
+    S =< 32767.
+
+is_int(S) :-
+    integer(S),
+    S >= -2147483648,
+    S =< 2147483647.
+
+is_long(S) :-
+    integer(S),
+    S >= -9223372036854775808,
+    S =< 9223372036854775807.
+
+is_unsigned_byte(S) :-
+    integer(S),
+    S >= 0,
+    S =< 255.
+
+is_unsigned_short(S) :-
+    integer(S),
+    S >= 0,
+    S =< 65535.
+
+is_unsigned_int(S) :-
+    integer(S),
+    S >= 0,
+    S =< 4294967295.
+
+is_unsigned_long(S) :-
+    integer(S),
+    S >= 0,
+    S =< 18446744073709551615.
+
+is_positive_integer(S) :-
+    integer(S),
+    S > 0.
+
+is_nonnegative_integer(S) :-
+    integer(S),
+    S >= 0.
+
+is_negative_integer(S) :-
+    integer(S),
+    S < 0.
+
+is_nonpositive_integer(S) :-
+    integer(S),
+    S =< 0.

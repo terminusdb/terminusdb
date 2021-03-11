@@ -39,13 +39,20 @@
  *
  * Guess some possible dates.
  */
-guess_date(Val,Date^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
+guess_date(Val,DateTime^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     atom_codes(Val,Codes),
-    once(phrase(guess_date(Date),Codes)).
+    once(phrase(guess_date(Date),Codes)),
+    datetime_to_internal_datetime(Date,DateTime).
 
-guess_datetime_stamp(Val,date(Y,M,D,HH,MM,SS,Offset,Zone,DST)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp') :-
+guess_datetime_stamp(Val,DateTime^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp') :-
     atom_codes(Val,Codes),
-    once(phrase(dateTimeStamp(Y,M,D,HH,MM,SS,Offset,Zone,DST),Codes)).
+    once(phrase(dateTimeStamp(Y,M,D,HH,MM,SS,Offset,Zone,DST),Codes)),
+    datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,Zone,DST),DateTime).
+
+guess_time(Val,Time^^'http://www.w3.org/2001/XMLSchema#time') :-
+    atom_codes(Val,Codes),
+    once(phrase(time(HH,MM,SS,Offset,Zone,DST),Codes)),
+    time_to_internal_time(time(HH,MM,SS,Offset,Zone,DST), Time).
 
 guess_integer(Val,Val^^'http://www.w3.org/2001/XMLSchema#integer') :-
     integer(Val),
