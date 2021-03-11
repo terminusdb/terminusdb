@@ -75,9 +75,21 @@ json_to_woql_ast(JSON,WOQL,Path) :-
     !,
     (   _{'@value' : V, '@type' : T } :< JSON
     ->  atom_string(TE,T),
-        % NOTE: TODO: Marshall to appropriate datatype when input is not a string
-        once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
-                      TE, [], Val)),
+        (   string(V)
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
+                     TE, [], Val)
+        ;   atom(V),
+            atom_string(V,String)
+        ->  typecast(String^^'http://www.w3.org/2001/XMLSchema#string',
+                     TE, [], Val)
+        ;   number(V)
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#decimal',
+                     TE, [], Val)
+        ;   member(V,[false,true])
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#boolean',
+                     TE, [], Val)
+        ;   throw(error(null_unsupported, JSON))
+        ),
         WOQL = Val
     ;   _{'@type' : Type} :< JSON,
         json_type_to_woql_ast(Type,JSON,WOQL,Path)
@@ -1533,7 +1545,8 @@ test(dateTime, []) :-
     atom_json_dict(JSON_Atom, JSON, []),
     woql_context(Prefixes),
     json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=date(2004,04,12,13,20,0,0,-,-)^^'http://www.w3.org/2001/XMLSchema#dateTime').
+
+    WOQL = (v('X')=date_time(2004,04,12,13,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
 
 test(dateTimeStamp, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1545,7 +1558,7 @@ test(dateTimeStamp, []) :-
     atom_json_dict(JSON_Atom, JSON, []),
     woql_context(Prefixes),
     json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=date(2004,4,12,13,20,0,-18000,-,-)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
+    WOQL = (v('X')=date_time(2004,4,12,8,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
 
 test(byte, []) :-
     JSON_Atom= '{"@type": "Equals",

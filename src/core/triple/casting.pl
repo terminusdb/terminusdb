@@ -352,8 +352,20 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime', 'http://www.w3.org/
     (   date_time_string(Cast,Val)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))).
-%%% xsd:date => xsd:string
+%%% xsd:dateTime => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTime', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    (   is_date_time(Val)
+    ->  date_time_string(Val,S)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#string'),_))).
+%%% xsd:string => xsd:dateTimeStamp
+typecast_switch('http://www.w3.org/2001/XMLSchema#dateTimeStamp', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp') :-
+    !,
+    (   date_time_string(Cast,Val)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTimeStamp'),_))).
+%%% xsd:dateTimeStamp => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTimeStamp', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   is_date_time(Val)
     ->  date_time_string(Val,S)
@@ -778,6 +790,13 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#nonPositiveInteger', 'http://w
 %%% xsd:anyURI => xdd:url --- Special cast as technically xsd:anyURI is not a string
 typecast_switch('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#anyURI', Val, _, Val^^'http://terminusdb.com/schema/xdd#url') :-
     !.
+%%% xsd:dateTimeStamp => xsd:dateTime --- indistinguishable
+typecast_switch('http://www.w3.org/2001/XMLSchema#dateTimeStamp','http://www.w3.org/2001/XMLSchema#anyURI', Val, _, Val^^'http://terminusdb.com/schema/xdd#dateTimeStamp') :-
+    !.
+%%% xsd:dateTime => xsd:dateTimeStamp --- indistinguishable
+typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime','http://www.w3.org/2001/XMLSchema#dateTimeStamp', Val, _, Val^^'http://terminusdb.com/schema/xdd#dateTime') :-
+    !.
+
 
 :- begin_tests(typecast).
 

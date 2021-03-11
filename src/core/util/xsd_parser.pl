@@ -213,13 +213,16 @@ year(SY) --> sign(S), natural(Y),
 date(SY,Mo,D,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), optional_time_offset(Offset).
 
+time_separator --> "T".
+time_separator --> " ".
+
 dateTime(SY,Mo,D,H,M,S,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time(H,M,S,Offset).
+    time_separator, time(H,M,S,Offset).
 
 dateTimeStamp(SY,Mo,D,H,M,S,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    "T", time_and_offset(H,M,S,Offset).
+    time_separator, time_and_offset(H,M,S,Offset).
 
 gYear(Y,Offset) --> year(Y), time_offset(Offset) .
 
@@ -249,7 +252,7 @@ maybeMinute(-1) --> "" .
 maybeSecond(S) --> unsignedDecimal(S), "S" .
 maybeSecond(-1) --> "" .
 
-maybeTime(H,M,S) --> "T", maybeHour(MH), maybeMinute(MM), maybeSecond(MS),
+maybeTime(H,M,S) --> time_separator, maybeHour(MH), maybeMinute(MM), maybeSecond(MS),
 		     { (MH < 0, MM < 0, MS < 0)
 		       -> fail
 		       ; (MH < 0 -> H = 0 ; MH = H),

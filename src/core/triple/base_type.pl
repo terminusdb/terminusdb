@@ -181,6 +181,7 @@ base_type_parent('http://www.w3.org/2001/XMLSchema#anyURI','http://www.w3.org/20
 base_type_parent('http://www.w3.org/2001/XMLSchema#date','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#time','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#dateTime','http://www.w3.org/2001/XMLSchema#anySimpleType').
+base_type_parent('http://www.w3.org/2001/XMLSchema#dateTimeStamp','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#gYear','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#gYearMonth','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://www.w3.org/2001/XMLSchema#gMonth','http://www.w3.org/2001/XMLSchema#anySimpleType').

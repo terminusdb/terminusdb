@@ -24,10 +24,10 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- reexport(core(util/syntax)).
-
 :- use_module(library(pcre)).
 :- use_module(core(util)).
 :- use_module(core(triple/casting), [typecast/4]).
+:- use_module(core(validation), [basetype_subsumption_of/2]).
 
 /*
  * date_time_string(-Date_Time,+String) is det.
@@ -47,6 +47,23 @@ date_time_string(Date_Time,String) :-
     !,
     atom_codes(String,Codes),
     phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Offset),Codes),
+    datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,-,-), Date_Time).
+
+
+date_time_stamp_string(Date_Time,String) :-
+    nonvar(Date_Time),
+    !,
+    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
+    Date_Time = date_time(Y,M,D,HH,MM,SS),
+    format(string(String),
+           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+           [Y,M,D,HH,MM,SS]).
+date_time_stamp_string(Date_Time,String) :-
+    % So expensive! Let's do this faster somehow.
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(xsd_parser:dateTimeStamp(Y,M,D,HH,MM,SS,Offset),Codes),
     datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,-,-), Date_Time).
 
 /*
@@ -219,6 +236,12 @@ duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
     atom_codes(String,Codes),
     phrase(xsd_parser:duration(Sign,Y,M,D,HH,MM,SS),Codes).
 
+is_number_type(Type) :-
+    (   Type = 'http://www.w3.org/2001/XMLSchema#float'
+    ;   Type = 'http://www.w3.org/2001/XMLSchema#double'
+    ;   basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#decimal')
+    ).
+
 /*
  * literal_to_turtle(+Literal,-Turtle_Literal) is det.
  *
@@ -240,7 +263,8 @@ turtle_to_literal(literal(lang(Lang,S)),String@Lang) :-
     ->  atom_string(S,String)
     ;   S = String),
     !.
-turtle_to_literal(literal(type(Type,S)),Val^^Type) :-
+turtle_to_literal(literal(type(Type,A)),Val^^Type) :-
+    atom_string(A,S),
     typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
     !.
 turtle_to_literal(literal(L),String@en) :-
@@ -266,10 +290,11 @@ ground_object_storage(String@Lang, value(S)) :-
     format(string(S), '~q@~q', [String,Lang]).
 ground_object_storage(Val^^Type, value(S)) :-
     !,
-    (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
-        Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
-    ->  date_string(Val,Date_String),
-        format(string(S), '"~s"^^\'http://www.w3.org/2001/XMLSchema#dateTime\'', [Date_String])
+    (   is_number_type(Type)
+    ->  format(string(S), '~q^^~q', [Val,Type])
+    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], Cast^^_),
+        format(string(S), '~q^^~q', [Cast,Type])
     ;   format(string(S), '~q^^~q', [Val,Type])).
 ground_object_storage(O, node(O)).
 
@@ -295,10 +320,11 @@ nonvar_literal(Val^^Type, value(S)) :-
     nonvar(Type),
     nonvar(Val),
     !,
-    (   Type = 'http://www.w3.org/2001/XMLSchema#dateTime',
-        Val = date(_Y, _M, _D, _HH, _MM, _SS, _Z, _ZH, _ZM)
-    ->  date_string(Val,Date_String),
-        format(string(S), '~q^^~q', [Date_String,Type])
+    (   is_number_type(Type)
+    ->  format(string(S), '~q^^~q', [Val,Type])
+    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], Cast^^_),
+        format(string(S), '~q^^~q', [Cast,Type])
     ;   format(string(S), '~q^^~q', [Val,Type])).
 nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),
@@ -338,13 +364,12 @@ storage_value(X,V) :-
 storage_literal(X1^^T1,X3^^T2) :-
     storage_atom(T1,T2),
     storage_value(X1,X2),
-    (   T2 = 'http://www.w3.org/2001/XMLSchema#dateTime'
-    ->  date_string(X3,X2)
-    ;   T2 = 'http://www.w3.org/2001/XMLSchema#decimal'
+    (   is_number_type(T2)
     ->  (   string(X2)
         ->  number_string(X3,X2)
         ;   X2 = X3)
-    ;   X2 = X3).
+    ;   typecast(X2^^'http://www.w3.org/2001/XMLSchema#string',T2,
+                 [], X3^^_)).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
     storage_value(X1,X2).
@@ -423,7 +448,7 @@ prefixed_to_uri(URI, _, URI).
 :- begin_tests(turtle_literal_marshalling).
 
 test(date, []) :-
-    literal_to_turtle(date(-228, 10, 10, 0, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00'))).
+    literal_to_turtle(date_time(-228, 10, 10, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00Z'))).
 
 test(bool, []) :-
     literal_to_turtle(false^^'http://www.w3.org/2001/XMLSchema#boolean', literal(type('http://www.w3.org/2001/XMLSchema#boolean',false))).

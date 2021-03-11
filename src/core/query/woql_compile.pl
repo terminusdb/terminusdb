@@ -234,6 +234,8 @@ resolve_prefix(Pre,Suf,URI) -->
     ;   {atomic_list_concat([Full_Prefix,Suf],URI)}
     ).
 
+is_boolean_type('http://www.w3.org/2001/XMLSchema#boolean').
+
 /*
  * resolve(ID,Resolution, S0, S1) is det.
  *
@@ -270,7 +272,8 @@ resolve(X^^T,Lit) -->
     resolve(T,TE),
     {
         (   ground(XE)
-        ->  (   atom(XE)
+        ->  (   atom(XE),
+                \+ is_boolean_type(TE)
             ->  atom_string(XE,XS)
             ;   XE=XS),
             Lit = XS^^TE
@@ -285,22 +288,24 @@ resolve(L,Le) -->
     mapm(resolve,L,Le).
 resolve(X,X) -->
     {
-        string(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        atom(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        number(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        is_date(X)
+        once((   string(X)
+             ;   atom(X)
+             ;   number(X)
+             ;   is_date(X)
+             ;   is_time(X)
+             ;   is_date_time(X)
+             ;   is_gyear(X)
+             ;   is_gyear_month(X)
+             ;   is_gmonth(X)
+             ;   is_gmonth_day(X)
+             ;   is_gday(X)
+             ;   is_boolean(X)
+             ;   is_duration(X)
+             ;   is_gyear_range(X)
+             ;   is_integer_range(X)
+             ;   is_decimal_range(X)
+             ;   is_point(X)
+             ))
     },
     !.
 resolve(X,X) -->
@@ -1050,6 +1055,7 @@ compile_wf(t(X,P,Y),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
+    { Y = false^^_, nl, writeq(YE) },
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     view(filter, Filter),
@@ -1846,7 +1852,7 @@ test(substring, [
                           datatype : _{'@type' : "xsd:string",
                                        '@value' : "Test"}},
               before : _{ '@type' : "Datatype",
-                          datatype : _{'@type' : "xsd:string",
+                          datatype : _{'@type' : "xsd:integer",
                                        '@value' : 1}},
               length : _{'@type' : "Variable",
                          variable_name :
@@ -2549,7 +2555,7 @@ test(order_by, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 10}}},
                           _{'@type' : "QueryListElement",
                             index : _{'@type' : "xsd:integer",
@@ -2559,13 +2565,14 @@ test(order_by, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 20}}}]}},
 
     query_test_response_test_branch(Query, JSON),
-    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':10}},
-                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':20}}].
 
 test(order_by_desc, [
@@ -2593,7 +2600,7 @@ test(order_by_desc, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 10}}},
                           _{'@type' : "QueryListElement",
                             index : _{'@type' : "xsd:integer",
@@ -2603,13 +2610,13 @@ test(order_by_desc, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 20}}}]}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':20}},
-                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':10}}].
 
 
@@ -4676,7 +4683,7 @@ test(literal_datetime, [
                 'woql:right': _{
                                   '@type': "woql:Datatype",
                                   'woql:datatype': _{
-                                                       '@value': "2021-02-23T21:12:58",
+                                                       '@value': "2021-02-23T21:12:58Z",
                                                        '@type': "xsd:dateTime"
                                                    }
                               }
@@ -4923,8 +4930,8 @@ test(float_neg) :-
     % note that the number saved is not further quoted
     test_lit(-123.456^^xsd:float, "-123.456^^'http://www.w3.org/2001/XMLSchema#float'").
 
-test(dateTime) :-
-    test_lit(date(2020,01,02,03,04,05,1,0,0)^^xsd:dateTime, "\"2020-01-02T03:04:05\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
+test(dateTime, [error(asdf)]) :-
+    test_lit(date_time(2020,01,02,03,04,05)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
 
 test(byte_pos) :-
     % note that the number saved is not further quoted
