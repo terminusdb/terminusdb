@@ -61,6 +61,7 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
+  ?- pack_install(tus).
 ```
 
 ### TerminusDB Server
@@ -129,6 +130,7 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
+  ?- pack_install(tus).
 ```
 
 
@@ -196,6 +198,7 @@ For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
 % Contacting server ....
+  ?- pack_install(tus).
 ```
 
 
@@ -247,6 +250,7 @@ In the SWI-Prolog prompt, enter the following:
 
 ```
 pack_install(terminus_store_prolog).
+pack_install(tus).
 ```
 
 Press Y if it asks for confirmation, be sure to check the GitHub URLs to check whether you trust the package.
