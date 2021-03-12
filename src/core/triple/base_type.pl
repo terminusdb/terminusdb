@@ -99,6 +99,7 @@ base_type('http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
 base_type('http://www.w3.org/2001/XMLSchema#negativeInteger').
 base_type('http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
 base_type('http://www.w3.org/2001/XMLSchema#base64Binary').
+base_type('http://www.w3.org/2001/XMLSchema#hexBinary').
 base_type('http://www.w3.org/2001/XMLSchema#anyURI').
 base_type('http://www.w3.org/2001/XMLSchema#language').
 base_type('http://www.w3.org/2001/XMLSchema#normalizedString').

@@ -25,6 +25,7 @@
                        dayTimeDuration//5,
                        string/3,
                        base64Binary//0,
+                       hexBinary//0,
                        language//0,
                        whitespace//0,
                        anyBut//1,
@@ -268,6 +269,11 @@ yearMonthDuration(Sign,Y,Mo) --> sign(Sign), "P", maybeYear(Y), maybeMonth(Mo) .
 
 dayTimeDuration(Sign,D,H,M,S) --> sign(Sign), "P", maybeDay(D), maybeTime(H,M,S) .
 
+% xsd:hexBinary
+hex_elt --> oneOf('abcdef0123456789') .
+
+hexBinary --> hex_elt , hexBinary .
+hexBinary --> hex_elt .
 
 %  Base64 encoding
 

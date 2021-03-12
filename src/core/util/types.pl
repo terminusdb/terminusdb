@@ -303,24 +303,22 @@ is_date(date(Y,M,D,Offset)) :-
     days_in_month(Y,M,Days), D >= 1, D =< Days,
     integer(Offset).
 
-is_point([X,Y]) :-
+is_point(point(X,Y)) :-
     number(X),
     number(Y).
 
-is_coordinate_polygon([]).
-is_coordinate_polygon([Point|T]) :-
-    is_point(Point),
-    is_coordinate_polygon(T).
+is_coordinate_polygon(coordinate_polygon(L)) :-
+    maplist([X,Y]>>(number(X),number(Y)),L).
 
-is_date_range([Date1,Date2]) :-
+is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
     is_date(Date2).
 
-is_integer_range([Integer1,Integer2]) :-
+is_integer_range(integer_range(Integer1,Integer2)) :-
     integer(Integer1),
     integer(Integer2).
 
-is_decimal_range([Float1,Float2]) :-
+is_decimal_range(decimal_range(Float1,Float2)) :-
     number(Float1),
     number(Float2).
 
@@ -328,7 +326,7 @@ is_gyear(gyear(Year,Offset)) :-
     integer(Year),
     is_offset(Offset).
 
-is_gyear_range([Year1,Year2]) :-
+is_gyear_range(gyear_range(Year1,Year2)) :-
     is_gyear(Year1),
     is_gyear(Year2).
 

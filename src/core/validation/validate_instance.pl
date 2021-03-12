@@ -905,6 +905,16 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#base64Binary',S^^_,Reason
                      'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:base64Binary'}
                  }
     ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#hexBinary',S^^_,Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:hexBinary,C,[])),
+        term_to_atom(S,A)
+    ->  Reason = _{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:hexBinary',
+                     'vio:literal' : _{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : _{ '@type' : 'xsd:string', '@value' : 'xsd:hexBinary'}
+                 }
+    ).
 refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#anyURI',S^^_,Reason) :-
     (   \+ uri_components(S,_),
         term_to_atom(S,A)

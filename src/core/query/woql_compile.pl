@@ -1055,7 +1055,6 @@ compile_wf(t(X,P,Y),Goal) -->
     resolve(X,XE),
     resolve(P,PE),
     resolve(Y,YE),
-    { Y = false^^_, nl, writeq(YE) },
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     view(filter, Filter),
@@ -4930,12 +4929,11 @@ test(float_neg) :-
     % note that the number saved is not further quoted
     test_lit(-123.456^^xsd:float, "-123.456^^'http://www.w3.org/2001/XMLSchema#float'").
 
-test(dateTime, [error(asdf)]) :-
+test(dateTime) :-
     test_lit(date_time(2020,01,02,03,04,05)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
 
 test(byte_pos) :-
-    % note that the number saved is not further quoted
-    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
+    % note that the number saved is not further quoted    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
 
 
 test(byte_neg) :-
@@ -5013,6 +5011,9 @@ test(language) :-
 
 test(language_tagged) :-
     test_lit("this is an english sentence"@en, "\"this is an english sentence\"@en").
+
+test(gyear) :-
+    test_lit(gyear(2100,0)^^xsd:gYear, W).
 
 :- end_tests(store_load_data).
 

@@ -161,6 +161,7 @@
               dayTimeDuration//5,
               string/3,
               base64Binary//0,
+              hexBinary//0,
               language//0,
               whitespace//0,
               anyBut//1,
