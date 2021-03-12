@@ -58,6 +58,7 @@ This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
 :- reexport(core(util/syntax)).
+:- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 
@@ -301,14 +302,14 @@ is_date(date(Y,M,D,Offset)) :-
     integer(Y),
     integer(M), M >= 1, M =< 12,
     days_in_month(Y,M,Days), D >= 1, D =< Days,
-    integer(Offset).
+    is_offset(Offset).
 
 is_point(point(X,Y)) :-
     number(X),
     number(Y).
 
 is_coordinate_polygon(coordinate_polygon(L)) :-
-    maplist([X,Y]>>(number(X),number(Y)),L).
+    maplist([[X,Y]]>>(number(X),number(Y)),L).
 
 is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
@@ -372,12 +373,12 @@ is_boolean(false).
 
 is_duration(duration(Sign,Y,M,D,HH,MM,SS)) :-
     member(Sign, [1,-1]),
-    integer(Y),
-    integer(M), M >= 1, M =< 12,
-    days_in_month(Y,M,Days), D >= 1, D =< Days,
-    integer(HH), HH >= 0, HH =< 24,
-    integer(MM), MM >= 0, MM =< 60,
-    number(SS), SS >= 0, HH =< 60.
+    number(Y),
+    number(M),
+    number(D),
+    number(HH),
+    number(MM),
+    number(SS).
 
 is_byte(S) :-
     integer(S),

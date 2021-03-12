@@ -52,10 +52,11 @@ test(worlds_graph, [
         ask(Desc,
             t(doc:scipioJrs, scm:birthday, Date))
     ),
-    Date = date(-228,10,10,0,0,0,0,-,-)^^xsd:dateTime,
+
+    Date = date_time(-228,10,10,0,0,0.0)^^xsd:dateTime,
 
     graph_dump(System_DB, Auth, Path, "turtle", Output),
 
-    re_match('-228-10-10T00:00:00', Output).
+    re_match('-228-10-10T00:00:00.000Z', Output).
 
 :- end_tests(graph_dump).

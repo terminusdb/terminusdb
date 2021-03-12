@@ -38,9 +38,16 @@ date_time_string(Date_Time,String) :-
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
     Date_Time = date_time(Y,M,D,HH,MM,SS),
-    format(string(String),
-           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
-           [Y,M,D,HH,MM,SS]).
+    (   integer(SS)
+    ->  format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+               [Y,M,D,HH,MM,SS])
+    ;   S is floor(SS),
+        MS is floor((SS - S) / 1000),
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
+               [Y,M,D,HH,MM,S,MS])
+    ).
 date_time_string(Date_Time,String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
@@ -55,9 +62,16 @@ date_time_stamp_string(Date_Time,String) :-
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
     Date_Time = date_time(Y,M,D,HH,MM,SS),
-    format(string(String),
-           '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
-           [Y,M,D,HH,MM,SS]).
+    (   integer(SS)
+    ->  format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+               [Y,M,D,HH,MM,SS])
+    ;   S is floor(SS),
+        MS is floor((SS - S) / 1000),
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
+               [Y,M,D,HH,MM,S,MS])
+    ).
 date_time_stamp_string(Date_Time,String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
@@ -189,9 +203,16 @@ time_string(Time,String) :-
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
     Time = time(HH,MM,SS),
-    format(string(String),
-           '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
-               [HH,MM,SS]).
+    (   integer(SS)
+    ->  format(string(String),
+               '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+               [HH,MM,SS])
+    ;   S is floor(SS),
+        MS is floor((SS - S) / 1000),
+        format(string(String),
+               '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
+               [HH,MM,S,MS])
+    ).
 time_string(Time,String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
@@ -216,7 +237,7 @@ duration_string(Duration,String) :-
     (   D \= 0
     ->  format(atom(DP),'~wD',[D])
     ;   DP = ''),
-    (   HH \= 0, MM \= 0, SS \= 0
+    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0)
     ->  TP = 'T'
     ;   TP = ''),
     (   HH \= 0
@@ -293,8 +314,8 @@ ground_object_storage(Val^^Type, value(S)) :-
     (   is_number_type(Type)
     ->  format(string(S), '~q^^~q', [Val,Type])
     ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_),
-        format(string(S), '~q^^~q', [Cast,Type])
+                 [], Cast^^_)
+    ->  format(string(S), '~q^^~q', [Cast,Type])
     ;   format(string(S), '~q^^~q', [Val,Type])).
 ground_object_storage(O, node(O)).
 

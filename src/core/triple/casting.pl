@@ -155,13 +155,13 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 typecast_switch('http://terminusdb.com/schema/xdd#coordinatePolyline', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#coordinatePolyline') :-
     !,
     (   atom_codes(Val, Codes), phrase(xsd_parser:coordinatePolygon(S),Codes)
-    ->  Cast = coordinate_polyline(S)
+    ->  Cast = coordinate_polygon(S)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#coordinatePolyline'),_))).
 %%% xdd:coordinatePolyline => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#coordinatePolyline', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   is_coordinate_polygon(Val),
-        Val = coordinate_polyline(L)
+        Val = coordinate_polygon(L)
     ->  format(string(S), '~w', [L])
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#coordinatePolyline'),_))).
 %%% xsd:string => xdd:coordinate

@@ -199,9 +199,10 @@ time_and_offset(H,M,0,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), time_offset(Offset).
 
 % Hour, Minute, Second, Offset, Zone, DST
-time(H,M,S,Offset) -->
+time(H,M,SS,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	".", threeDigitNatural(_), optional_time_offset(Offset).
+	".", threeDigitNatural(MS), optional_time_offset(Offset),
+    { SS is S + MS / 1000}.
 time(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 	optional_time_offset(Offset) .

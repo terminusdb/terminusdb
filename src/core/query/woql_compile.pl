@@ -302,9 +302,11 @@ resolve(X,X) -->
              ;   is_boolean(X)
              ;   is_duration(X)
              ;   is_gyear_range(X)
+             ;   is_date_range(X)
              ;   is_integer_range(X)
              ;   is_decimal_range(X)
              ;   is_point(X)
+             ;   is_coordinate_polygon(X)
              ))
     },
     !.
@@ -4933,8 +4935,8 @@ test(dateTime) :-
     test_lit(date_time(2020,01,02,03,04,05)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
 
 test(byte_pos) :-
-    % note that the number saved is not further quoted    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
-
+    % note that the number saved is not further quoted
+    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
 
 test(byte_neg) :-
     % note that the number saved is not further quoted
@@ -5013,7 +5015,48 @@ test(language_tagged) :-
     test_lit("this is an english sentence"@en, "\"this is an english sentence\"@en").
 
 test(gyear) :-
-    test_lit(gyear(2100,0)^^xsd:gYear, W).
+    test_lit(gyear(2100,0)^^xsd:gYear, "\"2100\"^^'http://www.w3.org/2001/XMLSchema#gYear'").
+
+test(gYearMonth) :-
+    test_lit(gyear_month(2100,3,0)^^xsd:gYearMonth, "\"2100-03\"^^'http://www.w3.org/2001/XMLSchema#gYearMonth'").
+
+test(gMonthDay) :-
+    test_lit(gmonth_day(05,24,0)^^xsd:gMonthDay, "\"-05-24\"^^'http://www.w3.org/2001/XMLSchema#gMonthDay'").
+
+test(gMonth) :-
+    test_lit(gmonth(05,0)^^xsd:gMonth, "\"--05\"^^'http://www.w3.org/2001/XMLSchema#gMonth'").
+
+test(gDay) :-
+    test_lit(gday(24,0)^^xsd:gDay, "\"---24\"^^'http://www.w3.org/2001/XMLSchema#gDay'").
+
+test(time) :-
+    test_lit(time(12,14,0)^^xsd:time, "\"12:14:00Z\"^^'http://www.w3.org/2001/XMLSchema#time'").
+
+test(date) :-
+    test_lit(date(1978,6,25,0)^^xsd:date, "\"1978-06-25\"^^'http://www.w3.org/2001/XMLSchema#date'").
+
+test(coordinate) :-
+    test_lit(point(1.3,34.3)^^xdd:coordinate, "\"[1.3,34.3]\"^^'http://terminusdb.com/schema/xdd#coordinate'").
+
+test(coordinatePolygon) :-
+    test_lit(coordinate_polygon([[1.3,34.3],[1.3,34.3]])^^xdd:coordinatePolygon, "\"[[1.3,34.3],[1.3,34.3]]\"^^'http://terminusdb.com/schema/xdd#coordinatePolygon'").
+
+test(coordinatePolyline) :-
+    test_lit(coordinate_polygon([[1.3,34.3],[1.3,34.3]])^^xdd:coordinatePolyline, "\"[[1.3,34.3],[1.3,34.3]]\"^^'http://terminusdb.com/schema/xdd#coordinatePolyline'").
+
+test(integer_range) :-
+    test_lit(integer_range(1,3)^^xdd:integerRange, "\"[1,3]\"^^'http://terminusdb.com/schema/xdd#integerRange'").
+
+test(date_range) :-
+    test_lit(date_range(date(2012,02,03,0),date(2012,02,03,0))^^xdd:dateRange, "\"[2012-02-03,2012-02-03]\"^^'http://terminusdb.com/schema/xdd#dateRange'").
+
+test(gyear_range, [blocked(unimplemented)]) :-
+    test_lit(gyear_range(gyear(2012,0),gyear(2013,0))^^xdd:gyearRange, "\"[2012,2014]\"^^'http://terminusdb.com/schema/xdd#gyearRange'").
+
+test(duration_year) :-
+    test_lit(duration(1,10,0,0,0,0,0)^^xsd:duration, "\"P10Y\"^^'http://www.w3.org/2001/XMLSchema#duration'").
+
+test(duration_hour) :-
+    test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, "\"-PT1H\"^^'http://www.w3.org/2001/XMLSchema#duration'").
 
 :- end_tests(store_load_data).
-
