@@ -104,6 +104,15 @@ api_error_jsonld(csv,error(unresolvable_absolute_descriptor(Descriptor),_), JSON
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg}.
+api_error_jsonld(csv,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON) :-
+    term_string(Term,String),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
+    JSON = _{'@type' : 'api:CSVErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                              'api:error_term' : String},
+             'api:message' : Msg
+            }.
 % Triples
 api_error_jsonld(triples,error(unknown_format(Format), _), JSON) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
@@ -185,6 +194,15 @@ api_error_jsonld(frame,error(unresolvable_collection(Descriptor),_), JSON) :-
              'api:status' : 'api:not_found',
              'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                               'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_error_jsonld(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON) :-
+    term_string(Term,String),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
+    JSON = _{'@type' : 'api:FrameErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                              'api:error_term' : String},
              'api:message' : Msg
             }.
 api_error_jsonld(woql,error(casting_error(Val,Type),_), JSON) :-
