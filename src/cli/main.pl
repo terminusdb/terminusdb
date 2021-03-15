@@ -1008,7 +1008,7 @@ run_command(csv,list,[Path],_Opts) :-
         csv,
         csv_list(System_DB, Auth, Path, Names,_{})),
     forall(
-        option(Name, Names),
+        member(Name, Names),
         format(current_output,'~w~n',[Name])).
 run_command(csv,load,[Path|Files],Opts) :-
     super_user_authority(Auth),

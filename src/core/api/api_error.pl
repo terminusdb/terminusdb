@@ -113,6 +113,14 @@ api_error_jsonld(csv,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON) :
                               'api:error_term' : String},
              'api:message' : Msg
             }.
+api_error_jsonld(csv,error(no_known_csv(Name),_), JSON) :-
+    format(string(Msg), "No csv named: ~q", [Name]),
+    JSON = _{'@type' : 'api:CSVErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NoKnownCSVError',
+                              'api:error_term' : Name},
+             'api:message' : Msg
+            }.
 % Triples
 api_error_jsonld(triples,error(unknown_format(Format), _), JSON) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
