@@ -706,6 +706,18 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#IDGenerator',JSON,WOQL,
     json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
                                |Path]),
     WOQL = idgen(WBase,WKey,WURI).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#RandomIDGenerator',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#base' : Base,
+      'http://terminusdb.com/schema/woql#key_list' : Key,
+      'http://terminusdb.com/schema/woql#uri' : URI
+     } :< JSON,
+    json_to_woql_ast(Base,WBase,['http://terminusdb.com/schema/woql#base'
+                                 |Path]),
+    json_to_woql_ast(Key,WKey,['http://terminusdb.com/schema/woql#key_list'
+                               |Path]),
+    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
+                               |Path]),
+    WOQL = random_idgen(WBase,WKey,WURI).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Upper',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#left' :  S,
       'http://terminusdb.com/schema/woql#right' : V
