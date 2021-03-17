@@ -9,24 +9,7 @@
  *
  * Utilities for casting between types for I/O.
  *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                      *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
- *                                                                       *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+ */
 
 :- use_module(literals).
 
@@ -228,11 +211,11 @@ typecast_switch('http://terminusdb.com/schema/xdd#gYearRange', 'http://www.w3.or
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#gYearRange', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   is_gyear_range(Val),
-        Val = gyear_range(gyear(Val1),gyear(Val2)),
+        Val = gyear_range(Val1,Val2),
         gyear_string(Val1,S1),
         gyear_string(Val2,S2)
     ->  format(string(S), '[~w,~w]', [S1,S2])
-    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#gYearRange'),_))).
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#string'),_))).
 %%% xsd:string => xdd:url
 typecast_switch('http://terminusdb.com/schema/xdd#url', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://terminusdb.com/schema/xdd#url') :-
     !,
@@ -382,6 +365,12 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#gYear', 'http://www.w3.org/200
     !,
     (   gyear_string(Cast,Val)
     ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#gYear'),_))).
+%%% xsd:decimal => xsd:gYear
+typecast_switch('http://www.w3.org/2001/XMLSchema#gYear', 'http://www.w3.org/2001/XMLSchema#decimal', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#gYear') :-
+    !,
+    (   integer(Val)
+    ->  Cast = gyear(Val,0.0)
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#gYear'),_))).
 %%% xsd:gYear => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#gYear', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
@@ -812,6 +801,20 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#dateTimeStamp','http://www.w3.
 %%% xsd:dateTime => xsd:dateTimeStamp --- indistinguishable
 typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime','http://www.w3.org/2001/XMLSchema#dateTimeStamp', Val, _, Val^^'http://terminusdb.com/schema/xdd#dateTime') :-
     !.
+%%% xsd:string => xsd:anySimpleType
+typecast_switch('http://www.w3.org/2001/XMLSchema#anySimpleType','http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#anySimpleType') :-
+    !.
+%%% xsd:anySimpleType => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string','http://www.w3.org/2001/XMLSchema#anySimpleType', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !.
+%%% Anything => xsd:anySimpleType (via cast to string first...)
+typecast_switch('http://www.w3.org/2001/XMLSchema#anySimpleType',Type, Val, _, Res^^'http://www.w3.org/2001/XMLSchema#anySimpleType') :-
+    !,
+    typecast_switch('http://www.w3.org/2001/XMLSchema#string',Type, Val, _, Res^^_).
+%%% xsd:anySimpleType => Anything (via cast to string first...)
+typecast_switch(Type, 'http://www.w3.org/2001/XMLSchema#anySimpleType',Val, _, Cast) :-
+    !,
+    typecast_switch(Type,'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast).
 
 
 :- begin_tests(typecast).

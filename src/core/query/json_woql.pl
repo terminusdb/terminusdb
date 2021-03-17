@@ -1424,7 +1424,7 @@ test(id_simplification_2, []) :-
 
 :- begin_tests(jsonld_ast).
 
-test(anySimpleType, [blocked('Not yet implemented')]) :-
+test(anySimpleType, []) :-
 
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
@@ -1523,7 +1523,7 @@ test(decimal, []) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
 
-test(date, [blocked('Marshalls correctly but not correctly treated in db')]) :-
+test(date, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1533,9 +1533,10 @@ test(date, [blocked('Marshalls correctly but not correctly treated in db')]) :-
     atom_json_dict(JSON_Atom, JSON, []),
     woql_context(Prefixes),
     json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=date(1066,9,18)^^'http://www.w3.org/2001/XMLSchema#date').
+    WOQL = (v('X')=date(1066,9,18,Z)^^'http://www.w3.org/2001/XMLSchema#date'),
+    Z == 0.
 
-test(time, [blocked('unimplemented')]) :-
+test(time, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1545,7 +1546,7 @@ test(time, [blocked('unimplemented')]) :-
     atom_json_dict(JSON_Atom, JSON, []),
     woql_context(Prefixes),
     json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=time(15,29,44,_,_)^^'http://www.w3.org/2001/XMLSchema#time').
+    WOQL = (v('X')=time(15,29,44)^^'http://www.w3.org/2001/XMLSchema#time').
 
 test(dateTime, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1571,6 +1572,96 @@ test(dateTimeStamp, []) :-
     woql_context(Prefixes),
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=date_time(2004,4,12,8,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
+
+test(gyear, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004",
+                                          "@type": "xsd:gYear"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear(2004,Z)^^'http://www.w3.org/2001/XMLSchema#gYear'),
+    Z == 0.
+
+test(gyear_range, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "[2004,2014]",
+                                          "@type": "xdd:gYearRange"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear_range(gyear(2004,Z),gyear(2014,Z))^^'http://terminusdb.com/schema/xdd#gYearRange'),
+    Z == 0.
+
+test(gyear_int, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 2004,
+                                          "@type": "xsd:gYear"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear(2004,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear').
+
+test(gyear_month, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004-12",
+                                          "@type": "xsd:gYearMonth"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear_month(2004,12,Z)^^'http://www.w3.org/2001/XMLSchema#gYearMonth'),
+    Z == 0.
+
+test(gmonth, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "--12",
+                                          "@type": "xsd:gMonth"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gmonth(12,Z)^^'http://www.w3.org/2001/XMLSchema#gMonth'),
+    Z == 0.
+
+test(gmonth_day, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "-05-24",
+                                          "@type": "xsd:gMonthDay"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gmonth_day(5,24,Z)^^'http://www.w3.org/2001/XMLSchema#gMonthDay'),
+    Z == 0.
+
+test(gday, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "---24",
+                                          "@type": "xsd:gDay"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gday(24,Z)^^'http://www.w3.org/2001/XMLSchema#gDay'),
+    Z == 0.
 
 test(byte, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1620,7 +1711,7 @@ test(long, []) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#long').
 
-test(unsignedByte, [blocked('unimplemented')]) :-
+test(unsignedByte, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1632,7 +1723,7 @@ test(unsignedByte, [blocked('unimplemented')]) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedByte').
 
-test(unsignedShort, [blocked('unimplemented')]) :-
+test(unsignedShort, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1644,7 +1735,7 @@ test(unsignedShort, [blocked('unimplemented')]) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedShort').
 
-test(unsignedInt, [blocked('unimplemented')]) :-
+test(unsignedInt, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1656,7 +1747,7 @@ test(unsignedInt, [blocked('unimplemented')]) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedInt').
 
-test(unsignedLong, [blocked('unimplemented')]) :-
+test(unsignedLong, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1716,7 +1807,7 @@ test(nonPositiveInteger, []) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')=(-120)^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
 
-test(hexBinary, [blocked('unimplemented')]) :-
+test(hexBinary, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},
@@ -1728,7 +1819,7 @@ test(hexBinary, [blocked('unimplemented')]) :-
     json_woql(JSON, Prefixes, WOQL),
     WOQL = (v('X')="a03bc23"^^'http://www.w3.org/2001/XMLSchema#hexBinary').
 
-test(base64binary, [blocked('unimplemented')]) :-
+test(base64binary, []) :-
     JSON_Atom= '{"@type": "Equals",
                  "left": { "@type": "Variable",
                            "variable_name": "X"},

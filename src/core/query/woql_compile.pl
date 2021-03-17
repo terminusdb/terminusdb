@@ -5050,8 +5050,8 @@ test(integer_range) :-
 test(date_range) :-
     test_lit(date_range(date(2012,02,03,0),date(2012,02,03,0))^^xdd:dateRange, "\"[2012-02-03,2012-02-03]\"^^'http://terminusdb.com/schema/xdd#dateRange'").
 
-test(gyear_range, [blocked(unimplemented)]) :-
-    test_lit(gyear_range(gyear(2012,0),gyear(2013,0))^^xdd:gyearRange, "\"[2012,2014]\"^^'http://terminusdb.com/schema/xdd#gyearRange'").
+test(gyear_range, []) :-
+    test_lit(gyear_range(gyear(2012,0),gyear(2013,0))^^xdd:gYearRange, "\"[2012,2013]\"^^'http://terminusdb.com/schema/xdd#gYearRange'").
 
 test(duration_year) :-
     test_lit(duration(1,10,0,0,0,0,0)^^xsd:duration, "\"P10Y\"^^'http://www.w3.org/2001/XMLSchema#duration'").

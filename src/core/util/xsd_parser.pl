@@ -226,15 +226,15 @@ dateTimeStamp(SY,Mo,D,H,M,S,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
     time_separator, time_and_offset(H,M,S,Offset).
 
-gYear(Y,Offset) --> year(Y), time_offset(Offset) .
+gYear(Y,Offset) --> year(Y), optional_time_offset(Offset) .
 
-gYearMonth(Y,M,Offset) --> year(Y), "-", twoDigitNatural(M), time_offset(Offset) .
+gYearMonth(Y,M,Offset) --> year(Y), "-", twoDigitNatural(M), optional_time_offset(Offset) .
 
-gMonth(M,Offset) --> "--", twoDigitNatural(M), time_offset(Offset) .
+gMonth(M,Offset) --> "--", twoDigitNatural(M), optional_time_offset(Offset) .
 
-gMonthDay(Mo,D,Offset) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), time_offset(Offset) .
+gMonthDay(Mo,D,Offset) --> "-", twoDigitNatural(Mo), "-", twoDigitNatural(D), optional_time_offset(Offset) .
 
-gDay(D,Offset) --> "---", twoDigitNatural(D), time_offset(Offset) .
+gDay(D,Offset) --> "---", twoDigitNatural(D), optional_time_offset(Offset) .
 
 maybeYear(Y) --> natural(Y), "Y" .
 maybeYear(0) --> "" .
@@ -392,10 +392,12 @@ integerRange(X,Y) --> "[" , whitespace, integer(X), whitespace,
 					 "," , whitespace, integer(Y), whitespace,
 					 "]" .
 
-gYearRange(X,X) --> gYear(X,_).
-gYearRange(X,Y) --> "[" , whitespace, gYear(X,_), whitespace,
-					"," , whitespace, gYear(Y,_), whitespace,
-					"]" .
+gYearRange(gyear(X,Z),gyear(X,Z)) -->
+    gYear(X,Z).
+gYearRange(gyear(X,ZX),gyear(Y,ZY)) -->
+    "[" , whitespace, gYear(X,ZX), whitespace,
+	"," , whitespace, gYear(Y,ZY), whitespace,
+	"]" .
 
 dateRange(date(Y,M,D,Offset),date(Y,M,D,Offset)) -->
     date(Y,M,D,Offset).
