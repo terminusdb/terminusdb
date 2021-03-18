@@ -4826,11 +4826,40 @@ test(and_type, [
     [Binding] = (JSON.bindings),
     "asdf" = (Binding.'Z'.'@value').
 
-%    ask(Descriptor,
-%        (t(X, P, Z),
-%         typeof(Z, Type))),
-%    Type = "en"^^xsd:string.
 
+
+test(gyear_cast, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Typecast = '{
+  "@type": "woql:Typecast",
+  "woql:typecast_value": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "xsd:string",
+      "@value": "1999"
+    }
+  },
+  "woql:typecast_type": {
+    "@type": "woql:Node",
+    "woql:node": "xsd:gYear"
+  },
+  "woql:typecast_result": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "V",
+      "@type": "xsd:string"
+    }
+  }
+}',
+
+    atom_json_dict(Typecast, Query, []),
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Binding] = (JSON.bindings),
+    Binding = _{'V':_{'@type':'http://www.w3.org/2001/XMLSchema#gYear',
+                      '@value':"1999"}}.
 
 :- end_tests(woql).
 

@@ -1016,6 +1016,7 @@ generic_exception_jsonld(type_error(T,O),JSON) :-
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
     JSON = _{'api:status' : 'api:failure',
+             'api:message' : M,
              'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                      'vio:message' : M,
                                      'vio:type' : TA,

@@ -294,7 +294,7 @@ is_date_time(date_time(Y,M,D,HH,MM,SS)) :-
     number(SS), SS >= 0, HH =< 60.
 
 is_offset(Offset) :-
-    integer(Offset),
+    number(Offset),
     Offset =< 43200,
     Offset >= -43200.
 

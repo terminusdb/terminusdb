@@ -929,4 +929,9 @@ test(positive_decimal_round_trip, []) :-
         error(casting_error("1",'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'),_)
     ].
 
+test(gyear_to_string, []) :-
+    typecast(gyear(1990,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear',
+             'http://www.w3.org/2001/XMLSchema#string', [], X),
+    writeq(X).
+
 :- end_tests(typecast).
