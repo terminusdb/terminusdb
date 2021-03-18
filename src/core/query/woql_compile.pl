@@ -4102,6 +4102,10 @@ test(date_marshall, [
                                            message : "testing"}, Context),
 
     query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    [_{'Start date':
+       _{'@type':'http://www.w3.org/2001/XMLSchema#dateTime',
+         '@value':"2018-12-01T00:00:44.000Z"}}
+     |_] = Response.bindings,
     length(Response.bindings, 49).
 
 test(into_absolute_descriptor, [

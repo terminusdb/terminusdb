@@ -931,7 +931,6 @@ test(positive_decimal_round_trip, []) :-
 
 test(gyear_to_string, []) :-
     typecast(gyear(1990,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear',
-             'http://www.w3.org/2001/XMLSchema#string', [], X),
-    writeq(X).
+             'http://www.w3.org/2001/XMLSchema#string', [], "1990"^^'http://www.w3.org/2001/XMLSchema#string').
 
 :- end_tests(typecast).
