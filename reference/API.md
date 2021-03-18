@@ -10,12 +10,6 @@ The TerminusDB Server HTTP API. JSON documents have optional elements notated wi
 }
 ```
 
-## Table of contents
-{: .no_toc .text-delta }
-
-1. TOC
-{:toc}
-
 ---
 
 ## Connect
