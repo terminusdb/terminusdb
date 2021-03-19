@@ -701,7 +701,7 @@ run_command(query,[Database,Query],Opts) :-
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
-            write(String)
+            format(current_output,'~s',[String])
         )).
 run_command(push,[Path],Opts) :-
     super_user_authority(Auth),

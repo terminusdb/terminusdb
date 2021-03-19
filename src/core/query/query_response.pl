@@ -132,18 +132,21 @@ pretty_print_query_response(Response, Prefixes, String) :-
                 (
                     maplist({Binding}/[Name,Value]>>
                             get_dict(Name,Binding,Value), Names, Values),
-                    format(current_output,Format_String, Values),
-                        format(current_output,"~n",[]))
+                    (   Values \= []
+                    ->  format(current_output,Format_String, Values),
+                        format(current_output,"~n",[])
+                    ;   true)
+                )
             ),
 
             get_dict(inserts, Response, Inserts),
             (   Inserts > 0
-            ->  format(current_output, "Inserts: ~s~n", [Inserts])
+            ->  format(current_output, "Inserts: ~d~n", [Inserts])
             ;   true),
 
             get_dict(deletes, Response, Deletes),
             (   Deletes > 0
-            ->  format(current_output, "Deletes: ~s", [Deletes])
+            ->  format(current_output, "Deletes: ~d~n", [Deletes])
             ;   true)
         )
     ).
