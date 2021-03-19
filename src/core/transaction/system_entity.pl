@@ -25,14 +25,29 @@ database_exists(Organization,DB) :-
 database_exists(Askable, Organization, DB) :-
     organization_database_name_uri(Askable, Organization, DB, _).
 
+% First check if the Db_Uri is ground, if it is ground
+% the following query is much faster
+organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
+    ground(Db_Uri),
+    !,
+    once(ask(Askable,
+             (
+                 t(Organization_Uri, system:resource_includes, Db_Uri),
+                 t(Organization_Uri, system:resource_name, Organization^^xsd:string),
+                 t(Organization_Uri, rdf:type, system:'Organization'),
+                 t(Db_Uri, system:resource_name, DB^^xsd:string),
+                 t(Db_Uri, rdf:type, system:'Database')
+             ))).
 organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
     once(ask(Askable,
-             (   t(Organization_Uri, system:resource_name, Organization^^xsd:string),
+             (
+                 t(Organization_Uri, system:resource_name, Organization^^xsd:string),
                  t(Organization_Uri, rdf:type, system:'Organization'),
                  t(Organization_Uri, system:resource_includes, Db_Uri),
                  t(Db_Uri, system:resource_name, DB^^xsd:string),
                  t(Db_Uri, rdf:type, system:'Database')
              ))).
+
 
 organization_name_uri(Askable,Organization, Uri) :-
     once(ask(Askable,
