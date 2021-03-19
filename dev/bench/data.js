@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1616117160255,
+  "lastUpdate": 1616194641057,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -1961,6 +1961,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.033362930164657516",
             "extra": "mean: 70.01280703333825 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@datachemist.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "631b50b6f206774dfdf04f4940f82f1715d924d0",
+          "message": "Merge pull request #259 from rrooij/dev\n\nFix very slow query when using ./terminusdb list with many dbs",
+          "timestamp": "2021-03-19T23:55:38+01:00",
+          "tree_id": "2a16ab5e5a65d30d680cdefab211a13bb07b3408",
+          "url": "https://github.com/terminusdb/terminusdb/commit/631b50b6f206774dfdf04f4940f82f1715d924d0"
+        },
+        "date": 1616194639270,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.03227531507222,
+            "unit": "iter/sec",
+            "range": "stddev: 0.012454662344719848",
+            "extra": "mean: 165.77492700000013 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 5.871370767800115,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010453491364765252",
+            "extra": "mean: 170.31797846666734 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 16.337917273674996,
+            "unit": "iter/sec",
+            "range": "stddev: 0.026003177484749996",
+            "extra": "mean: 61.20731199999909 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 16.07135864092781,
+            "unit": "iter/sec",
+            "range": "stddev: 0.021980568509993092",
+            "extra": "mean: 62.222492966672384 msec\nrounds: 30"
           }
         ]
       }
