@@ -1,6 +1,6 @@
 # Basic Terminology of TerminusDB
 
- 1. [Triple] (#triple)
+ 1. [Triple](#triple)
  2. [Object](#object)
  3. [Document](#document)
  4. [Abstract](#abstract)
