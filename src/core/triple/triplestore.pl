@@ -14,6 +14,7 @@
               local_triple_store/1,
               retract_local_triple_store/1,
               default_triple_store/1,
+              memory_triple_store/1,
               with_triple_store/2
           ]).
 
@@ -62,6 +63,14 @@ checkpoint(_DB_ID,_Graph_ID) :-
 default_triple_store(Triple_Store) :-
     db_path(Path),
     open_directory_store(Path,Triple_Store).
+
+/**
+ * memory_triple_store(-Triple_Store) is det.
+ *
+ * Opens an in-memory triple store.
+ */
+memory_triple_store(Triple_Store) :-
+    open_memory_store(Triple_Store).
 
 :- dynamic global_triple_store_var/1.
 
