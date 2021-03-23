@@ -98,6 +98,7 @@
               local_triple_store/1,
               retract_local_triple_store/1,
               default_triple_store/1,
+              memory_triple_store/1,
               with_triple_store/2,
 
               % turtle_utils.pl
