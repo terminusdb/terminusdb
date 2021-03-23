@@ -21,12 +21,12 @@ const client = new TerminusDB.WOQLClient('https://127.0.0.1:6363', {
 })
 ```
 
-> Make sure to replace the "mykey" value in the connection object with the key you created for your admin user in terminusDB server
+> Make sure to replace the "mykey" value in the connection object with the key you created for your admin user in terminusDB server.
 
 # Create Database
-To create a new db you need to pass the id of the database and the database details
+To create a new db you need to pass the id of the database and the database details.
 
-> Remember to add schema true or you not will be allow to add a schema for your database
+> Remember to add schema true or you not will be allow to add a schema for your database.
 
 ```js
 
@@ -48,7 +48,7 @@ async function createDB() {
 ```
 
 # Create Schema
-We create a simple document.
+We rea creating a simple document.
 
 ```js
 function createSchema() {
@@ -76,7 +76,7 @@ function createSchema() {
 # Understand Branch
 Each Database can have one or more branches, when you create a new TerminusDB it comes with the default branch called **main**. TerminusDB saves each version of your database as a snapshot of the data exactly as it was at the moment you committed it. 
 
-We are working with TerminusDB inserting data in the Databases safely off to one branch, and merging them back into the main Branch.
+We are working with TerminusDB inserting data in the Databases to one branch and merging them back into the main Branch.
 Let’s go through a simple example of branching and merging, you can use this workflow in the real world. Follow these steps:
 
 1. create a new branch
@@ -134,8 +134,8 @@ I this point the main branch is still empty. The **main** branch is the one wher
         return allData
 }
 ```
-Now run all the functions. The main branch will points at the same place of the **tmp_data**
-You can delete the tmp_data branch with the deleteBranch method
+Now run all the functions. The main branch will points at the same place of the **tmp_data**.
+You can delete the tmp_data branch with the deleteBranch method.
 
 ```js
     async function run() {
