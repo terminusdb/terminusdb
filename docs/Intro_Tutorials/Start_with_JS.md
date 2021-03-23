@@ -10,7 +10,7 @@ We assume that you already have created and initialized you [node projects](http
 
 # Connect to your TerminusDB server
 
-For connecting to terminusdb server you need to pass the server url the string includes information on the hostname or IP address and port of your server. The connection params includes all you need for Authentication and db setup, you can find the complete options [here](https://terminusdb.github.io/terminusdb-client-js/#/) 
+For connecting to terminusdb server you need to pass the server url, the string includes information on the hostname or IP address and port of your server. The connection params includes all you need for Authentication and db setup, you can find the complete options [here](https://terminusdb.github.io/terminusdb-client-js/#/) 
 
 ```js
 const TerminusDB = require('@terminusdb/terminusdb-client')
