@@ -682,7 +682,9 @@ run_command(serve,_Positional,Opts) :-
     ;   terminus_server([serve|Opts], true)).
 run_command(list,Databases,_Opts) :-
     super_user_authority(Auth),
-    list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
+    (   Databases = []
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects)
+    ;   list_existing_databases(Databases, Database_Objects)),
     pretty_print_databases(Database_Objects).
 run_command(optimize,Databases,_Opts) :-
     super_user_authority(Auth),

@@ -1,6 +1,7 @@
 :- module(system_entity, [
               database_exists/2,
               database_exists/3,
+              db_uri_organization/3,
               organization_database_name_uri/4,
               organization_name_uri/3,
               organization_name_exists/2,
@@ -25,19 +26,14 @@ database_exists(Organization,DB) :-
 database_exists(Askable, Organization, DB) :-
     organization_database_name_uri(Askable, Organization, DB, _).
 
-% First check if the Db_Uri is ground, if it is ground
-% the following query is much faster
-organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
-    ground(Db_Uri),
-    !,
+db_uri_organization(Askable, Db_Uri, Organization) :-
     once(ask(Askable,
              (
                  t(Organization_Uri, system:resource_includes, Db_Uri),
-                 t(Organization_Uri, system:resource_name, Organization^^xsd:string),
                  t(Organization_Uri, rdf:type, system:'Organization'),
-                 t(Db_Uri, system:resource_name, DB^^xsd:string),
-                 t(Db_Uri, rdf:type, system:'Database')
+                 t(Organization_Uri, system:resource_name, Organization^^xsd:string)
              ))).
+
 organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
     once(ask(Askable,
              (
