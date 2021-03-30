@@ -694,6 +694,15 @@ api_error_jsonld(prefix,error(invalid_absolute_path(Path),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld(prefix,error(database_does_not_exist(Account,Name),_), JSON) :-
+    format(string(Msg), "The database '~w/~w' does not exist.", [Account, Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:DatabaseDoesNotExist',
+                              'api:database_name' : Name,
+                              'api:organization_name' : Account},
+             'api:message' : Msg
+            }.
 api_error_jsonld(user_update,error(user_update_failed_without_error(Name,Document),_),JSON) :-
     atom_json_dict(Atom, Document,[]),
     format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
