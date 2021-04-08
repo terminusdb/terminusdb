@@ -16,14 +16,14 @@ Any language should do for making a client as long as it supports JSON serializa
 
 ## Looking at the JSON-LD documentation
 
-Be sure to check out the JSON-LD [reference documentation](../reference/WOQL_JSON.md). It contains
+Be sure to check out the JSON-LD [reference documentation](https://github.com/terminusdb/terminusdb/blob/master/docs/reference/WOQL_JSON.md). It contains
 the JSON-LD specification that needs to be implemented. Another way to discover the used JSON-LD
 of the queries is by inspecting the console requests when you fire off queries yourself.
 
 ## API Endpoints
 
 A good TerminusDB client should be able to communicate with the various API endpoints that exist in TerminusDB.
-The different API endpoints can be found in [the API reference docs](../reference/API.md).
+The different API endpoints can be found in [the API reference docs](https://github.com/terminusdb/terminusdb/blob/master/docs/reference/API.md).
 
 
 ## Example clients
