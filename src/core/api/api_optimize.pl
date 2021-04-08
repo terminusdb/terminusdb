@@ -167,7 +167,7 @@ exponential_rollup_strategy(Layer) :-
         ;   store_id_layer(Store, Name, This_Layer),
             nth0(Start, Names, Upto_Id),
             store_id_layer(Store, Upto_Id, Upto),
-            rollup_upto(This_Layer, Upto)
+            imprecise_rollup_upto(This_Layer, Upto)
         )
     ).
 
