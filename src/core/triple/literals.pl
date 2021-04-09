@@ -344,8 +344,8 @@ nonvar_literal(Val^^Type, value(S)) :-
     (   is_number_type(Type)
     ->  format(string(S), '~q^^~q', [Val,Type])
     ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_),
-        format(string(S), '~q^^~q', [Cast,Type])
+                 [], Cast^^_)
+    ->  format(string(S), '~q^^~q', [Cast,Type])
     ;   format(string(S), '~q^^~q', [Val,Type])).
 nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),
