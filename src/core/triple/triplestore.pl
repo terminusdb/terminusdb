@@ -285,7 +285,7 @@ xrdf(Gs,X,Y,Z) :-
  */
 xquad(Gs,G,X,Y,Z) :-
     assertion(is_list(Gs)),
-    member(G,Gs),
+    memberchk(G,Gs),
     read_write_obj_reader(G, Layer),
     xrdf_db(Layer,X,Y,Z).
 
