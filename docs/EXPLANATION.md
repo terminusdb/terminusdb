@@ -6,4 +6,4 @@ What matters here is context, explanation, examples built into broader text, sug
 
 We are always trying to improve, so let us know if the content can be better or if you have a contribution.
 
-We use the ['The documentation system'](https://documentation.divio.com/) to organise the TerminusDB docs.
+We use the ['The documentation system'](https://documentation.We use the ['The Diátaxis documentation system'](https://diataxis.fr/) to organise the TerminusDB docs..com/) to organise the TerminusDB docs.

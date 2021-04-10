@@ -8,4 +8,4 @@ We are always trying to improve so let us know if this section could be better. 
 
 There is also a [tutorial repo](https://github.com/terminusdb/terminusdb-tutorials) - check it out for more examples
 
-We use the ['The documentation system'](https://documentation.divio.com/) to organise the TerminusDB docs.
+We use the ['The documentation system'](https://documentation.We use the ['The Diátaxis documentation system'](https://diataxis.fr/) to organise the TerminusDB docs..com/) to organise the TerminusDB docs.
