@@ -819,6 +819,32 @@ api:NotAValidOptimizationDescriptorError
   rdfs:comment "The supplied descriptor is not valid for optimization."@en ;
   rdfs:subClassOf api:WithAbsoluteDescriptor .
 
+api:WithVersion
+  a owl:Class .
+
+api:version
+  a owl:DatatypeProperty ;
+  rdfs:label "version"@en ;
+  rdfs:comment "Points to a label version."@en ;
+  rdfs:domain api:WithVersion ;
+  rdfs:range xsd:decimal .
+
+api:WithLabelName
+  a owl:Class .
+
+api:label_name
+  a owl:DatatypeProperty ;
+  rdfs:label "label name"@en ;
+  rdfs:comment "Points to a label name."@en ;
+  rdfs:domain api:WithLabelName ;
+  rdfs:range xsd:string .
+
+api:LabelVersionChanged
+  a owl:Class ;
+  rdfs:label "Label version changed"@en ;
+  rdfs:comment "The label version changed while attempting to optimize"@en ;
+  rdfs:subClassOf api:WithVersion, api:WithLabelName .
+
 api:NotLocalRepositoryError
   a owl:Class ;
   rdfs:label "Not A Local Repository Error"@en ;

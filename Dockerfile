@@ -1,4 +1,4 @@
-FROM terminusdb/terminus_store_prolog:v0.17.0
+FROM terminusdb/terminus_store_prolog:v0.18.1
 ENV TUS_VERSION v0.0.5
 WORKDIR /app/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
@@ -8,7 +8,7 @@ RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config
         && swipl -g "pack_install('file:///app/pack/jwt_io', [interactive(false)])" \
         && swipl -g "pack_install('file:///app/pack/tus', [interactive(false)])"
 
-FROM terminusdb/terminus_store_prolog:v0.17.0
+FROM terminusdb/terminus_store_prolog:v0.18.1
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/ /usr/share/swi-prolog/pack

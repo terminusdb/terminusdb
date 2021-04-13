@@ -857,6 +857,16 @@ api_error_jsonld(optimize,error(not_a_valid_descriptor_for_optimization(Descript
              'api:error' : _{ '@type' : "api:NotAValidOptimizationDescriptorError",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld(optimize,error(label_version_changed(Name,Version),_), JSON) :-
+    format(string(Msg), "The label ~q to be optimized has moved since loaded as version ~q",
+           [Name,Version]),
+    JSON = _{'@type' : 'api:OptimizeErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:LabelVersionChanged',
+                              'api:version' : Version,
+                              'api:label_name' : Name},
+             'api:message' : Msg
+            }.
 api_error_jsonld(store_init,error(storage_already_exists(Path),_),JSON) :-
     format(string(Msg), "There is already a database initialized at path ~s", [Path]),
     JSON = _{'@type' : 'api:StoreInitErrorResponse',
