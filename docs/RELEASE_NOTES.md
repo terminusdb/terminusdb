@@ -5,6 +5,7 @@
 + Coverage of all xsd types in casting, JSON-LD and storage
 + TypeOf now allows you to get the type of languages or nodes (as 'owl:Thing')
 + Expose internal RandomIdgen for generating unique URIs
++ New startup flag (--memory) to start TerminusDB in memory mode, without persistent storage
 
 ## Bug fixes
 

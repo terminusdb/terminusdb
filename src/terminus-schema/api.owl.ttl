@@ -231,6 +231,13 @@ api:UnknownOrganization
 api:WithDatabaseName
   a owl:Class .
 
+api:database_name
+  a owl:DatatypeProperty ;
+  rdfs:label "database name"@en ;
+  rdfs:comment "Points to the database name."@en ;
+  rdfs:domain api:WithDatabaseName ;
+  rdfs:range xsd:string .
+
 api:DatabaseAlreadyExists
   a owl:Class ;
   rdfs:label "Database Already Exists"@en ;
