@@ -89,7 +89,13 @@ opt_spec(list,'terminusdb list OPTIONS',
            shortflags([h]),
            longflags([help]),
            default(false),
-           help('print help for the `list` command')]]).
+           help('print help for the `list` command')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON as the result of the `list` command')]]).
 opt_spec(optimize,'terminusdb optimize OPTIONS',
          'Optimize a database (including _system and _meta).',
          [[opt(help),
@@ -680,12 +686,16 @@ run_command(serve,_Positional,Opts) :-
     ->  terminus_server([serve|Opts], false),
         prolog
     ;   terminus_server([serve|Opts], true)).
-run_command(list,Databases,_Opts) :-
+run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
     (   Databases = []
     ->  list_databases(system_descriptor{}, Auth, Database_Objects)
-    ;   list_existing_databases(Databases, Database_Objects)),
-    pretty_print_databases(Database_Objects).
+    ;   list_existing_databases(Databases, Database_Objects)
+    ),
+    (   option(json(true), Opts)
+    ->  json_write_dict(current_output, Database_Objects)
+    ;   pretty_print_databases(Database_Objects)
+    ).
 run_command(optimize,Databases,_Opts) :-
     super_user_authority(Auth),
     api_report_errors(
