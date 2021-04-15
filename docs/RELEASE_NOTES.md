@@ -6,12 +6,17 @@
 + TypeOf now allows you to get the type of languages or nodes (as 'owl:Thing')
 + Expose internal RandomIdgen for generating unique URIs
 + New startup flag (--memory) to start TerminusDB in memory mode, without persistent storage
++ Optimized database listing, added JSON output in command line
++ Added memory only mode for non-persistent TerminusDB instances
 
 ## Bug fixes
 
 + Improved robustness of casting.
 + Fix round-trip of dates and integers in Turtle
 + Throw error if no csv of the given name exists when using get_csv
++ Correct super-user permission scoping for various actions
++ Correct race condition in optimize for system graph and meta graph
++ Add imprecise rollups to avoid crash on poorly specified boundaries
 
 # TerminusDB Server v4.2.0 Release Notes
 
