@@ -106,6 +106,9 @@ username_auth(DB, Username, User_ID) :-
  *
  * This needs to implement some of the logical character of scope subsumption.
  */
+auth_action_scope(_, Auth, _, _) :-
+    is_super_user(Auth),
+    !.
 auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ground(Auth),
     ask(DB,
@@ -386,3 +389,24 @@ check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
 
 check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
     check_descriptor_auth_(Descriptor, Action, Auth, System_DB).
+
+
+:- begin_tests(capabilities).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(account/user_management)).
+
+test(admin_has_access_to_all_dbs, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    super_user_authority(Auth),
+    resolve_absolute_string_descriptor("Gavin/test1", GavinTestDB),
+    check_descriptor_auth(system_descriptor{}, GavinTestDB, system:meta_write_access, Auth),
+    check_descriptor_auth(system_descriptor{}, GavinTestDB, system:commit_write_access, Auth).
+
+:- end_tests(capabilities).
