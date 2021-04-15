@@ -157,7 +157,7 @@ write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
 
 is_super_user(Auth) :-
-    is_super_user(Auth, {doc : 'terminusdb:///system/data/'}).
+    is_super_user(Auth, _{ doc : 'terminusdb:///system/data/' }).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
