@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1618327173243,
+  "lastUpdate": 1618475119218,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -2481,6 +2481,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.02131596665067797",
             "extra": "mean: 62.52154426666341 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "rrooij@users.noreply.github.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff83cc1389ffef46639f187abc746d998e9ca5cc",
+          "message": "Fix admin not having access to other databases (#307)\n\nThe permission checking was too strict. If any other use makes a\r\nDB, the admin does not have write access. Now it checks whether\r\nyou are actually admin.",
+          "timestamp": "2021-04-15T10:23:56+02:00",
+          "tree_id": "830ca69446ca8af5153f03b73af757d91b0af5d4",
+          "url": "https://github.com/terminusdb/terminusdb/commit/ff83cc1389ffef46639f187abc746d998e9ca5cc"
+        },
+        "date": 1618475118284,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 8.803757394824627,
+            "unit": "iter/sec",
+            "range": "stddev: 0.011763202318765913",
+            "extra": "mean: 113.58786426666636 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 8.79368257200967,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0037338532377296373",
+            "extra": "mean: 113.71800059999941 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 18.653072827816494,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01680410606204791",
+            "extra": "mean: 53.61046993333692 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 18.548240161303635,
+            "unit": "iter/sec",
+            "range": "stddev: 0.017878084052100944",
+            "extra": "mean: 53.91347056667163 msec\nrounds: 30"
           }
         ]
       }
