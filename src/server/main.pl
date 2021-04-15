@@ -12,6 +12,7 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
+:- use_module(core(api)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[]).
