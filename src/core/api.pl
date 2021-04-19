@@ -88,7 +88,8 @@
               get_prefixes/4,
 
               % api_db
-              list_databases/4,
+              list_databases/3,
+              list_existing_databases/2,
               pretty_print_databases/1,
 
               % api_error.pl

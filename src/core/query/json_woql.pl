@@ -61,7 +61,9 @@ json_woql(JSON,Ctx,WOQL) :-
 deindex_list(Key,List,Flatten) :-
     maplist({Key}/[Elt,Sub_Elt]>>(
                 get_dict(Key, Elt, Sub_Elt)
-            ), List, Flatten).
+            ), List, Flatten),
+    !.
+deindex_list(_Key,List,List). % maybe the list is already flattened?
 
 /*
  * json_to_woql_ast(+JSON:dict,-AST:any) is det.
@@ -71,15 +73,27 @@ deindex_list(Key,List,Flatten) :-
 json_to_woql_ast(JSON,WOQL,Path) :-
     is_dict(JSON),
     !,
-    (   _{'@type' : Type} :< JSON,
+    (   _{'@value' : V, '@type' : T } :< JSON
+    ->  atom_string(TE,T),
+        (   string(V)
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
+                     TE, [], Val)
+        ;   atom(V),
+            atom_string(V,String)
+        ->  typecast(String^^'http://www.w3.org/2001/XMLSchema#string',
+                     TE, [], Val)
+        ;   number(V)
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#decimal',
+                     TE, [], Val)
+        ;   member(V,[false,true])
+        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#boolean',
+                     TE, [], Val)
+        ;   throw(error(null_unsupported, JSON))
+        ),
+        WOQL = Val
+    ;   _{'@type' : Type} :< JSON,
         json_type_to_woql_ast(Type,JSON,WOQL,Path)
     ->  true
-    ;   _{'@value' : V, '@type' : T } :< JSON
-    ->  atom_string(TE,T),
-        % Marshall to appropriate datatype
-        once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
-                      TE, [], Val)),
-        WOQL = Val
     ;   _{'@value' : V, '@language' : L } :< JSON
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
@@ -116,6 +130,11 @@ json_to_woql_ast(JSON,WOQL,_Path) :-
     number(JSON),
     !,
     WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#decimal').
+json_to_woql_ast(JSON,WOQL,_Path) :-
+    atom(JSON),
+    memberchk(JSON,[true,false]),
+    !,
+    WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#boolean').
 json_to_woql_ast(JSON,WOQL,_Path) :-
     coerce_atom(JSON,WOQL),
     !.
@@ -687,6 +706,18 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#IDGenerator',JSON,WOQL,
     json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
                                |Path]),
     WOQL = idgen(WBase,WKey,WURI).
+json_type_to_woql_ast('http://terminusdb.com/schema/woql#RandomIDGenerator',JSON,WOQL,Path) :-
+    _{'http://terminusdb.com/schema/woql#base' : Base,
+      'http://terminusdb.com/schema/woql#key_list' : Key,
+      'http://terminusdb.com/schema/woql#uri' : URI
+     } :< JSON,
+    json_to_woql_ast(Base,WBase,['http://terminusdb.com/schema/woql#base'
+                                 |Path]),
+    json_to_woql_ast(Key,WKey,['http://terminusdb.com/schema/woql#key_list'
+                               |Path]),
+    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
+                               |Path]),
+    WOQL = random_idgen(WBase,WKey,WURI).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#Upper',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#left' :  S,
       'http://terminusdb.com/schema/woql#right' : V
@@ -989,6 +1020,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path)
     json_to_woql_ast(Type,WOQL_Type,
                      ['http://terminusdb.com/schema/woql#type'
                       |Path]),
+
     WOQL = typeof(WOQL_Value,WOQL_Type).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
@@ -1388,5 +1420,415 @@ test(id_simplification_2, []) :-
     WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
                  ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
                  v('Journey_ID')).
-
 :- end_tests(woql_jsonld).
+
+:- begin_tests(jsonld_ast).
+
+test(anySimpleType, []) :-
+
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "Something",
+                                          "@type": "xsd:anySimpleType"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, _WOQL).
+
+test(string, []) :-
+
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "Something",
+                                          "@type": "xsd:string"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')="Something"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(boolean_true, []) :-
+
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "true",
+                                          "@type": "xsd:boolean"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
+
+test(boolean_true_concrete, []) :-
+
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": true,
+                                          "@type": "xsd:boolean"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
+
+test(boolean_true_bare, []) :-
+
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": true}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
+
+
+test(decimal_bare, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": 1.3}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+
+test(decimal_typed, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 1.3,
+                                          "@type": "xsd:decimal"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+
+test(decimal, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "1.3",
+                                          "@type": "xsd:decimal"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+
+test(date, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "1066-09-18",
+                                          "@type": "xsd:date"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=date(1066,9,18,Z)^^'http://www.w3.org/2001/XMLSchema#date'),
+    Z == 0.
+
+test(time, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "15:29:44",
+                                          "@type": "xsd:time"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=time(15,29,44)^^'http://www.w3.org/2001/XMLSchema#time').
+
+test(dateTime, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004-04-12T13:20:00",
+                                          "@type": "xsd:dateTime"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+
+    WOQL = (v('X')=date_time(2004,04,12,13,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
+
+test(dateTimeStamp, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004-04-12T13:20:00-05:00",
+                                          "@type": "xsd:dateTimeStamp"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=date_time(2004,4,12,8,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
+
+test(gyear, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004",
+                                          "@type": "xsd:gYear"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear(2004,Z)^^'http://www.w3.org/2001/XMLSchema#gYear'),
+    Z == 0.
+
+test(gyear_range, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "[2004,2014]",
+                                          "@type": "xdd:gYearRange"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear_range(gyear(2004,Z),gyear(2014,Z))^^'http://terminusdb.com/schema/xdd#gYearRange'),
+    Z == 0.
+
+test(gyear_int, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 2004,
+                                          "@type": "xsd:gYear"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear(2004,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear').
+
+test(gyear_month, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "2004-12",
+                                          "@type": "xsd:gYearMonth"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gyear_month(2004,12,Z)^^'http://www.w3.org/2001/XMLSchema#gYearMonth'),
+    Z == 0.
+
+test(gmonth, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "--12",
+                                          "@type": "xsd:gMonth"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gmonth(12,Z)^^'http://www.w3.org/2001/XMLSchema#gMonth'),
+    Z == 0.
+
+test(gmonth_day, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "-05-24",
+                                          "@type": "xsd:gMonthDay"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gmonth_day(5,24,Z)^^'http://www.w3.org/2001/XMLSchema#gMonthDay'),
+    Z == 0.
+
+test(gday, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "---24",
+                                          "@type": "xsd:gDay"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=gday(24,Z)^^'http://www.w3.org/2001/XMLSchema#gDay'),
+    Z == 0.
+
+test(byte, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:byte"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#byte').
+
+test(short, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:short"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#short').
+
+test(integer, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:integer"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#integer').
+
+test(long, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:long"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#long').
+
+test(unsignedByte, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:unsignedByte"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedByte').
+
+test(unsignedShort, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:unsignedShort"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedShort').
+
+test(unsignedInt, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:unsignedInt"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedInt').
+
+test(unsignedLong, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:unsignedLong"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedLong').
+
+test(positiveInteger, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:positiveInteger"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#positiveInteger').
+
+test(nonNegativeInteger, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": 120,
+                                          "@type": "xsd:nonNegativeInteger"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
+
+test(negativeInteger, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": -120,
+                                          "@type": "xsd:negativeInteger"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=(-120)^^'http://www.w3.org/2001/XMLSchema#negativeInteger').
+
+test(nonPositiveInteger, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": -120,
+                                          "@type": "xsd:nonPositiveInteger"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')=(-120)^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
+
+test(hexBinary, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "a03bc23",
+                                          "@type": "xsd:hexBinary"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')="a03bc23"^^'http://www.w3.org/2001/XMLSchema#hexBinary').
+
+test(base64binary, []) :-
+    JSON_Atom= '{"@type": "Equals",
+                 "left": { "@type": "Variable",
+                           "variable_name": "X"},
+                 "right": { "@type": "Datatype",
+                            "datatype": { "@value": "YXNkZg==",
+                                          "@type": "xsd:base64Binary"}}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    woql_context(Prefixes),
+    json_woql(JSON, Prefixes, WOQL),
+    WOQL = (v('X')="YXNkZg=="^^'http://www.w3.org/2001/XMLSchema#base64Binary').
+
+:- end_tests(jsonld_ast).

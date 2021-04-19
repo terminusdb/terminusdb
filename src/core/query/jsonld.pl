@@ -350,20 +350,6 @@ compress_aux(JSON,_Ctx_Pairs,JSON) :-
 compress_aux(JSON,_Ctx_Pairs,JSON) :-
     number(JSON),
     !.
-compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
-compress_aux(date(Y, M, D),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
-compress_aux(date(Y,M,D,HH,MM,SS,_Z,_ZH,_ZM),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
-           [Y,M,D,HH,MM,SS]).
-compress_aux(date_time(Y,M,D,HH,MM,SS),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
-           [Y,M,D,HH,MM,SS]).
-compress_aux(month_day(M,D),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~2+-~|~`0t~d~2+', [M,D]).
-compress_aux(year_month(Y,M),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+', [Y,M]).
 
 :- begin_tests(jsonld_compress).
 :- use_module(core(util/test_utils)).
@@ -383,39 +369,16 @@ test(compress_prefix, [])
 
 :- end_tests(jsonld_compress).
 
-
-/*
-
-date(2017, 9, 29, 0, 0, 0, 0, 0, 0)
-
-date(Y,M,D)
-xsd:dateTime	date_time(Y,M,D,HH,MM,SS) (2,3)
-xsd:gDay	integer
-xsd:gMonth	integer
-xsd:gMonthDay	month_day(M,D)
-xsd:gYear	integer
-xsd:gYearMonth	year_month(Y,M)
-
-compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
-compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
-compress_aux(time(H, M, S),_Ctx_Pairs, Atom) :-
-    format(atom(Atom),'~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+', [H,M,S]).
-*/
-
 /*
  * term_jsonld(Term,JSON) is det.
  *
  * expand a prolog internal json representation to dicts.
  */
-term_jsonld(date(Y, M, D, HH, MM, SS, _Z, _ZH, _ZM)^^'http://www.w3.org/2001/XMLSchema#dateTime',
-            _{'@type' : 'http://www.w3.org/2001/XMLSchema#dateTime', '@value' : Atom}) :-
-    !,
-    % Really should put the time zone in properly.
-    format(atom(Atom),'~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+',
-           [Y,M,D,HH,MM,SS]).
-term_jsonld(D^^T,_{'@type' : T, '@value' : D}) :-
+term_jsonld(D^^T,_{'@type' : T, '@value' : V}) :-
+    (   compound(D)
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   D=V),
     !.
 term_jsonld(D@L,_{'@language' : L, '@value' : D}) :-
     !.

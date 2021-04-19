@@ -104,6 +104,23 @@ api_error_jsonld(csv,error(unresolvable_absolute_descriptor(Descriptor),_), JSON
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg}.
+api_error_jsonld(csv,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON) :-
+    term_string(Term,String),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
+    JSON = _{'@type' : 'api:CSVErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                              'api:error_term' : String},
+             'api:message' : Msg
+            }.
+api_error_jsonld(csv,error(no_known_csv(Name),_), JSON) :-
+    format(string(Msg), "No csv named: ~q", [Name]),
+    JSON = _{'@type' : 'api:CSVErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NoKnownCSVError',
+                              'api:error_term' : Name},
+             'api:message' : Msg
+            }.
 % Triples
 api_error_jsonld(triples,error(unknown_format(Format), _), JSON) :-
     format(string(Msg), "Unrecognized format: ~q", [Format]),
@@ -185,6 +202,15 @@ api_error_jsonld(frame,error(unresolvable_collection(Descriptor),_), JSON) :-
              'api:status' : 'api:not_found',
              'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                               'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_error_jsonld(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON) :-
+    term_string(Term,String),
+    format(string(Msg), "Badly formed ast after compilation with term: ~q", [Term]),
+    JSON = _{'@type' : 'api:FrameErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:WOQLSyntaxError',
+                              'api:error_term' : String},
              'api:message' : Msg
             }.
 api_error_jsonld(woql,error(casting_error(Val,Type),_), JSON) :-
@@ -668,6 +694,15 @@ api_error_jsonld(prefix,error(invalid_absolute_path(Path),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld(prefix,error(database_does_not_exist(Account,Name),_), JSON) :-
+    format(string(Msg), "The database '~w/~w' does not exist.", [Account, Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:DatabaseDoesNotExist',
+                              'api:database_name' : Name,
+                              'api:organization_name' : Account},
+             'api:message' : Msg
+            }.
 api_error_jsonld(user_update,error(user_update_failed_without_error(Name,Document),_),JSON) :-
     atom_json_dict(Atom, Document,[]),
     format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
@@ -821,6 +856,16 @@ api_error_jsonld(optimize,error(not_a_valid_descriptor_for_optimization(Descript
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NotAValidOptimizationDescriptorError",
                               'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld(optimize,error(label_version_changed(Name,Version),_), JSON) :-
+    format(string(Msg), "The label ~q to be optimized has moved since loaded as version ~q",
+           [Name,Version]),
+    JSON = _{'@type' : 'api:OptimizeErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:LabelVersionChanged',
+                              'api:version' : Version,
+                              'api:label_name' : Name},
+             'api:message' : Msg
             }.
 api_error_jsonld(store_init,error(storage_already_exists(Path),_),JSON) :-
     format(string(Msg), "There is already a database initialized at path ~s", [Path]),
@@ -990,6 +1035,7 @@ generic_exception_jsonld(type_error(T,O),JSON) :-
     format(atom(OA), '~q', [O]),
     format(atom(TA), '~q', [T]),
     JSON = _{'api:status' : 'api:failure',
+             'api:message' : M,
              'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                      'vio:message' : M,
                                      'vio:type' : TA,

@@ -1459,8 +1459,9 @@ test(woql_object, [
                         inserts:10,
                         transaction_retry_count:0},
 
-    Get_Query = '{"@type": "woql:ReadObject", "woql:document_uri" : "doc:Triple_b975f26907b64367c87013ff3f772286", "woql:document": {"@type": "woql:Variable", "woql:variable_name": {"@value": "X", "@type": "xsd:string"}}}',
+    Get_Query = '{"@type": "woql:ReadObject", "woql:document_uri" : "doc:Triple_b9f84f0ddf5428d6e83ec2e152bf8512", "woql:document": {"@type": "woql:Variable", "woql:variable_name": {"@value": "X", "@type": "xsd:string"}}}',
     atom_json_dict(Get_Query, Get_JSON, []),
+
     woql_query_json(system_descriptor{}, Auth, some("admin/woql"), Get_JSON,
                     _{author : me, message: yo},
                     [],
@@ -1468,7 +1469,6 @@ test(woql_object, [
                     Get_Response),
 
     [Binding] = (Get_Response.bindings),
-
     /* Assigning this to a variable, and then comparing will
        not yeild the same failing behaviour. Neither will
        checking with dictionary subsumption. */

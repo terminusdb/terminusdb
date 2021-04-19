@@ -17,7 +17,7 @@ on:
   pull_request:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.16.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.18.1
   TUS_VERSION: v0.0.5
 
 jobs:
@@ -124,6 +124,7 @@ jobs:
         path: terminusdb*.rpm
 
     - name: Upload to bintray repo
+      if: github.event_name != 'pull_request'
       run: |
           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
@@ -164,7 +165,12 @@ jobs:
         cd distribution/appimage
         wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
         chmod +x linuxdeploy-x86_64.AppImage
-        ./build_script.sh "$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')" "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
+        if [[ $(echo "${{ github.ref }}" | grep "refs/pull") ]]; then
+           BRANCH=$(echo "${{ github.base_ref }}" | sed -e 's,.*/\(.*\),\1,')
+        else
+           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        fi
+        ./build_script.sh "$BRANCH" "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
         mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
     - name: Run AppImage tests
@@ -323,7 +329,11 @@ jobs:
 
     - name: Install terminusdb-store-prolog
       run: |
-        TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        if [[ $(echo "${{ github.ref }}" | grep "refs/pull") ]]; then
+           TAG=$(echo "${{ github.base_ref }}" | sed -e 's,.*/\(.*\),\1,')
+        else
+           TAG=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+        fi
         bash ../mac/install_dependencies.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TAG" "$TUS_VERSION"
 
     - name: Cache SWI Prolog on Mac

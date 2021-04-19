@@ -19,8 +19,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(util)).
-:- use_module(core(triple)).
-
 :- use_module(library(pcre)).
 
 resolve_string_descriptor(Default_Descriptor, String, Descriptor) :-

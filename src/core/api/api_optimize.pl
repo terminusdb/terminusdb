@@ -32,31 +32,25 @@ api_optimize(SystemDB, Auth, Path) :-
 
     descriptor_optimize(Descriptor).
 
-descriptor_optimize(system_descriptor{}) :-
-    open_descriptor(system_descriptor{}, Transaction_Object),
-    [Instance] = (Transaction_Object.instance_objects),
-    Layer = (Instance.read),
-    squash(Layer,New_Layer),
+named_graph_optimize(Graph_Name) :-
     storage(Store),
+    safe_open_named_graph(Store,Graph_Name,Graph),
+    (   head(Graph, Layer, Version)
+    ->  squash(Layer,New_Layer),
+        do_or_die(
+            nb_force_set_head(Graph,New_Layer,Version),
+            error(label_version_changed(Graph_Name,Version),_))
+    ;   true).
+
+descriptor_optimize(system_descriptor{}) :-
     system_instance_name(Graph_Name),
-    safe_open_named_graph(Store, Graph_Name, Graph),
-    nb_force_set_head(Graph,New_Layer).
+    named_graph_optimize(Graph_Name).
 descriptor_optimize(database_descriptor{
                         organization_name : Organization_Name,
                         database_name : Database_Name
                     }) :-
-    Descriptor = database_descriptor{
-                     organization_name : Organization_Name,
-                     database_name : Database_Name
-                 },
-    open_descriptor(Descriptor, Transaction_Object),
-    [Instance] = (Transaction_Object.instance_objects),
-    Layer = (Instance.read),
-    squash(Layer,New_Layer),
-    storage(Store),
     organization_database_name(Organization_Name,Database_Name,Composite),
-    safe_open_named_graph(Store, Composite, Graph),
-    nb_force_set_head(Graph,New_Layer).
+    named_graph_optimize(Composite).
 descriptor_optimize(repository_descriptor{
                         database_descriptor : Database_Descriptor,
                         repository_name : Repository_Name
@@ -167,7 +161,7 @@ exponential_rollup_strategy(Layer) :-
         ;   store_id_layer(Store, Name, This_Layer),
             nth0(Start, Names, Upto_Id),
             store_id_layer(Store, Upto_Id, Upto),
-            rollup_upto(This_Layer, Upto)
+            imprecise_rollup_upto(This_Layer, Upto)
         )
     ).
 

@@ -236,6 +236,9 @@ csv_dump(System_DB, Auth, Path, Name, Filename, Options) :-
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),
 
     csv_columns(Name, Context, Columns),
+    (   Columns = []
+    ->  throw(error(no_known_csv(Name),_))
+    ;   true),
     % collect header predicates
 
     % write headers

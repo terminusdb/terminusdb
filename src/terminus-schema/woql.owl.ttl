@@ -903,6 +903,12 @@ woql:IDGenerator
   rdfs:label "ID Gen"@en ;
   rdfs:comment "A reversible unique identifier generated from a Base and a Key"@en .
 
+woql:RandomIDGenerator
+  a owl:Class ;
+  rdfs:subClassOf woql:URIGenerator ;
+  rdfs:label "Random ID Gen"@en ;
+  rdfs:comment "A unique identifier generated from a Base and a Key with a *large* random nonce"@en .
+
 woql:Upper
   a owl:Class ;
   rdfs:subClassOf woql:BinaryOperator ;

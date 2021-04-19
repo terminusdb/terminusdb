@@ -6,6 +6,7 @@
   "rdfs" : "http://www.w3.org/2000/01/rdf-schema#",
   "owl" : "http://www.w3.org/2002/07/owl#",
   "xsd" : "http://www.w3.org/2001/XMLSchema#",
+  "xdd" : "http://terminusdb.com/schema/xdd#",
   "v" : "http://terminusdb.com/schema/woql/variable/",
   "system" : "http://terminusdb.com/schema/system#",
   "query_list" : {"@type" : "@id"},

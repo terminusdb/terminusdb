@@ -234,6 +234,8 @@ resolve_prefix(Pre,Suf,URI) -->
     ;   {atomic_list_concat([Full_Prefix,Suf],URI)}
     ).
 
+is_boolean_type('http://www.w3.org/2001/XMLSchema#boolean').
+
 /*
  * resolve(ID,Resolution, S0, S1) is det.
  *
@@ -270,7 +272,8 @@ resolve(X^^T,Lit) -->
     resolve(T,TE),
     {
         (   ground(XE)
-        ->  (   atom(XE)
+        ->  (   atom(XE),
+                \+ is_boolean_type(TE)
             ->  atom_string(XE,XS)
             ;   XE=XS),
             Lit = XS^^TE
@@ -285,22 +288,26 @@ resolve(L,Le) -->
     mapm(resolve,L,Le).
 resolve(X,X) -->
     {
-        string(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        atom(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        number(X)
-    },
-    !.
-resolve(X,X) -->
-    {
-        is_date(X)
+        once((   string(X)
+             ;   atom(X)
+             ;   number(X)
+             ;   is_date(X)
+             ;   is_time(X)
+             ;   is_date_time(X)
+             ;   is_gyear(X)
+             ;   is_gyear_month(X)
+             ;   is_gmonth(X)
+             ;   is_gmonth_day(X)
+             ;   is_gday(X)
+             ;   is_boolean(X)
+             ;   is_duration(X)
+             ;   is_gyear_range(X)
+             ;   is_date_range(X)
+             ;   is_integer_range(X)
+             ;   is_decimal_range(X)
+             ;   is_point(X)
+             ;   is_coordinate_polygon(X)
+             ))
     },
     !.
 resolve(X,X) -->
@@ -1105,7 +1112,7 @@ compile_wf((A,B),(ProgA,ProgB)) -->
     {
         debug(terminus(woql_compile(compile_wf)), 'Conjunctive Program: ~q',[(ProgA,ProgB)])
     }.
-compile_wf(when(A,B),(ProgA,ProgB)) --> % forall(ProgA, ProgB)
+compile_wf(when(A,B),((ProgA, ProgB) ; true)) --> % forall(ProgA, ProgB)
     compile_wf(A,ProgA),
     compile_wf(B,ProgB).
 compile_wf(select(VL,P), Prog) -->
@@ -1462,13 +1469,10 @@ typeof(X,T) :-
 typeof(X,T) :-
     var(X),
     !,
-    (   T = 'http://www.w3.org/2002/07/owl#Thing'
-    ->  when(nonvar(X), atom(X))
-    ;   base_type(T)
-    ->  when(nonvar(X),
-             X = _^^T)
-    ;   X = _@T).
-typeof(_@T,T) :-
+    when(nonvar(X),
+         typeof(X,T)).
+typeof(_@T,S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom_string(T,S),
     !.
 typeof(_^^T,T) :-
     !.
@@ -1849,7 +1853,7 @@ test(substring, [
                           datatype : _{'@type' : "xsd:string",
                                        '@value' : "Test"}},
               before : _{ '@type' : "Datatype",
-                          datatype : _{'@type' : "xsd:string",
+                          datatype : _{'@type' : "xsd:integer",
                                        '@value' : 1}},
               length : _{'@type' : "Variable",
                          variable_name :
@@ -2552,7 +2556,7 @@ test(order_by, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 10}}},
                           _{'@type' : "QueryListElement",
                             index : _{'@type' : "xsd:integer",
@@ -2562,13 +2566,14 @@ test(order_by, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 20}}}]}},
 
     query_test_response_test_branch(Query, JSON),
-    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':10}},
-                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':20}}].
 
 test(order_by_desc, [
@@ -2596,7 +2601,7 @@ test(order_by_desc, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 10}}},
                           _{'@type' : "QueryListElement",
                             index : _{'@type' : "xsd:integer",
@@ -2606,13 +2611,13 @@ test(order_by_desc, [
                                                 variable_name :
                                                 _{'@type' : "xsd:string",
                                                   '@value' : "X"}},
-                                       right : _{'@type' : "xsd:string",
+                                       right : _{'@type' : "xsd:integer",
                                                  '@value' : 20}}}]}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+    JSON.bindings = [_{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':20}},
-                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                     _{'X':_{'@type':'http://www.w3.org/2001/XMLSchema#integer',
                              '@value':10}}].
 
 
@@ -3592,6 +3597,39 @@ test(ast_when_test, [
 
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
 
+test(ast_when_update, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, p, c),
+                      insert(a, q, c),
+                      insert(a, r, e))),
+        _Meta_Data1
+    ),
+
+    create_context(Descriptor, Commit_Info, Context2),
+
+    AST = ((   v('P') = p
+           ;   v('P') = q),
+           when(t(a,v('P'),v('X')),
+                (   delete(a, v('P'), v('X')),
+                    insert(a, v('P'), g)))),
+
+    query_response:run_context_ast_jsonld_response(Context2, AST, _JSON),
+
+    findall(t(X,P,Y),
+            ask(Descriptor, t(X, P, Y)),
+            Triples),
+
+    Triples = [t(a,p,g),t(a,q,g),t(a,r,e)].
+
 
 test(get_put, [
          setup((setup_temp_store(State),
@@ -4064,6 +4102,10 @@ test(date_marshall, [
                                            message : "testing"}, Context),
 
     query_response:run_context_ast_jsonld_response(Context, AST, Response),
+    [_{'Start date':
+       _{'@type':'http://www.w3.org/2001/XMLSchema#dateTime',
+         '@value':"2018-12-01T00:00:44.000Z"}}
+     |_] = Response.bindings,
     length(Response.bindings, 49).
 
 test(into_absolute_descriptor, [
@@ -4646,7 +4688,7 @@ test(literal_datetime, [
                 'woql:right': _{
                                   '@type': "woql:Datatype",
                                   'woql:datatype': _{
-                                                       '@value': "2021-02-23T21:12:58",
+                                                       '@value': "2021-02-23T21:12:58Z",
                                                        '@type': "xsd:dateTime"
                                                    }
                               }
@@ -4655,5 +4697,399 @@ test(literal_datetime, [
     query_test_response(system_descriptor{}, Query, _JSON),
     !.
 
+test(language_en_variable, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type': "woql:Triple",
+               'woql:subject':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "s",
+                     '@type': "xsd:string"
+                   }
+                },
+               'woql:predicate':
+               _{ '@type': "woql:Node",
+                  'woql:node': "scm:title"
+                },
+               'woql:object':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "title",
+                     '@language' : "en"
+                     %'@type': "xsd:string"
+                   }
+                }
+             },
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, c),
+                insert(d, scm:title, f))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    !,
+    forall(member(Elt,(JSON.bindings)),
+           member(Elt, [_{s:a,title:c},_{s:d,title:f}])).
+
+test(language_en_variable, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type': "woql:Triple",
+               'woql:subject':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "s",
+                     '@type': "xsd:string"
+                   }
+                },
+               'woql:predicate':
+               _{ '@type': "woql:Node",
+                  'woql:node': "scm:title"
+                },
+               'woql:object':
+               _{ '@type': "woql:Variable",
+                  'woql:variable_name':
+                  _{ '@value': "title",
+                     '@language' : "en"
+                     %'@type': "xsd:string"
+                   }
+                }
+             },
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, "asdf"@en),
+                insert(d, scm:title, "fdsa"@fr))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    !,
+    Bindings = (JSON.bindings),
+
+    forall(member(Elt, Bindings),
+           member(Elt, [_{s:a,title: _{'@language' : en, '@value' : "asdf"}},_{s:d,title: _{'@language' : fr, '@value' : "fdsa"}}])).
+
+
+test(and_type, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    And_Type = '{ "@type": "woql:And",
+  "woql:query_list": [
+   {"@type": "woql:Triple",
+    "woql:subject": {
+      "@type": "woql:Variable",
+      "woql:variable_name": "X"},
+    "woql:predicate": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "P"
+        },
+    "woql:object": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "Z"
+        }
+      },
+    { "@type": "woql:TypeOf",
+      "woql:value": {
+          "@type": "woql:Variable",
+          "woql:variable_name": "Z"
+        },
+      "woql:type": {
+          "@type": "xsd:string",
+          "@value": "en"
+        }
+    }]}',
+    atom_json_dict(And_Type, Query, []),
+
+    resolve_absolute_string_descriptor("admin/db", Descriptor),
+
+    create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+    with_transaction(
+        Context,
+        ask(Context,
+            (   insert(a, scm:title, "asdf"@en),
+                insert(d, scm:title, "fdsa"@fr))),
+        _),
+
+    query_test_response(Descriptor, Query, JSON),
+    [Binding] = (JSON.bindings),
+    "asdf" = (Binding.'Z'.'@value').
+
+
+
+test(gyear_cast, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Typecast = '{
+  "@type": "woql:Typecast",
+  "woql:typecast_value": {
+    "@type": "woql:Datatype",
+    "woql:datatype": {
+      "@type": "xsd:string",
+      "@value": "1999"
+    }
+  },
+  "woql:typecast_type": {
+    "@type": "woql:Node",
+    "woql:node": "xsd:gYear"
+  },
+  "woql:typecast_result": {
+    "@type": "woql:Variable",
+    "woql:variable_name": {
+      "@value": "V",
+      "@type": "xsd:string"
+    }
+  }
+}',
+
+    atom_json_dict(Typecast, Query, []),
+
+    query_test_response(system_descriptor{}, Query, JSON),
+    [Binding] = (JSON.bindings),
+    Binding = _{'V':_{'@type':'http://www.w3.org/2001/XMLSchema#gYear',
+                      '@value':"1999"}}.
 
 :- end_tests(woql).
+
+:- begin_tests(store_load_data).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(library(terminus_store)).
+
+store_get_lit(Data, Literal) :-
+    setup_call_cleanup(
+        (   setup_temp_store(State),
+            create_db_without_schema(admin, test)),
+        (
+            resolve_absolute_string_descriptor("admin/test", Descriptor),
+            create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+            with_transaction(Context,
+                             ask(Context,
+                                 insert(a,b, Data)),
+                             _),
+
+            open_descriptor(Descriptor, Transaction),
+            [RWO] = (Transaction.instance_objects),
+            Layer = (RWO.read),
+
+            once(triple(Layer, a,b,value(Literal)))
+        ),
+        teardown_temp_store(State)).
+
+load_get_lit(Literal, Data) :-
+    setup_call_cleanup(
+        (   setup_temp_store(State),
+            create_db_without_schema(admin, test)),
+        (
+            resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+            create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
+            [Transaction] = (Context.transaction_objects),
+            [RWO] = (Transaction.instance_objects),
+            read_write_obj_builder(RWO, Builder),
+
+            with_transaction(Context,
+                             nb_add_triple(Builder, "a", "b", value(Literal)),
+                             _),
+
+            once(ask(Descriptor,
+                     t("a", "b", Data)))
+
+        ),
+        teardown_temp_store(State)).
+
+test_lit(Data, Literal) :-
+    store_get_lit(Data, Literal),
+    load_get_lit(Literal, Data).
+
+test(string) :-
+    test_lit("a string"^^xsd:string, "\"a string\"^^'http://www.w3.org/2001/XMLSchema#string'").
+
+test(boolean_false) :-
+    test_lit(false^^xsd:boolean, "\"false\"^^'http://www.w3.org/2001/XMLSchema#boolean'").
+
+test(boolean_true) :-
+    test_lit(true^^xsd:boolean, "\"true\"^^'http://www.w3.org/2001/XMLSchema#boolean'").
+
+test(decimal_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:decimal, "123.456^^'http://www.w3.org/2001/XMLSchema#decimal'").
+
+test(decimal_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:decimal, "-123.456^^'http://www.w3.org/2001/XMLSchema#decimal'").
+
+test(integer_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(42^^xsd:integer, "42^^'http://www.w3.org/2001/XMLSchema#integer'").
+
+test(integer_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-42^^xsd:integer, "-42^^'http://www.w3.org/2001/XMLSchema#integer'").
+
+%% NOTE: doubles and floats actually have an alternative notation (2.7E10 etc), as well as special constants(Inf, NaN..), which are not currently supported.
+
+test(double_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:double, "123.456^^'http://www.w3.org/2001/XMLSchema#double'").
+
+test(double_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:double, "-123.456^^'http://www.w3.org/2001/XMLSchema#double'").
+
+test(float_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123.456^^xsd:float, "123.456^^'http://www.w3.org/2001/XMLSchema#float'").
+
+test(float_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123.456^^xsd:float, "-123.456^^'http://www.w3.org/2001/XMLSchema#float'").
+
+test(dateTime) :-
+    test_lit(date_time(2020,01,02,03,04,05)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
+
+test(byte_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(127^^xsd:byte, "127^^'http://www.w3.org/2001/XMLSchema#byte'").
+
+test(byte_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-127^^xsd:byte, "-127^^'http://www.w3.org/2001/XMLSchema#byte'").
+
+test(short_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(65535^^xsd:short, "65535^^'http://www.w3.org/2001/XMLSchema#short'").
+
+test(short_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-65535^^xsd:short, "-65535^^'http://www.w3.org/2001/XMLSchema#short'").
+
+test(int_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:int, "123456^^'http://www.w3.org/2001/XMLSchema#int'").
+
+test(int_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:int, "-123456^^'http://www.w3.org/2001/XMLSchema#int'").
+
+test(long_pos) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:long, "123456^^'http://www.w3.org/2001/XMLSchema#long'").
+
+test(long_neg) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:long, "-123456^^'http://www.w3.org/2001/XMLSchema#long'").
+
+test(unsignedByte) :-
+    % note that the number saved is not further quoted
+    test_lit(255^^xsd:unsignedByte, "255^^'http://www.w3.org/2001/XMLSchema#unsignedByte'").
+
+test(unsignedShort) :-
+    % note that the number saved is not further quoted
+    test_lit(65535^^xsd:unsignedShort, "65535^^'http://www.w3.org/2001/XMLSchema#unsignedShort'").
+
+test(unsignedInt) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:unsignedInt, "123456^^'http://www.w3.org/2001/XMLSchema#unsignedInt'").
+
+test(unsignedLong) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:unsignedLong, "123456^^'http://www.w3.org/2001/XMLSchema#unsignedLong'").
+
+test(positiveInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:positiveInteger, "123456^^'http://www.w3.org/2001/XMLSchema#positiveInteger'").
+
+test(nonNegativeInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(123456^^xsd:nonNegativeInteger, "123456^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'").
+
+test(negativeInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:negativeInteger, "-123456^^'http://www.w3.org/2001/XMLSchema#negativeInteger'").
+
+
+test(nonPositiveInteger) :-
+    % note that the number saved is not further quoted
+    test_lit(-123456^^xsd:nonPositiveInteger, "-123456^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'").
+
+test(hexBinary) :-
+    test_lit("abcd0123"^^xsd:hexBinary, "\"abcd0123\"^^'http://www.w3.org/2001/XMLSchema#hexBinary'").
+
+test(base64Binary) :-
+    test_lit("YXNkZg=="^^xsd:base64Binary, "\"YXNkZg==\"^^'http://www.w3.org/2001/XMLSchema#base64Binary'").
+
+test(anyURI) :-
+    test_lit("http://example.org/schema#thing"^^xsd:anyURI, "\"http://example.org/schema#thing\"^^'http://www.w3.org/2001/XMLSchema#anyURI'").
+
+test(language) :-
+    test_lit("en"^^xsd:language, "\"en\"^^'http://www.w3.org/2001/XMLSchema#language'").
+
+test(language_tagged) :-
+    test_lit("this is an english sentence"@en, "\"this is an english sentence\"@en").
+
+test(gyear) :-
+    test_lit(gyear(2100,0)^^xsd:gYear, "\"2100\"^^'http://www.w3.org/2001/XMLSchema#gYear'").
+
+test(gYearMonth) :-
+    test_lit(gyear_month(2100,3,0)^^xsd:gYearMonth, "\"2100-03\"^^'http://www.w3.org/2001/XMLSchema#gYearMonth'").
+
+test(gMonthDay) :-
+    test_lit(gmonth_day(05,24,0)^^xsd:gMonthDay, "\"-05-24\"^^'http://www.w3.org/2001/XMLSchema#gMonthDay'").
+
+test(gMonth) :-
+    test_lit(gmonth(05,0)^^xsd:gMonth, "\"--05\"^^'http://www.w3.org/2001/XMLSchema#gMonth'").
+
+test(gDay) :-
+    test_lit(gday(24,0)^^xsd:gDay, "\"---24\"^^'http://www.w3.org/2001/XMLSchema#gDay'").
+
+test(time) :-
+    test_lit(time(12,14,0)^^xsd:time, "\"12:14:00Z\"^^'http://www.w3.org/2001/XMLSchema#time'").
+
+test(date) :-
+    test_lit(date(1978,6,25,0)^^xsd:date, "\"1978-06-25\"^^'http://www.w3.org/2001/XMLSchema#date'").
+
+test(coordinate) :-
+    test_lit(point(1.3,34.3)^^xdd:coordinate, "\"[1.3,34.3]\"^^'http://terminusdb.com/schema/xdd#coordinate'").
+
+test(coordinatePolygon) :-
+    test_lit(coordinate_polygon([[1.3,34.3],[1.3,34.3]])^^xdd:coordinatePolygon, "\"[[1.3,34.3],[1.3,34.3]]\"^^'http://terminusdb.com/schema/xdd#coordinatePolygon'").
+
+test(coordinatePolyline) :-
+    test_lit(coordinate_polygon([[1.3,34.3],[1.3,34.3]])^^xdd:coordinatePolyline, "\"[[1.3,34.3],[1.3,34.3]]\"^^'http://terminusdb.com/schema/xdd#coordinatePolyline'").
+
+test(integer_range) :-
+    test_lit(integer_range(1,3)^^xdd:integerRange, "\"[1,3]\"^^'http://terminusdb.com/schema/xdd#integerRange'").
+
+test(date_range) :-
+    test_lit(date_range(date(2012,02,03,0),date(2012,02,03,0))^^xdd:dateRange, "\"[2012-02-03,2012-02-03]\"^^'http://terminusdb.com/schema/xdd#dateRange'").
+
+test(gyear_range, []) :-
+    test_lit(gyear_range(gyear(2012,0),gyear(2013,0))^^xdd:gYearRange, "\"[2012,2013]\"^^'http://terminusdb.com/schema/xdd#gYearRange'").
+
+test(duration_year) :-
+    test_lit(duration(1,10,0,0,0,0,0)^^xsd:duration, "\"P10Y\"^^'http://www.w3.org/2001/XMLSchema#duration'").
+
+test(duration_hour) :-
+    test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, "\"-PT1H\"^^'http://www.w3.org/2001/XMLSchema#duration'").
+
+:- end_tests(store_load_data).

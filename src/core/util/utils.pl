@@ -21,6 +21,8 @@
               mapm/4,
               mapm/5,
               mapm/6,
+              mapm/7,
+              mapm/8,
               convlist/4,
               exists/2,
               find/3,
@@ -58,7 +60,8 @@
               chunk/2,
               chunk/3,
               member_last/3,
-              is_date/1
+              time_to_internal_time/2,
+              datetime_to_internal_datetime/2
           ]).
 
 /** <module> Utils
@@ -472,6 +475,33 @@ mapm_([H|T],[HP|TP],[HM|TM],S0,SN,P) :-
     call(P,H,HP,HM,S0,S1),
     mapm_(T,TP,TM,S1,SN,P).
 
+/*
+ * mapm(P:predicate,L:list,O:list,M:list,N:list,S0:any,SN:any) is nondet.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(6,?,?,?,?,?,?).
+mapm(P,L1,L2,L3,L4,S0,SN) :-
+    mapm_(L1,L2,L3,L4,S0,SN,P).
+
+mapm_([],[],[],[],S,S,_P).
+mapm_([H|T],[HP|TP],[HM|TM],[HL|TL],S0,SN,P) :-
+    call(P,H,HP,HM,HL,S0,S1),
+    mapm_(T,TP,TM,TL,S1,SN,P).
+
+/*
+ * mapm(P:predicate,L:list,O:list,M:list,N:list,P:list,S0:any,SN:any) is nondet.
+ *
+ * Monadic map over state
+ */
+:- meta_predicate mapm(7,?,?,?,?,?,?).
+mapm(P,L1,L2,L3,L4,L5,S0,SN) :-
+    mapm_(L1,L2,L3,L4,L5,S0,SN,P).
+
+mapm_([],[],[],[],[],S,S,_P).
+mapm_([H|T],[HP|TP],[HM|TM],[HL|TL],[HO|TO],S0,SN,P) :-
+    call(P,H,HP,HM,HL,HO,S0,S1),
+    mapm_(T,TP,TM,TL,TO,S1,SN,P).
 
 :- meta_predicate convlist(3, +, +, -).
 convlist(Goal, ListIn1, ListIn2, ListOut) :-
@@ -831,10 +861,15 @@ member_last_([A,_|_],A,false).
 member_last_([_|Rest],A,Last) :-
     member_last_(Rest,A,Last).
 
-/*
- * is_date(+Date) is semidet.
- *
- * Determines if `Date` is a date or date time object.
- */
-is_date(date(_,_,_,_,_,_,_,_,_)).
-is_date(date(_,_,_)).
+datetime_to_internal_datetime(Date,date_time(Y,M,D,HH,MM,SS)) :-
+    date_time_stamp(Date,TS),
+    stamp_date_time(TS,date(Y, M, D, HH, MM, SS, 0, 'UTC', -), 'UTC').
+
+time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
+    HHOff is Offset div 3600,
+    Offset1 is Offset - HHOff * 3600,
+    MMOff is Offset1 div 60,
+    SSOff is Offset1 - MMOff * 60,
+    HN is HH + HHOff mod 24,
+    MN is MM + MMOff mod 60,
+    SN is SS + SSOff mod 60.
