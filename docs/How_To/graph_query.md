@@ -11,7 +11,7 @@ Whitesnake, bands that these members have been in, the members of
 these bands, the bands that these members have been in, etc. until
 finally we arrive at a band which plays Country music (a 6 hop path).
 
-In Python:
+With [Python client](https://github.com/terminusdb/terminusdb-client-python):
 
 ```python
 #!/usr/bin/python3
