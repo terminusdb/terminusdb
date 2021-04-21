@@ -28,6 +28,5 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
     context_extend_prefixes(Context,Woql_Prefixes,Final_Context),
 
     json_woql(Query, Final_Context.prefixes, AST),
-
     run_context_ast_jsonld_response(Final_Context,AST,JSON).
 
