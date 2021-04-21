@@ -76,7 +76,7 @@ database_schema(Transaction_Object, Schemas) :-
     Schemas = Transaction_Object.schema_objects.
 
 excluded_organization(Organization) :-
-    re_match('\\||console|api|db|home|profile', Organization).
+    re_match('\\||^(console|api|db|home|profile)$', Organization).
 
 error_on_excluded_organization(Organization) :-
     do_or_die(\+ excluded_organization(Organization),
@@ -94,3 +94,34 @@ organization_database_name(Organization,DB,Name) :-
     freeze(Organization,error_on_excluded_organization(Organization)),
     freeze(DB,error_on_pipe(DB)),
     merge_separator_split(Name,'|',[Organization,DB]).
+
+:- begin_tests(database_utils).
+
+test(excluded_organization_bad_names) :-
+    excluded_organization("console"),
+    excluded_organization("api"),
+    excluded_organization("db"),
+    excluded_organization("home"),
+    excluded_organization("profile"),
+    excluded_organization("john|smith"),
+    excluded_organization("|"),
+    excluded_organization("smith|"),
+    excluded_organization("|amy").
+
+
+test(excluded_organization_good_names) :-
+    \+ excluded_organization("consolez"),
+    \+ excluded_organization("zconsole"),
+    \+ excluded_organization("adba"),
+    \+ excluded_organization("dba"),
+    \+ excluded_organization("adb").
+
+
+test(excluded_organization_normal_names) :-
+    \+ excluded_organization("patrick"),
+    \+ excluded_organization("john"),
+    \+ excluded_organization("megacorp"),
+    \+ excluded_organization("littlecorp"),
+    \+ excluded_organization("jane").
+
+:- end_tests(database_utils).
