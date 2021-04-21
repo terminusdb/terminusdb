@@ -78,8 +78,8 @@ GET http://localhost:6363/api/triples/<organization>/<dbid>/<repo>/commit/<refid
 
 This call returns a "Turtle" format file representation of the graph
 specified in the URL path as a JSON string. It takes a get parameter
-`format` which must always be "turtle". In the future we hope to
-support other formats.
+`format` which, if supplied, must always be "turtle". In the future we
+hope to support other formats.
 
 ## Replace Triples
 
@@ -333,9 +333,16 @@ branch.
 ```
 POST http://localhost:6363/api/optimize/_system
 POST http://localhost:6363/api/optimize/<organization>/<dbid>
+POST http://localhost:6363/api/optimize/<organization>/<dbid>/_meta
+POST http://localhost:6363/api/optimize/<organization>/<dbid>/<repo>/_commits
+POST http://localhost:6363/api/optimize/<organization>/<dbid>/<repo>/branch/<branch>
 ```
 
-This API endpoint will attempt to optimize the database.
+This API endpoint will attempt to optimize the database using an
+appropriate strategy. This call is not recursive, i.e. it will only
+optimize access to the respective graph collection specified.
+
+In the case of an unspecified branch, `main` is assumed.
 
 ## Add User to Organization
 
