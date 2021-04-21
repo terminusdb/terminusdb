@@ -267,6 +267,17 @@ api_error_jsonld(woql,error(woql_syntax_error(Term),_), JSON) :-
                               'api:error_term' : String},
              'api:message' : Msg
             }.
+api_error_jsonld(woql,error(woql_syntax_error(Query,Path,Element), _), JSON) :-
+    json_woql_path_element_error_message(Query,Path,Element,Message),
+    reverse(Path,Director),
+    Error = _{'@type' : 'vio:WOQLSyntaxError',
+              'vio:path' : Director,
+              'vio:query' : Query},
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : Error,
+             'api:message' : Message
+            }.
 api_error_jsonld(woql,error(schema_check_failure(Witnesses),_), JSON) :-
     format(string(Msg), "There was an error when schema checking", []),
     JSON = _{'@type' : 'api:WoqlErrorResponse',
@@ -1157,3 +1168,31 @@ status_cli_code('api:unauthorized',13).
 status_cli_code('api:forbidden',13).
 status_cli_code('api:method_not_allowed',126).
 status_cli_code('api:server_error',131).
+
+:- begin_tests(error_reporting).
+
+:- use_module(core(query/json_woql)).
+
+test(size_syntax,[]) :-
+
+    catch(
+        (   Query = _{ '@type' : "http://terminusdb.com/schema/woql#Size",
+                       'http://terminusdb.com/schema/woql#resource' : 1,
+                       'http://terminusdb.com/schema/woql#size' : 2
+                     },
+            json_woql:json_to_woql_ast(Query, _, [])
+        ),
+        E,
+        once(api_error_jsonld(woql,E,JSON))
+    ),
+
+    JSON = _{'@type':'api:WoqlErrorResponse',
+             'api:error': _{'@type':'vio:WOQLSyntaxError',
+                            'vio:path':[],
+                            'vio:query': _{'@type':"http://terminusdb.com/schema/woql#Size",
+                                           'http://terminusdb.com/schema/woql#resource':1,
+                                           'http://terminusdb.com/schema/woql#size':2}},
+             'api:message':"Not well formed WOQL JSON-LD",
+             'api:status':'api:failure'}.
+
+:- end_tests(error_reporting).

@@ -1065,7 +1065,7 @@ api:WOQLSyntaxError
   a owl:Class ;
   rdfs:label "WOQL Syntax Error"@en ;
   rdfs:comment "Syntax error in WOQL term."@en ;
-  rdfs:subClassOf api:Error, api:WithErrorTerm .
+  rdfs:subClassOf api:Error, api:WithErrorTerm, api:WithPath, api:WithBody .
 
 api:WithErrorTerm
   a owl:Class .
@@ -1074,6 +1074,26 @@ api:error_term
   a owl:DatatypeProperty ;
   rdfs:label "error term"@en ;
   rdfs:comment "Points to an error term."@en ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .
+
+api:WithPath
+  a owl:Class .
+
+api:path
+  a owl:DatatypeProperty ;
+  rdfs:label "path"@en ;
+  rdfs:comment "Gives the path to an error term."@en ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .
+
+api:WithBody
+  a owl:Class .
+
+api:body
+  a owl:DatatypeProperty ;
+  rdfs:label "body"@en ;
+  rdfs:comment "The body of the term with syntax error."@en ;
   rdfs:domain api:WOQLSyntaxError ;
   rdfs:range xsd:string .
 
