@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1618492035239,
+  "lastUpdate": 1618993338995,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -2689,6 +2689,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.026615273106783365",
             "extra": "mean: 60.194285633332356 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "rrooij@users.noreply.github.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3877c8915ddd814141f5bda30c14095c9da8fa1b",
+          "message": "Fix organization filter (#313)\n\nThe organization filter was too strict. If the organization\r\nname contained one of the excluded names, it would already\r\nforbid this organization too exist. Even a organization name\r\ncalled \"soundboard\" would be forbidden by the existing filter.\r\n\r\nNow it only checks whether the whole name is the forbidden word.\r\nThe exception to this rule is the | (pipe) character which\r\nshould always be forbidden.",
+          "timestamp": "2021-04-21T10:20:41+02:00",
+          "tree_id": "974e6a55e82b063262a0ea0cb9e44723754d81e8",
+          "url": "https://github.com/terminusdb/terminusdb/commit/3877c8915ddd814141f5bda30c14095c9da8fa1b"
+        },
+        "date": 1618993338358,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 5.961228322406321,
+            "unit": "iter/sec",
+            "range": "stddev: 0.03164035751326884",
+            "extra": "mean: 167.75066243333185 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 6.0859988654736705,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02005056798505513",
+            "extra": "mean: 164.31156529999953 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 14.25751849493178,
+            "unit": "iter/sec",
+            "range": "stddev: 0.025153416514256177",
+            "extra": "mean: 70.13843259999817 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 14.886265891788529,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02399167667997892",
+            "extra": "mean: 67.17601359999985 msec\nrounds: 30"
           }
         ]
       }
