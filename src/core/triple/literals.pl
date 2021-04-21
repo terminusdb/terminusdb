@@ -389,8 +389,15 @@ storage_literal(X1^^T1,X3^^T2) :-
     ->  (   string(X2)
         ->  number_string(X3,X2)
         ;   X2 = X3)
+    % NOTE: This is considered special because the anyURI condition
+    % used to be less strict.
+    % There may be data in the DB that does not meet the current
+    % datatype specification.
+    ;   T2 = 'http://www.w3.org/2001/XMLSchema#anyURI'
+    ->  X2 = X3
     ;   typecast(X2^^'http://www.w3.org/2001/XMLSchema#string',T2,
-                 [], X3^^_)).
+                 [], X3^^_)
+    ).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
     storage_value(X1,X2).
