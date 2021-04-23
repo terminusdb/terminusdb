@@ -68,13 +68,20 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            shortflags([h]),
            longflags([help]),
            default(false),
-           help('print help for `serve` command')],
+           help('Print help for `serve` command')],
           [opt(interactive),
            type(boolean),
            shortflags([i]),
            longflags([interactive]),
            default(false),
-           help('run server in interactive mode')]]).
+           help('Run server in interactive mode')],
+          [opt(memory),
+           type(atom),
+           shortflags([m]),
+           longflags([memory]),
+           meta(password),
+           default('_'),
+           help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
 opt_spec(list,'terminusdb list OPTIONS',
          'List databases.',
          [[opt(help),
@@ -82,7 +89,13 @@ opt_spec(list,'terminusdb list OPTIONS',
            shortflags([h]),
            longflags([help]),
            default(false),
-           help('print help for the `list` command')]]).
+           help('print help for the `list` command')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON as the result of the `list` command')]]).
 opt_spec(optimize,'terminusdb optimize OPTIONS',
          'Optimize a database (including _system and _meta).',
          [[opt(help),
@@ -669,14 +682,20 @@ run_command(test,_Positional,Opts) :-
     ->  halt(0)
     ;   halt(1)).
 run_command(serve,_Positional,Opts) :-
-    (   option(interactive(true),Opts)
+    (   option(interactive(true), Opts)
     ->  terminus_server([serve|Opts], false),
         prolog
     ;   terminus_server([serve|Opts], true)).
-run_command(list,Databases,_Opts) :-
+run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
-    list_databases(system_descriptor{}, Auth, Databases, Database_Objects),
-    pretty_print_databases(Database_Objects).
+    (   Databases = []
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects)
+    ;   list_existing_databases(Databases, Database_Objects)
+    ),
+    (   option(json(true), Opts)
+    ->  json_write_dict(current_output, Database_Objects)
+    ;   pretty_print_databases(Database_Objects)
+    ).
 run_command(optimize,Databases,_Opts) :-
     super_user_authority(Auth),
     api_report_errors(
@@ -701,7 +720,7 @@ run_command(query,[Database,Query],Opts) :-
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
-            write(String)
+            format(current_output,'~s',[String])
         )).
 run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
@@ -1008,7 +1027,7 @@ run_command(csv,list,[Path],_Opts) :-
         csv,
         csv_list(System_DB, Auth, Path, Names,_{})),
     forall(
-        option(Name, Names),
+        member(Name, Names),
         format(current_output,'~w~n',[Name])).
 run_command(csv,load,[Path|Files],Opts) :-
     super_user_authority(Auth),

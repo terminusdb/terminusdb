@@ -42,3 +42,9 @@ worldOnt:address a owl:DatatypeProperty ;
   rdfs:comment "An address"@en ;
   rdfs:domain worldOnt:Person ;
   rdfs:range xsd:string .
+
+worldOnt:birthday a owl:DatatypeProperty ;
+  rdfs:label "Birthday"@en ;
+  rdfs:comment "A birthday"@en ;
+  rdfs:domain worldOnt:Person ;
+  rdfs:range xsd:dateTime .

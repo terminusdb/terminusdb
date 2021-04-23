@@ -231,6 +231,13 @@ api:UnknownOrganization
 api:WithDatabaseName
   a owl:Class .
 
+api:database_name
+  a owl:DatatypeProperty ;
+  rdfs:label "database name"@en ;
+  rdfs:comment "Points to the database name."@en ;
+  rdfs:domain api:WithDatabaseName ;
+  rdfs:range xsd:string .
+
 api:DatabaseAlreadyExists
   a owl:Class ;
   rdfs:label "Database Already Exists"@en ;
@@ -812,6 +819,32 @@ api:NotAValidOptimizationDescriptorError
   rdfs:comment "The supplied descriptor is not valid for optimization."@en ;
   rdfs:subClassOf api:WithAbsoluteDescriptor .
 
+api:WithVersion
+  a owl:Class .
+
+api:version
+  a owl:DatatypeProperty ;
+  rdfs:label "version"@en ;
+  rdfs:comment "Points to a label version."@en ;
+  rdfs:domain api:WithVersion ;
+  rdfs:range xsd:decimal .
+
+api:WithLabelName
+  a owl:Class .
+
+api:label_name
+  a owl:DatatypeProperty ;
+  rdfs:label "label name"@en ;
+  rdfs:comment "Points to a label name."@en ;
+  rdfs:domain api:WithLabelName ;
+  rdfs:range xsd:string .
+
+api:LabelVersionChanged
+  a owl:Class ;
+  rdfs:label "Label version changed"@en ;
+  rdfs:comment "The label version changed while attempting to optimize"@en ;
+  rdfs:subClassOf api:WithVersion, api:WithLabelName .
+
 api:NotLocalRepositoryError
   a owl:Class ;
   rdfs:label "Not A Local Repository Error"@en ;
@@ -1032,7 +1065,7 @@ api:WOQLSyntaxError
   a owl:Class ;
   rdfs:label "WOQL Syntax Error"@en ;
   rdfs:comment "Syntax error in WOQL term."@en ;
-  rdfs:subClassOf api:Error, api:WithErrorTerm .
+  rdfs:subClassOf api:Error, api:WithErrorTerm, api:WithPath, api:WithBody .
 
 api:WithErrorTerm
   a owl:Class .
@@ -1041,6 +1074,26 @@ api:error_term
   a owl:DatatypeProperty ;
   rdfs:label "error term"@en ;
   rdfs:comment "Points to an error term."@en ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .
+
+api:WithPath
+  a owl:Class .
+
+api:path
+  a owl:DatatypeProperty ;
+  rdfs:label "path"@en ;
+  rdfs:comment "Gives the path to an error term."@en ;
+  rdfs:domain api:WOQLSyntaxError ;
+  rdfs:range xsd:string .
+
+api:WithBody
+  a owl:Class .
+
+api:body
+  a owl:DatatypeProperty ;
+  rdfs:label "body"@en ;
+  rdfs:comment "The body of the term with syntax error."@en ;
   rdfs:domain api:WOQLSyntaxError ;
   rdfs:range xsd:string .
 

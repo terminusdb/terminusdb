@@ -12,6 +12,7 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
+:- use_module(core(api)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[]).
@@ -68,6 +69,17 @@ terminus_server(Argv,Wait) :-
                    time_limit(infinite),
                    prefix
                  ]),
+    % initialize the global store as an in-memory store if the memory flag is set
+    (   option(memory(Memory_Password),Argv),
+        ground(Memory_Password)
+    ->  memory_triple_store(Store),
+        (   Memory_Password = ''
+        ->  Password = root
+        ;   Password = Memory_Password),
+        initialize_database_with_store(Password, Store),
+        global_triple_store(Store)
+    ;   true),
+
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
         http_delete_handler(id(busy_loading)),
         welcome_banner(Server,Argv),

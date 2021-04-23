@@ -54,7 +54,7 @@ update_turtle_graph_(Database, Graph, New_Graph_Stream, Meta_Data) :-
                 [Triples,_Resource]>>(
                     forall(member(T, Triples),
                            (   normalise_triple(T, rdf(X,P,Y)),
-                               object_storage(Y,S),
+                               ground_object_storage(Y,S),
                                nb_add_triple(Builder, X, P, S)
                            ))),
                 [encoding(utf8),
@@ -265,17 +265,9 @@ format_property(Collection,Prefixes, Property, Out_Stream) :-
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
  */
 turtle_triples(Layer,X,P,Y,_) :-
-    ground(Y),
-    !,
-    (   \+ (   atom(Y)
-           ;   string(Y))
-    ->  fixup_schema_literal(Y,YO)
-    ;   Y = YO),
-    xrdf_db(Layer,X,P,YO).
-turtle_triples(Layer,X,P,Y,_) :-
     xrdf_db(Layer,X,P,YO),
     (   is_literal(YO)
-    ->  fixup_schema_literal(Y,YO)
+    ->  literal_to_turtle(YO,Y)
     ;   Y = YO).
 
 /**
@@ -295,3 +287,4 @@ layer_to_turtle(Layer,Prefixes,Out_Stream) :-
          indent(2),
          silent(true)]
     ).
+

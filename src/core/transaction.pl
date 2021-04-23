@@ -104,6 +104,7 @@
               % system_entity.pl
               database_exists/2,
               database_exists/3,
+              db_uri_organization/3,
               organization_database_name_uri/4,
               organization_name_uri/3,
               organization_name_exists/2,

@@ -20,12 +20,18 @@
               iana/3,
 
               % literals.pl
-              fixup_schema_literal/2,
+              literal_to_turtle/2,
               normalise_triple/2,
               object_storage/2,
               ground_object_storage/2,
               storage_object/2,
               date_string/2,
+              duration_string/2,
+              gyear_string/2,
+              gmonth_string/2,
+              gyear_month_string/2,
+              gmonth_day_string/2,
+              gday_string/2,
               uri_to_prefixed/3,
               prefixed_to_uri/3,
 
@@ -92,6 +98,7 @@
               local_triple_store/1,
               retract_local_triple_store/1,
               default_triple_store/1,
+              memory_triple_store/1,
               with_triple_store/2,
 
               % turtle_utils.pl

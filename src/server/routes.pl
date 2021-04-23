@@ -4253,7 +4253,7 @@ try_get_param(Key,Request,Value) :-
     !,
     member(mime(Mime_Header,Encoded_Value,_),Form_Data),
     memberchk(name(Key), Mime_Header),
-    (   memberchk(type('application/json'),Mime_Header)
+    (   json_mime_type(Mime_Header)
     ->  atom_json_dict(Encoded_Value,Value,[])
     ;   uri_encoded(query_value, Value, Encoded_Value)).
 try_get_param(Key,Request,Value) :-
@@ -4261,7 +4261,7 @@ try_get_param(Key,Request,Value) :-
     memberchk(method(Method), Request),
     (   memberchk(Method, [get,delete])
     ;   memberchk(Method, [post,put]),
-        \+ memberchk(content_type('application/json'), Request)),
+        \+ json_content_type(Request)),
 
     http_parameters(Request, [], [form_data(Data)]),
 
@@ -4273,7 +4273,7 @@ try_get_param(Key,Request,Value) :-
     memberchk(method(Method), Request),
     memberchk(Method, [post,put]),
 
-    memberchk(content_type('application/json'), Request),
+    json_content_type(Request),
 
     (   memberchk(payload(Document), Request)
         <>  throw(error(no_document_for_key(Key)))),
@@ -4290,6 +4290,14 @@ try_get_param(Key,_Request,_Value) :-
     % Catch all.
     throw(error(no_parameter_key(Key))).
 
+json_content_type(Request) :-
+    memberchk(content_type(CT), Request),
+    re_match('^application/json', CT, []).
+
+json_mime_type(Mime) :-
+    memberchk(type(CT),Mime),
+    re_match('^application/json', CT, []).
+
 /*
  * get_param_default(Key,Request:request,Value,Default) is semidet.
  *
@@ -4304,7 +4312,7 @@ get_param(Key,Request,Value) :-
     !,
     memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
     memberchk(name(Key), Mime_Header),
-    (   memberchk(type('application/json'),Mime_Header)
+    (   json_mime_type(Mime_Header)
     ->  atom_json_dict(Encoded_Value,Value,[])
     ;   uri_encoded(query_value, Value, Encoded_Value)).
 get_param(Key,Request,Value) :-
@@ -4312,7 +4320,7 @@ get_param(Key,Request,Value) :-
     memberchk(method(Method), Request),
     (   memberchk(Method, [get,delete])
     ;   memberchk(Method, [post,put]),
-        \+ memberchk(content_type('application/json'), Request)),
+        \+ json_content_type(Request)),
 
     http_parameters(Request, [], [form_data(Data)]),
     memberchk(Key=Value,Data),
@@ -4322,7 +4330,7 @@ get_param(Key,Request,Value) :-
     memberchk(method(Method), Request),
     memberchk(Method, [post,put]),
 
-    memberchk(content_type('application/json'), Request),
+    json_content_type(Request),
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
 
@@ -4350,7 +4358,7 @@ add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
     !,
     http_read_data(Request, Form_Data, [on_filename(save_post_file),form_data(mime)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
-    memberchk(content_type('application/json'), Request),
+    json_content_type(Request),
     !,
     http_read_data(Request, Document, [json_object(dict)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
@@ -4397,7 +4405,7 @@ collect_posted_files(Request,Files) :-
     !,
     convlist([mime(Mime_Header,Data,_),Filename=Temp_Filename]>>(
                  memberchk(filename(Filename),Mime_Header),
-                 \+ memberchk(type('application/json'),Mime_Header),
+                 \+ json_mime_type(Mime_Header),
                  setup_call_cleanup(
                      tmp_file_stream(octet, Temp_Filename, Out),
                      write(Out, Data),
@@ -4416,7 +4424,7 @@ collect_posted_named_files(Request,Files) :-
     convlist([mime(Mime_Header,Data,_),Name=Temp_Filename]>>(
                  memberchk(filename(_),Mime_Header),
                  memberchk(name(Name),Mime_Header),
-                 \+ memberchk(type('application/json'),Mime_Header),
+                 \+ json_mime_type(Mime_Header),
                  setup_call_cleanup(
                      tmp_file_stream(octet, Temp_Filename, Out),
                      write(Out, Data),

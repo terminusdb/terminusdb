@@ -26,3 +26,37 @@ graph_dump(System_DB, Auth, Path, Format, String) :-
     ;   text_to_string(Format,"md")
     ->  dump_md(Context,String)
     ;   throw(error(unknown_format(Format), _))).
+
+:- begin_tests(graph_dump).
+
+:- use_module(core(util/test_utils)).
+:- use_module(graph_load).
+
+test(worlds_graph, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    expand_file_search_path(test('world.ttl'), File),
+    read_file_to_string(File, String, []),
+    super_user_authority(Auth),
+    System_DB = system_descriptor{},
+    Path = "admin/test/local/branch/main/instance/main",
+    Commit_Info = commit_info{ author : "Me", message : "none" },
+    Format = "turtle",
+    graph_insert(System_DB, Auth, Path, Commit_Info, Format, String),
+
+    resolve_absolute_string_descriptor("admin/test", Desc),
+    once(
+        ask(Desc,
+            t(doc:scipioJrs, scm:birthday, Date))
+    ),
+
+    Date = date_time(-228,10,10,0,0,0.0)^^xsd:dateTime,
+
+    graph_dump(System_DB, Auth, Path, "turtle", Output),
+
+    re_match('-228-10-10T00:00:00.000Z', Output).
+
+:- end_tests(graph_dump).
