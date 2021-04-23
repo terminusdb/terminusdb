@@ -4,14 +4,6 @@ This is the JSON-LD definition of the WOQL language. Those wishing to
 implement clients for TerminusDB should construct JSON-LD messages according
 to this ontology.
 
-## Table of contents
-{: .no_toc .text-delta }
-
-1. TOC
-{:toc}
-
----
-
 # Terminus DB WOQL Query Syntax Schema (`http://terminusdb.com/schema/woql`)
 
 Authors: Gavin Mendel-Gleason Kevin C. Feeney
