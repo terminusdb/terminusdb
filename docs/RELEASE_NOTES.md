@@ -8,6 +8,8 @@
 + New startup flag (--memory) to start TerminusDB in memory mode, without persistent storage
 + Optimized database listing, added JSON output in command line
 + Added memory only mode for non-persistent TerminusDB instances
++ Speed improvement for `terminusdb list`
++ Clearer errors
 
 ## Bug fixes
 
@@ -17,6 +19,7 @@
 + Correct super-user permission scoping for various actions
 + Correct race condition in optimize for system graph and meta graph
 + Add imprecise rollups to avoid crash on poorly specified boundaries
++ Fixed organization filter being too strict
 
 # TerminusDB Server v4.2.0 Release Notes
 
