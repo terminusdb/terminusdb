@@ -1,4 +1,4 @@
-VERSION=4.2.1
+VERSION=4.2.2
 LICENSE=Apache-2.0
 MAINTAINER="TerminusDB Team <team@terminusdb.com>"
 DEB_TARGET=terminusdb_$(VERSION)_amd64.deb

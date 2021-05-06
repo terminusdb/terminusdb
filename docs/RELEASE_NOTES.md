@@ -1,3 +1,9 @@
+# TerminusDB Server v4.2.2 Release Notes
+
+## New
+
++ Add new TerminusDB console with performance improvements
+
 # TerminusDB Server v4.2.1 Release Notes
 
 ## New
