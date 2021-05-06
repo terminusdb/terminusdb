@@ -11,7 +11,7 @@
       - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/docs/ROADMAP.md)
       - [Python Client](https://github.com/terminusdb/terminusdb-client-python/projects/1)
 - [Tutorials](TUTORIALS.md)
-  - [Getting Started](Intro_Tutorials/Getting_Started.md)
+  - [First Tutorials](Intro_Tutorials/Getting_Started.md)
       - [Start With JS](Intro_Tutorials/Start_with_JS.md)
       - [Start With Python](Intro_Tutorials/Start_With_Python.md)
       - [Start With CLI](Intro_Tutorials/Start_With_CLI.md)
