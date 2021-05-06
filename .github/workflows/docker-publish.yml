@@ -51,7 +51,7 @@ jobs:
 
       - name: Log into Docker Container Registry
         if: github.event_name != 'pull_request'
-        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u terminusdb --password-stdin
+        run: echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
 
       - name: Push image to Docker Container Registry
         if: github.event_name != 'pull_request'
