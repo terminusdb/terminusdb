@@ -81,7 +81,7 @@ you to use a pythonic syntax to query the database.
 
 ## Documentation
 
-Documentation is on our [TerminusDB documentation](https://terminusdb.com/terminusdb/#/) site.
+Documentation is on our [TerminusDB documentation](https://terminusdb.com/) site.
 
 ## Community
 
