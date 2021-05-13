@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1620913362978,
+  "lastUpdate": 1620917329660,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -3313,6 +3313,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.03888785342739683",
             "extra": "mean: 70.20920496666652 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "a2b49cabcc437c625df9919fc1d308ab3a7ef6a6",
+          "message": "AppImage: add swipl to library path",
+          "timestamp": "2021-05-13T16:47:14+02:00",
+          "tree_id": "ded0cc5d3bc501e17646c94756964164d1647403",
+          "url": "https://github.com/terminusdb/terminusdb/commit/a2b49cabcc437c625df9919fc1d308ab3a7ef6a6"
+        },
+        "date": 1620917328658,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 8.091476153229253,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01232143297350647",
+            "extra": "mean: 123.58684386666661 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 8.035544948083881,
+            "unit": "iter/sec",
+            "range": "stddev: 0.005826254947028848",
+            "extra": "mean: 124.44706693333292 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 19.14042000684949,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01956989633592409",
+            "extra": "mean: 52.24545749999976 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 19.02572414763122,
+            "unit": "iter/sec",
+            "range": "stddev: 0.019116903382145403",
+            "extra": "mean: 52.56041726666704 msec\nrounds: 30"
           }
         ]
       }
