@@ -37,18 +37,6 @@ jobs:
       - name: Run tests
         run: docker run -e TERMINUSDB_HTTPS_ENABLED=false -e TERMINUSDB_JWT_ENABLED=true --name terminusdb terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
 
-      - name: Copy binary to local filesystem
-        run: |
-          id=$(docker create terminusdb/terminusdb-server:local)
-          docker cp $id:/app/terminusdb/terminusdb terminusdb
-          docker rm -v $id
-
-      - name: Archive production artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: terminusdb-linux
-          path: terminusdb
-
       - name: Log into Docker Container Registry
         if: github.event_name != 'pull_request'
         run: echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
@@ -373,10 +361,6 @@ jobs:
 
     - uses: actions/download-artifact@v2
 
-    - name: Rename terminusdb binary
-      run: |
-        mv terminusdb-linux/terminusdb terminusdb-linux-amd64
-
     - name: Set release name
       id: release_name
       run: |
@@ -408,6 +392,5 @@ jobs:
           TerminusDB-amd64.AppImage/TerminusDB-amd64.AppImage
           TerminusDB-server-windows.tar.gz/terminusdb_windows.tar.gz
           terminusdb-desktop.dmg/terminusdb-desktop.dmg
-          terminusdb-linux-amd64
           terminusdb-deb/terminusdb*.deb
           terminusdb-rpm/terminusdb*.rpm
