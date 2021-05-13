@@ -75,16 +75,16 @@ jobs:
 
   deb_and_rpm:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, fedora_bin]
+    needs: [test_and_push_docker, appimage]
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
 
     - uses: actions/download-artifact@v2
       with:
-        name: terminusdb-linux
+        name: TerminusDB-amd64.AppImage
 
-    - run: chmod +x terminusdb
+    - run: mv *.AppImage terminusdb && chmod +x terminusdb
 
     - uses: actions/download-artifact@v2
       with:
