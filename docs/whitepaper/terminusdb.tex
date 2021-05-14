@@ -38,7 +38,7 @@
   use of main memory resources. Prudent use of memory reduces cache
   contention while read-only data structures simplify parallel access
   significantly.  Third, we adopted the delta encoding approach to
-  updates as is used in source control systems such as git. This
+  updates as is used in source control systems such as Git. This
   provides transaction processing and updates to our immutable
   database data structures, recovering standard database management
   features while also providing the whole suite of revision control
@@ -254,7 +254,7 @@ this can be found in \autocite{10.1007/978-3-642-30284-8_36}.
 \subsection{Delta Encoded Databases}
 
 The use of {\em delta encoding} in software development is now
-ubiquitous due to the enormous popularity of the {\em git} revision
+ubiquitous due to the enormous popularity of the {\em Git} revision
 control system which makes use of these techniques to store histories
 of revisions.
 
@@ -281,8 +281,8 @@ developers collaborating on a code base. The operations include:
 These features have powered a revolution in software engineering and
 have elevated the importance of dev-ops automation in modern IT
 infrastructures. It would be nice if we could apply them to databases
-too and similarly elevate the field of data-ops. However, git itself
-is not the solution – git is squarely focused on code management, and
+too and similarly elevate the field of data-ops. However, Git itself
+is not the solution – Git is squarely focused on code management, and
 data and code differ in some important fundamental characteristics.
 
 Codebases can be adequately modelled as a hierarchy of directories
@@ -298,9 +298,9 @@ performance factor.
 
 TerminusDB uses nodes and edges, replete with classes and restrictions
 to model the structure of data – enabling a fine-granularity in
-expression of changes. Otherwise, it uses a similar approach to git for
+expression of changes. Otherwise, it uses a similar approach to Git for
 expressing updates. A given database is comprised of layers which
-stand in place of the objects of git. Each layer is identified by a
+stand in place of the objects of Git. Each layer is identified by a
 unique 20-byte name. The base layer contains a simple graph
 represented using the succinct data structures described earlier.
 
@@ -374,7 +374,7 @@ data-ops\autocite{gleason2018}.
 	\label{workflow} % Label for referencing with \ref{bear}
 \end{figure}
 
-% More here. 
+% More here.
 
 \subsection{Delta compression}
 
@@ -382,8 +382,8 @@ As new updates are performed the database layer depth increases. This
 will incur a performance penalty requiring repeated searching at each
 layer for every query. In order to improve performance, we can perform
 a {\em delta compression} similar to the mechanisms used in
-git. Alternatively, we can recalculate the full dataset as a new
-base-layer. In git, this {\em delta compression} step can be performed
+Git. Alternatively, we can recalculate the full dataset as a new
+base-layer. In Git, this {\em delta compression} step can be performed
 manually, or it will occur when a depth threshold is passed.
 
 Since the layers are immutable, this operation can be done
@@ -428,7 +428,7 @@ facilitate effective management.
 The use of advanced CI/CD workflows for databases as yet has not been
 practical due to the lack of tool-chain support. In the software world,
 we have seen just what a large impact appropriate tools can make with
-advent of git.
+advent of Git.
 
 TerminusDB makes possible these collaborative CI/CD type operations in
 the universe of data management.
