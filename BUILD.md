@@ -26,12 +26,15 @@ prolog. The TerminusDB team tends to use the latest stable for local
 development and packaging, but likely, other versions of swi-prolog since
 8.0.3 will work as well.
 Currently we don't have an officially supported version of swi-prolog,
-but latest stable is likely to work.
+but latest stable is likely to work. Ubuntu's version of swi-prolog
+is outdated, so the repo needs to be added.
 
 To install swi-prolog in Debian variants simply use the apt package
 manager:
 
 ```
+# add the repo if Ubuntu is the OS
+cat /etc/*release | grep ubuntu >/dev/null && (sudo apt-get install software-properties-common; sudo apt-add-repository ppa:swi-prolog/stable)
 apt install swi-prolog
 ```
 
