@@ -1,7 +1,7 @@
 ## Reference: White List of XSD datatypes
 
-TerminusDB attempts to be compliant with the (W3C XSD
-datatype)[https://www.w3.org/TR/2012/REC-xmlschema11-2-20120405/]
+TerminusDB attempts to be compliant with the [W3C XSD
+datatype](https://www.w3.org/TR/2012/REC-xmlschema11-2-20120405/)
 specification wherever possible.
 
 The following XSD datetypes should work in TerminusDB:
