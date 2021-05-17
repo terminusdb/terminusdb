@@ -35,7 +35,8 @@ manager:
 ```
 # add the repo if Ubuntu is the OS
 cat /etc/*release | grep ubuntu >/dev/null && (sudo apt-get install software-properties-common; sudo apt-add-repository ppa:swi-prolog/stable)
-apt install swi-prolog
+sudo apt-get update
+sudo apt install swi-prolog
 ```
 
 the swi-prolog project website also contains downloadable packages for
