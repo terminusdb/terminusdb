@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1621432153477,
+  "lastUpdate": 1621456530880,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -3573,6 +3573,58 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.029623333929072525",
             "extra": "mean: 68.54649759999916 msec\nrounds: 30"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dwinston@alum.mit.edu",
+            "name": "Donny Winston",
+            "username": "dwinston"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cfe5d0390d4adb1221fae794a8b40eb32c60fc08",
+          "message": "allow TERMINUSDB_ADMIN_PASS_FILE (#326)\n\nfile_env shell function to facilitate the common convention of allowing a *_FILE env var, i.e. TERMINUSDB_ADMIN_PASS_FILE in this case.\r\n\r\nuse bash rather than dash, to avoid \"bad completion\" error.",
+          "timestamp": "2021-05-19T22:33:58+02:00",
+          "tree_id": "de5073d94bd20db7c0fe9697b3607a2551caeffe",
+          "url": "https://github.com/terminusdb/terminusdb/commit/cfe5d0390d4adb1221fae794a8b40eb32c60fc08"
+        },
+        "date": 1621456528654,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks.py::test_insert_triple_speed",
+            "value": 6.1805493701702385,
+            "unit": "iter/sec",
+            "range": "stddev: 0.015898748560754895",
+            "extra": "mean: 161.7979147333396 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_bulk_update",
+            "value": 6.032184440187141,
+            "unit": "iter/sec",
+            "range": "stddev: 0.010740419395581173",
+            "extra": "mean: 165.77742440000333 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_create_schema",
+            "value": 15.694407010958443,
+            "unit": "iter/sec",
+            "range": "stddev: 0.02394200141640941",
+            "extra": "mean: 63.71696613333408 msec\nrounds: 30"
+          },
+          {
+            "name": "benchmarks.py::test_schema_bulk_update",
+            "value": 16.034200385017822,
+            "unit": "iter/sec",
+            "range": "stddev: 0.026101995725987856",
+            "extra": "mean: 62.366689699998304 msec\nrounds: 30"
           }
         ]
       }
