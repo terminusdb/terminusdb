@@ -1,3 +1,9 @@
+# TerminusDB Server v4.2.3 Release Notes
+
+## New
+
++ Use new Rust-Prolog bridge for storage backend
+
 # TerminusDB Server v4.2.2 Release Notes
 
 ## New
