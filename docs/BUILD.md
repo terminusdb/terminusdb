@@ -24,7 +24,7 @@ https://www.rust-lang.org/tools/install
 To use TerminusDB Server, you will need the swi-prolog installation of
 prolog. The TerminusDB team tends to use the latest stable for local
 development and packaging, but likely, other versions of swi-prolog since
-8.0.3 will work as well.
+8.2.4 will work as well.
 Currently we don't have an officially supported version of swi-prolog,
 but latest stable is likely to work. Ubuntu's version of swi-prolog
 is outdated, so the repo needs to be added.
