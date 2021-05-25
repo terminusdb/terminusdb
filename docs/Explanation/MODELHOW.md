@@ -2,21 +2,21 @@
 
 Data has always been important to businesses but how can I choose the right approach for a particular application? TerminusDB organizes data in a very simple structure to make it easy and natural to model the real world.
 
-What we are doing together is an analysis of an Organization data domain, step by step we'll see the process to find a Terminusdb schema model that can fit our data.
+What we are doing together is an analysis of an Organization data domain, step by step we'll follow the process to find a Terminusdb schema model that can fit our data.
 
-In this tutorial we'll model the database schema for a small organization. We simulate that our organization is divided into groups by areas of specialty. Our goal is to create a schema from mapping the process of monitoring and controlling projects. We would like to model all the events that track our project execution status.
+In this tutorial we'll model the database schema for a small organization. We simulate that our organization is divided into specialized groups. Our goal is to create a schema from mapping the process of monitoring and controlling projects. We would like to model all the events that track our project execution status.
 
 
 ### Analyze the Organization process and get out the main entities
 
-An entity is an object in the real world with an independent existence that can be differentiated from other entities. 
-In TerminusDB we have two type of entities: [**Document elements**](#classes-or-node-element), they can exist apart from all of its related entities. [**Object elements**](#classes-or-node-element), They can not exist without a relationship with other entities.
+An entity is an object with independent existence that can be differentiated from other entities. 
+In TerminusDB we have two type of entities: [**Document elements**](#classes-or-node-element) can exist apart from other entities. [**Object elements**](#classes-or-node-element) can not exist without relationships connected to other entities.
 
 Let's analyze our organization
 
-* The **Organization** is divides in functional **Team/Group**
-* A **Person** belongs to a **Team/group**
-* A **Person** has a different Role in the **Team/Group**
+* The **Organization** divides into functional **Team/Group** entities
+* A **Person** belongs to a **Team/Group**
+* A **Person** has a Role in the **Team/Group**
 * The **Team/Group** schedules a **Project**
 * The **Project** is divided into **Tasks**.
 * Every **Task** is assigned to a **Person** to complete the **Job**.
