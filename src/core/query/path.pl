@@ -5,7 +5,6 @@
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
-:- use_module(core(validation)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),

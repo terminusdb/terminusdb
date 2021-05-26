@@ -3,7 +3,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
-
+:- use_module(core(document)).
 
 api_class_frame(System_DB, Auth, Path, Class_Uri, Frame) :-
     do_or_die(

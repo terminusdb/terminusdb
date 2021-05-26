@@ -2,6 +2,10 @@
               refute_validation_objects/2
           ]).
 
+:- use_module(core(util), [exists/2]).
+:- use_module(core(transaction)).
+:- use_module(instance).
+:- use_module(schema).
 /*
  * needs_schema_validation(Validation_Object) is det.
  *

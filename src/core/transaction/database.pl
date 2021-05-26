@@ -16,7 +16,6 @@
 
 :- use_module(core(transaction/descriptor)).
 :- use_module(core(transaction/validate)).
-:- use_module(core(validation)).
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).

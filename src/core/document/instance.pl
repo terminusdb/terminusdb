@@ -1,5 +1,5 @@
-:- module(json_instance, [
-              refute_instance/1
+:- module('document/instance', [
+              refute_instance/2
           ]).
 
 /*
@@ -17,7 +17,8 @@
 :- use_module(library(aggregate)).
 
 
-is_rdf_list_(Instance, rdf:nil) :-
+is_rdf_list_(_Instance, Type) :-
+    global_prefix_expand(rdf:nil, Type),
     !.
 is_rdf_list_(Instance, Type) :-
     xrdf(Instance, Type, rdf:first, _Car),
@@ -31,11 +32,12 @@ is_rdf_list(Validation_Object, Type) :-
 % This looks dubious
 is_instance(_Validation_Object, _^^T,T) :-
     !.
-is_instance(_Validation_Object, _@_,rdf:literal) :-
+is_instance(_Validation_Object, _@_, T) :-
+    global_prefix_expand(rdf:literal,T),
     !.
-is_instance(Validation_Object, X,C) :-
+is_instance(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
-    xrdf(Instance, rdf:type,Class),
+    xrdf(Instance, X, rdf:type, Class),
     is_simple_class(Validation_Object, Class),
     class_subsumed(Validation_Object, Class,C),
     !.
@@ -55,6 +57,7 @@ is_dateTime(A) :-
 is_dateTime(A) :-
     string(A).
 
+% DEBUG - use already existing refutation system
 refute_base_type_(xsd:string, A, Witness) :-
     atom(A),
     !,
@@ -93,14 +96,14 @@ refute_base_type(N,Type,Witness) :-
 
 array_object(Validation_Object, S,I,O) :-
     database_instance(Validation_Object, Instance),
-    xrdf(Instance, S,rdf:type,array_object),
+    xrdf(Instance, S,rdf:type,sys:'Array_Object'),
     % cardinality one
     findall(t(S,index,I),
-            xrdf(Instance, S,index,I),
+            xrdf(Instance, S,sys:index,I),
             [t(S,index,I)]),
     % cardinality one
     findall(t(S,object,O),
-            xrdf(Instance, S,object,O),
+            xrdf(Instance, S,sys:object,O),
             [t(S,object,O)]).
 
 member_list_(Instance, O,L) :-
@@ -204,7 +207,7 @@ subject_changed(Validation_Object, Subject) :-
 subject_inserted(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
     xrdf_added(Instance, Subject,rdf:type,_),
-    \+ xrdf_removed(Subject,_,_),
+    \+ xrdf_deleted(Instance, Subject,_,_),
     !.
 
 subject_updated(Validation_Object, Subject) :-
@@ -322,7 +325,7 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
 
 refute_built_in(Validation_Object,Subject,Predicate,Witness) :-
     database_instance(Validation_Object, Instance),
-    xrdf_added(Instance,Subject,Predicate,Value,i),
+    xrdf_added(Instance,Subject,Predicate,Value),
     refute_built_in_value(Validation_Object,Predicate,Value,Witness).
 
 refute_subject(Validation_Object,Subject,Witness) :-

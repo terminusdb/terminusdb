@@ -6,7 +6,8 @@
               commit_commit_validation_object/4,
               validate_validation_objects/2,
               validate_validation_objects/3,
-              read_write_obj_to_graph_validation_obj/4
+              read_write_obj_to_graph_validation_obj/4,
+              validation_object_changed/1
           ]).
 
 /** <module> Validation
@@ -24,7 +25,9 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
-:- use_module(core(validation)).
+:- use_module(core(document), [
+                  refute_validation_objects/2
+              ]).
 
 :- use_module(library(semweb/turtle)).
 

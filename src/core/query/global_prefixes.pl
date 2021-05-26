@@ -6,31 +6,13 @@
           ]).
 
 /** <module> Global Prefixes
- *
- * Global prefix management utilities used for goal expansion
- *
- * * * * * * * * * * * * * COPYRIGHT NOTICE  * * * * * * * * * * * * * * *
- *                                                                       *
- *  This file is part of TerminusDB.                                      *
- *                                                                       *
- *  TerminusDB is free software: you can redistribute it and/or modify    *
- *  it under the terms of the GNU General Public License as published by *
- *  the Free Software Foundation, under version 3 of the License.        *
- *                                                                       *
- *                                                                       *
- *  TerminusDB is distributed in the hope that it will be useful,         *
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of       *
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
- *  GNU General Public License for more details.                         *
- *                                                                       *
- *  You should have received a copy of the GNU General Public License    *
- *  along with TerminusDB.  If not, see <https://www.gnu.org/licenses/>.  *
- *                                                                       *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+ **/
 
 :- reexport(core(util/syntax)).
 
 % internal
+global_prefixes(sys,'http://terminusdb.com/schema/sys#').
+global_prefixes(type,'http://terminusdb.com/schema/type#').
 global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
 global_prefixes(vio,'http://terminusdb.com/schema/vio#').
 global_prefixes(woql,'http://terminusdb.com/schema/woql#').
@@ -67,6 +49,9 @@ literal_expand(D^^T, D^^E) :-
     global_prefix_expand(T,E).
 literal_expand(D@L, D@L).
 
+/*
+ * Used for goal expansion magic
+ */
 prefix_list(List, Output) :-
     maplist(global_prefix_expand, List, Output).
 

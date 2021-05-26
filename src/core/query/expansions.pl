@@ -98,6 +98,12 @@ user:goal_expansion(xrdf_deleted(G,X,Y,L),xrdf_deleted(G,X,Y,Object)) :-
     once(L = _@_ ; L = _^^_),
     literal_expand(L,Object).
 
+% global_prefix_expand/2
+user:goal_expansion(global_prefix_expand(A,B),B=C) :-
+    ground(A),
+    !,
+    global_prefix_expand(A,C).
+
 % prefix_list/2
 user:goal_expansion(prefix_list(Input,List),List=Output) :-
     ground(Input),

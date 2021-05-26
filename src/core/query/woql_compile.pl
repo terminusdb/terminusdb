@@ -15,10 +15,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(inference).
-:- use_module(frame, [
-                  update_object/3,
-                  delete_object/2
-              ]).
 :- use_module(jsonld).
 :- use_module(json_woql).
 % We may need to patch this in again...
@@ -35,9 +31,6 @@
 :- use_module(core(account)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
-
-%:- use_module(core(validation/schema)).
-:- use_module(core(validation)).
 
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).

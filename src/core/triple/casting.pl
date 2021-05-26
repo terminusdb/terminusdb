@@ -14,8 +14,6 @@
 :- use_module(literals).
 
 :- use_module(core(util)).
-%:- use_module(core(util/speculative_parse)).
-:- use_module(core(validation)).
 :- use_module(core(triple/base_type)).
 
 :- reexport(core(util/syntax)).

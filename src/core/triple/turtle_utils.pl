@@ -155,7 +155,6 @@ graph_to_turtle(Prefixes,G,Out_Stream) :-
     ->  true
     ;   layer_to_turtle(G.read,Prefixes,Out_Stream)).
 
-:- use_module(core(validation)).
 :- use_module(core(triple/database_utils)).
 dump_md_stream(Collection,Prefixes,Out_Stream) :-
     format_ontology(Collection,Prefixes, Out_Stream),

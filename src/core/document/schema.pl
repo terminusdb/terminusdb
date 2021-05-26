@@ -7,7 +7,8 @@
               class_predicate_type/4,
               type_descriptor/3,
               class_subsumed/3,
-              key_descriptor/3
+              key_descriptor/3,
+              type_family_constructor/1
           ]).
 
 /*
@@ -26,18 +27,17 @@ check_schema :-
     ;   true).
 
 is_unit(Class) :-
-    prefix_list([sys:'Unit'], List),
-    memberchk(Class,List).
+    global_prefix_expand(sys:'Unit', Class).
 
 is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema,Class, rdf:type, sys:'Enum').
+    xrdf(Schema, Class, rdf:type, sys:'Enum').
 
 is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, rdf:type, sys:'TaggedUnion').
+    xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
-is_simple_class(Validation_Object,Class) :-
+is_simple_class(_Validation_Object,Class) :-
     prefix_list(
         [
             sys:'Class',
@@ -64,22 +64,21 @@ is_base_type(Type) :-
 
     memberchk(Type, List).
 
-class_subsumed(Validation_Object,Class,Class).
+class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
     class_super(Validation_Object,Class,Super),
     class_subsumed(Validation_Object,Super, Subsumed).
 
 class_super(Validation_Object,Class,Super) :-
-    database_schema(Validation_Object,Schema),
-    xrdf(Class, rdfs:subClassOf, Super).
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, Class, rdfs:subClassOf, Super).
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Class, rdfs:subClassOf, Intermediate),
+    xrdf(Schema, Class, rdfs:subClassOf, Intermediate),
     class_super(Validation_Object,Intermediate,Super).
 
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     is_simple_class(Validation_Object,Class),
-
     database_schema(Validation_Object,Schema),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
@@ -109,7 +108,7 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
 
 sub_class_of(Validation_Object,Class,Subclass) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Validation_Object,Class,rdfs:subClassOf,Subclass).
+    xrdf(Schema,Class,rdfs:subClassOf,Subclass).
 
 repeats([X|T]) :-
     member(X,T),
@@ -132,9 +131,8 @@ is_built_in(P) :-
     prefix_list(
         [
             rdf:type,
-            rdfs:comment,
-            rdfs:label,
-            rdfs:subClassOf,
+            sys:comment,
+            sys:inheritsFrom,
             sys:key,
             sys:base,
             sys:value,
@@ -144,10 +142,7 @@ is_built_in(P) :-
         List),
     memberchk(P,List).
 
-is_type_family(Validation_Object,Class) :-
-    database_schema(Validation_Object,Schema),
-    xrdf(Schema,Class,rdf:type,Type),
-
+type_family_constructor(Type) :-
     prefix_list(
         [
             sys:'Set',
@@ -161,10 +156,15 @@ is_type_family(Validation_Object,Class) :-
         List),
     memberchk(Type,List).
 
+is_type_family(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema,Class,rdf:type,Type_Constructor),
+    type_family_constructor(Type_Constructor).
+
 refute_property(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Validation_Object, Class, rdf:type, sys:'Class'),
-    xrdf(Validation_Object, Class, P, Range),
+    xrdf(Schema, Class, rdf:type, sys:'Class'),
+    xrdf(Schema, Class, P, Range),
     \+ is_built_in(P),
     (   is_type_family(Validation_Object, Range)
     ->  refute_type(Validation_Object, Range, Witness)
@@ -226,7 +226,10 @@ refute_class(Validation_Object,Class, Witness) :-
 refute_class(Validation_Object,Class,Witness) :-
     refute_simple_class(Validation_Object,Class,Witness).
 
-rdf_list(Validation_Object,rdf:nil,[]).
+rdf_list(_,P,[]) :-
+    prefix_list([rdf:nil],List),
+    memberchk(P,List),
+    !.
 rdf_list(Validation_Object,Cell,[First|Rest]) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Cell, rdf:first, First),
@@ -234,18 +237,18 @@ rdf_list(Validation_Object,Cell,[First|Rest]) :-
     rdf_list(Validation_Object, Next_Cell,Rest).
 
 refute_type(Validation_Object,Type,Witness) :-
-    database_schema(Validation_Object,Schema),
-    xrdf(Validation_Object, Type, rdf:type, sys:'Enum'),
-    (   \+ xrdf(Validation_Object, Type, sys:value, _),
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Enum'),
+    (   \+ xrdf(Schema, Type, sys:value, _),
         Witness = json{ '@type' : enum_has_no_elements,
                         type : Type }
-    ;   xrdf(Validation_Object, Type, sys:value, Cons),
+    ;   xrdf(Schema, Type, sys:value, Cons),
         refute_list(Validation_Object,Cons,List_Witness),
         Witness = (List_Witness.put({'@type' : enum_has_bad_enumeration,
                                      list_error : (List_Witness.'@type')}))
     ).
 refute_type(Validation_Object,Type,Witness) :-
-    database_schema(Validation_Object,Schema),
+    database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'TaggedUnion'),
     xrdf(Schema, Type, P, Class),
     \+ is_built_in(Validation_Object,P),
@@ -254,8 +257,8 @@ refute_type(Validation_Object,Type,Witness) :-
                   class_error : (Class_Witness.'@type')
                  })).
 refute_type(Validation_Object,Type,Witness) :-
-    database_schema(Validation_Object,Schema),
-    xrdf(Schema,Type, rdf:type, sys:'Set'),
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Set'),
     \+  xrdf(Schema, Type, sys:class, _),
     Witness = json{ '@type' : set_has_no_class,
                     type : Type }.
@@ -266,19 +269,19 @@ refute_type(Validation_Object,Type,Witness) :-
     Witness = json{ '@type' : list_has_no_class,
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
-    database_schema(Validation_Object,Schema),
+    database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     \+ xrdf(Schema, Type, sys:class, _),
     Witness = json{ '@type' : optional_has_no_class,
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
-    database_schema(Validation_Object,Schema),
+    database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Array'),
     \+ xrdf(Schema, Type, sys:class, _),
     Witness = json{ '@type' : array_has_no_class,
                     type : Type }.
-refute_type(Type,Witness) :-
-    database_schema(Validation_Object,Schema),
+refute_type(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     (   \+ xrdf(Schema, Type, sys:class, _)
     ->  Witness = json{ '@type' : cardinality_has_no_class,
@@ -323,23 +326,23 @@ type_descriptor(Validation_Object, Type, set(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Set'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Type, list(Class)) :-
+type_descriptor(Validation_Object, Type, list(Class)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'List'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Type, array(Class)) :-
+type_descriptor(Validation_Object, Type, array(Class)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Array'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Type, card(Class,N)) :-
+type_descriptor(Validation_Object, Type, card(Class,N)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
     xrdf(Schema, Type, sys:cardinality, N^^type:positiveInteger).
-type_descriptor(Type, optional(Class)) :-
+type_descriptor(Validation_Object, Type, optional(Class)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
@@ -347,105 +350,117 @@ type_descriptor(Type, optional(Class)) :-
 
 key_base(Validation_Object, Type, Base) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type,sys:base,Base^^type:string),
+    xrdf(Schema, Type, sys:base, Base^^type:string),
     !.
-key_base(Validation_Object, _, '').
+key_base(_Validation_Object, Type, Type).
 
 % should refactor to do key lookup once.
 key_descriptor(Validation_Object, Type, Descriptor) :-
-    database_schema(Validation_Object,Schema),
+    database_schema(Validation_Object, Schema),
     xrdf(Schema, Type,sys:key,Obj),
     key_descriptor_(Type,Obj,Descriptor).
 
 key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Obj,rdf:type,sys:lexical),
-    xrdf(Schema, Obj,sys:fields,L),
+    xrdf(Schema, Obj,rdf:type, sys:'Lexical'),
+    xrdf(Schema, Obj, sys:fields, L),
     rdf_list(L,Fields),
     key_base(Validation_Object,Type,Base).
 key_descriptor_(Validation_Object, Type, Obj, hash(Base,Fields)) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Obj,rdf:type,sys:hash),
-    xrdf(Schema, Obj,sys:fields,L),
+    xrdf(Schema, Obj, rdf:type, sys:'Hash'),
+    xrdf(Schema, Obj, sys:fields, L),
     rdf_list(L,Fields),
     key_base(Validation_Object,Type,Base).
 key_descriptor_(Validation_Object, Type, Obj, value_hash(Base)) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Obj,rdf:type,sys:value_hash),
+    xrdf(Schema, Obj, rdf:type, sys:'ValueHash'),
     key_base(Validation_Object,Type,Base).
 key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Obj,rdf:type,sys:random),
+    xrdf(Schema, Obj, rdf:type, sys:'Random'),
     key_base(Validation_Object,Type,Base).
 
-/*
 :- begin_tests(schema_checker).
+:- use_module(core(util/test_utils)).
 
 test(check_for_cycles_good, [
          setup(
-             (   delete_database,
-
-                 % Schema
-                 insert_triple(s(person, rdf:type, 'Class')),
-                 insert_triple(s(person, name, type:string)),
-                 insert_triple(s(person, birthdate, type:date)),
-                 insert_triple(s(person, friends, set_person)),
-                 insert_triple(s(set_person, rdf:type, 'Set')),
-                 insert_triple(s(set_person, sys:class, person)),
-
-                 insert_triple(s(employee, rdf:type, 'Class')),
-                 insert_triple(s(employee, rdfs:subClassOf, person)),
-                 insert_triple(s(employee, employee_number, type:integer)),
-
-                 stage
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema(admin,test),
+                 resolve_absolute_string_descriptor('admin/test',Desc)
 
              )),
          cleanup(
-             delete_database
+             teardown_temp_store(State)
          )
      ]) :-
 
-    check_schema.
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"}, Context),
+
+    with_transaction(
+        Context,
+        (   % Schema
+            ask(Context,
+                (   insert(person, rdf:type, 'Class'),
+                    insert(person, name, type:string),
+                    insert(person, birthdate, type:date),
+                    insert(person, friends, set_person),
+                    insert(set_person, rdf:type, 'Set'),
+                    insert(set_person, sys:class, person),
+                    insert(employee, rdf:type, 'Class'),
+                    insert(employee, rdfs:subClassOf, person),
+                    insert(employee, employee_number, type:integer)
+                )
+               )
+        ),
+        _Meta).
 
 test(check_for_cycles_bad, [
          setup(
-             (   delete_database,
-
-                 insert_triple(s(person, rdf:type, 'Class')),
-                 insert_triple(s(person, rdfs:subClassOf, engineer)),
-                 insert_triple(s(person, name, type:string)),
-                 insert_triple(s(person, birthdate, type:date)),
-                 insert_triple(s(person, friends, set_person)),
-                 insert_triple(s(set_person, rdf:type, 'Set')),
-                 insert_triple(s(set_person, sys:class, person)),
-
-                 insert_triple(s(employee, rdf:type, 'Class')),
-                 insert_triple(s(employee, rdfs:subClassOf, person)),
-                 insert_triple(s(employee, employee_number, type:integer)),
-
-                 insert_triple(s(engineer, rdf:type, 'Class')),
-                 insert_triple(s(engineer, rdfs:subClassOf, employee)),
-
-                 stage
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema(admin,test),
+                 resolve_absolute_string_descriptor('admin/test',Desc)
 
              )),
          cleanup(
-             delete_database
-         ),
-         error(
-             schema_check_failure(
-                 witness{
-                     '@type':cycle_in_class,
-                     from_class:person,
-                     path:[engineer,person,employee,engineer],
-                     to_class:employee
-                 }
-             ),_Ctx)
+             teardown_temp_store(State)
+         )
+
      ]) :-
 
-    check_schema.
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"}, Context),
+
+    with_transaction(
+        Context,
+        (   % Schema
+            ask(Context,
+                (
+                    insert(person, rdf:type, 'Class'),
+                    insert(person, rdfs:subClassOf, engineer),
+                    insert(person, name, type:string),
+                    insert(person, birthdate, type:date),
+                    insert(person, friends, set_person),
+                    insert(set_person, rdf:type, 'Set'),
+                    insert(set_person, sys:class, person),
+
+                    insert(employee, rdf:type, 'Class'),
+                    insert(employee, rdfs:subClassOf, person),
+                    insert(employee, employee_number, type:integer),
+
+                    insert(engineer, rdf:type, 'Class'),
+                    insert(engineer, rdfs:subClassOf, employee)
+                )
+               )
+        ),
+        _Meta_Data
+    ).
 
 %% TODO: Check for diamond properties!
 
 :- end_tests(schema_checker).
-*/
+
