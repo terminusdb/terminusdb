@@ -66,3 +66,8 @@ literal_expand(D^^T, D^^E) :-
     !,
     global_prefix_expand(T,E).
 literal_expand(D@L, D@L).
+
+prefix_list(List, Output) :-
+    maplist(global_prefix_expand, List, Output).
+
+
