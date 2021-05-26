@@ -267,19 +267,19 @@ refute_type(Validation_Object,Type,Witness) :-
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Type, rdf:type, 'Optional'),
+    xrdf(Schema, Type, rdf:type, sys:'Optional'),
     \+ xrdf(Schema, Type, sys:class, _),
     Witness = json{ '@type' : optional_has_no_class,
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Type, rdf:type, 'Array'),
+    xrdf(Schema, Type, rdf:type, sys:'Array'),
     \+ xrdf(Schema, Type, sys:class, _),
     Witness = json{ '@type' : array_has_no_class,
                     type : Type }.
 refute_type(Type,Witness) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Type, rdf:type, 'Cardinality'),
+    xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     (   \+ xrdf(Schema, Type, sys:class, _)
     ->  Witness = json{ '@type' : cardinality_has_no_class,
                         type : Type }
@@ -320,28 +320,28 @@ type_descriptor(Validation_Object, Class, class(Class)) :-
     !.
 type_descriptor(Validation_Object, Type, set(Class)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, rdf:type, 'Set'),
+    xrdf(Schema, Type, rdf:type, sys:'Set'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 type_descriptor(Type, list(Class)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, rdf:type, 'List'),
+    xrdf(Schema, Type, rdf:type, sys:'List'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 type_descriptor(Type, array(Class)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, rdf:type, 'Array'),
+    xrdf(Schema, Type, rdf:type, sys:'Array'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 type_descriptor(Type, card(Class,N)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, rdf:type, 'Cardinality'),
+    xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
     xrdf(Schema, Type, sys:cardinality, N^^type:positiveInteger).
 type_descriptor(Type, optional(Class)) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, rdf:type, 'Optional'),
+    xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 
