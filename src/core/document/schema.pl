@@ -441,7 +441,7 @@ test(check_for_cycles_bad, [
             ask(Context,
                 (
                     insert(person, rdf:type, 'Class'),
-                    insert(person, rdfs:subClassOf, engineer),
+                    insert(person, sys:inheritsFrom, engineer),
                     insert(person, name, type:string),
                     insert(person, birthdate, type:date),
                     insert(person, friends, set_person),
@@ -449,11 +449,11 @@ test(check_for_cycles_bad, [
                     insert(set_person, sys:class, person),
 
                     insert(employee, rdf:type, 'Class'),
-                    insert(employee, rdfs:subClassOf, person),
+                    insert(employee, sys:inheritsFrom, person),
                     insert(employee, employee_number, type:integer),
 
                     insert(engineer, rdf:type, 'Class'),
-                    insert(engineer, rdfs:subClassOf, employee)
+                    insert(engineer, sys:inheritsFrom, employee)
                 )
                )
         ),
