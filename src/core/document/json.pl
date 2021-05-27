@@ -738,7 +738,7 @@ test(extract_json,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema(admin,test))),
+                 create_db_without_schema(admin,test),
 
              % Schema
                  forall(schema1(A,B,C),
@@ -763,14 +763,13 @@ test(extract_json,
                             },
 
                  forall(json_triple(Document,t(X,P,Y)),
-                        insert_triple(t(X,P,Y))),
+                        insert_triple(t(X,P,Y)))
 
-                 check_and_commit
              )
          ),
          cleanup(
              (
-                 delete_database
+                 teardown_temp_store(State)
              )
          )
      ]) :-

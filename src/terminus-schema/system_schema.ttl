@@ -1,0 +1,66 @@
+@base <http://terminusdb.com/schema/system/> .
+@prefix : <http://terminusdb.com/schema/system#> .
+@prefix type: <http://terminusdb.com/schema/type#> .
+@prefix sys: <http://terminusdb.com/schema/sys#> .
+
+:User a sys:Class ;
+  :identifier type:string ;
+  :key_hash type:string ;
+  :role :Role .
+
+:Organization a sys:Class ;
+  :name type:string ;
+  :child [
+    a sys:Set ;
+    sys:class :Organization ] ;
+  :database [
+    a sys:Set ;
+    sys:class :Database ] .
+
+:Role a sys:class ;
+  :capability [
+    a sys:Set ;
+    sys:class :Capability ] .
+
+:Capability a sys:Class ;
+  :scope :Resource ;
+  :action [
+    a sys:Set ;
+    sys:class :Action ] .
+
+:Action a sys:Enum ;
+  sys:value (
+    <Action#create_database>
+    <Action#delete_database>
+    <Action#class_frame>
+    <Action#clone>
+    <Action#fetch>
+    <Action#push>
+    <Action#branch>
+    <Action#rebase>
+    <Action#instance_read_access>
+    <Action#instance_write_access>
+    <Action#schema_read_access>
+    <Action#schema_write_access>
+    <Action#inference_read_access>
+    <Action#inference_write_access>
+    <Action#meta_read_access>
+    <Action#meta_write_access>
+    <Action#commit_read_access>
+    <Action#commit_write_access>
+    <Action#manage_capabilities>
+    ).
+
+:Resource a sys:Class ;
+  :name type:string .
+
+:SystemDatabase a sys:Class ;
+  sys:inheritsFrom :Resource .
+
+:Database a sys:Class ;
+  sys:inheritsFrom :Resource .
+
+:DatabaseState a sys:Enum ;
+  sys:value ( <DatabaseState#deleting>
+              <DatabaseState#finalized> ) .
+
