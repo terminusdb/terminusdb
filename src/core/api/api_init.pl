@@ -249,7 +249,7 @@ initialize_database_with_store(Key, Store) :-
     ref_schema(Ref_Schema_String),
     open_string(Ref_Schema_String, Ref_Schema_Stream),
     ref_ontology(Ref_Name),
-    create_graph_from_json(Store,Ref_Name,Ref_Schema_Stream,schema._),
+    create_graph_from_json(Store,Ref_Name,Ref_Schema_Stream,schema,_),
 
     repo_schema(Repo_Schema_String),
     open_string(Repo_Schema_String, Repo_Schema_Stream),

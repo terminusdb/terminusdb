@@ -165,7 +165,8 @@ database_context(DB,Context) :-
     id_schema_json(DB,ID,Context).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
-    get_dict('@base', Context, Base),
+    % NOTE: This is probably wrong if it already has a prefix...
+    get_dict('@schema', Context, Base),
     atomic_list_concat([Base,'(.*)'],Pat),
     re_matchsub(Pat, P, Match, []),
     !,
@@ -173,9 +174,6 @@ predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     atom_string(Prop,Short).
 predicate_map(P, _Context, P, json{}).
 
-/*
-type_context(DB,'@id',json{}) :-
-    !. */
 type_context(DB,Type,Context) :-
     database_context(DB, Database_Context),
     atom_string(Type_Atom,Type),
@@ -191,14 +189,25 @@ type_context(DB,Type,Context) :-
     dict_create(Context,json,Edges).
 
 json_elaborate(DB,JSON,JSON_ID) :-
+    database_context(DB,Context),
+    json_elaborate(DB,JSON,Context,JSON_ID).
+
+maybe_expand_type(Type,Context,TypeEx) :-
+    get_dict('@schema', Context, Schema),
+    put_dict(_{'@base' : Schema}, Context, New_Context),
+    prefix_expand(Type, New_Context, TypeEx).
+
+json_elaborate(DB,JSON,Context,JSON_ID) :-
     is_dict(JSON),
     !,
     get_dict('@type',JSON,Type),
+    maybe_expand_type(Type,Context,TypeEx),
     do_or_die(
-        type_context(DB,Type,Context),
-        error(unknown_type_encountered(Type),_)),
+        type_context(DB,TypeEx,Type_Context),
+        error(unknown_type_encountered(TypeEx),_)),
     %
-    json_context_elaborate(DB,JSON,Context,Elaborated),
+    put_dict(Type_Context,Context,New_Context),
+    json_context_elaborate(DB,JSON,New_Context,Elaborated),
     json_jsonid(Elaborated,JSON_ID).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
@@ -262,7 +271,8 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
     findall(
         P-V,
         (   member(Prop-Value,Pairs),
-            (   get_dict(Prop, Context, Full_Expansion)
+            (   get_dict(Prop, Context, Full_Expansion),
+                is_dict(Full_Expansion)
             ->  expansion_key(Prop,Full_Expansion,P,Expansion),
                 context_value_expand(DB,Value,Expansion,V)
             ;   P = Prop,
@@ -298,7 +308,7 @@ json_schema_elaborate(JSON,Elaborated) :-
 
 is_type_family(Dict) :-
     get_dict('@type',Dict,Type_Constructor),
-    maybe_expand_type(Type_Constructor,Expanded),
+    maybe_expand_schema_type(Type_Constructor,Expanded),
     type_family_constructor(Expanded).
 
 type_family_parts(JSON,['Cardinality',Class,Cardinality]) :-
@@ -318,7 +328,7 @@ type_family_id(JSON,Path,ID) :-
     merge_separator_split(Merged,'_',Encoded),
     ID = Merged.
 
-maybe_expand_type(Type, Expanded) :-
+maybe_expand_schema_type(Type, Expanded) :-
     (   re_match('.*:.*', Type)
     ->  Type = Expanded
     ;   global_prefix_expand(sys:Type,Expanded)
@@ -347,13 +357,13 @@ context_triple(JSON,Triple) :-
 
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
-context_keyword_value_map('@ref',Value,'sys:ref',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
 
 context_elaborate(JSON,Elaborated) :-
     is_context(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
-    partition([P-_]>>(member(P, ['@type', '@base', '@ref'])),
+    partition([P-_]>>(member(P, ['@type', '@base', '@schema'])),
               Pairs, Keyword_Values, Prop_Values),
     findall(
         P-V,
@@ -383,24 +393,24 @@ context_elaborate(JSON,Elaborated) :-
                                                         '@value' : Prefix_Pair_List }
                                 |PVs]).
 
-json_predicate_value('@id',V,_,'@id',V) :-
+json_schema_predicate_value('@id',V,_,'@id',V) :-
     !.
-json_predicate_value(P,V,_,P,json{'@type' : 'xsd:positiveInteger',
+json_schema_predicate_value(P,V,_,P,json{'@type' : 'xsd:positiveInteger',
                                   '@value' : V }) :-
     global_prefix_expand(sys:cardinality, P),
     !.
-json_predicate_value('@type',V,_,'@type',Value) :-
+json_schema_predicate_value('@type',V,_,'@type',Value) :-
     !,
-    maybe_expand_type(V,Value).
-json_predicate_value('@class',V,_,Class,json{'@type' : "@id",
+    maybe_expand_schema_type(V,Value).
+json_schema_predicate_value('@class',V,_,Class,json{'@type' : "@id",
                                              '@id' : V}) :-
     !,
     global_prefix_expand(sys:class, Class).
-json_predicate_value(P,V,Path,P,Value) :-
+json_schema_predicate_value(P,V,Path,P,Value) :-
     is_dict(V),
     !,
     json_schema_elaborate(V, [P|Path], Value).
-json_predicate_value(P,V,_,P,json{'@type' : "@id",
+json_schema_predicate_value(P,V,_,P,json{'@type' : "@id",
                                   '@id' : V }).
 
 json_schema_elaborate(JSON,_,Elaborated) :-
@@ -409,7 +419,7 @@ json_schema_elaborate(JSON,_,Elaborated) :-
     %writeq(JSON),nl,
     get_dict('@id', JSON, ID),
     get_dict('@type', JSON, Type),
-    maybe_expand_type(Type,Expanded),
+    maybe_expand_schema_type(Type,Expanded),
     get_dict('@value', JSON, List),
     maplist({ID}/[Elt,json{'@type' : "@id",
                            '@id' : V}]>>(
@@ -434,7 +444,7 @@ json_schema_elaborate(JSON,Old_Path,Elaborated) :-
     findall(
         Prop-Value,
         (   member(P-V,Pairs),
-            json_predicate_value(P,V,Path,Prop,Value)
+            json_schema_predicate_value(P,V,Path,Prop,Value)
         ),
         PVs),
     dict_pairs(Elaborated,json,PVs).
@@ -442,7 +452,9 @@ json_schema_elaborate(JSON,Old_Path,Elaborated) :-
 
 json_schema_triple(JSON,Context,Triple) :-
     json_schema_elaborate(JSON,JSON_Schema),
-    expand(JSON_Schema,Context,Expanded),
+    get_dict('@schema', Context, Schema),
+    put_dict(_{'@base' : Schema}, Context, Schema_Context),
+    expand(JSON_Schema,Schema_Context,Expanded),
     json_triple_(Expanded,Triple).
 
 json_schema_triple(JSON,Triple) :-
@@ -658,8 +670,8 @@ type_descriptor_json(enum(C), C).
 schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
     !.
-schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@ref',O) :-
-    global_prefix_expand(sys:ref,P),
+schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@schema',O) :-
+    global_prefix_expand(sys:schema,P),
     !.
 schema_subject_predicate_object_key_value(_,_Id,P,O,'@class',O) :-
     global_prefix_expand(sys:class,P),
