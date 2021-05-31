@@ -1,19 +1,31 @@
 :- module('document/json', [
-              json_elaborate/2,
-              json_triple/2,
-              id_json/3
+              context_triple/2,
+              json_elaborate/3,
+              json_triple/4,
+              json_schema_triple/2,
+              json_schema_triple/3,
+              json_schema_elaborate/2,
+              id_json/3,
+              database_context/2
           ]).
 
 :- use_module(instance).
 :- use_module(schema).
+
 :- use_module(library(pcre)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
+:- use_module(core(util), [merge_separator_split/3,do_or_die/2]).
+:- use_module(core(query), [expand/3,global_prefix_expand/2,prefix_expand/3]).
+:- use_module(core(triple), [xrdf/4,database_instance/2,database_schema/2]).
 
 value_json(X,O) :-
     O = json{
-            '@type': '@id',
-            '@value': X
+            '@type': "@id",
+            '@id': X
         },
-    atom(X),
+    string(X),
     !.
 value_json(1^^unit,json{}) :-
     !.
@@ -39,12 +51,12 @@ get_all_path_values(JSON,Path_Values) :-
 
 % TODO: Arrays
 get_value(Elaborated, _) :-
-    get_dict('@type', Elaborated, '@id'),
+    get_dict('@type', Elaborated, "@id"),
     !,
     throw(error(no_hash_possible_over_ids(Elaborated))).
 get_value(Elaborated,Value) :-
     is_dict(Elaborated),
-    get_dict('@type',Elaborated,'@container'),
+    get_dict('@type',Elaborated,"@container"),
     !,
     get_dict('@value',Elaborated, List),
     member(Elt,List),
@@ -92,19 +104,6 @@ get_field_values(JSON,Fields,Values) :-
 
 raw(JValue,Value) :- get_dict('@value',JValue,Value).
 
-/*
- * pattern_string_split(Pattern,String,List) is det.
- */
-pattern_string_split(Pattern,String,List) :-
-    re_split(Pattern,String,L),
-    once(intersperse(_,List,L)).
-
-/**
- * escape_pcre(String,Escaped) is det.
- */
-escape_pcre(String, Escaped) :-
-    re_replace('[-[\\]{}()*+?.,\\\\^$|#\\s]'/g, '\\\\0', String, Escaped).
-
 idgen_lexical(Base,Values,ID) :-
     maplist(raw,Values,Raw),
     maplist(uri_encoded(path),Raw,Encoded),
@@ -145,82 +144,129 @@ idgen(JSON,ID) :-
     ->  idgen_random(Base,ID)
     ).
 
-type_context(Type,Context) :-
-    findall(P - Image,
-            (   class_predicate_type(Type, P, Desc),
-                (   (   Desc = class(C)
-                    ;   Desc = optional(C)
-                    ;   Desc = tagged_union(C,_)
-                    )
-                ->  Image = json{ '@type' : '@id'}
-                ;   Desc = base_class(C)
-                ->  Image = json{ '@type' : C }
-                ;   Desc = enum(C,_)
-                ->  Image = json{ '@type' : C }
-                ;   Desc = list(C)
-                ->  Image = json{ '@container' : '@list',
-                                  '@type' : C
-                                }
-                ;   Desc = array(C)
-                ->  Image = json{ '@container' : '@array',
-                                  '@type' : C
-                                }
-                ;   Desc = set(C)
-                ->  Image = json{ '@container' : '@set',
-                                  '@type' : C
-                                }
-                ;   Desc = card(C,_)
-                ->  Image = json{ '@container' : '@set',
-                                  '@type' : C
-                                }
-                )
-            ),
-            Edges),
+class_descriptor_image(class(_),json{ '@type' : "@id" }).
+class_descriptor_image(optional(_),json{ '@type' : "@id" }).
+class_descriptor_image(tagged_union(_),json{ '@type' : "@id" }).
+class_descriptor_image(base_class(C),json{ '@type' : C }).
+class_descriptor_image(enum(C),json{ '@type' : C }).
+class_descriptor_image(list(C),json{ '@container' : "@list",
+                                     '@type' : C }).
+class_descriptor_image(array(C),json{ '@container' : "@array",
+                                      '@type' : C }).
+class_descriptor_image(set(C),json{ '@container' : "@set",
+                                    '@type' : C }).
+class_descriptor_image(cardinality(C,_), json{ '@container' : "@cardinality",
+                                               '@type' : C }).
+
+database_context(DB,Context) :-
+    database_schema(DB,Schema),
+    once(xrdf(Schema, ID, rdf:type, sys:'Context')),
+    !,
+    id_schema_json(DB,ID,Context).
+
+predicate_map(P, Context, Prop, json{ '@id' : P }) :-
+    get_dict('@base', Context, Base),
+    atomic_list_concat([Base,'(.*)'],Pat),
+    re_matchsub(Pat, P, Match, []),
+    !,
+    get_dict(1,Match,Short),
+    atom_string(Prop,Short).
+predicate_map(P, _Context, P, json{}).
+
+/*
+type_context(DB,'@id',json{}) :-
+    !. */
+type_context(DB,Type,Context) :-
+    database_context(DB, Database_Context),
+    atom_string(Type_Atom,Type),
+    prefix_expand(Type_Atom,Database_Context,TypeEx),
+    findall(Prop - C,
+          (
+              class_predicate_type(DB, TypeEx, P, Desc),
+              class_descriptor_image(Desc, Image),
+              predicate_map(P,Database_Context,Prop, Map),
+              put_dict(Map,Image,C)
+          ),
+          Edges),
     dict_create(Context,json,Edges).
 
-json_elaborate(JSON,JSON_ID) :-
+json_elaborate(DB,JSON,JSON_ID) :-
     is_dict(JSON),
     !,
     get_dict('@type',JSON,Type),
-    type_context(Type,Context),
-    json_context_elaborate(JSON,Context,Elaborated),
+    do_or_die(
+        type_context(DB,Type,Context),
+        error(unknown_type_encountered(Type),_)),
+    %
+    json_context_elaborate(DB,JSON,Context,Elaborated),
     json_jsonid(Elaborated,JSON_ID).
 
-json_context_elaborate(JSON, Context, Expanded) :-
+expansion_key(Key,Expansion,Prop,Cleaned) :-
+    (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
+    ->  true
+    ;   Key = Prop,
+        Expansion = Cleaned
+    ).
+
+context_value_expand(DB,Value,Expansion,V) :-
+    get_dict('@container', Expansion, _),
+    !,
+    % Container type
+    get_dict('@type', Expansion, Elt_Type),
+    (   is_list(Value)
+    ->  Value_List = Value
+    ;   string(Value)
+    ->  Value_List = [Value]
+    ;   get_dict('@value',Value,Value_List)),
+    maplist({DB,Elt_Type}/[Elt_In,Elt_Out]>>(
+                (   is_dict(Elt_In)
+                ->  put_dict(Elt_In,json{'@type':Elt_Type},Elt2)
+                ;   is_base_type(Elt_Type)
+                ->  Elt2 = json{'@value' : Elt_In,
+                                '@type': Elt_Type}
+                ;   Elt2 = json{'@id' : Elt_In,
+                                '@type': "@id"}),
+                json_elaborate(DB,Elt2,Elt_Out)
+            ), Value_List, V_List),
+    V = (Expansion.put(json{'@value' : V_List})).
+context_value_expand(DB,Value,Expansion,V) :-
+    % A possible reference
+    get_dict('@type', Expansion, "@id"),
+    !,
+    is_dict(Value),
+    json_elaborate(DB,Value, V).
+context_value_expand(_,Value,_Expansion,V) :-
+    % An already expanded typed value
+    is_dict(Value),
+    get_dict('@value',Value,_),
+    !,
+    V = Value.
+context_value_expand(DB,Value,Expansion,V) :-
+    % An unexpanded typed value
+    New_Expansion = (Expansion.put(json{'@value' : Value})),
+    json_elaborate(DB,New_Expansion, V).
+
+json_context_elaborate(DB, JSON, _Context, Expanded) :-
+    is_dict(JSON),
+    get_dict('@type',JSON,Type),
+    is_enum(DB,Type),
+    !,
+    get_dict('@value',JSON,Value),
+    atomic_list_concat([Type, '_', Value], Full_ID),
+    Expanded = json{ '@type' : "@id",
+                     '@id' : Full_ID }.
+json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
     findall(
-        Prop-V,
+        P-V,
         (   member(Prop-Value,Pairs),
-            (   get_dict(Prop, Context, Expansion)
-            ->  (   get_dict('@container', Expansion, _)
-                % Container type
-                ->  get_dict('@type', Expansion, Elt_Type),
-                    (   is_list(Value)
-                    ->  Value_List = Value
-                    ;   get_dict('@value',Value,Value_List)),
-                    maplist({Elt_Type}/[Elt_In,Elt_Out]>>(
-                                (   is_dict(Elt_In)
-                                ->  put_dict(Elt_In,json{'@type':Elt_Type},Elt2)
-                                ;   Elt2 = json{'@value' : Elt_In,
-                                                '@type': Elt_Type}),
-                                json_elaborate(Elt2,Elt_Out)
-                            ), Value_List, V_List),
-                    V = (Expansion.put(json{'@value' : V_List}))
-                % A possible reference
-                ;   get_dict('@type', Expansion, '@id'),
-                    is_dict(Value)
-                ->  json_elaborate(Value, V)
-                % An already expanded typed value
-                ;   is_dict(Value),
-                    get_dict('@value',Value,_)
-                ->  V = Value
-                % An unexpanded typed value
-                ;   New_Expansion = (Expansion.put(json{'@value' : Value})),
-                    json_elaborate(New_Expansion, V)
-                )
-            ;   V = Value
+            (   get_dict(Prop, Context, Full_Expansion)
+            ->  expansion_key(Prop,Full_Expansion,P,Expansion),
+                context_value_expand(DB,Value,Expansion,V)
+            ;   P = Prop,
+                V = Value
             )
         ),
         PVs),
@@ -235,7 +281,7 @@ json_jsonid(JSON,JSON_ID) :-
     ;   get_dict('@value', JSON, _)
     ->  JSON_ID = JSON
     ;   idgen(JSON,ID)
-    ->  JSON_ID = (JSON.put(_{'@id' : ID}))
+    ->  JSON_ID = (JSON.put(json{'@id' : ID}))
     ;   throw(error(no_id(JSON),_))
     ).
 
@@ -248,21 +294,21 @@ json_type(JSON,_Context,Type) :-
     json_prefix_access(JSON,rdf:type,Type).
 
 json_schema_elaborate(JSON,Elaborated) :-
-    get_dict('@id',JSON,ID),
-    json_schema_elaborate(JSON,[ID],Elaborated).
+    json_schema_elaborate(JSON,[],Elaborated).
 
 is_type_family(Dict) :-
     get_dict('@type',Dict,Type_Constructor),
-    type_family_constructor(Type_Constructor).
+    maybe_expand_type(Type_Constructor,Expanded),
+    type_family_constructor(Expanded).
 
-type_family_parts(JSON,['Card',Class,Cardinality]) :-
-    get_dict('@type',JSON,'Card'),
+type_family_parts(JSON,['Cardinality',Class,Cardinality]) :-
+    get_dict('@type',JSON,"Cardinality"),
     !,
-    get_dict('sys:class',JSON, Class),
-    get_dict('sys:cardinality',JSON, Cardinality).
+    get_dict('@class',JSON, Class),
+    get_dict('@cardinality',JSON, Cardinality).
 type_family_parts(JSON,[Family,Class]) :-
     get_dict('@type',JSON, Family),
-    get_dict('sys:class',JSON, Class).
+    get_dict('@class',JSON, Class).
 
 type_family_id(JSON,Path,ID) :-
     reverse(Path,Rev),
@@ -272,52 +318,153 @@ type_family_id(JSON,Path,ID) :-
     merge_separator_split(Merged,'_',Encoded),
     ID = Merged.
 
-json_schema_elaborate(JSON,Path,Elaborated) :-
-    dict_pairs(JSON,json,Pre_Pairs),
-    (   is_type_family(JSON)
-    ->  type_family_id(JSON,Path,ID),
-        Pairs = ['@id'-ID|Pre_Pairs]
-    ;   Pairs = Pre_Pairs
-    ),
+maybe_expand_type(Type, Expanded) :-
+    (   re_match('.*:.*', Type)
+    ->  Type = Expanded
+    ;   global_prefix_expand(sys:Type,Expanded)
+    ).
 
+is_context(JSON) :-
+    get_dict('@type', JSON, "@context").
+
+% NOTE: We probably need the prefixes in play here...
+is_type_enum(JSON) :-
+    get_dict('@type', JSON, "Enum"),
+    !.
+is_type_enum(JSON) :-
+    global_prefix_expand(sys:'Enum', Enum),
+    get_dict('@type', JSON, Enum).
+
+context_triple(JSON,Triple) :-
+    context_elaborate(JSON,Elaborated),
+    expand(Elaborated,JSON{
+                          sys:'http://terminusdb.com/schema/sys#',
+                          xsd:'http://www.w3.org/2001/XMLSchema#',
+                          xdd:'http://terminusdb.com/schema/xdd#'
+                      },
+           Expanded),
+    json_triple_(Expanded,Triple).
+
+context_keyword_value_map('@type',"@context",'@type','sys:Context').
+context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@ref',Value,'sys:ref',json{'@type' : "xsd:string", '@value' : Value}).
+
+context_elaborate(JSON,Elaborated) :-
+    is_context(JSON),
     !,
+    dict_pairs(JSON,json,Pairs),
+    partition([P-_]>>(member(P, ['@type', '@base', '@ref'])),
+              Pairs, Keyword_Values, Prop_Values),
     findall(
-        Prop-V,
-        (   member(Prop-Value,Pairs),
-            (   Prop = 'sys:cardinality'
-            ->  V = json{'@type' : 'xsd:positiveInteger',
-                         '@value' : Value }
-            ;   memberchk(Prop,['@type','@id'])
-            ->  V = Value
-            ;   is_dict(Value)
-            ->  json_schema_elaborate(Value, [Prop|Path], V)
-            ;   V = json{'@type' : '@id',
-                         '@value' : Value }
-            )
+        P-V,
+        (   member(Keyword-Value,Keyword_Values),
+            context_keyword_value_map(Keyword,Value,P,V)
+        ),
+        PVs),
+
+    findall(
+        Prefix_Pair,
+        (   member(Prop-Value, Prop_Values),
+            idgen_hash('terminusdb://Prefix_Pair_',[json{'@value' : Prop},
+                                                    json{'@value' : Value}], HashURI),
+            Prefix_Pair = json{'@type' : 'sys:Prefix',
+                               '@id' : HashURI,
+                               'sys:prefix' : json{ '@value' : Prop,
+                                                    '@type' : "xsd:string"},
+                               'sys:url' : json{ '@value' : Value,
+                                                 '@type' : "xsd:string"}
+                              }
+        ),
+        Prefix_Pair_List),
+
+    dict_pairs(Elaborated,json,['@id'-"terminusdb://context",
+                                'sys:prefix_pair'-json{ '@container' : "@set",
+                                                        '@type' : "sys:Prefix",
+                                                        '@value' : Prefix_Pair_List }
+                                |PVs]).
+
+json_predicate_value('@id',V,_,'@id',V) :-
+    !.
+json_predicate_value(P,V,_,P,json{'@type' : 'xsd:positiveInteger',
+                                  '@value' : V }) :-
+    global_prefix_expand(sys:cardinality, P),
+    !.
+json_predicate_value('@type',V,_,'@type',Value) :-
+    !,
+    maybe_expand_type(V,Value).
+json_predicate_value('@class',V,_,Class,json{'@type' : "@id",
+                                             '@id' : V}) :-
+    !,
+    global_prefix_expand(sys:class, Class).
+json_predicate_value(P,V,Path,P,Value) :-
+    is_dict(V),
+    !,
+    json_schema_elaborate(V, [P|Path], Value).
+json_predicate_value(P,V,_,P,json{'@type' : "@id",
+                                  '@id' : V }).
+
+json_schema_elaborate(JSON,_,Elaborated) :-
+    is_type_enum(JSON),
+    !,
+    %writeq(JSON),nl,
+    get_dict('@id', JSON, ID),
+    get_dict('@type', JSON, Type),
+    maybe_expand_type(Type,Expanded),
+    get_dict('@value', JSON, List),
+    maplist({ID}/[Elt,json{'@type' : "@id",
+                           '@id' : V}]>>(
+                format(string(V),'~w_~w',[ID,Elt])
+            ),List,New_List),
+    Elaborated = json{ '@id' : ID,
+                       '@type' : Expanded,
+                       'sys:value' : json{ '@container' : "@set",
+                                           '@type' : "@id",
+                                           '@value' : New_List } }.
+json_schema_elaborate(JSON,Old_Path,Elaborated) :-
+    is_dict(JSON),
+    dict_pairs(JSON,json,Pre_Pairs),
+    !,
+    (   is_type_family(JSON)
+    ->  type_family_id(JSON,Old_Path,ID),
+        Pairs = ['@id'-ID|Pre_Pairs]
+    ;   Pairs = Pre_Pairs,
+        get_dict('@id',JSON,ID)
+    ),
+    Path = [ID|Old_Path],
+    findall(
+        Prop-Value,
+        (   member(P-V,Pairs),
+            json_predicate_value(P,V,Path,Prop,Value)
         ),
         PVs),
     dict_pairs(Elaborated,json,PVs).
 
 
-% Doesn't exist yet.
+json_schema_triple(JSON,Context,Triple) :-
+    json_schema_elaborate(JSON,JSON_Schema),
+    expand(JSON_Schema,Context,Expanded),
+    json_triple_(Expanded,Triple).
+
 json_schema_triple(JSON,Triple) :-
     json_schema_elaborate(JSON,JSON_Schema),
     json_triple_(JSON_Schema,Triple).
 
 % Triple generator
-json_triple(JSON,Triple) :-
-    json_elaborate(JSON,JSON_Elaborated),
-    json_triple_(JSON_Elaborated,Triple).
+json_triple(DB,JSON,Context,Triple) :-
+    json_elaborate(DB,JSON,Elaborated),
+    expand(Elaborated,Context,Expanded),
+    json_triple_(Expanded,Triple).
 
-json_triples(JSON,Triples) :-
+json_triples(DB,JSON,Context,Triples) :-
     findall(
         Triple,
-        json_triple(JSON, Triple),
+        json_triple(DB, JSON, Context, Triple),
         Triples).
 
 json_triple_(JSON,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
+    \+ get_dict('@container', JSON, _),
     !,
     fail.
 json_triple_(JSON,Triple) :-
@@ -335,19 +482,32 @@ json_triple_(JSON,Triple) :-
     get_dict(Key,JSON,Value),
     (   Key = '@id'
     ->  fail
+    ;   Key = '@type', % this is a leaf
+        Value = "@id"
+    ->  fail
     ;   Key = '@type'
-    ->  Triple = t(ID,rdf:type,Value)
+    ->  global_prefix_expand(rdf:type, RDF_Type),
+        Triple = t(ID,RDF_Type,Value)
+    ;   Key = '@inherits'
+    ->  global_prefix_expand(sys:inherits, SYS_Inherits),
+        (    get_dict('@value',Value,Class)
+        ->  (   is_dict(Class)
+            ->  get_dict('@id', Class, Inherited)
+            ;   Inherited = Class),
+            Triple = t(ID,SYS_Inherits,Inherited)
+        ;   get_dict('@id', Value, Inherited)
+        ->  Triple = t(ID,SYS_Inherits,Inherited))
     ;   (   get_dict('@id', Value, Value_ID)
         ->  (   json_triple_(Value, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
-        ;   get_dict('@container', Value, '@list')
+        ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
             list_id_key_triple(List,ID,Key,Triple)
-        ;   get_dict('@container', Value, '@array')
+        ;   get_dict('@container', Value, "@array")
         ->  get_dict('@value', Value, Array),
             array_id_key_triple(Array,ID,Key,Triple)
-        ;   get_dict('@container', Value, '@set')
+        ;   get_dict('@container', Value, "@set")
         ->  get_dict('@value', Value, Set),
             set_id_key_triple(Set,ID,Key,Triple)
         ;   value_json(Lit,Value),
@@ -361,9 +521,11 @@ array_id_key_triple(List,ID,Key,Triple) :-
 array_index_id_key_triple([H|T],Index,ID,Key,Triple) :-
     idgen_random('Array_',New_ID),
     reference(H,HRef),
+    global_prefix_expand(sys:value, SYS_Value),
+    global_prefix_expand(sys:value, SYS_Index),
     (   Triple = t(ID, Key, New_ID)
-    ;   Triple = t(New_ID, sys:value, HRef)
-    ;   Triple = t(New_ID, sys:index, Index)
+    ;   Triple = t(New_ID, SYS_Value, HRef)
+    ;   Triple = t(New_ID, SYS_Index, Index)
     ;   Next_Index is Index + 1,
         array_index_id_key_triple(T,Next_Index,ID,Key,Triple)
     ;   json_triple_(H,Triple)
@@ -392,14 +554,13 @@ list_id_key_triple([H|T],ID,Key,Triple) :-
     ;   json_triple_(H,Triple)
     ).
 
-rdf_list_list(_DB, RDF_Nil,[]) :-
+rdf_list_list(_Graph, RDF_Nil,[]) :-
     global_prefix_expand(rdf:nil,RDF_Nil),
     !.
-rdf_list_list(DB, Cons,[H|L]) :-
-    database_instance(DB,Instance),
-    xrdf(Instance, Cons, rdf:first, H),
-    xrdf(Instance, Cons, rdf:rest, Tail),
-    rdf_list_list(DB,Tail,L).
+rdf_list_list(Graph, Cons,[H|L]) :-
+    xrdf(Graph, Cons, rdf:first, H),
+    xrdf(Graph, Cons, rdf:rest, Tail),
+    rdf_list_list(Graph,Tail,L).
 
 array_list(DB,Id,P,List) :-
     database_instance(DB,Instance),
@@ -436,39 +597,37 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
+type_id_predicate_iri_value(enum(C),_,_,V^^C,_,V).
+type_id_predicate_iri_value(list(_),_,_,O,DB,V) :-
+    database_instance(DB,Instance),
+    rdf_list_list(Instance,O,V).
+type_id_predicate_iri_value(array(_),Id,P,_,DB,V) :-
+    array_list(DB,Id,P,V).
+type_id_predicate_iri_value(set(_),Id,P,_,DB,V) :-
+    set_list(DB,Id,P,V).
+type_id_predicate_iri_value(cardinality(_,_),Id,P,_,DB,V) :-
+    set_list(DB,Id,P,V).
+type_id_predicate_iri_value(class(_),_,_,V,_,V).
+type_id_predicate_iri_value(tagged_union(_),_,_,V,_,V).
+type_id_predicate_iri_value(optional(_),_,_,V,_,V).
+type_id_predicate_iri_value(base_class(_),_,_,O,_,V) :-
+    value_json(O, I),
+    (   is_dict(I)
+    ->  get_dict('@value', I, V)
+    ;   I = V
+    ).
+
 id_json(DB, Id, JSON) :-
     database_instance(DB,Instance),
     xrdf(Instance, Id, rdf:type, Class),
 
     findall(
         P-V,
-        (   database_instance(DB,Instance),
-            distinct([P],xrdf(Instance,Id,P,O)),
+        (   distinct([P],xrdf(Instance,Id,P,O)),
             \+ is_built_in(P),
 
-            once(class_predicate_type(Class,P,Type)),
-
-            (   Type = enum(C,_)
-            ->  O = V^^C
-            ;   Type = list(_)
-            ->  rdf_list_list(DB,O,V)
-            ;   Type = array(_)
-            ->  array_list(DB,Id,P,V)
-            ;   Type = set(_)
-            ->  set_list(DB,Id,P,V)
-            ;   Type = card(_,_)
-            ->  set_list(DB,Id,P,V)
-            ;   (   Type = class(C)
-                ;   Type = tagged_union(_,_)
-                ;   Type = optional(_))
-            ->  V = O
-            ;   Type = base_class(_)
-            ->  value_json(O, I),
-                (   is_dict(I)
-                ->  get_dict('@value', I, V)
-                ;   I = V
-                )
-            )
+            once(class_predicate_type(DB,Class,P,Type)),
+            type_id_predicate_iri_value(Type,Id,P,O,DB,V)
         ),
         Data),
     !,
@@ -476,79 +635,141 @@ id_json(DB, Id, JSON) :-
                            '@type'-Class
                            |Data]).
 
+key_descriptor_json(lexical(_, Fields), json{ '@type' : "Lexical",
+                                                 '@fields' : Fields }).
+key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
+                                              '@fields' : Fields }).
+key_descriptor_json(value_hash(_), json{ '@type' : "ValueHash" }).
+key_descriptor_json(random(_), json{ '@type' : "Random" }).
+
+type_descriptor_json(unit, 'Unit').
+type_descriptor_json(class(C), C).
+type_descriptor_json(optional(C), json{ '@type' : "Optional",
+                                        '@class' : C }).
+type_descriptor_json(set(C), json{ '@type' : "Set",
+                                   '@class' : C }).
+type_descriptor_json(array(C), json{ '@type' : "Array",
+                                   '@class' : C }).
+type_descriptor_json(list(C), json{ '@type' : "List",
+                                    '@class' : C }).
+type_descriptor_json(tagged_union(C), C).
+type_descriptor_json(enum(C), C).
+
+schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@base',O) :-
+    global_prefix_expand(sys:base,P),
+    !.
+schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@ref',O) :-
+    global_prefix_expand(sys:ref,P),
+    !.
+schema_subject_predicate_object_key_value(_,_Id,P,O,'@class',O) :-
+    global_prefix_expand(sys:class,P),
+    !.
+schema_subject_predicate_object_key_value(DB,_Id,P,O,'@value',L) :-
+    global_prefix_expand(sys:value,P),
+    !,
+    database_schema(DB,Schema),
+    rdf_list_list(Schema, O, L).
+schema_subject_predicate_object_key_value(DB,_Id,P,O,'@key',V) :-
+    global_prefix_expand(sys:key,P),
+    !,
+    key_descriptor(DB, O, Key),
+    key_descriptor_json(Key,V).
+schema_subject_predicate_object_key_value(DB,_Id,P,O,P,JSON) :-
+    type_descriptor(DB, O, Descriptor),
+    type_descriptor_json(Descriptor,JSON).
+
+id_schema_json(DB, Id, JSON) :-
+    database_schema(DB,Schema),
+    xrdf(Schema, Id, rdf:type, Class),
+
+    findall(
+        K-V,
+        (   distinct([P],xrdf(Schema,Id,P,O)),
+            schema_subject_predicate_object_key_value(DB,Id,P,O,K,V)
+        ),
+        Data),
+    !,
+    dict_create(JSON,json,['@id'-Id,
+                           '@type'-Class
+                           |Data]).
+
+
+
 :- begin_tests(json_conv).
 
-schema1(person, rdf:type, 'Class').
+schema1(person, rdf:type, sys:'Class').
 schema1(person, name, xsd:string).
 schema1(person, birthdate, xsd:date).
 schema1(person, friends, set_person).
-schema1(set_person, rdf:type, 'Set').
+schema1(set_person, rdf:type, sys:'Set').
 schema1(set_person, sys:class, person).
-schema1(employee, rdf:type, 'Class').
+schema1(employee, rdf:type, sys:'Class').
 schema1(employee, rdfs:subClassOf, person).
 schema1(employee, staff_number, xsd:string).
 schema1(employee, boss, optional_employee).
-schema1(optional_employee, rdf:type, 'Optional').
+schema1(optional_employee, rdf:type, sys:'Optional').
 schema1(optional_employee, sys:class, employee).
 schema1(employee, tasks, list_task).
-schema1(list_task, rdf:type, 'List').
+schema1(list_task, rdf:type, sys:'List').
 schema1(list_task, sys:class, task).
-schema1(task, rdf:type, 'Class').
+schema1(task, rdf:type, sys:'Class').
 schema1(task, name, xsd:string).
-schema1(criminal, rdf:type, 'Class').
+schema1(criminal, rdf:type, sys:'Class').
 schema1(criminal, rdfs:subClassOf, person).
 schema1(criminal, aliases, list_string).
-schema1(list_string, rdf:type, 'List').
+schema1(list_string, rdf:type, sys:'List').
 schema1(list_string, sys:class, xsd:string).
 
-test(create_schema_context,
+write_schema1(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    % Schema
+    with_transaction(
+        Context,
+        forall(schema1(A,B,C),
+               ask(Context,
+                   insert(A,B,C))),
+        _Meta
+    ).
+
+test(create_database_context,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema(admin,test),
+                 resolve_absolute_string_descriptor('admin/test',Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    type_context(employee,Context),
+    open_descriptor(Desc, DB),
+    type_context(DB,employee,Context),
 
-    Context = json{birthdate:json{'@type':xsd:date},
-                   boss:json{'@type':'@id'},
-                   friends:json{'@container':'@set',
-                                '@type':person},
-                   name:json{'@type':xsd:string},
-                   staff_number:json{'@type':xsd:string},
-                   tasks:json{'@container':'@list',
-                              '@type':task}}.
+    Context = json{birthdate:json{'@type':"xsd:date"},
+                   boss:json{'@type':"@id"},
+                   friends:json{'@container':"@set",
+                                '@type':"person"},
+                   name:json{'@type':"xsd:string"},
+                   staff_number:json{'@type':"xsd:string"},
+                   tasks:json{'@container':"@list",
+                              '@type':"task"}}.
 
 test(elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema(admin,test),
+                 resolve_absolute_string_descriptor('admin/test',Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
@@ -560,19 +781,20 @@ test(elaborate,
                    aliases : ["gavino", "gosha"]
                },
 
-    json_elaborate(Document, Elaborated),
+    open_descriptor(Desc,DB),
+    json_elaborate(DB, Document, Elaborated),
 
-    Elaborated = json{'@id':gavin,
-                      '@type':criminal,
+    Elaborated = json{'@id':"gavin",
+                      '@type':"criminal",
                       aliases:json{'@container':'@list',
-                                   '@type':xsd:string,
-                                   '@value':[json{'@type':xsd:string,
+                                   '@type':"xsd:string",
+                                   '@value':[json{'@type':"xsd:string",
                                                   '@value':"gavino"},
-                                             json{'@type':xsd:string,
+                                             json{'@type':"xsd:string",
                                                   '@value':"gosha"}]},
-                      birthdate:json{'@type':xsd:date,
+                      birthdate:json{'@type':"xsd:date",
                                      '@value':"1977-05-24"},
-                      name:json{'@type':xsd:string,
+                      name:json{'@type':"xsd:string",
                                 '@value':"gavin"}}.
 
 test(id_expand,

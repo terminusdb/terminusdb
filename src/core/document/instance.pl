@@ -8,12 +8,13 @@
  */
 
 :- use_module(core(util)).
+:- use_module(core(util/xsd_parser)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
 :- use_module(schema).
-%:- use_module(json_conv).
 
+:- use_module(library(http/json)).
 :- use_module(library(aggregate)).
 
 
@@ -42,57 +43,9 @@ is_instance(Validation_Object, X, C) :-
     class_subsumed(Validation_Object, Class,C),
     !.
 
-instance_of(Validation_Object, X,C) :-
+instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X,rdf:type,C).
-
-/* Not the best checker... */
-is_date(A) :-
-    atom(A).
-is_date(A) :-
-    string(A).
-
-is_dateTime(A) :-
-    atom(A).
-is_dateTime(A) :-
-    string(A).
-
-% DEBUG - use already existing refutation system
-refute_base_type_(xsd:string, A, Witness) :-
-    atom(A),
-    !,
-    Witness = witness{ '@type': object_not_of_type,
-                       value: A,
-                       value_type: xsd:string
-                     }.
-
-refute_base_type_(xsd:string, S^^_, Witness) :-
-    \+ string(S),
-    Witness = witness{ '@type': object_not_of_type,
-                       value: S,
-                       value_type: xsd:string
-                     }.
-refute_base_type_(xsd:decimal, N^^_, Witness) :-
-    \+ number(N),
-    Witness = witness{ '@type': object_not_of_type,
-                       value: N,
-                       value_type: xsd:decimal
-                     }.
-refute_base_type_(xsd:date, D^^_, Witness) :-
-    \+ is_date(D),
-    Witness = witness{ '@type': object_not_of_type,
-                       value: D,
-                       value_type: xsd:date
-                     }.
-refute_base_type_(xsd:dateTime, D^^_, Witness) :-
-    \+ is_dateTime(D),
-    Witness = witness{ '@type': object_not_of_type,
-                       value: D,
-                       value_type: xsd:dateTime
-                     }.
-
-refute_base_type(N,Type,Witness) :-
-    refute_base_type_(Type,N,Witness).
 
 array_object(Validation_Object, S,I,O) :-
     database_instance(Validation_Object, Instance),
@@ -148,7 +101,7 @@ refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
-refute_cardinality_(seq(_C),_Validation_Object,_S,_P,_Witness) :-
+refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
@@ -167,7 +120,7 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
                            cardinality: N
                          }
     ).
-refute_cardinality_(card(C,N),Validation_Object,S,P,Witness) :-
+refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,N),
     Witness = witness{ '@type': instance_has_wrong_cardinality,
                        class: C,
@@ -277,7 +230,7 @@ refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
     ).
 
 refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
-    refute_base_type(Object,C,Witness).
+    refute_basetype_elt(Object,C,Witness).
 refute_object_type_(class(C),Validation_Object,Object,Witness) :-
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
@@ -313,7 +266,7 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
     ->  Witness = witness{'@type':not_a_valid_list,
                           class:C,
                           list:Object}
-    ;   member_list(Elt,Object),
+    ;   member_list(Validation_Object, Elt,Object),
         \+ is_instance(Validation_Object,Elt,C),
         Witness = witness{
                       '@type': list_element_of_wrong_type,
@@ -384,6 +337,540 @@ delete_document(JSON) :-
     ),
     commit.
 */
+
+%%%%%%%%%%%%%%%%%%%%%%
+%%  BASETYPES ONLY  %%
+%%%%%%%%%%%%%%%%%%%%%%
+
+/*
+ * refute_basetype_elt(+Literal,+Type,-Reason)
+ */
+refute_basetype_elt(L,T,R) :-
+    (   L = _^^T2,
+        \+ basetype_subsumption_of(T,T2)
+    ->  R = json{
+                '@type' : 'vio:DataTypeSubsumptionViolation',
+                'vio:message' : 'Could not subsume type1:required_type with type2:found_type',
+			    'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : T},
+			    'vio:parent_type' : json{ '@type' : 'xsd:string', '@value' : T2}
+            }
+    ;   refute_basetype_elt_(T,L,R)
+    ).
+
+refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString',S@L,Reason) :-
+    (   \+ (atom(S) ; string(S)),
+        term_to_atom(S@L,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom or string for language value, found term.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString',S@L,Reason) :-
+    (   \+ atom(L),
+        term_to_atom(S@L,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom in language section, found term.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#string',S@L,Reason) :-
+    (   \+ atom(L),
+        term_to_atom(S@L,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom in language section, found term.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#string',S@L,Reason) :-
+    (   \+ (atom(S) ; string(S)),
+        term_to_atom(S@L,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom or string for language value, found term.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#string',S^^_,Reason) :-
+    (   \+ (atom(S) ; string(S)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom, found term as element.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#string',S^^T,Reason) :-
+    (   \+ atom(T),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+			         'vio:message' : 'Expected atom, found term as type.',
+			         'vio:literal' : json{ '@value' : A, '@type' : 'xsd:anySimpleType'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#coordinatePolygon',S^^_, Reason) :-
+    (   \+ is_coordinate_polygon(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed coordinate polygon',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:coordinatePolygon'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#coordinatePolyline',S^^_, Reason) :-
+    (   \+ is_coordinate_polygon(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed coordinate polyline',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:coordinatePolyline'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#coordinate',S^^_, Reason) :-
+    (   \+ is_point(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed coordinate',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:coordinate'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#dateRange',S^^_, Reason) :-
+    (   \+ is_date_range(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed dateRange',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:dateRange'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#integerRange',S^^_, Reason) :-
+    (   \+ is_integer_range(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed integerRange',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:integerRange'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#decimalRange',S^^_, Reason) :-
+    (   \+ is_decimal_range(S),
+        term_to_atom(S,A)
+	->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed decimalRange',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:decimalRange'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#gYearRange',S^^_, Reason) :-
+    (   \+ is_gyear_range(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed gYearRange',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:gYearRange'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#url',S^^_, Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:url,C,[])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a valid URL',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:url'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#email',S^^_, Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:email,C,[])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a valid email address',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:email'}
+                 }
+    ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#json',S^^_, Reason) :-
+    (   \+ (catch(atom_json_dict(S,_,[]),_,fail)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a valid json object',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:json'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#boolean',S^^_,Reason) :-
+    (   \+ is_boolean(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed boolean.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:boolean'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#decimal',S^^_,Reason) :-
+    (   \+ number(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed decimal.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:decimal'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#integer',S^^_,Reason) :-
+    (   \+ integer(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed integer.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:integer'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#double',S^^_,Reason) :-
+    (   \+ float(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed double.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:double'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#float',S^^_,Reason) :-
+    (   \+ float(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed float.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:float'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#time',S^^_,Reason) :-
+    (   \+ is_time(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:time',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:time'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#date',S^^_,Reason) :-
+    (   \+ is_date(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:date.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:date'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#dateTime', S^^_,Reason) :-
+    (   \+ is_date_time(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:dateTime : parameter out of range.',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:dateTime'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#gYear',S^^_,Reason) :-
+    (   \+ is_gyear(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:gYear',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:gYear'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#gMonth',S^^_,Reason) :-
+    (   \+ is_gmonth(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:Month',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#gDay',S^^_,Reason) :-
+    (   \+ is_gday(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:gMonth',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:gMonth'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#gYearMonth',S^^_,Reason) :-
+    (   \+ is_gyear_month(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:gYearMonth',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:gYearMonth'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#gMonthDay',S^^_,Reason) :-
+    (   \+ is_gmonth_day(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:gYearMonth',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:gMonthDay'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#duration',S^^_,Reason) :-
+    (   \+ is_duration(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:duration',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:duration'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#byte',S^^_,Reason) :-
+    (   \+ is_byte(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:byte',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:byte'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#short',S^^_,Reason) :-
+    (   \+ is_short(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:short',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:short'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#int',S^^_,Reason) :-
+    (   \+ is_int(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:int',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:int'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#long',S^^_,Reason) :-
+    (   \+ is_long(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:long',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:long'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#unsignedByte',S^^_,Reason) :-
+    (   \+ is_unsigned_byte(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:unsignedByte',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedByte'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#unsignedShort',S^^_,Reason) :-
+    (   \+ is_unsigned_short(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:unsignedShort',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedShort'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#unsignedInt',S^^_,Reason) :-
+    (   \+ is_unsigned_int(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:unsignedInt',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedInt'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#unsignedLong',S^^_,Reason) :-
+    (   \+ is_unsigned_long(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:unsignedLong',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:unsignedLong'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#positiveInteger',S^^_,Reason) :-
+    (   \+ is_positive_integer(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:positiveInteger',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:positiveInteger'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#nonNegativeInteger',S^^_,Reason) :-
+    (   \+ is_nonnegative_integer(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:nonNegativeInteger',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+	                 'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:nonNegativeInteger'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#negativeInteger',S^^_,Reason) :-
+    (   \+ is_negative_integer(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:negativeInteger',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:negativeInteger'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#nonPositiveInteger',S^^_,Reason) :-
+    (   \+ is_nonpositive_integer(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:nonPositiveInteger',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:nonPositiveInteger'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#base64Binary',S^^_,Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:base64Binary,C,[])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:base64Binary',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:base64Binary'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#hexBinary',S^^_,Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:hexBinary,C,[])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:hexBinary',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:hexBinary'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#anyURI',S^^_,Reason) :-
+    (   \+ uri_components(S,_),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:anyUri',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:anyURI'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#language',S^^_,Reason) :-
+    (   \+ (atom_codes(S,C), phrase(xsd_parser:language, C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:language',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:language'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#normalizedString',S^^_,Reason) :-
+    (   \+  (atom_codes(S,C), phrase(xsd_parser:normalizedString,C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:normalizedString',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:normalizedString'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#token',S^^_,Reason) :-
+    (   \+  (atom_codes(S,C), phrase(xsd_parser:normalizedString,C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:token',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:token'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#NMTOKEN',S^^_,Reason) :-
+    (   \+  (atom_codes(S,C), phrase(xsd_parser:nmtoken,C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:NMTOKEN',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:NMTOKEN'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#Name',S^^_,Reason) :-
+    (   \+  (atom_codes(S,C), phrase(xsd_parser:name,C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:Name',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:Name'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#NCName',S^^_,Reason) :-
+    (   \+  (atom_codes(S,C), phrase(xsd_parser:ncname,C, [])),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:NCName',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:NCName'}
+                 }
+    ).
+refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T,Reason) :-
+    (   \+ (atom(T) ; string(T)),
+        term_to_atom(T,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed rdf:PlainLiteral',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'rdf:PlainLiteral'}
+                 }
+    ).
 
 :- begin_tests(json_instance).
 

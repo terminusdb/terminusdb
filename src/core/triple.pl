@@ -2,6 +2,7 @@
               % base_type.pl
               base_type/1,
               base_type_parent/2,
+              basetype_subsumption_of/2,
 
               % casting.pl
               typecast/4,

@@ -8,7 +8,8 @@
               jsonld_id/2,
               jsonld_type/2,
               get_key_document/4,
-              compress_dict_uri/3
+              compress_dict_uri/3,
+              context_prefix_expand/3
           ]).
 
 /** <module> JSON-LD
@@ -44,7 +45,7 @@
  * Expands from JSON_LD prefixed format to fully expanded form.
  */
 expand(JSON_LD, JSON) :-
-    expand(JSON_LD, _{}, JSON).
+    expand(JSON_LD, json{}, JSON).
 
 /**
  * expand(+JSON_LD, +Context:dict, -JSON) is det.
@@ -56,7 +57,7 @@ expand(JSON_LD, Context, JSON) :-
     % Law of recursion: Something must be getting smaller...
     % This "something" is the removal of the context
     % from the object to be expanded.
-    select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
+    select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
     expand_context(New_Context,Context_Expanded),
     (   is_dict(Context)
@@ -64,17 +65,18 @@ expand(JSON_LD, Context, JSON) :-
     ;   Local_Context = Context_Expanded),
     expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
     put_dict('@context',JSON_Ex,Local_Context,JSON).
-expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
+expand(json{'@type' : Type, '@value' : Value}, Context, JSON) :-
     !,
     prefix_expand(Type,Context,TypeX),
-    JSON = _{'@type' : TypeX, '@value' : Value}.
-expand(_{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
+    JSON = json{'@type' : TypeX, '@value' : Value}.
+expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     !,
-    JSON = _{'@language' : Lang, '@value' : Value}.
+    JSON = json{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
-    % \+ select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
+    % \+ select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
+    select_dict(json{}, JSON_LD, _),
     dict_keys(JSON_LD,Keys),
     findall(Key-Value,
             (
@@ -89,7 +91,7 @@ expand(JSON_LD, Context, JSON) :-
                 )
             ),
             Data),
-    dict_create(JSON,_,Data).
+    dict_create(JSON,json,Data).
 expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
@@ -108,30 +110,30 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,Key_Ctx,Ctx,Value) :-
     string(V),
     !,
-    (   _{'@type' : "@id"} = Key_Ctx
+    (   json{'@type' : "@id"} = Key_Ctx
     %   Type ID distribution
     ->  prefix_expand(V, Ctx, Expanded),
-        Value = _{'@id' : Expanded}
-    ;   _{'@type' : "@id", '@id' : ID} = Key_Ctx
+        Value = json{'@id' : Expanded}
+    ;   json{'@type' : "@id", '@id' : ID} = Key_Ctx
     %   Fixed ID distribution
-    ->  Value = _{'@id' : ID}
-    ;   _{'@type' : Type} = Key_Ctx
+    ->  Value = json{'@id' : ID}
+    ;   json{'@type' : Type} = Key_Ctx
     ->  prefix_expand(Type,Ctx,EType),
-        Value = _{'@value' : V,
+        Value = json{'@value' : V,
                   '@type' : EType}
-    ;   _{'@language' : Lang} = Key_Ctx
-    ->  Value = _{'@value' : V,
+    ;   json{'@language' : Lang} = Key_Ctx
+    ->  Value = json{'@value' : V,
                   '@language' : Lang}
-    ;   _{} = Key_Ctx
+    ;   json{} = Key_Ctx
     ->  V = Value
     ;   throw(error('Invalid key context in expand_value/4'))
     ).
 expand_value(V,Key_Ctx,Ctx,Value) :-
     is_dict(V),
     !,
-    (   _{'@type' : "@id", '@id' : _} :< Key_Ctx
+    (   json{'@type' : "@id", '@id' : _} :< Key_Ctx
     ->  expand(V,Ctx,Value)
-    ;   _{'@type' : "@id"} :< Key_Ctx
+    ;   json{'@type' : "@id"} :< Key_Ctx
     ->  expand(V,Ctx,Value)
     ;   is_dict(Key_Ctx)
     ->  merge_dictionaries(V,Key_Ctx,V2),
@@ -238,32 +240,32 @@ expand_key(K,Context,Key,Value) :-
         ->  Key = Key_Candidate,
             Value = R
         ;   atom_string(Key,R),
-            Value = _{})
+            Value = json{})
     ;   Key = Key_Candidate,
-        Value = _{}).
+        Value = json{}).
 
 :- begin_tests(jsonld_expand).
 :- use_module(core(util/test_utils)).
 
 test(expand_inner, [])
 :-
-    Context = _{doc : 'http://outer_document/'},
-    Document = _{'@context' : _{ doc : 'http://inner_document/'},
-                 'test' : _{'@id' : 'doc:test'}},
+    Context = json{doc : 'http://outer_document/'},
+    Document = json{'@context' : json{ doc : 'http://inner_document/'},
+                 'test' : json{'@id' : 'doc:test'}},
     expand(Document, Context, JSON_LD),
 
-    _{ test:_{'@id':'http://inner_document/test'}} :< JSON_LD.
+    json{ test:json{'@id':'http://inner_document/test'}} :< JSON_LD.
 
 
 test(expand_path, [])
 :-
     server(Server),
     atomic_list_concat([Server, '/api/prefixes/_system'], Context),
-    Document = _{'@context' : Context,
-                 'test' : _{'@id' : 'doc:test'}},
+    Document = json{'@context' : Context,
+                 'test' : json{'@id' : 'doc:test'}},
     expand(Document, Context, JSON_LD),
     Result = (JSON_LD.'@context'),
-    _{ doc:'terminusdb:///system/data/'} :< Result.
+    json{ doc:'terminusdb:///system/data/'} :< Result.
 
 :- end_tests(jsonld_expand).
 
@@ -312,7 +314,7 @@ compress(JSON,Context,JSON_LD) :-
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_dict(JSON_Pre),
     !,
-    put_dict(_{'@context' : Context}, JSON_Pre, JSON_LD).
+    put_dict(json{'@context' : Context}, JSON_Pre, JSON_LD).
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_list(JSON_Pre),
 
@@ -357,14 +359,14 @@ compress_aux(JSON,_Ctx_Pairs,JSON) :-
 % Note: This needs to treat "base", "vocab", as well.
 test(compress_prefix, [])
 :-
-    Context = _{ ex : "http://example.com/document/",
+    Context = json{ ex : "http://example.com/document/",
                  scm : "http://example.com/schema#"},
-    Document = _{ '@type' : "http://example.com/schema#Fact",
+    Document = json{ '@type' : "http://example.com/schema#Fact",
                   'http://example.com/schema#your_face' :
-                  _{ '@id' : "http://example.com/document/is_ugly" }},
+                  json{ '@id' : "http://example.com/document/is_ugly" }},
     compress(Document, Context, Compressed),
 
-    _{'@type':'scm:Fact','scm:your_face':_{'@id':'ex:is_ugly'}} :< Compressed.
+    json{'@type':'scm:Fact','scm:your_face':json{'@id':'ex:is_ugly'}} :< Compressed.
 
 :- end_tests(jsonld_compress).
 
@@ -373,13 +375,13 @@ test(compress_prefix, [])
  *
  * expand a prolog internal json representation to dicts.
  */
-term_jsonld(D^^T,_{'@type' : T, '@value' : V}) :-
+term_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
     (   compound(D)
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
                  [], V^^_)
     ;   D=V),
     !.
-term_jsonld(D@L,_{'@language' : L, '@value' : D}) :-
+term_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
     !.
 term_jsonld(Term,JSON) :-
     is_list(Term),
@@ -420,7 +422,7 @@ get_key_document(Key,Ctx,Document,Value) :-
     % Law of recursion: Something must be getting smaller...
     % This "something" is the removal of the context
     % from the object to be expanded.
-    select_dict(_{'@context' : New_Ctx}, Document, Document_Ctx_Free),
+    select_dict(json{'@context' : New_Ctx}, Document, Document_Ctx_Free),
     !,
     expand_context(New_Ctx,Ctx_Expanded),
     merge_dictionaries(Ctx,Ctx_Expanded,Local_Ctx),

@@ -1,49 +1,43 @@
-{ '@type' : 'sys:context',
-  '@base' : 'http://my.database.endpoint/foo/schema#',
-  'sys' : '...',
-  'type' : '...',
-  'doc' : '...' }
+{ "@type" : "@context",
+  "@base" : "http://terminusdb.com/db/system/schema#",
+  "@ref" :  "http://terminusdb.com/db/system/instance/",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
-{ '@id' : 'User',
-  '@type' : 'sys:Class',
-  'key_hash' : 'type:string',
-  'capability' : { '@type' : 'sys:Set',
-                   '@class' : 'Capability' } }
+{ "@id" : "User",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "key_hash" : "xsd:string",
+  "capability" : { "@type" : "Set",
+                   "@class" : "Capability" } }
 
-{ '@id' : 'Resource',
-  '@type' : 'sys:Class' }
+{ "@id" : "Resource",
+  "@type" : "Class",
+  "name" : "xsd:string" }
 
-{ '@id' : 'Organization',
-  '@type' : 'sys:Class',
-  '@inherits' : 'Resource',
-  'name' : 'type:string',
-  'child' : { '@type' : 'sys:Set',
-              'sys:class' : 'Organization' },
-  'database' : { '@type' : 'sys:Set',
-                 '@class' : 'Database' } }
+{ "@id" : "Organization",
+  "@type" : "Class",
+  "@inherits" : "Resource",
+  "child" : { "@type" : "Set",
+              "@class" : "Organization" },
+  "database" : { "@type" : "Set",
+                 "@class" : "Database" } }
 
-{ '@id' : 'Role',
-  '@type' : 'sys:Class',
-  'name' : 'type:string',
-  'action' : { '@type' : 'sys:Set',
-               '@class' : 'Action' } }
+{ "@id" : "Role",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "action" : { "@type" : "Set",
+               "@class" : "Action" } }
 
-{ '@id' : 'Capability',
-  '@type' : 'sys:Class',
-  'name' : 'type:string',
-  'action' : { '@type' : 'sys:Set',
-               '@class' : 'Action' } }
+{ "@id" : "Capability",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "scope" : "Resource",
+  "role" : { "@type" : "Set",
+             "@class" : "Role" } }
 
-{ '@id' : 'Capability'
-  '@type' : 'sys:Class',
-  '@key' : { '@type' : 'sys:ValueHash' },
-  'scope' : 'Resource',
-  'role' : { '@type' : 'sys:Set',
-             '@class' : 'Role' } }
-
-{ '@id' : 'Action',
-  '@type' : 'sys:Enum',
-  '@value' : [ "create_database",
+{ "@id" : "Action",
+  "@type" : "Enum",
+  "@value" : [ "create_database",
                "delete_database",
                "class_frame",
                "clone",
@@ -61,16 +55,15 @@
                "commit_write_access",
                "manage_capabilities" ] }
 
-{ '@id' : 'SystemDatabase',
-  '@type' : 'sys:Class',
-  '@inherits' : 'Resource' }
+{ "@id" : "SystemDatabase",
+  "@type" : "Class",
+  "@inherits" : "Resource" }
 
-{ '@id' : 'Database',
-  '@type' : 'sys:Class',
-  '@inherits' : 'Resource' }
+{ "@id" : "Database",
+  "@type" : "Class",
+  "@inherits" : "Resource" }
 
-{ '@id' : 'DatabaseState',
-  '@type' : 'sys:Enum',
-  '@value' : [ "deleting",
+{ "@id" : "DatabaseState",
+  "@type" : "Enum",
+  "@value" : [ "deleting",
                "finalized" ] }
-

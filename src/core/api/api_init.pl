@@ -8,11 +8,13 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
+:- use_module(core(document)).
+:- use_module(core(query), [expand/2, default_prefixes/1]).
+:- use_module(core(transaction), [open_descriptor/2]).
 
 :- use_module(library(semweb/turtle)).
-
 :- use_module(library(terminus_store)).
-
+:- use_module(library(http/json)).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -37,47 +39,108 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
     nb_commit(Builder,Layer),
     nb_set_head(Graph_Obj, Layer).
 
+json_read_dict_stream(Stream,Term) :-
+    repeat,
+    json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),
+    (   Term = eof
+    ->  !,
+        fail
+    ;   true).
+
+%%
+% create_graph_from_json(+Store,+Graph_ID,+JSON_Stream,+Type:graph_type,-Layer) is det.
+%
+% Type := instance | schema(Database)
+%
+create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
+    safe_create_named_graph(Store,Graph_ID,Graph_Obj),
+    open_write(Store, Builder),
+
+    write_json_stream_to_builder(JSON_Stream, Builder, Type),
+    % commit this builder to a temporary layer to perform a diff.
+    nb_commit(Builder,Layer),
+    nb_set_head(Graph_Obj, Layer),
+    test_utils:print_all_triples(Layer).
+
+write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
+    !,
+    json_read_dict(JSON_Stream, Context, [default_tag(json),end_of_file(eof)]),
+
+    (   Context = eof
+    ;   is_dict(Context),
+        \+ get_dict('@type', Context, "@context")
+    ->  throw(error(no_context_found_in_schema))
+    ;   true
+    ),
+
+    forall(
+        context_triple(Context,t(S,P,O)),
+        (
+            object_storage(O,OS),
+            nb_add_triple(Builder, S, P, OS)
+        )
+    ),
+
+    default_prefixes(Prefixes),
+    put_dict(Context,Prefixes,Expanded_Context),
+
+    forall(
+        json_read_dict_stream(JSON_Stream, Dict),
+        (
+            forall(
+                json_schema_triple(Dict,Expanded_Context,t(S,P,O)),
+                (
+                    object_storage(O,OS),
+                    nb_add_triple(Builder, S, P, OS)
+                )
+            )
+        )
+    ).
+write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
+    database_context(DB,Context),
+    default_prefixes(Prefixes),
+
+    put_dict(Context,Prefixes,Expanded_Context),
+
+    forall(
+        json_read_dict_stream(JSON_Stream, Dict),
+        (
+            forall(
+                json_triple(DB,Dict,Expanded_Context,t(S,P,O)),
+                (
+                    object_storage(O,OS),
+                    nb_add_triple(Builder, S, P, OS)
+                )
+            )
+        )
+    ).
+
 :- dynamic template_system_instance/1.
-:- dynamic system_inference/1.
 :- dynamic system_schema/1.
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
 bootstrap_files :-
-    template_system_instance_ttl(InstancePath),
+    template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
-    system_inference_ttl(InferencePath),
-    file_to_predicate(InferencePath, system_inference),
-    system_schema_ttl(SchemaPath),
+    system_schema_json(SchemaPath),
     file_to_predicate(SchemaPath, system_schema),
-    repository_schema_ttl(RepoPath),
+    repository_schema_json(RepoPath),
     file_to_predicate(RepoPath, repo_schema),
-    layer_schema_ttl(LayerSchemaPath),
-    file_to_predicate(LayerSchemaPath, layer_schema),
-    ref_schema_ttl(RefSchemaPath),
+    ref_schema_json(RefSchemaPath),
     file_to_predicate(RefSchemaPath, ref_schema).
 
-example_registry_path(Path) :-
-    once(expand_file_search_path(template('example_registry.pl'), Path)).
+template_system_instance_json(Path) :-
+    once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
 
-template_system_instance_ttl(Path) :-
-    once(expand_file_search_path(template('system_instance_template.ttl'), Path)).
+system_schema_json(Path) :-
+    once(expand_file_search_path(ontology('system_schema.json'), Path)).
 
+repository_schema_json(Path) :-
+    once(expand_file_search_path(ontology('repository.json'), Path)).
 
-system_inference_ttl(Path) :-
-    once(expand_file_search_path(ontology('system_inference.owl.ttl'), Path)).
-
-system_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('system_schema.owl.ttl'), Path)).
-
-repository_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('repository.owl.ttl'), Path)).
-
-layer_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('layer.owl.ttl'), Path)).
-
-ref_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('ref.owl.ttl'), Path)).
+ref_schema_json(Path) :-
+    once(expand_file_search_path(ontology('ref.json'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
@@ -168,35 +231,76 @@ initialize_storage_version(DB_Path) :-
 initialize_database_with_store(Key, Store) :-
     crypto_password_hash(Key,Hash, [cost(15)]),
 
-    template_system_instance(Template_Instance_String),
-    format(string(Instance_String), Template_Instance_String, [Hash]),
-    open_string(Instance_String, Instance_Stream),
-
-    system_instance_name(Instance_Name),
-    create_graph_from_turtle(Store,Instance_Name,Instance_Stream),
-
     system_schema(System_Schema_String),
     open_string(System_Schema_String, System_Schema_Stream),
     system_schema_name(Schema_Name),
-    create_graph_from_turtle(Store,Schema_Name,System_Schema_Stream),
+    create_graph_from_json(Store,Schema_Name,System_Schema_Stream,schema,Schema),
 
-    system_inference(System_Inference_String),
-    open_string(System_Inference_String, System_Inference_Stream),
-    system_inference_name(Inference_Name),
-    create_graph_from_turtle(Store,Inference_Name,System_Inference_Stream),
-
-    layer_schema(Layer_Schema_String),
-    open_string(Layer_Schema_String, Layer_Schema_Stream),
-    layer_ontology(Layer_Name),
-    create_graph_from_turtle(Store,Layer_Name,Layer_Schema_Stream),
+    layer_to_id(Schema,ID),
+    Descriptor = id_descriptor{ id: ID, type: schema},
+    open_descriptor(Descriptor, Transaction_Object),
+    template_system_instance(Template_Instance_String),
+    format(string(Instance_String), Template_Instance_String, [Hash]),
+    open_string(Instance_String, Instance_Stream),
+    system_instance_name(Instance_Name),
+    create_graph_from_json(Store,Instance_Name,Instance_Stream,
+                           instance(Transaction_Object),_),
 
     ref_schema(Ref_Schema_String),
     open_string(Ref_Schema_String, Ref_Schema_Stream),
     ref_ontology(Ref_Name),
-    create_graph_from_turtle(Store,Ref_Name,Ref_Schema_Stream),
+    create_graph_from_json(Store,Ref_Name,Ref_Schema_Stream,schema._),
 
     repo_schema(Repo_Schema_String),
     open_string(Repo_Schema_String, Repo_Schema_Stream),
     repository_ontology(Repository_Name),
-    create_graph_from_turtle(Store,Repository_Name,Repo_Schema_Stream).
+    create_graph_from_json(Store,Repository_Name,Repo_Schema_Stream,schema,_).
 
+:- begin_tests(api_init).
+:- use_module(core(util)).
+:- use_module(library(terminus_store)).
+:- use_module(core(query), [ask/2]).
+
+test(write_json_stream_to_builder, [
+         setup(
+             (   open_memory_store(Store),
+                 open_write(Store,Builder)
+             )
+         )
+     ]) :-
+
+    open_string(
+    '{ "@type" : "@context",
+       "@base" : "http://terminusdb.com/system/schema#",
+        "type" : "http://terminusdb.com/type#" }
+
+     { "@id" : "User",
+       "@type" : "Class",
+       "key_hash" : "type:string",
+       "capability" : { "@type" : "Set",
+                        "@class" : "Capability" } }',Stream),
+
+    write_json_stream_to_builder(Stream, Builder,schema),
+    nb_commit(Builder,Layer),
+
+    findall(
+        t(X,Y,Z),
+        triple(Layer,X,Y,Z),
+        Triples),
+
+    Triples = [
+        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#capability",node("http://terminusdb.com/system/schema#User_capability_Set_Capability")),
+        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#key_hash",node("http://terminusdb.com/type#string")),
+        t("http://terminusdb.com/system/schema#User","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Class")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://terminusdb.com/schema/sys#class",node("http://terminusdb.com/system/schema#Capability")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Set")),
+
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#prefix",value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#url",value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Prefix")),
+        t("terminusdb://context","http://terminusdb.com/schema/sys#base",value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://context","http://terminusdb.com/schema/sys#prefix_pair",node("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b")),
+        t("terminusdb://context","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Context"))
+    ].
+
+:- end_tests(api_init).

@@ -67,7 +67,8 @@
  *
  * collection_descriptor --> system_descriptor{}
  *                         | label_descriptor{ label: string }
- *                         | id_descriptor{ id : string } % only for querying!
+ *                         | id_descriptor{ id : string,
+ *                                          type : Or(instance,schema) } % only for querying!
  *                         | database_descriptor{ organization_name : string,
  *                                                database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
@@ -196,9 +197,10 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = id_graph{ layer_id: Layer_Id,
-                           type: instance,
+                           type: Type,
                            name: "main"},
     !,
+    member(Type,[instance,schema]),
     storage(Store),
     store_id_layer(Store, Layer_Id, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
@@ -406,14 +408,20 @@ open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                 [Descriptor=Transaction_Object|New_Map]) :-
-    id_descriptor{ id : ID } :< Descriptor,
+    id_descriptor{ id : ID, type: Type } :< Descriptor,
     !,
-    Graph_Descriptor = id_graph{ layer_id : ID, type: instance, name: "main" },
-    open_read_write_obj(Graph_Descriptor, Instance, Map, New_Map),
+    Graph_Descriptor = id_graph{ layer_id : ID, type: Type, name: "main" },
+    open_read_write_obj(Graph_Descriptor, RW, Map, New_Map),
+    (   Type = instance
+    ->  Instance_Objects = [RW],
+        Schema_Objects = []
+    ;   Instance_Objects = [],
+        Schema_Objects = [RW]),
+
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
-                             instance_objects : [Instance],
-                             schema_objects : [],
+                             instance_objects : Instance_Objects,
+                             schema_objects : Schema_Objects,
                              inference_objects : []
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,

@@ -1,5 +1,6 @@
 :- module('document/schema', [
               refute_schema/2,
+              is_enum/2,
               is_simple_class/2,
               is_base_type/1,
               is_built_in/1,
@@ -55,14 +56,14 @@ is_simple_class(Validation_Object,Class) :-
 is_base_type(Type) :-
     prefix_list(
         [
-            type:integer, % List all here...
-            type:string,
-            type:date,
-            type:dateTime
+            xsd:integer, % List all here...
+            xsd:string,
+            xsd:date,
+            xsd:dateTime
         ],
         List),
-
-    memberchk(Type, List).
+    atom_string(Atom,Type),
+    memberchk(Atom, List).
 
 class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
@@ -71,10 +72,10 @@ class_subsumed(Validation_Object,Class,Subsumed) :-
 
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Class, rdfs:subClassOf, Super).
+    xrdf(Schema, Class, sys:inherits, Super).
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Class, rdfs:subClassOf, Intermediate),
+    xrdf(Schema, Class, sys:inherits, Intermediate),
     class_super(Validation_Object,Intermediate,Super).
 
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
@@ -308,14 +309,14 @@ type_descriptor(Validation_Object, Class, tagged_union(Class,Map)) :-
             Data),
     dict_create(Map,tagged_union,Data).
 type_descriptor(Validation_Object, Class, enum(Class,List)) :-
-    is_enum(Class),
+    is_enum(Validation_Object,Class),
     !,
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:value, Cons),
     rdf_list(Validation_Object, Cons, List).
-type_descriptor(Validation_Object, Class, base_class(Class)) :-
+type_descriptor(_Validation_Object, Class, base_class(Class)) :-
     % Not sure these should be conflated...
-    is_base_type(Validation_Object, Class),
+    is_base_type(Class),
     !.
 type_descriptor(Validation_Object, Class, class(Class)) :-
     % Not sure these should be conflated...
@@ -341,7 +342,7 @@ type_descriptor(Validation_Object, Type, card(Class,N)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
-    xrdf(Schema, Type, sys:cardinality, N^^type:positiveInteger).
+    xrdf(Schema, Type, sys:cardinality, N^^xsd:positiveInteger).
 type_descriptor(Validation_Object, Type, optional(Class)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
@@ -350,7 +351,7 @@ type_descriptor(Validation_Object, Type, optional(Class)) :-
 
 key_base(Validation_Object, Type, Base) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, sys:base, Base^^type:string),
+    xrdf(Schema, Type, sys:base, Base^^xsd:string),
     !.
 key_base(_Validation_Object, Type, Type).
 
@@ -358,7 +359,7 @@ key_base(_Validation_Object, Type, Type).
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type,sys:key,Obj),
-    key_descriptor_(Type,Obj,Descriptor).
+    key_descriptor_(Validation_Object,Type,Obj,Descriptor).
 
 key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-
     database_schema(Validation_Object, Schema),
