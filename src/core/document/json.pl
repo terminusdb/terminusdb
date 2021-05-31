@@ -228,7 +228,9 @@ context_value_expand(DB,Value,Expansion,V) :-
     ->  Value_List = [Value]
     ;   get_dict('@value',Value,Value_List)),
     maplist({DB,Elt_Type}/[Elt_In,Elt_Out]>>(
-                (   is_dict(Elt_In)
+                (   is_enum(DB,Elt_Type)
+                ->  enum_value(Elt_Type,Elt_In,Elt_Out)
+                ;   is_dict(Elt_In)
                 ->  put_dict(Elt_In,json{'@type':Elt_Type},Elt2)
                 ;   is_base_type(Elt_Type)
                 ->  Elt2 = json{'@value' : Elt_In,
@@ -255,13 +257,16 @@ context_value_expand(DB,Value,Expansion,V) :-
     New_Expansion = (Expansion.put(json{'@value' : Value})),
     json_elaborate(DB,New_Expansion, V).
 
+enum_value(Type,Value,ID) :-
+    atomic_list_concat([Type, '_', Value], ID).
+
 json_context_elaborate(DB, JSON, _Context, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     is_enum(DB,Type),
     !,
     get_dict('@value',JSON,Value),
-    atomic_list_concat([Type, '_', Value], Full_ID),
+    enum_value(Type,Value,Full_ID),
     Expanded = json{ '@type' : "@id",
                      '@id' : Full_ID }.
 json_context_elaborate(DB, JSON, Context, Expanded) :-
@@ -709,28 +714,34 @@ id_schema_json(DB, Id, JSON) :-
 
 :- begin_tests(json_conv).
 
-schema1(person, rdf:type, sys:'Class').
-schema1(person, name, xsd:string).
-schema1(person, birthdate, xsd:date).
-schema1(person, friends, set_person).
-schema1(set_person, rdf:type, sys:'Set').
-schema1(set_person, sys:class, person).
-schema1(employee, rdf:type, sys:'Class').
-schema1(employee, rdfs:subClassOf, person).
-schema1(employee, staff_number, xsd:string).
-schema1(employee, boss, optional_employee).
-schema1(optional_employee, rdf:type, sys:'Optional').
-schema1(optional_employee, sys:class, employee).
-schema1(employee, tasks, list_task).
-schema1(list_task, rdf:type, sys:'List').
-schema1(list_task, sys:class, task).
-schema1(task, rdf:type, sys:'Class').
-schema1(task, name, xsd:string).
-schema1(criminal, rdf:type, sys:'Class').
-schema1(criminal, rdfs:subClassOf, person).
-schema1(criminal, aliases, list_string).
-schema1(list_string, rdf:type, sys:'List').
-schema1(list_string, sys:class, xsd:string).
+:- use_module(core(util/test_utils)).
+
+context1(json{ '@type' : "Context",
+               '@base' : "i/",
+               '@schema' : "s/" }).
+
+schema1(json{ '@id' : "Person",
+              '@type' : "Class",
+              'name' : "xsd:string",
+              'birthdate' : "xsd:date",
+              'friends' : json{ '@type' : "Set",
+                                '@class' : "Person" } }).
+schema1(json{ '@id' : "Employee",
+              '@type' : "Class",
+              '@inherits' : "Person",
+              'staff_number' : "xsd:string",
+              'boss' : json{ '@type' : "Optional",
+                             '@class' : "Employee" },
+              'tasks' : json{ '@type' : "List",
+                              '@class' : "Task" } }).
+schema1(json{ '@id' : "Task",
+              '@type' : "Class",
+              'name' : "xsd:string" }).
+schema1(json{ '@id' : "Criminal",
+              '@type' : "Class",
+              '@inherits' : "Person",
+              'aliases' : json{ '@type' : "List",
+                                '@class' : "xsd:string" } }).
 
 write_schema1(Desc) :-
     create_context(Desc,commit{
@@ -741,9 +752,14 @@ write_schema1(Desc) :-
     % Schema
     with_transaction(
         Context,
-        forall(schema1(A,B,C),
-               ask(Context,
-                   insert(A,B,C))),
+        forall(
+            (   (   context1(Ctx),
+                    context_triple(Ctx,t(A,B,C))
+                ;   schema1(Doc),
+                    json_schema_triple(Doc,t(A,B,C)))
+            ),
+            ask(Context,
+                insert(A,B,C))),
         _Meta
     ).
 

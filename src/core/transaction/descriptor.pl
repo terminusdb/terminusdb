@@ -389,22 +389,20 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
                              inference_objects : []
                          }.
 open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
-                 [system_descriptor{}=Transaction_Object|Map_3]) :-
+                 [system_descriptor{}=Transaction_Object|Map_2]) :-
     !,
 
     Instance_Graph = system_graph{ type: instance, name: "main"},
     Schema_Graph = system_graph{ type: schema, name: "main"},
-    Inference_Graph = system_graph{ type: inference, name: "main"},
 
     open_read_write_obj(Schema_Graph, Schema_Object, Map, Map_1),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
-    open_read_write_obj(Inference_Graph, Inference_Object, Map_2, Map_3),
 
     Transaction_Object = transaction_object{
                              descriptor : system_descriptor{},
                              instance_objects : [Instance_Object],
                              schema_objects : [Schema_Object],
-                             inference_objects : [Inference_Object]
+                             inference_objects : []
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                 [Descriptor=Transaction_Object|New_Map]) :-
