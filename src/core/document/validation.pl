@@ -31,7 +31,7 @@ needs_schema_instance_validation(Validation_Object) :-
         schema_objects: Schema_Objects,
         instance_objects: Instance_Objects
     } :< Validation_Object,
-    Instance_Objects \= [],
+    exists(validation_object_has_layer, Instance_Objects),
     exists(validation_object_changed, Schema_Objects).
 
 /*

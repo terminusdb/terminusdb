@@ -207,7 +207,7 @@ with_transaction(Query_Context,
         (   abolish_module_tables(validate_schema),
             abolish_module_tables(frame),
             get_dict(transaction_objects,Query_Context,Databases),
-            maplist(invalidate_schema,Databases)
+            * maplist(invalidate_schema,Databases)
         )
     ).
 

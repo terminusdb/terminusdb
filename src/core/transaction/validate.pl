@@ -7,7 +7,8 @@
               validate_validation_objects/2,
               validate_validation_objects/3,
               read_write_obj_to_graph_validation_obj/4,
-              validation_object_changed/1
+              validation_object_changed/1,
+              validation_object_has_layer/1
           ]).
 
 /** <module> Validation
@@ -218,6 +219,27 @@ commit_validation_object(Validation_Object, []) :-
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
+        instance_objects: [Instance_Object],
+        schema_objects: [Schema_Object]
+    } :< Validation_Object,
+    document_label_descriptor{
+        schema_label: Schema_Label,
+        instance_label: Instance_Label
+    } = Descriptor,
+    !,
+    (   validation_object_changed(Instance_Object)
+    ->  storage(Store),
+        safe_open_named_graph(Store, Instance_Label, Instance_Graph),
+        nb_set_head(Instance_Graph, Instance_Object.read)
+    ;   true),
+    (   validation_object_changed(Schema_Object)
+    ->  storage(Store),
+        safe_open_named_graph(Store, Schema_Label, Schema_Graph),
+        nb_set_head(Schema_Graph, Schema_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object, []) :-
+    validation_object{
+        descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
     database_descriptor{
@@ -324,6 +346,9 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
 
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
+
+validation_object_has_layer(Validation_Object) :-
+    ground(Validation_Object.read).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 

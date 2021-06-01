@@ -35,6 +35,7 @@
               validate_validation_objects/2,
               validate_validation_objects/3,
               validation_object_changed/1,
+              validation_object_has_layer/1,
 
               % layer_entity.pl
               has_layer/2,

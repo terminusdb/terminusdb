@@ -67,6 +67,7 @@
  *
  * collection_descriptor --> system_descriptor{}
  *                         | label_descriptor{ label: string }
+ *                         | document_label_descriptor{ schema_label: string, instance:label: string }
  *                         | id_descriptor{ id : string,
  *                                          type : Or(instance,schema) } % only for querying!
  *                         | layer_descriptor{ layer : layer,
@@ -456,6 +457,26 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              descriptor: Descriptor,
                              instance_objects: [Read_Write_Obj],
                              schema_objects: [],
+                             inference_objects: []
+                         }.
+
+open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+                 [Descriptor=Transaction_Object|Map_2]) :-
+    document_label_descriptor{
+        schema_label: Schema_Label,
+        instance_label: Instance_Label
+    } = Descriptor,
+    !,
+
+    Schema_Graph_Descriptor = labelled_graph{ label: Schema_Label, type: schema, name: "main" },
+    Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema, name: "main" },
+    open_read_write_obj(Schema_Graph_Descriptor, Schema_Read_Write_Obj, Map, Map_1),
+    open_read_write_obj(Instance_Graph_Descriptor, Instance_Read_Write_Obj, Map_1, Map_2),
+
+    Transaction_Object = transaction_object{
+                             descriptor: Descriptor,
+                             instance_objects: [Instance_Read_Write_Obj],
+                             schema_objects: [Schema_Read_Write_Obj],
                              inference_objects: []
                          }.
 

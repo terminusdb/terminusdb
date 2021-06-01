@@ -6,7 +6,10 @@
               json_schema_triple/3,
               json_schema_elaborate/2,
               id_json/3,
-              database_context/2
+              database_context/2,
+              create_graph_from_json/5,
+              write_json_stream_to_builder/3,
+              write_json_stream_to_schema/2
           ]).
 
 :- use_module(instance).
@@ -15,10 +18,13 @@
 :- use_module(library(pcre)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(terminus_store)).
+:- use_module(library(http/json)).
 
-:- use_module(core(util), [merge_separator_split/3,do_or_die/2]).
-:- use_module(core(query), [expand/3,global_prefix_expand/2,prefix_expand/3]).
-:- use_module(core(triple), [xrdf/4,database_instance/2,database_schema/2]).
+:- use_module(core(util)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
 
 value_json(X,O) :-
     O = json{
@@ -160,9 +166,9 @@ class_descriptor_image(cardinality(C,_), json{ '@container' : "@cardinality",
 
 database_context(DB,Context) :-
     database_schema(DB,Schema),
-    once(xrdf(Schema, ID, rdf:type, sys:'Context')),
-    !,
-    id_schema_json(DB,ID,Context).
+    (   xrdf(Schema, ID, rdf:type, sys:'Context')
+    ->  id_schema_json(DB,ID,Context)
+    ;   Context = _{}).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     % NOTE: This is probably wrong if it already has a prefix...
@@ -712,12 +718,11 @@ id_schema_json(DB, Id, JSON) :-
                            '@type'-Class
                            |Data]).
 
-
-
-:- begin_tests(json).
-
-:- use_module(core(util/test_utils)).
-
+%%
+% create_graph_from_json(+Store,+Graph_ID,+JSON_Stream,+Type:graph_type,-Layer) is det.
+%
+% Type := instance | schema(Database)
+%
 create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
     safe_create_named_graph(Store,Graph_ID,Graph_Obj),
     open_write(Store, Builder),
@@ -727,25 +732,144 @@ create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
     nb_commit(Builder,Layer),
     nb_set_head(Graph_Obj, Layer).
 
+write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
+    !,
+    writeq(moo),nl,
+    json_read_dict(JSON_Stream, Context, [default_tag(json),end_of_file(eof)]),
+
+    (   Context = eof
+    ;   is_dict(Context),
+        \+ get_dict('@type', Context, "@context")
+    ->  throw(error(no_context_found_in_schema,_))
+    ;   true
+    ),
+
+    forall(
+        context_triple(Context,t(S,P,O)),
+        (
+            object_storage(O,OS),
+            nb_add_triple(Builder, S, P, OS)
+        )
+    ),
+
+    default_prefixes(Prefixes),
+    put_dict(Context,Prefixes,Expanded_Context),
+
+    forall(
+        json_read_dict_stream(JSON_Stream, Dict),
+        (
+            forall(
+                json_schema_triple(Dict,Expanded_Context,t(S,P,O)),
+                (
+                    object_storage(O,OS),
+                    nb_add_triple(Builder, S, P, OS)
+                )
+            )
+        )
+    ).
+write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
+    database_context(DB,Context),
+    default_prefixes(Prefixes),
+
+    put_dict(Context,Prefixes,Expanded_Context),
+
+    forall(
+        json_read_dict_stream(JSON_Stream, Dict),
+        (
+            forall(
+                json_triple(DB,Dict,Expanded_Context,t(S,P,O)),
+                (
+                    object_storage(O,OS),
+                    nb_add_triple(Builder, S, P, OS)
+                )
+            )
+        )
+    ).
+
+write_json_stream_to_schema(Transaction, Stream) :-
+    transaction_object{} :< Transaction,
+    !,
+    [RWO] = (Transaction.schema_objects),
+    read_write_obj_builder(RWO, Builder),
+
+    write_json_stream_to_builder(Stream, Builder, schema).
+
+write_json_stream_to_schema(Context, Stream) :-
+    query_context{transaction_objects: [Transaction]} :< Context,
+    write_json_stream_to_schema(Transaction, Stream).
+
+:- begin_tests(json_stream).
+:- use_module(core(util)).
+:- use_module(library(terminus_store)).
+:- use_module(core(query), [ask/2]).
+
+test(write_json_stream_to_builder, [
+         setup(
+             (   open_memory_store(Store),
+                 open_write(Store,Builder)
+             )
+         )
+     ]) :-
+
+    open_string(
+    '{ "@type" : "@context",
+       "@base" : "http://terminusdb.com/system/schema#",
+        "type" : "http://terminusdb.com/type#" }
+
+     { "@id" : "User",
+       "@type" : "Class",
+       "key_hash" : "type:string",
+       "capability" : { "@type" : "Set",
+                        "@class" : "Capability" } }',Stream),
+
+    write_json_stream_to_builder(Stream, Builder,schema),
+    nb_commit(Builder,Layer),
+
+    findall(
+        t(X,Y,Z),
+        triple(Layer,X,Y,Z),
+        Triples),
+
+    Triples = [
+        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#capability",node("http://terminusdb.com/system/schema#User_capability_Set_Capability")),
+        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#key_hash",node("http://terminusdb.com/type#string")),
+        t("http://terminusdb.com/system/schema#User","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Class")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://terminusdb.com/schema/sys#class",node("http://terminusdb.com/system/schema#Capability")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Set")),
+
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#prefix",value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#url",value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Prefix")),
+        t("terminusdb://context","http://terminusdb.com/schema/sys#base",value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://context","http://terminusdb.com/schema/sys#prefix_pair",node("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b")),
+        t("terminusdb://context","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Context"))
+    ].
+
+:- end_tests(json_stream).
+
+:- begin_tests(json).
+
+:- use_module(core(util/test_utils)).
+
 schema1('
-{ "@type" : "Context",
+{ "@type" : "@context",
   "@base" : "i/",
   "@schema" : "s/" }
 
 { "@id" : "Person",
   "@type" : "Class",
-              "name" : "xsd:string",
-              "birthdate" : "xsd:date",
-              "friends" : json{ "@type" : "Set",
-                                "@class" : "Person" } }
+  "name" : "xsd:string",
+  "birthdate" : "xsd:date",
+  "friends" : { "@type" : "Set",
+                "@class" : "Person" } }
 { "@id" : "Employee",
   "@type" : "Class",
   "@inherits" : "Person",
   "staff_number" : "xsd:string",
-  "boss" : json{ "@type" : "Optional",
+  "boss" : { "@type" : "Optional",
                  "@class" : "Employee" },
-  "tasks" : json{ "@type" : "List",
-                              "@class" : "Task" } }
+  "tasks" : { "@type" : "List",
+                    "@class" : "Task" } }
 
 { "@id" : "Task",
   "@type" : "Class",
@@ -754,8 +878,8 @@ schema1('
 { "@id" : "Criminal",
   "@type" : "Class",
   "@inherits" : "Person",
-  "aliases" : json{ "@type" : "List",
-                    "@class" : "xsd:string" } }').
+  "aliases" : { "@type" : "List",
+                "@class" : "xsd:string" } }').
 
 write_schema1(Desc) :-
     create_context(Desc,commit{
