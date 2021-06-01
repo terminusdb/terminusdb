@@ -1,0 +1,24 @@
+{ "@type" : "@context",
+  "@base" : "http://terminusdb.com/repo/schema#",
+  "@schema" : "http://terminusdb.com/db/repository/schema#",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"}
+
+{ "@id" : "layer:Layer",
+  "@type" : "Class",
+  "sys:key" : { "@type" : "ValueHash" },
+  "layer:identifier" : "xsd:string" }
+
+{ "@id" : "Repository",
+  "@type" : "Class",
+  "@inherits" : "Repository",
+  "head" : "layer:Layer",
+  "name" : "type:string" }
+
+{ "@id" : "Local",
+  "@type" : "Class",
+  "@inherits" : "Repository" }
+
+{ "@id" : "Remote",
+  "@type" : "Class",
+  "@inherits" : "Repository",
+  "remote_url" : "xsd:string" }

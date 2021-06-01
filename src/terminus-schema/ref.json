@@ -1,0 +1,46 @@
+{ "@type" : "@context",
+  "@base" : "http://terminusdb.com/db/ref/instance/",
+  "@schema" : "http://terminusdb.com/db/ref/schema#",
+  "layer" : "http://terminusdb.com/db/layer/schema#" }
+
+{ "@id" : "layer:Layer",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "layer:identifier" : "xsd:string" }
+
+{ "@id" : "Branch",
+  "@type" : "Class",
+  "branch_name" : "xsd:string" }
+
+{ "@id" : "Commit",
+  "@type" : "Class",
+  "instance" : "Graph",
+  "schema" : "Graph",
+  "author" : "xsd:string",
+  "message" : "xsd:string",
+  "identifier" : "xsd:string",
+  "timestamp" : "xsd:decimal",
+  "parent" : { "@type" : "Optional",
+               "@class" : "Commit" } }
+
+{ "@id" : "Graph",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "layer" : "layer:Layer" }
+
+{ "@id" : "ValidCommit",
+  "@type" : "Class",
+  "@inherits" : "Commit" }
+
+{ "@id" : "InvalidCommit",
+  "@type" : "Class",
+  "@inherits" : "Commit"}
+
+{ "@id" : "Ref",
+  "@type" : "Class",
+  "commit" : "Commit",
+  "identifier" : "xsd:string" }
+
+{ "@id" : "Tag",
+  "@type" : "Class",
+  "@inherits" : "Ref" }
