@@ -718,32 +718,44 @@ id_schema_json(DB, Id, JSON) :-
 
 :- use_module(core(util/test_utils)).
 
-context1(json{ '@type' : "Context",
-               '@base' : "i/",
-               '@schema' : "s/" }).
+create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
+    safe_create_named_graph(Store,Graph_ID,Graph_Obj),
+    open_write(Store, Builder),
 
-schema1(json{ '@id' : "Person",
-              '@type' : "Class",
-              'name' : "xsd:string",
-              'birthdate' : "xsd:date",
-              'friends' : json{ '@type' : "Set",
-                                '@class' : "Person" } }).
-schema1(json{ '@id' : "Employee",
-              '@type' : "Class",
-              '@inherits' : "Person",
-              'staff_number' : "xsd:string",
-              'boss' : json{ '@type' : "Optional",
-                             '@class' : "Employee" },
-              'tasks' : json{ '@type' : "List",
-                              '@class' : "Task" } }).
-schema1(json{ '@id' : "Task",
-              '@type' : "Class",
-              'name' : "xsd:string" }).
-schema1(json{ '@id' : "Criminal",
-              '@type' : "Class",
-              '@inherits' : "Person",
-              'aliases' : json{ '@type' : "List",
-                                '@class' : "xsd:string" } }).
+    write_json_stream_to_builder(JSON_Stream, Builder, Type),
+    % commit this builder to a temporary layer to perform a diff.
+    nb_commit(Builder,Layer),
+    nb_set_head(Graph_Obj, Layer).
+
+schema1('
+{ "@type" : "Context",
+  "@base" : "i/",
+  "@schema" : "s/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+              "name" : "xsd:string",
+              "birthdate" : "xsd:date",
+              "friends" : json{ "@type" : "Set",
+                                "@class" : "Person" } }
+{ "@id" : "Employee",
+  "@type" : "Class",
+  "@inherits" : "Person",
+  "staff_number" : "xsd:string",
+  "boss" : json{ "@type" : "Optional",
+                 "@class" : "Employee" },
+  "tasks" : json{ "@type" : "List",
+                              "@class" : "Task" } }
+
+{ "@id" : "Task",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+
+{ "@id" : "Criminal",
+  "@type" : "Class",
+  "@inherits" : "Person",
+  "aliases" : json{ "@type" : "List",
+                    "@class" : "xsd:string" } }').
 
 write_schema1(Desc) :-
     create_context(Desc,commit{

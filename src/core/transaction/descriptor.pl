@@ -69,6 +69,8 @@
  *                         | label_descriptor{ label: string }
  *                         | id_descriptor{ id : string,
  *                                          type : Or(instance,schema) } % only for querying!
+ *                         | layer_descriptor{ layer : layer,
+ *                                             type : Or(instance,schema) } % only for querying!
  *                         | database_descriptor{ organization_name : string,
  *                                                database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
@@ -415,6 +417,24 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
         Schema_Objects = []
     ;   Instance_Objects = [],
         Schema_Objects = [RW]),
+
+    Transaction_Object = transaction_object{
+                             descriptor : Descriptor,
+                             instance_objects : Instance_Objects,
+                             schema_objects : Schema_Objects,
+                             inference_objects : []
+                         }.
+open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
+    layer_descriptor{ layer : Layer, type: Type } :< Descriptor,
+    !,
+    open_read_write_obj(Layer, Object, [], _),
+
+    (   Type = instance
+    ->  Instance_Objects = [Object]
+    ;   Type = schema
+    ->  Schema_Objects = [Object]
+    ;   throw(error(bad_descriptor(Descriptor)))
+    ),
 
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
