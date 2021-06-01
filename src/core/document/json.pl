@@ -9,7 +9,8 @@
               database_context/2,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
-              write_json_stream_to_schema/2
+              write_json_stream_to_schema/2,
+              write_json_stream_to_instance/2
           ]).
 
 :- use_module(instance).
@@ -797,6 +798,18 @@ write_json_stream_to_schema(Transaction, Stream) :-
 write_json_stream_to_schema(Context, Stream) :-
     query_context{transaction_objects: [Transaction]} :< Context,
     write_json_stream_to_schema(Transaction, Stream).
+
+write_json_stream_to_instance(Transaction, Stream) :-
+    transaction_object{} :< Transaction,
+    !,
+    [RWO] = (Transaction.instance_objects),
+    read_write_obj_builder(RWO, Builder),
+
+    write_json_stream_to_builder(Stream, Builder, schema(Transaction)).
+
+write_json_stream_to_instance(Context, Stream) :-
+    query_context{transaction_objects: [Transaction]} :< Context,
+    write_json_stream_to_instance(Transaction, Stream).
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
