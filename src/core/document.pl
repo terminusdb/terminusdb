@@ -13,7 +13,9 @@
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
               write_json_stream_to_schema/2,
-              write_json_stream_to_instance/2
+              write_json_stream_to_instance/2,
+              write_json_string_to_schema/2,
+              write_json_string_to_instance/2
           ]).
 
 :- use_module('document/validation').

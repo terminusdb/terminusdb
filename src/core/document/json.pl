@@ -10,7 +10,9 @@
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
               write_json_stream_to_schema/2,
-              write_json_stream_to_instance/2
+              write_json_stream_to_instance/2,
+              write_json_string_to_schema/2,
+              write_json_string_to_instance/2
           ]).
 
 :- use_module(instance).
@@ -181,9 +183,15 @@ predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     atom_string(Prop,Short).
 predicate_map(P, _Context, P, json{}).
 
+type_context(_DB, "@id", json{}) :- !.
+type_context(_DB, Base_Type, json{}) :-
+    is_base_type(Base_Type),
+    !.
 type_context(DB,Type,Context) :-
     database_context(DB, Database_Context),
     maybe_expand_type(Type,Database_Context,TypeEx),
+    do_or_die(is_simple_class(DB, TypeEx),
+              error(type_not_found(Type), _)),
     findall(Prop - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
@@ -735,7 +743,6 @@ create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
 
 write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     !,
-    writeq(moo),nl,
     json_read_dict(JSON_Stream, Context, [default_tag(json),end_of_file(eof)]),
 
     (   Context = eof
@@ -810,6 +817,15 @@ write_json_stream_to_instance(Transaction, Stream) :-
 write_json_stream_to_instance(Context, Stream) :-
     query_context{transaction_objects: [Transaction]} :< Context,
     write_json_stream_to_instance(Transaction, Stream).
+
+write_json_string_to_schema(Context, String) :-
+    open_string(String, Stream),
+    write_json_stream_to_schema(Context, Stream).
+
+write_json_string_to_instance(Context, String) :-
+    open_string(String, Stream),
+    write_json_stream_to_instance(Context, Stream).
+
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -900,35 +916,29 @@ write_schema1(Desc) :-
                             message : "none"},
                    Context),
 
+    schema1(Schema1),
+
     % Schema
     with_transaction(
         Context,
-        forall(
-            (   (   context1(Ctx),
-                    context_triple(Ctx,t(A,B,C))
-                ;   schema1(Doc),
-                    json_schema_triple(Doc,t(A,B,C)))
-            ),
-            ask(Context,
-                insert(A,B,C))),
-        _Meta
-    ).
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
 
 test(create_database_context,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_with_empty_schema(admin,test),
-                 resolve_absolute_string_descriptor('admin/test',Desc),
+                 test_document_label_descriptor(Desc),
                  write_schema1(Desc)
              )),
          cleanup(
              teardown_temp_store(State)
          )
      ]) :-
-
     open_descriptor(Desc, DB),
-    type_context(DB,employee,Context),
+    type_context(DB,'Employee',Context),
+
+    nl,print_term(Context, []),nl,
 
     Context = json{birthdate:json{'@type':"xsd:date"},
                    boss:json{'@type':"@id"},

@@ -35,7 +35,9 @@
               setup_temp_unattached_server/4,
               teardown_temp_unattached_server/1,
               setup_cloned_situation/4,
-              setup_cloned_nonempty_situation/4
+              setup_cloned_nonempty_situation/4,
+              test_document_label_descriptor/1,
+              test_document_label_descriptor/2
           ]).
 
 /** <module> Test Utilities
@@ -569,3 +571,17 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
               _,
               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
                request_header('Authorization-Remote'=Authorization_Remote)]).
+
+test_document_label_descriptor(Descriptor) :-
+    test_document_label_descriptor(test, Descriptor).
+test_document_label_descriptor(Name, Descriptor) :-
+    triple_store(Store),
+    atom_concat(Name, '_schema', Schema_Name),
+    atom_concat(Name, '_instance', Instance_Name),
+    create_named_graph(Store, Schema_Name, _),
+    create_named_graph(Store, Instance_Name, _),
+
+    Descriptor = document_label_descriptor{
+                     schema_label: Schema_Name,
+                     instance_label: Instance_Name
+                 }.
