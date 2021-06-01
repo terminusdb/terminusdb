@@ -47,8 +47,8 @@ organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
 
 organization_name_uri(Askable,Organization, Uri) :-
     once(ask(Askable,
-             (   t(Uri, system:organization_name, Organization^^xsd:string),
-                 t(Uri, rdf:type, system:'Organization')
+             (   t(Uri, '@schema':name, Organization^^xsd:string),
+                 t(Uri, rdf:type, '@schema':'Organization')
              ))).
 
 organization_name_exists(Askable, Name) :-

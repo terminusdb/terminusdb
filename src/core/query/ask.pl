@@ -31,6 +31,8 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+:- use_module(core(document), [database_context/2]).
+
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     freeze(Woql_Var,
            (   is_dict(Woql_Var) % Document
@@ -110,7 +112,10 @@ create_context(Validation,Context) :-
 create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
-    collection_descriptor_prefixes(Descriptor, Prefixes),
+    database_context(Transaction_Object, Database_Prefixes),
+    default_prefixes(Default_Prefixes),
+    put_dict(Database_Prefixes, Default_Prefixes, Prefixes),
+    %collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
     % Note: should we be using system_descriptor{} below? or open it?

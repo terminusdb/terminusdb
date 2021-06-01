@@ -176,8 +176,7 @@ predicate_map(P, _Context, P, json{}).
 
 type_context(DB,Type,Context) :-
     database_context(DB, Database_Context),
-    atom_string(Type_Atom,Type),
-    prefix_expand(Type_Atom,Database_Context,TypeEx),
+    maybe_expand_type(Type,Database_Context,TypeEx),
     findall(Prop - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
@@ -280,6 +279,9 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
                 is_dict(Full_Expansion)
             ->  expansion_key(Prop,Full_Expansion,P,Expansion),
                 context_value_expand(DB,Value,Expansion,V)
+            ;   Prop = '@type'
+            ->  P = Prop,
+                maybe_expand_type(Value,Context, V)
             ;   P = Prop,
                 V = Value
             )
@@ -712,7 +714,7 @@ id_schema_json(DB, Id, JSON) :-
 
 
 
-:- begin_tests(json_conv).
+:- begin_tests(json).
 
 :- use_module(core(util/test_utils)).
 
@@ -1975,4 +1977,4 @@ test(binary_tree_elaborate,
                       }.
 
 
-:- end_tests(json_conv).
+:- end_tests(json).

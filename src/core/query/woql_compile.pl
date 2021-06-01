@@ -237,6 +237,18 @@ is_boolean_type('http://www.w3.org/2001/XMLSchema#boolean').
 resolve(ignore,_Something) -->
     !,
     [].
+%% resolve(X,XEx) -->
+%%     {
+%%         atom(X),
+%%         \+ uri_has_protocol(X),
+%%         \+ uri_has_prefix(X)
+%%     },
+%%     !,
+%%     view(prefixes,Prefixes),
+%%     {
+%%         get_dict('@base', Prefixes, Base),
+%%         atomic_list_concat([Base,X],XEx)
+%%     }.
 resolve(ID:Suf,U) -->
     !,
     resolve_prefix(ID,Suf,U).
