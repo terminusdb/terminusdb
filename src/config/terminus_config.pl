@@ -94,7 +94,7 @@ jwt_enabled :-
     Value = true.
 
 jwt_jwks_endpoint(Value) :-
-    getenv_default('TERMINUSDB_SERVER_JWKS_ENDPOINT', '', Value).
+    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', Value).
 
 console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).

@@ -33,9 +33,8 @@
 :- endif.
 
 load_jwt_conditionally :-
-    (   config:jwt_enabled
-    ->  config:jwt_jwks_endpoint(Endpoint),
-        jwt_io:setup_jwks(Endpoint)
+    (   config:jwt_enabled, config:jwt_jwks_endpoint(Endpoint)
+    ->  jwt_io:setup_jwks(Endpoint)
     ; true).
 
 
