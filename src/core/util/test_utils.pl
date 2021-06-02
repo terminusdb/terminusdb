@@ -422,7 +422,8 @@ spawn_server_1(Path, URL, PID, Options) :-
 
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_HTTPS_ENABLED'='false'
+        'TERMINUSDB_HTTPS_ENABLED'='false',
+        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 
     inherit_env_vars(Env_List_1,
@@ -433,10 +434,7 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TEMP', % Again...
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
-                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
-                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID',
                          'TERMINUSDB_JWT_ENABLED',
-                         'TERMINUSDB_SERVER_JWKS_ENDPOINT',
                          'TERMINUSDB_SERVER_TMP_PATH'
                      ],
                      Env_List),
