@@ -8,8 +8,7 @@
               max_transaction_retries/1,
               index_template/1,
               default_database_path/1,
-              jwt_public_key_path/1,
-              jwt_public_key_id/1,
+              jwt_jwks_endpoint/1,
               jwt_enabled/0,
               registry_path/1,
               console_base_url/1,
@@ -94,11 +93,8 @@ jwt_enabled :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, Value),
     Value = true.
 
-jwt_public_key_path(Value) :-
-    getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH', '', Value).
-
-jwt_public_key_id(Value) :-
-    getenv_default('TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID', '', Value).
+jwt_jwks_endpoint(Value) :-
+    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', Value).
 
 console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).

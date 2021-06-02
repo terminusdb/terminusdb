@@ -33,13 +33,8 @@
 :- endif.
 
 load_jwt_conditionally :-
-    (   config:jwt_enabled
-    ->  config:jwt_public_key_id(Public_Key_Id),
-        config:jwt_public_key_path(JWTPubKeyPath),
-        set_setting(jwt_io:keys, [_{kid: Public_Key_Id,
-                                    type: 'RSA',
-                                    algorithm: 'RS256',
-                                    public_key: JWTPubKeyPath}])
+    (   config:jwt_enabled, config:jwt_jwks_endpoint(Endpoint)
+    ->  jwt_io:setup_jwks(Endpoint)
     ; true).
 
 

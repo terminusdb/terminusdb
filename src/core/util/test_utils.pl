@@ -412,7 +412,6 @@ spawn_server_1(Path, URL, PID, Options) :-
     ),
 
     format(string(URL), "http://127.0.0.1:~d", [Port]),
-    expand_file_search_path(terminus_home('test/public_key_test.key.pub'), Pub_Key),
     Env_List_1 = [
         'LANG'='en_US.UTF-8',
         'LC_TIME'='en_US.UTF-8',
@@ -424,8 +423,7 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
         'TERMINUSDB_HTTPS_ENABLED'='false',
-        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH'=Pub_Key,
-        'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID'='testkey'
+        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 
     inherit_env_vars(Env_List_1,
@@ -436,8 +434,6 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TEMP', % Again...
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
-                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH',
-                         'TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID',
                          'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH'
                      ],
