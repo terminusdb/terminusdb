@@ -20,7 +20,9 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
-%:- use_module(core(query)).
+:- use_module(core(query), [has_at/1, compress_uri/4]).
+
+:- use_module(json). % This feels very circular.
 
 check_schema :-
     (   schema_not_wf(Witness)
@@ -83,6 +85,9 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
+    do_or_die(
+        \+ has_at(Predicate),
+        throw(error(not_a_valid_keyword(Predicate)))),
     type_descriptor(Validation_Object,Range,Type).
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     class_super(Validation_Object,Class,Super),
@@ -150,9 +155,7 @@ type_family_constructor(Type) :-
             sys:'List',
             sys:'Array',
             sys:'Cardinality',
-            sys:'Optional',
-            sys:'Enum',
-            sys:'TaggedUnion'
+            sys:'Optional'
         ],
         List),
     memberchk(Type,List).
@@ -353,7 +356,11 @@ key_base(Validation_Object, Type, Base) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, sys:base, Base^^xsd:string),
     !.
-key_base(_Validation_Object, Type, Type).
+key_base(Validation_Object, Type, Base) :-
+    database_context(Validation_Object,Context),
+    get_dict('@schema',Context,Schema),
+    compress_uri(Type,'@base',Schema,Type_Compressed),
+    atomic_list_concat([Type_Compressed,'_'],Base).
 
 % should refactor to do key lookup once.
 key_descriptor(Validation_Object, Type, Descriptor) :-
@@ -365,13 +372,13 @@ key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Obj,rdf:type, sys:'Lexical'),
     xrdf(Schema, Obj, sys:fields, L),
-    rdf_list(L,Fields),
+    rdf_list(Validation_Object,L,Fields),
     key_base(Validation_Object,Type,Base).
 key_descriptor_(Validation_Object, Type, Obj, hash(Base,Fields)) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, sys:'Hash'),
     xrdf(Schema, Obj, sys:fields, L),
-    rdf_list(L,Fields),
+    rdf_list(Validation_Object,L,Fields),
     key_base(Validation_Object,Type,Base).
 key_descriptor_(Validation_Object, Type, Obj, value_hash(Base)) :-
     database_schema(Validation_Object,Schema),

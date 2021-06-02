@@ -9,7 +9,9 @@
               jsonld_type/2,
               get_key_document/4,
               compress_dict_uri/3,
-              context_prefix_expand/3
+              compress_uri/4,
+              context_prefix_expand/3,
+              has_at/1
           ]).
 
 /** <module> JSON-LD

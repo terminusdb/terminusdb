@@ -2,7 +2,7 @@
               context_triple/2,
               json_elaborate/3,
               json_triple/4,
-              json_schema_triple/2,
+              %json_schema_triple/2,
               json_schema_triple/3,
               json_schema_elaborate/2,
               id_json/3,
@@ -36,7 +36,8 @@ value_json(X,O) :-
         },
     string(X),
     !.
-value_json(1^^unit,json{}) :-
+value_json(RDF_Nil,json{}) :-
+    global_prefix_expand(rdf:nil,RDF_Nil),
     !.
 value_json(X^^Y,O) :-
     O = json{
@@ -153,24 +154,26 @@ json_idgen(DB,JSON,ID) :-
     ->  idgen_random(Base,ID)
     ).
 
+class_descriptor_image(unit,json{}).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(optional(_),json{ '@type' : "@id" }).
-class_descriptor_image(tagged_union(_),json{ '@type' : "@id" }).
+class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
-class_descriptor_image(enum(C),json{ '@type' : C }).
+class_descriptor_image(enum(C,_),json{ '@type' : C }).
 class_descriptor_image(list(C),json{ '@container' : "@list",
                                      '@type' : C }).
 class_descriptor_image(array(C),json{ '@container' : "@array",
                                       '@type' : C }).
 class_descriptor_image(set(C),json{ '@container' : "@set",
                                     '@type' : C }).
-class_descriptor_image(cardinality(C,_), json{ '@container' : "@cardinality",
+class_descriptor_image(cardinality(C,_), json{ '@container' : "@set",
                                                '@type' : C }).
 
 database_context(DB,Context) :-
     database_schema(DB,Schema),
     (   xrdf(Schema, ID, rdf:type, sys:'Context')
-    ->  id_schema_json(DB,ID,Context)
+    ->  id_schema_json(DB,ID,Pre_Context),
+        select_dict(json{'@id' : _ }, Pre_Context, Context)
     ;   Context = _{}).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
@@ -219,7 +222,7 @@ json_elaborate(DB,JSON,Context,JSON_ID) :-
     do_or_die(
         type_context(DB,TypeEx,Type_Context),
         error(unknown_type_encountered(TypeEx),_)),
-    %
+
     put_dict(Type_Context,Context,New_Context),
     json_context_elaborate(DB,JSON,New_Context,Elaborated),
     json_jsonid(DB,Elaborated,JSON_ID).
@@ -231,7 +234,24 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
         Expansion = Cleaned
     ).
 
-context_value_expand(DB,Value,Expansion,V) :-
+
+value_expand_list([], _DB, _Context, _Elt_Type, []).
+value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
+    (   is_enum(DB,Elt_Type)
+    ->  enum_value(Elt_Type,Value,Expanded)
+    ;   is_dict(Value)
+    ->  put_dict(json{'@type':Elt_Type}, Value, Prepared)
+    ;   is_base_type(Elt_Type)
+    ->  Prepared = json{'@value' : Value,
+                        '@type': Elt_Type}
+    ;   Prepared = json{'@id' : Value,
+                        '@type': "@id"}),
+    json_elaborate(DB, Prepared, Expanded),
+    value_expand_list(Vs, DB, Context, Elt_Type, Exs).
+
+context_value_expand(_,_,json{},json{},json{}) :-
+    !.
+context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
     % Container type
@@ -241,32 +261,21 @@ context_value_expand(DB,Value,Expansion,V) :-
     ;   string(Value)
     ->  Value_List = [Value]
     ;   get_dict('@value',Value,Value_List)),
-    maplist({DB,Elt_Type}/[Elt_In,Elt_Out]>>(
-                (   is_enum(DB,Elt_Type)
-                ->  enum_value(Elt_Type,Elt_In,Elt_Out)
-                ;   is_dict(Elt_In)
-                ->  put_dict(Elt_In,json{'@type':Elt_Type},Elt2)
-                ;   is_base_type(Elt_Type)
-                ->  Elt2 = json{'@value' : Elt_In,
-                                '@type': Elt_Type}
-                ;   Elt2 = json{'@id' : Elt_In,
-                                '@type': "@id"}),
-                json_elaborate(DB,Elt2,Elt_Out)
-            ), Value_List, V_List),
-    V = (Expansion.put(json{'@value' : V_List})).
-context_value_expand(DB,Value,Expansion,V) :-
+    value_expand_list(Value_List, DB, Context, Elt_Type, Expanded_List),
+    V = (Expansion.put(json{'@value' : Expanded_List})).
+context_value_expand(DB,Context,Value,Expansion,V) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
     !,
     is_dict(Value),
-    json_elaborate(DB,Value, V).
-context_value_expand(_,Value,_Expansion,V) :-
+    json_elaborate(DB, Value, Context, V).
+context_value_expand(_,_Context, Value,_Expansion,V) :-
     % An already expanded typed value
     is_dict(Value),
     get_dict('@value',Value,_),
     !,
     V = Value.
-context_value_expand(DB,Value,Expansion,V) :-
+context_value_expand(DB,_Context,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
     json_elaborate(DB,New_Expansion, V).
@@ -274,10 +283,11 @@ context_value_expand(DB,Value,Expansion,V) :-
 enum_value(Type,Value,ID) :-
     atomic_list_concat([Type, '_', Value], ID).
 
-json_context_elaborate(DB, JSON, _Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
-    is_enum(DB,Type),
+    maybe_expand_type(Type,Context,Type_Ex),
+    is_enum(DB,Type_Ex),
     !,
     get_dict('@value',JSON,Value),
     enum_value(Type,Value,Full_ID),
@@ -293,12 +303,14 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
             (   get_dict(Prop, Context, Full_Expansion),
                 is_dict(Full_Expansion)
             ->  expansion_key(Prop,Full_Expansion,P,Expansion),
-                context_value_expand(DB,Value,Expansion,V)
+                context_value_expand(DB,Context,Value,Expansion,V)
             ;   Prop = '@type'
             ->  P = Prop,
                 maybe_expand_type(Value,Context, V)
-            ;   P = Prop,
+            ;   has_at(Prop)
+            ->  P = Prop,
                 V = Value
+            ;   throw(error(unrecognized_prop_value(Prop,Value), _))
             )
         ),
         PVs),
@@ -345,6 +357,21 @@ type_family_parts(JSON,[Family,Class]) :-
 type_family_id(JSON,Path,ID) :-
     reverse(Path,Rev),
     type_family_parts(JSON,Parts),
+    append(Rev,Parts,Full_Path),
+    maplist(uri_encoded(path),Full_Path,Encoded),
+    merge_separator_split(Merged,'_',Encoded),
+    ID = Merged.
+
+key_parts(JSON,[Type|Fields]) :-
+    get_dict('@type',JSON,Type),
+    get_dict('@fields',JSON,Fields),
+    !.
+key_parts(JSON,[Type]) :-
+    get_dict('@type',JSON,Type).
+
+key_id(JSON,Path,ID) :-
+    reverse(Path,Rev),
+    key_parts(JSON,Parts),
     append(Rev,Parts,Full_Path),
     maplist(uri_encoded(path),Full_Path,Encoded),
     merge_separator_split(Merged,'_',Encoded),
@@ -415,6 +442,13 @@ context_elaborate(JSON,Elaborated) :-
                                                         '@value' : Prefix_Pair_List }
                                 |PVs]).
 
+wrap_id(ID, json{'@type' : "@id",
+                 '@id' : ID}) :-
+    (   atom(ID)
+    ;   string(ID)),
+    !.
+wrap_id(ID, ID).
+
 expand_match_system(Key,Term,Key_Ex) :-
     global_prefixes(sys,Prefix),
     global_prefix_expand(sys:Term,Key_Ex),
@@ -430,13 +464,14 @@ json_schema_elaborate_key(V,Value) :-
     expand_match_system(Lexical, 'Lexical', Type),
     !,
     get_dict('@fields', V, Fields),
+    maplist([Elt,Elt_ID]>>wrap_id(Elt,Elt_ID), Fields, Fields_Wrapped),
     Value = json{
                 '@type' : Type,
                 'sys:fields' :
                 json{
                     '@container' : "@list",
                     '@type' : "@id",
-                    '@value' : Fields
+                    '@value' : Fields_Wrapped
                 }
             }.
 json_schema_elaborate_key(V,Value) :-
@@ -444,13 +479,14 @@ json_schema_elaborate_key(V,Value) :-
     expand_match_system(Hash, 'Hash', Type),
     !,
     get_dict('@fields', V, Fields),
+    maplist([Elt,Elt_ID]>>wrap_id(Elt,Elt_ID), Fields, Fields_Wrapped),
     Value = json{
                 '@type' : Type,
                 'sys:fields' :
                 json{
                     '@container' : "@list",
                     '@type' : "@id",
-                    '@value' : Fields
+                    '@value' : Fields_Wrapped
                 }
             }.
 json_schema_elaborate_key(V,json{ '@type' : Type}) :-
@@ -464,14 +500,16 @@ json_schema_elaborate_key(V,json{ '@type' : Type}) :-
 
 json_schema_predicate_value('@id',V,_,'@id',V) :-
     !.
-json_schema_predicate_value(P,V,_,P,json{'@type' : 'xsd:positiveInteger',
-                                         '@value' : V }) :-
+json_schema_predicate_value('@cardinality',V,_,P,json{'@type' : 'xsd:positiveInteger',
+                                                      '@value' : V }) :-
     global_prefix_expand(sys:cardinality, P),
     !.
-json_schema_predicate_value('@key',V,_,P,Value) :-
+json_schema_predicate_value('@key',V,Path,P,Value) :-
     !,
     global_prefix_expand(sys:key, P),
-    json_schema_elaborate_key(V,Value).
+    json_schema_elaborate_key(V,Elab),
+    key_id(V,Path,ID),
+    put_dict(_{'@id' : ID}, Elab, Value).
 json_schema_predicate_value('@base',V,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -498,7 +536,6 @@ json_schema_predicate_value(P,V,_,P,json{'@type' : "@id",
 json_schema_elaborate(JSON,_,Elaborated) :-
     is_type_enum(JSON),
     !,
-    %writeq(JSON),nl,
     get_dict('@id', JSON, ID),
     get_dict('@type', JSON, Type),
     maybe_expand_schema_type(Type,Expanded),
@@ -509,7 +546,7 @@ json_schema_elaborate(JSON,_,Elaborated) :-
             ),List,New_List),
     Elaborated = json{ '@id' : ID,
                        '@type' : Expanded,
-                       'sys:value' : json{ '@container' : "@set",
+                       'sys:value' : json{ '@container' : "@list",
                                            '@type' : "@id",
                                            '@value' : New_List } }.
 json_schema_elaborate(JSON,Old_Path,Elaborated) :-
@@ -541,9 +578,11 @@ json_schema_triple(JSON,Context,Triple) :-
     expand_schema(JSON_Schema,Context,Expanded),
     json_triple_(Expanded,Triple).
 
+/*
 json_schema_triple(JSON,Triple) :-
     json_schema_elaborate(JSON,JSON_Schema),
     json_triple_(JSON_Schema,Triple).
+*/
 
 % Triple generator
 json_triple(DB,JSON,Context,Triple) :-
@@ -618,10 +657,11 @@ array_index_id_key_triple([H|T],Index,ID,Key,Triple) :-
     idgen_random('Array_',New_ID),
     reference(H,HRef),
     global_prefix_expand(sys:value, SYS_Value),
-    global_prefix_expand(sys:value, SYS_Index),
+    global_prefix_expand(sys:index, SYS_Index),
+    global_prefix_expand(xsd:nonNegativeInteger, XSD_NonNegativeInteger),
     (   Triple = t(ID, Key, New_ID)
     ;   Triple = t(New_ID, SYS_Value, HRef)
-    ;   Triple = t(New_ID, SYS_Index, Index)
+    ;   Triple = t(New_ID, SYS_Index, Index^^XSD_NonNegativeInteger)
     ;   Next_Index is Index + 1,
         array_index_id_key_triple(T,Next_Index,ID,Key,Triple)
     ;   json_triple_(H,Triple)
@@ -640,13 +680,16 @@ reference(Dict,ID) :-
 reference(Elt,V) :-
     value_json(V,Elt).
 
-list_id_key_triple([],ID,Key,t(ID,Key,rdf:nil)).
+list_id_key_triple([],ID,Key,t(ID,Key,RDF_Nil)) :-
+    global_prefix_expand(rdf:nil, RDF_Nil).
 list_id_key_triple([H|T],ID,Key,Triple) :-
     idgen_random('Cons_',New_ID),
-    (   reference(H,HRef),
-        member(Triple,[t(ID,Key,New_ID),
-                       t(New_ID,rdf:first,HRef)])
-    ;   list_id_key_triple(T,New_ID,rdf:rest,Triple)
+    (   Triple = t(ID,Key,New_ID)
+    ;   reference(H,HRef),
+        global_prefix_expand(rdf:first, RDF_First),
+        Triple = t(New_ID,RDF_First,HRef)
+    ;   global_prefix_expand(rdf:rest, RDF_Rest),
+        list_id_key_triple(T,New_ID,RDF_Rest,Triple)
     ;   json_triple_(H,Triple)
     ).
 
@@ -664,10 +707,11 @@ array_list(DB,Id,P,List) :-
         I-V,
         (   xrdf(Instance,Id,P,ArrayElement),
             xrdf(Instance,ArrayElement,sys:value,V),
-            xrdf(Instance,ArrayElement,sys:index,I)
+            xrdf(Instance,ArrayElement,sys:index,I^^_)
         ),
         Index_List),
-    index_list_array(Index_List,List).
+    keysort(Index_List, Index_List_Sorted),
+    index_list_array(Index_List_Sorted,List).
 
 index_list_array(Index_List, List) :-
     index_list_last_array(Index_List,0,List).
@@ -680,7 +724,7 @@ index_list_last_array([I-Value|T], I, [Value|List]) :-
     index_list_last_array(T,J,List).
 index_list_last_array(Index_List, I, [null|List]) :-
     (   I > 174763
-    ->  throw(error(index_on_array_too_large(J),_))
+    ->  throw(error(index_on_array_too_large(I),_))
     ;   true
     ),
 
@@ -696,9 +740,9 @@ set_list(DB,Id,P,Set) :-
 list_type_id_predicate_value([],_,_,_,_,_,[]).
 list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,[V|L]) :-
     type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,V),
-    list_type_id_predicate_iri_value(T,C,Id,P,DB,Prefixes,L).
+    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,L).
 
-type_id_predicate_iri_value(enum(C),_,_,V^^C,_,_,O) :-
+type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,O) :-
     merge_separator_split(V, '_', [C,O]).
 type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,L) :-
     % Probably need to treat enums...
@@ -707,20 +751,20 @@ type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,L) :-
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
 type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,L) :-
-    array_list(DB,Prefixes,Id,P,V),
+    array_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
 type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,L) :-
-    set_list(DB,Prefixes,Id,P,V),
+    set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,_,L) :-
-    set_list(DB,Prefixes,Id,P,V),
+type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,L) :-
+    set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
 type_id_predicate_iri_value(class(_),_,_,Id,_,Prefixes,Id_Comp) :-
     compress_dict_uri(Id, Prefixes, Id_Comp).
-type_id_predicate_iri_value(tagged_union(_),_,_,V,_,_,V).
+type_id_predicate_iri_value(tagged_union(_,_),_,_,V,_,_,V).
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
@@ -763,7 +807,7 @@ key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), json{ '@type' : "Random" }).
 
-type_descriptor_json(unit, 'Unit').
+type_descriptor_json(unit, "Unit").
 type_descriptor_json(class(C), C).
 type_descriptor_json(optional(C), json{ '@type' : "Optional",
                                         '@class' : C }).
@@ -773,8 +817,8 @@ type_descriptor_json(array(C), json{ '@type' : "Array",
                                    '@class' : C }).
 type_descriptor_json(list(C), json{ '@type' : "List",
                                     '@class' : C }).
-type_descriptor_json(tagged_union(C), C).
-type_descriptor_json(enum(C), C).
+type_descriptor_json(tagged_union(C,_), C).
+type_descriptor_json(enum(C,_), C).
 
 schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
@@ -913,35 +957,38 @@ write_json_string_to_instance(Context, String) :-
     open_string(String, Stream),
     write_json_stream_to_instance(Context, Stream).
 
-
-insert_document(Desc, Document, ID) :-
-    create_context(Desc,commit{
-                            author : "test",
-                            message : "none"},
-                   Context),
-
+run_insert_document(Desc, Commit, Document, ID) :-
+    create_context(Desc,Commit,Context),
     with_transaction(
         Context,
         (   [TO] = (Context.transaction_objects),
-            database_context(TO, Prefixes),
-            % Pre process document
-            json_elaborate(TO, Document, Elaborated),
-            expand(Elaborated, Prefixes, Expanded),
-            get_dict('@id', Expanded, ID),
-            [RWO] = (TO.instance_objects),
-            % insert
-            forall(
-                json_triple_(Expanded, t(S,P,O)),
-                (   O = D^^T
-                ->  typecast(D^^'http://www.w3.org/2001/XMLSchema#string',
-                             T, [],
-                             OC),
-                    insert(RWO, S, P, OC, _)
-                ;   insert(RWO, S, P, O, _)
-                )
-            )
+            insert_document(TO, Document, ID)
         ),
-        _
+        _).
+
+json_to_database_type(D^^T, OC) :-
+    (   string(D)
+    ;   atom(D)),
+    !,
+    typecast(D^^'http://www.w3.org/2001/XMLSchema#string', T, [], OC).
+json_to_database_type(D^^T, OC) :-
+    number(D),
+    !,
+    typecast(D^^'http://www.w3.org/2001/XMLSchema#decimal', T, [], OC).
+json_to_database_type(O, O).
+
+insert_document(Transaction, Document, ID) :-
+    database_context(Transaction, Prefixes),
+    % Pre process document
+    json_elaborate(Transaction, Document, Elaborated),
+    expand(Elaborated, Prefixes, Expanded),
+    get_dict('@id', Expanded, ID),
+    database_instance(Transaction, [Instance]),
+    % insert
+    forall(
+        json_triple_(Expanded, t(S,P,O)),
+        (   json_to_database_type(O,OC),
+            insert(Instance, S, P, OC, _))
     ).
 
 :- begin_tests(json_stream).
@@ -977,18 +1024,39 @@ test(write_json_stream_to_builder, [
         Triples),
 
     Triples = [
-        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#capability",node("http://terminusdb.com/system/schema#User_capability_Set_Capability")),
-        t("http://terminusdb.com/system/schema#User","http://terminusdb.com/system/schema#key_hash",node("http://terminusdb.com/type#string")),
-        t("http://terminusdb.com/system/schema#User","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Class")),
-        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://terminusdb.com/schema/sys#class",node("http://terminusdb.com/system/schema#Capability")),
-        t("http://terminusdb.com/system/schema#User_capability_Set_Capability","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Set")),
-
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#prefix",value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://terminusdb.com/schema/sys#url",value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Prefix")),
-        t("terminusdb://context","http://terminusdb.com/schema/sys#base",value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://context","http://terminusdb.com/schema/sys#prefix_pair",node("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b")),
-        t("terminusdb://context","http://www.w3.org/1999/02/22-rdf-syntax-ns#type",node("http://terminusdb.com/schema/sys#Context"))
+        t("http://terminusdb.com/system/schema#User",
+          "http://terminusdb.com/system/schema#capability",
+          node("http://terminusdb.com/system/schema#User_capability_Set_Capability")),
+        t("http://terminusdb.com/system/schema#User",
+          "http://terminusdb.com/system/schema#key_hash",
+          node("http://terminusdb.com/type#string")),
+        t("http://terminusdb.com/system/schema#User",
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          node("http://terminusdb.com/schema/sys#Class")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability",
+          "http://terminusdb.com/schema/sys#class",
+          node("http://terminusdb.com/system/schema#Capability")),
+        t("http://terminusdb.com/system/schema#User_capability_Set_Capability",
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          node("http://terminusdb.com/schema/sys#Set")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+          "http://terminusdb.com/schema/sys#prefix",
+          value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+          "http://terminusdb.com/schema/sys#url",
+          value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          node("http://terminusdb.com/schema/sys#Prefix")),
+        t("terminusdb://context",
+          "http://terminusdb.com/schema/sys#base",
+          value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+        t("terminusdb://context",
+          "http://terminusdb.com/schema/sys#prefix_pair",
+          node("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b")),
+        t("terminusdb://context",
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          node("http://terminusdb.com/schema/sys#Context"))
     ].
 
 :- end_tests(json_stream).
@@ -1095,9 +1163,6 @@ test(elaborate,
     open_descriptor(Desc, DB),
 
     json_elaborate(DB, Document, Elaborated),
-
-    print_term(Elaborated,[]),
-
 
     Elaborated = json{ '@id':gavin,
                        '@type':'http://s/Criminal',
@@ -1265,7 +1330,9 @@ test(extract_json,
                           }
                },
 
-    insert_document(Desc, Document, ID),
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, ID),
 
     open_descriptor(Desc, DB),
     !, % NOTE: why does rolling back over this go mental?
@@ -1325,18 +1392,18 @@ schema2('
   "@type" : "Class",
   "@base" : "Person_",
   "@key" : { "@type" : "Lexical",
-             "@fields" : [ "name", "birthday" ] },
+             "@fields" : [ "name", "birthdate" ] },
   "name" : "xsd:string",
-  "birthday" : "xsd:date",
+  "birthdate" : "xsd:date",
   "friends" : { "@type" : "Set",
                 "@class" : "Person" } }
 
 { "@id" : "Employee",
   "@type" : "Class",
+  "@inherits" : "Person",
   "@base" : "Employee_",
   "@key" : { "@type" : "Hash",
-             "@fields" : [ "name", "birthday" ] },
-  "@inherts" : "Person",
+             "@fields" : [ "name", "birthdate" ] },
   "staff_number" : "xsd:string",
   "boss" : { "@type" : "Optional",
              "@class" : "Employee" },
@@ -1382,17 +1449,18 @@ schema2('
   "@value" : [ "red", "blue", "green" ] }
 
 { "@id" : "Dog",
-  "@base" : "dog_",
+  "@type" : "Class",
+  "@base" : "Dog_",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
   "name" : "xsd:string",
   "hair_colour" : "Colour" }
 
 { "@id" : "BinaryTree",
-  "@class" : "TaggedUnion",
+  "@type" : "TaggedUnion",
   "@base" : "binary_tree_",
   "@key" : { "@type" : "ValueHash" },
-  "leaf" : "Unit",
+  "leaf" : "sys:Unit",
   "node" : "Node" }
 
 { "@id" : "Node",
@@ -1444,40 +1512,36 @@ test(schema_lexical_key_elaboration, []) :-
                 '@type' : "Class",
                 '@base' : "Person_",
                 '@key' : json{ '@type' : "Lexical",
-                               '@fields' : [ "name", "birthday" ] },
+                               '@fields' : [ "name", "birthdate" ] },
                 'name' : "xsd:string",
-                'birthday' : "xsd:date",
+                'birthdate' : "xsd:date",
                 'friends' : json{ '@type' : "Set",
                                   '@class' : "Person" } },
 
     json_schema_elaborate(Doc, Elaborate),
 
-    print_term(Elaborate, []),
-
     Elaborate =
     json{ '@id':"Person",
           '@type':'http://terminusdb.com/schema/sys#Class',
-          birthday:json{'@id':"xsd:date",'@type':"@id"},
+          birthdate:json{'@id':"xsd:date",'@type':"@id"},
           friends:json{ '@id':'Person_friends_Set_Person',
 		                '@type':'http://terminusdb.com/schema/sys#Set',
-		                'http://terminusdb.com/schema/sys#class':
-                        json{ '@id':"Person",
-							  '@type':"@id"
-							}
+		                'http://terminusdb.com/schema/sys#class':json{ '@id':"Person",
+								                                       '@type':"@id"
+								                                     }
 		              },
-          'http://terminusdb.com/schema/sys#base':
-          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-				'@value':"Person_"
-			  },
-          'http://terminusdb.com/schema/sys#key':
-          json{ '@type':'http://terminusdb.com/schema/sys#Lexical',
-				'sys:fields':json{ '@container':"@list",
-								   '@type':"@id",
-								   '@value':[ "name",
-										      "birthday"
-									        ]
-								 }
-			  },
+          'http://terminusdb.com/schema/sys#base':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						                                '@value':"Person_"
+						                              },
+          'http://terminusdb.com/schema/sys#key':json{ '@id':'Person_Lexical_name_birthdate',
+						                               '@type':'http://terminusdb.com/schema/sys#Lexical',
+						                               'sys:fields':json{ '@container':"@list",
+								                                          '@type':"@id",
+								                                          '@value':[ "name",
+										                                             "birthdate"
+									                                               ]
+								                                        }
+						                             },
           name:json{'@id':"xsd:string",'@type':"@id"}
         }.
 
@@ -1499,129 +1563,118 @@ test(idgen_lexical,
                },
 
     open_descriptor(Desc, DB),
-
-    print_all_triples(DB,schema),
-
     json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{'@id':"Person_jane_1979-12-28",
-                      '@type':'Person',
-                      birthdate:json{'@type':xsd:date,
-                                     '@value':"1979-12-28"},
-                      name:json{'@type':xsd:string,
-                                '@value':"jane"}
-                     }.
+    Elaborated =
+    json{'@id':"Person_jane_1979-12-28",
+         '@type':'http://s/Person',
+         'http://s/birthdate':json{'@type':'http://www.w3.org/2001/XMLSchema#date',
+                                   '@value':"1979-12-28"},
+         'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                              '@value':"jane"}
+        }.
 
 test(idgen_hash,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':employee,
+    JSON = json{'@type':'Employee',
                 birthdate:"1979-12-28",
                 name:"jane",
                 staff_number:"13"
                },
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{'@id':"employee_b367edeea1a0e899b55a88edf9b27513",
-                      '@type':employee,
-                      birthdate:json{'@type':xsd:date,
-                                     '@value':"1979-12-28"},
-                      name:json{'@type':xsd:string,
-                                '@value':"jane"},
-                      staff_number:json{'@type':xsd:string,
-                                        '@value':"13"}
-                     }.
+    Elaborated =
+    json{
+        '@id':"Employee_b367edeea1a0e899b55a88edf9b27513",
+        '@type':'http://s/Employee',
+        'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+				                   '@value':"1979-12-28"
+			                     },
+        'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                  '@value':"jane"
+			                },
+        'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				                      '@value':"13"
+				                    }
+    }.
 
 test(idgen_value_hash,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':task,
+    JSON = json{'@type':'Task',
                 name:"Groceries"},
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON, Elaborated),
 
-    Elaborated = json{'@id':"task_6e39e0ff19d797fd2073c41f8f54242b",
-                      '@type':task,
-                      name:json{'@type':xsd:string,
-                                '@value':"Groceries"}
-                     }.
+    Elaborated =
+    json{ '@id':"Task_960ac85fd49f49e99e7e0e82491c90fd",
+          '@type':'http://s/Task',
+          'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                    '@value':"Groceries"
+			                  }
+        }.
 
 test(idgen_random,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':event,
+    JSON = json{'@type': 'Event',
                 action: "click click",
                 timestamp: "2021-05-20T20:33:00.000Z"
                },
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{'@id':_,
-                      '@type':event,
-                      action:json{'@type':xsd:string,
-                                  '@value':"click click"},
-                      timestamp:json{'@type':xsd:dateTime,
-                                     '@value':"2021-05-20T20:33:00.000Z"}
-                     }.
+    Elaborated =
+    json{ '@id':ID,
+          '@type':'http://s/Event',
+          'http://s/action':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                      '@value':"click click"
+			                    },
+          'http://s/timestamp':json{ '@type':'http://www.w3.org/2001/XMLSchema#dateTime',
+				                     '@value':"2021-05-20T20:33:00.000Z"
+			                       }
+        },
+
+    atom_concat('Event_',_,ID).
+
 test(type_family_id, []) :-
 
-    type_family_id(json{'@type':'Card',
-                        'sys:cardinality':3,
-                        'sys:class':'Person'},
-                   [friend_of, 'Person'],
-                   'Person_friend_of_Card_Person_3').
+    type_family_id(json{'@type':"Cardinality",
+                        '@cardinality':3,
+                        '@class':'Person'},
+                   [friend_of, 'Person'], 'Person_friend_of_Cardinality_Person_3').
 
 test(schema_elaborate, []) :-
 
@@ -1629,44 +1682,72 @@ test(schema_elaborate, []) :-
                    '@id' : 'Person',
                    'name' : 'xsd:string',
                    'age' : json{ '@type' : 'Optional',
-                                 'sys:class' : 'xsd:decimal' },
-                   'friend_of' : json{ '@type' : 'Card',
-                                       'sys:class' : 'Person',
-                                       'sys:cardinality' : 3 }
+                                 '@class' : 'xsd:decimal' },
+                   'friend_of' : json{ '@type' : 'Cardinality',
+                                       '@class' : 'Person',
+                                       '@cardinality' : 3 }
                  },
 
     json_schema_elaborate(Schema, Elaborated),
 
-    Elaborated = json{'@id':'Person',
-                      '@type':'Class',
-                      age:json{'@id':'Person_age_Optional_xsd%3Adecimal',
-                               '@type':'Optional',
-                               'sys:class':json{'@type':'@id',
-                                                '@value':'xsd:decimal'}
-                              },
-                      friend_of:json{'@id':'Person_friend_of_Card_Person_3',
-                                     '@type':'Card',
-                                     'sys:cardinality':json{'@type':'xsd:positiveInteger',
-                                                            '@value':3},
-                                     'sys:class':json{'@type':'@id',
-                                                      '@value':'Person'}},
-                      name:json{'@type':'@id',
-                                '@value':'xsd:string'}},
+    Elaborated =
+    json{ '@id':'Person',
+          '@type':'http://terminusdb.com/schema/sys#Class',
+          age:json{ '@id':'Person_age_Optional_xsd%3Adecimal',
+		            '@type':'http://terminusdb.com/schema/sys#Optional',
+		            'http://terminusdb.com/schema/sys#class':json{ '@id':'xsd:decimal',
+							                                       '@type':"@id"
+							                                     }
+	              },
+          friend_of:json{ '@id':'Person_friend_of_Cardinality_Person',
+		                  '@type':'http://terminusdb.com/schema/sys#Cardinality',
+		                  'http://terminusdb.com/schema/sys#cardinality':json{ '@type':'xsd:nonNegativeInteger',
+									                                           '@value':3
+									                                         },
+		                  'http://terminusdb.com/schema/sys#class':json{ '@id':'Person',
+								                                         '@type':"@id"
+								                                       }
+		                },
+          name:json{'@id':'xsd:string','@type':"@id"}
+        },
 
-    json_triples(Elaborated, Triples),
+    default_prefixes(Prefixes),
+    put_dict(_{'@schema' : "https://s#"}, Prefixes, Context),
 
-    Triples = [
-        t('Person',rdf:type,'Class'),
-        t('Person_age_Optional_xsd%3Adecimal',rdf:type,'Optional'),
-        t('Person_age_Optional_xsd%3Adecimal','sys:class','xsd:decimal'),
-        t('Person',age,'Person_age_Optional_xsd%3Adecimal'),
-        t('Person_friend_of_Card_Person_3',rdf:type,'Card'),
-        t('Person_friend_of_Card_Person_3','sys:cardinality', (3^^'xsd:positiveInteger')),
-        t('Person_friend_of_Card_Person_3','sys:class','Person'),
-        t('Person',friend_of,'Person_friend_of_Card_Person_3'),
-        t('Person',name,'xsd:string')
+    findall(Triple,
+            json_schema_triple(Schema, Context, Triple),
+            Triples),
+
+    sort(Triples,Sorted),
+    Sorted = [
+        t('https://s#Person',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Class'),
+        t('https://s#Person',
+          'https://s#age',
+          'https://s#Person_age_Optional_xsd%3Adecimal'),
+        t('https://s#Person',
+          'https://s#friend_of',
+          'https://s#Person_friend_of_Cardinality_Person'),
+        t('https://s#Person',
+          'https://s#name',
+          'http://www.w3.org/2001/XMLSchema#string'),
+        t('https://s#Person_age_Optional_xsd%3Adecimal',
+          'http://terminusdb.com/schema/sys#class',
+          'http://www.w3.org/2001/XMLSchema#decimal'),
+        t('https://s#Person_age_Optional_xsd%3Adecimal',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Optional'),
+        t('https://s#Person_friend_of_Cardinality_Person',
+          'http://terminusdb.com/schema/sys#cardinality',
+          3^^'http://www.w3.org/2001/XMLSchema#positiveInteger'),
+        t('https://s#Person_friend_of_Cardinality_Person',
+          'http://terminusdb.com/schema/sys#class',
+          'https://s#Person'),
+        t('https://s#Person_friend_of_Cardinality_Person',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Cardinality')
     ].
-
 
 test(list_id_key_triple, []) :-
     findall(Triple,
@@ -1683,14 +1764,15 @@ test(list_id_key_triple, []) :-
             Triples),
     Triples = [
         t(elt,p,Cons1),
-        t(Cons1,rdf:first,"task_a4963868aa3ad8365a4b164a7f206ffc"),
-        t(Cons1,rdf:rest,Cons2),
-        t(Cons2,rdf:first,"task_f9e4104c952e71025a1d68218d88bab1"),
-        t(Cons2,rdf:rest,rdf:nil),
-        t("task_f9e4104c952e71025a1d68218d88bab1",rdf:type,task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",name,("Take out rubbish"^^xsd:string)),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",rdf:type,task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,("Get Groceries"^^xsd:string))].
+        t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_a4963868aa3ad8365a4b164a7f206ffc"),
+        t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Cons2),
+        t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_f9e4104c952e71025a1d68218d88bab1"),
+        t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',_Nil),
+        t("task_f9e4104c952e71025a1d68218d88bab1",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',task),
+        t("task_f9e4104c952e71025a1d68218d88bab1",name,"Take out rubbish"^^xsd:string),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',task),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,"Get Groceries"^^xsd:string)
+    ].
 
 test(array_id_key_triple, []) :-
     findall(Triple,
@@ -1708,15 +1790,31 @@ test(array_id_key_triple, []) :-
 
     Triples = [
         t(elt,p,Array0),
-        t(Array0,sys:value,"task_a4963868aa3ad8365a4b164a7f206ffc"),
-        t(Array0,sys:index,0),
+        t(Array0,
+          'http://terminusdb.com/schema/sys#value',
+          "task_a4963868aa3ad8365a4b164a7f206ffc"),
+        t(Array0,
+          'http://terminusdb.com/schema/sys#index',
+          0^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
         t(elt,p,Array1),
-        t(Array1,sys:value,"task_f9e4104c952e71025a1d68218d88bab1"),
-        t(Array1,sys:index,1),
-        t("task_f9e4104c952e71025a1d68218d88bab1",rdf:type,task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",name,^^("Take out rubbish",xsd:string)),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",rdf:type,task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,^^("Get Groceries",xsd:string))
+        t(Array1,
+          'http://terminusdb.com/schema/sys#value',
+          "task_f9e4104c952e71025a1d68218d88bab1"),
+        t(Array1,
+          'http://terminusdb.com/schema/sys#index',
+          1^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+        t("task_f9e4104c952e71025a1d68218d88bab1",
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          task),
+        t("task_f9e4104c952e71025a1d68218d88bab1",
+          name,
+          "Take out rubbish"^^xsd:string),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          task),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",
+          name,
+          "Get Groceries"^^xsd:string)
     ].
 
 test(set_id_key_triple, []) :-
@@ -1733,37 +1831,36 @@ test(set_id_key_triple, []) :-
                                 p, Triple),
             Triples),
 
-    Triples =[
+    Triples = [
         t(elt,p,"task_a4963868aa3ad8365a4b164a7f206ffc"),
         t(elt,p,"task_f9e4104c952e71025a1d68218d88bab1"),
-        t("task_f9e4104c952e71025a1d68218d88bab1",rdf:type,task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",name,("Take out rubbish"^^xsd:string)),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",rdf:type,task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,("Get Groceries"^^xsd:string))
+        t("task_f9e4104c952e71025a1d68218d88bab1",
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          task),
+        t("task_f9e4104c952e71025a1d68218d88bab1",
+          name,
+          "Take out rubbish"^^xsd:string),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          task),
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",
+          name,
+          "Get Groceries"^^xsd:string)
     ].
 
 test(list_elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':employee,
+    JSON = json{'@type':'Employee',
                 name: "Gavin",
                 birthdate: "1977-05-24",
                 staff_number: "12",
@@ -1773,81 +1870,114 @@ test(list_elaborate,
                 ]
                },
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{
-        '@id':"employee_6f1bb32f84f15c68ac7b69df05967953",
-        '@type':employee,
-        birthdate:json{'@type':xsd:date,
-                       '@value':"1977-05-24"},
-        name:json{'@type':xsd:string,
-                  '@value':"Gavin"},
-        staff_number:json{'@type':xsd:string,
-                          '@value':"12"},
-        tasks:json{'@container':'@list',
-                   '@type':task,
-                   '@value':[json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
-                                  '@type':task,
-                                  name:json{'@type':xsd:string,
-                                            '@value':"Get Groceries"}},
-                             json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
-                                  '@type':task,
-                                  name:json{'@type':xsd:string,
-                                            '@value':"Take out rubbish"}}]}},
+    Elaborated =
+    json{ '@id':"Employee_6f1bb32f84f15c68ac7b69df05967953",
+          '@type':'http://s/Employee',
+          'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+				                     '@value':"1977-05-24"
+			                       },
+          'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                    '@value':"Gavin"
+			                  },
+          'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				                        '@value':"12"
+				                      },
+          'http://s/tasks':_{ '@container':"@list",
+			                  '@type':'http://s/Task',
+			                  '@value':[ json{ '@id':"Task_aaae9b46cb8be52f604b2141434c1d65",
+					                           '@type':'http://s/Task',
+					                           'http://s/name':
+                                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								                     '@value':"Get Groceries"
+							                       }
+					                         },
+				                         json{ '@id':"Task_52a5c6e7da12020f4ac58b51b37610c0",
+					                           '@type':'http://s/Task',
+					                           'http://s/name':
+                                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								                     '@value':"Take out rubbish"
+							                       }
+					                         }
+				                       ]
+			}
+        },
 
-    json_triples(Elaborated,Triples),
+    database_context(DB, Context),
+    json_triples(DB, JSON, Context, Triples),
 
-    Triples =[
-        t("employee_6f1bb32f84f15c68ac7b69df05967953",rdf:type,employee),
-        t("employee_6f1bb32f84f15c68ac7b69df05967953",birthdate,("1977-05-24"^^xsd:date)),
-        t("employee_6f1bb32f84f15c68ac7b69df05967953",name,("Gavin"^^xsd:string)),
-        t("employee_6f1bb32f84f15c68ac7b69df05967953",staff_number,("12"^^xsd:string)),
-        t("employee_6f1bb32f84f15c68ac7b69df05967953",tasks,Cons1),
-        t(Cons1,rdf:first,"task_a4963868aa3ad8365a4b164a7f206ffc"),
-        t(Cons1,rdf:rest,Cons2),
-        t(Cons2,rdf:first,"task_f9e4104c952e71025a1d68218d88bab1"),
-        t(Cons2,rdf:rest,rdf:nil),
-        t("task_f9e4104c952e71025a1d68218d88bab1",rdf:type,task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",name,("Take out rubbish"^^xsd:string)),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",rdf:type,task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,("Get Groceries"^^xsd:string))],
+    Triples = [
+        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Employee'),
+        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
+          'http://s/birthdate',
+          "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
+        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
+          'http://s/name',
+          "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
+          'http://s/staff_number',
+          "12"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
+          'http://s/tasks',
+          Cons0),
+        t(Cons0,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+          'http://i/Task_aaae9b46cb8be52f604b2141434c1d65'),
+        t(Cons0,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+          Cons1),
+        t(Cons1,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+          'http://i/Task_52a5c6e7da12020f4ac58b51b37610c0'),
+        t(Cons1,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+        t('http://i/Task_52a5c6e7da12020f4ac58b51b37610c0',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Task'),
+        t('http://i/Task_52a5c6e7da12020f4ac58b51b37610c0',
+          'http://s/name',
+          "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Task_aaae9b46cb8be52f604b2141434c1d65',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Task'),
+        t('http://i/Task_aaae9b46cb8be52f604b2141434c1d65',
+          'http://s/name',
+          "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
+    ],
 
-    forall(member(t(X,Y,Z),Triples),
-           insert_triple(t(X,Y,Z))),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
 
-    check_and_commit,
+    open_descriptor(Desc, New_DB),
+    id_json(New_DB, ID, Fresh_JSON),
 
-    id_json("employee_6f1bb32f84f15c68ac7b69df05967953", Fresh_JSON),
-
-    Fresh_JSON = json{'@id':"employee_6f1bb32f84f15c68ac7b69df05967953",
-                      '@type':employee,
-                      birthdate:"1977-05-24",
-                      name:"Gavin",
-                      staff_number:"12",
-                      tasks:["task_a4963868aa3ad8365a4b164a7f206ffc",
-                             "task_f9e4104c952e71025a1d68218d88bab1"]}.
+    Fresh_JSON = json{ '@id':'Employee_6f1bb32f84f15c68ac7b69df05967953',
+                       '@type':'Employee',
+                       birthdate:"1977-05-24",
+                       name:"Gavin",
+                       staff_number:"12",
+                       tasks:[ 'Task_aaae9b46cb8be52f604b2141434c1d65',
+	                           'Task_52a5c6e7da12020f4ac58b51b37610c0'
+	                         ]
+                     }.
 
 test(array_elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':book_club,
+    JSON = json{'@type':'BookClub',
                 name: "Marxist book club",
                 book_list : [
                     json{ name : "Das Kapital" },
@@ -1855,181 +1985,229 @@ test(array_elaborate,
                 ]
                },
 
-    json_elaborate(JSON,Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,Elaborated),
 
-    Elaborated = json{'@id':"book_club_Marxist%20book%20club",
-                      '@type':book_club,
-                      book_list:json{'@container':'@array',
-                                     '@type':book,
-                                     '@value':[json{'@id':"book_Das%20Kapital",
-                                                    '@type':book,
-                                                    name:json{'@type':xsd:string,
-                                                              '@value':"Das Kapital"}},
-                                               json{'@id':"book_Der%20Ursprung%20des%20Christentums",
-                                                    '@type':book,
-                                                    name:json{'@type':xsd:string,
-                                                              '@value':"Der Ursprung des Christentums"}}]},
-                      name:json{'@type':xsd:string,
-                                '@value':"Marxist book club"}},
+    Elaborated = json{ '@id':"BookClub_Marxist%20book%20club",
+                       '@type':'http://s/BookClub',
+                       'http://s/book_list':
+                       _{ '@container':"@array",
+			              '@type':'http://s/Book',
+			              '@value':[ json{ '@id':"Book_Das%20Kapital",
+					                       '@type':'http://s/Book',
+					                       'http://s/name':
+                                           json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								                 '@value':"Das Kapital"
+								               }
+					                     },
+					                 json{ '@id':"Book_Der%20Ursprung%20des%20Christentums",
+					                       '@type':'http://s/Book',
+					                       'http://s/name':
+                                           json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								                 '@value':"Der Ursprung des Christentums"
+								               }
+					                     }
+				                   ]
+			            },
+                       'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                                 '@value':"Marxist book club"
+			                               }
+                     },
 
-    json_triples(JSON,Triples),
+    database_context(DB, Context),
+    json_triples(DB, JSON, Context, Triples),
 
     Triples = [
-        t("book_club_Marxist%20book%20club",rdf:type,book_club),
-        t("book_club_Marxist%20book%20club",book_list,ArrayElement0),
-        t(ArrayElement0,sys:value,"book_Das%20Kapital"),
-        t(ArrayElement0,sys:index,0),
-        t("book_club_Marxist%20book%20club",book_list,ArrayElement1),
-        t(ArrayElement1,sys:value,"book_Der%20Ursprung%20des%20Christentums"),
-        t(ArrayElement1,sys:index,1),
-        t("book_Der%20Ursprung%20des%20Christentums",rdf:type,book),
-        t("book_Der%20Ursprung%20des%20Christentums",name,("Der Ursprung des Christentums"^^xsd:string)),
-        t("book_Das%20Kapital",rdf:type,book),
-        t("book_Das%20Kapital",name,("Das Kapital"^^xsd:string)),
-        t("book_club_Marxist%20book%20club",name,("Marxist book club"^^xsd:string))
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/BookClub'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/book_list',
+          Array0),
+        t(Array0,
+          'http://terminusdb.com/schema/sys#value',
+          'http://i/Book_Das%20Kapital'),
+        t(Array0,
+          'http://terminusdb.com/schema/sys#index',
+          0^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/book_list',
+          Array1),
+        t(Array1,
+          'http://terminusdb.com/schema/sys#value',
+          'http://i/Book_Der%20Ursprung%20des%20Christentums'),
+        t(Array1,
+          'http://terminusdb.com/schema/sys#index',
+          1^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+        t('http://i/Book_Der%20Ursprung%20des%20Christentums',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Book'),
+        t('http://i/Book_Der%20Ursprung%20des%20Christentums',
+          'http://s/name',
+          "Der Ursprung des Christentums"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Book_Das%20Kapital',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Book'),
+        t('http://i/Book_Das%20Kapital',
+          'http://s/name',
+          "Das Kapital"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/name',
+          "Marxist book club"^^'http://www.w3.org/2001/XMLSchema#string')
     ],
 
-    forall(member(t(X1,X2,X3),Triples),
-           insert_triple(t(X1,X2,X3))),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
 
-    check_and_commit,
-
-    id_json("book_club_Marxist%20book%20club", Recovered),
-
-    Recovered = json{'@id':"book_club_Marxist%20book%20club",
-                     '@type':book_club,
-                     book_list:["book_Das%20Kapital",
-                                "book_Der%20Ursprung%20des%20Christentums"],
-                     name:"Marxist book club"}.
-
+    open_descriptor(Desc, New_DB),
+    id_json(New_DB, ID, Recovered),
+    Recovered = json{ '@id':'BookClub_Marxist%20book%20club',
+                      '@type':'BookClub',
+                      book_list:[ 'Book_Das%20Kapital',
+		                          'Book_Der%20Ursprung%20des%20Christentums'
+		                        ],
+                      name:"Marxist book club"
+                    }.
 test(set_elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':book_club,
+    JSON = json{'@type':'BookClub',
                 name: "Marxist book club",
                 people: [
-                    json{'@type' : person,
+                    json{'@type' : 'Person',
                          name : "jim",
                          birthdate: "1982-05-03"
                         },
-                    json{'@type':person,
+                    json{'@type':'Person',
                          birthdate:"1979-12-28",
                          name:"jane"
                         }],
                 book_list : []
                },
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{'@id':"book_club_Marxist%20book%20club",
-                      '@type':book_club,
-                      book_list:json{'@container':'@array',
-                                     '@type':book,
-                                     '@value':[]},
-                      name:json{'@type':xsd:string,
-                                '@value':"Marxist book club"},
-                      people:json{'@container':'@set','@type':person,
-                                  '@value':[json{'@id':"person_jim_1982-05-03",
-                                                 '@type':person,
-                                                 birthdate:json{'@type':xsd:date,
-                                                                '@value':"1982-05-03"},
-                                                 name:json{'@type':xsd:string,
-                                                           '@value':"jim"}},
-                                            json{'@id':"person_jane_1979-12-28",
-                                                 '@type':person,
-                                                 birthdate:json{'@type':xsd:date,
-                                                                '@value':"1979-12-28"},
-                                                 name:json{'@type':xsd:string,
-                                                           '@value':"jane"}}]}},
+    Elaborated =
+    json{ '@id':"BookClub_Marxist%20book%20club",
+          '@type':'http://s/BookClub',
+          'http://s/book_list':_{ '@container':"@array",
+			                      '@type':'http://s/Book',
+			                      '@value':[]
+			                    },
+          'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                    '@value':"Marxist book club"
+			                  },
+          'http://s/people':
+          _{ '@container':"@set",
+			 '@type':'http://s/Person',
+			 '@value':[ json{ '@id':"Person_jim_1982-05-03",
+					          '@type':'http://s/Person',
+					          'http://s/birthdate':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+								    '@value':"1982-05-03"
+								  },
+					          'http://s/name':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								    '@value':"jim"
+								  }
+					        },
+				        json{ '@id':"Person_jane_1979-12-28",
+					          '@type':'http://s/Person',
+					          'http://s/birthdate':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+								    '@value':"1979-12-28"
+								  },
+					          'http://s/name':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								    '@value':"jane"
+								  }
+					        }
+				      ]
+		   }
+        },
 
-    json_triples(JSON,Triples),
+    database_context(DB, Context),
+    json_triples(DB, JSON, Context, Triples),
+    print_term(Triples, []),
+    Triples = [
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/BookClub'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/name',
+          "Marxist book club"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/people',
+          'http://i/Person_jim_1982-05-03'),
+        t('http://i/BookClub_Marxist%20book%20club',
+          'http://s/people',
+          'http://i/Person_jane_1979-12-28'),
+        t('http://i/Person_jane_1979-12-28',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Person'),
+        t('http://i/Person_jane_1979-12-28',
+          'http://s/birthdate',
+          "1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+        t('http://i/Person_jane_1979-12-28',
+          'http://s/name',
+          "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Person_jim_1982-05-03',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Person'),
+        t('http://i/Person_jim_1982-05-03',
+          'http://s/birthdate',
+          "1982-05-03"^^'http://www.w3.org/2001/XMLSchema#date'),
+        t('http://i/Person_jim_1982-05-03',
+          'http://s/name',
+          "jim"^^'http://www.w3.org/2001/XMLSchema#string')
+    ],
 
-    Triples = [t("book_club_Marxist%20book%20club",rdf:type,book_club),
-               t("book_club_Marxist%20book%20club",name,("Marxist book club"^^xsd:string)),
-               t("book_club_Marxist%20book%20club",people,"person_jim_1982-05-03"),
-               t("book_club_Marxist%20book%20club",people,"person_jane_1979-12-28"),
-               t("person_jane_1979-12-28",rdf:type,person),
-               t("person_jane_1979-12-28",birthdate,("1979-12-28"^^xsd:date)),
-               t("person_jane_1979-12-28",name,("jane"^^xsd:string)),
-               t("person_jim_1982-05-03",rdf:type,person),
-               t("person_jim_1982-05-03",birthdate,("1982-05-03"^^xsd:date)),
-               t("person_jim_1982-05-03",name,("jim"^^xsd:string))],
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
 
-    forall(member(t(X,Y,Z), Triples),
-           insert_triple(t(X,Y,Z))),
+    open_descriptor(Desc, New_DB),
+    id_json(New_DB, ID, Book_Club),
 
-    check_and_commit,
-
-    id_json("book_club_Marxist%20book%20club", Book_Club),
-
-    Book_Club = json{'@id':"book_club_Marxist%20book%20club",
-                     '@type':book_club,
-                     name:"Marxist book club",
-                     people:["person_jane_1979-12-28",
-                             "person_jim_1982-05-03"]}.
+    Book_Club = json{ '@id':'BookClub_Marxist%20book%20club',
+                      '@type':'BookClub',
+                      name:"Marxist book club",
+                      people:['Person_jane_1979-12-28','Person_jim_1982-05-03']
+                    }.
 
 test(empty_list,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':employee,
+    JSON = json{'@type':'Employee',
                 name: "Gavin",
                 birthdate: "1977-05-24",
                 staff_number: "12",
                 tasks : []
                },
 
-    json_triples(JSON,Triples),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
 
-    Employee = "employee_6f1bb32f84f15c68ac7b69df05967953",
-    Triples =[t(Employee,rdf:type,employee),
-              t(Employee,birthdate,("1977-05-24"^^xsd:date)),
-              t(Employee,name,^^("Gavin",xsd:string)),
-              t(Employee,staff_number,^^("12",xsd:string)),
-              t(Employee,tasks,rdf:nil)],
+    open_descriptor(Desc, DB),
+    id_json(DB, ID, Employee_JSON),
 
-    forall(member(t(X,Y,Z), Triples),
-           insert_triple(t(X,Y,Z))),
-
-    check_and_commit,
-
-    id_json(Employee, Employee_JSON),
-
-    Employee_JSON = json{'@id':Employee,
-                         '@type':employee,
+    Employee_JSON = json{'@id':_,
+                         '@type':'Employee',
                          birthdate:"1977-05-24",
                          name:"Gavin",
                          staff_number:"12",
@@ -2038,239 +2216,224 @@ test(empty_list,
 test(enum_elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':dog,
+    open_descriptor(Desc, DB),
+
+    type_context(DB,'Dog',TypeContext),
+    TypeContext = json{ hair_colour:json{'@id':'http://s/hair_colour',
+                                         '@type':'http://s/Colour'},
+                        name:json{ '@id':'http://s/name',
+		                           '@type':'http://www.w3.org/2001/XMLSchema#string'
+	                             }
+                      },
+
+    JSON = json{'@type':'Dog',
                 name: "Ralph",
                 hair_colour: "blue"
                },
 
-    json_elaborate(JSON, Elaborated),
+    json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{'@id':"dog_Ralph",
-                      '@type':dog,
-                      hair_colour:json{'@type':colour,
-                                       '@value':"blue"},
-                      name:json{'@type':xsd:string,
-                                '@value':"Ralph"}},
+    Elaborated = json{ '@id':"Dog_Ralph",
+                       '@type':'http://s/Dog',
+                       'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
+                                                   '@type':"@id"},
+                       'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                                 '@value':"Ralph"
+			                               }
+                     },
 
-    json_triples(JSON,Triples),
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        JSON, ID),
 
-    Triples = [t("dog_Ralph",rdf:type,dog),
-               t("dog_Ralph",hair_colour,("blue"^^colour)),
-               t("dog_Ralph",name,("Ralph"^^xsd:string))],
+    open_descriptor(Desc, New_DB),
+    id_json(New_DB,ID, Dog_JSON),
 
-    forall(member(t(X,Y,Z), Triples),
-           insert_triple(t(X,Y,Z))),
-
-    check_and_commit,
-
-    id_json("dog_Ralph", Dog_JSON),
-
-    Dog_JSON = json{'@id':"dog_Ralph",
-                    '@type':dog,
-                    hair_colour:"blue",
+    Dog_JSON = json{'@id':'Dog_Ralph',
+                    '@type':'Dog',
+                    hair_colour:blue,
                     name:"Ralph"}.
 
 test(elaborate_tagged_union,[]) :-
 
     Binary_Tree = json{ '@type' : 'TaggedUnion',
-                        '@id' : binary_tree,
-                        'sys:base' : binary_tree_,
-                        'sys:key' : json{ '@type' : 'sys:value_hash'},
-                        leaf : json{},
-                        node : node
+                        '@id' : 'BinaryTree',
+                        '@base' : "BinaryTree_",
+                        '@key' : json{ '@type' : 'ValueHash' },
+                        leaf : 'sys:Unit',
+                        node : 'Node'
                       },
 
     Node = json{ '@type' : 'Class',
-                 '@id' : node,
-                 'sys:base' : node,
-                 'sys:key' : json{ '@type' : 'sys:value_hash'},
+                 '@id' : 'Node',
+                 '@base' : "Node_",
+                 '@key' : json{ '@type' : 'ValueHash' },
                  value : 'xsd:integer',
-                 left : binary_tree,
-                 right : binary_tree
+                 left : "BinaryTree",
+                 right : "BinaryTree"
                },
 
     json_schema_elaborate(Binary_Tree, BT_Elaborated),
-
-    BT_Elaborated = json{'@id':binary_tree,
-                         '@type':'TaggedUnion',
-                         leaf:json{},
-                         node:json{'@type':'@id',
-                                   '@value':node},
-                         'sys:base':json{'@type':'@id',
-                                         '@value':binary_tree_},
-                         'sys:key':json{'@type':'sys:value_hash'}},
+    BT_Elaborated =json{ '@id':'BinaryTree',
+                         '@type':'http://terminusdb.com/schema/sys#TaggedUnion',
+                         'http://terminusdb.com/schema/sys#base':
+                         json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						       '@value':"BinaryTree_"
+						     },
+                         'http://terminusdb.com/schema/sys#key':
+                         json{ '@id':'BinaryTree_ValueHash',
+						       '@type':'http://terminusdb.com/schema/sys#ValueHash'
+						     },
+                         leaf:json{'@id':'sys:Unit','@type':"@id"},
+                         node:json{'@id':'Node','@type':"@id"}
+                       },
 
     json_schema_elaborate(Node, Node_Elaborated),
 
-    Node_Elaborated = json{'@id':node,'@type':'Class',
-                           left:json{'@type':'@id',
-                                     '@value':binary_tree},
-                           right:json{'@type':'@id',
-                                      '@value':binary_tree},
-                           'sys:base':json{'@type':'@id',
-                                           '@value':node},
-                           'sys:key':json{'@type':'sys:value_hash'},
-                           value:json{'@type':'@id',
-                                      '@value':'xsd:integer'}}.
+    Node_Elaborated = json{'@id':'Node',
+                           '@type':'http://terminusdb.com/schema/sys#Class',
+                           'http://terminusdb.com/schema/sys#base':
+                           json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Node_"},
+                           'http://terminusdb.com/schema/sys#key':
+                           json{'@id':'Node_ValueHash',
+                                '@type':'http://terminusdb.com/schema/sys#ValueHash'},
+                           left:json{'@id':"BinaryTree", '@type':"@id"},
+                           right:json{'@id':"BinaryTree", '@type':"@id"},
+                           value:json{'@id':'xsd:integer', '@type':"@id"}}.
 
 test(binary_tree_context,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    type_context(binary_tree, Binary_Context),
-    Binary_Context = json{node:json{'@type':'@id'}},
-
-    type_context(node, Node_Context),
-    Node_Context = json{left:json{'@type':'@id'},
-                        right:json{'@type':'@id'},
-                        value:json{'@type':xsd:integer}}.
-
+    open_descriptor(Desc, DB),
+    type_context(DB,'BinaryTree', Binary_Context),
+    Binary_Context = json{ leaf:json{'@id':'http://s/leaf'},
+                           node:json{'@id':'http://s/node','@type':"@id"}
+                         },
+    type_context(DB,'Node', Node_Context),
+    Node_Context = json{ left:json{'@id':'http://s/left','@type':"@id"},
+                         right:json{'@id':'http://s/right','@type':"@id"},
+                         value:json{ '@id':'http://s/value',
+		                             '@type':'http://www.w3.org/2001/XMLSchema#integer'
+		                           }
+                       }.
 
 test(binary_tree_elaborate,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':binary_tree,
-                node: json{'@type':node,
+    JSON = json{'@type':'BinaryTree',
+                node: json{'@type':'Node',
                            value: 1,
-                           left: json{'@type':binary_tree,
-                                      node: json{'@type':node,
+                           left: json{'@type':'BinaryTree',
+                                      node: json{'@type':'Node',
                                                  value: 0,
-                                                 left: json{'@type':binary_tree,
+                                                 left: json{'@type':'BinaryTree',
                                                             leaf : json{}},
-                                                 right: json{'@type':binary_tree,
+                                                 right: json{'@type':'BinaryTree',
                                                              leaf : json{}}}},
-                           right: json{'@type':binary_tree,
-                                      node: json{'@type':node,
+                           right: json{'@type':'BinaryTree',
+                                      node: json{'@type':'Node',
                                                  value: 2,
-                                                 left: json{'@type':binary_tree,
+                                                 left: json{'@type':'BinaryTree',
                                                             leaf : json{}},
-                                                 right: json{'@type':binary_tree,
+                                                 right: json{'@type':'BinaryTree',
                                                              leaf : json{}}}}}},
 
-    json_elaborate(JSON,Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,Elaborated),
 
-    Elaborated = json{'@id':"binary_tree_6162f820aed5255e723ac6c8204a93a7",
-                      '@type':binary_tree,
-                      node:json{'@id':"node_key_5eae43f6b0c9f168746c13c1618de64c",
-                                '@type':node,
-                                left:json{'@id':"binary_tree_54311eeaadeb74170bc7d798c0f26981",
-                                          '@type':binary_tree,
-                                          node:json{'@id':"node_key_32d40d13f5c3cad3aceed61ea04fd424",
-                                                    '@type':node,
-                                                    left:json{'@id':"binary_tree_30cdfe5207fa97225ab97f77c4739df5",
-                                                              '@type':binary_tree,
-                                                              leaf:json{}},
-                                                    right:json{'@id':"binary_tree_30cdfe5207fa97225ab97f77c4739df5",
-                                                               '@type':binary_tree,
-                                                               leaf:json{}},
-                                                    value:json{'@type':xsd:integer,'@value':0}}},
-                                right:json{'@id':"binary_tree_d64802d34dc699934655986166394d6a",
-                                           '@type':binary_tree,
-                                           node:json{'@id':"node_key_f521087200a9df87f3f1f0e3f994301a",
-                                                     '@type':node,
-                                                     left:json{'@id':"binary_tree_30cdfe5207fa97225ab97f77c4739df5",
-                                                               '@type':binary_tree,
-                                                               leaf:json{}},
-                                                     right:json{'@id':"binary_tree_30cdfe5207fa97225ab97f77c4739df5",
-                                                                '@type':binary_tree,
-                                                                leaf:json{}},
-                                                     value:json{'@type':xsd:integer,
-                                                                '@value':2}}},
-                                value:json{'@type':xsd:integer,
-                                           '@value':1}}},
+    Elaborated =
+    json{ '@id':"binary_tree_ce4e85e93a3d4818eb1eb6b4d252a3a4",
+          '@type':'http://s/BinaryTree',
+          'http://s/node':
+          json{ '@id':"Node_6ac73e53f5c3956d3b563da380ae0970",
+			    '@type':'http://s/Node',
+			    'http://s/left':
+                json{ '@id':"binary_tree_fd9dd5865a72d5065c9c33ff255bc047",
+					  '@type':'http://s/BinaryTree',
+					  'http://s/node':
+                      json{ '@id':"Node_038aa635227c70af63ce5835b09c2cd0",
+							'@type':'http://s/Node',
+							'http://s/left':
+                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+								  '@type':'http://s/BinaryTree',
+								  'http://s/leaf':json{}
+								},
+							'http://s/right':
+                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+								  '@type':'http://s/BinaryTree',
+								  'http://s/leaf':json{}
+								},
+							'http://s/value':
+                            json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
+								  '@value':0
+								}
+						  }
+					},
+			    'http://s/right':
+                json{ '@id':"binary_tree_d5ea6dfdd40dcf2177bcbbd24c63ef44",
+					  '@type':'http://s/BinaryTree',
+					  'http://s/node':
+                      json{ '@id':"Node_f3b5c54ec90d0178186c20aa44b1044f",
+							'@type':'http://s/Node',
+							'http://s/left':
+                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+								  '@type':'http://s/BinaryTree',
+								  'http://s/leaf':json{}
+								},
+							'http://s/right':
+                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+								  '@type':'http://s/BinaryTree',
+								  'http://s/leaf':json{}
+								},
+							'http://s/value':
+                            json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
+								  '@value':2
+								}
+						  }
+					},
+			    'http://s/value':
+                json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
+					  '@value':1
+					}
+			  }
+        },
 
-    json_triples(JSON,Triples),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
 
-    Triples = [
-        t("binary_tree_6162f820aed5255e723ac6c8204a93a7",rdf:type,binary_tree),
-        t("node_key_5eae43f6b0c9f168746c13c1618de64c",rdf:type,node),
-        t("binary_tree_54311eeaadeb74170bc7d798c0f26981",rdf:type,binary_tree),
-        t("node_key_32d40d13f5c3cad3aceed61ea04fd424",rdf:type,node),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",rdf:type,binary_tree),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",leaf,^^(1,unit)),
-        t("node_key_32d40d13f5c3cad3aceed61ea04fd424",left,"binary_tree_30cdfe5207fa97225ab97f77c4739df5"),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",rdf:type,binary_tree),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",leaf,^^(1,unit)),
-        t("node_key_32d40d13f5c3cad3aceed61ea04fd424",right,"binary_tree_30cdfe5207fa97225ab97f77c4739df5"),
-        t("node_key_32d40d13f5c3cad3aceed61ea04fd424",value,^^(0,xsd:integer)),
-        t("binary_tree_54311eeaadeb74170bc7d798c0f26981",node,"node_key_32d40d13f5c3cad3aceed61ea04fd424"),
-        t("node_key_5eae43f6b0c9f168746c13c1618de64c",left,"binary_tree_54311eeaadeb74170bc7d798c0f26981"),
-        t("binary_tree_d64802d34dc699934655986166394d6a",rdf:type,binary_tree),
-        t("node_key_f521087200a9df87f3f1f0e3f994301a",rdf:type,node),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",rdf:type,binary_tree),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",leaf,^^(1,unit)),
-        t("node_key_f521087200a9df87f3f1f0e3f994301a",left,"binary_tree_30cdfe5207fa97225ab97f77c4739df5"),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",rdf:type,binary_tree),
-        t("binary_tree_30cdfe5207fa97225ab97f77c4739df5",leaf,^^(1,unit)),
-        t("node_key_f521087200a9df87f3f1f0e3f994301a",right,"binary_tree_30cdfe5207fa97225ab97f77c4739df5"),
-        t("node_key_f521087200a9df87f3f1f0e3f994301a",value,^^(2,xsd:integer)),
-        t("binary_tree_d64802d34dc699934655986166394d6a",node,"node_key_f521087200a9df87f3f1f0e3f994301a"),
-        t("node_key_5eae43f6b0c9f168746c13c1618de64c",right,"binary_tree_d64802d34dc699934655986166394d6a"),
-        t("node_key_5eae43f6b0c9f168746c13c1618de64c",value,^^(1,xsd:integer)),
-        t("binary_tree_6162f820aed5255e723ac6c8204a93a7",node,"node_key_5eae43f6b0c9f168746c13c1618de64c")
-    ],
+    open_descriptor(Desc, New_DB),
+    id_json(New_DB, ID, Fresh_JSON),
 
-
-    forall(member(t(X,Y,Z),Triples),
-           insert_triple(t(X,Y,Z))),
-
-    check_and_commit,
-
-    id_json("binary_tree_6162f820aed5255e723ac6c8204a93a7", Fresh_JSON),
-    Fresh_JSON = json{'@id':"binary_tree_6162f820aed5255e723ac6c8204a93a7",
-                      '@type':binary_tree,
-                      node:"node_key_5eae43f6b0c9f168746c13c1618de64c"
-                      }.
-
+    Fresh_JSON = json{ '@id':binary_tree_ce4e85e93a3d4818eb1eb6b4d252a3a4,
+                       '@type':'BinaryTree',
+                       node:'Node_6ac73e53f5c3956d3b563da380ae0970'
+                     }.
 
 :- end_tests(json).

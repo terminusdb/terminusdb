@@ -37,7 +37,9 @@
               jsonld_id/2,
               get_key_document/4,
               compress_dict_uri/3,
-
+              has_at/1,
+              compress_uri/4,
+              
               % json_woql.pl
               woql_context/1,
               initialise_woql_contexts/0,
