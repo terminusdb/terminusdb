@@ -137,9 +137,9 @@ idgen_random(Base,ID) :-
     md5_hash(S,Hash,[]),
     format(string(ID),'~w~w',[Base,Hash]).
 
-idgen(JSON,ID) :-
+json_idgen(DB,JSON,ID) :-
     get_dict('@type',JSON,Type),
-    key_descriptor(Type,Descriptor),
+    key_descriptor(DB,Type,Descriptor),
     (   Descriptor = lexical(Base,Fields)
     ->  get_field_values(JSON, Fields, Values),
         idgen_lexical(Base,Values,ID)
@@ -222,7 +222,7 @@ json_elaborate(DB,JSON,Context,JSON_ID) :-
     %
     put_dict(Type_Context,Context,New_Context),
     json_context_elaborate(DB,JSON,New_Context,Elaborated),
-    json_jsonid(Elaborated,JSON_ID).
+    json_jsonid(DB,Elaborated,JSON_ID).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -304,7 +304,7 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
         PVs),
     dict_pairs(Expanded,json,PVs).
 
-json_jsonid(JSON,JSON_ID) :-
+json_jsonid(DB,JSON,JSON_ID) :-
     % Set up the ID
     (   get_dict('@id',JSON,_)
     ->  JSON_ID = JSON
@@ -312,7 +312,7 @@ json_jsonid(JSON,JSON_ID) :-
     ->  JSON_ID = JSON
     ;   get_dict('@value', JSON, _)
     ->  JSON_ID = JSON
-    ;   idgen(JSON,ID)
+    ;   json_idgen(DB,JSON,ID)
     ->  JSON_ID = (JSON.put(json{'@id' : ID}))
     ;   throw(error(no_id(JSON),_))
     ).
@@ -415,17 +415,77 @@ context_elaborate(JSON,Elaborated) :-
                                                         '@value' : Prefix_Pair_List }
                                 |PVs]).
 
+expand_match_system(Key,Term,Key_Ex) :-
+    global_prefixes(sys,Prefix),
+    global_prefix_expand(sys:Term,Key_Ex),
+    prefix_expand(Key, _{'@base' : Prefix}, Key_Ex).
+
+json_schema_elaborate_key(V,json{'@type':Value}) :-
+    atom(V),
+    !,
+    global_prefixes(sys,Prefix),
+    prefix_expand(V, _{'@base' : Prefix}, Value).
+json_schema_elaborate_key(V,Value) :-
+    get_dict('@type', V, Lexical),
+    expand_match_system(Lexical, 'Lexical', Type),
+    !,
+    get_dict('@fields', V, Fields),
+    Value = json{
+                '@type' : Type,
+                'sys:fields' :
+                json{
+                    '@container' : "@list",
+                    '@type' : "@id",
+                    '@value' : Fields
+                }
+            }.
+json_schema_elaborate_key(V,Value) :-
+    get_dict('@type', V, Hash),
+    expand_match_system(Hash, 'Hash', Type),
+    !,
+    get_dict('@fields', V, Fields),
+    Value = json{
+                '@type' : Type,
+                'sys:fields' :
+                json{
+                    '@container' : "@list",
+                    '@type' : "@id",
+                    '@value' : Fields
+                }
+            }.
+json_schema_elaborate_key(V,json{ '@type' : Type}) :-
+    get_dict('@type', V, ValueHash),
+    expand_match_system(ValueHash, 'ValueHash', Type),
+    !.
+json_schema_elaborate_key(V,json{ '@type' : Type}) :-
+    get_dict('@type', V, Random),
+    expand_match_system(Random, 'Random', Type),
+    !.
+
 json_schema_predicate_value('@id',V,_,'@id',V) :-
     !.
 json_schema_predicate_value(P,V,_,P,json{'@type' : 'xsd:positiveInteger',
-                                  '@value' : V }) :-
+                                         '@value' : V }) :-
     global_prefix_expand(sys:cardinality, P),
     !.
+json_schema_predicate_value('@key',V,_,P,Value) :-
+    !,
+    global_prefix_expand(sys:key, P),
+    json_schema_elaborate_key(V,Value).
+json_schema_predicate_value('@base',V,_,P,Value) :-
+    !,
+    global_prefix_expand(sys:base, P),
+    (   is_dict(V)
+    ->  Value = V
+    ;   global_prefix_expand(xsd:string, XSD),
+        Value = json{ '@type' : XSD,
+                      '@value' : V }
+    ).
 json_schema_predicate_value('@type',V,_,'@type',Value) :-
     !,
     maybe_expand_schema_type(V,Value).
 json_schema_predicate_value('@class',V,_,Class,json{'@type' : "@id",
-                                             '@id' : V}) :-
+                                                    '@id' : V}) :-
     !,
     global_prefix_expand(sys:class, Class).
 json_schema_predicate_value(P,V,Path,P,Value) :-
@@ -433,7 +493,7 @@ json_schema_predicate_value(P,V,Path,P,Value) :-
     !,
     json_schema_elaborate(V, [P|Path], Value).
 json_schema_predicate_value(P,V,_,P,json{'@type' : "@id",
-                                  '@id' : V }).
+                                         '@id' : V }).
 
 json_schema_elaborate(JSON,_,Elaborated) :-
     is_type_enum(JSON),
@@ -471,12 +531,14 @@ json_schema_elaborate(JSON,Old_Path,Elaborated) :-
         PVs),
     dict_pairs(Elaborated,json,PVs).
 
+expand_schema(JSON,Prefixes,Expanded) :-
+    get_dict('@schema', Prefixes, Schema),
+    put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
+    expand(JSON,Schema_Prefixes,Expanded).
 
 json_schema_triple(JSON,Context,Triple) :-
     json_schema_elaborate(JSON,JSON_Schema),
-    get_dict('@schema', Context, Schema),
-    put_dict(_{'@base' : Schema}, Context, Schema_Context),
-    expand(JSON_Schema,Schema_Context,Expanded),
+    expand_schema(JSON_Schema,Context,Expanded),
     json_triple_(Expanded,Triple).
 
 json_schema_triple(JSON,Triple) :-
@@ -631,48 +693,73 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
-type_id_predicate_iri_value(enum(C),_,_,V^^C,_,V).
-type_id_predicate_iri_value(list(_),_,_,O,DB,V) :-
+list_type_id_predicate_value([],_,_,_,_,_,[]).
+list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,[V|L]) :-
+    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,V),
+    list_type_id_predicate_iri_value(T,C,Id,P,DB,Prefixes,L).
+
+type_id_predicate_iri_value(enum(C),_,_,V^^C,_,_,O) :-
+    merge_separator_split(V, '_', [C,O]).
+type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,L) :-
+    % Probably need to treat enums...
     database_instance(DB,Instance),
-    rdf_list_list(Instance,O,V).
-type_id_predicate_iri_value(array(_),Id,P,_,DB,V) :-
-    array_list(DB,Id,P,V).
-type_id_predicate_iri_value(set(_),Id,P,_,DB,V) :-
-    set_list(DB,Id,P,V).
-type_id_predicate_iri_value(cardinality(_,_),Id,P,_,DB,V) :-
-    set_list(DB,Id,P,V).
-type_id_predicate_iri_value(class(_),_,_,V,_,V).
-type_id_predicate_iri_value(tagged_union(_),_,_,V,_,V).
-type_id_predicate_iri_value(optional(_),_,_,V,_,V).
-type_id_predicate_iri_value(base_class(_),_,_,O,_,V) :-
-    value_json(O, I),
-    (   is_dict(I)
-    ->  get_dict('@value', I, V)
-    ;   I = V
-    ).
+    rdf_list_list(Instance,O,V),
+    type_descriptor(DB,C,Desc),
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
+type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,L) :-
+    array_list(DB,Prefixes,Id,P,V),
+    type_descriptor(DB,C,Desc),
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
+type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,L) :-
+    set_list(DB,Prefixes,Id,P,V),
+    type_descriptor(DB,C,Desc),
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
+type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,_,L) :-
+    set_list(DB,Prefixes,Id,P,V),
+    type_descriptor(DB,C,Desc),
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
+type_id_predicate_iri_value(class(_),_,_,Id,_,Prefixes,Id_Comp) :-
+    compress_dict_uri(Id, Prefixes, Id_Comp).
+type_id_predicate_iri_value(tagged_union(_),_,_,V,_,_,V).
+type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
+    type_descriptor(DB,C,Desc),
+    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
+type_id_predicate_iri_value(base_class(_),_,_,O,_,_,S) :-
+    typecast(O,'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
+
+compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
+    get_dict('@schema',Prefixes,Schema),
+    put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
+    compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp).
 
 id_json(DB, Id, JSON) :-
+    database_context(DB,Prefixes),
     database_instance(DB,Instance),
-    xrdf(Instance, Id, rdf:type, Class),
 
+    prefix_expand(Id,Prefixes,Id_Ex),
+    xrdf(Instance, Id_Ex, rdf:type, Class),
     findall(
-        P-V,
-        (   distinct([P],xrdf(Instance,Id,P,O)),
+        Prop-Value,
+        (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
             \+ is_built_in(P),
 
             once(class_predicate_type(DB,Class,P,Type)),
-            type_id_predicate_iri_value(Type,Id,P,O,DB,V)
+            type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Value),
+
+            compress_schema_uri(P, Prefixes, Prop)
         ),
         Data),
     !,
-    dict_create(JSON,json,['@id'-Id,
-                           '@type'-Class
+    compress_dict_uri(Id_Ex, Prefixes, Id_comp),
+    compress_schema_uri(Class, Prefixes, Class_comp),
+    dict_create(JSON,json,['@id'-Id_comp,
+                           '@type'-Class_comp
                            |Data]).
 
 key_descriptor_json(lexical(_, Fields), json{ '@type' : "Lexical",
-                                                 '@fields' : Fields }).
-key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
                                               '@fields' : Fields }).
+key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
+                                           '@fields' : Fields }).
 key_descriptor_json(value_hash(_), json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), json{ '@type' : "Random" }).
 
@@ -827,6 +914,36 @@ write_json_string_to_instance(Context, String) :-
     write_json_stream_to_instance(Context, Stream).
 
 
+insert_document(Desc, Document, ID) :-
+    create_context(Desc,commit{
+                            author : "test",
+                            message : "none"},
+                   Context),
+
+    with_transaction(
+        Context,
+        (   [TO] = (Context.transaction_objects),
+            database_context(TO, Prefixes),
+            % Pre process document
+            json_elaborate(TO, Document, Elaborated),
+            expand(Elaborated, Prefixes, Expanded),
+            get_dict('@id', Expanded, ID),
+            [RWO] = (TO.instance_objects),
+            % insert
+            forall(
+                json_triple_(Expanded, t(S,P,O)),
+                (   O = D^^T
+                ->  typecast(D^^'http://www.w3.org/2001/XMLSchema#string',
+                             T, [],
+                             OC),
+                    insert(RWO, S, P, OC, _)
+                ;   insert(RWO, S, P, O, _)
+                )
+            )
+        ),
+        _
+    ).
+
 :- begin_tests(json_stream).
 :- use_module(core(util)).
 :- use_module(library(terminus_store)).
@@ -882,8 +999,8 @@ test(write_json_stream_to_builder, [
 
 schema1('
 { "@type" : "@context",
-  "@base" : "i/",
-  "@schema" : "s/" }
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
 
 { "@id" : "Person",
   "@type" : "Class",
@@ -891,6 +1008,7 @@ schema1('
   "birthdate" : "xsd:date",
   "friends" : { "@type" : "Set",
                 "@class" : "Person" } }
+
 { "@id" : "Employee",
   "@type" : "Class",
   "@inherits" : "Person",
@@ -938,23 +1056,27 @@ test(create_database_context,
     open_descriptor(Desc, DB),
     type_context(DB,'Employee',Context),
 
-    nl,print_term(Context, []),nl,
-
-    Context = json{birthdate:json{'@type':"xsd:date"},
-                   boss:json{'@type':"@id"},
-                   friends:json{'@container':"@set",
-                                '@type':"person"},
-                   name:json{'@type':"xsd:string"},
-                   staff_number:json{'@type':"xsd:string"},
-                   tasks:json{'@container':"@list",
-                              '@type':"task"}}.
+    Context = json{ birthdate:json{ '@id':'http://s/birthdate',
+		                            '@type':'http://www.w3.org/2001/XMLSchema#date'
+		                          },
+                    boss:json{'@id':'http://s/boss','@type':"@id"},
+                    friends:json{'@container':"@set",
+                                 '@id':'http://s/friends',
+                                 '@type':'http://s/Person'},
+                    name:json{ '@id':'http://s/name',
+		                       '@type':'http://www.w3.org/2001/XMLSchema#string'
+	                         },
+                    staff_number:json{ '@id':'http://s/staff_number',
+			                           '@type':'http://www.w3.org/2001/XMLSchema#string'
+		                             },
+                    tasks:json{'@container':"@list",'@id':'http://s/tasks','@type':'http://s/Task'}
+                  }.
 
 test(elaborate,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_with_empty_schema(admin,test),
-                 resolve_absolute_string_descriptor('admin/test',Desc),
+                 test_document_label_descriptor(Desc),
                  write_schema1(Desc)
              )),
          cleanup(
@@ -964,411 +1086,426 @@ test(elaborate,
 
     Document = json{
                    '@id' : gavin,
-                   '@type' : criminal,
+                   '@type' : 'Criminal',
                    name : "gavin",
                    birthdate : "1977-05-24",
                    aliases : ["gavino", "gosha"]
                },
 
-    open_descriptor(Desc,DB),
+    open_descriptor(Desc, DB),
+
     json_elaborate(DB, Document, Elaborated),
 
-    Elaborated = json{'@id':"gavin",
-                      '@type':"criminal",
-                      aliases:json{'@container':'@list',
-                                   '@type':"xsd:string",
-                                   '@value':[json{'@type':"xsd:string",
-                                                  '@value':"gavino"},
-                                             json{'@type':"xsd:string",
-                                                  '@value':"gosha"}]},
-                      birthdate:json{'@type':"xsd:date",
-                                     '@value':"1977-05-24"},
-                      name:json{'@type':"xsd:string",
-                                '@value':"gavin"}}.
+    print_term(Elaborated,[]),
+
+
+    Elaborated = json{ '@id':gavin,
+                       '@type':'http://s/Criminal',
+                       'http://s/aliases':
+                       _{ '@container':"@list",
+			              '@type':'http://www.w3.org/2001/XMLSchema#string',
+			              '@value':[ json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+					                       '@value':"gavino"
+					                     },
+				                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+					                       '@value':"gosha"
+					                     }
+				                   ]
+			            },
+                       'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+				                                  '@value':"1977-05-24"
+			                                    },
+                       'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                                 '@value':"gavin"
+			                               }
+                     }.
 
 test(id_expand,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
     Document = json{
                    '@id' : gavin,
-                   '@type' : employee,
+                   '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    boss : json{
                               '@id' : jane,
-                              '@type' : employee,
+                              '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
                               birthdate : "1979-12-28"
                           }
                },
 
-    json_elaborate(Document, Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, Document, Elaborated),
 
-    Elaborated = json{'@id':gavin,
-                      '@type':employee,
-                      birthdate:json{'@type':xsd:date,
-                                     '@value':"1977-05-24"},
-                      boss:json{'@id':jane,
-                                '@type':employee,
-                                birthdate:json{'@type':xsd:date,
-                                               '@value':"1979-12-28"},
-                                name:json{'@type':xsd:string,'@value':"jane"},
-                                staff_number:json{'@type':xsd:string,
-                                                  '@value':"12"}
-                               },
-                      name:json{'@type':xsd:string,
-                                '@value':"gavin"},
-                      staff_number:json{'@type':xsd:string,
-                                        '@value':"13"}}.
-
-
-test(id_free,
-     [
-         setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
-         cleanup(
-             (
-                 delete_database
-             )
-         )
-     ]) :-
-
-    Document = json{
-                   '@id' : gavin,
-                   '@type' : employee,
-                   name : "gavin",
-                   staff_number : "13",
-                   birthdate : "1977-05-24",
-                   boss : json{
-                              '@id' : jane,
-                              '@type' : employee,
-                              name : "jane",
-                              staff_number : "12",
-                              birthdate : "1979-12-28"
-                          }
-               },
-
-    json_elaborate(Document, Elaborated),
-
-    Elaborated = json{'@id':gavin,
-                      '@type':employee,
-                      birthdate:json{'@type':xsd:date,
-                                     '@value':"1977-05-24"},
-                      boss:json{'@id':jane,
-                                '@type':employee,
-                                birthdate:json{'@type':xsd:date,
-                                               '@value':"1979-12-28"},
-                                name:json{'@type':xsd:string,'@value':"jane"},
-                                staff_number:json{'@type':xsd:string,
-                                                  '@value':"12"}
-                               },
-                      name:json{'@type':xsd:string,
-                                '@value':"gavin"},
-                      staff_number:json{'@type':xsd:string,
-                                        '@value':"13"}}.
-
+    Elaborated =
+    json{
+        '@id':gavin,
+        '@type':'http://s/Employee',
+        'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+				                   '@value':"1977-05-24"
+			                     },
+        'http://s/boss':json{ '@id':jane,
+			                  '@type':'http://s/Employee',
+			                  'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+						                                 '@value':"1979-12-28"
+						                               },
+			                  'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						                            '@value':"jane"
+						                          },
+			                  'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+							                                '@value':"12"
+							                              }
+			                },
+        'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                  '@value':"gavin"
+			                },
+        'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				                      '@value':"13"
+				                    }
+    }.
 
 test(triple_convert,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
     Document = json{
                    '@id' : gavin,
-                   '@type' : employee,
+                   '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    boss : json{
                               '@id' : jane,
-                              '@type' : employee,
+                              '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
                               birthdate : "1979-12-28"
                           }
                },
 
-    json_triples(Document, Triples),
+    open_descriptor(Desc, DB),
+    database_context(DB, Context),
+    json_triples(DB, Document, Context, Triples),
 
-    Triples = [
-        t(gavin,rdf:type,employee),
-        t(gavin,birthdate,"1977-05-24"^^xsd:date),
-        t(jane,rdf:type,employee),
-        t(jane,birthdate,"1979-12-28"^^xsd:date),
-        t(jane,name,"jane"^^xsd:string),
-        t(jane,staff_number,"12"^^xsd:string),
-        t(gavin,boss,jane),
-        t(gavin,name,"gavin"^^xsd:string),
-        t(gavin,staff_number,"13"^^xsd:string)
+    sort(Triples, Sorted),
+
+    Sorted = [
+        t('http://i/gavin',
+          'http://s/birthdate',
+          "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
+        t('http://i/gavin','http://s/boss','http://i/jane'),
+        t('http://i/gavin',
+          'http://s/name',
+          "gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/gavin',
+          'http://s/staff_number',
+          "13"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/gavin',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Employee'),
+        t('http://i/jane',
+          'http://s/birthdate',
+          "1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+        t('http://i/jane',
+          'http://s/name',
+          "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/jane',
+          'http://s/staff_number',
+          "12"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/jane',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://s/Employee')
     ].
 
 test(extract_json,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema(admin,test),
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit,
-
-             % Document
-                 Document = json{
-                                '@id' : gavin,
-                                '@type' : employee,
-                                name : "gavin",
-                                staff_number : "13",
-                                birthdate : "1977-05-24",
-                                boss : json{
-                                           '@id' : jane,
-                                           '@type' : employee,
-                                           name : "jane",
-                                           staff_number : "12",
-                                           birthdate : "1979-12-28"
-                                       }
-                            },
-
-                 forall(json_triple(Document,t(X,P,Y)),
-                        insert_triple(t(X,P,Y)))
-
-             )
-         ),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 teardown_temp_store(State)
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    id_json(gavin,JSON1),
+    Document = json{
+                   '@id' : gavin,
+                   '@type' : 'Employee',
+                   name : "gavin",
+                   staff_number : "13",
+                   birthdate : "1977-05-24",
+                   boss : json{
+                              '@id' : jane,
+                              '@type' : 'Employee',
+                              name : "jane",
+                              staff_number : "12",
+                              birthdate : "1979-12-28"
+                          }
+               },
 
+    insert_document(Desc, Document, ID),
+
+    open_descriptor(Desc, DB),
+    !, % NOTE: why does rolling back over this go mental?
+
+    id_json(DB,ID,JSON1),
+    !,
     JSON1 = json{'@id':gavin,
-                 '@type':employee,
+                 '@type':'Employee',
                  birthdate:"1977-05-24",
                  boss:jane,
                  name:"gavin",
-                 staff_number:"13"
-                },
+                 staff_number:"13"},
 
-    id_json(jane,JSON2),
-
-    JSON2 = json{'@id':jane,
-                 '@type':employee,
-                 birthdate:"1979-12-28",
-                 name:"jane",
-                 staff_number:"12"}.
+    id_json(DB,jane,JSON2),
+    !,
+    JSON2 = json{ '@id':jane,
+                  '@type':'Employee',
+                  birthdate:"1979-12-28",
+                  name:"jane",
+                  staff_number:"12"
+                }.
 
 test(get_value,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
     JSON = json{'@id':jane,
-                '@type':employee,
+                '@type':'Employee',
                 birthdate:"1979-12-28",
                 name:"jane",
                 staff_number:"12"},
 
-    json_elaborate(JSON,Elaborated),
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,Elaborated),
 
     get_all_path_values(Elaborated,Values),
 
-    Values = [['@type']-employee,
-              [birthdate]- ("1979-12-28"^^xsd:date),
-              [name]- ("jane"^^xsd:string),
-              [staff_number]- ("12"^^xsd:string)].
+    Values = [['@type']-'http://s/Employee',
+              ['http://s/birthdate']-("1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+              ['http://s/name']-("jane"^^'http://www.w3.org/2001/XMLSchema#string'),
+              ['http://s/staff_number']-("12"^^'http://www.w3.org/2001/XMLSchema#string')].
 
+schema2('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
 
-schema2(person, rdf:type, 'Class').
-schema2(person, sys:key, person_key).
-schema2(person, sys:base, person_^^xsd:string).
-schema2(person_key, rdf:type, sys:lexical).
-schema2(person_key, sys:fields, person_key_list1).
-schema2(person_key_list1, rdf:first, name).
-schema2(person_key_list1, rdf:rest, person_key_list2).
-schema2(person_key_list2, rdf:first, birthdate).
-schema2(person_key_list2, rdf:rest, rdf:nil).
-schema2(person, name, xsd:string).
-schema2(person, birthdate, xsd:date).
-schema2(person, friends, set_person).
-schema2(set_person, rdf:type, 'Set').
-schema2(set_person, sys:class, person).
-schema2(employee, rdf:type, 'Class').
-schema2(employee, sys:base, employee_^^xsd:string).
-schema2(employee, sys:key, employee_key).
-schema2(employee_key, rdf:type, sys:hash).
-schema2(employee_key, sys:fields, employee_key_list1).
-schema2(employee_key_list1, rdf:first, name).
-schema2(employee_key_list1, rdf:rest, employee_key_list2).
-schema2(employee_key_list2, rdf:first, birthdate).
-schema2(employee_key_list2, rdf:rest, rdf:nil).
-schema2(employee, rdfs:subClassOf, person).
-schema2(employee, staff_number, xsd:string).
-schema2(employee, boss, optional_employee).
-schema2(optional_employee, rdf:type, 'Optional').
-schema2(optional_employee, sys:class, employee).
-schema2(employee, tasks, list_task).
-schema2(list_task, rdf:type, 'List').
-schema2(list_task, sys:class, task).
-schema2(task, rdf:type, 'Class').
-schema2(task, sys:base, task_^^xsd:string).
-schema2(task, name, xsd:string).
-schema2(task, sys:key, task_key).
-schema2(task_key, rdf:type, sys:value_hash).
-schema2(criminal, rdf:type, 'Class').
-schema2(criminal, sys:base, criminal_^^xsd:string).
-schema2(criminal, rdfs:subClassOf, person).
-schema2(criminal, aliases, list_string).
-schema2(list_string, rdf:type, 'List').
-schema2(list_string, sys:class, xsd:string).
-schema2(event, rdf:type, 'Class').
-schema2(event, sys:base, event_^^xsd:string).
-schema2(event, action, xsd:string).
-schema2(event, timestamp, xsd:dateTime).
-schema2(event, sys:key, event_key).
-schema2(event_key, rdf:type, sys:random).
-schema2(book, rdf:type, 'Class').
-schema2(book, sys:base, book_^^xsd:string).
-schema2(book, name, xsd:string).
-schema2(book, sys:key, book_key).
-schema2(book_key, rdf:type, sys:lexical).
-schema2(book_key, sys:fields, book_key_fields).
-schema2(book_key_fields, rdf:first, name).
-schema2(book_key_fields, rdf:rest, rdf:nil).
-schema2(book_club, rdf:type, 'Class').
-schema2(book_club, sys:base, book_club_^^xsd:string).
-schema2(book_club, sys:key, book_club_key).
-schema2(book_club_key, rdf:type, sys:lexical).
-schema2(book_club_key, sys:fields, book_club_key_list1).
-schema2(book_club_key_list1, rdf:first, name).
-schema2(book_club_key_list1, rdf:rest, rdf:nil).
-schema2(book_club, name, xsd:string).
-schema2(book_club, people, book_club_set_people).
-schema2(book_club_set_people, rdf:type, 'Set').
-schema2(book_club_set_people, sys:class, person).
-schema2(book_club, book_list, book_club_array).
-schema2(book_club_array, rdf:type, 'Array').
-schema2(book_club_array, sys:class, book).
-schema2(colour, rdf:type, 'Enum').
-schema2(colour, sys:value, colour_list0).
-schema2(colour_list0, rdf:first, red).
-schema2(colour_list0, rdf:rest, colour_list1).
-schema2(colour_list1, rdf:first, blue).
-schema2(colour_list1, rdf:rest, colour_list2).
-schema2(colour_list2, rdf:first, green).
-schema2(colour_list2, rdf:rest, rdf:nil).
-schema2(dog, rdf:type, 'Class').
-schema2(dog, sys:base, dog_^^xsd:string).
-schema2(dog, sys:key, dog_key).
-schema2(dog_key, rdf:type, sys:lexical).
-schema2(dog_key, sys:fields, dog_key_list1).
-schema2(dog_key_list1, rdf:first, name).
-schema2(dog_key_list1, rdf:rest, rdf:nil).
-schema2(dog, name, xsd:string).
-schema2(dog, hair_colour, colour).
-schema2(binary_tree, rdf:type, 'TaggedUnion').
-schema2(binary_tree, sys:base, binary_tree_^^xsd:string).
-schema2(binary_tree, sys:key, binary_tree_key).
-schema2(binary_tree_key, rdf:type, sys:value_hash).
-schema2(binary_tree, leaf, 'Unit').
-schema2(binary_tree, node, node).
-schema2(node, rdf:type, 'Class').
-schema2(node, sys:base, node_key_^^xsd:string).
-schema2(node, sys:key, node_key).
-schema2(node_key, rdf:type, sys:value_hash).
-schema2(node, value, xsd:integer).
-schema2(node, left, binary_tree).
-schema2(node, right, binary_tree).
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@base" : "Person_",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name", "birthday" ] },
+  "name" : "xsd:string",
+  "birthday" : "xsd:date",
+  "friends" : { "@type" : "Set",
+                "@class" : "Person" } }
+
+{ "@id" : "Employee",
+  "@type" : "Class",
+  "@base" : "Employee_",
+  "@key" : { "@type" : "Hash",
+             "@fields" : [ "name", "birthday" ] },
+  "@inherts" : "Person",
+  "staff_number" : "xsd:string",
+  "boss" : { "@type" : "Optional",
+             "@class" : "Employee" },
+  "tasks" : { "@type" : "List",
+              "@class" : "Task" } }
+
+{ "@id" : "Task",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "name" : "xsd:string" }
+
+{ "@id" : "Criminal",
+  "@type" : "Class",
+  "@inherits" : "Person",
+  "aliases" : { "@type" : "List",
+                "@class" : "xsd:string" } }
+
+{ "@id" : "Event",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "action" : "xsd:string",
+  "timestamp" : "xsd:dateTime" }
+
+{ "@id" : "Book",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : ["name"] },
+  "name" : "xsd:string" }
+
+{ "@id" : "BookClub",
+  "@type" : "Class",
+  "@base" : "BookClub_",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "people" : { "@type" : "Set",
+               "@class" : "Person" },
+  "book_list" : { "@type" : "Array",
+                  "@class" : "Book" } }
+
+{ "@id" : "Colour",
+  "@type" : "Enum",
+  "@value" : [ "red", "blue", "green" ] }
+
+{ "@id" : "Dog",
+  "@base" : "dog_",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "name" : "xsd:string",
+  "hair_colour" : "Colour" }
+
+{ "@id" : "BinaryTree",
+  "@class" : "TaggedUnion",
+  "@base" : "binary_tree_",
+  "@key" : { "@type" : "ValueHash" },
+  "leaf" : "Unit",
+  "node" : "Node" }
+
+{ "@id" : "Node",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "value" : "xsd:integer",
+  "left" : "BinaryTree",
+  "right" : "BinaryTree" }').
+
+write_schema2(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema2(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(schema_key_elaboration1, []) :-
+    Doc = json{'@id':"Capability",
+               '@key':json{'@type':"ValueHash"},
+               '@type':"Class",
+               role:json{'@class':"Role",
+                         '@type':"Set"},
+               scope:"Resource"},
+    json_schema_elaborate(Doc, Elaborate),
+
+    Elaborate = json{ '@id':"Capability",
+                      '@type':'http://terminusdb.com/schema/sys#Class',
+                      'http://terminusdb.com/schema/sys#key':json{
+                                                                 '@type':'http://terminusdb.com/schema/sys#ValueHash'
+						                                     },
+                      role:json{ '@id':'Capability_role_Set_Role',
+		                         '@type':'http://terminusdb.com/schema/sys#Set',
+		                         'http://terminusdb.com/schema/sys#class':json{ '@id':"Role",
+								                                                '@type':"@id"
+							                                                  }
+	                           },
+                      scope:json{'@id':"Resource",'@type':"@id"}
+                    }.
+
+test(schema_lexical_key_elaboration, []) :-
+    Doc = json{ '@id' : "Person",
+                '@type' : "Class",
+                '@base' : "Person_",
+                '@key' : json{ '@type' : "Lexical",
+                               '@fields' : [ "name", "birthday" ] },
+                'name' : "xsd:string",
+                'birthday' : "xsd:date",
+                'friends' : json{ '@type' : "Set",
+                                  '@class' : "Person" } },
+
+    json_schema_elaborate(Doc, Elaborate),
+
+    print_term(Elaborate, []),
+
+    Elaborate =
+    json{ '@id':"Person",
+          '@type':'http://terminusdb.com/schema/sys#Class',
+          birthday:json{'@id':"xsd:date",'@type':"@id"},
+          friends:json{ '@id':'Person_friends_Set_Person',
+		                '@type':'http://terminusdb.com/schema/sys#Set',
+		                'http://terminusdb.com/schema/sys#class':
+                        json{ '@id':"Person",
+							  '@type':"@id"
+							}
+		              },
+          'http://terminusdb.com/schema/sys#base':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				'@value':"Person_"
+			  },
+          'http://terminusdb.com/schema/sys#key':
+          json{ '@type':'http://terminusdb.com/schema/sys#Lexical',
+				'sys:fields':json{ '@container':"@list",
+								   '@type':"@id",
+								   '@value':[ "name",
+										      "birthday"
+									        ]
+								 }
+			  },
+          name:json{'@id':"xsd:string",'@type':"@id"}
+        }.
 
 test(idgen_lexical,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-             % Schema
-                 forall(schema2(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-                 check_and_commit
-             )
-         ),
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
          cleanup(
-             (
-                 delete_database
-             )
+             teardown_temp_store(State)
          )
      ]) :-
 
-    JSON = json{'@type':person,
+    JSON = json{'@type':'Person',
                 birthdate:"1979-12-28",
                 name:"jane"
                },
 
-    json_elaborate(JSON, Elaborated),
+    open_descriptor(Desc, DB),
 
-    Elaborated = json{'@id':"person_jane_1979-12-28",
-                      '@type':person,
+    print_all_triples(DB,schema),
+
+    json_elaborate(DB, JSON, Elaborated),
+
+    Elaborated = json{'@id':"Person_jane_1979-12-28",
+                      '@type':'Person',
                       birthdate:json{'@type':xsd:date,
                                      '@value':"1979-12-28"},
                       name:json{'@type':xsd:string,

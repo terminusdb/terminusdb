@@ -277,6 +277,14 @@ test(expand_path, [])
  * URI = 'http://example.com/bar'
  * compresses to => foo:bar
  */
+compress_uri(URI, '@base', Prefix, Rest) :-
+    !,
+    sub_atom(URI, _, Length, After, Prefix),
+    sub_atom(URI, Length, After, _, Rest).
+compress_uri(_URI, Key, _Prefix, _Rest) :-
+    is_at(Key),
+    !,
+    fail.
 compress_uri(URI, Key, Prefix, Comp) :-
     sub_atom(URI, _, Length, After, Prefix),
     sub_atom(URI, Length, After, _, Rest),
@@ -302,12 +310,7 @@ is_at(Key) :-
  */
 compress(JSON,Context,JSON_LD) :-
     dict_pairs(Context, _, Pairs),
-    include([A-B]>>(\+ is_at(A), % exclude @type, @vocab, etc. from expansions
-                    (   atom(B)
-                    ->  true
-                    ;   string(B))),
-            Pairs, Valid_Pairs),
-    compress_aux(JSON,Valid_Pairs,JSON_Pre),
+    compress_aux(JSON,Pairs,JSON_Pre),
 
     extend_with_context(JSON_Pre,Context,JSON_LD).
 
@@ -367,6 +370,17 @@ test(compress_prefix, [])
     compress(Document, Context, Compressed),
 
     json{'@type':'scm:Fact','scm:your_face':json{'@id':'ex:is_ugly'}} :< Compressed.
+
+test(compress_base, [])
+:-
+    Context = json{ '@base' : "http://example.com/document/",
+                    scm : "http://example.com/schema#"},
+    Document = json{ '@type' : "http://example.com/schema#Fact",
+                     'http://example.com/schema#your_face' :
+                     json{ '@id' : "http://example.com/document/is_ugly" }},
+    compress(Document, Context, Compressed),
+
+    json{'@type':'scm:Fact','scm:your_face':json{'@id':'is_ugly'}} :< Compressed.
 
 :- end_tests(jsonld_compress).
 

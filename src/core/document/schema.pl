@@ -133,7 +133,7 @@ is_built_in(P) :-
         [
             rdf:type,
             sys:comment,
-            sys:inheritsFrom,
+            sys:inherits,
             sys:key,
             sys:base,
             sys:value,
