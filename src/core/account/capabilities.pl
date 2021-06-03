@@ -116,7 +116,7 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
             t(Auth, '@schema':capability, Capability),
             t(Capability, '@schema':role, Role),
             t(Role, '@schema':action, Action),
-            t(Capability, 'Schema':scope, Scope_Iri)
+            t(Capability, '@schema':scope, Scope_Iri)
         )
        ).
 /*
@@ -171,7 +171,7 @@ write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
 
 is_super_user(Auth) :-
-    is_super_user(Auth, _{ doc : 'terminusdb:///system/data/' }).
+    is_super_user(Auth, _{ '@base' : 'http://terminusdb.com/db/system/instance/' }).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),

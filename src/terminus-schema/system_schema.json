@@ -5,8 +5,11 @@
 
 { "@id" : "User",
   "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+            "@fields" : ["name"]},
   "name" : "xsd:string",
-  "key_hash" : "xsd:string",
+  "key_hash" : { "@type" : "Optional",
+                 "@class": "xsd:string"},
   "capability" : { "@type" : "Set",
                    "@class" : "Capability" } }
 
@@ -17,6 +20,8 @@
 { "@id" : "Organization",
   "@type" : "Class",
   "@inherits" : "Resource",
+  "@key" : { "@type" : "Lexical",
+            "@fields" : ["name"]},
   "child" : { "@type" : "Set",
               "@class" : "Organization" },
   "database" : { "@type" : "Set",

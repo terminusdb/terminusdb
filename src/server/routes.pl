@@ -3331,7 +3331,7 @@ user_handler(delete, Request, System_DB, Auth) :-
 :- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name)),
                 [method(Method),
                  prefix,
-                 methods([options,post,delete])]).
+                 methods([options,delete])]).
 
 organization_handler(post, Request, System_DB, Auth) :-
     get_payload(Document, Request),
@@ -3363,6 +3363,7 @@ organization_handler(delete, Request, System_DB, Auth) :-
                             _{'@type' : "api:DeleteOrganizationResponse",
                               'api:status' : "api:success"}))).
 
+/*
 organization_handler(post, Name, Request, System_DB, Auth) :-
     get_payload(Document, Request),
 
@@ -3376,6 +3377,7 @@ organization_handler(post, Name, Request, System_DB, Auth) :-
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteOrganizationResponse",
                               'api:status' : "api:success"}))).
+*/
 organization_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
         delete_organization,

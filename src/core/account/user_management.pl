@@ -63,10 +63,7 @@ delete_organization(Name) :-
 
 delete_organization(Context,Name) :-
     organization_name_uri(Context, Name, Organization_Uri),
-    ask(Context,
-        (   t(Organization_Uri, rdf:type, system:'Organization'),
-            delete_object(Organization_Uri)
-        )).
+    delete_object(Context, Organization_Uri).
 
 add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -91,21 +88,17 @@ add_user_organization(Context, Nick, Org, Organization_URI) :-
     ->  throw(error(organization_already_exists(Org),_))
     ;   true),
 
-    ask(Context,
-        (   random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
-            random_idgen(doc:'Organization',[Org^^xsd:string], Organization_URI),
-            t(User_URI, system:agent_name, Nick^^xsd:string),
-            t(User_URI, system:role, Role_URI),
-            insert(Role_URI, system:capability, Capability_URI),
-            insert(Capability_URI, rdf:type, system:'Capability'),
-            insert(Capability_URI, system:capability_scope, Organization_URI),
-            insert(Capability_URI, system:action, system:manage_capabilities),
-            insert(Organization_URI, rdf:type, system:'Organization'),
-            insert(Organization_URI, system:organization_name, Org^^xsd:string),
-            insert(doc:admin_organization, system:resource_includes, Organization_URI)
-        ),
-       [compress_prefixes(false)]).
+    user_name_uri(Context, Nick, User_URI),
 
+    add_organization(Context, Org, Organization_URI),
+
+    get_document(Context, User_URI, User_Document),
+    Capabilities = (User_Document.capabilities),
+    New_Capabilities = [{ 'scope' : Organization_URI,
+                          'role': ["admin_role"]}
+                        |Capabilities],
+    New_User_Document = (User_Document.put(capabilities, New_Capabilities)),
+    update_document(Context, New_User_Document).
 
 add_organization_transaction(System_DB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -132,48 +125,17 @@ add_organization(Context, Name, Organization_URI) :-
     ->  throw(error(organization_already_exists(Name),_))
     ;   true),
 
-    ask(Context,
-        (
-            random_idgen(doc:'Organization',[Name^^xsd:string], Organization_URI),
-            insert(Organization_URI, rdf:type, system:'Organization'),
-            insert(Organization_URI, system:organization_name, Name^^xsd:string),
-            insert(doc:admin_organization, system:resource_includes, Organization_URI)
-        ),
-       [compress_prefixes(false)]).
+    insert_document(Context, _{
+                                 '@type': 'Organization',
+                                 'name': Org
+                             }, Organization_URI).
+
 
 user_managed_resource(_Askable, User_Uri, _Resource_Uri) :-
-    is_super_user(User_Uri,_{doc : 'terminusdb:///system/data/'}),
+    is_super_user(User_Uri),
     !.
 user_managed_resource(Askable, User_Uri, Resource_Uri) :-
     auth_action_scope(Askable, User_Uri, system:manage_capabilities, Resource_Uri).
-
-update_organization_transaction(System_DB, Auth, Name, New_Name) :-
-    do_or_die(is_super_user(Auth, _{}),
-              error(organization_update_requires_superuser,_)),
-
-    Commit_Info = commit_info{ author: "update_organization_transaction/4",
-                               message: "internal system operation"
-                             },
-    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
-
-    with_transaction(Ctx,
-                     update_organization(Ctx, Name, New_Name),
-                     _).
-
-update_organization(Name, New_Name) :-
-    create_context(system_descriptor{}, Context),
-    with_transaction(
-        Context,
-        update_organization(Context,Name,New_Name),
-        _).
-
-update_organization(Context, Name, New_Name) :-
-    ask(Context,
-        (   t(Organization_URI, system:organization_name, Name^^xsd:string),
-            delete(Organization_URI, system:organization_name, Name^^xsd:string),
-            insert(Organization_URI, system:organization_name, New_Name^^xsd:string)
-        ),
-       [compress_prefixes(false)]).
 
 add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
@@ -192,45 +154,21 @@ add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
     ;   true),
 
     add_organization(SystemDB, Nick, Organization_URI),
-    ask(SystemDB,
-        (   random_idgen(doc:'User',[Nick^^xsd:string], User_URI),
-            random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
-            random_idgen(doc:'Capability',[Nick^^xsd:string], Capability_URI),
-            insert(User_URI, rdf:type, system:'User'),
-            insert(User_URI, rdfs:comment, Comment@en),
-            insert(User_URI, system:agent_name, Nick^^xsd:string),
-            insert(User_URI, system:user_identifier, Email^^xsd:string),
-            insert(User_URI, system:role, Role_URI),
-            insert(Role_URI, rdf:type, system:'Role'),
-            insert(Role_URI, system:capability, Capability_URI),
-            insert(Capability_URI, rdf:type, system:'Capability'),
-            insert(Capability_URI, system:direct_capability_scope, Organization_URI),
-            insert(Capability_URI, system:action, system:create_database),
-            insert(Capability_URI, system:action, system:manage_capabilities),
-            insert(Capability_URI, system:action, system:delete_database),
-            insert(Capability_URI, system:action, system:class_frame),
-            insert(Capability_URI, system:action, system:fetch),
-            insert(Capability_URI, system:action, system:push),
-            insert(Capability_URI, system:action, system:branch),
-            insert(Capability_URI, system:action, system:meta_read_access),
-            insert(Capability_URI, system:action, system:meta_write_access),
-            insert(Capability_URI, system:action, system:commit_read_access),
-            insert(Capability_URI, system:action, system:commit_write_access),
-            insert(Capability_URI, system:action, system:instance_read_access),
-            insert(Capability_URI, system:action, system:instance_write_access),
-            insert(Capability_URI, system:action, system:schema_read_access),
-            insert(Capability_URI, system:action, system:schema_write_access),
-            insert(Capability_URI, system:action, system:manage_capabilities)
-        ),
-        [compress_prefixes(false)]
-       ),
-
-    (   Pass_Opt = some(Pass)
+    User_Document = _{
+                        '@type': 'User',
+                        'name': Nick,
+                        'capability': [
+                            { 'scope': Organization_URI,
+                              'role': [ "admin_role" ]
+                            }
+                        ]
+                    },
+    (   some(Pass) = Pass_Opt
     ->  crypto_password_hash(Pass,Hash),
-        ask(SystemDB,
-            insert(User_URI, system:user_key_hash, Hash^^xsd:string)
-           )
-    ;   true).
+        Final_User_Document = (User_Document.put(key_hash, Hash))
+    ;   Final_User_Document = User_Document),
+
+    insert_document(Context, Final_User_Document).
 
 update_user_transaction(SystemDB, Auth, Name, Document) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -261,29 +199,8 @@ update_user(Name, Document) :-
 
 update_user(SystemDB, Name, Document) :-
     % Agent already exists so update
-    agent_name_uri(SystemDB, Name, User_Uri),
+    user_name_uri(SystemDB, Name, User_Uri),
     !,
-
-    (   get_dict(user_identifier, Document, Identifier)
-    ->  ask(SystemDB,
-            (   t(User_Uri, system:user_identifier, Old_ID^^xsd:string),
-                delete(User_Uri, system:user_identifier, Old_ID^^xsd:string),
-                insert(User_Uri, system:user_identifier, Identifier^^xsd:string)))
-    ;   true),
-
-    (   get_dict(agent_name, Document, Agent_Name)
-    ->  ask(SystemDB,
-            (   t(User_Uri, system:agent_name, Old_Name^^xsd:string),
-                delete(User_Uri, system:agent_name, Old_Name^^xsd:string),
-                insert(User_Uri, system:agent_name, Agent_Name^^xsd:string)))
-    ;   true),
-
-    (   get_dict(comment, Document, Comment)
-    ->  ask(SystemDB,
-            (   t(User_Uri, rdfs:comment, Old_Comment@en),
-                delete(User_Uri, rdfs:comment, Old_Comment@en),
-                insert(User_Uri, rdfs:comment, Comment@en)))
-    ;   true),
 
     (   get_dict(password, Document, Password)
     ->  crypto_password_hash(Password,Hash),
