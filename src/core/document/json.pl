@@ -981,6 +981,8 @@ json_to_database_type(D^^T, OC) :-
     typecast(D^^'http://www.w3.org/2001/XMLSchema#decimal', T, [], OC).
 json_to_database_type(O, O).
 
+%% Document insert / delete / update
+
 run_delete_document(Desc, Commit, ID) :-
     create_context(Desc,Commit,Context),
     with_transaction(
@@ -2610,5 +2612,127 @@ test(auto_id_update,
                         hair_colour:green,
                         name:"Ralph"}.
 
+test(partial_document_elaborate,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@id' : 'Dog_Henry',
+                '@type':'Dog',
+                hair_colour: "blue"
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,JSON_ID),
+
+    JSON_ID = json{ '@id':'Dog_Henry',
+                    '@type':'http://s/Dog',
+                    'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
+                                                '@type':"@id"}
+                  }.
+
+test(partial_document_elaborate_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@id' : 'BookClub_Murder%20Mysteries',
+                '@type': 'BookClub',
+                name : "Murder Mysteries",
+                book_list: [ json{ name : "And Then There Were None" },
+                             json{ name : "In Cold Blood" }
+                           ]
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,JSON_ID),
+
+    JSON_ID = json{ '@id':'BookClub_Murder%20Mysteries',
+                    '@type':'http://s/BookClub',
+                    'http://s/book_list':
+                    _{ '@container':"@array",
+			           '@type':'http://s/Book',
+			           '@value':
+                       [ json{ '@id':"Book_And%20Then%20There%20Were%20None",
+					           '@type':'http://s/Book',
+					           'http://s/name':
+                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								     '@value':"And Then There Were None"
+								   }
+					         },
+					     json{ '@id':"Book_In%20Cold%20Blood",
+					           '@type':'http://s/Book',
+					           'http://s/name':
+                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								     '@value':"In Cold Blood"
+								   }
+					         }
+				       ]
+			         },
+                    'http://s/name':
+                    json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			              '@value':"Murder Mysteries"
+			            }
+                  }.
+
+test(partial_document_elaborate_list_without_required,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@id' : 'BookClub_Murder%20Mysteries',
+                '@type': 'BookClub',
+                book_list: [ json{ name : "And Then There Were None" },
+                             json{ name : "In Cold Blood" }
+                           ]
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,JSON_ID),
+
+    JSON_ID = json{ '@id':'BookClub_Murder%20Mysteries',
+                    '@type':'http://s/BookClub',
+                    'http://s/book_list':
+                    _{ '@container':"@array",
+			           '@type':'http://s/Book',
+			           '@value':
+                       [ json{ '@id':"Book_And%20Then%20There%20Were%20None",
+					           '@type':'http://s/Book',
+					           'http://s/name':
+                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								     '@value':"And Then There Were None"
+								   }
+					         },
+					     json{ '@id':"Book_In%20Cold%20Blood",
+					           '@type':'http://s/Book',
+					           'http://s/name':
+                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								     '@value':"In Cold Blood"
+								   }
+					         }
+				       ]
+			         }
+                  }.
 
 :- end_tests(json).
