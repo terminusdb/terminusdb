@@ -83,7 +83,7 @@ make_db_public(System_Context,DB_Uri) :-
             insert(Capability_Uri, system:action, system:commit_read_access),
             insert(Capability_Uri, system:action, system:meta_read_access))).
 
-create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
+create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),

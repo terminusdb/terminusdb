@@ -6,6 +6,7 @@
               askable_prefixes/2,
               create_context/2,
               create_context/3,
+              is_query_context/1,
               askable_context/4,
               askable_context/5,
               askable_settings_context/3,
@@ -39,7 +40,7 @@
               compress_dict_uri/3,
               has_at/1,
               compress_uri/4,
-              
+
               % json_woql.pl
               woql_context/1,
               initialise_woql_contexts/0,

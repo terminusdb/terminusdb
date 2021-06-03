@@ -3,6 +3,7 @@
               ask/3,
               ask_ast/3,
               askable_prefixes/2,
+              is_query_context/1,
               create_context/2,
               create_context/3,
               askable_context/4,
@@ -137,6 +138,10 @@ create_context(Transaction_Object, Context) :-
 create_context(Descriptor, Context) :-
     open_descriptor(Descriptor, Transaction_Object),
     create_context(Transaction_Object, Context).
+
+is_query_context(Context) :-
+    is_dict(Context),
+    query_context{} :< Context.
 
 /**
  * create_context(Askable, Commit_Info, Context).

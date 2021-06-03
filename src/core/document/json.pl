@@ -5,7 +5,10 @@
               %json_schema_triple/2,
               json_schema_triple/3,
               json_schema_elaborate/2,
-              id_json/3,
+              get_document/3,
+              delete_document/2,
+              insert_document/3,
+              update_document/3,
               database_context/2,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
@@ -500,7 +503,7 @@ json_schema_elaborate_key(V,json{ '@type' : Type}) :-
 
 json_schema_predicate_value('@id',V,_,'@id',V) :-
     !.
-json_schema_predicate_value('@cardinality',V,_,P,json{'@type' : 'xsd:positiveInteger',
+json_schema_predicate_value('@cardinality',V,_,P,json{'@type' : 'xsd:nonNegativeInteger',
                                                       '@value' : V }) :-
     global_prefix_expand(sys:cardinality, P),
     !.
@@ -776,7 +779,17 @@ compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
     compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp).
 
-id_json(DB, Id, JSON) :-
+get_document(Query_Context, Id, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document(TO, Id, Document).
+get_document(Desc, Id, Document) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document(Transaction, Id, Document).
+get_document(DB, Id, Document) :-
     database_context(DB,Prefixes),
     database_instance(DB,Instance),
 
@@ -796,9 +809,9 @@ id_json(DB, Id, JSON) :-
     !,
     compress_dict_uri(Id_Ex, Prefixes, Id_comp),
     compress_schema_uri(Class, Prefixes, Class_comp),
-    dict_create(JSON,json,['@id'-Id_comp,
-                           '@type'-Class_comp
-                           |Data]).
+    dict_create(Document,json,['@id'-Id_comp,
+                               '@type'-Class_comp
+                               |Data]).
 
 key_descriptor_json(lexical(_, Fields), json{ '@type' : "Lexical",
                                               '@fields' : Fields }).
@@ -957,15 +970,6 @@ write_json_string_to_instance(Context, String) :-
     open_string(String, Stream),
     write_json_stream_to_instance(Context, Stream).
 
-run_insert_document(Desc, Commit, Document, ID) :-
-    create_context(Desc,Commit,Context),
-    with_transaction(
-        Context,
-        (   [TO] = (Context.transaction_objects),
-            insert_document(TO, Document, ID)
-        ),
-        _).
-
 json_to_database_type(D^^T, OC) :-
     (   string(D)
     ;   atom(D)),
@@ -977,11 +981,44 @@ json_to_database_type(D^^T, OC) :-
     typecast(D^^'http://www.w3.org/2001/XMLSchema#decimal', T, [], OC).
 json_to_database_type(O, O).
 
+run_delete_document(Desc, Commit, ID) :-
+    create_context(Desc,Commit,Context),
+    with_transaction(
+        Context,
+        delete_document(Context, ID),
+        _).
+
+delete_document(Query_Context, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    delete_document(TO, Id).
+delete_document(DB, Id) :-
+    database_context(DB,Prefixes),
+    database_instance(DB,Instance),
+    prefix_expand(Id,Prefixes,Id_Ex),
+    (   xrdf(Instance, Id_Ex, rdf:type, _)
+    ->  true
+    ;   throw(error(document_does_not_exist(Id),_))
+    ),
+    forall(
+        xquad(Instance, G, Id_Ex, P, V),
+        delete(G, Id_Ex, P, V, _)
+    ).
+
+insert_document(Query_Context, Document, ID) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_document(TO, Document, ID).
 insert_document(Transaction, Document, ID) :-
     database_context(Transaction, Prefixes),
     % Pre process document
     json_elaborate(Transaction, Document, Elaborated),
     expand(Elaborated, Prefixes, Expanded),
+    insert_document_expanded(Transaction, Expanded, ID).
+
+insert_document_expanded(Transaction, Expanded, ID) :-
     get_dict('@id', Expanded, ID),
     database_instance(Transaction, [Instance]),
     % insert
@@ -990,6 +1027,41 @@ insert_document(Transaction, Document, ID) :-
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
+
+run_insert_document(Desc, Commit, Document, ID) :-
+    create_context(Desc,Commit,Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, ID),
+        _).
+
+update_document(Query_Context, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    update_document(TO, Document).
+update_document(Transaction, Document) :-
+    update_document(Transaction, Document, _).
+
+update_document(Query_Context, Document, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    update_document(TO, Document, Id).
+update_document(Transaction, Document, Id) :-
+    database_context(Transaction, Prefixes),
+    json_elaborate(Transaction, Document, Elaborated),
+    expand(Elaborated, Prefixes, Expanded),
+    get_dict('@id', Expanded, Id),
+    delete_document(Transaction, Id),
+    insert_document_expanded(Transaction, Expanded, Id).
+
+run_update_document(Desc, Commit, Document, Id) :-
+    create_context(Desc,Commit,Context),
+    with_transaction(
+        Context,
+        update_document(Context, Document, Id),
+        _).
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -1332,12 +1404,12 @@ test(extract_json,
 
     run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
                                            message: "foo" },
-                        Document, ID),
+                        Document, Id),
 
     open_descriptor(Desc, DB),
     !, % NOTE: why does rolling back over this go mental?
 
-    id_json(DB,ID,JSON1),
+    get_document(DB,Id,JSON1),
     !,
     JSON1 = json{'@id':gavin,
                  '@type':'Employee',
@@ -1346,7 +1418,7 @@ test(extract_json,
                  name:"gavin",
                  staff_number:"13"},
 
-    id_json(DB,jane,JSON2),
+    get_document(DB,jane,JSON2),
     !,
     JSON2 = json{ '@id':jane,
                   '@type':'Employee',
@@ -1495,14 +1567,17 @@ test(schema_key_elaboration1, []) :-
 
     Elaborate = json{ '@id':"Capability",
                       '@type':'http://terminusdb.com/schema/sys#Class',
-                      'http://terminusdb.com/schema/sys#key':json{
-                                                                 '@type':'http://terminusdb.com/schema/sys#ValueHash'
-						                                     },
+                      'http://terminusdb.com/schema/sys#key':
+                      json{
+                          '@id':'Capability_ValueHash',
+                          '@type':'http://terminusdb.com/schema/sys#ValueHash'
+					  },
                       role:json{ '@id':'Capability_role_Set_Role',
 		                         '@type':'http://terminusdb.com/schema/sys#Set',
-		                         'http://terminusdb.com/schema/sys#class':json{ '@id':"Role",
-								                                                '@type':"@id"
-							                                                  }
+		                         'http://terminusdb.com/schema/sys#class':
+                                 json{ '@id':"Role",
+								       '@type':"@id"
+							         }
 	                           },
                       scope:json{'@id':"Resource",'@type':"@id"}
                     }.
@@ -1537,9 +1612,13 @@ test(schema_lexical_key_elaboration, []) :-
 						                               '@type':'http://terminusdb.com/schema/sys#Lexical',
 						                               'sys:fields':json{ '@container':"@list",
 								                                          '@type':"@id",
-								                                          '@value':[ "name",
-										                                             "birthdate"
-									                                               ]
+								                                          '@value': [ json{ '@id':"name",
+										                                                    '@type':"@id"
+										                                                  },
+										                                              json{ '@id':"birthdate",
+										                                                    '@type':"@id"
+										                                                  }
+									                                                ]
 								                                        }
 						                             },
           name:json{'@id':"xsd:string",'@type':"@id"}
@@ -1657,7 +1736,7 @@ test(idgen_random,
     json_elaborate(DB, JSON, Elaborated),
 
     Elaborated =
-    json{ '@id':ID,
+    json{ '@id':Id,
           '@type':'http://s/Event',
           'http://s/action':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 			                      '@value':"click click"
@@ -1667,7 +1746,7 @@ test(idgen_random,
 			                       }
         },
 
-    atom_concat('Event_',_,ID).
+    atom_concat('Event_',_,Id).
 
 test(type_family_id, []) :-
 
@@ -1701,9 +1780,10 @@ test(schema_elaborate, []) :-
 	              },
           friend_of:json{ '@id':'Person_friend_of_Cardinality_Person',
 		                  '@type':'http://terminusdb.com/schema/sys#Cardinality',
-		                  'http://terminusdb.com/schema/sys#cardinality':json{ '@type':'xsd:nonNegativeInteger',
-									                                           '@value':3
-									                                         },
+		                  'http://terminusdb.com/schema/sys#cardinality':
+                          json{ '@type':'xsd:nonNegativeInteger',
+								'@value':3
+							  },
 		                  'http://terminusdb.com/schema/sys#class':json{ '@id':'Person',
 								                                         '@type':"@id"
 								                                       }
@@ -1740,7 +1820,7 @@ test(schema_elaborate, []) :-
           'http://terminusdb.com/schema/sys#Optional'),
         t('https://s#Person_friend_of_Cardinality_Person',
           'http://terminusdb.com/schema/sys#cardinality',
-          3^^'http://www.w3.org/2001/XMLSchema#positiveInteger'),
+          3^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
         t('https://s#Person_friend_of_Cardinality_Person',
           'http://terminusdb.com/schema/sys#class',
           'https://s#Person'),
@@ -1950,10 +2030,10 @@ test(list_elaborate,
           "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ],
 
-    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
     open_descriptor(Desc, New_DB),
-    id_json(New_DB, ID, Fresh_JSON),
+    get_document(New_DB, Id, Fresh_JSON),
 
     Fresh_JSON = json{ '@id':'Employee_6f1bb32f84f15c68ac7b69df05967953',
                        '@type':'Employee',
@@ -2056,10 +2136,10 @@ test(array_elaborate,
           "Marxist book club"^^'http://www.w3.org/2001/XMLSchema#string')
     ],
 
-    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
     open_descriptor(Desc, New_DB),
-    id_json(New_DB, ID, Recovered),
+    get_document(New_DB, Id, Recovered),
     Recovered = json{ '@id':'BookClub_Marxist%20book%20club',
                       '@type':'BookClub',
                       book_list:[ 'Book_Das%20Kapital',
@@ -2137,7 +2217,7 @@ test(set_elaborate,
 
     database_context(DB, Context),
     json_triples(DB, JSON, Context, Triples),
-    print_term(Triples, []),
+
     Triples = [
         t('http://i/BookClub_Marxist%20book%20club',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -2171,10 +2251,10 @@ test(set_elaborate,
           "jim"^^'http://www.w3.org/2001/XMLSchema#string')
     ],
 
-    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
     open_descriptor(Desc, New_DB),
-    id_json(New_DB, ID, Book_Club),
+    get_document(New_DB, Id, Book_Club),
 
     Book_Club = json{ '@id':'BookClub_Marxist%20book%20club',
                       '@type':'BookClub',
@@ -2201,10 +2281,10 @@ test(empty_list,
                 tasks : []
                },
 
-    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
     open_descriptor(Desc, DB),
-    id_json(DB, ID, Employee_JSON),
+    get_document(DB, Id, Employee_JSON),
 
     Employee_JSON = json{'@id':_,
                          '@type':'Employee',
@@ -2253,10 +2333,10 @@ test(enum_elaborate,
 
     run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
                                            message: "foo" },
-                        JSON, ID),
+                        JSON, Id),
 
     open_descriptor(Desc, New_DB),
-    id_json(New_DB,ID, Dog_JSON),
+    get_document(New_DB,Id, Dog_JSON),
 
     Dog_JSON = json{'@id':'Dog_Ralph',
                     '@type':'Dog',
@@ -2426,14 +2506,109 @@ test(binary_tree_elaborate,
 			  }
         },
 
-    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, ID),
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
     open_descriptor(Desc, New_DB),
-    id_json(New_DB, ID, Fresh_JSON),
+    get_document(New_DB, Id, Fresh_JSON),
 
     Fresh_JSON = json{ '@id':binary_tree_ce4e85e93a3d4818eb1eb6b4d252a3a4,
                        '@type':'BinaryTree',
                        node:'Node_6ac73e53f5c3956d3b563da380ae0970'
                      }.
+
+test(insert_get_delete,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@type':'Dog',
+                name: "Ralph",
+                hair_colour: "blue"
+               },
+
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
+
+    get_document(Desc, Id, _),
+
+    run_delete_document(Desc, commit_object{ author : "me", message : "boo"}, Id),
+
+    \+ get_document(Desc, Id, _).
+
+
+test(document_update,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@type':'Dog',
+                name: "Ralph",
+                hair_colour: "blue"
+               },
+
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
+
+    New_JSON = json{'@type':'Dog',
+                    '@id' : Id,
+                    name: "Ralph",
+                    hair_colour: "green"
+                   },
+
+    run_update_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Id),
+
+    get_document(Desc, Id, Updated_JSON),
+
+    Updated_JSON = json{'@id':'Dog_Ralph',
+                        '@type':'Dog',
+                        hair_colour:green,
+                        name:"Ralph"}.
+
+
+test(auto_id_update,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@type':'Dog',
+                name: "Ralph",
+                hair_colour: "blue"
+               },
+
+    run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, _Id),
+
+    New_JSON = json{'@type':'Dog',
+                    name: "Ralph",
+                    hair_colour: "green"
+                   },
+
+    run_update_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Same_Id),
+
+    get_document(Desc, Same_Id, Updated_JSON),
+
+    Updated_JSON = json{'@id':'Dog_Ralph',
+                        '@type':'Dog',
+                        hair_colour:green,
+                        name:"Ralph"}.
+
 
 :- end_tests(json).

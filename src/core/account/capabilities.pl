@@ -113,12 +113,26 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ground(Auth),
     ask(DB,
         (
-            t(Auth, system:role, Role),
-            t(Role, system:capability, Capability),
-            t(Capability, system:action, Action),
-            t(Capability, system:capability_scope, Scope_Iri)
+            t(Auth, '@schema':capability, Capability),
+            t(Capability, '@schema':role, Role),
+            t(Role, '@schema':action, Action),
+            t(Capability, 'Schema':scope, Scope_Iri)
         )
        ).
+/*
+match_document(DB,
+  _{ '@id' : Auth,
+     'capability' : _{ 'role' : { 'action' : Action },
+                       'scope' : Scope }}, _Doc).
+
+or in JS
+
+match_document(
+  { "@id" : "v:Auth",
+    "capability" : _{ "role" : { "action" : "v:Action" },
+                      "scope" : "v:Scope" }})
+
+*/
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
     ask(DB,

@@ -1,4 +1,6 @@
 :- module(descriptor,[
+              is_descriptor/1,
+              is_transaction/1,
               open_read_write_obj/2,
               open_read_write_obj/4,
               open_descriptor/2,
@@ -148,6 +150,25 @@
 :- use_module(core(query)).
 
 :- use_module(library(terminus_store)).
+
+is_descriptor_name(system_descriptor).
+is_descriptor_name(label_descriptor).
+is_descriptor_name(document_label_descriptor).
+is_descriptor_name(id_descriptor).
+is_descriptor_name(layer_descriptor).
+is_descriptor_name(database_descriptor).
+is_descriptor_name(repository_descriptor).
+is_descriptor_name(branch_descriptor).
+is_descriptor_name(commit_descriptor).
+
+is_descriptor(Descriptor) :-
+    is_dict(Descriptor),
+    Type{} :< Descriptor,
+    is_descriptor_name(Type).
+
+is_transaction(Transaction) :-
+    is_dict(Transaction),
+    transaction_object{} :< Transaction.
 
 graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
                                                                 descriptor: Descriptor,
