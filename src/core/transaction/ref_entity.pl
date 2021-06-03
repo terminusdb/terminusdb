@@ -45,6 +45,7 @@
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
+:- use_module(core(document)).
 
 :- use_module(layer_entity).
 :- use_module(descriptor).

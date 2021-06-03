@@ -1,5 +1,5 @@
 { "@type" : "@context",
-  "@base" : "http://terminusdb.com/db/ref/instance/",
+  "@base" : "http://terminusdb.com/db/ref/data/",
   "@schema" : "http://terminusdb.com/db/ref/schema#",
   "layer" : "http://terminusdb.com/db/layer/schema#" }
 

@@ -15,7 +15,13 @@
               write_json_stream_to_schema/2,
               write_json_stream_to_instance/2,
               write_json_string_to_schema/2,
-              write_json_string_to_instance/2
+              write_json_string_to_instance/2,
+
+              get_document/3,
+              delete_document/2,
+              insert_document/3,
+              update_document/3
+
           ]).
 
 :- use_module('document/validation').

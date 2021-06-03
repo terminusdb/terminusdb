@@ -1,7 +1,7 @@
 :- module(user_management,
           [
-              add_user/5,
-              add_user/6,
+              add_user/3,
+              add_user/4,
               delete_user/1,
               delete_user/2,
               delete_user_transaction/3,
@@ -11,9 +11,6 @@
               update_user/2,
               update_user/3,
               update_user_transaction/4,
-              update_organization/2,
-              update_organization/3,
-              update_organization_transaction/4,
               add_organization/2,
               add_organization/3,
               add_organization_transaction/3,
@@ -127,7 +124,7 @@ add_organization(Context, Name, Organization_URI) :-
 
     insert_document(Context, _{
                                  '@type': 'Organization',
-                                 'name': Org
+                                 'name': Name
                              }, Organization_URI).
 
 
@@ -137,17 +134,17 @@ user_managed_resource(_Askable, User_Uri, _Resource_Uri) :-
 user_managed_resource(Askable, User_Uri, Resource_Uri) :-
     auth_action_scope(Askable, User_Uri, system:manage_capabilities, Resource_Uri).
 
-add_user(Nick, Email, Comment, Pass_Opt, User_URI) :-
+add_user(Nick, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
                    commit_info{
                        author: "add_user/4",
                        message: "internal system operation"
                    }, SystemDB),
     with_transaction(SystemDB,
-                     add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI),
+                     add_user(SystemDB, Nick, Pass_Opt, User_URI),
                      _).
 
-add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
+add_user(SystemDB, Nick, Pass_Opt, User_URI) :-
 
     (   agent_name_exists(SystemDB, Nick)
     ->  throw(error(user_already_exists(Nick), _))
@@ -168,7 +165,7 @@ add_user(SystemDB, Nick, Email, Comment, Pass_Opt, User_URI) :-
         Final_User_Document = (User_Document.put(key_hash, Hash))
     ;   Final_User_Document = User_Document),
 
-    insert_document(Context, Final_User_Document).
+    insert_document(SystemDB, Final_User_Document, User_URI).
 
 update_user_transaction(SystemDB, Auth, Name, Document) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -439,12 +436,12 @@ test(add_user, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    add_user("Gavin", "gavin@terminusdb.com", "here.i.am",  some('password'), URI),
+    add_user("Gavin", some('password'), URI),
 
     agent_name_uri(system_descriptor{}, "Gavin", URI),
 
     once(ask(system_descriptor{},
-             t(URI, system:user_identifier, "gavin@terminusdb.com"^^xsd:string))).
+             t(URI, '@schema':name, "Gavin"^^xsd:string))).
 
 
 test(user_ownership, [
@@ -454,7 +451,7 @@ test(user_ownership, [
      ]) :-
 
     Name = "Gavin",
-    add_user(Name, "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+    add_user(Name, some('password'), User_URI),
 
     create_db_without_schema(Name, "test"),
 
@@ -539,19 +536,6 @@ test(organization_creation, [
     add_organization_transaction(System_DB, Admin,"testing_organization"),
 
     organization_name_exists(system_descriptor{}, "testing_organization").
-
-test(organization_update, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    add_organization("testing_organization", _),
-
-    open_descriptor(system_descriptor{}, System_DB),
-    super_user_authority(Admin),
-    update_organization_transaction(System_DB, Admin, "testing_organization", "new_organization"),
-
-    organization_name_exists(system_descriptor{}, "new_organization").
 
 test(organization_delete, [
          setup(setup_temp_store(State)),

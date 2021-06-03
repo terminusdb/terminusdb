@@ -209,17 +209,13 @@ ref_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
-    layer_ontology(Layer_Label),
     ref_ontology(Ref_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
     Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema,name:"ref"},
-    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
     open_read_write_obj(Ref_Descriptor, Ref_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
     Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
-                                                           [Layer_Read_Write_Object,
-                                                            Ref_Read_Write_Object]),
+                                                           [Ref_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
 
@@ -227,17 +223,13 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
-    layer_ontology(Layer_Label),
     repository_ontology(Repo_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
-    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema,name:"ref"},
-    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema,name:"repo"},
     open_read_write_obj(Repo_Descriptor, Repo_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
     Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
-                                                           [Layer_Read_Write_Object,
-                                                            Repo_Read_Write_Object]),
+                                                           [Repo_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
 

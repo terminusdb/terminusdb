@@ -1017,7 +1017,9 @@ insert_document(Transaction, Document, ID) :-
     database_context(Transaction, Prefixes),
     % Pre process document
     json_elaborate(Transaction, Document, Elaborated),
+    !,
     expand(Elaborated, Prefixes, Expanded),
+    !,
     insert_document_expanded(Transaction, Expanded, ID).
 
 insert_document_expanded(Transaction, Expanded, ID) :-
@@ -1037,19 +1039,14 @@ run_insert_document(Desc, Commit, Document, ID) :-
         insert_document(Context, Document, ID),
         _).
 
+update_document(Transaction, Document) :-
+    update_document(Transaction, Document, _).
 update_document(Query_Context, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
     update_document(TO, Document).
-update_document(Transaction, Document) :-
-    update_document(Transaction, Document, _).
 
-update_document(Query_Context, Document, Id) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    update_document(TO, Document, Id).
 update_document(Transaction, Document, Id) :-
     database_context(Transaction, Prefixes),
     json_elaborate(Transaction, Document, Elaborated),
@@ -1057,6 +1054,11 @@ update_document(Transaction, Document, Id) :-
     get_dict('@id', Expanded, Id),
     delete_document(Transaction, Id),
     insert_document_expanded(Transaction, Expanded, Id).
+update_document(Query_Context, Document, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    update_document(TO, Document, Id).
 
 run_update_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),

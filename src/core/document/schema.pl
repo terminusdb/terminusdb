@@ -255,7 +255,7 @@ refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'TaggedUnion'),
     xrdf(Schema, Type, P, Class),
-    \+ is_built_in(Validation_Object,P),
+    \+ is_built_in(P),
     refute_type(Validation_Object,Class,Class_Witness),
     (Witness.put({'@type' : tagged_union_has_bad_class,
                   class_error : (Class_Witness.'@type')

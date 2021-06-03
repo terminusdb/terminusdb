@@ -1,6 +1,6 @@
 { "@type" : "@context",
   "@schema" : "http://terminusdb.com/db/system/schema#",
-  "@base" :  "http://terminusdb.com/db/system/instance/",
+  "@base" :  "http://terminusdb.com/db/system/data/",
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
 { "@id" : "User",

@@ -5,6 +5,7 @@
           ]).
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(document)).
 
 has_layer(Askable, Layer_Id) :-
     ask(Askable,
@@ -15,12 +16,11 @@ layer_id_uri(Askable, Layer_Id, Layer_Uri) :-
              t(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string))).
 
 insert_layer_object(Context, Layer_Id, Layer_Uri) :-
-    (   var(Layer_Uri)
-    ->  once(ask(Context, idgen(doc:'Layer', [Layer_Id^^xsd:string], Layer_Uri)))
-    ;   true),
-    once(ask(Context,
-             (   insert(Layer_Uri, rdf:type, layer:'Layer'),
-                 insert(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string)))).
+    Document = json{
+                   '@type' : "layer:Layer",
+                   'layer:layer_id' : Layer_Id
+               },
+    insert_document(Context, Document, Layer_Uri).
 
 :- begin_tests(layer_objects).
 :- use_module(core(util/test_utils)).
