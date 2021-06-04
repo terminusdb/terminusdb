@@ -211,7 +211,7 @@ attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-
 graph_idgen(Context, Commit_Id, Graph_Type, Graph_Name, Graph_Uri) :-
     once(
         ask(Context,
-            idgen('@schema':'Graph',
+            idgen('@base':'Graph',
                   [Commit_Id^^xsd:string,
                    Graph_Type^^xsd:string,
                    Graph_Name^^xsd:string], Graph_Uri))).
@@ -257,6 +257,7 @@ copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
     commit_id_uri(Origin_Context,
                   Commit_Id,
                   Commit_Uri),
+
     commit_id_to_metadata(Origin_Context, Commit_Id, Author, Message, Timestamp),
     Commit_Info = commit_info{author: Author, message: Message},
 
@@ -277,19 +278,19 @@ copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
            (   copy_graph_object(Origin_Context, Destination_Context, Graph_Uri),
                attach_graph_to_commit(Destination_Context, Commit_Uri, Type, Graph_Name, Graph_Uri))).
 
-copy_commits_(Origin_Context, Destination_Context, Commit_Id) :-
+copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
     (   has_commit(Destination_Context, Commit_Id)
     ->  true
     ;   copy_commit(Origin_Context, Destination_Context, Commit_Id),
         (   commit_id_to_parent_uri(Origin_Context, Commit_Id, Parent_Uri)
         ->  commit_id_uri(Origin_Context, Parent_Id, Parent_Uri),
-            copy_commits_(Origin_Context, Destination_Context, Parent_Id)
+            copy_commits(Origin_Context, Destination_Context, Parent_Id)
         ;   true)).
 
-copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
-    context_default_prefixes(Origin_Context, Origin_Context_Stripped),
-    context_default_prefixes(Destination_Context, Destination_Context_Stripped),
-    copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
+%% copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
+%%     context_default_prefixes(Origin_Context, Origin_Context_Stripped),
+%%     context_default_prefixes(Destination_Context, Destination_Context_Stripped),
+%%     copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
 
 :- begin_tests(branch_objects).
 :- use_module(core(util/test_utils)).
@@ -563,7 +564,6 @@ test(copy_base_commit,
     ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
     Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
-    Layer3_Id = "a3a29522ec767aa1a1cf321122f833726c102749",
     with_transaction(Context1_1,
                      (
                          insert_base_commit_object(Context1_1, commit_info{author: "author", message: "message"}, 'commit_id', Commit_Uri),
@@ -573,12 +573,8 @@ test(copy_base_commit,
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         insert_layer_object(Context1_1,
-                                             Layer3_Id,
-                                             Layer3_Uri),
                          insert_graph_object(Context1_1, Commit_Uri, "commit_id", instance, "graph_1", Layer1_Uri, Graph1_Uri),
-                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", instance, "graph_2", Layer2_Uri, Graph2_Uri),
-                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", schema, "graph_3", Layer3_Uri, Graph3_Uri)
+                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", schema, "graph_2", Layer2_Uri, Graph2_Uri)
                      ),
                      _),
 
@@ -590,21 +586,24 @@ test(copy_base_commit,
                      copy_commits(Context1_2, Context2, "commit_id"),
                      _),
 
-    commit_id_uri(Descriptor2, "commit_id", Commit_Uri),
+    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
+    commit_id_uri(Context2_1, "commit_id", Commit_Uri),
 
     findall(Type-Name-Graph_Uri-Layer_Uri-Layer_Id,
-            (   graph_for_commit(Descriptor2, Commit_Uri, Type, Name, Graph_Uri),
-                layer_uri_for_graph(Descriptor2, Graph_Uri, Layer_Uri),
-                layer_id_uri(Descriptor2, Layer_Id, Layer_Uri)),
+            (   graph_for_commit(Context2_1, Commit_Uri, Type, Name, Graph_Uri),
+                layer_uri_for_graph(Context2_1, Graph_Uri, Layer_Uri),
+                layer_id_uri(Context2_1, Layer_Id, Layer_Uri)
+            ),
             Graphs),
+
     Expected = [
-        instance-"graph_1"-Graph1_Uri-Layer1_Uri-Layer1_Id,
-        instance-"graph_2"-Graph2_Uri-Layer2_Uri-Layer2_Id,
-        schema-"graph_3"-Graph3_Uri-Layer3_Uri-Layer3_Id
+        'http://terminusdb.com/schema/ref#instance'-"graph_1"-Graph1_Uri-Layer1_Uri-Layer1_Id,
+        'http://terminusdb.com/schema/ref#schema'-"graph_2"-Graph2_Uri-Layer2_Uri-Layer2_Id
     ],
 
     list_to_ord_set(Graphs, Graph_Set),
     list_to_ord_set(Expected, Expected_Set),
+    print_term(here, []),nl,
 
     ord_seteq(Graph_Set, Expected_Set).
 
@@ -653,9 +652,10 @@ test(copy_child_commit_with_no_shared_ancestors,
                      copy_commits(Context1_2, Context2, "commit3_id"),
                      _),
 
+    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Descriptor2, Commit_Id),
-                commit_id_uri(Descriptor2, Commit_Id, Commit_Uri)),
+            (   has_commit(Context2_1, Commit_Id),
+                commit_id_uri(Context2_1, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
@@ -716,9 +716,10 @@ test(copy_child_commit_with_some_shared_ancestors,
                      copy_commits(Context1_2, Context2_2, "commit3_id"),
                      _),
 
+    ref_schema_context_from_label_descriptor(Descriptor2, Context2_3),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Descriptor2, Commit_Id),
-                commit_id_uri(Descriptor2, Commit_Id, Commit_Uri)),
+            (   has_commit(Context2_3, Commit_Id),
+                commit_id_uri(Context2_3, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
@@ -779,9 +780,10 @@ test(copy_child_commit_that_already_exists,
                      copy_commits(Context1_2, Context2_2, "commit3_id"),
                      _),
 
+    ref_schema_context_from_label_descriptor(Descriptor2, Context2_3),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Descriptor2, Commit_Id),
-                commit_id_uri(Descriptor2, Commit_Id, Commit_Uri)),
+            (   has_commit(Context2_3, Commit_Id),
+                commit_id_uri(Context2_3, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
     length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
@@ -1044,12 +1046,13 @@ test(apply_single_addition,
                                             New_Commit_B_Uri),
                      _),
 
-    Repo_Descriptor = Descriptor1.repository_descriptor,
-    commit_uri_to_parent_uri(Repo_Descriptor, New_Commit_B_Uri, Commit_A_Uri),
-    commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
-    commit_uri_to_metadata(Repo_Descriptor, New_Commit_B_Uri, _, "commit b", _),
+    Repo_Descriptor = (Descriptor1.repository_descriptor),
+    create_context(Repo_Descriptor, Context5),
+    commit_uri_to_parent_uri(Context5, New_Commit_B_Uri, Commit_A_Uri),
+    commit_uri_to_metadata(Context5, Commit_A_Uri, _, "commit a", _),
+    commit_uri_to_metadata(Context5, New_Commit_B_Uri, _, "commit b", _),
 
-    once(ask(Descriptor1,
+    once(ask(Context5,
              (   t(a,b,c),
                  t(d,e,f),
                  addition(d,e,f)))).
