@@ -44,8 +44,9 @@ value_json(RDF_Nil,json{}) :-
 value_json(X^^Y,O) :-
     O = json{
             '@type': Y,
-            '@value': X
+            '@value': S
         },
+    atom_string(S, X),
     !.
 value_json(X@Y,O) :-
     O = json{
@@ -177,22 +178,31 @@ class_descriptor_image(cardinality(C,_), json{ '@container' : "@set",
                                                '@type' : C }).
 
 database_context(DB,Context) :-
+    is_transaction(DB),
+    !,
     database_schema(DB,Schema),
-    (   xrdf(Schema, ID, rdf:type, sys:'Context')
-    ->  id_schema_json(DB,ID,Pre_Context),
-        findall(
-            Key-URI,
-            (   xrdf(Schema, ID, sys:prefix_pair, Prefix_Pair),
-                xrdf(Schema, Prefix_Pair, sys:prefix, Key_String^^_),
-                xrdf(Schema, Prefix_Pair, sys:url, URI^^_),
-                atom_string(Key,Key_String)
-            ),
-            Pairs),
-        dict_pairs(Prefixes, context, Pairs),
-        !,
-        Context_With_ID = (Pre_Context.put(Prefixes)),
-        select_dict(json{'@id' : _ }, Context_With_ID, Context)
-    ;   Context = _{}).
+    once(
+        (   xrdf(Schema, ID, rdf:type, sys:'Context')
+        ->  id_schema_json(DB,ID,Pre_Context),
+            findall(
+                Key-URI,
+                (   xrdf(Schema, ID, sys:prefix_pair, Prefix_Pair),
+                    xrdf(Schema, Prefix_Pair, sys:prefix, Key_String^^_),
+                    xrdf(Schema, Prefix_Pair, sys:url, URI^^_),
+                    atom_string(Key,Key_String)
+                ),
+                Pairs),
+            dict_pairs(Prefixes, context, Pairs),
+            !,
+            Context_With_ID = (Pre_Context.put(Prefixes)),
+            select_dict(json{'@id' : _ }, Context_With_ID, Context)
+        ;   Context = _{})
+    ).
+database_context(Query_Context, Context) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    database_context(TO, Context).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     % NOTE: This is probably wrong if it already has a prefix...
