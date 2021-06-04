@@ -229,6 +229,18 @@ resolve_prefix(Pre,Suf,URI) -->
 
 is_boolean_type('http://www.w3.org/2001/XMLSchema#boolean').
 
+resolve_predicate(ignore,_Something) -->
+    !,
+    [].
+resolve_predicate(P,PE) -->
+    {
+        atom(P),
+        !
+    },
+    resolve_prefix('@schema', P, PE).
+resolve_predicate(P, PE) -->
+   resolve(P,PE).
+
 /*
  * resolve(ID,Resolution, S0, S1) is det.
  *
@@ -939,7 +951,7 @@ compile_wf(delete(X,P,Y),(
 -->
     assert_write_access,
     resolve(X,XE),
-    resolve(P,PE),
+    resolve_predicate(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
@@ -973,7 +985,7 @@ compile_wf(insert(X,P,Y),(
 -->
     assert_write_access,
     resolve(X,XE),
-    resolve(P,PE),
+    resolve_predicate(P,PE),
     resolve(Y,YE),
     view(write_graph,Graph_Descriptor),
     view(transaction_objects, Transaction_Objects),
@@ -1018,7 +1030,7 @@ compile_wf(opt(P), optional(Goal)) -->
 compile_wf(addition(X,P,Y),Goal) -->
     assert_read_access,
     resolve(X,XE),
-    resolve(P,PE),
+    resolve_predicate(P,PE),
     resolve(Y,YE),
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
@@ -1039,7 +1051,7 @@ compile_wf(addition(X,P,Y,G),Goal) -->
 compile_wf(removal(X,P,Y),Goal) -->
     assert_read_access,
     resolve(X,XE),
-    resolve(P,PE),
+    resolve_predicate(P,PE),
     resolve(Y,YE),
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
@@ -1060,7 +1072,7 @@ compile_wf(removal(X,P,Y,G),Goal) -->
 compile_wf(t(X,P,Y),Goal) -->
     assert_read_access,
     resolve(X,XE),
-    resolve(P,PE),
+    resolve_predicate(P,PE),
     resolve(Y,YE),
     view(default_collection, Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),

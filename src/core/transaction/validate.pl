@@ -167,22 +167,17 @@ commit_validation_object(Validation_Object, []) :-
         descriptor: Descriptor,
         instance_objects: [Instance_Object],
         schema_objects: [Schema_Object],
-        inference_objects: [Inference_Object]
+        inference_objects: []
     } :< Validation_Object,
     system_descriptor{
     } = Descriptor,
     !,
     system_instance_name(Instance_Label),
-    system_inference_name(Inference_Label),
     system_schema_name(Schema_Label),
     storage(Store),
     (   validation_object_changed(Instance_Object)
     ->  safe_open_named_graph(Store, Instance_Label, Instance_Graph),
         nb_set_head(Instance_Graph, Instance_Object.read)
-    ;   true),
-    (   validation_object_changed(Inference_Object)
-    ->  safe_open_named_graph(Store, Inference_Label, Inference_Graph),
-        nb_set_head(Inference_Graph, Inference_Object.read)
     ;   true),
     (   validation_object_changed(Schema_Object)
     ->  safe_open_named_graph(Store, Schema_Label, Schema_Graph),

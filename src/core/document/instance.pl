@@ -1,5 +1,6 @@
 :- module('document/instance', [
-              refute_instance/2
+              refute_instance/2,
+              refute_instance_schema/2
           ]).
 
 /*
@@ -296,6 +297,14 @@ refute_subject(Validation_Object,Subject,Witness) :-
 
 refute_instance(Validation_Object, Witness) :-
     subject_changed(Validation_Object, Subject),
+    refute_subject(Validation_Object,Subject,Witness).
+
+refute_instance_schema(Validation_Object, Witness) :-
+    refute_schema(Validation_Object,Witness).
+refute_instance_schema(Validation_Object, Witness) :-
+    database_instance(Validation_Object, Instance),
+    distinct(Subject,
+             xrdf(Instance, Subject, _, _)),
     refute_subject(Validation_Object,Subject,Witness).
 
 /*

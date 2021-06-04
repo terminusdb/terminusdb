@@ -20,7 +20,7 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
-:- use_module(core(query), [has_at/1, compress_uri/4]).
+:- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(json). % This feels very circular.
 
@@ -56,16 +56,7 @@ is_simple_class(Validation_Object,Class) :-
     is_simple_class(Validation_Object,C).
 
 is_base_type(Type) :-
-    prefix_list(
-        [
-            xsd:integer, % List all here...
-            xsd:string,
-            xsd:date,
-            xsd:dateTime
-        ],
-        List),
-    atom_string(Atom,Type),
-    memberchk(Atom, List).
+    base_type(Type).
 
 class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
@@ -358,14 +349,13 @@ key_base(Validation_Object, Type, Base) :-
     !.
 key_base(Validation_Object, Type, Base) :-
     database_context(Validation_Object,Context),
-    get_dict('@schema',Context,Schema),
-    compress_uri(Type,'@base',Schema,Type_Compressed),
+    compress_dict_uri(Type,Context,Type_Compressed),
     atomic_list_concat([Type_Compressed,'_'],Base).
 
 % should refactor to do key lookup once.
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type,sys:key, Obj),
+    xrdf(Schema, Type, sys:key, Obj),
     key_descriptor_(Validation_Object,Type,Obj,Descriptor).
 
 key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-

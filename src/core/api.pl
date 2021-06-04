@@ -6,7 +6,7 @@
 
               % db_create.pl
               create_db/9,
-              create_ref_layer/2,
+              create_ref_layer/1,
 
               % init.pl
               initialize_config/4,

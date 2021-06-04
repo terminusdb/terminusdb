@@ -1,12 +1,12 @@
 { "@type" : "@context",
-  "@schema" : "http://terminusdb.com/db/system/schema#",
-  "@base" :  "http://terminusdb.com/db/system/data/",
+  "@schema" : "http://terminusdb.com/schema/system#",
+  "@base" :  "terminusdb://system/data/",
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
 { "@id" : "User",
   "@type" : "Class",
   "@key" : { "@type" : "Lexical",
-            "@fields" : ["name"]},
+             "@fields" : ["name"]},
   "name" : "xsd:string",
   "key_hash" : { "@type" : "Optional",
                  "@class": "xsd:string"},
@@ -66,9 +66,15 @@
 
 { "@id" : "Database",
   "@type" : "Class",
-  "@inherits" : "Resource" }
+  "@inherits" : "Resource",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "label" : "xsd:string",
+  "comment" : "xsd:string",
+  "state" : "DatabaseState" }
 
 { "@id" : "DatabaseState",
   "@type" : "Enum",
-  "@value" : [ "deleting",
+  "@value" : [ "creating",
+               "deleting",
                "finalized" ] }

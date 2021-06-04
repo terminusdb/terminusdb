@@ -12,15 +12,9 @@
 
 % internal
 global_prefixes(sys,'http://terminusdb.com/schema/sys#').
-global_prefixes(type,'http://terminusdb.com/schema/type#').
 global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').
 global_prefixes(vio,'http://terminusdb.com/schema/vio#').
 global_prefixes(woql,'http://terminusdb.com/schema/woql#').
-global_prefixes(system,'http://terminusdb.com/schema/system#').
-global_prefixes(terminus,'http://terminusdb.com/schema/system#').
-global_prefixes(ref,'http://terminusdb.com/schema/ref#').
-global_prefixes(layer,'http://terminusdb.com/schema/layer#').
-global_prefixes(repo,'http://terminusdb.com/schema/repository#').
 global_prefixes(xsd,'http://www.w3.org/2001/XMLSchema#').
 global_prefixes(rdf,'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 global_prefixes(rdfs,'http://www.w3.org/2000/01/rdf-schema#').

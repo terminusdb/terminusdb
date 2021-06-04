@@ -1,8 +1,8 @@
 { "@type" : "@context",
-  "@base" : "http://terminusdb.com/db/ref/data/",
-  "@schema" : "http://terminusdb.com/db/ref/schema#",
-  "layer" : "http://terminusdb.com/db/layer/schema#",
-  "xsd" : "http://www.w3.org/2001/XMLSchema#"}
+  "@base" : "terminusdb://ref/data/",
+  "@schema" : "http://terminusdb.com/schema/ref#",
+  "layer" : "http://terminusdb.com/schema/layer#",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
 { "@id" : "layer:Layer",
   "@type" : "Class",
@@ -11,12 +11,20 @@
 
 { "@id" : "Branch",
   "@type" : "Class",
-  "branch_name" : "xsd:string" }
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "head" : { "@type" : "Optional",
+             "@class" : "Commit" },
+  "name" : "xsd:string" }
 
 { "@id" : "Commit",
   "@type" : "Class",
-  "instance" : "Graph",
-  "schema" : "Graph",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "identifier" ] },
+  "instance" : { "@type" : "Optional",
+                 "@class" : "Graph" },
+  "schema" : { "@type" : "Optional",
+               "@class" : "Graph" },
   "author" : "xsd:string",
   "message" : "xsd:string",
   "identifier" : "xsd:string",
@@ -31,11 +39,16 @@
 
 { "@id" : "ValidCommit",
   "@type" : "Class",
-  "@inherits" : "Commit" }
+  "@inherits" : "Commit",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "identifier" ] } }
+
 
 { "@id" : "InvalidCommit",
   "@type" : "Class",
-  "@inherits" : "Commit"}
+  "@inherits" : "Commit",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "identifier" ] } }
 
 { "@id" : "Ref",
   "@type" : "Class",

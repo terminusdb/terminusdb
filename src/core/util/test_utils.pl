@@ -272,22 +272,22 @@ create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
     graph_update(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
 
 create_db_without_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
 
 create_db_with_empty_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
 
 create_public_db_without_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).

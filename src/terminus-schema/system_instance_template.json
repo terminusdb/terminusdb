@@ -36,6 +36,14 @@
   "@type" : "User",
   "capability" : [] }
 
+{ "@id" : "consumer_role",
+  "@type" : "Role",
+  "name" : "Consumer Role",
+  "action" : [ "class_frame",
+               "instance_read_access",
+               "schema_read_access"
+             ]}
+
 { "@id" : "admin",
   "@type" : "User",
   "name" : "admin",

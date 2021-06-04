@@ -55,11 +55,11 @@ system_schema_name('terminusdb:///system/schema').
 
 system_inference_name('terminusdb:///system/inference').
 
-layer_ontology('http://terminusdb.com/db/layer/schema').
+layer_ontology('http://terminusdb.com/schema/layer').
 
-repository_ontology('http://terminusdb.com/db/repository/schema').
+repository_ontology('http://terminusdb.com/schema/repository').
 
-ref_ontology('http://terminusdb.com/db/ref/schema').
+ref_ontology('http://terminusdb.com/schema/ref').
 
 %%% various URIs that we use often
 rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').

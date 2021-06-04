@@ -1,7 +1,7 @@
 :- module(db_create, [
               create_db_unfinalized/9,
               create_db/9,
-              create_ref_layer/2,
+              create_ref_layer/1,
               finalize_db/1
           ]).
 
@@ -45,13 +45,11 @@ create_repo_graph(Organization,Database) :-
                      insert_local_repository(Context, "local", _),
                      _).
 
-create_ref_layer(Descriptor,Prefixes) :-
+create_ref_layer(Descriptor) :-
     create_context(Descriptor, Context),
     with_transaction(
         Context,
-        (   insert_branch_object(Context, "main", _),
-            update_prefixes(Context, Prefixes)
-        ),
+        insert_branch_object(Context, "main", _),
         _).
 
 finalize_db(DB_Uri) :-
@@ -59,29 +57,30 @@ finalize_db(DB_Uri) :-
     with_transaction(
         Context,
         (   ask(Context, (
-                    t(DB_Uri, rdf:type, system:'Database'),
-                    not(t(DB_Uri, system:database_state, _))
-                ))
+                    t(DB_Uri, rdf:type, '@schema':'Database'),
+                    t(DB_Uri, '@schema':state, '@schema':'DatabaseState_creating')
+                )
+               )
         ->  ask(Context,
-                insert(DB_Uri, system:database_state, system:finalized))
+                (   delete(DB_Uri, 'Schema':state, '@schema':'DatabaseState_creating'),
+                    insert(DB_Uri, 'Schema':state, '@schema':'DatabaseState_finalized')
+                )
+               )
         ;   throw(error(database_in_inconsistent_state))),
         _).
 
 make_db_public(System_Context,DB_Uri) :-
+    insert_document(
+        System_Context,
+        _{
+            '@type' : 'Capability',
+            'scope' : DB_Uri,
+            'role' : 'consumer_role'
+        },
+        Capability_Uri),
+
     ask(System_Context,
-        (   random_idgen(doc:'Capability', ["anonymous"^^xsd:string], Capability_Uri),
-            insert(doc:anonymous_role, system:capability, Capability_Uri),
-            insert(Capability_Uri, rdf:type, system:'Capability'),
-            insert(Capability_Uri, system:capability_scope, DB_Uri),
-            insert(Capability_Uri, system:action, system:class_frame),
-            insert(Capability_Uri, system:action, system:clone),
-            insert(Capability_Uri, system:action, system:fetch),
-            insert(Capability_Uri, system:action, system:branch),
-            insert(Capability_Uri, system:action, system:instance_read_access),
-            insert(Capability_Uri, system:action, system:schema_read_access),
-            insert(Capability_Uri, system:action, system:inference_read_access),
-            insert(Capability_Uri, system:action, system:commit_read_access),
-            insert(Capability_Uri, system:action, system:meta_read_access))).
+        (   insert('@base':anonymous, '@schema':capability, Capability_Uri))).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
@@ -93,7 +92,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
             % don't create if already exists
             do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
                       error(unknown_organization(Organization_Name),_)),
-            assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':create_database, Organization_Uri),
 
             do_or_die(
                 not(database_exists(Organization_Name, Database_Name)),
@@ -104,7 +103,6 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
 
             % insert new db object into the terminus db
             insert_db_object(System_Context, Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri),
-
             (   Public = true
             ->  make_db_public(System_Context, Db_Uri)
             ;   true)
@@ -124,7 +122,8 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
                                 },
                                 repository_name: "local"
                             },
-    create_ref_layer(Repository_Descriptor,Prefixes).
+    % NOTE: Do something with prefixes!
+    create_ref_layer(Repository_Descriptor).
 
 default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
     atomic_list_concat([Organization_Name, '/', Database_Name, '/',

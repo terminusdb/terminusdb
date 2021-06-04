@@ -204,11 +204,7 @@ with_transaction(Query_Context,
     setup_call_cleanup(
         true,
         with_transaction_(Query_Context,Body,Meta_Data),
-        (   abolish_module_tables(validate_schema),
-            abolish_module_tables(frame),
-            get_dict(transaction_objects,Query_Context,Databases),
-            * maplist(invalidate_schema,Databases)
-        )
+        true % Do some cleanup of schema compilation etc.
     ).
 
 :- meta_predicate with_transaction(?,0,?).
