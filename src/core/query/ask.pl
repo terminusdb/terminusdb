@@ -197,11 +197,13 @@ context_extend_prefixes(Context, Prefixes, New_Context) :-
  * context_default_prefixes(+Context:query_context, -New_Context:query_context) is det.
  *
  * Transform the given context, stripping out all prefixes, and
- * replacing them with the default global prefix set.
+ * replacing them with the default global prefix set + the collection prefixes.
  */
 context_default_prefixes(Context, New_Context) :-
     default_prefixes(Default),
-    New_Context = Context.put(prefixes, Default).
+    database_context(Context, New_Prefixes),
+    Total = (Default.put(New_Prefixes)),
+    New_Context = Context.put(prefixes, Total).
 
 context_to_parent_transaction(Context,Parent_Transaction) :-
     do_or_die(
