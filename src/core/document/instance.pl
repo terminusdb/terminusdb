@@ -114,21 +114,44 @@ refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,_,N),
     (   \+ memberchk(N, [0,1])
-    ->  Witness = witness{ '@type': instance_has_wrong_cardinality,
+    ->  range_term_list(Validation_Object,S,P,L),
+        Witness = witness{ '@type': instance_has_wrong_cardinality,
                            class: C,
                            instance: S,
                            predicate: P,
-                           cardinality: N
+                           cardinality: N,
+                           object_list: L
                          }
     ).
 refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,N),
+    range_term_list(Validation_Object,S,P,L),
     Witness = witness{ '@type': instance_has_wrong_cardinality,
                        class: C,
                        instance: S,
+                       object_list: L,
                        predicate: P,
                        cardinality: N
                      }.
+
+internal_simple_json(X^^_, X) :-
+    (   string(X)
+    ;   atom(X)
+    ),
+    !.
+internal_simple_json(X, X) :-
+    atom(X),
+    !.
+internal_simple_json(D^^T, X) :-
+    typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], X).
+
+range_term_list(Validation_Object, S, P, L) :-
+    database_instance(Validation_Object, Instance),
+    findall(J,
+            (   xrdf(Instance, S,P,O),
+                internal_simple_json(O, J)
+            ),
+            L).
 
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     class_predicate_type(Validation_Object, C,P,Desc),
