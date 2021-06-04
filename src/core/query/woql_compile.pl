@@ -235,6 +235,7 @@ resolve_predicate(ignore,_Something) -->
 resolve_predicate(P,PE) -->
     {
         atom(P),
+        \+ uri_has_protocol(P),
         !
     },
     resolve_prefix('@schema', P, PE).
@@ -1733,17 +1734,12 @@ filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transa
     (   memberchk(schema,Types)
     ->  Schema_Objects = Transaction_Object.schema_objects
     ;   Schema_Objects = []),
-    (   memberchk(inference,Types)
-    ->  Inference_Objects = Transaction_Object.inference_objects
-    ;   Inference_Objects = []),
-    append([Instance_Objects,Schema_Objects,Inference_Objects],Read_Write_Objects).
+    append([Instance_Objects,Schema_Objects],Read_Write_Objects).
 filter_transaction_object_read_write_objects(type_name_filter{ type : Type, names : Names}, Transaction_Object, Read_Write_Objects) :-
     (   Type = instance
     ->  Objs = Transaction_Object.instance_objects
     ;   Type = schema
-    ->  Objs = Transaction_Object.schema_objects
-    ;   Type = inference
-    ->  Objs = Transaction_Object.inference_objects),
+    ->  Objs = Transaction_Object.schema_objects),
     include({Names}/[Obj]>>(
                 get_dict(descriptor, Obj, Desc),
                 get_dict(name, Desc, Name),
@@ -1752,34 +1748,25 @@ filter_transaction_object_read_write_objects(type_name_filter{ type : Type, name
 
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)
-    ->  Search_1 = [inference:inferredEdge(XE,PE,YE,Transaction_Object)]
+    ->  Search_1 = [xrdf(Transaction_Object.instance_objects, XE, PE, YE)]
     ;   Search_1 = []),
     (   memberchk(schema,Types)
     ->  Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PE, YE)]
     ;   Search_2 = []),
-    (   memberchk(inference,Types)
-    ->  Search_3 = [xrdf(Transaction_Object.inference_objects, XE, PE, YE)]
-    ;   Search_3 = []),
-    append([Search_1,Search_2,Search_3], Searches),
+    append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
 filter_transaction_object_goal(type_name_filter{ type : instance , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_objects(Transaction_Object.instance_objects, Names, Objects),
-    Inference_Object = Transaction_Object.put(instance_objects, Objects),
-    Goal = inference:inferredEdge(XE,PE,YE,Inference_Object).
+    Goal = xrdf(Objects, XE, PE, YE).
 filter_transaction_object_goal(type_name_filter{ type : schema , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
     filter_read_write_objects(Transaction_Object.schema_objects, Names, Objects),
-    Goal = xrdf(Objects, XE, PE, YE).
-filter_transaction_object_goal(type_name_filter{ type : inference , names : Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    filter_read_write_objects(Transaction_Object.inference_objects, Names, Objects),
     Goal = xrdf(Objects, XE, PE, YE).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name]},Transaction,Graph_Descriptor) :-
     (   Type = instance
     ->  Objects = Transaction.instance_objects
     ;   Type = schema
-    ->  Objects = Transaction.schema_objects
-    ;   Type = inference
-    ->  Objects = Transaction.inference_objects),
+    ->  Objects = Transaction.schema_objects),
     find({Name}/[Obj]>>read_write_object_to_name(Obj,Name), Objects, Found),
     Graph_Descriptor = Found.get(descriptor).
 
