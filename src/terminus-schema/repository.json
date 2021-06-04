@@ -1,6 +1,7 @@
 { "@type" : "@context",
   "@base" : "http://terminusdb.com/db/repository/data/",
   "@schema" : "http://terminusdb.com/db/repository/schema#",
+  "layer" : "http://terminusdb.com/db/layer/schema#",
   "xsd" : "http://www.w3.org/2001/XMLSchema#"}
 
 { "@id" : "layer:Layer",

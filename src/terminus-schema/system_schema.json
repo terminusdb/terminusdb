@@ -21,7 +21,7 @@
   "@type" : "Class",
   "@inherits" : "Resource",
   "@key" : { "@type" : "Lexical",
-            "@fields" : ["name"]},
+             "@fields" : [ "name" ] },
   "child" : { "@type" : "Set",
               "@class" : "Organization" },
   "database" : { "@type" : "Set",

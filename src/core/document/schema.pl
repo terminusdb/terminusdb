@@ -365,7 +365,7 @@ key_base(Validation_Object, Type, Base) :-
 % should refactor to do key lookup once.
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type,sys:key,Obj),
+    xrdf(Schema, Type,sys:key, Obj),
     key_descriptor_(Validation_Object,Type,Obj,Descriptor).
 
 key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-

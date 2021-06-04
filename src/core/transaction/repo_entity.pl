@@ -149,8 +149,11 @@ test(local_repo_insert,
                          insert_local_repository(Context, "baz", _)),
                      _),
 
-    findall(Name, has_repository(Descriptor, Name), Repositories),
-    findall(Name, has_local_repository(Descriptor, Name), Repositories),
+    % We need to get a valid schema+context and so can not use the bare descriptor!
+    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+
+    findall(Name, has_repository(Context2, Name), Repositories),
+    findall(Name, has_local_repository(Context2, Name), Repositories),
     Expected = ["foo","bar","baz"],
 
     union(Repositories, Expected, Union),
@@ -168,7 +171,9 @@ test(local_repo_insert_with_head,
                      insert_local_repository(Context, "foo", "245cf1f533d691a031205b7bd21025076b31ee35", _),
                      _),
 
-    repository_head(Descriptor, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
+    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repository_head(Context2, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
+
 :- end_tests(local_repo_objects).
 
 :- begin_tests(remote_repo_objects).

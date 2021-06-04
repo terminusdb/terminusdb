@@ -9,16 +9,16 @@
 
 has_layer(Askable, Layer_Id) :-
     ask(Askable,
-        t(_, layer:layer_id, Layer_Id^^xsd:string)).
+        t(_, layer:identifier, Layer_Id^^xsd:string)).
 
 layer_id_uri(Askable, Layer_Id, Layer_Uri) :-
     once(ask(Askable,
-             t(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string))).
+             t(Layer_Uri, layer:identifier, Layer_Id^^xsd:string))).
 
 insert_layer_object(Context, Layer_Id, Layer_Uri) :-
     Document = json{
                    '@type' : "layer:Layer",
-                   'layer:layer_id' : Layer_Id
+                   'layer:identifier' : Layer_Id
                },
     insert_document(Context, Document, Layer_Uri).
 

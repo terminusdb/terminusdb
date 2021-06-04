@@ -1,10 +1,9 @@
 :- module('document/json', [
               context_triple/2,
               json_elaborate/3,
-              json_triple/4,
-              %json_schema_triple/2,
+              json_triple/3,
               json_schema_triple/3,
-              json_schema_elaborate/2,
+              json_schema_elaborate/3,
               get_document/3,
               delete_document/2,
               insert_document/3,
@@ -104,11 +103,12 @@ get_path_value(Elaborated,Path,Value) :-
         Path = [P|Sub_Path]
     ).
 
-get_field_values(JSON,Fields,Values) :-
+get_field_values(JSON,Context,Fields,Values) :-
     findall(
         Value,
         (   member(Field,Fields),
-            (   get_dict(Field,JSON,Value)
+            prefix_expand_schema(Field,Context,Field_Ex),
+            (   get_dict(Field_Ex,JSON,Value)
             ->  true
             ;   throw(error(missing_key(Field,JSON),_))
             )
@@ -127,12 +127,14 @@ idgen_hash(Base,Values,ID) :-
     maplist(raw,Values,Raw),
     maplist(uri_encoded(path),Raw,Encoded),
     merge_separator_split(String, '_', Encoded),
-    md5_hash(String,Hash,[]),
+    sha_hash(String, Octets, []),
+    hash_atom(Octets, Hash),
     format(string(ID), "~w~w", [Base,Hash]).
 
 idgen_path_values_hash(Base,Path,ID) :-
     format(string(A), '~q', [Path]),
-    md5_hash(A,Hash,[]),
+    sha_hash(A, Octets, []),
+    hash_atom(Octets, Hash),
     format(string(ID), "~w~w", [Base,Hash]).
 
 idgen_random(Base,ID) :-
@@ -141,21 +143,23 @@ idgen_random(Base,ID) :-
     md5_hash(S,Hash,[]),
     format(string(ID),'~w~w',[Base,Hash]).
 
-json_idgen(DB,JSON,ID) :-
+json_idgen(JSON,DB,Context,ID_Ex) :-
     get_dict('@type',JSON,Type),
     key_descriptor(DB,Type,Descriptor),
     (   Descriptor = lexical(Base,Fields)
-    ->  get_field_values(JSON, Fields, Values),
+    ->  get_field_values(JSON, Context, Fields, Values),
         idgen_lexical(Base,Values,ID)
     ;   Descriptor = hash(Base,Fields),
-        get_field_values(JSON, Fields, Values),
+        get_field_values(JSON, Context, Fields, Values),
         idgen_hash(Base,Values,ID)
     ;   Descriptor = value_hash(Base)
     ->  get_all_path_values(JSON,Path_Values),
         idgen_path_values_hash(Base,Path_Values,ID)
     ;   Descriptor = random(Base)
     ->  idgen_random(Base,ID)
-    ).
+    ),
+    prefix_expand(ID, Context, ID_Ex).
+
 
 class_descriptor_image(unit,json{}).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
@@ -176,7 +180,18 @@ database_context(DB,Context) :-
     database_schema(DB,Schema),
     (   xrdf(Schema, ID, rdf:type, sys:'Context')
     ->  id_schema_json(DB,ID,Pre_Context),
-        select_dict(json{'@id' : _ }, Pre_Context, Context)
+        findall(
+            Key-URI,
+            (   xrdf(Schema, ID, sys:prefix_pair, Prefix_Pair),
+                xrdf(Schema, Prefix_Pair, sys:prefix, Key_String^^_),
+                xrdf(Schema, Prefix_Pair, sys:url, URI^^_),
+                atom_string(Key,Key_String)
+            ),
+            Pairs),
+        dict_pairs(Prefixes, context, Pairs),
+        !,
+        Context_With_ID = (Pre_Context.put(Prefixes)),
+        select_dict(json{'@id' : _ }, Context_With_ID, Context)
     ;   Context = _{}).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
@@ -195,7 +210,7 @@ type_context(_DB, Base_Type, json{}) :-
     !.
 type_context(DB,Type,Context) :-
     database_context(DB, Database_Context),
-    maybe_expand_type(Type,Database_Context,TypeEx),
+    prefix_expand_schema(Type,Database_Context,TypeEx),
     do_or_die(is_simple_class(DB, TypeEx),
               error(type_not_found(Type), _)),
     findall(Prop - C,
@@ -212,23 +227,34 @@ json_elaborate(DB,JSON,JSON_ID) :-
     database_context(DB,Context),
     json_elaborate(DB,JSON,Context,JSON_ID).
 
-maybe_expand_type(Type,Context,TypeEx) :-
+prefix_expand_schema(Node,Context,NodeEx) :-
     get_dict('@schema', Context, Schema),
     put_dict(_{'@base' : Schema}, Context, New_Context),
-    prefix_expand(Type, New_Context, TypeEx).
+    prefix_expand(Node, New_Context, NodeEx).
+
+property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+    get_dict(Prop, Context, Full_Expansion),
+    is_dict(Full_Expansion),
+    !,
+    expansion_key(Prop,Full_Expansion,P,Expansion),
+    context_value_expand(DB,Context,Value,Expansion,V).
+property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+    prefix_expand_schema(Prop, Context, Prop_Ex),
+    Prop \= Prop_Ex,
+    property_expand_key_value(Prop_Ex,Value,DB,Context,P,V).
 
 json_elaborate(DB,JSON,Context,JSON_ID) :-
     is_dict(JSON),
     !,
     get_dict('@type',JSON,Type),
-    maybe_expand_type(Type,Context,TypeEx),
+    prefix_expand_schema(Type,Context,TypeEx),
     do_or_die(
         type_context(DB,TypeEx,Type_Context),
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
     json_context_elaborate(DB,JSON,New_Context,Elaborated),
-    json_jsonid(DB,Elaborated,JSON_ID).
+    json_assign_id(Elaborated,DB,Context,JSON_ID).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -241,7 +267,10 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
 value_expand_list([], _DB, _Context, _Elt_Type, []).
 value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
     (   is_enum(DB,Elt_Type)
-    ->  enum_value(Elt_Type,Value,Expanded)
+    ->  enum_value(Elt_Type,Value,Enum_Value),
+        prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
+        Prepared = json{'@id' : Enum_Value_Ex,
+                        '@type' : "@id"}
     ;   is_dict(Value)
     ->  put_dict(json{'@type':Elt_Type}, Value, Prepared)
     ;   is_base_type(Elt_Type)
@@ -252,6 +281,7 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
     json_elaborate(DB, Prepared, Expanded),
     value_expand_list(Vs, DB, Context, Elt_Type, Exs).
 
+% Unit type expansion
 context_value_expand(_,_,json{},json{},json{}) :-
     !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
@@ -270,8 +300,10 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
     !,
-    is_dict(Value),
-    json_elaborate(DB, Value, Context, V).
+    (   is_dict(Value)
+    ->  json_elaborate(DB, Value, Context, V)
+    ;   V = json{ '@type' : "@id", '@id' : Value}
+    ).
 context_value_expand(_,_Context, Value,_Expansion,V) :-
     % An already expanded typed value
     is_dict(Value),
@@ -289,7 +321,7 @@ enum_value(Type,Value,ID) :-
 json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
-    maybe_expand_type(Type,Context,Type_Ex),
+    prefix_expand_schema(Type,Context,Type_Ex),
     is_enum(DB,Type_Ex),
     !,
     get_dict('@value',JSON,Value),
@@ -303,13 +335,11 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
     findall(
         P-V,
         (   member(Prop-Value,Pairs),
-            (   get_dict(Prop, Context, Full_Expansion),
-                is_dict(Full_Expansion)
-            ->  expansion_key(Prop,Full_Expansion,P,Expansion),
-                context_value_expand(DB,Context,Value,Expansion,V)
+            (   property_expand_key_value(Prop,Value,DB,Context,P,V)
+            ->  true
             ;   Prop = '@type'
             ->  P = Prop,
-                maybe_expand_type(Value,Context, V)
+                prefix_expand_schema(Value, Context, V)
             ;   has_at(Prop)
             ->  P = Prop,
                 V = Value
@@ -319,19 +349,19 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
         PVs),
     dict_pairs(Expanded,json,PVs).
 
-json_jsonid(DB,JSON,JSON_ID) :-
+json_assign_id(JSON,DB,Context,JSON_ID) :-
     % Set up the ID
-    (   get_dict('@id',JSON,_)
-    ->  JSON_ID = JSON
+    (   get_dict('@id',JSON,ID)
+    ->  prefix_expand(ID, Context, ID_Ex),
+        JSON_ID = (JSON.put(json{'@id' : ID_Ex}))
     ;   get_dict('@container', JSON, _)
     ->  JSON_ID = JSON
     ;   get_dict('@value', JSON, _)
     ->  JSON_ID = JSON
-    ;   json_idgen(DB,JSON,ID)
+    ;   json_idgen(JSON,DB,Context,ID)
     ->  JSON_ID = (JSON.put(json{'@id' : ID}))
     ;   throw(error(no_id(JSON),_))
     ).
-
 
 json_prefix_access(JSON,Edge,Type) :-
     global_prefix_expand(Edge,Expanded),
@@ -339,9 +369,6 @@ json_prefix_access(JSON,Edge,Type) :-
 
 json_type(JSON,_Context,Type) :-
     json_prefix_access(JSON,rdf:type,Type).
-
-json_schema_elaborate(JSON,Elaborated) :-
-    json_schema_elaborate(JSON,[],Elaborated).
 
 is_type_family(Dict) :-
     get_dict('@type',Dict,Type_Constructor),
@@ -372,13 +399,13 @@ key_parts(JSON,[Type|Fields]) :-
 key_parts(JSON,[Type]) :-
     get_dict('@type',JSON,Type).
 
-key_id(JSON,Path,ID) :-
+key_id(JSON,Context,Path,ID) :-
     reverse(Path,Rev),
     key_parts(JSON,Parts),
     append(Rev,Parts,Full_Path),
     maplist(uri_encoded(path),Full_Path,Encoded),
     merge_separator_split(Merged,'_',Encoded),
-    ID = Merged.
+    prefix_expand_schema(Merged,Context,ID).
 
 maybe_expand_schema_type(Type, Expanded) :-
     (   re_match('.*:.*', Type)
@@ -457,63 +484,55 @@ expand_match_system(Key,Term,Key_Ex) :-
     global_prefix_expand(sys:Term,Key_Ex),
     prefix_expand(Key, _{'@base' : Prefix}, Key_Ex).
 
-json_schema_elaborate_key(V,json{'@type':Value}) :-
+json_schema_elaborate_key(V,_,json{'@type':Value}) :-
     atom(V),
     !,
     global_prefixes(sys,Prefix),
     prefix_expand(V, _{'@base' : Prefix}, Value).
-json_schema_elaborate_key(V,Value) :-
-    get_dict('@type', V, Lexical),
-    expand_match_system(Lexical, 'Lexical', Type),
+json_schema_elaborate_key(V,Context,Value) :-
+    get_dict('@type', V, Candidate),
+    (   expand_match_system(Candidate, 'Lexical', Type)
+    ;   expand_match_system(Candidate, 'Hash', Type)
+    ),
     !,
     get_dict('@fields', V, Fields),
-    maplist([Elt,Elt_ID]>>wrap_id(Elt,Elt_ID), Fields, Fields_Wrapped),
-    Value = json{
-                '@type' : Type,
-                'sys:fields' :
-                json{
-                    '@container' : "@list",
-                    '@type' : "@id",
-                    '@value' : Fields_Wrapped
-                }
-            }.
-json_schema_elaborate_key(V,Value) :-
-    get_dict('@type', V, Hash),
-    expand_match_system(Hash, 'Hash', Type),
-    !,
-    get_dict('@fields', V, Fields),
-    maplist([Elt,Elt_ID]>>wrap_id(Elt,Elt_ID), Fields, Fields_Wrapped),
-    Value = json{
-                '@type' : Type,
-                'sys:fields' :
-                json{
-                    '@container' : "@list",
-                    '@type' : "@id",
-                    '@value' : Fields_Wrapped
-                }
-            }.
-json_schema_elaborate_key(V,json{ '@type' : Type}) :-
+    maplist({Context}/[Elt,Elt_ID]>>(
+                prefix_expand_schema(Elt,Context,Elt_Ex),
+                wrap_id(Elt_Ex,Elt_ID)
+            ),
+            Fields, Fields_Wrapped),
+    global_prefix_expand(sys:fields,Field),
+    Type_Value = json{ '@type' : Type },
+    Value = (Type_Value.put(Field,
+                            json{
+                                '@container' : "@list",
+                                '@type' : "@id",
+                                '@value' : Fields_Wrapped
+                            })).
+json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, ValueHash),
     expand_match_system(ValueHash, 'ValueHash', Type),
     !.
-json_schema_elaborate_key(V,json{ '@type' : Type}) :-
+json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, Random),
     expand_match_system(Random, 'Random', Type),
     !.
 
-json_schema_predicate_value('@id',V,_,'@id',V) :-
-    !.
-json_schema_predicate_value('@cardinality',V,_,P,json{'@type' : 'xsd:nonNegativeInteger',
-                                                      '@value' : V }) :-
-    global_prefix_expand(sys:cardinality, P),
-    !.
-json_schema_predicate_value('@key',V,Path,P,Value) :-
+json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
+    !,
+    prefix_expand_schema(V,Context,V_Ex).
+json_schema_predicate_value('@cardinality',V,_,_,P,json{'@type' : Type,
+                                                        '@value' : V }) :-
+    !,
+    global_prefix_expand(xsd:nonNegativeInteger,Type),
+    global_prefix_expand(sys:cardinality, P).
+json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     !,
     global_prefix_expand(sys:key, P),
-    json_schema_elaborate_key(V,Elab),
-    key_id(V,Path,ID),
+    json_schema_elaborate_key(V,Context,Elab),
+    key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
-json_schema_predicate_value('@base',V,_,P,Value) :-
+json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
     (   is_dict(V)
@@ -522,37 +541,45 @@ json_schema_predicate_value('@base',V,_,P,Value) :-
         Value = json{ '@type' : XSD,
                       '@value' : V }
     ).
-json_schema_predicate_value('@type',V,_,'@type',Value) :-
+json_schema_predicate_value('@type',V,_,_,'@type',Value) :-
     !,
     maybe_expand_schema_type(V,Value).
-json_schema_predicate_value('@class',V,_,Class,json{'@type' : "@id",
-                                                    '@id' : V}) :-
+json_schema_predicate_value('@class',V,Context,_,Class,json{'@type' : "@id",
+                                                            '@id' : VEx}) :-
     !,
+    prefix_expand_schema(V,Context,VEx),
     global_prefix_expand(sys:class, Class).
-json_schema_predicate_value(P,V,Path,P,Value) :-
+json_schema_predicate_value(P,V,Context,Path,Prop,Value) :-
     is_dict(V),
     !,
-    json_schema_elaborate(V, [P|Path], Value).
-json_schema_predicate_value(P,V,_,P,json{'@type' : "@id",
-                                         '@id' : V }).
+    prefix_expand_schema(P,Context,Prop),
+    json_schema_elaborate(V, Context, [P|Path], Value).
+json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
+                                                    '@id' : VEx }) :-
+    prefix_expand_schema(P,Context,Prop),
+    prefix_expand_schema(V,Context,VEx).
 
-json_schema_elaborate(JSON,_,Elaborated) :-
+json_schema_elaborate(JSON,Context,_,Elaborated) :-
     is_type_enum(JSON),
     !,
     get_dict('@id', JSON, ID),
+    prefix_expand_schema(ID,Context,ID_Ex),
     get_dict('@type', JSON, Type),
     maybe_expand_schema_type(Type,Expanded),
     get_dict('@value', JSON, List),
-    maplist({ID}/[Elt,json{'@type' : "@id",
-                           '@id' : V}]>>(
-                format(string(V),'~w_~w',[ID,Elt])
+    maplist({ID_Ex}/[Elt,json{'@type' : "@id",
+                              '@id' : V}]>>(
+                format(string(V),'~w_~w',[ID_Ex,Elt])
             ),List,New_List),
-    Elaborated = json{ '@id' : ID,
-                       '@type' : Expanded,
-                       'sys:value' : json{ '@container' : "@list",
-                                           '@type' : "@id",
-                                           '@value' : New_List } }.
-json_schema_elaborate(JSON,Old_Path,Elaborated) :-
+    Type_ID = json{ '@id' : ID_Ex,
+                    '@type' : Expanded
+                  },
+    global_prefix_expand(sys:value, Sys_Value),
+    Elaborated = (Type_ID.put(Sys_Value,
+                              json{ '@container' : "@list",
+                                    '@type' : "@id",
+                                    '@value' : New_List })).
+json_schema_elaborate(JSON,Context,Old_Path,Elaborated) :-
     is_dict(JSON),
     dict_pairs(JSON,json,Pre_Pairs),
     !,
@@ -566,37 +593,27 @@ json_schema_elaborate(JSON,Old_Path,Elaborated) :-
     findall(
         Prop-Value,
         (   member(P-V,Pairs),
-            json_schema_predicate_value(P,V,Path,Prop,Value)
+            json_schema_predicate_value(P,V,Context,Path,Prop,Value)
         ),
         PVs),
     dict_pairs(Elaborated,json,PVs).
 
-expand_schema(JSON,Prefixes,Expanded) :-
-    get_dict('@schema', Prefixes, Schema),
-    put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
-    expand(JSON,Schema_Prefixes,Expanded).
+json_schema_elaborate(JSON,Context,JSON_Schema) :-
+    json_schema_elaborate(JSON,Context,[],JSON_Schema).
 
 json_schema_triple(JSON,Context,Triple) :-
-    json_schema_elaborate(JSON,JSON_Schema),
-    expand_schema(JSON_Schema,Context,Expanded),
-    json_triple_(Expanded,Triple).
-
-/*
-json_schema_triple(JSON,Triple) :-
-    json_schema_elaborate(JSON,JSON_Schema),
+    json_schema_elaborate(JSON,Context,[],JSON_Schema),
     json_triple_(JSON_Schema,Triple).
-*/
 
 % Triple generator
-json_triple(DB,JSON,Context,Triple) :-
+json_triple(DB,JSON,Triple) :-
     json_elaborate(DB,JSON,Elaborated),
-    expand(Elaborated,Context,Expanded),
-    json_triple_(Expanded,Triple).
+    json_triple_(Elaborated,Triple).
 
-json_triples(DB,JSON,Context,Triples) :-
+json_triples(DB,JSON,Triples) :-
     findall(
         Triple,
-        json_triple(DB, JSON, Context, Triple),
+        json_triple(DB, JSON, Triple),
         Triples).
 
 json_triple_(JSON,_Triple) :-
@@ -920,16 +937,11 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
         )
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
-    database_context(DB,Context),
-    default_prefixes(Prefixes),
-
-    put_dict(Context,Prefixes,Expanded_Context),
-
     forall(
         json_read_dict_stream(JSON_Stream, Dict),
         (
             forall(
-                json_triple(DB,Dict,Expanded_Context,t(S,P,O)),
+                json_triple(DB,Dict,t(S,P,O)),
                 (
                     object_storage(O,OS),
                     nb_add_triple(Builder, S, P, OS)
@@ -990,12 +1002,9 @@ run_delete_document(Desc, Commit, ID) :-
         delete_document(Context, ID),
         _).
 
-delete_document(Query_Context, Id) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    delete_document(TO, Id).
 delete_document(DB, Id) :-
+    is_transaction(DB),
+    !,
     database_context(DB,Prefixes),
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
@@ -1007,27 +1016,29 @@ delete_document(DB, Id) :-
         xquad(Instance, G, Id_Ex, P, V),
         delete(G, Id_Ex, P, V, _)
     ).
+delete_document(Query_Context, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    delete_document(TO, Id).
 
+insert_document(Transaction, Document, ID) :-
+    is_transaction(Transaction),
+    !,
+    json_elaborate(Transaction, Document, Elaborated),
+    insert_document_expanded(Transaction, Elaborated, ID).
 insert_document(Query_Context, Document, ID) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, ID).
-insert_document(Transaction, Document, ID) :-
-    database_context(Transaction, Prefixes),
-    % Pre process document
-    json_elaborate(Transaction, Document, Elaborated),
-    !,
-    expand(Elaborated, Prefixes, Expanded),
-    !,
-    insert_document_expanded(Transaction, Expanded, ID).
 
-insert_document_expanded(Transaction, Expanded, ID) :-
-    get_dict('@id', Expanded, ID),
+insert_document_expanded(Transaction, Elaborated, ID) :-
+    get_dict('@id', Elaborated, ID),
     database_instance(Transaction, [Instance]),
     % insert
     forall(
-        json_triple_(Expanded, t(S,P,O)),
+        json_triple_(Elaborated, t(S,P,O)),
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
@@ -1040,6 +1051,8 @@ run_insert_document(Desc, Commit, Document, ID) :-
         _).
 
 update_document(Transaction, Document) :-
+    is_transaction(Transaction),
+    !,
     update_document(Transaction, Document, _).
 update_document(Query_Context, Document) :-
     is_query_context(Query_Context),
@@ -1048,12 +1061,12 @@ update_document(Query_Context, Document) :-
     update_document(TO, Document).
 
 update_document(Transaction, Document, Id) :-
-    database_context(Transaction, Prefixes),
+    is_transaction(Transaction),
+    !,
     json_elaborate(Transaction, Document, Elaborated),
-    expand(Elaborated, Prefixes, Expanded),
-    get_dict('@id', Expanded, Id),
+    get_dict('@id', Elaborated, Id),
     delete_document(Transaction, Id),
-    insert_document_expanded(Transaction, Expanded, Id).
+    insert_document_expanded(Transaction, Elaborated, Id).
 update_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
     !,
@@ -1186,6 +1199,23 @@ write_schema1(Desc) :-
         write_json_string_to_schema(Context, Schema1),
         _Meta).
 
+test(get_field_values, []) :-
+    Expanded = json{'@type':'http://s/Person',
+                    'http://s/birthdate':
+                    json{'@type':'http://www.w3.org/2001/XMLSchema#date',
+                         '@value':"1979-12-28"},
+                    'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                         '@value':"jane"}},
+    get_field_values(Expanded, context{'@base':"http://i/",
+                                       '@schema':"http://s/",
+                                       '@type':'http://terminusdb.com/schema/sys#Context'},
+                     [name, birthdate],
+                     [ json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                            '@value':"jane"},
+                       json{'@type':'http://www.w3.org/2001/XMLSchema#date',
+                            '@value':"1979-12-28"}
+                     ]).
+
 test(create_database_context,
      [
          setup(
@@ -1240,7 +1270,7 @@ test(elaborate,
 
     json_elaborate(DB, Document, Elaborated),
 
-    Elaborated = json{ '@id':gavin,
+    Elaborated = json{ '@id':'http://i/gavin',
                        '@type':'http://s/Criminal',
                        'http://s/aliases':
                        _{ '@container':"@list",
@@ -1293,12 +1323,12 @@ test(id_expand,
 
     Elaborated =
     json{
-        '@id':gavin,
+        '@id':'http://i/gavin',
         '@type':'http://s/Employee',
         'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 				                   '@value':"1977-05-24"
 			                     },
-        'http://s/boss':json{ '@id':jane,
+        'http://s/boss':json{ '@id':'http://i/jane',
 			                  '@type':'http://s/Employee',
 			                  'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 						                                 '@value':"1979-12-28"
@@ -1346,8 +1376,7 @@ test(triple_convert,
                },
 
     open_descriptor(Desc, DB),
-    database_context(DB, Context),
-    json_triples(DB, Document, Context, Triples),
+    json_triples(DB, Document, Triples),
 
     sort(Triples, Sorted),
 
@@ -1567,24 +1596,31 @@ test(schema_key_elaboration1, []) :-
                role:json{'@class':"Role",
                          '@type':"Set"},
                scope:"Resource"},
-    json_schema_elaborate(Doc, Elaborate),
 
-    Elaborate = json{ '@id':"Capability",
-                      '@type':'http://terminusdb.com/schema/sys#Class',
-                      'http://terminusdb.com/schema/sys#key':
-                      json{
-                          '@id':'Capability_ValueHash',
-                          '@type':'http://terminusdb.com/schema/sys#ValueHash'
-					  },
-                      role:json{ '@id':'Capability_role_Set_Role',
-		                         '@type':'http://terminusdb.com/schema/sys#Set',
-		                         'http://terminusdb.com/schema/sys#class':
-                                 json{ '@id':"Role",
-								       '@type':"@id"
-							         }
-	                           },
-                      scope:json{'@id':"Resource",'@type':"@id"}
-                    }.
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Doc, Context, Elaborate),
+
+    Elaborate =
+    json{ '@id':'https://s/Capability',
+          '@type':'http://terminusdb.com/schema/sys#Class',
+          'http://terminusdb.com/schema/sys#key':
+          json{ '@id':'https://s/Capability_ValueHash',
+				'@type':'http://terminusdb.com/schema/sys#ValueHash'
+			  },
+          'https://s/role':
+          json{ '@id':'https://s/Capability_role_Set_Role',
+			    '@type':'http://terminusdb.com/schema/sys#Set',
+			    'http://terminusdb.com/schema/sys#class':
+                json{ '@id':'https://s/Role',
+					  '@type':"@id"
+					}
+			  },
+          'https://s/scope':
+          json{'@id':'https://s/Resource',
+               '@type':"@id"}
+    }.
 
 test(schema_lexical_key_elaboration, []) :-
     Doc = json{ '@id' : "Person",
@@ -1597,35 +1633,49 @@ test(schema_lexical_key_elaboration, []) :-
                 'friends' : json{ '@type' : "Set",
                                   '@class' : "Person" } },
 
-    json_schema_elaborate(Doc, Elaborate),
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Doc, Context, Elaborate),
 
     Elaborate =
-    json{ '@id':"Person",
+    json{ '@id':'https://s/Person',
           '@type':'http://terminusdb.com/schema/sys#Class',
-          birthdate:json{'@id':"xsd:date",'@type':"@id"},
-          friends:json{ '@id':'Person_friends_Set_Person',
-		                '@type':'http://terminusdb.com/schema/sys#Set',
-		                'http://terminusdb.com/schema/sys#class':json{ '@id':"Person",
-								                                       '@type':"@id"
-								                                     }
-		              },
-          'http://terminusdb.com/schema/sys#base':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						                                '@value':"Person_"
-						                              },
-          'http://terminusdb.com/schema/sys#key':json{ '@id':'Person_Lexical_name_birthdate',
-						                               '@type':'http://terminusdb.com/schema/sys#Lexical',
-						                               'sys:fields':json{ '@container':"@list",
-								                                          '@type':"@id",
-								                                          '@value': [ json{ '@id':"name",
-										                                                    '@type':"@id"
-										                                                  },
-										                                              json{ '@id':"birthdate",
-										                                                    '@type':"@id"
-										                                                  }
-									                                                ]
-								                                        }
-						                             },
-          name:json{'@id':"xsd:string",'@type':"@id"}
+          'http://terminusdb.com/schema/sys#base':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				'@value':"Person_"
+			  },
+          'http://terminusdb.com/schema/sys#key':
+          json{ '@id':'https://s/Person_Lexical_name_birthdate',
+				'@type':'http://terminusdb.com/schema/sys#Lexical',
+                'http://terminusdb.com/schema/sys#fields':
+                json{ '@container':"@list",
+					  '@type':"@id",
+					  '@value': [ json{ '@id':'https://s/name',
+									    '@type':"@id"
+									  },
+								  json{ '@id':'https://s/birthdate',
+									    '@type':"@id"
+									  }
+							    ]
+					}
+			  },
+          'https://s/birthdate':
+          json{ '@id':'http://www.w3.org/2001/XMLSchema#date',
+				'@type':"@id"
+			  },
+          'https://s/friends':
+          json{ '@id':'https://s/Person_friends_Set_Person',
+				'@type':'http://terminusdb.com/schema/sys#Set',
+				'http://terminusdb.com/schema/sys#class':
+                json{ '@id':'https://s/Person',
+					  '@type':"@id"
+					}
+			  },
+          'https://s/name':
+          json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+			    '@type':"@id"
+			  }
         }.
 
 test(idgen_lexical,
@@ -1639,7 +1689,6 @@ test(idgen_lexical,
              teardown_temp_store(State)
          )
      ]) :-
-
     JSON = json{'@type':'Person',
                 birthdate:"1979-12-28",
                 name:"jane"
@@ -1649,7 +1698,7 @@ test(idgen_lexical,
     json_elaborate(DB, JSON, Elaborated),
 
     Elaborated =
-    json{'@id':"Person_jane_1979-12-28",
+    json{'@id':'http://i/Person_jane_1979-12-28',
          '@type':'http://s/Person',
          'http://s/birthdate':json{'@type':'http://www.w3.org/2001/XMLSchema#date',
                                    '@value':"1979-12-28"},
@@ -1680,7 +1729,7 @@ test(idgen_hash,
 
     Elaborated =
     json{
-        '@id':"Employee_b367edeea1a0e899b55a88edf9b27513",
+        '@id':'http://i/Employee_3ef31cdd168b76d42f61e49114c8886c61640bca',
         '@type':'http://s/Employee',
         'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 				                   '@value':"1979-12-28"
@@ -1710,9 +1759,8 @@ test(idgen_value_hash,
 
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON, Elaborated),
-
     Elaborated =
-    json{ '@id':"Task_960ac85fd49f49e99e7e0e82491c90fd",
+    json{ '@id':'http://i/Task_0525416b27d3c2cadc4a9efdfb9a3aa620966c91',
           '@type':'http://s/Task',
           'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 			                    '@value':"Groceries"
@@ -1750,7 +1798,7 @@ test(idgen_random,
 			                       }
         },
 
-    atom_concat('Event_',_,Id).
+    atom_concat('http://i/Event_',_,Id).
 
 test(type_family_id, []) :-
 
@@ -1771,38 +1819,46 @@ test(schema_elaborate, []) :-
                                        '@cardinality' : 3 }
                  },
 
-    json_schema_elaborate(Schema, Elaborated),
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s#')),
+
+    json_schema_elaborate(Schema, Context, Elaborated),
 
     Elaborated =
-    json{ '@id':'Person',
+    json{ '@id':'https://s#Person',
           '@type':'http://terminusdb.com/schema/sys#Class',
-          age:json{ '@id':'Person_age_Optional_xsd%3Adecimal',
-		            '@type':'http://terminusdb.com/schema/sys#Optional',
-		            'http://terminusdb.com/schema/sys#class':json{ '@id':'xsd:decimal',
-							                                       '@type':"@id"
-							                                     }
-	              },
-          friend_of:json{ '@id':'Person_friend_of_Cardinality_Person',
-		                  '@type':'http://terminusdb.com/schema/sys#Cardinality',
-		                  'http://terminusdb.com/schema/sys#cardinality':
-                          json{ '@type':'xsd:nonNegativeInteger',
-								'@value':3
-							  },
-		                  'http://terminusdb.com/schema/sys#class':json{ '@id':'Person',
-								                                         '@type':"@id"
-								                                       }
-		                },
-          name:json{'@id':'xsd:string','@type':"@id"}
+          'https://s#age':
+          json{ '@id':'https://s#Person_age_Optional_xsd%3Adecimal',
+			    '@type':'http://terminusdb.com/schema/sys#Optional',
+			    'http://terminusdb.com/schema/sys#class':
+                json{ '@id':'http://www.w3.org/2001/XMLSchema#decimal',
+					  '@type':"@id"
+					}
+			  },
+          'https://s#friend_of':
+          json{ '@id':'https://s#Person_friend_of_Cardinality_Person',
+				'@type':'http://terminusdb.com/schema/sys#Cardinality',
+				'http://terminusdb.com/schema/sys#cardinality':
+                json{ '@type':'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+					  '@value':3
+					},
+				'http://terminusdb.com/schema/sys#class':
+                json{ '@id':'https://s#Person',
+					  '@type':"@id"
+					}
+			  },
+          'https://s#name':
+          json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+			    '@type':"@id"
+			  }
         },
-
-    default_prefixes(Prefixes),
-    put_dict(_{'@schema' : "https://s#"}, Prefixes, Context),
 
     findall(Triple,
             json_schema_triple(Schema, Context, Triple),
             Triples),
 
     sort(Triples,Sorted),
+
     Sorted = [
         t('https://s#Person',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -1958,7 +2014,7 @@ test(list_elaborate,
     json_elaborate(DB, JSON, Elaborated),
 
     Elaborated =
-    json{ '@id':"Employee_6f1bb32f84f15c68ac7b69df05967953",
+    json{ '@id':'http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
           '@type':'http://s/Employee',
           'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 				                     '@value':"1977-05-24"
@@ -1969,69 +2025,69 @@ test(list_elaborate,
           'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 				                        '@value':"12"
 				                      },
-          'http://s/tasks':_{ '@container':"@list",
-			                  '@type':'http://s/Task',
-			                  '@value':[ json{ '@id':"Task_aaae9b46cb8be52f604b2141434c1d65",
-					                           '@type':'http://s/Task',
-					                           'http://s/name':
-                                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-								                     '@value':"Get Groceries"
-							                       }
-					                         },
-				                         json{ '@id':"Task_52a5c6e7da12020f4ac58b51b37610c0",
-					                           '@type':'http://s/Task',
-					                           'http://s/name':
-                                               json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-								                     '@value':"Take out rubbish"
-							                       }
-					                         }
-				                       ]
-			}
+          'http://s/tasks':
+          _{ '@container':"@list",
+			 '@type':'http://s/Task',
+			 '@value':[ json{ '@id':'http://i/Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676',
+					          '@type':'http://s/Task',
+					          'http://s/name':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								    '@value':"Get Groceries"
+							      }
+					        },
+				        json{ '@id':'http://i/Task_86a03131d587c39afa75620b12692f1c998faec0',
+					          '@type':'http://s/Task',
+					          'http://s/name':
+                              json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								    '@value':"Take out rubbish"
+							      }
+					        }
+				      ]
+		   }
         },
 
-    database_context(DB, Context),
-    json_triples(DB, JSON, Context, Triples),
+    json_triples(DB, JSON, Triples),
 
-    Triples = [
-        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          'http://s/Employee'),
-        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
-          'http://s/birthdate',
-          "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
-        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
-          'http://s/name',
-          "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
-          'http://s/staff_number',
-          "12"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/Employee_6f1bb32f84f15c68ac7b69df05967953',
-          'http://s/tasks',
-          Cons0),
-        t(Cons0,
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
-          'http://i/Task_aaae9b46cb8be52f604b2141434c1d65'),
-        t(Cons0,
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
-          Cons1),
-        t(Cons1,
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
-          'http://i/Task_52a5c6e7da12020f4ac58b51b37610c0'),
-        t(Cons1,
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
-        t('http://i/Task_52a5c6e7da12020f4ac58b51b37610c0',
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          'http://s/Task'),
-        t('http://i/Task_52a5c6e7da12020f4ac58b51b37610c0',
-          'http://s/name',
-          "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/Task_aaae9b46cb8be52f604b2141434c1d65',
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          'http://s/Task'),
-        t('http://i/Task_aaae9b46cb8be52f604b2141434c1d65',
-          'http://s/name',
-          "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
+    Triples =
+    [ t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://s/Employee'),
+      t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+        'http://s/birthdate',
+        "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
+      t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+        'http://s/name',
+        "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+        'http://s/staff_number',
+        "12"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+        'http://s/tasks',
+        Cons0),
+      t(Cons0,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+        'http://i/Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676'),
+      t(Cons0,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+        Cons1),
+      t(Cons1,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+        'http://i/Task_86a03131d587c39afa75620b12692f1c998faec0'),
+      t(Cons1,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+      t('http://i/Task_86a03131d587c39afa75620b12692f1c998faec0',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://s/Task'),
+      t('http://i/Task_86a03131d587c39afa75620b12692f1c998faec0',
+        'http://s/name',
+        "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('http://i/Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://s/Task'),
+      t('http://i/Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676',
+        'http://s/name',
+        "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ],
 
     run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
@@ -2039,15 +2095,16 @@ test(list_elaborate,
     open_descriptor(Desc, New_DB),
     get_document(New_DB, Id, Fresh_JSON),
 
-    Fresh_JSON = json{ '@id':'Employee_6f1bb32f84f15c68ac7b69df05967953',
-                       '@type':'Employee',
-                       birthdate:"1977-05-24",
-                       name:"Gavin",
-                       staff_number:"12",
-                       tasks:[ 'Task_aaae9b46cb8be52f604b2141434c1d65',
-	                           'Task_52a5c6e7da12020f4ac58b51b37610c0'
-	                         ]
-                     }.
+    Fresh_JSON =
+    json{ '@id':'Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
+          '@type':'Employee',
+          birthdate:"1977-05-24",
+          name:"Gavin",
+          staff_number:"12",
+          tasks:[ 'Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676',
+	              'Task_86a03131d587c39afa75620b12692f1c998faec0'
+	            ]
+        }.
 
 test(array_elaborate,
      [
@@ -2072,19 +2129,19 @@ test(array_elaborate,
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,Elaborated),
 
-    Elaborated = json{ '@id':"BookClub_Marxist%20book%20club",
+    Elaborated = json{ '@id':'http://i/BookClub_Marxist%20book%20club',
                        '@type':'http://s/BookClub',
                        'http://s/book_list':
                        _{ '@container':"@array",
 			              '@type':'http://s/Book',
-			              '@value':[ json{ '@id':"Book_Das%20Kapital",
+			              '@value':[ json{ '@id':'http://i/Book_Das%20Kapital',
 					                       '@type':'http://s/Book',
 					                       'http://s/name':
                                            json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 								                 '@value':"Das Kapital"
 								               }
 					                     },
-					                 json{ '@id':"Book_Der%20Ursprung%20des%20Christentums",
+					                 json{ '@id':'http://i/Book_Der%20Ursprung%20des%20Christentums',
 					                       '@type':'http://s/Book',
 					                       'http://s/name':
                                            json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2098,8 +2155,7 @@ test(array_elaborate,
 			                               }
                      },
 
-    database_context(DB, Context),
-    json_triples(DB, JSON, Context, Triples),
+    json_triples(DB, JSON, Triples),
 
     Triples = [
         t('http://i/BookClub_Marxist%20book%20club',
@@ -2144,6 +2200,7 @@ test(array_elaborate,
 
     open_descriptor(Desc, New_DB),
     get_document(New_DB, Id, Recovered),
+
     Recovered = json{ '@id':'BookClub_Marxist%20book%20club',
                       '@type':'BookClub',
                       book_list:[ 'Book_Das%20Kapital',
@@ -2181,19 +2238,21 @@ test(set_elaborate,
     json_elaborate(DB, JSON, Elaborated),
 
     Elaborated =
-    json{ '@id':"BookClub_Marxist%20book%20club",
+    json{ '@id':'http://i/BookClub_Marxist%20book%20club',
           '@type':'http://s/BookClub',
-          'http://s/book_list':_{ '@container':"@array",
-			                      '@type':'http://s/Book',
-			                      '@value':[]
-			                    },
-          'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-			                    '@value':"Marxist book club"
-			                  },
+          'http://s/book_list':
+          _{ '@container':"@array",
+			 '@type':'http://s/Book',
+			 '@value':[]
+		   },
+          'http://s/name':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			    '@value':"Marxist book club"
+			  },
           'http://s/people':
           _{ '@container':"@set",
 			 '@type':'http://s/Person',
-			 '@value':[ json{ '@id':"Person_jim_1982-05-03",
+			 '@value':[ json{ '@id':'http://i/Person_jim_1982-05-03',
 					          '@type':'http://s/Person',
 					          'http://s/birthdate':
                               json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
@@ -2204,7 +2263,7 @@ test(set_elaborate,
 								    '@value':"jim"
 								  }
 					        },
-				        json{ '@id':"Person_jane_1979-12-28",
+				        json{ '@id':'http://i/Person_jane_1979-12-28',
 					          '@type':'http://s/Person',
 					          'http://s/birthdate':
                               json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
@@ -2219,8 +2278,7 @@ test(set_elaborate,
 		   }
         },
 
-    database_context(DB, Context),
-    json_triples(DB, JSON, Context, Triples),
+    json_triples(DB, JSON, Triples),
 
     Triples = [
         t('http://i/BookClub_Marxist%20book%20club',
@@ -2312,6 +2370,7 @@ test(enum_elaborate,
     open_descriptor(Desc, DB),
 
     type_context(DB,'Dog',TypeContext),
+
     TypeContext = json{ hair_colour:json{'@id':'http://s/hair_colour',
                                          '@type':'http://s/Colour'},
                         name:json{ '@id':'http://s/name',
@@ -2326,7 +2385,7 @@ test(enum_elaborate,
 
     json_elaborate(DB, JSON, Elaborated),
 
-    Elaborated = json{ '@id':"Dog_Ralph",
+    Elaborated = json{ '@id':'http://i/Dog_Ralph',
                        '@type':'http://s/Dog',
                        'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
                                                    '@type':"@id"},
@@ -2366,34 +2425,47 @@ test(elaborate_tagged_union,[]) :-
                  right : "BinaryTree"
                },
 
-    json_schema_elaborate(Binary_Tree, BT_Elaborated),
-    BT_Elaborated =json{ '@id':'BinaryTree',
-                         '@type':'http://terminusdb.com/schema/sys#TaggedUnion',
-                         'http://terminusdb.com/schema/sys#base':
-                         json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						       '@value':"BinaryTree_"
-						     },
-                         'http://terminusdb.com/schema/sys#key':
-                         json{ '@id':'BinaryTree_ValueHash',
-						       '@type':'http://terminusdb.com/schema/sys#ValueHash'
-						     },
-                         leaf:json{'@id':'sys:Unit','@type':"@id"},
-                         node:json{'@id':'Node','@type':"@id"}
-                       },
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
 
-    json_schema_elaborate(Node, Node_Elaborated),
+    json_schema_elaborate(Binary_Tree, Context, BT_Elaborated),
 
-    Node_Elaborated = json{'@id':'Node',
-                           '@type':'http://terminusdb.com/schema/sys#Class',
-                           'http://terminusdb.com/schema/sys#base':
-                           json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                '@value':"Node_"},
-                           'http://terminusdb.com/schema/sys#key':
-                           json{'@id':'Node_ValueHash',
-                                '@type':'http://terminusdb.com/schema/sys#ValueHash'},
-                           left:json{'@id':"BinaryTree", '@type':"@id"},
-                           right:json{'@id':"BinaryTree", '@type':"@id"},
-                           value:json{'@id':'xsd:integer', '@type':"@id"}}.
+    BT_Elaborated =
+    json{ '@id':'https://s/BinaryTree',
+          '@type':'http://terminusdb.com/schema/sys#TaggedUnion',
+          'http://terminusdb.com/schema/sys#base':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				'@value':"BinaryTree_"
+			  },
+          'http://terminusdb.com/schema/sys#key':
+          json{ '@id':'https://s/BinaryTree_ValueHash',
+				'@type':'http://terminusdb.com/schema/sys#ValueHash'
+			  },
+          'https://s/leaf':json{ '@id':'http://terminusdb.com/schema/sys#Unit',
+			                     '@type':"@id"
+			                   },
+          'https://s/node':json{'@id':'https://s/Node','@type':"@id"}
+        },
+
+    json_schema_elaborate(Node, Context, Node_Elaborated),
+
+    Node_Elaborated =
+    json{ '@id':'https://s/Node',
+          '@type':'http://terminusdb.com/schema/sys#Class',
+          'http://terminusdb.com/schema/sys#base':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				'@value':"Node_"
+			  },
+          'http://terminusdb.com/schema/sys#key':
+          json{ '@id':'https://s/Node_ValueHash',
+				'@type':'http://terminusdb.com/schema/sys#ValueHash'
+			  },
+          'https://s/left':json{'@id':'https://s/BinaryTree','@type':"@id"},
+          'https://s/right':json{'@id':'https://s/BinaryTree','@type':"@id"},
+          'https://s/value':json{ '@id':'http://www.w3.org/2001/XMLSchema#integer',
+			                      '@type':"@id"
+			                    }
+        }.
 
 test(binary_tree_context,
      [
@@ -2454,27 +2526,27 @@ test(binary_tree_elaborate,
     json_elaborate(DB,JSON,Elaborated),
 
     Elaborated =
-    json{ '@id':"binary_tree_ce4e85e93a3d4818eb1eb6b4d252a3a4",
+    json{ '@id':'http://i/binary_tree_0cd3f60e652c662bc3ac2a0020327bae0f8f065c',
           '@type':'http://s/BinaryTree',
           'http://s/node':
-          json{ '@id':"Node_6ac73e53f5c3956d3b563da380ae0970",
+          json{ '@id':'http://i/Node_4c6870b61cd97b543e792bc1ccabf49df7d81616',
 			    '@type':'http://s/Node',
 			    'http://s/left':
-                json{ '@id':"binary_tree_fd9dd5865a72d5065c9c33ff255bc047",
+                json{ '@id':'http://i/binary_tree_2a98c95f71de40e11a86448fc47b713c25a82ee9',
 					  '@type':'http://s/BinaryTree',
 					  'http://s/node':
-                      json{ '@id':"Node_038aa635227c70af63ce5835b09c2cd0",
+                      json{ '@id':'http://i/Node_8ad86294dc0666a7bbf3ded3654faae3a58184fd',
 							'@type':'http://s/Node',
 							'http://s/left':
-                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
 								  '@type':'http://s/BinaryTree',
 								  'http://s/leaf':json{}
 								},
 							'http://s/right':
-                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
 								  '@type':'http://s/BinaryTree',
 								  'http://s/leaf':json{}
-								},
+											     },
 							'http://s/value':
                             json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
 								  '@value':0
@@ -2482,18 +2554,18 @@ test(binary_tree_elaborate,
 						  }
 					},
 			    'http://s/right':
-                json{ '@id':"binary_tree_d5ea6dfdd40dcf2177bcbbd24c63ef44",
+                json{ '@id':'http://i/binary_tree_836137339ef8708e682dd51e4e280e9dc4538135',
 					  '@type':'http://s/BinaryTree',
 					  'http://s/node':
-                      json{ '@id':"Node_f3b5c54ec90d0178186c20aa44b1044f",
+                      json{ '@id':'http://i/Node_b6797ef3fe69a260e9bc6f3eebe98faa326a1eb4',
 							'@type':'http://s/Node',
 							'http://s/left':
-                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
 								  '@type':'http://s/BinaryTree',
 								  'http://s/leaf':json{}
 								},
 							'http://s/right':
-                            json{ '@id':"binary_tree_ab15c31cac4d1330c35121ad80d15970",
+                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
 								  '@type':'http://s/BinaryTree',
 								  'http://s/leaf':json{}
 								},
@@ -2515,9 +2587,9 @@ test(binary_tree_elaborate,
     open_descriptor(Desc, New_DB),
     get_document(New_DB, Id, Fresh_JSON),
 
-    Fresh_JSON = json{ '@id':binary_tree_ce4e85e93a3d4818eb1eb6b4d252a3a4,
+    Fresh_JSON = json{ '@id':binary_tree_0cd3f60e652c662bc3ac2a0020327bae0f8f065c,
                        '@type':'BinaryTree',
-                       node:'Node_6ac73e53f5c3956d3b563da380ae0970'
+                       node:'Node_4c6870b61cd97b543e792bc1ccabf49df7d81616'
                      }.
 
 test(insert_get_delete,
@@ -2634,7 +2706,7 @@ test(partial_document_elaborate,
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,JSON_ID),
 
-    JSON_ID = json{ '@id':'Dog_Henry',
+    JSON_ID = json{ '@id':'http://i/Dog_Henry',
                     '@type':'http://s/Dog',
                     'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
                                                 '@type':"@id"}
@@ -2663,20 +2735,20 @@ test(partial_document_elaborate_list,
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,JSON_ID),
 
-    JSON_ID = json{ '@id':'BookClub_Murder%20Mysteries',
+    JSON_ID = json{ '@id':'http://i/BookClub_Murder%20Mysteries',
                     '@type':'http://s/BookClub',
                     'http://s/book_list':
                     _{ '@container':"@array",
 			           '@type':'http://s/Book',
 			           '@value':
-                       [ json{ '@id':"Book_And%20Then%20There%20Were%20None",
+                       [ json{ '@id':'http://i/Book_And%20Then%20There%20Were%20None',
 					           '@type':'http://s/Book',
 					           'http://s/name':
                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 								     '@value':"And Then There Were None"
 								   }
 					         },
-					     json{ '@id':"Book_In%20Cold%20Blood",
+					     json{ '@id':'http://i/Book_In%20Cold%20Blood',
 					           '@type':'http://s/Book',
 					           'http://s/name':
                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -2713,20 +2785,20 @@ test(partial_document_elaborate_list_without_required,
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,JSON_ID),
 
-    JSON_ID = json{ '@id':'BookClub_Murder%20Mysteries',
+    JSON_ID = json{ '@id':'http://i/BookClub_Murder%20Mysteries',
                     '@type':'http://s/BookClub',
                     'http://s/book_list':
                     _{ '@container':"@array",
 			           '@type':'http://s/Book',
 			           '@value':
-                       [ json{ '@id':"Book_And%20Then%20There%20Were%20None",
+                       [ json{ '@id':'http://i/Book_And%20Then%20There%20Were%20None',
 					           '@type':'http://s/Book',
 					           'http://s/name':
                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 								     '@value':"And Then There Were None"
 								   }
 					         },
-					     json{ '@id':"Book_In%20Cold%20Blood",
+					     json{ '@id':'http://i/Book_In%20Cold%20Blood',
 					           '@type':'http://s/Book',
 					           'http://s/name':
                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',

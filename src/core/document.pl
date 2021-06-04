@@ -5,9 +5,9 @@
 
               % json.pl
               json_elaborate/3,
-              json_triple/4,
+              json_triple/3,
               json_schema_triple/3,
-              json_schema_elaborate/2,
+              json_schema_elaborate/3,
               context_triple/2,
               database_context/2,
               create_graph_from_json/5,
