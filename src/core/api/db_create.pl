@@ -154,9 +154,9 @@ test(create_db_and_check_master_branch, [
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
-    Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
     open_descriptor(system_descriptor{}, System),
-    create_db(System, doc:admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
+    create_db(System, admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
     Database_Descriptor = database_descriptor{
                               organization_name: "admin",
                               database_name: "testdb" },

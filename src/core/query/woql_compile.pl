@@ -250,18 +250,14 @@ resolve_predicate(P, PE) -->
 resolve(ignore,_Something) -->
     !,
     [].
-%% resolve(X,XEx) -->
-%%     {
-%%         atom(X),
-%%         \+ uri_has_protocol(X),
-%%         \+ uri_has_prefix(X)
-%%     },
-%%     !,
-%%     view(prefixes,Prefixes),
-%%     {
-%%         get_dict('@base', Prefixes, Base),
-%%         atomic_list_concat([Base,X],XEx)
-%%     }.
+
+resolve(X,XEx) -->
+    {
+        atom(X),
+        \+ uri_has_protocol(X),
+        !
+    },
+    resolve_prefix('@base', X, XEx).
 resolve(ID:Suf,U) -->
     !,
     resolve_prefix(ID,Suf,U).

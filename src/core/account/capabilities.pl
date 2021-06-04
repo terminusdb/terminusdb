@@ -113,32 +113,20 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ground(Auth),
     ask(DB,
         (
-            t(Auth, '@schema':capability, Capability),
-            t(Capability, '@schema':role, Role),
-            t(Role, '@schema':action, Action),
-            t(Capability, '@schema':scope, Scope_Iri)
+            t(Auth, capability, Capability),
+            t(Capability, role, Role),
+            t(Role, action, Action),
+            t(Capability, scope, Scope_Iri)
         )
        ).
-/*
-match_document(DB,
-  _{ '@id' : Auth,
-     'capability' : _{ 'role' : { 'action' : Action },
-                       'scope' : Scope }}, _Doc).
-
-or in JS
-
-match_document(
-  { "@id" : "v:Auth",
-    "capability" : _{ "role" : { "action" : "v:Action" },
-                      "scope" : "v:Scope" }})
-
-*/
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
     ask(DB,
-        (   t(doc:anonymous_role, system:capability, Capability),
-            t(Capability, system:action, Action),
-            t(Capability, system:capability_scope, Scope_Iri)
+        (   t(anonymous_role, capability, Capability),
+            t(Capability, rdf:type, '@schema':'Capability'),
+            t(Capability, scope, Scope_Iri),
+            t(Capability, role, Role_Iri),
+            t(Role_Iri, action, Action)
         )
        ).
 
@@ -171,7 +159,7 @@ write_type_access(schema,system:schema_write_access).
 write_type_access(inference,system:inference_write_access).
 
 is_super_user(Auth) :-
-    is_super_user(Auth, _{ '@base' : 'http://terminusdb.com/db/system/instance/' }).
+    is_super_user(Auth, _{ '@base' : 'terminusdb://system/data/' }).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
@@ -208,7 +196,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:meta_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':meta_write_access, Scope_Iri).
 assert_write_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -222,7 +210,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:commit_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':commit_write_access, Scope_Iri).
 assert_write_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -285,7 +273,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:meta_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':meta_read_access, Scope_Iri).
 assert_read_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -299,7 +287,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:commit_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':commit_read_access, Scope_Iri).
 assert_read_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -383,7 +371,7 @@ user_object(DB, User_ID, User_Obj) :-
 
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
-    assert_auth_action_scope(System_DB,Auth,Action,doc:system).
+    assert_auth_action_scope(System_DB,Auth,Action,system).
 check_descriptor_auth_(database_descriptor{ database_name : Database,
                                             organization_name : Organization},
                        Action, Auth, System_DB) :-

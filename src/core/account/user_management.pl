@@ -266,10 +266,10 @@ exists_role(Askable, User, Organization, Resource_Name_Option) :-
 
     once(
         ask(Askable,
-            (   t(User_URI, system:role, Role_URI),
+            (   t(User_URI, capability, Capability_URI),
+                t(Capability_URI, role, Role_URI),
                 t(Role_URI, rdf:type, system:'Role'),
-                t(Role_URI, system:capability, Capability_URI),
-                t(Capability_URI, system:direct_capability_scope, Resource_URI)
+                t(Capability_URI, scope, Resource_URI)
             ))).
 
 add_role(Context, Auth_ID, User, Organization, Resource_Name_Option, Actions) :-
