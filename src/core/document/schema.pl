@@ -336,7 +336,7 @@ type_descriptor(Validation_Object, Type, card(Class,N)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
-    xrdf(Schema, Type, sys:cardinality, N^^xsd:positiveInteger).
+    xrdf(Schema, Type, sys:cardinality, N^^xsd:nonNegativeInteger).
 type_descriptor(Validation_Object, Type, optional(Class)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
@@ -349,7 +349,9 @@ key_base(Validation_Object, Type, Base) :-
     !.
 key_base(Validation_Object, Type, Base) :-
     database_context(Validation_Object,Context),
-    compress_dict_uri(Type,Context,Type_Compressed),
+    get_dict('@schema', Context, Schema),
+    put_dict(_{'@base' : Schema}, Context, New_Context),
+    compress_dict_uri(Type,New_Context,Type_Compressed),
     atomic_list_concat([Type_Compressed,'_'],Base).
 
 % should refactor to do key lookup once.
