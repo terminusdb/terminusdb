@@ -91,6 +91,8 @@ get_all_path_values(JSON,Path_Values) :-
             Path_Values).
 
 % TODO: Arrays
+get_value([], []) :-
+    !.
 get_value(Elaborated, _) :-
     get_dict('@type', Elaborated, "@id"),
     !,
@@ -320,7 +322,7 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
     value_expand_list(Vs, DB, Context, Elt_Type, Exs).
 
 % Unit type expansion
-context_value_expand(_,_,json{},json{},json{}) :-
+context_value_expand(_,_,[],json{},[]) :-
     !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
@@ -691,7 +693,10 @@ json_triple_(JSON,Triple) :-
             Triple = t(ID,SYS_Inherits,Inherited)
         ;   get_dict('@id', Value, Inherited)
         ->  Triple = t(ID,SYS_Inherits,Inherited))
-    ;   (   get_dict('@id', Value, Value_ID)
+    ;   (   Value = []
+        ->  global_prefix_expand(rdf:nil,RDF_Nil),
+            Triple = t(ID,Key,RDF_Nil)
+        ;   get_dict('@id', Value, Value_ID)
         ->  (   json_triple_(Value, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
@@ -2625,42 +2630,42 @@ test(binary_tree_elaborate,
                                       node: json{'@type':'Node',
                                                  value: 0,
                                                  left: json{'@type':'BinaryTree',
-                                                            leaf : json{}},
+                                                            leaf : []},
                                                  right: json{'@type':'BinaryTree',
-                                                             leaf : json{}}}},
+                                                             leaf : []}}},
                            right: json{'@type':'BinaryTree',
                                       node: json{'@type':'Node',
                                                  value: 2,
                                                  left: json{'@type':'BinaryTree',
-                                                            leaf : json{}},
+                                                            leaf : []},
                                                  right: json{'@type':'BinaryTree',
-                                                             leaf : json{}}}}}},
+                                                             leaf : []}}}}},
 
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,Elaborated),
 
     Elaborated =
-    json{ '@id':'http://i/binary_tree_0cd3f60e652c662bc3ac2a0020327bae0f8f065c',
+    json{ '@id':'http://i/binary_tree_27afb2c9dc1067ffab4d12f5f1170cf8a419361d',
           '@type':'http://s/BinaryTree',
           'http://s/node':
-          json{ '@id':'http://i/Node_4c6870b61cd97b543e792bc1ccabf49df7d81616',
+          json{ '@id':'http://i/Node_9e1c81332e7435825b35bd9d9b9936d1c99057fd',
 			    '@type':'http://s/Node',
 			    'http://s/left':
-                json{ '@id':'http://i/binary_tree_2a98c95f71de40e11a86448fc47b713c25a82ee9',
+                json{ '@id':'http://i/binary_tree_93723c4a3745a147119da53da17d9d6ecc037eda',
 					  '@type':'http://s/BinaryTree',
 					  'http://s/node':
-                      json{ '@id':'http://i/Node_8ad86294dc0666a7bbf3ded3654faae3a58184fd',
+                      json{ '@id':'http://i/Node_a9cb582dfc264bce6c8bc765f4a934b3522380b0',
 							'@type':'http://s/Node',
 							'http://s/left':
-                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
+                            json{ '@id':'http://i/binary_tree_6e745bace66ec54f2b359be3c60b472969a448a2',
 								  '@type':'http://s/BinaryTree',
-								  'http://s/leaf':json{}
+								  'http://s/leaf':[]
 								},
 							'http://s/right':
-                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
+                            json{ '@id':'http://i/binary_tree_6e745bace66ec54f2b359be3c60b472969a448a2',
 								  '@type':'http://s/BinaryTree',
-								  'http://s/leaf':json{}
-											     },
+								  'http://s/leaf':[]
+								},
 							'http://s/value':
                             json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
 								  '@value':0
@@ -2668,20 +2673,20 @@ test(binary_tree_elaborate,
 						  }
 					},
 			    'http://s/right':
-                json{ '@id':'http://i/binary_tree_836137339ef8708e682dd51e4e280e9dc4538135',
+                json{ '@id':'http://i/binary_tree_0d302510badd3c2d41d33f018da75638d59f0253',
 					  '@type':'http://s/BinaryTree',
 					  'http://s/node':
-                      json{ '@id':'http://i/Node_b6797ef3fe69a260e9bc6f3eebe98faa326a1eb4',
+                      json{ '@id':'http://i/Node_d8bb6d9fcf734d417696881e96ecb38b02588df7',
 							'@type':'http://s/Node',
 							'http://s/left':
-                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
+                            json{ '@id':'http://i/binary_tree_6e745bace66ec54f2b359be3c60b472969a448a2',
 								  '@type':'http://s/BinaryTree',
-								  'http://s/leaf':json{}
+								  'http://s/leaf':[]
 								},
 							'http://s/right':
-                            json{ '@id':'http://i/binary_tree_49451eeae38bf9f5623e4017838ea9723ac16e26',
+                            json{ '@id':'http://i/binary_tree_6e745bace66ec54f2b359be3c60b472969a448a2',
 								  '@type':'http://s/BinaryTree',
-								  'http://s/leaf':json{}
+								  'http://s/leaf':[]
 								},
 							'http://s/value':
                             json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
@@ -2701,10 +2706,11 @@ test(binary_tree_elaborate,
     open_descriptor(Desc, New_DB),
     get_document(New_DB, Id, Fresh_JSON),
 
-    Fresh_JSON = json{ '@id':binary_tree_0cd3f60e652c662bc3ac2a0020327bae0f8f065c,
-                       '@type':'BinaryTree',
-                       node:'Node_4c6870b61cd97b543e792bc1ccabf49df7d81616'
-                     }.
+    Fresh_JSON =
+    json{ '@id':binary_tree_27afb2c9dc1067ffab4d12f5f1170cf8a419361d,
+          '@type':'BinaryTree',
+          node:'Node_9e1c81332e7435825b35bd9d9b9936d1c99057fd'
+        }.
 
 test(insert_get_delete,
      [
