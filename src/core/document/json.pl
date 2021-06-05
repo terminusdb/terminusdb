@@ -31,6 +31,38 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+value_type_to_json_type(X, T, X, T) :-
+    number(X),
+    !.
+value_type_to_json_type(X, T, S, T) :-
+    (   string(X)
+    ;   atom(X)),
+    !,
+    atom_string(X, S).
+value_type_to_json_type(X, T, X, T) :-
+    T = 'http://www.w3.org/2001/XMLSchema#boolean',
+    !.
+value_type_to_json_type(X, T, S, T) :-
+    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
+
+json_type_to_value_type(J, T, J, T) :-
+    number(J),
+    !.
+json_type_to_value_type(J, T, J, T) :-
+    T = 'http://www.w3.org/2001/XMLSchema#boolean',
+    !.
+json_type_to_value_type(J, T, X, T) :-
+    typecast(J^^'http://www.w3.org/2001/XMLSchema#string', T, [], X^^_).
+
+
+value_type_json_type(V,T,JV,JT) :-
+    ground(V),
+    ground(T),
+    !,
+    value_type_to_json_type(V,T,JV,JT).
+value_type_json_type(V,T,JV,JT) :-
+    json_type_to_value_type(JV,JT,V,T).
+
 value_json(X,O) :-
     O = json{
             '@type': "@id",
@@ -38,15 +70,11 @@ value_json(X,O) :-
         },
     string(X),
     !.
-value_json(RDF_Nil,json{}) :-
+value_json(RDF_Nil,[]) :-
     global_prefix_expand(rdf:nil,RDF_Nil),
     !.
-value_json(X^^Y,O) :-
-    O = json{
-            '@type': Y,
-            '@value': S
-        },
-    atom_string(S, X),
+value_json(V^^T,json{ '@value' : JV, '@type' : JT}) :-
+    value_type_json_type(V,T,JV,JT),
     !.
 value_json(X@Y,O) :-
     O = json{
@@ -162,7 +190,7 @@ json_idgen(JSON,DB,Context,ID_Ex) :-
     prefix_expand(ID, Context, ID_Ex).
 
 
-class_descriptor_image(unit,json{}).
+class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(optional(_),json{ '@type' : "@id" }).
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
@@ -312,7 +340,8 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     !,
     (   is_dict(Value)
     ->  json_elaborate(DB, Value, Context, V)
-    ;   V = json{ '@type' : "@id", '@id' : Value}
+    ;   prefix_expand(Value,Context,Value_Ex),
+        V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
 context_value_expand(_,_Context, Value,_Expansion,V) :-
     % An already expanded typed value
@@ -799,6 +828,8 @@ type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
 type_id_predicate_iri_value(base_class(_),_,_,O,_,_,S) :-
+    % NOTE: This has to treat each variety of JSON value as natively
+    % as possible.
     typecast(O,'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
@@ -1193,7 +1224,8 @@ schema1('
   "@type" : "Class",
   "@inherits" : "Person",
   "aliases" : { "@type" : "List",
-                "@class" : "xsd:string" } }').
+                "@class" : "xsd:string" } }
+').
 
 write_schema1(Desc) :-
     create_context(Desc,commit{
@@ -1393,7 +1425,7 @@ test(triple_convert,
     Sorted = [
         t('http://i/gavin',
           'http://s/birthdate',
-          "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
+          date(1977,5,24,0)^^'http://www.w3.org/2001/XMLSchema#date'),
         t('http://i/gavin','http://s/boss','http://i/jane'),
         t('http://i/gavin',
           'http://s/name',
@@ -1406,7 +1438,7 @@ test(triple_convert,
           'http://s/Employee'),
         t('http://i/jane',
           'http://s/birthdate',
-          "1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+          date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
         t('http://i/jane',
           'http://s/name',
           "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
@@ -1494,7 +1526,7 @@ test(get_value,
     get_all_path_values(Elaborated,Values),
 
     Values = [['@type']-'http://s/Employee',
-              ['http://s/birthdate']-("1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+              ['http://s/birthdate']-(date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
               ['http://s/name']-("jane"^^'http://www.w3.org/2001/XMLSchema#string'),
               ['http://s/staff_number']-("12"^^'http://www.w3.org/2001/XMLSchema#string')].
 
@@ -1583,7 +1615,14 @@ schema2('
   "@key" : { "@type" : "ValueHash" },
   "value" : "xsd:integer",
   "left" : "BinaryTree",
-  "right" : "BinaryTree" }').
+  "right" : "BinaryTree" }
+
+{ "@id" : "Human",
+  "@type" : "Class",
+  "mother" : "Human",
+  "father" : "Human" }
+
+').
 
 write_schema2(Desc) :-
     create_context(Desc,commit{
@@ -1903,15 +1942,16 @@ test(list_id_key_triple, []) :-
     findall(Triple,
             list_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
                                      '@type':task,
-                                     name:json{'@type':xsd:string,
+                                     name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                '@value':"Get Groceries"}},
                                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
                                      '@type':task,
-                                     name:json{'@type':xsd:string,
+                                     name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                '@value':"Take out rubbish"}}],
                                elt,
                                p, Triple),
             Triples),
+    
     Triples = [
         t(elt,p,Cons1),
         t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_a4963868aa3ad8365a4b164a7f206ffc"),
@@ -1919,20 +1959,20 @@ test(list_id_key_triple, []) :-
         t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_f9e4104c952e71025a1d68218d88bab1"),
         t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',_Nil),
         t("task_f9e4104c952e71025a1d68218d88bab1",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",name,"Take out rubbish"^^xsd:string),
+        t("task_f9e4104c952e71025a1d68218d88bab1",name,"Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
         t("task_a4963868aa3ad8365a4b164a7f206ffc",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,"Get Groceries"^^xsd:string)
+        t("task_a4963868aa3ad8365a4b164a7f206ffc",name,"Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ].
 
 test(array_id_key_triple, []) :-
     findall(Triple,
             array_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
                                       '@type':task,
-                                      name:json{'@type':xsd:string,
+                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                 '@value':"Get Groceries"}},
                                  json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
                                       '@type':task,
-                                      name:json{'@type':xsd:string,
+                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                 '@value':"Take out rubbish"}}],
                                 elt,
                                 p, Triple),
@@ -1958,24 +1998,24 @@ test(array_id_key_triple, []) :-
           task),
         t("task_f9e4104c952e71025a1d68218d88bab1",
           name,
-          "Take out rubbish"^^xsd:string),
+          "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
         t("task_a4963868aa3ad8365a4b164a7f206ffc",
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           task),
         t("task_a4963868aa3ad8365a4b164a7f206ffc",
           name,
-          "Get Groceries"^^xsd:string)
+          "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ].
 
 test(set_id_key_triple, []) :-
     findall(Triple,
             set_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
                                       '@type':task,
-                                      name:json{'@type':xsd:string,
+                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                 '@value':"Get Groceries"}},
                                  json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
                                       '@type':task,
-                                      name:json{'@type':xsd:string,
+                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                 '@value':"Take out rubbish"}}],
                                 elt,
                                 p, Triple),
@@ -1989,14 +2029,15 @@ test(set_id_key_triple, []) :-
           task),
         t("task_f9e4104c952e71025a1d68218d88bab1",
           name,
-          "Take out rubbish"^^xsd:string),
+          "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
         t("task_a4963868aa3ad8365a4b164a7f206ffc",
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           task),
         t("task_a4963868aa3ad8365a4b164a7f206ffc",
           name,
-          "Get Groceries"^^xsd:string)
+          "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ].
+
 
 test(list_elaborate,
      [
@@ -2064,7 +2105,7 @@ test(list_elaborate,
         'http://s/Employee'),
       t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
         'http://s/birthdate',
-        "1977-05-24"^^'http://www.w3.org/2001/XMLSchema#date'),
+        date(1977,5,24,0)^^'http://www.w3.org/2001/XMLSchema#date'),
       t('http://i/Employee_2ec148d64a1bd9ec4759064e013604bcc46358fe',
         'http://s/name',
         "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
@@ -2308,7 +2349,7 @@ test(set_elaborate,
           'http://s/Person'),
         t('http://i/Person_jane_1979-12-28',
           'http://s/birthdate',
-          "1979-12-28"^^'http://www.w3.org/2001/XMLSchema#date'),
+          date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
         t('http://i/Person_jane_1979-12-28',
           'http://s/name',
           "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
@@ -2317,7 +2358,7 @@ test(set_elaborate,
           'http://s/Person'),
         t('http://i/Person_jim_1982-05-03',
           'http://s/birthdate',
-          "1982-05-03"^^'http://www.w3.org/2001/XMLSchema#date'),
+          date(1982,5,3,0)^^'http://www.w3.org/2001/XMLSchema#date'),
         t('http://i/Person_jim_1982-05-03',
           'http://s/name',
           "jim"^^'http://www.w3.org/2001/XMLSchema#string')
@@ -2333,6 +2374,68 @@ test(set_elaborate,
                       name:"Marxist book club",
                       people:['Person_jane_1979-12-28','Person_jim_1982-05-03']
                     }.
+
+test(set_elaborate_id,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@type':'BookClub',
+                name: "Marxist book club",
+                people: [ "Person_jim_1982-05-03", "Person_jane_1979-12-28"],
+                book_list : []
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
+    Elaborated =
+    json{'@id':'http://i/BookClub_Marxist%20book%20club',
+         '@type':'http://s/BookClub',
+         'http://s/book_list':_1506{'@container':"@array",
+                                    '@type':'http://s/Book',
+                                    '@value':[]},
+         'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                              '@value':"Marxist book club"},
+         'http://s/people':_1390{'@container':"@set",
+                                 '@type':'http://s/Person',
+                                 '@value':[json{'@id':'http://i/Person_jim_1982-05-03',
+                                                '@type':"@id"},
+                                           json{'@id':'http://i/Person_jane_1979-12-28',
+                                                '@type':"@id"}]}}.
+
+test(elaborate_id,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@type':'Human',
+                '@id' : "Cleatus",
+                'mother' : "MaryJane",
+                'father' : "BobbyJoe" },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, JSON, Elaborated),
+    Elaborated =
+    json{'@id':'http://i/Cleatus',
+         '@type':'http://s/Human',
+         'http://s/father':json{'@id':'http://i/BobbyJoe',
+                                '@type':"@id"},
+         'http://s/mother':json{'@id':'http://i/MaryJane',
+                                '@type':"@id"}}.
 
 test(empty_list,
      [
@@ -2415,6 +2518,7 @@ test(enum_elaborate,
                     '@type':'Dog',
                     hair_colour:blue,
                     name:"Ralph"}.
+
 
 test(elaborate_tagged_union,[]) :-
 
