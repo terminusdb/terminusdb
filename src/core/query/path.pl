@@ -141,18 +141,10 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
  *
  * foo>,<baz,bar>
  */
-compile_pattern(n(Pred), Compiled, Prefixes, Transaction_Object) :-
-    prefixed_to_uri(Pred,Prefixes,Pred_Expanded),
-    sol_set({Transaction_Object,Pred_Expanded}/[n(Sub)]>>(
-                subsumption_properties_of(Sub,Pred_Expanded,Transaction_Object)
-            ), Predicates),
-    xfy_list(';',Compiled,Predicates).
-compile_pattern(p(Pred), Compiled, Prefixes, Transaction_Object) :-
-    prefixed_to_uri(Pred,Prefixes,Pred_Expanded),
-    sol_set({Transaction_Object,Pred_Expanded}/[p(Sub)]>>(
-                subsumption_properties_of(Sub,Pred_Expanded,Transaction_Object)
-            ), Predicates),
-    xfy_list(';',Compiled,Predicates).
+compile_pattern(n(Pred), n(Pred_Expanded), Prefixes, _Transaction_Object) :-
+    prefixed_to_property(Pred,Prefixes,Pred_Expanded).
+compile_pattern(p(Pred), p(Pred_Expanded), Prefixes, _Transaction_Object) :-
+    prefixed_to_property(Pred,Prefixes,Pred_Expanded).
 compile_pattern((X,Y), (XC,YC), Prefixes, Transaction_Object) :-
     compile_pattern(X,XC,Prefixes,Transaction_Object),
     compile_pattern(Y,YC,Prefixes,Transaction_Object).

@@ -14,7 +14,8 @@
               gmonth_day_string/2,
               gday_string/2,
               uri_to_prefixed/3,
-              prefixed_to_uri/3
+              prefixed_to_uri/3,
+              prefixed_to_property/3
           ]).
 
 /** <module> Literals
@@ -464,14 +465,27 @@ uri_to_prefixed(URI, Ctx, Prefixed) :-
     try_prefix_uri(URI,Sorted_Pairs,Prefixed).
 
 prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
-    (    Base = Ctx.get(Prefix)
-    ->   true
-    ;    format(atom(M), "Could not convert prefix to URI: ~w", [Prefix]),
-         throw(prefix_error(M))),
+    (   get_dict(Prefix, Ctx, Base)
+    ->  true
+    ;   throw(error(prefix_error(Prefix, Suffix), _))
+    ),
     !,
     atomic_list_concat([Base, Suffix], URI).
+prefixed_to_uri(X, Ctx, URI) :-
+    atom(X),
+    \+ uri_has_protocol(X),
+    !,
+    (   get_dict('@base', Ctx, Base)
+    ->  true
+    ;   throw(error(prefix_error('@base', X), _))
+    ),
+    atomic_list_concat([Base, X], URI).
 prefixed_to_uri(URI, _, URI).
 
+prefixed_to_property(Term, Ctx, URI) :-
+    get_dict('@schema', Ctx, Schema),
+    put_dict('@base', Ctx, Schema, New_Ctx),
+    prefixed_to_uri(Term, New_Ctx, URI).
 
 :- begin_tests(turtle_literal_marshalling).
 
