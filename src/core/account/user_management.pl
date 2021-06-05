@@ -91,8 +91,8 @@ add_user_organization(Context, Nick, Org, Organization_URI) :-
 
     get_document(Context, User_URI, User_Document),
     Capabilities = (User_Document.capabilities),
-    New_Capabilities = [{ 'scope' : Organization_URI,
-                          'role': ["admin_role"]}
+    New_Capabilities = [_{ 'scope' : Organization_URI,
+                           'role': ["admin_role"]}
                         |Capabilities],
     New_User_Document = (User_Document.put(capabilities, New_Capabilities)),
     update_document(Context, New_User_Document).
