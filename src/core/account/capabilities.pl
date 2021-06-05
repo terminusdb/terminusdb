@@ -115,18 +115,19 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
         (
             t(Auth, capability, Capability),
             t(Capability, role, Role),
-            t(Role, action, Action),
-            t(Capability, scope, Scope_Iri)
+            t(Capability, scope, Intermediate_Scope_Iri),
+            path(Intermediate_Scope_Iri, (star((p(child);p(database)))), Scope_Iri, _),
+            t(Role, action, Action)
         )
        ).
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
     ask(DB,
-        (   t(anonymous_role, capability, Capability),
+        (   t(anonymous, capability, Capability),
             t(Capability, rdf:type, '@schema':'Capability'),
             t(Capability, scope, Scope_Iri),
-            t(Capability, role, Role_Iri),
-            t(Role_Iri, action, Action)
+            t(Capability, role, anonymous_role),
+            t(anonymous_role, action, Action)
         )
        ).
 
