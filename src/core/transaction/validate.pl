@@ -186,30 +186,18 @@ commit_validation_object(Validation_Object, []) :-
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
-        instance_objects: [Instance_Object]
+        instance_objects: [Instance_Object],
+        schema_objects : [Schema_Object]
     } :< Validation_Object,
     id_descriptor{
-    } = Descriptor,
+    } :< Descriptor,
     !,
 
     (   validation_object_changed(Instance_Object)
     ->  throw(error(immutable_graph_update(Descriptor),_))
-    ;   true).
-commit_validation_object(Validation_Object, []) :-
-    validation_object{
-        descriptor: Descriptor,
-        instance_objects: [Instance_Object]
-    } :< Validation_Object,
-    label_descriptor{
-        label: Label
-    } = Descriptor,
-    !,
-    % super simple case, we just need to set head
-    % That is, assuming anything changed
-    (   validation_object_changed(Instance_Object)
-    ->  storage(Store),
-        safe_open_named_graph(Store, Label, Graph),
-        nb_set_head(Graph, Instance_Object.read)
+    ;   true),
+    (   validation_object_changed(Schema_Object)
+    ->  throw(error(immutable_graph_update(Descriptor),_))
     ;   true).
 commit_validation_object(Validation_Object, []) :-
     validation_object{
@@ -217,11 +205,13 @@ commit_validation_object(Validation_Object, []) :-
         instance_objects: [Instance_Object],
         schema_objects: [Schema_Object]
     } :< Validation_Object,
-    document_label_descriptor{
-        schema_label: Schema_Label,
-        instance_label: Instance_Label
-    } = Descriptor,
+    label_descriptor{
+        instance: Instance_Label,
+        schema: Schema_Label
+    } :< Descriptor,
     !,
+    % super simple case, we just need to set head
+    % That is, assuming anything changed
     (   validation_object_changed(Instance_Object)
     ->  storage(Store),
         safe_open_named_graph(Store, Instance_Label, Instance_Graph),

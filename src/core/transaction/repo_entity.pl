@@ -140,7 +140,8 @@ test(local_repo_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
     repo_schema_context_from_label_descriptor(Descriptor, Context),
 
     with_transaction(Context,
@@ -164,7 +165,9 @@ test(local_repo_insert_with_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context),
 
     with_transaction(Context,
@@ -183,7 +186,9 @@ test(remote_repo_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context),
 
     with_transaction(Context,
@@ -212,7 +217,9 @@ test(remote_repo_insert_with_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context),
 
     with_transaction(Context,
@@ -230,7 +237,9 @@ test(repo_update_unset_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context1),
 
     with_transaction(Context1,
@@ -252,7 +261,9 @@ test(repo_update_set_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context1),
 
     with_transaction(Context1,
@@ -271,7 +282,9 @@ test(repo_update_remote_url,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
+
     repo_schema_context_from_label_descriptor(Descriptor, Context1),
 
     with_transaction(Context1,

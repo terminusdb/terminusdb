@@ -573,7 +573,8 @@ test_document_label_descriptor(Name, Descriptor) :-
     create_named_graph(Store, Schema_Name, _),
     create_named_graph(Store, Instance_Name, _),
 
-    Descriptor = document_label_descriptor{
-                     schema_label: Schema_Name,
-                     instance_label: Instance_Name
+    Descriptor = label_descriptor{
+                     variety: branch_descriptor,
+                     schema: Schema_Name,
+                     instance: Instance_Name
                  }.

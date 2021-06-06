@@ -160,7 +160,7 @@ initialize_database_with_store(Key, Store) :-
     system_schema_name(Schema_Name),
     create_graph_from_json(Store,Schema_Name,System_Schema_Stream,schema,Schema),
 
-    Descriptor = layer_descriptor{ layer: Schema, type: schema},
+    Descriptor = layer_descriptor{ schema: Schema, variety: system_descriptor},
     open_descriptor(Descriptor, Transaction_Object),
     template_system_instance(Template_Instance_String),
     format(string(Instance_String), Template_Instance_String, [Hash]),

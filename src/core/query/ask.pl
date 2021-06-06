@@ -114,9 +114,8 @@ create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
     database_context(Transaction_Object, Database_Prefixes),
-    default_prefixes(Default_Prefixes),
+    collection_descriptor_prefixes(Descriptor, Default_Prefixes),
     put_dict(Database_Prefixes, Default_Prefixes, Prefixes),
-    %collection_descriptor_prefixes(Descriptor, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
 
     % Note: should we be using system_descriptor{} below? or open it?

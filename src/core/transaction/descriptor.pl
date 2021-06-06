@@ -68,12 +68,15 @@
  * A ref_graph is a layer id that can be resolved to a graph.
  *
  * collection_descriptor --> system_descriptor{}
- *                         | label_descriptor{ label: string }
- *                         | document_label_descriptor{ schema_label: string, instance:label: string }
- *                         | id_descriptor{ id : string,
- *                                          type : Or(instance,schema) } % only for querying!
- *                         | layer_descriptor{ layer : layer,
- *                                             type : Or(instance,schema) } % only for querying!
+ *                         | label_descriptor{ variety: atom,
+ *                                             schema: string,
+ *                                             instance: string }
+ *                         | id_descriptor{ variety: atom,
+ *                                          schema : string,
+ *                                          instance: string } % only for querying!
+ *                         | layer_descriptor{ variety: atom,
+ *                                             instance : layer,
+ *                                             schema : layer } % only for querying!
  *                         | database_descriptor{ organization_name : string,
  *                                                database_name : string }
  *                         | repository_descriptor{ database_descriptor : database_descriptor,
@@ -392,7 +395,7 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
 
     open_read_write_obj(Layer, Instance_Object, [], _),
 
-    Descriptor = id_descriptor{ id: Id},
+    Descriptor = id_descriptor{ instance: Id }, % assume instance graph only
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
                              instance_objects : [Instance_Object],
@@ -417,15 +420,21 @@ open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                 [Descriptor=Transaction_Object|New_Map]) :-
-    id_descriptor{ id : ID, type: Type } :< Descriptor,
+    id_descriptor{} :< Descriptor,
     !,
-    Graph_Descriptor = id_graph{ layer_id : ID, type: Type, name: "main" },
-    open_read_write_obj(Graph_Descriptor, RW, Map, New_Map),
-    (   Type = instance
-    ->  Instance_Objects = [RW],
-        Schema_Objects = []
-    ;   Instance_Objects = [],
-        Schema_Objects = [RW]),
+    (   get_dict(instance, Descriptor, Instance_ID)
+    ->  Instance_Graph_Descriptor = id_graph{ layer_id : Instance_ID, type: instance, name: "main" },
+        open_read_write_obj(Instance_Graph_Descriptor, Instance_RW, Map, Map1),
+        Instance_Objects = [Instance_RW]
+    ;   Map = Map1,
+        Instance_Objects = []
+    ),
+    (   get_dict(schema, Descriptor, Schema_ID)
+    ->  Schema_Graph_Descriptor = id_graph{ layer_id : Schema_ID, type: schema, name: "main" },
+        open_read_write_obj(Schema_Graph_Descriptor, Schema_RW, Map1, New_Map),
+        Schema_Objects = [Schema_RW]
+    ;   Map1 = New_Map,
+        Schema_Objects = []),
 
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
@@ -434,16 +443,16 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              inference_objects : []
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
-    layer_descriptor{ layer : Layer, type: Type } :< Descriptor,
+    layer_descriptor{} :< Descriptor,
     !,
-    open_read_write_obj(Layer, Object, [], _),
-
-    (   Type = instance
-    ->  Instance_Objects = [Object]
-    ;   Type = schema
-    ->  Schema_Objects = [Object]
-    ;   throw(error(bad_descriptor(Descriptor)))
-    ),
+    (   get_dict(instance, Descriptor, Instance_Layer)
+    ->  open_read_write_obj(Instance_Layer, Instance_Object, [], _),
+        Instance_Objects = [Instance_Object]
+    ;   Instance_Objects = []),
+    (   get_dict(schema, Descriptor, Schema_Layer)
+    ->  open_read_write_obj(Schema_Layer, Schema_Object, [], _),
+        Schema_Objects = [Schema_Object]
+    ;   Schema_Objects = []),
 
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
@@ -452,42 +461,30 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=T
                              inference_objects : []
                          }.
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
-                 [Descriptor=Transaction_Object|Map_1]) :-
-    label_descriptor{
-        label: Label
-    } = Descriptor,
-    !,
-
-    Graph_Descriptor = labelled_graph{ label: Label, type: instance, name: "main" },
-    open_read_write_obj(Graph_Descriptor, Read_Write_Obj, Map, Map_1),
-
-    Transaction_Object = transaction_object{
-                             descriptor: Descriptor,
-                             instance_objects: [Read_Write_Obj],
-                             schema_objects: [],
-                             inference_objects: []
-                         }.
-
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
-    document_label_descriptor{
-        schema_label: Schema_Label,
-        instance_label: Instance_Label
-    } = Descriptor,
+    label_descriptor{} :< Descriptor,
     !,
-
-    Schema_Graph_Descriptor = labelled_graph{ label: Schema_Label, type: schema, name: "main" },
-    Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema, name: "main" },
-    open_read_write_obj(Schema_Graph_Descriptor, Schema_Read_Write_Obj, Map, Map_1),
-    open_read_write_obj(Instance_Graph_Descriptor, Instance_Read_Write_Obj, Map_1, Map_2),
+    (   get_dict(schema, Descriptor, Schema_Label)
+    ->  Schema_Graph_Descriptor = labelled_graph{ label: Schema_Label, type: schema, name: "main" },
+        open_read_write_obj(Schema_Graph_Descriptor, Schema_Read_Write_Obj, Map, Map_1),
+        Schema_Objects = [Schema_Read_Write_Obj]
+    ;   Map = Map_1,
+        Schema_Objects = []
+    ),
+    (   get_dict(instance, Descriptor, Instance_Label)
+    ->  Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema, name: "main" },
+        open_read_write_obj(Instance_Graph_Descriptor, Instance_Read_Write_Obj, Map_1, Map_2),
+        Instance_Objects = [Instance_Read_Write_Obj]
+    ;   Map_1 = Map_2,
+        Instance_Objects = []
+    ),
 
     Transaction_Object = transaction_object{
                              descriptor: Descriptor,
-                             instance_objects: [Instance_Read_Write_Obj],
-                             schema_objects: [Schema_Read_Write_Obj],
+                             instance_objects: Instance_Objects,
+                             schema_objects: Schema_Objects,
                              inference_objects: []
                          }.
-
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
     database_descriptor{
@@ -939,49 +936,30 @@ collection_descriptor_graph_filter_graph_descriptor(
                   name : "main"}) :-
     !.
 
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    system_descriptor{} :< Descriptor,
-    !,
-    Prefixes = _{doc: 'terminusdb:///system/data/'}.
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    id_descriptor{} :< Descriptor,
-    !,
+collection_descriptor_prefixes_(system_descriptor, Prefixes) :-
+    Prefixes = _{ '@data': 'terminusdb:///system/data/',
+                  '@schema': 'http://terminusdb.com/schema/system#' }.
+collection_descriptor_prefixes_(database_descriptor, Prefixes) :-
+    Prefixes = _{'@base' : 'terminusdb://repository/data/',
+                 '@schema' : 'http://terminusdb.com/schema/repository#'}.
+collection_descriptor_prefixes_(repository_descriptor, Prefixes) :-
+    Prefixes = _{'@base' : 'terminusdb://ref/data/',
+                 '@schema' : 'http://terminusdb.com/schema/ref#'}.
+collection_descriptor_prefixes_(branch_descriptor, Prefixes) :-
     Prefixes = _{}.
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    label_descriptor{} :< Descriptor,
-    !,
-    atomic_list_concat(['terminusdb:///data/'], Doc_Prefix),
-    Prefixes = _{doc: Doc_Prefix}.
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    database_descriptor{} :< Descriptor,
-    !,
-    atomic_list_concat(['terminusdb:///repository/data/'], Doc_Prefix),
-    Prefixes = _{doc: Doc_Prefix}.
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    repository_descriptor{} :< Descriptor,
-    !,
-    atomic_list_concat(['terminusdb:///commits/data/'], Commit_Document_Prefix),
-    Prefixes = _{doc : Commit_Document_Prefix}.
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    % Note: possible race condition.
-    % We're querying the ref graph to find the branch base uri. it may have changed by the time we actually open the transaction.
-    branch_descriptor{
-        repository_descriptor: Repository_Descriptor
-    } :< Descriptor,
-    !,
-    repository_prefixes(Repository_Descriptor, Prefixes).
-collection_descriptor_prefixes_(Descriptor, Prefixes) :-
-    % We don't know which documents you are retrieving
-    % because we don't know the branch you are on,
-    % and you can't write so it's up to you to set this
-    % in the query.
-    commit_descriptor{} :< Descriptor,
-    !,
+collection_descriptor_prefixes_(commit_descriptor, Prefixes) :-
     Prefixes = _{}.
+
+descriptor_variety(Descriptor, Variety) :-
+    get_dict(variety, Descriptor, Variety),
+    !.
+descriptor_variety(Descriptor, Variety) :-
+    Variety{} :< Descriptor.
 
 collection_descriptor_prefixes(Descriptor, Prefixes) :-
     default_prefixes(Default_Prefixes),
-    collection_descriptor_prefixes_(Descriptor, Nondefault_Prefixes),
+    descriptor_variety(Descriptor, Variety),
+    collection_descriptor_prefixes_(Variety, Nondefault_Prefixes),
     merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
 
 collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
@@ -1128,7 +1106,8 @@ test(id, [
     nb_commit(Builder, Layer),
     layer_to_id(Layer, Id),
 
-    Descriptor = id_descriptor{id: Id},
+    Descriptor = id_descriptor{variety: branch_descriptor,
+                               instance: Id},
 
     open_descriptor(Descriptor, Transaction),
     once(ask(Transaction, t(foo, bar, baz))).

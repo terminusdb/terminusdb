@@ -29,10 +29,11 @@
 descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
     !.
+% NOTE: Do these two make any sense?
 descriptor_database_name(Descriptor, ID) :-
-    id_descriptor{ id : ID } = Descriptor.
+    id_descriptor{ instance : ID } = Descriptor.
 descriptor_database_name(Descriptor, Label) :-
-    label_descriptor{ label : Label } = Descriptor.
+    label_descriptor{ instance : Label } = Descriptor.
 descriptor_database_name(Descriptor, Name) :-
     database_descriptor{ organization_name : _,
                          database_name : Name } = Descriptor,
