@@ -26,21 +26,21 @@
 
 has_repository(Askable, Repo_Name) :-
     ask(Askable,
-        t(_, '@schema':name, Repo_Name^^xsd:string)).
+        t(_, name, Repo_Name^^xsd:string)).
 
 has_local_repository(Askable, Repo_Name) :-
     ask(Askable,
-        (   t(Repo_Uri, '@schema':name, Repo_Name^^xsd:string),
+        (   t(Repo_Uri, name, Repo_Name^^xsd:string),
             t(Repo_Uri, rdf:type, '@schema':'Local'))).
 
 has_remote_repository(Askable, Repo_Name) :-
     ask(Askable,
-        (   t(Repo_Uri, '@schema':name, Repo_Name^^xsd:string),
+        (   t(Repo_Uri, name, Repo_Name^^xsd:string),
             t(Repo_Uri, rdf:type, '@schema':'Remote'))).
 
 repository_name_uri(Askable, Repo_Name, Repo_Uri) :-
     once(ask(Askable,
-             t(Repo_Uri, '@schema':name, Repo_Name^^xsd:string))).
+             t(Repo_Uri, name, Repo_Name^^xsd:string))).
 
 repository_type(Askable, Repo_Name, Type) :-
     repository_name_uri(Askable, Repo_Name, Repo_Uri),
@@ -54,13 +54,13 @@ repository_type(Askable, Repo_Name, Type) :-
 repository_head(Askable, Repo_Name, Layer_Id) :-
     repository_name_uri(Askable, Repo_Name, Repo_Uri),
     once(ask(Askable,
-             t(Repo_Uri, '@schema':head, Layer_Uri))),
+             t(Repo_Uri, head, Layer_Uri))),
     layer_id_uri(Askable, Layer_Id, Layer_Uri).
 
 repository_remote_url(Askable, Repo_Name, Remote_Url) :-
     repository_name_uri(Askable, Repo_Name, Repo_Uri),
     once(ask(Askable,
-             t(Repo_Uri, '@schema':remote_url, Remote_Url^^xsd:string))).
+             t(Repo_Uri, remote_url, Remote_Url^^xsd:string))).
 
 insert_local_repository(Context, Repo_Name, Repo_Uri) :-
     insert_local_repository(Context, Repo_Name, _, Repo_Uri).
@@ -77,7 +77,7 @@ insert_local_repository(Context, Repo_Name, Head_Layer_Id, Repo_Uri) :-
     (   ground(Head_Layer_Id)
     ->  insert_layer_object(Context, Head_Layer_Id, Layer_Uri),
         once(ask(Context,
-                 insert(Repo_Uri, '@schema':head, Layer_Uri)))
+                 insert(Repo_Uri, head, Layer_Uri)))
     ;   true).
 
 insert_remote_repository(Context, Repo_Name, Remote_Url, Repo_Uri) :-
@@ -96,41 +96,41 @@ insert_remote_repository(Context, Repo_Name, Remote_Url, Head_Layer_Id, Repo_Uri
     (   ground(Head_Layer_Id)
     ->  insert_layer_object(Context, Head_Layer_Id, Layer_Uri),
         once(ask(Context,
-                 insert(Repo_Uri, '@schema':head, Layer_Uri)))
+                 insert(Repo_Uri, head, Layer_Uri)))
     ;   true).
 
 update_repository_head(Context, Repo_Name, Layer_Id) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
     once(ask(Context,
-             opt((t(Repo_Uri, '@schema':head, Old_Layer_Uri),
-                  delete(Repo_Uri, '@schema':head, Old_Layer_Uri))))),
+             opt((t(Repo_Uri, head, Old_Layer_Uri),
+                  delete(Repo_Uri, head, Old_Layer_Uri))))),
 
     insert_layer_object(Context, Layer_Id, New_Layer_Uri),
 
     once(ask(Context,
-             insert(Repo_Uri, '@schema':head, New_Layer_Uri))).
+             insert(Repo_Uri, head, New_Layer_Uri))).
 
 update_repository_remote_url(Context, Repo_Name, Remote_Url) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
     once(ask(Context,
-             (   t(Repo_Uri, '@schema':remote_url, Old_Remote_Url^^xsd:string),
-                 delete(Repo_Uri, '@schema':remote_url, Old_Remote_Url^^xsd:string),
-                 insert(Repo_Uri, '@schema':remote_url, Remote_Url^^xsd:string)))).
+             (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
+                 delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
+                 insert(Repo_Uri, remote_url, Remote_Url^^xsd:string)))).
 
 
 remove_local_repository(Context, Repo_Name) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
     once(ask(Context,
              (   delete(Repo_Uri, rdf:type, '@schema':'Local'),
-                 delete(Repo_Uri, '@schema':name, Repo_Name^^xsd:string)))).
+                 delete(Repo_Uri, name, Repo_Name^^xsd:string)))).
 
 remove_remote_repository(Context, Repo_Name) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
     once(ask(Context,
-             (   t(Repo_Uri, '@schema':remote_url, Old_Remote_Url^^xsd:string),
+             (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
                  delete(Repo_Uri, rdf:type, '@schema':'Remote'),
-                 delete(Repo_Uri, '@schema':name, Repo_Name^^xsd:string),
-                 delete(Repo_Uri, '@schema':remote_url, Old_Remote_Url^^xsd:string)))).
+                 delete(Repo_Uri, name, Repo_Name^^xsd:string),
+                 delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string)))).
 
 
 :- begin_tests(local_repo_objects).

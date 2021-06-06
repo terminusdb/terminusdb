@@ -92,7 +92,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
             % don't create if already exists
             do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
                       error(unknown_organization(Organization_Name),_)),
-            assert_auth_action_scope(System_Context, Auth, '@schema':create_database, Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_create_database', Organization_Uri),
 
             do_or_die(
                 not(database_exists(Organization_Name, Database_Name)),

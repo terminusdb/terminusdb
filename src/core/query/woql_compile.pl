@@ -282,16 +282,15 @@ resolve(X@L,XS@LE) -->
     },
     resolve(L,LE).
 resolve(X^^T,Lit) -->
-    resolve(X,XE),
     resolve(T,TE),
     {
-        (   ground(XE)
-        ->  (   atom(XE),
+        (   ground(X)
+        ->  (   atom(X),
                 \+ is_boolean_type(TE)
-            ->  atom_string(XE,XS)
-            ;   XE=XS),
+            ->  atom_string(X,XS)
+            ;   X=XS),
             Lit = XS^^TE
-        ;   Lit = XE^^TE),
+        ;   Lit = X^^TE),
         !
     }.
 resolve(L,Le) -->
