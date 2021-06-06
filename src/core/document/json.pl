@@ -473,7 +473,7 @@ context_triple(JSON,Triple) :-
                           xdd:'http://terminusdb.com/schema/xdd#'
                       },
            Expanded),
-    json_triple_(Expanded,Triple).
+    json_triple_(Expanded,_{},Triple).
 
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
@@ -644,12 +644,13 @@ json_schema_elaborate(JSON,Context,JSON_Schema) :-
 
 json_schema_triple(JSON,Context,Triple) :-
     json_schema_elaborate(JSON,Context,[],JSON_Schema),
-    json_triple_(JSON_Schema,Triple).
+    json_triple_(JSON_Schema,Context,Triple).
 
 % Triple generator
 json_triple(DB,JSON,Triple) :-
     json_elaborate(DB,JSON,Elaborated),
-    json_triple_(Elaborated,Triple).
+    database_context(DB,Context),
+    json_triple_(Elaborated,Context,Triple).
 
 json_triples(DB,JSON,Triples) :-
     findall(
@@ -657,13 +658,13 @@ json_triples(DB,JSON,Triples) :-
         json_triple(DB, JSON, Triple),
         Triples).
 
-json_triple_(JSON,_Triple) :-
+json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
     \+ get_dict('@container', JSON, _),
     !,
     fail.
-json_triple_(JSON,Triple) :-
+json_triple_(JSON,Context,Triple) :-
     is_dict(JSON),
     !,
     % NOTE: Need to do something with containers separately
@@ -697,28 +698,30 @@ json_triple_(JSON,Triple) :-
         ->  global_prefix_expand(rdf:nil,RDF_Nil),
             Triple = t(ID,Key,RDF_Nil)
         ;   get_dict('@id', Value, Value_ID)
-        ->  (   json_triple_(Value, Triple)
+        ->  (   json_triple_(Value, Context, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
-            list_id_key_triple(List,ID,Key,Triple)
+            list_id_key_context_triple(List,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@array")
         ->  get_dict('@value', Value, Array),
-            array_id_key_triple(Array,ID,Key,Triple)
+            array_id_key_context_triple(Array,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@set")
         ->  get_dict('@value', Value, Set),
-            set_id_key_triple(Set,ID,Key,Triple)
+            set_id_key_context_triple(Set,ID,Key,Context,Triple)
         ;   value_json(Lit,Value),
             Triple = t(ID,Key,Lit)
         )
     ).
 
-array_id_key_triple(List,ID,Key,Triple) :-
-    array_index_id_key_triple(List,0,ID,Key,Triple).
+array_id_key_context_triple(List,ID,Key,Context,Triple) :-
+    array_index_id_key_context_triple(List,0,ID,Key,Context,Triple).
 
-array_index_id_key_triple([H|T],Index,ID,Key,Triple) :-
-    idgen_random('Array_',New_ID),
+array_index_id_key_context_triple([H|T],Index,ID,Key,Context,Triple) :-
+    get_dict('@base', Context, Base),
+    atomic_list_concat([Base,'Array_'], Base_Array),
+    idgen_random(Base_Array,New_ID),
     reference(H,HRef),
     global_prefix_expand(sys:value, SYS_Value),
     global_prefix_expand(sys:index, SYS_Index),
@@ -727,15 +730,15 @@ array_index_id_key_triple([H|T],Index,ID,Key,Triple) :-
     ;   Triple = t(New_ID, SYS_Value, HRef)
     ;   Triple = t(New_ID, SYS_Index, Index^^XSD_NonNegativeInteger)
     ;   Next_Index is Index + 1,
-        array_index_id_key_triple(T,Next_Index,ID,Key,Triple)
-    ;   json_triple_(H,Triple)
+        array_index_id_key_context_triple(T,Next_Index,ID,Key,Context,Triple)
+    ;   json_triple_(H,Context,Triple)
     ).
 
-set_id_key_triple([H|T],ID,Key,Triple) :-
+set_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
     (   reference(H,HRef),
         Triple = t(ID,Key,HRef)
-    ;   set_id_key_triple(T,ID,Key,Triple)
-    ;   json_triple_(H,Triple)
+    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
+    ;   json_triple_(H,Context,Triple)
     ).
 
 reference(Dict,ID) :-
@@ -744,17 +747,19 @@ reference(Dict,ID) :-
 reference(Elt,V) :-
     value_json(V,Elt).
 
-list_id_key_triple([],ID,Key,t(ID,Key,RDF_Nil)) :-
+list_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
     global_prefix_expand(rdf:nil, RDF_Nil).
-list_id_key_triple([H|T],ID,Key,Triple) :-
-    idgen_random('Cons_',New_ID),
+list_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
+    get_dict('@base', Context, Base),
+    atomic_list_concat([Base,'Array_'], Base_Array),
+    idgen_random(Base_Array,New_ID),
     (   Triple = t(ID,Key,New_ID)
     ;   reference(H,HRef),
         global_prefix_expand(rdf:first, RDF_First),
         Triple = t(New_ID,RDF_First,HRef)
     ;   global_prefix_expand(rdf:rest, RDF_Rest),
-        list_id_key_triple(T,New_ID,RDF_Rest,Triple)
-    ;   json_triple_(H,Triple)
+        list_id_key_context_triple(T,New_ID,RDF_Rest,Context,Triple)
+    ;   json_triple_(H,Context,Triple)
     ).
 
 rdf_list_list(_Graph, RDF_Nil,[]) :-
@@ -1082,9 +1087,10 @@ insert_document(Query_Context, Document, ID) :-
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
     database_instance(Transaction, [Instance]),
+    database_context(Transaction, Context),
     % insert
     forall(
-        json_triple_(Elaborated, t(S,P,O)),
+        json_triple_(Elaborated, Context, t(S,P,O)),
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
@@ -1139,16 +1145,17 @@ test(write_json_stream_to_builder, [
          )
      ]) :-
 
-    open_string(
-    '{ "@type" : "@context",
-       "@base" : "http://terminusdb.com/system/schema#",
-        "type" : "http://terminusdb.com/type#" }
+    open_string('
+{ "@type" : "@context",
+  "@base" : "terminusdb://system/data/",
+  "@schema" : "http://terminusdb.com/system/schema#",
+  "type" : "http://terminusdb.com/type#" }
 
-     { "@id" : "User",
-       "@type" : "Class",
-       "key_hash" : "type:string",
-       "capability" : { "@type" : "Set",
-                        "@class" : "Capability" } }',Stream),
+{ "@id" : "User",
+  "@type" : "Class",
+  "key_hash" : "type:string",
+  "capability" : { "@type" : "Set",
+                   "@class" : "Capability" } }',Stream),
 
     write_json_stream_to_builder(Stream, Builder,schema),
     nb_commit(Builder,Layer),
@@ -1174,21 +1181,24 @@ test(write_json_stream_to_builder, [
         t("http://terminusdb.com/system/schema#User_capability_Set_Capability",
           "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
           node("http://terminusdb.com/schema/sys#Set")),
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+        t("terminusdb://Prefix_Pair_93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
           "http://terminusdb.com/schema/sys#prefix",
           value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+        t("terminusdb://Prefix_Pair_93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
           "http://terminusdb.com/schema/sys#url",
           value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b",
+        t("terminusdb://Prefix_Pair_93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
           "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
           node("http://terminusdb.com/schema/sys#Prefix")),
         t("terminusdb://context",
           "http://terminusdb.com/schema/sys#base",
-          value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
+          value("\"terminusdb://system/data/\"^^'http://www.w3.org/2001/XMLSchema#string'")),
         t("terminusdb://context",
           "http://terminusdb.com/schema/sys#prefix_pair",
-          node("terminusdb://Prefix_Pair_5450b0648f2f15c2864f8853747d484b")),
+          node("terminusdb://Prefix_Pair_93538b446fef31f7eef2e4d45f7addf0aa1d4ad5")),
+        t("terminusdb://context",
+          "http://terminusdb.com/schema/sys#schema",
+          value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
         t("terminusdb://context",
           "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
           node("http://terminusdb.com/schema/sys#Context"))
@@ -1943,20 +1953,23 @@ test(schema_elaborate, []) :-
           'http://terminusdb.com/schema/sys#Cardinality')
     ].
 
-test(list_id_key_triple, []) :-
+test(list_id_key_context_triple, []) :-
     findall(Triple,
-            list_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
-                                     '@type':task,
-                                     name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                               '@value':"Get Groceries"}},
-                                json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
-                                     '@type':task,
-                                     name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                               '@value':"Take out rubbish"}}],
-                               elt,
-                               p, Triple),
+            list_id_key_context_triple(
+                [json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Get Groceries"}},
+                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Take out rubbish"}}],
+                elt,
+                p,
+                _{'@base' : ''},
+                Triple),
             Triples),
-    
+
     Triples = [
         t(elt,p,Cons1),
         t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_a4963868aa3ad8365a4b164a7f206ffc"),
@@ -1971,16 +1984,19 @@ test(list_id_key_triple, []) :-
 
 test(array_id_key_triple, []) :-
     findall(Triple,
-            array_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
-                                      '@type':task,
-                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                '@value':"Get Groceries"}},
-                                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
-                                      '@type':task,
-                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                '@value':"Take out rubbish"}}],
-                                elt,
-                                p, Triple),
+            array_id_key_context_triple(
+                [json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Get Groceries"}},
+                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Take out rubbish"}}],
+                elt,
+                p,
+                _{'@base' : ''},
+                Triple),
             Triples),
 
     Triples = [
@@ -2012,18 +2028,21 @@ test(array_id_key_triple, []) :-
           "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
     ].
 
-test(set_id_key_triple, []) :-
+test(set_id_key_context_triple, []) :-
     findall(Triple,
-            set_id_key_triple([json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
-                                      '@type':task,
-                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                '@value':"Get Groceries"}},
-                                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
-                                      '@type':task,
-                                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                '@value':"Take out rubbish"}}],
-                                elt,
-                                p, Triple),
+            set_id_key_context_triple(
+                [json{'@id':"task_a4963868aa3ad8365a4b164a7f206ffc",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Get Groceries"}},
+                 json{'@id':"task_f9e4104c952e71025a1d68218d88bab1",
+                      '@type':task,
+                      name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                '@value':"Take out rubbish"}}],
+                elt,
+                p,
+                _{},
+                Triple),
             Triples),
 
     Triples = [
