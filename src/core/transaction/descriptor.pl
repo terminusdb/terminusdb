@@ -269,8 +269,21 @@ open_read_write_obj(Descriptor,
     (   Type = instance,
         Name = "main"
     ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
-        once(has_repository(Repository_Read_Write_Obj.read, Repository_Name)),
-        ignore((   repository_head(Repository_Read_Write_Obj.read, Repository_Name, Commit_Layer_Id),
+
+
+        repository_ontology(Repo_Name),
+        storage(Store),
+        safe_open_named_graph(Store, Repo_Name, Repo_Graph),
+        head(Repo_Graph, Repo_Layer),
+
+        Repo_Layer_Desc =
+        layer_descriptor{
+            variety: database_descriptor,
+            instance: (Repository_Read_Write_Obj.read),
+            schema: Repo_Layer
+        },
+        once(has_repository(Repo_Layer_Desc, Repository_Name)),
+        ignore((   repository_head(Repo_Layer_Desc, Repository_Name, Commit_Layer_Id),
                    storage(Store),
                    store_id_layer(Store, Commit_Layer_Id, Layer)))
     ;   Type = schema,
@@ -395,7 +408,8 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
 
     open_read_write_obj(Layer, Instance_Object, [], _),
 
-    Descriptor = id_descriptor{ instance: Id }, % assume instance graph only
+    Descriptor = id_descriptor{ instance: Id, variety: branch_descriptor },
+                                % assume branch instance graph
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
                              instance_objects : [Instance_Object],
@@ -556,30 +570,25 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                     Map, Map_1),
 
-    [Instance_Object] = Repository_Transaction_Object.instance_objects,
-
+    [Instance_Object] = (Repository_Transaction_Object.instance_objects),
+    % NOTE: These are all incorrect
     (   once(ask(Instance_Object.read,
-                 t(Branch_Uri, ref:branch_name, Branch_Name_String^^xsd:string)))
+                 t(Branch_Uri, name, Branch_Name_String^^xsd:string)))
     ->  (   once(ask(Instance_Object.read,
-                 t(Branch_Uri, ref:ref_commit, Commit_Uri)))
+                 t(Branch_Uri, head, Commit_Uri)))
         ->  findall(Instance_Graph_Name,
                     ask(Instance_Object.read,
-                    (   t(Commit_Uri, ref:instance, Instance_Graph),
-                        t(Instance_Graph, ref:graph_name, Instance_Graph_Name^^xsd:string)
+                    (   t(Commit_Uri, instance, Instance_Graph),
+                        t(Instance_Graph, name, Instance_Graph_Name^^xsd:string)
                     )),
                Instance_Names),
             findall(Schema_Graph_Name,
                     ask(Instance_Object.read,
-                        (   t(Commit_Uri, ref:schema, Schema_Graph),
-                            t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
+                        (   t(Commit_Uri, schema, Schema_Graph),
+                            t(Schema_Graph, name, Schema_Graph_Name^^xsd:string)
                         )),
                     Schema_Names),
-            findall(Inference_Graph_Name,
-                    ask(Instance_Object.read,
-                        (   t(Commit_Uri, ref:inference, Inference_Graph),
-                            t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
-                        )),
-                    Inference_Names)
+            Inference_Names = []
         ;   % Note: There has never been a commit! Set up default graph.
             Instance_Names = ["main"],
             Inference_Names = [],
@@ -941,10 +950,16 @@ collection_descriptor_prefixes_(system_descriptor, Prefixes) :-
                   '@schema': 'http://terminusdb.com/schema/system#' }.
 collection_descriptor_prefixes_(database_descriptor, Prefixes) :-
     Prefixes = _{'@base' : 'terminusdb://repository/data/',
-                 '@schema' : 'http://terminusdb.com/schema/repository#'}.
+                 '@schema' : 'http://terminusdb.com/schema/repository#',
+                 'layer' : "http://terminusdb.com/schema/layer#",
+                 'layer_data' : "terminsudb://layer/data/"
+                }.
 collection_descriptor_prefixes_(repository_descriptor, Prefixes) :-
     Prefixes = _{'@base' : 'terminusdb://ref/data/',
-                 '@schema' : 'http://terminusdb.com/schema/ref#'}.
+                 '@schema' : 'http://terminusdb.com/schema/ref#',
+                 'layer' : "http://terminusdb.com/schema/layer#",
+                 'layer_data' : "terminsudb://layer/data/"
+                }.
 collection_descriptor_prefixes_(branch_descriptor, Prefixes) :-
     Prefixes = _{}.
 collection_descriptor_prefixes_(commit_descriptor, Prefixes) :-
@@ -960,7 +975,7 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
     default_prefixes(Default_Prefixes),
     descriptor_variety(Descriptor, Variety),
     collection_descriptor_prefixes_(Variety, Nondefault_Prefixes),
-    merge_dictionaries(Nondefault_Prefixes, Default_Prefixes, Prefixes).
+    Prefixes = (Default_Prefixes.put(Nondefault_Prefixes)).
 
 collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
     !,

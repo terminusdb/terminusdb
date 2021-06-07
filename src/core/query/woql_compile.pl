@@ -242,6 +242,12 @@ resolve_predicate(P,PE) -->
 resolve_predicate(P, PE) -->
    resolve(P,PE).
 
+resolve_variable(v(Var_Name),Var) -->
+    !,
+    lookup_or_extend(Var_Name,Var).
+resolve_variable(Not_Var,Not_Var) -->
+    [].
+
 /*
  * resolve(ID,Resolution, S0, S1) is det.
  *
@@ -250,7 +256,6 @@ resolve_predicate(P, PE) -->
 resolve(ignore,_Something) -->
     !,
     [].
-
 resolve(X,XEx) -->
     {
         atom(X),
@@ -282,15 +287,16 @@ resolve(X@L,XS@LE) -->
     },
     resolve(L,LE).
 resolve(X^^T,Lit) -->
+    resolve_variable(X,XE),
     resolve(T,TE),
     {
-        (   ground(X)
-        ->  (   atom(X),
+        (   ground(XE)
+        ->  (   atom(XE),
                 \+ is_boolean_type(TE)
-            ->  atom_string(X,XS)
-            ;   X=XS),
+            ->  atom_string(XE,XS)
+            ;   XE=XS),
             Lit = XS^^TE
-        ;   Lit = X^^TE),
+        ;   Lit = XE^^TE),
         !
     }.
 resolve(L,Le) -->

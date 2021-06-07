@@ -58,12 +58,12 @@ finalize_db(DB_Uri) :-
         Context,
         (   ask(Context, (
                     t(DB_Uri, rdf:type, '@schema':'Database'),
-                    t(DB_Uri, '@schema':state, '@schema':'DatabaseState_creating')
+                    t(DB_Uri, state, '@schema':'DatabaseState_creating')
                 )
                )
         ->  ask(Context,
-                (   delete(DB_Uri, 'Schema':state, '@schema':'DatabaseState_creating'),
-                    insert(DB_Uri, 'Schema':state, '@schema':'DatabaseState_finalized')
+                (   delete(DB_Uri, state, '@schema':'DatabaseState_creating'),
+                    insert(DB_Uri, state, '@schema':'DatabaseState_finalized')
                 )
                )
         ;   throw(error(database_in_inconsistent_state))),
@@ -150,7 +150,7 @@ test(create_db_and_check_master_branch, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
 
-         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"main"^^xsd:string))),
+         true((once(ask(Repo_Descriptor, t(_,name,"main"^^xsd:string))),
                \+ ask(Branch_Descriptor, t(_,_,_))))
          ])
 :-
