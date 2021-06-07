@@ -307,17 +307,19 @@ open_read_write_obj(Descriptor,
                                name: Graph_Name },
     !,
     assertion(member(Type, [instance, schema, inference])),
-
     Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
                                       database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
+
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
-    (   branch_head_commit(Commit_Read_Write_Obj.read, Branch_Name, Commit_Uri),
-        graph_for_commit(Commit_Read_Write_Obj.read, Commit_Uri, Type, Graph_Name, Graph_Uri),
-        layer_uri_for_graph(Commit_Read_Write_Obj.read, Graph_Uri, Layer_Uri),
-        layer_id_uri(Commit_Read_Write_Obj.read, Layer_Id, Layer_Uri),
+    (   Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
+                                 variety: repository_descriptor },
+        branch_head_commit(Repo, Branch_Name, Commit_Uri),
+        graph_for_commit(Repo, Commit_Uri, Type, Graph_Name, Graph_Uri),
+        layer_uri_for_graph(Repo, Graph_Uri, Layer_Uri),
+        layer_id_uri(Repo, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
@@ -339,11 +341,13 @@ open_read_write_obj(Descriptor,
                                       repository_name : Repository_Name,
                                       type: instance,
                                       name: "main" },
+    Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
+                             variety: repository_descriptor },
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
-    (   commit_id_uri(Commit_Read_Write_Obj.read, Commit_Id, Commit_Uri),
-        graph_for_commit(Commit_Read_Write_Obj.read, Commit_Uri, Type, Graph_Name, Graph_Uri),
-        layer_uri_for_graph(Commit_Read_Write_Obj.read, Graph_Uri, Layer_Uri),
-        layer_id_uri(Commit_Read_Write_Obj.read, Layer_Id, Layer_Uri),
+    (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
+        graph_for_commit(Repo, Commit_Uri, Type, Graph_Name, Graph_Uri),
+        layer_uri_for_graph(Repo, Graph_Uri, Layer_Uri),
+        layer_id_uri(Repo, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
@@ -571,19 +575,22 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                     Map, Map_1),
 
     [Instance_Object] = (Repository_Transaction_Object.instance_objects),
+    Repo = layer_descriptor{ instance: (Instance_Object.read),
+                             variety: repository_descriptor },
     % NOTE: These are all incorrect
-    (   once(ask(Instance_Object.read,
+    (   once(ask(Repo,
                  t(Branch_Uri, name, Branch_Name_String^^xsd:string)))
-    ->  (   once(ask(Instance_Object.read,
+    ->  (   once(ask(Repo,
                  t(Branch_Uri, head, Commit_Uri)))
         ->  findall(Instance_Graph_Name,
-                    ask(Instance_Object.read,
+                    ask(Repo,
                     (   t(Commit_Uri, instance, Instance_Graph),
                         t(Instance_Graph, name, Instance_Graph_Name^^xsd:string)
                     )),
-               Instance_Names),
+                    Instance_Names),
+
             findall(Schema_Graph_Name,
-                    ask(Instance_Object.read,
+                    ask(Repo,
                         (   t(Commit_Uri, schema, Schema_Graph),
                             t(Schema_Graph, name, Schema_Graph_Name^^xsd:string)
                         )),
@@ -650,28 +657,25 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                     Map, Map_1),
 
     [Instance_Object] = Repository_Transaction_Object.instance_objects,
+    Repo = layer_descriptor{ instance: (Instance_Object.read),
+                             variety: repository_descriptor },
 
-    (   commit_id_uri(Instance_Object.read,
+    (   commit_id_uri(Repo,
                       Commit_Id,
                       Commit_Uri)
     ->  findall(Instance_Graph_Name,
-                 ask(Instance_Object.read,
-                 (   t(Commit_Uri, ref:instance, Instance_Graph),
-                     t(Instance_Graph, ref:graph_name, Instance_Graph_Name^^xsd:string)
+                 ask(Repo,
+                 (   t(Commit_Uri, instance, Instance_Graph),
+                     t(Instance_Graph, name, Instance_Graph_Name^^xsd:string)
                  )),
             Instance_Names),
          findall(Schema_Graph_Name,
-                 ask(Instance_Object.read,
-                     (   t(Commit_Uri, ref:schema, Schema_Graph),
-                         t(Schema_Graph, ref:graph_name, Schema_Graph_Name^^xsd:string)
+                 ask(Repo,
+                     (   t(Commit_Uri, schema, Schema_Graph),
+                         t(Schema_Graph, name, Schema_Graph_Name^^xsd:string)
                      )),
                  Schema_Names),
-         findall(Inference_Graph_Name,
-                 ask(Instance_Object.read,
-                     (   t(Commit_Uri, ref:inference, Inference_Graph),
-                         t(Inference_Graph, ref:graph_name, Inference_Graph_Name^^xsd:string)
-                     )),
-                    Inference_Names)
+         Inference_Names = []
     ;   throw(commit_does_not_exist('commit does not exist', context(Descriptor)))
     ),
 

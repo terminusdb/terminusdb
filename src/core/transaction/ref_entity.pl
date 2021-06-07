@@ -201,7 +201,7 @@ reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
 % Note: We should probably refactor to add this to copy graph / copy new graph
 attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
     once(ask(Context,
-             (   insert(Commit_Uri, Graph_Type, Graph_Uri),
+             (   insert(Commit_Uri, '@schema':Graph_Type, Graph_Uri),
                  insert(Graph_Uri, name, Graph_Name^^xsd:string)))).
 
 attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-

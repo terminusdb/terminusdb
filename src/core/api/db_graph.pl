@@ -26,7 +26,7 @@ create_graph(System_DB, Auth, Path, Commit_Info, Transaction_Metadata) :-
         error(unresolvable_absolute_descriptor(Repo_Descriptor),_)),
 
     check_descriptor_auth(System_DB, Repo_Descriptor,
-                          system:commit_write_access, Auth),
+                          '@schema':'Action_commit_write_access', Auth),
 
     with_transaction(
         Context,

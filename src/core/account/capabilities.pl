@@ -197,7 +197,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, '@schema':meta_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_meta_write_access', Scope_Iri).
 assert_write_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -211,7 +211,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, '@schema':commit_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_commit_write_access', Scope_Iri).
 assert_write_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -274,7 +274,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, '@schema':meta_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_meta_read_access', Scope_Iri).
 assert_read_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -288,7 +288,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, '@schema':commit_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_commit_read_access', Scope_Iri).
 assert_read_access(Context) :-
     branch_descriptor{
         repository_descriptor :

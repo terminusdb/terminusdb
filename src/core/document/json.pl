@@ -233,6 +233,9 @@ database_context(Query_Context, Context) :-
     !,
     query_default_collection(Query_Context, TO),
     database_context(TO, Context).
+database_context(Askable, Context) :-
+    create_context(Askable, Query_Context),
+    database_context(Query_Context, Context).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     % NOTE: This is probably wrong if it already has a prefix...

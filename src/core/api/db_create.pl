@@ -1,5 +1,5 @@
 :- module(db_create, [
-              create_db_unfinalized/9,
+              create_db_unfinalized/10,
               create_db/9,
               create_ref_layer/1,
               finalize_db/1
@@ -20,6 +20,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 :- use_module(core(api/db_graph)).
+:- use_module(core(document)).
 
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
@@ -82,7 +83,7 @@ make_db_public(System_Context,DB_Uri) :-
     ask(System_Context,
         (   insert('@base':anonymous, '@schema':capability, Capability_Uri))).
 
-create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
+create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),
@@ -122,22 +123,48 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
                                 },
                                 repository_name: "local"
                             },
-    % NOTE: Do something with prefixes!
-    create_ref_layer(Repository_Descriptor).
+
+    create_ref_layer(Repository_Descriptor),
+
+    create_schema(Auth, Repository_Descriptor, Organization_Name, Database_Name, Schema, Prefixes).
+
+create_schema(Auth, Repository_Descriptor, Organization_Name, Database_Name, Schema, Prefixes) :-
+    % Create schema graph
+    default_schema_path(Organization_Name, Database_Name, Graph_Path),
+    Commit_Info = _{ author : "TerminusDB",
+                     message : "internal system operation" },
+    create_graph(system_descriptor{}, Auth, Graph_Path, Commit_Info, _),
+
+    Commit_Info = _{ author : "TerminusDB",
+                     message : "internal system operation" },
+    Branch_Desc = branch_descriptor{
+                      repository_descriptor:Repository_Descriptor,
+                      branch_name: "main" },
+
+    create_context(Branch_Desc, Commit_Info, Query_Context),
+    Prefix_Obj = (Prefixes.put('@type', "@context")),
+
+    with_transaction(
+        Query_Context,
+        (   forall(
+                context_triple(Prefix_Obj, t(S,P,O)),
+                ask(Query_Context,
+                    insert(S,P,O,schema))),
+
+            (   Schema = true
+            ->  true
+            ;   ask(Query_Context,
+                    insert('terminusdb://data/Schema', rdf:type, rdf:nil, schema)))
+        ),
+        _).
 
 default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
     atomic_list_concat([Organization_Name, '/', Database_Name, '/',
                         "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
-    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri),
-    % Create schema graph
-    (   Schema = true
-    ->  default_schema_path(Organization_Name, Database_Name, Graph_Path),
-        Commit_Info = _{ author : "TerminusDB",
-                         message : "internal system operation" },
-        create_graph(system_descriptor{}, Auth, Graph_Path, Commit_Info, _)
-    ;   true),
+    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes, Db_Uri),
+
     % update system with finalized
     % This reopens system graph internally, as it was advanced
     finalize_db(Db_Uri).
@@ -151,8 +178,12 @@ test(create_db_and_check_master_branch, [
          cleanup(teardown_temp_store(State)),
 
          true((once(ask(Repo_Descriptor, t(_,name,"main"^^xsd:string))),
-               \+ ask(Branch_Descriptor, t(_,_,_))))
-         ])
+               \+ ask(Branch_Descriptor, t(_,_,_)),
+               database_context(Branch_Descriptor,
+                                _{'@base':"http://somewhere/document",
+                                  '@schema':"http://somewhere/schema",
+                                  '@type':'http://terminusdb.com/schema/sys#Context'})))
+     ])
 :-
     Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
     open_descriptor(system_descriptor{}, System),
