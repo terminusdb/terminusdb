@@ -721,33 +721,10 @@ resolve_absolute_graph_descriptor(["_system", Type, Name], Graph) :-
 %  'instance/{foo,main}' => search in foo and main
 %
 resolve_filter(Filter_String,Filter) :-
-    (   re_matchsub('^(?P<type>[^/]*)$', Filter_String, Resource_Dict,[])
-    ->  atom_string(Type,Resource_Dict.type),
-        Filter = type_filter{ types : [Type]}
-    ;   re_matchsub('^\\*/\\*$', Filter_String, _Resource_Dict,[])
-    ->  Filter = type_filter{ types : [instance, schema, inference]}
-    ;   re_matchsub('^\\{(?P<types>[^}]*)\\}/\\*$', Filter_String, Resource_Dict,[])
-    ->  pattern_string_split(',',Resource_Dict.types, Type_Strings),
-        maplist(atom_string, Types, Type_Strings),
-        forall(member(Type, Types),
-               memberchk(Type, [instance,schema,inference])),
-        Filter = type_filter{ types : Types }
-    ;   re_matchsub('^(?P<type>[^/]*)/\\*$', Filter_String, Resource_Dict,[])
-    ->  atom_string(Type, Resource_Dict.type),
-        memberchk(Type, [instance,schema,inference]),
-        Filter = type_filter{ types : [Type] }
-    ;   re_matchsub('^(?P<type>[^/]*)/\\{(?P<names>[^\\}]*)\\}$', Filter_String, Resource_Dict,[])
-    ->  pattern_string_split(',',Resource_Dict.names, Names),
-        atom_string(Type,Resource_Dict.type),
-        memberchk(Type, [instance,schema,inference]),
-        Filter = type_name_filter{ type : Type,
-                                   names: Names }
-    ;   re_matchsub('^(?P<type>[^/]*)/(?P<name>[^/]*)$', Filter_String, Resource_Dict,[])
-    ->  atom_string(Type, Resource_Dict.type),
-        memberchk(Type, [instance,schema,inference]),
-        Filter = type_name_filter{ type : Type,
-                                   names : [Resource_Dict.name] }
-    ).
+    atom_string(Type,Filter_String),
+    (   Type = '*'
+    ->  Filter = type_filter{ types : [instance,schema] }
+    ;   Filter = type_name_filter{ type : Type, names: ["main"] }).
 
 :- begin_tests(resolution).
 

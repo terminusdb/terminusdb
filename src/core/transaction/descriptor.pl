@@ -948,6 +948,15 @@ collection_descriptor_graph_filter_graph_descriptor(
                   type: Type,
                   name : "main"}) :-
     !.
+collection_descriptor_graph_filter_graph_descriptor(
+    Label_Descriptor,
+    type_name_filter{ type : Type,
+                      names : [Name]},
+    labelled_graph{ label: Label,
+                    type: Type,
+                    name : Name}) :-
+    label_descriptor{} :< Label_Descriptor,
+    get_dict(Type,Label_Descriptor,Label).
 
 collection_descriptor_prefixes_(system_descriptor, Prefixes) :-
     Prefixes = _{ '@data': 'terminusdb:///system/data/',

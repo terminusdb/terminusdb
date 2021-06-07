@@ -40,7 +40,7 @@ is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
-is_simple_class(_Validation_Object,Class) :-
+is_system_class(Class) :-
     prefix_list(
         [
             sys:'Class',
@@ -48,12 +48,12 @@ is_simple_class(_Validation_Object,Class) :-
             sys:'Enum',
             sys:'Unit'
         ], List),
-    memberchk(Class,List),
-    !.
+    memberchk(Class,List).
+
 is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema,Class, rdf:type, C),
-    is_simple_class(Validation_Object,C).
+    is_system_class(C).
 
 is_base_type(Type) :-
     base_type(Type).
@@ -105,7 +105,7 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
 
 sub_class_of(Validation_Object,Class,Subclass) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema,Class,rdfs:subClassOf,Subclass).
+    xrdf(Schema,Class,sys:inherits,Subclass).
 
 repeats([X|T]) :-
     member(X,T),
@@ -383,13 +383,27 @@ key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
 
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+write_default_prefixes(Desc) :-
+    Context = _{'@type' : "@context",
+                '@base' : 'http://i/',
+                '@schema' : 'http://s/'},
+    create_context(Desc, _{author: "me", message: "boo"}, Query_Context),
+    with_transaction(
+        Query_Context,
+        forall(
+            context_triple(Context, t(S,P,O)),
+            ask(Query_Context,
+                insert(S,P,O, schema))),
+        _).
+
 
 test(check_for_cycles_good, [
          setup(
              (   setup_temp_store(State),
-                 create_db_with_empty_schema(admin,test),
-                 resolve_absolute_string_descriptor('admin/test',Desc)
-
+                 test_document_label_descriptor(Desc),
+                 write_default_prefixes(Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -404,15 +418,15 @@ test(check_for_cycles_good, [
         Context,
         (   % Schema
             ask(Context,
-                (   insert(person, rdf:type, 'Class'),
-                    insert(person, name, type:string),
-                    insert(person, birthdate, type:date),
-                    insert(person, friends, set_person),
-                    insert(set_person, rdf:type, 'Set'),
-                    insert(set_person, sys:class, person),
-                    insert(employee, rdf:type, 'Class'),
-                    insert(employee, rdfs:subClassOf, person),
-                    insert(employee, employee_number, type:integer)
+                (   insert('@schema':person, rdf:type, sys:'Class', schema),
+                    insert('@schema':person, '@schema':name, xsd:string, schema),
+                    insert('@schema':person, '@schema':birthdate, xsd:date, schema),
+                    insert('@schema':person, '@schema':friends, '@schema':set_person, schema),
+                    insert('@schema':set_person, rdf:type, sys:'Set', schema),
+                    insert('@schema':set_person, sys:class, '@schema':person, schema),
+                    insert('@schema':employee, rdf:type, sys:'Class', schema),
+                    insert('@schema':employee, sys:inherits, '@schema':person, schema),
+                    insert('@schema':employee, '@schema':employee_number, xsd:integer, schema)
                 )
                )
         ),
@@ -421,14 +435,23 @@ test(check_for_cycles_good, [
 test(check_for_cycles_bad, [
          setup(
              (   setup_temp_store(State),
-                 create_db_with_empty_schema(admin,test),
-                 resolve_absolute_string_descriptor('admin/test',Desc)
-
+                 test_document_label_descriptor(Desc),
+                 write_default_prefixes(Desc)
              )),
          cleanup(
              teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':cycle_in_class,
+                          from_class:'http://s/employee',
+                          path:['http://s/person',
+                                'http://s/employee',
+                                'http://s/engineer',
+                                'http://s/person'],
+                          to_class:'http://s/engineer'}]
+             )
          )
-
      ]) :-
 
     create_context(Desc,commit{
@@ -440,25 +463,27 @@ test(check_for_cycles_bad, [
         (   % Schema
             ask(Context,
                 (
-                    insert(person, rdf:type, 'Class'),
-                    insert(person, sys:inheritsFrom, engineer),
-                    insert(person, name, type:string),
-                    insert(person, birthdate, type:date),
-                    insert(person, friends, set_person),
-                    insert(set_person, rdf:type, 'Set'),
-                    insert(set_person, sys:class, person),
+                    insert('@schema':person, rdf:type, sys:'Class', schema),
+                    insert('@schema':person, sys:inherits, '@schema':engineer, schema),
+                    insert('@schema':person, '@schema':name, xsd:string, schema),
+                    insert('@schema':person, '@schema':birthdate, xsd:date, schema),
+                    insert('@schema':person, '@schema':friends, '@schema':set_person, schema),
+                    insert('@schema':set_person, rdf:type, sys:'Set', schema),
+                    insert('@schema':set_person, sys:class, '@schema':person, schema),
 
-                    insert(employee, rdf:type, 'Class'),
-                    insert(employee, sys:inheritsFrom, person),
-                    insert(employee, employee_number, type:integer),
+                    insert('@schema':employee, rdf:type, sys:'Class', schema),
+                    insert('@schema':employee, sys:inherits, '@schema':person, schema),
+                    insert('@schema':employee, '@schema':employee_number, xsd:integer, schema),
 
-                    insert(engineer, rdf:type, 'Class'),
-                    insert(engineer, sys:inheritsFrom, employee)
+                    insert('@schema':engineer, rdf:type, sys:'Class', schema),
+                    insert('@schema':engineer, sys:inherits, '@schema':employee, schema)
                 )
                )
         ),
         _Meta_Data
-    ).
+    ),
+
+    print_all_triples(Desc, schema).
 
 %% TODO: Check for diamond properties!
 
