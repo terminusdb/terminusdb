@@ -31,6 +31,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(capabilities).
+:- use_module(core(document)).
 
 /** <module> User
  *
