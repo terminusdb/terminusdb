@@ -577,7 +577,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     [Instance_Object] = (Repository_Transaction_Object.instance_objects),
     Repo = layer_descriptor{ instance: (Instance_Object.read),
                              variety: repository_descriptor },
-    % NOTE: These are all incorrect
+
     (   once(ask(Repo,
                  t(Branch_Uri, name, Branch_Name_String^^xsd:string)))
     ->  (   once(ask(Repo,
