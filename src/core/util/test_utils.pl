@@ -283,14 +283,14 @@ create_db_with_empty_schema(Organization, Db_Name) :-
                   '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
-    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).
 
 create_public_db_without_schema(Organization, Db_Name) :-
     Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
                   '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
-    create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
 
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),
