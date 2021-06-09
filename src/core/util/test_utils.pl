@@ -504,13 +504,13 @@ setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_De
     %% Setup: create a database on the remote server, clone it on the local server
     with_triple_store(
         Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+        (   add_user("KarlKautsky", some('password_destination'), _),
             create_db_without_schema("KarlKautsky", "foo"))
     ),
 
     with_triple_store(
         Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+        add_user("RosaLuxemburg", some('password_origin'), _)),
 
     atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
     atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
@@ -529,7 +529,7 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
     %% Setup: create a database with content on the remote server, clone it on the local server
     with_triple_store(
         Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+        (   add_user("KarlKautsky", some('password_destination'), _),
             create_db_without_schema("KarlKautsky", "foo"),
 
             resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
@@ -548,7 +548,7 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
 
     with_triple_store(
         Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+        add_user("RosaLuxemburg", some('password_origin'), _)),
 
 
     atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),

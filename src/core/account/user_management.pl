@@ -208,12 +208,8 @@ update_user(SystemDB, Name, Document) :-
                 insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
     ;   true).
 update_user(SystemDB, Name, Document) :-
-    do_or_die((_{ user_identifier : ID,
-                  agent_name : Name,
-                  comment : Comment} :< Document),
-              error(malformed_update_user_document(Document,[user_identifier,
-                                                             agent_name,
-                                                             comment
+    do_or_die((_{ agent_name : Name} :< Document),
+              error(malformed_update_user_document(Document,[agent_name
                                                             ]),
                     _)),
 
@@ -221,7 +217,7 @@ update_user(SystemDB, Name, Document) :-
     ->  Password_Option = some(Password)
     ;   Password_Option = none),
 
-    add_user(SystemDB, Name, ID, Comment, Password_Option, _).
+    add_user(SystemDB, Name, Password_Option, _).
 
 delete_user_transaction(SystemDB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -499,7 +495,7 @@ test(user_update, [
      ]) :-
 
     Name = "Gavin",
-    add_user(Name, "gavin@datachemist.com", "here.i.am", some("password"), User_URI),
+    add_user(Name, some("password"), User_URI),
 
     Agent_Name = "Bill",
     Password = "my_pass_is_strong",
@@ -560,7 +556,7 @@ test(get_roles, [
 
     Document = _{},
     Name = "Gavin",
-    add_user(Name, "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+    add_user(Name, some('password'), User_URI),
 
     create_db_without_schema(Name, "test"),
 
@@ -580,7 +576,7 @@ test(get_loads_of_roles, [
      ]) :-
 
     Document = _{},
-    add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+    add_user("Gavin", some('password'), User_URI),
 
     create_db_without_schema("Gavin", "test1"),
     create_db_without_schema("Gavin", "test2"),
@@ -743,7 +739,7 @@ test(add_role_no_capability, [
      ]) :-
 
     Name = "Gavin",
-    add_user(Name, "gavin@terminusdb.com", "here.i.am", some('password'), User_URI),
+    add_user(Name, some('password'), User_URI),
 
     create_db_without_schema("admin", "flurp"),
     create_context(system_descriptor{},
@@ -767,8 +763,8 @@ test(update_role_no_capability, [
          error(no_manage_capability("Kevin","flurp"),_)
      ]) :-
 
-    add_user("Kevin", "kevin@terminusdb.com", "here.i.am", some('password'), _Kevin_URI),
-    add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), Gavin_URI),
+    add_user("Kevin", some('password'), _Kevin_URI),
+    add_user("Gavin", some('password'), Gavin_URI),
 
     create_db_without_schema("Kevin", "flurp"),
     create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
@@ -837,7 +833,7 @@ test(add_user_organization, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    add_user("Kevin", "kevin@terminusdb.com", "here.i.am", some('password'), _Kevin_URI),
+    add_user("Kevin", some('password'), _Kevin_URI),
 
     create_db_without_schema("Kevin", "flurp"),
 
@@ -859,9 +855,7 @@ test(bad_add_user_document, [
          error(malformed_update_user_document(_660{agent_name:'Gavin',comment:'some comment',user_piedentifier:gavin},[user_identifier,agent_name,comment]),_)
      ]) :-
 
-    User_Document = _{ user_piedentifier : gavin,
-                       agent_name : 'Gavin',
-                       comment : 'some comment'},
+    User_Document = _{ agent_name : 'Gavin' },
 
     super_user_authority(Auth),
     update_user_transaction(system_descriptor{}, Auth, gavin, User_Document).
