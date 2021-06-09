@@ -4,6 +4,7 @@
 
 :- use_module(core(util), [exists/2]).
 :- use_module(core(transaction)).
+:- use_module(core(query)).
 :- use_module(instance).
 :- use_module(schema).
 /*
@@ -32,7 +33,8 @@ needs_schema_instance_validation(Validation_Object) :-
         instance_objects: Instance_Objects
     } :< Validation_Object,
     exists(validation_object_has_layer, Instance_Objects),
-    exists(validation_object_changed, Schema_Objects).
+    exists(validation_object_changed, Schema_Objects),
+    \+ is_schemaless(Validation_Object).
 
 /*
  * needs_local_instance_validation(Validation_Object) is det.
@@ -46,7 +48,8 @@ needs_local_instance_validation(Validation_Object) :-
         instance_objects : Instance_Objects
     } :< Validation_Object,
     Schema_Objects \= [],
-    exists(validation_object_changed, Instance_Objects).
+    exists(validation_object_changed, Instance_Objects),
+    \+ is_schemaless(Validation_Object).
 
 /*
  * refute(+Validation:validation_obj, -Witness) is nondet.

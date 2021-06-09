@@ -9,7 +9,8 @@
               type_descriptor/3,
               class_subsumed/3,
               key_descriptor/3,
-              type_family_constructor/1
+              type_family_constructor/1,
+              is_schemaless/1
           ]).
 
 /*
@@ -380,6 +381,10 @@ key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
     key_base(Validation_Object,Type,Base).
+
+is_schemaless(Validation_Object) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
 
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
