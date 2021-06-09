@@ -155,9 +155,8 @@ assert_write_access(G, Context, Context) :-
     New_Context = Context.put(write_graph,G),
     assert_write_access(New_Context, _).
 
-write_type_access(instance,system:instance_write_access).
-write_type_access(schema,system:schema_write_access).
-write_type_access(inference,system:inference_write_access).
+write_type_access(instance,'@schema':'Action_instance_write_access').
+write_type_access(schema,'@schema':'Action_schema_write_access').
 
 is_super_user(Auth) :-
     is_super_user(Auth, _{ '@base' : 'terminusdb://system/data/' }).
@@ -244,9 +243,8 @@ assert_read_access(Filter,Context,Context) :-
     New_Context = Context.put(filter,Filter),
     assert_read_access(New_Context, _).
 
-read_type_access(instance,system:instance_read_access).
-read_type_access(schema,system:schema_read_access).
-read_type_access(inference,system:inference_read_access).
+read_type_access(instance,'@schema':'Action_instance_read_access').
+read_type_access(schema,'@schema':'Action_schema_read_access').
 
 filter_types(type_filter{types:Types}, Types).
 filter_types(type_name_filter{type : Type, names : _}, [Type]).

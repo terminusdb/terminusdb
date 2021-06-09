@@ -15,14 +15,8 @@
               add_organization/3,
               add_organization_transaction/3,
 
-              add_user_organization_transaction/4,
+              add_user_organization_transaction/4
 
-              add_role/6,
-              update_role/6,
-              update_role_transaction/6,
-
-              get_role/4,
-              exists_role/4
           ]).
 
 :- use_module(core(util)).
@@ -61,7 +55,7 @@ delete_organization(Name) :-
 
 delete_organization(Context,Name) :-
     organization_name_uri(Context, Name, Organization_Uri),
-    delete_object(Context, Organization_Uri).
+    delete_document(Context, Organization_Uri).
 
 add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -91,12 +85,12 @@ add_user_organization(Context, Nick, Org, Organization_URI) :-
     add_organization(Context, Org, Organization_URI),
 
     get_document(Context, User_URI, User_Document),
-    Capabilities = (User_Document.capabilities),
+    Capabilities = (User_Document.capability),
     New_Capabilities = [_{ 'scope' : Organization_URI,
                            'role': ["admin_role"]}
                         |Capabilities],
-    New_User_Document = (User_Document.put(capabilities, New_Capabilities)),
-    update_document(Context, New_User_Document).
+    New_User_Document = (User_Document.put(capability, New_Capabilities)),
+    update_document(Context, New_User_Document, _).
 
 add_organization_transaction(System_DB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -133,7 +127,7 @@ user_managed_resource(_Askable, User_Uri, _Resource_Uri) :-
     is_super_user(User_Uri),
     !.
 user_managed_resource(Askable, User_Uri, Resource_Uri) :-
-    auth_action_scope(Askable, User_Uri, system:manage_capabilities, Resource_Uri).
+    auth_action_scope(Askable, User_Uri, '@schema':'Action_manage_capabilities', Resource_Uri).
 
 add_user(Nick, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},
@@ -152,18 +146,19 @@ add_user(SystemDB, Nick, Pass_Opt, User_URI) :-
     ;   true),
 
     add_organization(SystemDB, Nick, Organization_URI),
-    User_Document = _{
+    User_Document = json{
                         '@type': 'User',
                         'name': Nick,
                         'capability': [
-                            { 'scope': Organization_URI,
-                              'role': [ "admin_role" ]
-                            }
+                            json{ 'scope': Organization_URI,
+                                  'role': [ "admin_role" ]
+                                }
                         ]
                     },
     (   some(Pass) = Pass_Opt
     ->  crypto_password_hash(Pass,Hash),
-        Final_User_Document = (User_Document.put(key_hash, Hash))
+        atom_string(Hash,Hash_String),
+        Final_User_Document = (User_Document.put(key_hash, Hash_String))
     ;   Final_User_Document = User_Document),
 
     insert_document(SystemDB, Final_User_Document, User_URI).
@@ -203,9 +198,9 @@ update_user(SystemDB, Name, Document) :-
     (   get_dict(password, Document, Password)
     ->  crypto_password_hash(Password,Hash),
         ask(SystemDB,
-            (   t(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
-                delete(User_Uri, system:user_key_hash, Old_Hash^^xsd:string),
-                insert(User_Uri, system:user_key_hash, Hash^^xsd:string)))
+            (   t(User_Uri, key_hash, Old_Hash^^xsd:string),
+                delete(User_Uri, key_hash, Old_Hash^^xsd:string),
+                insert(User_Uri, key_hash, Hash^^xsd:string)))
     ;   true).
 update_user(SystemDB, Name, Document) :-
     do_or_die((_{ agent_name : Name} :< Document),
@@ -249,7 +244,7 @@ delete_user(User_Name) :-
 delete_user(Context, User_Name) :-
     user_name_uri(Context, User_Name, User_URI),
     ask(Context,
-        (   t(User_URI, rdf:type, system:'User'),
+        (   t(User_URI, rdf:type, '@schema':'User'),
             delete_object(User_URI)
         )).
 
@@ -265,163 +260,9 @@ exists_role(Askable, User, Organization, Resource_Name_Option) :-
         ask(Askable,
             (   t(User_URI, capability, Capability_URI),
                 t(Capability_URI, role, Role_URI),
-                t(Role_URI, rdf:type, system:'Role'),
+                t(Role_URI, rdf:type, '@system':'Role'),
                 t(Capability_URI, scope, Resource_URI)
             ))).
-
-add_role(Context, Auth_ID, User, Organization, Resource_Name_Option, Actions) :-
-    user_name_uri(Context, User, User_URI),
-
-    (   Resource_Name_Option = none
-    ->  organization_name_uri(Context, Organization, Resource_URI)
-    ;   Resource_Name_Option = some(Resource_Name),
-        organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI)),
-
-    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name), _)),
-
-    forall(
-        ask(Context,
-            (   random_idgen(doc:'Role',["founder"^^xsd:string], Role_URI),
-                random_idgen(doc:'Capability',[User^^xsd:string], Capability_URI),
-                insert(User_URI, system:role, Role_URI),
-                insert(Role_URI, rdf:type, system:'Role'),
-                insert(Role_URI, system:capability, Capability_URI),
-                insert(Capability_URI, system:direct_capability_scope, Resource_URI),
-                insert(Capability_URI, rdf:type, system:'Capability'),
-                member(Action, Actions),
-                insert(Capability_URI, system:action, Action)
-            )),
-        true).
-
-
-get_role(Askable, Auth_ID, Document, Response) :-
-    (   get_dict(agent_name, Document, Agent)
-    ->  Agent_Var = Agent^^xsd:string
-    ;   Agent_Var = v('Agent')),
-
-    (   get_dict(database_name, Document, Database_Name)
-    ->  Database_Name_Var = Database_Name^^xsd:string
-    ;   Database_Name_Var = v('Database_Name')),
-
-    (   get_dict(organization_name, Document, Organization_Name)
-    ->  Organization_Var = Organization_Name^^xsd:string
-    ;   Organization_Var = v('Organization')),
-
-    create_context(Askable, Query_Context),
-
-    Query = (select(
-                 [v('Owner_Role_Obj'),
-                  v('Control_Role_ID'),
-                  v('Database_ID'),
-                  v('Agent'),
-                  v('Organization')],
-                 (   t(Auth_ID, system:role, v('Control_Role_ID')),
-                     t(v('Control_Role_ID'), system:capability, v('Control_Capability_ID')),
-                     t(v('Control_Capability_ID'), system:capability_scope, v('Organization_ID')),
-                     t(v('Control_Capability_ID'), system:action, system:manage_capabilities),
-                     t(v('Organization_ID'), system:organization_name, Organization_Var),
-                     t(v('Organization_ID'), system:resource_includes, v('Database_ID')),
-                     t(v('Database_ID'), rdf:type, system:'Database'),
-                     t(v('Database_ID'), system:resource_name, Database_Name_Var),
-                     t(v('Capability_ID'), system:capability_scope, v('Database_ID')),
-                     t(v('Owner_Role_ID'), system:capability, v('Capability_ID')),
-                     t(v('Owner_ID'), system:role, v('Owner_Role_ID')),
-                     t(v('Owner_ID'), system:agent_name, Agent_Var),
-                     read_object(v('Owner_Role_ID'), 3, v('Owner_Role_Obj'))
-                 ))),
-    run_context_ast_jsonld_response(Query_Context,Query,Response).
-
-update_role_transaction(System_DB, Auth, Agents, Organization, Database_Name, Actions) :-
-    Commit_Info = commit_info{ author: "add_organization_transaction/3",
-                               message: "internal system operation"
-                             },
-    askable_context(System_DB, System_DB, Auth, Commit_Info, Ctx),
-
-    % NOTE: This should be replaced by appropriate document API expansion globally
-    default_prefixes(Prefixes),
-    maplist({Prefixes}/[Action,Action_URI]>>
-            prefix_expand(Action, Prefixes, Action_URI),
-            Actions,
-            Action_Uris),
-
-    with_transaction(Ctx,
-                     update_role(System_DB, Auth, Agents, Organization, Database_Name, Action_Uris),
-                     _).
-
-
-update_role(Context, Auth_ID, Users, Organization, Resource_Name_Option, Actions) :-
-    exists_role(Context, User, Organization, Resource_Name_Option),
-    !,
-
-    findall(User_URI,
-            (   member(User, Users),
-                user_name_uri(Context, User, User_URI)),
-            User_URIs),
-
-    (   Resource_Name_Option = none
-    ->  organization_name_uri(Context, Organization, Resource_URI)
-    ;   Resource_Name_Option = some(Resource_Name),
-        organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI)),
-
-    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name), _)),
-
-    forall(ask(Context,
-               (   member(User_URI, User_URIs),
-                   t(User_URI, system:role, Role_URI),
-                   t(Role_URI, system:capability, Capability_URI),
-                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
-                   t(Capability_URI, rdf:type, system:'Capability'),
-                   t(Capability_URI, system:action, Action),
-                   delete(Capability_URI, system:action, Action)
-               )),
-           true),
-
-    forall(ask(Context,
-               (   member(User_URI, User_URIs),
-                   t(User_URI, system:role, Role_URI),
-                   t(Role_URI, system:capability, Capability_URI),
-                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
-                   t(Capability_URI, rdf:type, system:'Capability'),
-                   member(Action, Actions),
-                   insert(Capability_URI, system:action, Action)
-               )),
-           true).
-update_role(Context, Auth_ID, Users, Organization, Resource_Name_Option, Actions) :-
-    forall(member(User, Users),
-           add_role(Context, Auth_ID, User, Organization, Resource_Name_Option, Actions)).
-
-delete_role(Context, Auth_ID, User, Organization, Resource_Name_Option) :-
-    exists_role(Context, User, Organization, Resource_Name_Option),
-    !,
-
-    user_name_uri(Context, User, User_URI),
-
-    (   Resource_Name_Option = none
-    ->  organization_name_uri(Context, Organization, Resource_URI)
-    ;   Resource_Name_Option = some(Resource_Name),
-        organization_database_name_uri(Context, Organization, Resource_Name, Resource_URI)),
-
-    do_or_die(user_managed_resource(Context, Auth_ID, Resource_URI),
-              error(no_manage_capability(Organization,Resource_Name), _)),
-
-    forall(ask(Context,
-               (
-                   t(User_URI, system:role, Role_URI),
-                   t(Role_URI, system:capability, Capability_URI),
-                   t(Capability_URI, system:direct_capability_scope, Resource_URI),
-                   t(Capability_URI, rdf:type, system:'Capability'),
-                   t(Capability_URI, system:action, Action),
-
-                   delete(Role_URI, system:capability, Capability_URI),
-                   delete(Capability_URI, system:direct_capability_scope, Resource_URI),
-                   delete(Capability_URI, rdf:type, system:'Capability'),
-                   delete(Capability_URI, system:action, Action),
-                   delete(Capability_URI, system:action, Action)
-               )),
-           true).
-
 
 :- begin_tests(user_management).
 :- use_module(core(util/test_utils)).
@@ -508,18 +349,14 @@ test(user_update, [
        user_identifier : Identifier,
        comment : Comment },
 
-    update_user(Name, Document),
-
-    %findall(P-Q, ask(system_descriptor{}, t(User_URI, P, Q)), PQs),
-    %writeq(PQs),
-    %nl,
+    update_user(system_descriptor{}, Name, Document,ID),
+    writeq(ID),
     once(ask(system_descriptor{},
-             (   t(User_URI, system:agent_name, Agent_Name^^xsd:string),
-                 t(User_URI, system:user_key_hash, Hash^^xsd:string),
-                 t(User_URI, rdfs:comment, Comment@en),
-                 t(User_URI, system:user_identifier, Identifier^^xsd:string)),
+             (   t(User_URI, name, Agent_Name^^xsd:string),
+                 t(User_URI, key_hash, Hash^^xsd:string)),
              [compress_prefixes(false)]
             )),
+
     atom_string(Hash_Atom, Hash),
     crypto_password_hash(Password, Hash_Atom).
 
@@ -548,286 +385,6 @@ test(organization_delete, [
 
     \+ organization_name_exists(system_descriptor{}, "testing_organization").
 
-
-test(get_roles, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    Document = _{},
-    Name = "Gavin",
-    add_user(Name, some('password'), User_URI),
-
-    create_db_without_schema(Name, "test"),
-
-    get_role(system_descriptor{}, User_URI, Document, Response),
-    Bindings = (Response.bindings),
-
-    forall((member(Binding_Set, Bindings),
-            (Name = Binding_Set.'Organization'.'@value')
-           ),
-           member(Name, ["Gavin"])
-          ).
-
-test(get_loads_of_roles, [
-         blocked('takes too long, adds nothing'),
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    Document = _{},
-    add_user("Gavin", some('password'), User_URI),
-
-    create_db_without_schema("Gavin", "test1"),
-    create_db_without_schema("Gavin", "test2"),
-    create_db_without_schema("Gavin", "test3"),
-    create_db_without_schema("Gavin", "test4"),
-    create_db_without_schema("Gavin", "test6"),
-    create_db_without_schema("Gavin", "test7"),
-    create_db_without_schema("Gavin", "test8"),
-    create_db_without_schema("Gavin", "test9"),
-    create_db_without_schema("Gavin", "test10"),
-    create_db_without_schema("Gavin", "test12"),
-    create_db_without_schema("Gavin", "test13"),
-    create_db_without_schema("Gavin", "test14"),
-    create_db_without_schema("Gavin", "test15"),
-    create_db_without_schema("Gavin", "test16"),
-    create_db_without_schema("Gavin", "test17"),
-    create_db_without_schema("Gavin", "test18"),
-    create_db_without_schema("Gavin", "test19"),
-    create_db_without_schema("Gavin", "test20"),
-    create_db_without_schema("Gavin", "test21"),
-    create_db_without_schema("Gavin", "test22"),
-    create_db_without_schema("Gavin", "test23"),
-    create_db_without_schema("Gavin", "test24"),
-    create_db_without_schema("Gavin", "test25"),
-    create_db_without_schema("Gavin", "test26"),
-    create_db_without_schema("Gavin", "test27"),
-    create_db_without_schema("Gavin", "test28"),
-    create_db_without_schema("Gavin", "test29"),
-    create_db_without_schema("Gavin", "test30"),
-
-    get_role(system_descriptor{}, User_URI, Document, Response),
-
-    Bindings = (Response.bindings),
-
-    forall((member(Binding_Set, Bindings),
-            (Name = Binding_Set.'Organization'.'@value')
-           ),
-           member(Name, ["Gavin"])
-          ).
-
-test(add_role, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-
-    create_db_without_schema("admin", "flurp"),
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
-
-    with_transaction(
-        Context,
-        add_role(Context,
-                 doc:admin,
-                 "admin",
-                 "admin",
-                 some("flurp"),
-                 [system:inference_write_access]
-                ),
-        _),
-
-    Document =
-    _{  agent_name : "admin"
-    },
-    get_role(system_descriptor{}, doc:admin, Document, Response),
-    Bindings = (Response.bindings),
-
-    once((member(Elt,Bindings),
-          (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
-          (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
-          (Cap.'system:action'.'@id') = 'system:inference_write_access')).
-
-
-test(update_role, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-
-    create_db_without_schema("admin", "flurp"),
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
-
-    with_transaction(
-        Context,
-        add_role(Context,
-                 doc:admin,
-                 "admin",
-                 "admin",
-                 some("flurp"),
-                 [system:inference_write_access]
-                ),
-        _),
-
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
-
-    with_transaction(
-        Context2,
-        update_role(Context2,
-                    doc:admin,
-                    ["admin"],
-                    "admin",
-                    some("flurp"),
-                    [system:inference_read_access]
-                   ),
-        _),
-
-    Document =
-    _{  agent_name : "admin"
-    },
-
-    get_role(system_descriptor{}, doc:admin, Document, Response),
-    Bindings = (Response.bindings),
-
-    once((member(Elt,Bindings),
-          (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
-          (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
-          (Cap.'system:action'.'@id') = 'system:inference_read_access')),
-
-    \+ (member(Elt,Bindings),
-        (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
-        (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
-        (Cap.'system:action'.'@id') = 'system:inference_write_access').
-
-
-test(update_role_unexpanded_keys, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    create_db_without_schema("admin", "flurp"),
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
-
-    with_transaction(
-        Context,
-        add_role(Context,
-                 doc:admin,
-                 "admin",
-                 "admin",
-                 some("flurp"),
-                 [system:inference_write_access]
-                ),
-        _),
-
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
-
-    update_role_transaction(Context2,
-                            doc:admin,
-                            ["admin"],
-                            "admin",
-                            some("flurp"),
-                            ["system:inference_read_access",
-                             "system:push"]
-                           ),
-    % No error is sufficient
-    true.
-
-test(add_role_no_capability, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State)),
-         error(no_manage_capability("admin","flurp"), _)
-     ]) :-
-
-    Name = "Gavin",
-    add_user(Name, some('password'), User_URI),
-
-    create_db_without_schema("admin", "flurp"),
-    create_context(system_descriptor{},
-                   commit_info{ message : "http://foo", author : "bar"},
-                   Context),
-
-    with_transaction(
-        Context,
-        add_role(Context,
-                 User_URI,
-                 "admin",
-                 "admin",
-                 some("flurp"),
-                 [system:inference_write_access]
-                ),
-        _).
-
-test(update_role_no_capability, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State)),
-         error(no_manage_capability("Kevin","flurp"),_)
-     ]) :-
-
-    add_user("Kevin", some('password'), _Kevin_URI),
-    add_user("Gavin", some('password'), Gavin_URI),
-
-    create_db_without_schema("Kevin", "flurp"),
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
-
-    with_transaction(
-        Context,
-        update_role(Context,
-                 Gavin_URI,
-                 ["Kevin"],
-                 "Kevin",
-                 some("flurp"),
-                 [system:inference_write_access]
-                ),
-        _).
-
-test(update_organization_role, [
-         setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-
-    create_db_without_schema("admin", "flurp"),
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context),
-
-    with_transaction(
-        Context,
-        add_role(Context,
-                 doc:admin,
-                 "admin",
-                 "admin",
-                 none,
-                 [system:manage_capabilities]
-                ),
-        _),
-
-    create_context(system_descriptor{}, commit_info{ message : "http://foo", author : "bar"}, Context2),
-
-    with_transaction(
-        Context2,
-        update_role(Context2,
-                    doc:admin,
-                    ["admin"],
-                    "admin",
-                    some("flurp"),
-                    [system:manage_capabilities,system:inference_read_access]
-                   ),
-        _),
-
-    Document =
-    _{  agent_name : "admin"
-    },
-
-    get_role(system_descriptor{}, doc:admin, Document, Response),
-    Bindings = (Response.bindings),
-
-    once((member(Elt,Bindings),
-          (Elt.'Owner_Role_Obj'.'system:capability') = Cap,
-          (Cap.'system:capability_scope'.'system:resource_name'.'@value') = "flurp",
-          (Cap.'system:action') =
-          [_{'@id':'system:inference_read_access',
-             '@type':'system:DBAction'},
-           _{'@id':'system:manage_capabilities','@type':'system:DBAction'}])).
-
 test(add_user_organization, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State))
@@ -852,7 +409,7 @@ test(add_user_organization, [
 test(bad_add_user_document, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
-         error(malformed_update_user_document(_660{agent_name:'Gavin',comment:'some comment',user_piedentifier:gavin},[user_identifier,agent_name,comment]),_)
+         error(malformed_update_user_document(_660{agent_name:'Gavin'},[agent_name]),_)
      ]) :-
 
     User_Document = _{ agent_name : 'Gavin' },
