@@ -965,13 +965,13 @@ collection_descriptor_prefixes_(database_descriptor, Prefixes) :-
     Prefixes = _{'@base' : 'terminusdb://repository/data/',
                  '@schema' : 'http://terminusdb.com/schema/repository#',
                  'layer' : "http://terminusdb.com/schema/layer#",
-                 'layer_data' : "terminsudb://layer/data/"
+                 'layer_data' : "terminusdb://layer/data/"
                 }.
 collection_descriptor_prefixes_(repository_descriptor, Prefixes) :-
     Prefixes = _{'@base' : 'terminusdb://ref/data/',
                  '@schema' : 'http://terminusdb.com/schema/ref#',
                  'layer' : "http://terminusdb.com/schema/layer#",
-                 'layer_data' : "terminsudb://layer/data/"
+                 'layer_data' : "terminusdb://layer/data/"
                 }.
 collection_descriptor_prefixes_(branch_descriptor, Prefixes) :-
     Prefixes = _{}.

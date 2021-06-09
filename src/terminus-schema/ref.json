@@ -2,7 +2,7 @@
   "@base" : "terminusdb://ref/data/",
   "@schema" : "http://terminusdb.com/schema/ref#",
   "layer" : "http://terminusdb.com/schema/layer#",
-  "layer_data" : "terminsudb://layer/data/",
+  "layer_data" : "terminusdb://layer/data/",
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
 { "@id" : "layer:Layer",
