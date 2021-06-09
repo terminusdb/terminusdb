@@ -70,10 +70,12 @@ member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
     member_list_(Instance, O, L).
 
-card_count(Validation_Object, S,P,O,N) :-
+card_count(Validation_Object,S,P,O,N) :-
     % choose as existential anything free
     database_instance(Validation_Object, Instance),
-    aggregate(count,[S,P,O]^xrdf(Instance,S,P,O),N).
+    (   aggregate(count,[S,P,O]^xrdf(Instance,S,P,O),N)
+    ->  true
+    ;   N = 0).
 
 refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,_,1),
@@ -161,12 +163,12 @@ range_term_list(Validation_Object, S, P, L) :-
 
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
-    class_predicate_type(Validation_Object, C, P, _),
+    class_predicate_type(Validation_Object,C,P,_),
     !,
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
-    ;   class_predicate_type(Validation_Object,C,Q,tagged_union(TU,R)),
+    ;   class_predicate_type(Validation_Object,C,Q,_),
         P \= Q,
-        refute_cardinality_(not_tagged_union(TU,R),Validation_Object,S,Q,Witness)
+        refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S,Q,Witness)
     ).
 refute_cardinality(Validation_Object,S,_,C,Witness) :-
     class_predicate_type(Validation_Object, C,P,Desc),
