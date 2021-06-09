@@ -76,12 +76,12 @@ make_db_public(System_Context,DB_Uri) :-
         _{
             '@type' : 'Capability',
             'scope' : DB_Uri,
-            'role' : 'consumer_role'
+            'role' : [ 'consumer_role' ]
         },
         Capability_Uri),
 
     ask(System_Context,
-        (   insert('@base':anonymous, '@schema':capability, Capability_Uri))).
+        (   insert(anonymous, capability, Capability_Uri))).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.

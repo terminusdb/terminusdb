@@ -94,6 +94,7 @@ get_all_path_values(JSON,Path_Values) :-
 get_value([], []) :-
     !.
 get_value(Elaborated, _) :-
+    is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
     !,
     throw(error(no_hash_possible_over_ids(Elaborated))).
