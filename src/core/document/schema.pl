@@ -85,6 +85,103 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     class_super(Validation_Object,Class,Super),
     class_predicate_type(Validation_Object,Super,Predicate,Type).
 
+refute_schema_context_prefix(Schema, Prefix, Witness) :-
+    \+ xrdf(Schema, Prefix, rdf:type, sys:'Prefix'),
+    Witness = witness{
+                  '@type': prefix_is_mistyped,
+                  prefix: Prefix
+              }.
+refute_schema_context_prefix(Schema, Prefix, Witness) :-
+    (   xrdf(Schema, Prefix, sys:prefix, Prefix_Name)
+    ->  (   Prefix_Name = Prefix_String^^Type,
+            Type = 'http://www.w3.org/2001/XMLSchema#string',
+            string(Prefix_String)
+        ->  fail
+        ;   format(string(Content), "~q", [Prefix_Name]),
+            Witness = witness{
+                          '@type': prefix_name_malformed,
+                          prefix: Prefix,
+                          content: Content
+                      })
+    ;   Witness = witness{
+                      '@type': prefix_name_missing,
+                      prefix: Prefix
+                  }).
+refute_schema_context_prefix(Schema, Prefix, Witness) :-
+    (   xrdf(Schema, Prefix, sys:url, Prefix_Url)
+    ->  (   Prefix_Url = Prefix_Url_String^^Type,
+            Type = 'http://www.w3.org/2001/XMLSchema#string',
+            string(Prefix_Url_String)
+        ->  fail
+        ;   format(string(Content), "~q", [Prefix_Url]),
+            Witness = witness{
+                          '@type': prefix_name_malformed,
+                          prefix: Prefix,
+                          content: Content
+                      })
+    ;   Witness = witness{
+                      '@type': prefix_url_missing,
+                      prefix: Prefix
+                  }).
+refute_schema_context_prefix(Schema, Prefix, Witness) :-
+    xrdf(Schema, Prefix, Property, _),
+    prefix_list(
+        [
+            sys:prefix,
+            sys:url,
+            rdf:type
+        ], List),
+    \+ memberchk(Property, List),
+    Witness = witness{
+                  '@type': prefix_has_invalid_property,
+                  prefix: Prefix,
+                  property: Property
+              }.
+
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    \+ xrdf(Schema, 'terminusdb://context', rdf:type,sys:'Context'),
+    Witness = witness{
+                  '@type': context_not_found
+              }.
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    \+ xrdf(Schema, 'terminusdb://context', sys:base,_),
+    Witness = witness{
+                  '@type': context_has_no_base_prefix
+              }.
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    \+ xrdf(Schema, 'terminusdb://context', sys:schema,_),
+    Witness = witness{
+                  '@type': context_has_no_schema_prefix
+              }.
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, 'terminusdb://context', Property, _),
+    prefix_list(
+        [
+            sys:base,
+            sys:schema,
+            sys:prefix_pair,
+            rdf:type
+        ], List),
+    \+ memberchk(Property, List),
+    Witness = witness{
+                  '@type': context_has_invalid_property,
+                  'property': Property
+              }.
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, 'terminusdb://context', sys:prefix_pair, Prefix),
+    (   atom(Prefix)
+    ->  refute_schema_context_prefix(Schema, Prefix, Witness)
+    ;   Witness = witness{
+                      '@type': context_has_malformed_prefix
+                  }).
+
+refute_schema(Validation_Object, Witness) :-
+    refute_schema_context(Validation_Object, Witness).
 refute_schema(Validation_Object,Witness) :-
     is_simple_class(Validation_Object,Class),
     refute_class_definition(Validation_Object,Class,Witness).
