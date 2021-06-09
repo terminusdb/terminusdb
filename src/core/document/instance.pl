@@ -914,62 +914,89 @@ refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T
 
 :- begin_tests(json_instance).
 
-schema1(person, rdf:type, 'Class').
-schema1(person, name, xsd:string).
-schema1(person, birthdate, xsd:date).
-schema1(person, friends, set_person).
-schema1(set_person, rdf:type, 'Set').
-schema1(set_person, sys:class, person).
-schema1(employee, rdf:type, 'Class').
-schema1(employee, rdfs:subClassOf, person).
-schema1(employee, staff_number, xsd:string).
-schema1(employee, boss, optional_employee).
-schema1(optional_employee, rdf:type, 'Optional').
-schema1(optional_employee, sys:class, employee).
-schema1(employee, tasks, list_task).
-schema1(list_task, rdf:type, 'List').
-schema1(list_task, sys:class, task).
-schema1(task, rdf:type, 'Class').
-schema1(task, name, xsd:string).
-schema1(criminal, rdf:type, 'Class').
-schema1(criminal, rdfs:subClassOf, person).
-schema1(criminal, aliases, list_string).
-schema1(list_string, rdf:type, 'List').
-schema1(list_string, sys:class, xsd:string).
+schema1('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "birthdate" : "xsd:date",
+  "friends" : { "@type" : "Set",
+                "@class" : "Person" } }
+
+{ "@id" : "Employee",
+  "@type" : "Class",
+  "@inherits" : "Person",
+  "staff_number" : "xsd:string",
+  "boss" : { "@type" : "Optional",
+                 "@class" : "Employee" },
+  "tasks" : { "@type" : "List",
+                    "@class" : "Task" } }
+
+{ "@id" : "Task",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+
+{ "@id" : "Criminal",
+  "@type" : "Class",
+  "@inherits" : "Person",
+  "aliases" : { "@type" : "List",
+                "@class" : "xsd:string" } }
+').
+
+write_schema1(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema1(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
 
 test(simple_class_with_set,
      [
          setup(
-             (   delete_database,
-                 create_database,
-
-              % Schema
-                 forall(schema1(A,B,C),
-                        insert_triple(s(A,B,C))),
-
-             % Jim
-                 insert_triple(t(jim, rdf:type, person)),
-                 insert_triple(t(jim, name, "jim"^^xsd:string)),
-                 insert_triple(t(jim, birthdate, "1978-10-09"^^xsd:date)),
-                 insert_triple(t(person, friends, jane)),
-
-             % Jane
-                 insert_triple(t(jane, rdf:type, person)),
-                 insert_triple(t(jane, name, "jane"^^xsd:string)),
-                 insert_triple(t(jane, birthdate, "1979-11-02"^^xsd:date)),
-                 insert_triple(t(person, friends, jim)),
-                 insert_triple(t(person, friends, jane)),
-
-                 stage
-
+             (
+                 setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
              )),
 
          cleanup(
-             delete_database
+             teardown_temp_store(State)
          )
      ]) :-
 
-    check_and_commit.
+    create_context(Desc, _{author : "me", message: "yes"}, Context),
+    with_transaction(
+        Context,
+        (   % Jim
+            insert_document(
+                Context,
+                json{'@id' : jim,
+                     '@type' : 'Person',
+                     name : "jim",
+                     birthdate: "1978-10-09",
+                     friends : [jane]},
+                _),
+            insert_document(
+                Context,
+                json{'@id' : jane,
+                     '@type' : 'Person',
+                     name : "jane",
+                     birthdate: "1979-11-02",
+                     friends : [jim]},
+                _)
+        ),
+        _).
 
 test(simple_class_with_bad_required,
      [
