@@ -99,6 +99,12 @@ refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
                        class: C,
                        predicate: P
                      }.
+refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
+    \+ card_count(Validation_Object,S,P,_,0),
+    Witness = witness{ '@type': instance_not_cardinality_zero,
+                       class: C,
+                       predicate: P
+                     }.
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
@@ -154,6 +160,15 @@ range_term_list(Validation_Object, S, P, L) :-
             L).
 
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
+    class_predicate_type(Validation_Object, C, P, _),
+    !,
+    (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
+    ;   class_predicate_type(Validation_Object,C,Q,tagged_union(TU,R)),
+        P \= Q,
+        refute_cardinality_(not_tagged_union(TU,R),Validation_Object,S,Q,Witness)
+    ).
+refute_cardinality(Validation_Object,S,_,C,Witness) :-
     class_predicate_type(Validation_Object, C,P,Desc),
     refute_cardinality_(Desc,Validation_Object,S,P,Witness).
 
@@ -335,7 +350,7 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     ;   refute_subject_type_change(Validation_Object,Subject,Witness)
     ;   refute_key(Validation_Object,Subject,Predicate,Class,Witness)
         % NOTE: Perhaps this can be more intelligence predicates
-    ;   refute_cardinality(Validation_Object,Subject,_,Class,Witness)
+    ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)
     ;   refute_object_type(Validation_Object,Class,Subject,Predicate,Witness)
     ).
 

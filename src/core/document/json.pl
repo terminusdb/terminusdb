@@ -1244,7 +1244,7 @@ schema1('
   "boss" : { "@type" : "Optional",
                  "@class" : "Employee" },
   "tasks" : { "@type" : "List",
-                    "@class" : "Task" } }
+              "@class" : "Task" } }
 
 { "@id" : "Task",
   "@type" : "Class",
@@ -1498,10 +1498,12 @@ test(extract_json,
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
+                   tasks : [],
                    boss : json{
                               '@id' : jane,
                               '@type' : 'Employee',
                               name : "jane",
+                              tasks : [],
                               staff_number : "12",
                               birthdate : "1979-12-28"
                           }
@@ -1520,6 +1522,7 @@ test(extract_json,
                  '@type':'Employee',
                  birthdate:"1977-05-24",
                  boss:jane,
+                 tasks: [],
                  name:"gavin",
                  staff_number:"13"},
 
@@ -1528,6 +1531,7 @@ test(extract_json,
     JSON2 = json{ '@id':jane,
                   '@type':'Employee',
                   birthdate:"1979-12-28",
+                  tasks: [],
                   name:"jane",
                   staff_number:"12"
                 }.
