@@ -4,6 +4,8 @@
               is_simple_class/2,
               is_base_type/1,
               is_built_in/1,
+              is_list_type/1,
+              is_array_type/1,
               refute_class/3,
               class_predicate_type/4,
               type_descriptor/3,
@@ -237,6 +239,12 @@ is_built_in(P) :-
         List),
     memberchk(P,List).
 
+is_list_type(C) :-
+    global_prefix_expand(rdf:'List', C).
+
+is_array_type(C) :-
+    global_prefix_expand(sys:'Array', C).
+
 type_family_constructor(Type) :-
     prefix_list(
         [
@@ -282,8 +290,7 @@ refute_base_type(Type,Witness) :-
 
 is_rdf_list(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Type, rdf:first, _Car),
-    xrdf(Schema, Type, rdf:rest, _Cdr).
+    xrdf(Schema, Type, rdf:type, rdf:'List').
 
 refute_list(_Validation_Object,rdf:nil,_Witness) :-
     !,

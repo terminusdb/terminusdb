@@ -727,10 +727,13 @@ array_index_id_key_context_triple([H|T],Index,ID,Key,Context,Triple) :-
     atomic_list_concat([Base,'Array_'], Base_Array),
     idgen_random(Base_Array,New_ID),
     reference(H,HRef),
+    global_prefix_expand(sys:'Array', SYS_Array),
     global_prefix_expand(sys:value, SYS_Value),
     global_prefix_expand(sys:index, SYS_Index),
     global_prefix_expand(xsd:nonNegativeInteger, XSD_NonNegativeInteger),
+    global_prefix_expand(rdf:type, RDF_Type),
     (   Triple = t(ID, Key, New_ID)
+    ;   Triple = t(New_ID, RDF_Type, SYS_Array)
     ;   Triple = t(New_ID, SYS_Value, HRef)
     ;   Triple = t(New_ID, SYS_Index, Index^^XSD_NonNegativeInteger)
     ;   Next_Index is Index + 1,
@@ -755,9 +758,12 @@ list_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
     global_prefix_expand(rdf:nil, RDF_Nil).
 list_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
     get_dict('@base', Context, Base),
-    atomic_list_concat([Base,'Array_'], Base_Array),
-    idgen_random(Base_Array,New_ID),
+    atomic_list_concat([Base,'Cons_'], Base_Cons),
+    idgen_random(Base_Cons,New_ID),
     (   Triple = t(ID,Key,New_ID)
+    ;   global_prefix_expand(rdf:type, RDF_Type),
+        global_prefix_expand(rdf:'List', RDF_List),
+        Triple = t(New_ID, RDF_Type, RDF_List)
     ;   reference(H,HRef),
         global_prefix_expand(rdf:first, RDF_First),
         Triple = t(New_ID,RDF_First,HRef)
@@ -770,6 +776,7 @@ rdf_list_list(_Graph, RDF_Nil,[]) :-
     global_prefix_expand(rdf:nil,RDF_Nil),
     !.
 rdf_list_list(Graph, Cons,[H|L]) :-
+    xrdf(Graph, Cons, rdf:type, rdf:'List'),
     xrdf(Graph, Cons, rdf:first, H),
     xrdf(Graph, Cons, rdf:rest, Tail),
     rdf_list_list(Graph,Tail,L).
@@ -779,6 +786,7 @@ array_list(DB,Id,P,List) :-
     findall(
         I-V,
         (   xrdf(Instance,Id,P,ArrayElement),
+            xrdf(Instance,ArrayElement,rdf:type,sys:'Array'),
             xrdf(Instance,ArrayElement,sys:value,V),
             xrdf(Instance,ArrayElement,sys:index,I^^_)
         ),
@@ -1976,8 +1984,10 @@ test(list_id_key_context_triple, []) :-
 
     Triples = [
         t(elt,p,Cons1),
+        t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
         t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_a4963868aa3ad8365a4b164a7f206ffc"),
         t(Cons1,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',Cons2),
+        t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
         t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"task_f9e4104c952e71025a1d68218d88bab1"),
         t(Cons2,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',_Nil),
         t("task_f9e4104c952e71025a1d68218d88bab1",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',task),
@@ -2006,12 +2016,18 @@ test(array_id_key_triple, []) :-
     Triples = [
         t(elt,p,Array0),
         t(Array0,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Array'),
+        t(Array0,
           'http://terminusdb.com/schema/sys#value',
           "task_a4963868aa3ad8365a4b164a7f206ffc"),
         t(Array0,
           'http://terminusdb.com/schema/sys#index',
           0^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
         t(elt,p,Array1),
+        t(Array1,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Array'),
         t(Array1,
           'http://terminusdb.com/schema/sys#value',
           "task_f9e4104c952e71025a1d68218d88bab1"),
@@ -2144,11 +2160,17 @@ test(list_elaborate,
         'http://s/tasks',
         Cons0),
       t(Cons0,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+      t(Cons0,
         'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
         'http://i/Task_3f11cdcf8dfc89eb56ee2f970c6d9f0108515676'),
       t(Cons0,
         'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
         Cons1),
+      t(Cons1,
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
       t(Cons1,
         'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
         'http://i/Task_86a03131d587c39afa75620b12692f1c998faec0'),
@@ -2244,6 +2266,9 @@ test(array_elaborate,
           'http://s/book_list',
           Array0),
         t(Array0,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Array'),
+        t(Array0,
           'http://terminusdb.com/schema/sys#value',
           'http://i/Book_Das%20Kapital'),
         t(Array0,
@@ -2252,6 +2277,9 @@ test(array_elaborate,
         t('http://i/BookClub_Marxist%20book%20club',
           'http://s/book_list',
           Array1),
+        t(Array1,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Array'),
         t(Array1,
           'http://terminusdb.com/schema/sys#value',
           'http://i/Book_Der%20Ursprung%20des%20Christentums'),

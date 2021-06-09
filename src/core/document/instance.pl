@@ -242,6 +242,26 @@ refute_subject_type_change(Validation_Object,Subject,Witness) :-
                     old_type : Old_Type,
                     new_type : New_Type}.
 
+refute_object_type(_,Class,Subject,Predicate,Witness) :-
+    is_array_type(Class),
+    !,
+    \+ (   global_prefix_expand(sys:index, SYS_Index),
+           global_prefix_expand(sys:value, SYS_Value),
+           global_prefix_expand(rdf:type, RDF_Type),
+           memberchk(Predicate, [SYS_Index, SYS_Value, RDF_Type])),
+    Witness = json{ '@type' : invalid_array_type,
+                    subject: Subject,
+                    class: Class }.
+refute_object_type(_,Class,Subject,Predicate,Witness) :-
+    is_list_type(Class),
+    !,
+    \+ (   global_prefix_expand(rdf:first, RDF_First),
+           global_prefix_expand(rdf:rest, RDF_Rest),
+           global_prefix_expand(rdf:type, RDF_Type),
+           memberchk(Predicate, [RDF_First, RDF_Rest, RDF_Type])),
+    Witness = json{ '@type' : invalid_list_type,
+                    subject: Subject,
+                    class: Class }.
 refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
     database_instance(Validation_Object, Instance),
     (   class_predicate_type(Validation_Object, Class,Predicate,Type)
@@ -318,6 +338,11 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     ;   refute_object_type(Validation_Object,Class,Subject,Predicate,Witness)
     ).
 
+refute_subject(Validation_Object,Subject,_Witness) :-
+    database_instance(Validation_Object, Instance),
+    \+ xrdf(Instance, Subject, _, _),
+    !,
+    fail.
 refute_subject(Validation_Object,Subject,Witness) :-
     (   instance_of(Validation_Object, Subject, Class)
     ->  refute_typed_subject(Validation_Object, Subject, Class, Witness)
