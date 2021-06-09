@@ -939,6 +939,8 @@ refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T
 
 :- begin_tests(json_instance).
 
+/*
+
 schema1('
 { "@type" : "@context",
   "@base" : "http://i/",
@@ -984,7 +986,6 @@ write_schema1(Desc) :-
         Context,
         write_json_string_to_schema(Context, Schema1),
         _Meta).
-
 
 test(simple_class_with_set,
      [
@@ -1304,6 +1305,6 @@ test(base_type_list,
 
     check_and_commit.
 
-
+*/
 
 :- end_tests(json_instance).

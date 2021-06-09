@@ -20,7 +20,10 @@
               get_document/3,
               delete_document/2,
               insert_document/3,
-              update_document/3
+              update_document/3,
+
+              % schema.pl
+              class_subsumed/3
 
           ]).
 

@@ -31,6 +31,7 @@
 :- use_module(core(account)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
@@ -1018,7 +1019,7 @@ compile_wf(isa(X,C),isa(XE,CE,Transaction_Object)) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object)
     }.
-compile_wf(A << B,(distinct([AE,BE], subsumption_of(AE,BE,Transaction_Object)))) -->
+compile_wf(A << B,(distinct([AE,BE], class_subsumed(Transaction_Object,AE,BE)))) -->
     resolve(A,AE),
     resolve(B,BE),
     view(default_collection,Collection_Descriptor),
@@ -1829,20 +1830,19 @@ test(subsumption, [setup(setup_temp_store(State)),
 :-
     Query = _{'@type' : "Subsumption",
               child : _{ '@type' : "Node",
-                         node : "system:User"},
+                         node : "system:Organization"},
               parent : _{'@type' : "Variable",
                          'variable_name' :
                          _{'@type' : "xsd:string",
                            '@value' : "Parent"}}},
 
     query_test_response(system_descriptor{}, Query, JSON),
+
     % Tag the dicts so we can sort them
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
     list_to_ord_set(Orderable,Bindings_Set),
-    list_to_ord_set([json{'Parent':'http://www.w3.org/2002/07/owl#Thing'},
-                     json{'Parent':'http://terminusdb.com/schema/system#User'},
-                     json{'Parent':'http://terminusdb.com/schema/system#Agent'},
-                     json{'Parent':'http://terminusdb.com/schema/system#Document'}],
+    list_to_ord_set([json{'Parent':'http://terminusdb.com/schema/system#Organization'},
+                     json{'Parent':'http://terminusdb.com/schema/system#Resource'}],
                     Expected),
     ord_seteq(Bindings_Set,Expected).
 
@@ -1934,7 +1934,7 @@ test(add_triple, [
 :-
     Query = _{'@type' : "AddTriple",
               subject : _{ '@type' : "Node",
-                           node : "doc:DBadmin"},
+                           node : "DBadmin"},
               predicate : _{ '@type' : "Node",
                                node : "rdfs:label"},
               object : _{ '@type' : "Node",
@@ -1952,14 +1952,14 @@ test(add_quad, [
 :-
     Query = _{'@type' : "AddQuad",
               subject : _{ '@type' : "Node",
-                             node : "doc:DBadmin"},
+                             node : "DBadmin"},
               predicate : _{ '@type' : "Node",
                                node : "rdfs:label"},
               object : _{ '@type' : "Node",
                           node : "xxx"},
               graph : _{ '@type' : "Datatype",
                          datatype : _{'@type' : "xsd:string",
-                                      '@value' : "instance/main"}
+                                      '@value' : "instance"}
                        }},
 
     make_branch_descriptor('admin', 'test', Descriptor),
@@ -2170,7 +2170,7 @@ test(limit, [
 
     query_test_response(Descriptor, Query, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-
+    print_term(Orderable,[]),nl,
     list_to_ord_set(Orderable,Bindings_Set),
     list_to_ord_set([json{'Object':q,'Predicate':y,'Subject':x},
                      json{'Object':w,'Predicate':y,'Subject':x}],
@@ -3783,7 +3783,7 @@ test(idgen, [
     "@type": "woql:Datatype",
     "woql:datatype": {
       "@type": "woql:Node",
-      "woql:node": "doc:Journey"
+      "woql:node": "Journey"
     }
   },
   "woql:key_list": {
@@ -3849,7 +3849,7 @@ test(isa_node, [setup(setup_temp_store(State)),
   "@type": "woql:IsA",
   "woql:element": {
     "@type": "woql:Node",
-    "woql:node": "doc:admin"
+    "woql:node": "admin"
   },
   "woql:of_type": {
     "@type": "woql:Variable",
@@ -3882,7 +3882,7 @@ test(meta_graph_update, [
     "@type": "woql:Into",
     "woql:graph": {
       "@type": "xsd:string",
-      "@value": "instance/main"
+      "@value": "instance"
     },
     "woql:query": {
       "@type": "woql:And",
@@ -4152,7 +4152,7 @@ test(using_insert_default_graph, [
                 (insert('a','b','c'))),
 
     create_context(system_descriptor{},Commit_Info,System_Context),
-    branch_create(System_Context,doc:admin,"admin/test/local/branch/new",none,_),
+    branch_create(System_Context,admin,"admin/test/local/branch/new",none,_),
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
@@ -4433,8 +4433,8 @@ test(added_deleted_quad, [
     query_response:run_context_ast_jsonld_response(Context2, AST2, _),
 
     once(ask(Descriptor,
-             (   addition(h,i,j, "instance/main"),
-                 removal(a,b,c, "instance/main")))
+             (   addition(h,i,j, instance),
+                 removal(a,b,c, instance)))
         ).
 
 test(guard_interspersed_insertions, [
@@ -4587,8 +4587,8 @@ test(using_multiple_prefixes, [
                                message : "testing"},
 
     AST = using("admin/schema_db",
-                (insert(doc:'Dublin', rdf:type, scm:'City'),
-                 insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string))),
+                (insert('Dublin', rdf:type, '@schema':'City'),
+                 insert('Dublin', name, "Dublin"^^xsd:string))),
 
     resolve_absolute_string_descriptor("admin/schemaless_db", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
@@ -4604,8 +4604,8 @@ test(bad_class_vio, [
     Commit_Info = commit_info{ author : "automated test framework",
                                message : "testing"},
 
-    AST = (insert(doc:'Dublin', rdf:type, scm:'City_State'),
-           insert(doc:'Dublin', scm:name, "Dublin"^^xsd:string)),
+    AST = (insert('Dublin', rdf:type, '@schema':'City_State'),
+           insert('Dublin', name, "Dublin"^^xsd:string)),
 
     resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
@@ -4718,7 +4718,7 @@ test(language_en_variable, [
                 },
                'woql:predicate':
                _{ '@type': "woql:Node",
-                  'woql:node': "scm:title"
+                  'woql:node': "title"
                 },
                'woql:object':
                _{ '@type': "woql:Variable",
@@ -4735,8 +4735,8 @@ test(language_en_variable, [
     with_transaction(
         Context,
         ask(Context,
-            (   insert(a, scm:title, c),
-                insert(d, scm:title, f))),
+            (   insert(a, title, c),
+                insert(d, title, f))),
         _),
 
     query_test_response(Descriptor, Query, JSON),
@@ -4760,7 +4760,7 @@ test(language_en_variable, [
                 },
                'woql:predicate':
                _{ '@type': "woql:Node",
-                  'woql:node': "scm:title"
+                  'woql:node': "title"
                 },
                'woql:object':
                _{ '@type': "woql:Variable",
@@ -4777,8 +4777,8 @@ test(language_en_variable, [
     with_transaction(
         Context,
         ask(Context,
-            (   insert(a, scm:title, "asdf"@en),
-                insert(d, scm:title, "fdsa"@fr))),
+            (   insert(a, title, "asdf"@en),
+                insert(d, title, "fdsa"@fr))),
         _),
 
     query_test_response(Descriptor, Query, JSON),
@@ -4827,8 +4827,8 @@ test(and_type, [
     with_transaction(
         Context,
         ask(Context,
-            (   insert(a, scm:title, "asdf"@en),
-                insert(d, scm:title, "fdsa"@fr))),
+            (   insert(a, title, "asdf"@en),
+                insert(d, title, "fdsa"@fr))),
         _),
 
     query_test_response(Descriptor, Query, JSON),

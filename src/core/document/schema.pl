@@ -12,7 +12,8 @@
               class_subsumed/3,
               key_descriptor/3,
               type_family_constructor/1,
-              is_schemaless/1
+              is_schemaless/1,
+              class_subsumed/3
           ]).
 
 /*
