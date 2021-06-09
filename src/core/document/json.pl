@@ -195,7 +195,10 @@ json_idgen(JSON,DB,Context,ID_Ex) :-
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
-class_descriptor_image(optional(_),json{ '@type' : "@id" }).
+class_descriptor_image(optional(C),Image) :-
+    (   is_base_type(C)
+    ->  Image = json{ '@type' : C }
+    ;   Image = json{ '@type' : "@id" }).
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
 class_descriptor_image(enum(C,_),json{ '@type' : C }).
@@ -2979,5 +2982,30 @@ test(partial_document_elaborate_list_without_required,
 				       ]
 			         }
                   }.
+
+test(optional_missing,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_one,
+                          class:'http://www.w3.org/2001/XMLSchema#dateTime',
+                          predicate:'http://s/timestamp'}
+                 ])
+         )
+     ]) :-
+
+    JSON = json{ '@type' : "Event",
+                 action : "test" },
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, _Id).
 
 :- end_tests(json).

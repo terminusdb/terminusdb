@@ -334,7 +334,8 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     ;   refute_subject_deletion(Validation_Object,Subject,Witness)
     ;   refute_subject_type_change(Validation_Object,Subject,Witness)
     ;   refute_key(Validation_Object,Subject,Predicate,Class,Witness)
-    ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)
+        % NOTE: Perhaps this can be more intelligence predicates
+    ;   refute_cardinality(Validation_Object,Subject,_,Class,Witness)
     ;   refute_object_type(Validation_Object,Class,Subject,Predicate,Witness)
     ).
 
