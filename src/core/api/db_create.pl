@@ -163,6 +163,10 @@ default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
                         "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
+    do_or_die(get_dict('@base', Prefixes, _),
+              error(no_base_prefix_specified, _)),
+    do_or_die(get_dict('@schema', Prefixes, _),
+              error(no_schema_prefix_specified, _)),
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes, Db_Uri),
 
     % update system with finalized
