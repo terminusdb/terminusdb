@@ -14,6 +14,8 @@
               gmonth_day_string/2,
               gday_string/2,
               uri_to_prefixed/3,
+              schema_uri_to_prefixed/3,
+              instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3
           ]).
@@ -459,10 +461,29 @@ length_comp((>),A-_,B-_) :-
     !.
 length_comp((=),_,_).
 
+is_special_context_element(A-_) :-
+    atom_concat('@', _, A).
+
 uri_to_prefixed(URI, Ctx, Prefixed) :-
     dict_pairs(Ctx,_,Pairs),
-    predsort(length_comp, Pairs, Sorted_Pairs),
+    exclude(is_special_context_element, Pairs, Normal_Pairs),
+    predsort(length_comp, Normal_Pairs, Sorted_Pairs),
     try_prefix_uri(URI,Sorted_Pairs,Prefixed).
+
+schema_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    Schema_URI = (Ctx.'@schema'),
+    atom_concat(Schema_URI, Prefixed, URI),
+    !.
+schema_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    uri_to_prefixed(URI, Ctx, Prefixed).
+
+instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    Instance_URI = (Ctx.'@base'),
+    atom_concat(Instance_URI, Prefixed, URI),
+    !.
+instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    uri_to_prefixed(URI, Ctx, Prefixed).
+
 
 prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
     (   get_dict(Prefix, Ctx, Base)

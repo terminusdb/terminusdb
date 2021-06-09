@@ -52,6 +52,71 @@ prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
                           Pre_Term = Elt^^Prefixed_Type))
            ;   uri_to_prefixed(Woql_Var,Ctx,Pre_Term))).
 
+term_var_to_binding(object, Ctx, Options, Pre_Term, Term, Bindings_In, Bindings_Out) :-
+    % A special case where we're querying for an object knowing either the type or the object but maybe not both.
+    nonvar(Pre_Term),
+    Pre_Term = Pre_Value_Term^^Pre_Type_Term,
+    !,
+    (   var(Pre_Value_Term)
+    ->  (   lookup_backwards(Pre_Value_Term,Value_V,Bindings_In)
+        ->  Bindings_In = Bindings_Out_1,
+            Value_Term = v(Value_V)
+        ;   gensym('Var',G_Value),
+            Bindings_Out_1 = [var_binding{ var_name : G_Value,
+                                           prolog_var: Pre_Value_Term,
+                                           woql_var : Pre_Value_Term}|Bindings_In])
+    ;   Value_Term = Pre_Value_Term,
+        Bindings_Out_1 = Bindings_In),
+
+    (   var(Pre_Type_Term)
+    ->  (   lookup_backwards(Pre_Type_Term,Type_V,Bindings_Out_1)
+        ->  Bindings_Out_1 = Bindings_Out,
+            Type_Term = v(Type_V)
+        ;   gensym('Var',G_Type),
+            Bindings_Out = [var_binding{ var_name : G_Type,
+                                         prolog_var: Pre_Type_Term,
+                                         woql_var : Woql_Type_Term}|Bindings_In],
+            freeze(Woql_Type_Term,
+                   (   memberchk(compress_prefixes(true), Options)
+                   ->  uri_to_prefixed(Woql_Type_Term, Ctx, Pre_Type_Term)
+                   ;   Woql_Type_Term = Pre_Type_Term)))
+    ;   Type_Term = Pre_Type_Term,
+        Bindings_Out = Bindings_Out_1),
+
+    Term = Value_Term^^Type_Term.
+
+term_var_to_binding(Var_Type, Ctx, Options, Pre_Term, Term, Bindings_In, Bindings_Out) :-
+    (   var(Pre_Term)
+    ->  (   lookup_backwards(Pre_Term,V,Bindings_In)
+        ->  Bindings_In = Bindings_Out,
+            Term = v(V)
+        ;   gensym('Var',G),
+            Bindings_Out = [var_binding{ var_name : G,
+                                         prolog_var: Pre_Term,
+                                         woql_var : Woql_Var}|Bindings_In],
+            (   memberchk(compress_prefixes(true), Options)
+            ->  (   Var_Type = subject
+                ->  freeze(Woql_Var,
+                       instance_uri_to_prefixed(Woql_Var,Ctx,Pre_Term))
+                ;   Var_Type = predicate
+                ->  freeze(Woql_Var,
+                       schema_uri_to_prefixed(Woql_Var,Ctx,Pre_Term))
+                ;   Var_Type = object
+                ->  freeze(Woql_Var,
+                           (   Woql_Var = _@_
+                           ->  Pre_Term = Woql_Var
+                           ;   Woql_Var = Elt^^Type
+                           ->  freeze(Type,
+                                      (   uri_to_prefixed(Type,Ctx,Prefixed_Type),
+                                          Pre_Term = Elt^^Prefixed_Type))
+                           ;   instance_uri_to_prefixed(Woql_Var,Ctx,Pre_Term)))
+                ;   throw(error(unknown_term_var_type, _)))
+            ;   Pre_Term = Woql_Var),
+            Term = v(G)
+        )
+    ;   Term = Pre_Term,
+        Bindings_Out = Bindings_In).
+
 /**
  * pre_term_to_term_and_bindings(Pre_Term, Woql_Term, Bindings_In, Bindings_Out) is det.
  *
@@ -74,6 +139,16 @@ pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out
     ;   is_dict(Pre_Term)
     ->  Term = Pre_Term,
         Bindings_In=Bindings_Out
+    ;   Pre_Term = t(S,P,O)
+    ->  term_var_to_binding(subject, Ctx, Options, S, S_Post, Bindings_In, Bindings_Out_1),
+        term_var_to_binding(predicate, Ctx, Options, P, P_Post, Bindings_Out_1, Bindings_Out_2),
+        term_var_to_binding(object, Ctx, Options, O, O_Post, Bindings_Out_2, Bindings_Out),
+        Term = t(S_Post, P_Post, O_Post)
+    ;   Pre_Term = t(S,P,O, Filter)
+    ->  term_var_to_binding(subject, Ctx, Options, S, S_Post, Bindings_In, Bindings_Out_1),
+        term_var_to_binding(predicate, Ctx, Options, P, P_Post, Bindings_Out_1, Bindings_Out_2),
+        term_var_to_binding(object, Ctx, Options, O, O_Post, Bindings_Out_2, Bindings_Out),
+        Term = t(S_Post, P_Post, O_Post, Filter)
     ;   Pre_Term =.. [F|Args],
         mapm(pre_term_to_term_and_bindings(Ctx,Options),Args,New_Args,Bindings_In,Bindings_Out),
         Term =.. [F|New_Args]
