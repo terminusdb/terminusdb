@@ -210,25 +210,18 @@ copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
                   Commit_Id,
                   Commit_Uri),
 
-    commit_id_to_metadata(Origin_Context, Commit_Id, Author, Message, Timestamp),
-    Commit_Info = commit_info{author: Author, message: Message},
+    get_document(Origin_Context, Commit_Uri, Commit),
+    insert_document(Destination_Context, Commit, _),
 
-    (   commit_id_to_parent_uri(Origin_Context, Commit_Id, Parent_Uri)
-    ->  insert_child_commit_object(Destination_Context,
-                                   Parent_Uri,
-                                   Commit_Info,
-                                   Timestamp,
-                                   Commit_Id,
-                                   Commit_Uri)
-    ;   insert_base_commit_object(Destination_Context,
-                                  Commit_Info,
-                                  Timestamp,
-                                  Commit_Id,
-                                  Commit_Uri)),
+    ignore(get_dict(instance, Commit, Commit_Instance_Layer_Uri)),
+    get_dict(schema, Commit, Commit_Schema_Layer_Uri),
+    (   var(Commit_Instance_Layer_Uri)
+    ->  true
+    ;   get_document(Origin_Context, Commit_Instance_Layer_Uri, Commit_Instance_Layer),
+        insert_document(Destination_Context, Commit_Instance_Layer, _)),
 
-    forall(graph_for_commit(Origin_Context, Commit_Uri, Type, Graph_Name, Graph_Uri),
-           (   copy_graph_object(Origin_Context, Destination_Context, Graph_Uri),
-               attach_graph_to_commit(Destination_Context, Commit_Uri, Type, Graph_Name, Graph_Uri))).
+    get_document(Origin_Context, Commit_Schema_Layer_Uri, Commit_Schema_Layer),
+    insert_document(Destination_Context, Commit_Schema_Layer, _).
 
 copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
     (   has_commit(Destination_Context, Commit_Id)

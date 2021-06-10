@@ -76,8 +76,8 @@ branch_create_(Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch
 branch_create_(Destination_Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
     commit_descriptor{repository_descriptor:Origin_Repository_Descriptor} :< Commit_Descriptor,
 
-    % in this case, the source is a branch descriptor, but it could come from anywhere.
-    % We'll have to copy over the commit onformation into the destination commit graph
+    % in this case, the source is a commit descriptor, but it could come from anywhere.
+    % We'll have to copy over the commit information into the destination commit graph
     create_context(Origin_Repository_Descriptor, Origin_Context),
     context_default_prefixes(Origin_Context, Origin_Context_Defaults),
 
@@ -118,14 +118,14 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
                 get_dict(database_descriptor, Origin_Repository_Descriptor, Origin_Database_Descriptor),
                 get_dict(database_name, Origin_Database_Descriptor, Database_Name),
                 get_dict(organization_name, Origin_Database_Descriptor, Organization_Name)),
-            error(source_not_a_valid_descriptor(Origin_Descriptor),_))
+            error(source_not_a_valid_descriptor(Origin_Descriptor),_)),
+
+        do_or_die(
+            organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
+            error(origin_database_does_not_exist(Organization_Name, Database_Name),_))
     ;   Origin_Option = none
     ->  Origin_Descriptor = empty
     ;   throw(error(bad_origin_path_option(Origin_Option),_))),
-
-    do_or_die(
-        organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
-        error(origin_database_does_not_exist(Organization_Name, Database_Name),_)),
 
     assert_auth_action_scope(System_DB, Auth, system:branch, Scope_Iri),
 
