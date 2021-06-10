@@ -44,6 +44,8 @@ is_instance(Validation_Object, X, C) :-
     is_simple_class(Validation_Object, Class),
     class_subsumed(Validation_Object, Class,C),
     !.
+% NOTE: Need a clause here for enumerated types!
+
 
 instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),

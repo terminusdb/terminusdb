@@ -27,8 +27,8 @@
               is_instance/3,
 
               % schema.pl
-              class_subsumed/3
-
+              class_subsumed/3,
+              class_frame/3
           ]).
 
 :- use_module('document/validation').

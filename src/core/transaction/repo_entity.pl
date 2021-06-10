@@ -200,11 +200,11 @@ test(remote_repo_insert,
     repo_schema_context_from_label_descriptor(Descriptor, Context2),
     findall(Name, has_repository(Context2, Name), Repositories),
     findall(Name, has_remote_repository(Context2, Name), Repositories),
-    print(here),nl,nl,
+
     maplist({Context2}/[Name,Name-Url]>>(repository_remote_url(Context2, Name, Url)),
             Repositories,
             RepositoriesWithUrls),
-    print(here),nl,nl,
+
     Expected = ["foo"-"http://remote1/",
                 "bar"-"http://remote2/",
                 "baz"-"http://remote3/"],

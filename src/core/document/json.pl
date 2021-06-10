@@ -15,7 +15,8 @@
               write_json_stream_to_instance/2,
               write_json_string_to_schema/2,
               write_json_string_to_instance/2,
-              update_json_schema/2
+              update_json_schema/2,
+              class_frame/3
           ]).
 
 :- use_module(instance).
@@ -611,6 +612,15 @@ json_schema_predicate_value(P,V,Context,Path,Prop,Value) :-
     !,
     prefix_expand_schema(P,Context,Prop),
     json_schema_elaborate(V, Context, [P|Path], Value).
+json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
+    is_list(List),
+    !,
+    prefix_expand_schema(P,Context,Prop),
+    maplist({Context}/[V,Value]>>prefix_expand_schema(V,Context,Value),
+            List, Value_List),
+    Set = json{ '@collection' : "@set",
+                '@type' : "@id",
+                '@value' : Value_List }.
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
                                                     '@id' : VEx }) :-
     prefix_expand_schema(P,Context,Prop),
@@ -705,9 +715,12 @@ json_triple_(JSON,Context,Triple) :-
     ->  global_prefix_expand(sys:inherits, SYS_Inherits),
         (    get_dict('@value',Value,Class)
         ->  (   is_dict(Class)
-            ->  get_dict('@id', Class, Inherited)
-            ;   Inherited = Class),
-            Triple = t(ID,SYS_Inherits,Inherited)
+            ->  get_dict('@id', Class, Inherited),
+                Triple = t(ID,SYS_Inherits,Inherited)
+            ;   is_list(Class)
+            ->  member(Inherited, Class),
+                Triple = t(ID,SYS_Inherits,Inherited)
+            ;   Triple = t(ID,SYS_Inherits,Class))
         ;   get_dict('@id', Value, Inherited)
         ->  Triple = t(ID,SYS_Inherits,Inherited))
     ;   (   Value = []
@@ -912,18 +925,27 @@ key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), json{ '@type' : "Random" }).
 
-type_descriptor_json(unit, "Unit").
-type_descriptor_json(class(C), C).
-type_descriptor_json(optional(C), json{ '@type' : "Optional",
-                                        '@class' : C }).
-type_descriptor_json(set(C), json{ '@type' : "Set",
-                                   '@class' : C }).
-type_descriptor_json(array(C), json{ '@type' : "Array",
-                                   '@class' : C }).
-type_descriptor_json(list(C), json{ '@type' : "List",
-                                    '@class' : C }).
-type_descriptor_json(tagged_union(C,_), C).
-type_descriptor_json(enum(C,_), C).
+type_descriptor_json(unit, _Prefix, "Unit").
+type_descriptor_json(class(C), Prefixes, Class_Comp) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(base_class(C), Prefixes, Class_Comp) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(optional(C), Prefixes, json{ '@type' : "Optional",
+                                                  '@class' : Class_Comp }) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(set(C), Prefixes, json{ '@type' : "Set",
+                                             '@class' : Class_Comp }) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(array(C), Prefixes, json{ '@type' : "Array",
+                                               '@class' : Class_Comp }) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(list(C), Prefixes, json{ '@type' : "List",
+                                              '@class' : Class_Comp }) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(enum(C,_),Prefixes, Class_Comp) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
 
 schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
@@ -946,7 +968,8 @@ schema_subject_predicate_object_key_value(DB,_Id,P,O,'@key',V) :-
     key_descriptor_json(Key,V).
 schema_subject_predicate_object_key_value(DB,_Id,P,O,P,JSON) :-
     type_descriptor(DB, O, Descriptor),
-    type_descriptor_json(Descriptor,JSON).
+    database_context(DB, Prefixes),
+    type_descriptor_json(Descriptor,Prefixes,JSON).
 
 id_schema_json(DB, Id, JSON) :-
     database_schema(DB,Schema),
@@ -1176,6 +1199,25 @@ run_update_document(Desc, Commit, Document, Id) :-
         Context,
         update_document(Context, Document, Id),
         _).
+
+class_frame(Validation_Object, Class, Frame) :-
+    database_context(Validation_Object, DB_Prefixes),
+    default_prefixes(Default_Prefixes),
+    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    findall(
+        Predicate_Comp-Type,
+        (   class_predicate_type(Validation_Object, Class_Ex, Predicate, Type_Desc),
+            type_descriptor_json(Type_Desc, Prefixes, Type),
+            compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
+        ),
+        Pairs),
+    sort(Pairs, Sorted_Pairs),
+    catch(
+        dict_create(Frame,json,Sorted_Pairs),
+        error(duplicate_key(Predicate),_),
+        throw(error(violation_of_diamond_property(Class,Predicate),_))
+    ).
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -3094,13 +3136,181 @@ test(check_for_cycles_bad,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':cycle_in_class,from_class:'http://s/Employee',path:['http://s/Person','http://s/Employee','http://s/Engineer','http://s/Person'],to_class:'http://s/Engineer'}]),
+                 [witness{'@type':cycle_in_class,
+                          from_class:'http://s/Employee',
+                          path:['http://s/Employee',
+                                'http://s/Person',
+                                'http://s/Engineer',
+                                'http://s/Employee'],
+                          to_class:'http://s/Employee'}]),
              _)
      ]) :-
 
     write_schema3(Desc).
 
+schema4('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
 
-%% TODO: Check for diamond properties!
+{ "@id" : "Top",
+  "@type" : "Class",
+  "bottom_face" : { "@type" : "Optional",
+                    "@class" : "Bottom" } }
+
+{ "@id" : "Left",
+  "@type" : "Class",
+  "@inherits" : "Top",
+  "thing" : "xsd:string",
+  "right_face" : { "@type" : "List",
+                   "@class" : "Right" } }
+
+{ "@id" : "Right",
+  "@type" : "Class",
+  "@inherits" : "Top",
+  "thing" : "xsd:string",
+  "left_face" : { "@type" : "Set",
+                  "@class" : "Left" } }
+
+{ "@id" : "Bottom",
+  "@type" : "Class",
+  "@inherits" : [ "Right", "Left"],
+  "top_face" : { "@type" : "Array",
+                 "@class" : "Top" }  }
+').
+
+write_schema4(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema4(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(elaborate_multiple_inheritance, []) :-
+    Doc = json{'@id':"Bottom",
+               '@inherits':["Right", "Left"],
+               '@type':"Class"},
+    Ctxt = json{'@base':"http://i/", '@schema':"http://s/"},
+    json_schema_elaborate(
+        Doc,
+        Ctxt,
+        Result),
+
+    Result = json{'@id':'http://s/Bottom',
+                  '@inherits':
+                  json{'@collection':"@set",
+                       '@type':"@id",
+                       '@value':['http://s/Right','http://s/Left']},
+                  '@type':'http://terminusdb.com/schema/sys#Class'},
+
+    findall(t(S,P,O),
+            json_triple_(Result,Ctxt,t(S,P,O)),
+            Triples),
+    Triples = [t('http://s/Bottom',
+                 'http://terminusdb.com/schema/sys#inherits',
+                 'http://s/Right'),
+               t('http://s/Bottom',
+                 'http://terminusdb.com/schema/sys#inherits',
+                 'http://s/Left'),
+               t('http://s/Bottom',
+                 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                 'http://terminusdb.com/schema/sys#Class')].
+
+test(diamond_ok,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    write_schema4(Desc),
+
+    open_descriptor(Desc, Transaction),
+    class_frame(Transaction, "Bottom", Frame),
+
+    Frame = json{
+                bottom_face:json{'@class':'Bottom',
+                                 '@type':"Optional"},
+                left_face:json{'@class':'Left','@type':"Set"},
+                right_face:json{'@class':'Right','@type':"List"},
+                thing:'xsd:string',
+                top_face:json{'@class':'Top','@type':"Array"}
+            }.
+
+% NOTE: We need to check diamond properties at schema creation time
+schema5('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Top",
+  "@type" : "Class",
+  "bottom_face" : { "@type" : "Optional",
+                    "@class" : "Bottom" } }
+
+{ "@id" : "Left",
+  "@type" : "Class",
+  "@inherits" : "Top",
+  "thing" : "xsd:string",
+  "right_face" : { "@type" : "List",
+                   "@class" : "Right" } }
+
+{ "@id" : "Right",
+  "@type" : "Class",
+  "@inherits" : "Top",
+  "thing" : "xsd:dateTime",
+  "left_face" : { "@type" : "Set",
+                  "@class" : "Left" } }
+
+{ "@id" : "Bottom",
+  "@type" : "Class",
+  "@inherits" : [ "Right", "Left"],
+  "top_face" : { "@type" : "Array",
+                 "@class" : "Top" }  }
+
+').
+
+write_schema5(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema5(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(diamond_bad,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':violation_of_diamond_property,
+                          class:'http://s/Bottom',
+                          predicate:thing}]),_)
+     ]) :-
+
+    write_schema5(Desc).
 
 :- end_tests(schema_checker).

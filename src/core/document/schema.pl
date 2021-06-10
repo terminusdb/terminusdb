@@ -183,13 +183,16 @@ refute_schema_context(Validation_Object, Witness) :-
                       '@type': context_has_malformed_prefix
                   }).
 
+refute_schema(Validation_Object,Witness) :-
+    is_circular_hasse_diagram(Validation_Object,Witness),
+    % We should not proceed if we are circular!
+    !.
 refute_schema(Validation_Object, Witness) :-
     refute_schema_context(Validation_Object, Witness).
 refute_schema(Validation_Object,Witness) :-
     is_simple_class(Validation_Object,Class),
-    refute_class_definition(Validation_Object,Class,Witness).
-refute_schema(Validation_Object,Witness) :-
-    is_circular_hasse_diagram(Validation_Object,Witness).
+    (   refute_class_definition(Validation_Object,Class,Witness)
+    ;   refute_diamond_property(Validation_Object,Class,Witness)).
 
 /* O(n^3)
  */
@@ -204,9 +207,9 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
                   path : Path
               }.
 
-sub_class_of(Validation_Object,Class,Subclass) :-
+sub_class_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema,Class,sys:inherits,Subclass).
+    xrdf(Schema,Subclass,sys:inherits,Class).
 
 repeats([X|T]) :-
     member(X,T),
@@ -215,11 +218,11 @@ repeats([_|T]) :-
     repeats(T).
 
 /* Needs to check 'seen' classes so as not to loop infinitely */
-transitive_sub_class_of(Validation_Object,Class, Subclass, [Subclass,Class]) :-
-    sub_class_of(Validation_Object,Class,Subclass).
-transitive_sub_class_of(Validation_Object,Class, Subsubclass, [Subclass,Class|Path]) :-
-    sub_class_of(Validation_Object,Class,Subclass),
-    transitive_sub_class_of(Validation_Object,Subclass, Subsubclass, Path).
+transitive_sub_class_of(Validation_Object, Subclass, Class, [Subclass,Class]) :-
+    sub_class_of(Validation_Object, Subclass,Class).
+transitive_sub_class_of(Validation_Object, Subclass, Super, [Subclass|Path]) :-
+    sub_class_of(Validation_Object, Subclass, Class),
+    transitive_sub_class_of(Validation_Object, Class, Super, Path).
 
 refute_class_definition(Validation_Object,Class,Witness) :-
     refute_property(Validation_Object,Class, Witness).
@@ -490,3 +493,14 @@ key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
+
+refute_diamond_property(Validation_Object, Class, Witness) :-
+    catch(
+        (   class_frame(Validation_Object, Class, _),
+            fail
+        ),
+        error(violation_of_diamond_property(Class,Predicate),_),
+        Witness = witness{'@type':violation_of_diamond_property,
+                          predicate: Predicate,
+                          class: Class}
+    ).
