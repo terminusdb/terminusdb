@@ -428,6 +428,15 @@ term_jsonld(Term,Prefixes,JSON) :-
     is_list(Term),
     !,
     maplist({Prefixes}/[Obj,JSON]>>term_jsonld(Obj,Prefixes,JSON), Term, JSON).
+term_jsonld(JSON,Prefixes,JSON_Compressed) :-
+    is_dict(JSON),
+    !,
+    dict_pairs(JSON, _, Pairs),
+    maplist({Prefixes}/[Key-Value,Compressed_Key-Compressed_Value]>>(
+                term_jsonld(Key,Prefixes,Compressed_Key),
+                term_jsonld(Value,Prefixes,Compressed_Value)
+            ), Pairs, New_Pairs),
+    dict_create(JSON_Compressed, _, New_Pairs).
 term_jsonld(URI,Prefixes,URI_Compressed) :-
     compress_dict_uri(URI, Prefixes, URI_Compressed).
 

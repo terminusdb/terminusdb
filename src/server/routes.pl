@@ -334,7 +334,7 @@ test(db_create_unauthorized_errors, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
      ]) :-
-    add_user("TERMINUSQA",'user1@example.com','a comment', some('password'),_User_ID),
+    add_user("TERMINUSQA",some('password'),_User_ID),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
                            scm : "https://terminushub.com/schema"},
@@ -1635,8 +1635,8 @@ test(clone_local, [
          cleanup(teardown_temp_server(State))
      ])
 :-
-    add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
-    add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+    add_user("TERMINUSQA1",some('password1'),_User_ID1),
+    add_user("TERMINUSQA2",some('password2'),_User_ID2),
     create_db_without_schema("TERMINUSQA1", "foo"),
     resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
     create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
@@ -1682,7 +1682,7 @@ test(clone_remote, [
 :-
     with_triple_store(
         Store_1,
-        (   add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+        (   add_user("TERMINUSQA1",some('password1'),_User_ID1),
             create_public_db_without_schema("TERMINUSQA1", "foo"),
             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
@@ -1695,7 +1695,7 @@ test(clone_remote, [
 
     with_triple_store(
         Store_2,
-        (   add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2)
+        (   add_user("TERMINUSQA2",some('password2'),_User_ID2)
         )
     ),
 
@@ -1773,7 +1773,7 @@ test(fetch_first_time, [
     with_triple_store(
         Store_1,
         (
-            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
             create_public_db_without_schema("TERMINUSQA1", "foo"),
             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
@@ -1790,7 +1790,7 @@ test(fetch_first_time, [
     with_triple_store(
         Store_2,
         (
-            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
             create_public_db_without_schema("TERMINUSQA2", "bar"),
             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
@@ -1841,7 +1841,7 @@ test(fetch_second_time_no_change, [
     with_triple_store(
         Store_1,
         (
-            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
             create_public_db_without_schema("TERMINUSQA1", "foo"),
             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
@@ -1858,7 +1858,7 @@ test(fetch_second_time_no_change, [
     with_triple_store(
         Store_2,
         (
-            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
             create_public_db_without_schema("TERMINUSQA2", "bar"),
             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
@@ -1921,7 +1921,7 @@ test(fetch_second_time_with_change, [
     with_triple_store(
         Store_1,
         (
-            add_user("TERMINUSQA1",'user1@example.com','a comment', some('password1'),_User_ID1),
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
             create_public_db_without_schema("TERMINUSQA1", "foo"),
             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
@@ -1938,7 +1938,7 @@ test(fetch_second_time_with_change, [
     with_triple_store(
         Store_2,
         (
-            add_user("TERMINUSQA2",'user2@example.com','a comment', some('password2'),_User_ID2),
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
             create_public_db_without_schema("TERMINUSQA2", "bar"),
             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
@@ -2054,7 +2054,7 @@ test(rebase_divergent_history, [
          cleanup(teardown_temp_server(State))
      ])
 :-
-    add_user("TERMINUSQA",'user@example.com','a comment', some('password'),User_ID),
+    add_user("TERMINUSQA",some('password'),User_ID),
     create_db_without_schema("TERMINUSQA", "foo"),
 
     Master_Path = "TERMINUSQA/foo",
@@ -2156,7 +2156,7 @@ test(pack_stuff, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
      ]) :-
-    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_',foo),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
@@ -2215,7 +2215,7 @@ test(pack_nothing, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
      ]) :-
-    add_user('_a_test_user_','user@example.com','a comment', some('password'),_User_ID),
+    add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_','foo'),
 
     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
@@ -3172,106 +3172,6 @@ test(create_graph, [
      } :< (JSON.'@context').
 
 :- end_tests(prefixes_endpoint).
-
-%%%%%%%%%%%%%%%%%%%% Create/Delete Graph Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(graph/Path), cors_handler(Method, graph_handler(Path)),
-                [method(Method),
-                 prefix,
-                 methods([options,post,delete])]).
-
-graph_handler(post, Path, Request, System_Db, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ commit_info : Commit_Info } :< Document,
-              error(bad_api_document(Document, [commit_info]), _)),
-
-    catch_with_backtrace(
-        (create_graph(System_Db, Auth,
-                      Path,
-                      Commit_Info,
-                      _Transaction_Metadata2),
-         cors_reply_json(Request,
-                         _{'@type' : "api:CreateGraphResponse",
-                           'api:status' : "api:success"},
-                         [status(200)])),
-        E,
-        do_or_die(api_error_http_reply(graph,E,'api:CreateGraphErrorResponse',Request),
-                  E)).
-graph_handler(delete, Path, Request, System_DB, Auth) :-
-    do_or_die((   get_payload(Document, Request),
-                  _{ commit_info : Commit_Info } :< Document),
-              error(bad_api_document(Document, [commit_info]), _)),
-
-    catch_with_backtrace(
-        (delete_graph(System_DB,Auth,
-                      Path,
-                      Commit_Info,
-                      _Transaction_Metadata2),
-         cors_reply_json(Request,
-                         _{'@type' : "api:DeleteGraphResponse",
-                           'api:status' : "api:success"},
-                         [status(200)])),
-        E,
-        do_or_die(api_error_http_reply(graph,E,'api:DeleteGraphErrorResponse',Request),
-                  E)).
-
-:- begin_tests(graph_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(create_graph, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    Commit = commit_info{ author : 'The Graphinator',
-                          message : 'Edges here there and everywhere' },
-
-    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/instance/naim'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{commit_info : Commit}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    make_branch_descriptor("admin","test",Branch_Descriptor),
-    open_descriptor(Branch_Descriptor, Transaction),
-    Instance_Objects = Transaction.instance_objects,
-    exists([Obj]>>(
-               get_dict(descriptor, Obj, Desc),
-               get_dict(name, Desc, "naim")
-           ), Instance_Objects).
-
-
-test(delete_graph, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    super_user_authority(Auth),
-    create_graph(system_descriptor{},
-                 Auth,
-                 "admin/test/local/branch/main/schema/main",
-                 commit_info{ author : "test",
-                              message: "Generated by automated testing"},
-                 _Transaction_Metadata),
-
-    atomic_list_concat([Server, '/api/graph/admin/test/local/branch/main/schema/main'], URI),
-    admin_pass(Key),
-    Commit = commit_info{ author : 'Jeebuz', message : 'Hello my children' },
-    http_get(URI,
-             _JSON,
-             [method(delete),
-              post(json(_{commit_info : Commit})),
-              json_object(dict),
-              authorization(basic(admin,Key))]).
-
-:- end_tests(graph_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(user), cors_handler(Method, user_handler),

@@ -455,11 +455,11 @@ test(commit_two_transactions_on_empty, [
     create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context2),
 
     ask(Context1,
-        insert(doc:a,doc:b,doc:c)),
+        insert(a,b,c)),
     query_context_transaction_objects(Context1, Transactions1),
 
     ask(Context2,
-        insert(doc:e,doc:f,doc:g)),
+        insert(e,f,g)),
     query_context_transaction_objects(Context2, Transactions2),
 
     run_transactions(Transactions1,(Context1.all_witnesses),_),
@@ -467,7 +467,7 @@ test(commit_two_transactions_on_empty, [
     retry_transaction(Context2, _),
 
     ask(Context2,
-        insert(doc:e,doc:f,doc:g)),
+        insert(e,f,g)),
 
     run_transactions(Transactions2,(Context2.all_witnesses),_),
     !,
@@ -477,8 +477,8 @@ test(commit_two_transactions_on_empty, [
                 t(X, Y, Z)),
             Triples),
 
-    Triples = [t(doc:a,doc:b,doc:c),
-               t(doc:e,doc:f,doc:g)].
+    Triples = [t(a,b,c),
+               t(e,f,g)].
 
 test(commit_two_transactions_on_existing, [
          setup(setup_temp_store(State)),
@@ -493,18 +493,18 @@ test(commit_two_transactions_on_existing, [
     with_transaction(
         Context,
         ask(Context,
-            insert(doc:asdf,doc:fdsa,doc:baz)),
+            insert(asdf,fdsa,baz)),
         _),
 
     create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context1),
     create_context(Branch_Descriptor, _{author : me, message: "hello"}, Context2),
 
     ask(Context1,
-        insert(doc:a,doc:b,doc:c)),
+        insert(a,b,c)),
     query_context_transaction_objects(Context1, Transactions1),
 
     ask(Context2,
-        insert(doc:e,doc:f,doc:g)),
+        insert(e,f,g)),
     query_context_transaction_objects(Context2, Transactions2),
 
     run_transactions(Transactions1,(Context1.all_witnesses),_),
@@ -512,7 +512,7 @@ test(commit_two_transactions_on_existing, [
     retry_transaction(Context2, _),
 
     ask(Context2,
-        insert(doc:e,doc:f,doc:g)),
+        insert(e,f,g)),
 
     run_transactions(Transactions2,(Context2.all_witnesses),_),
     !,
@@ -522,13 +522,13 @@ test(commit_two_transactions_on_existing, [
                 t(X, Y, Z)),
             Triples),
 
-    Triples = [t(doc:asdf,doc:fdsa,doc:baz),
-               t(doc:a,doc:b,doc:c),
-               t(doc:e,doc:f,doc:g)].
+    Triples = [t(asdf,fdsa,baz),
+               t(a,b,c),
+               t(e,f,g)].
 
 test(insert_on_branch_descriptor, [
          setup(setup_temp_store(State)),
-         all( t(X, Y, Z) == [t(doc:asdf,doc:fdsa,doc:baz)]),
+         all( t(X, Y, Z) == [t(asdf,fdsa,baz)]),
          cleanup(teardown_temp_store(State))
      ])
 :-
@@ -543,7 +543,7 @@ test(insert_on_branch_descriptor, [
     open_descriptor(Branch_Descriptor, Transaction),
     Transaction2 = Transaction.put(commit_info, commit_info{ author : "Me", message: "chill"}),
     ask(Transaction2,
-        insert(doc:asdf,doc:fdsa,doc:baz)),
+        insert(asdf,fdsa,baz)),
 
     transaction_objects_to_validation_objects([Transaction2], Validation),
     validate_validation_objects(Validation,Witnesses),
