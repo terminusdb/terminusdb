@@ -625,20 +625,20 @@ resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph) 
     pattern_string_split('/', String, Path_Unfiltered),
     exclude('='(""), Path_Unfiltered, Path),
     (   resolve_absolute_graph_descriptor(Path, Graph)
-    ->  once(append(Descriptor_Path,[_Type,_Name],Path)),
+    ->  once(append(Descriptor_Path,[_Type],Path)),
         resolve_absolute_descriptor(Descriptor_Path, Descriptor)
-    ;   append(Path, ["main"], Path_and_Name),
+    ;   append(Path, [], Path_and_Name),
         resolve_absolute_graph_descriptor(Path_and_Name, Graph)
     ->  once(append(Descriptor_Path,[_Type],Path)),
         resolve_absolute_descriptor(Descriptor_Path, Descriptor)
-    ;   append(Path, [instance, "main"], Path_Type_and_Name),
+    ;   append(Path, [instance], Path_Type_and_Name),
         resolve_absolute_graph_descriptor(Path_Type_and_Name, Graph)
     ->  resolve_absolute_descriptor(Path, Descriptor)
     % This is the case where no graph information is supplied and we're
     % finding the original descriptor in order to find the graph
     ;   resolve_absolute_string_descriptor(String, Descriptor),
         resolve_absolute_descriptor(Absolute, Descriptor),
-        append(Absolute,[instance, "main"], Graph_Absolute),
+        append(Absolute,[instance], Graph_Absolute),
         resolve_absolute_graph_descriptor(Graph_Absolute, Graph)
     ),
     resolve_absolute_descriptor(Descriptor_Path, Descriptor).
@@ -646,7 +646,7 @@ resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph) 
 resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
     pattern_string_split('/', String, Path_Unfiltered),
     exclude('='(""), Path_Unfiltered, Path),
-    once(append(Descriptor_Path,[_Type,_Name],Path)),
+    once(append(Descriptor_Path,[_Type],Path)),
     resolve_absolute_descriptor(Descriptor_Path, Descriptor),
     resolve_absolute_graph_descriptor(Path, Graph).
 
@@ -710,10 +710,9 @@ resolve_absolute_graph_descriptor(["_system", Type], Graph) :-
 %
 %  Syntax:
 %
-%  'schema/*' => search schema graphs
-%  '{instance,schema}/*' => search the union of instance and schema
-%  '*/*' => search everything
-%  'instance/{foo,main}' => search in foo and main
+%  '*' => search instance and schema graphs
+%  'instance' => search in instance graph
+%  'schema' => search in schema graph
 %
 resolve_filter(Filter_String,Filter) :-
     atom_string(Type,Filter_String),
@@ -724,7 +723,7 @@ resolve_filter(Filter_String,Filter) :-
 :- begin_tests(resolution).
 
 test(test_full_resolution, []) :-
-    String = "admin/db/local/branch/main/instance/main",
+    String = "admin/db/local/branch/main/instance",
     resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
     Descriptor = branch_descriptor{
                      branch_name:"main",
@@ -814,7 +813,6 @@ test(test_system_bare, []) :-
     resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
     Descriptor = system_descriptor{},
     Graph = system_graph{
-                name : "main",
                 type : instance
             }.
 
@@ -825,7 +823,6 @@ test(test_system_schema, []) :-
     Descriptor = system_descriptor{},
 
     Graph = system_graph{
-                name : "main",
                 type : instance
             }.
 
@@ -833,36 +830,13 @@ test(test_repo_bare, []) :-
     String = "admin/db/_meta",
     resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
     Descriptor = database_descriptor{database_name:"db",organization_name:"admin"},
-    Graph = repo_graph{database_name:"db", name:"main", organization_name:"admin", type:instance}.
+    Graph = repo_graph{database_name:"db", organization_name:"admin", type:instance}.
 
 test(test_repo_instance, []) :-
     String = "admin/db/_meta/instance",
     resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
     Descriptor = database_descriptor{database_name:"db",organization_name:"admin"},
-    Graph = repo_graph{database_name:"db", name:"main", organization_name:"admin", type:instance}.
-
-test(test_repo_instance_main, []) :-
-    String = "admin/db/_meta/instance/main",
-    resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
-    Descriptor = database_descriptor{database_name:"db",organization_name:"admin"},
-    Graph = repo_graph{database_name:"db", name:"main", organization_name:"admin", type:instance}.
-
-test(test_commits_instance_main, []) :-
-    String = "admin/db/local/_commits/instance/main",
-    resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph),
-    Descriptor = repository_descriptor{
-                     database_descriptor:
-                     database_descriptor{
-                         database_name:"db",
-                         organization_name:"admin"},
-                     repository_name:"local"},
-    Graph = commit_graph{
-                database_name:"db",
-                name:"main",
-                organization_name:"admin",
-                repository_name:"local",
-                type:instance
-            }.
+    Graph = repo_graph{database_name:"db", organization_name:"admin", type:instance}.
 
 test(test_commits_instance, []) :-
     String = "admin/db/local/_commits/instance",
@@ -875,7 +849,6 @@ test(test_commits_instance, []) :-
                      repository_name:"local"},
     Graph = commit_graph{
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance
@@ -892,7 +865,6 @@ test(test_commits_bare, []) :-
                      repository_name:"local"},
     Graph = commit_graph{
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance
