@@ -60,13 +60,17 @@
                "commit_write_access",
                "manage_capabilities" ] }
 
-{ "@id" : "SystemDatabase",
+{ "@id" : "Database",
   "@type" : "Class",
   "@inherits" : "Resource" }
 
-{ "@id" : "Database",
+{ "@id" : "SystemDatabase",
   "@type" : "Class",
-  "@inherits" : "Resource",
+  "@inherits" : "Database" }
+
+{ "@id" : "UserDatabase",
+  "@type" : "Class",
+  "@inherits" : "Database",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
   "label" : "xsd:string",

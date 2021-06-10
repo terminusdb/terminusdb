@@ -42,7 +42,7 @@ organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
                  t(Organization_Uri, rdf:type, '@schema':'Organization'),
                  t(Organization_Uri, database, Db_Uri),
                  t(Db_Uri, name, DB^^xsd:string),
-                 t(Db_Uri, rdf:type, '@schema':'Database')
+                 t(Db_Uri, rdf:type, '@schema':'UserDatabase')
              ))).
 
 
@@ -85,7 +85,7 @@ insert_db_object(System_Transaction, Organization_Name, Database_Name, Label, Co
 
     insert_document(
         System_Transaction,
-        _{ '@type' : 'Database',
+        _{ '@type' : 'UserDatabase',
            'name' : Database_Name,
            'label' : Label,
            'state' : "creating",

@@ -470,7 +470,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
         Schema_Objects = []
     ),
     (   get_dict(instance, Descriptor, Instance_Label)
-    ->  Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema },
+    ->  Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: instance },
         open_read_write_obj(Instance_Graph_Descriptor, Instance_Read_Write_Obj, Map_1, Map_2),
         Instance_Objects = [Instance_Read_Write_Obj]
     ;   Map_1 = Map_2,
@@ -841,7 +841,7 @@ collection_descriptor_graph_filter_graph_descriptor(
     get_dict(Type,Label_Descriptor,Label).
 
 collection_descriptor_prefixes_(system_descriptor, Prefixes) :-
-    Prefixes = _{ '@data': 'terminusdb:///system/data/',
+    Prefixes = _{ '@base': 'terminusdb:///system/data/',
                   '@schema': 'http://terminusdb.com/schema/system#' }.
 collection_descriptor_prefixes_(database_descriptor, Prefixes) :-
     Prefixes = _{'@base' : 'terminusdb://repository/data/',
@@ -922,7 +922,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            type : instance
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
-    label_descriptor{ label: Label} :< Descriptor,
+    label_descriptor{ instance: Label} :< Descriptor,
     !,
     text_to_string(Label, Label_String),
     Graph_Descriptor = labelled_graph{label:Label_String,

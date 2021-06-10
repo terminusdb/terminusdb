@@ -559,12 +559,17 @@ test(insert_on_label_descriptor, [
      ])
 :-
     triple_store(Store),
-    safe_create_named_graph(Store, testdb, _Graph),
-    Descriptor = label_descriptor{ label: "testdb" },
-    open_descriptor(Descriptor, Transaction),
+    safe_create_named_graph(Store, testdb_instance, _Graph1),
+    safe_create_named_graph(Store, testdb_schema, _Graph2),
 
-    once(ask(Transaction, insert(foo,bar,baz))),
-    transaction_objects_to_validation_objects([Transaction], Validation),
+    Descriptor = label_descriptor{ instance: "testdb_instance",
+                                   schema: "testdb_schema",
+                                   variety: system_descriptor },
+    create_context(Descriptor, _{author: "", message: ""}, Context),
+
+    once(ask(Context,insert(foo,bar,baz))),
+    Transactions = (Context.transaction_objects),
+    transaction_objects_to_validation_objects(Transactions, Validation),
     commit_validation_objects(Validation),
 
     once(ask(Descriptor, t(foo,bar,baz))).
@@ -577,13 +582,13 @@ test(insert_schema_system_descriptor, [
     create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
-                     once(ask(Context, insert(foo,bar,baz,"schema/main"))),
+                     once(ask(Context, insert(foo,bar,baz,schema))),
                      Meta_Data),
 
     Meta_Data.inserts = 1,
 
     once(ask(system_descriptor{},
-             t(foo,bar,baz,"schema/main"))).
+             t(foo,bar,baz,schema))).
 
 
 test(double_insert, [
@@ -594,7 +599,7 @@ test(double_insert, [
     create_context(system_descriptor{}, Context),
 
     with_transaction(Context,
-                     once(ask(Context, insert(foo,bar,baz,"schema/main"))),
+                     once(ask(Context, insert(foo,bar,baz,schema))),
                      Meta_Data),
 
 
@@ -605,7 +610,7 @@ test(double_insert, [
     Meta_Data.inserts = 1,
     create_context(system_descriptor{}, Context2),
     with_transaction(Context2,
-                     once(ask(Context2, insert(foo,bar,baz,"schema/main"))),
+                     once(ask(Context2, insert(foo,bar,baz,schema))),
                      _),
     open_descriptor(system_descriptor{}, Trans2),
     [Schema2] = Trans2.schema_objects,

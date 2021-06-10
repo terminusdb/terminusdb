@@ -269,7 +269,13 @@ type_context(DB,Type,Context) :-
               put_dict(Map,Image,C)
           ),
           Edges),
-    dict_create(Context,json,Edges).
+    % eliminate duplicates
+    sort(Edges,Sorted_Edges),
+    catch(
+        dict_create(Context,json,Sorted_Edges),
+        error(duplicate_key(P),_),
+        throw(error(violation_of_diamond_property(Type,P)))
+    ).
 
 json_elaborate(DB,JSON,JSON_ID) :-
     database_context(DB,Context),
@@ -392,7 +398,9 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
             ;   has_at(Prop)
             ->  P = Prop,
                 V = Value
-            ;   throw(error(unrecognized_prop_value(Prop,Value), _))
+            ;   (   get_dict('@type', JSON, Type)
+                ->  throw(error(unrecognized_property(Type,Prop,Value), _))
+                ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
             )
         ),
         PVs),

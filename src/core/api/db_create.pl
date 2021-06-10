@@ -57,7 +57,7 @@ finalize_db(DB_Uri) :-
     with_transaction(
         Context,
         (   ask(Context, (
-                    t(DB_Uri, rdf:type, '@schema':'Database'),
+                    t(DB_Uri, rdf:type, '@schema':'UserDatabase'),
                     t(DB_Uri, state, '@schema':'DatabaseState_creating')
                 )
                )
