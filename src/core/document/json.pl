@@ -3030,3 +3030,63 @@ test(optional_missing,
                                              message : "boo"}, JSON, _Id).
 
 :- end_tests(json).
+
+
+
+:- begin_tests(schema_checker).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema3('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@inherits" : "Engineer" }
+
+{ "@id" : "Employee",
+  "@type" : "Class",
+  "@inherits" : "Person" }
+
+{ "@id" : "Engineer",
+  "@type" : "Class",
+  "@inherits" : "Employee" }
+').
+
+write_schema3(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema3(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(check_for_cycles_bad,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':cycle_in_class,from_class:'http://s/Employee',path:['http://s/Person','http://s/Employee','http://s/Engineer','http://s/Person'],to_class:'http://s/Engineer'}]),
+             _)
+     ]) :-
+
+    write_schema3(Desc).
+
+
+%% TODO: Check for diamond properties!
+
+:- end_tests(schema_checker).
