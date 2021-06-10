@@ -22,6 +22,9 @@
               insert_document/3,
               update_document/3,
 
+              % instance.pl
+              is_instance/3,
+
               % schema.pl
               class_subsumed/3
 

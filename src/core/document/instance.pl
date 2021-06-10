@@ -1,6 +1,7 @@
 :- module('document/instance', [
               refute_instance/2,
-              refute_instance_schema/2
+              refute_instance_schema/2,
+              is_instance/3
           ]).
 
 /*

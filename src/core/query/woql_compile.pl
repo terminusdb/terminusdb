@@ -800,14 +800,6 @@ term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#string') :-
 term_literal(Term,  Term^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     number(Term).
 
-
-isa(XE,CE,Transaction_Object) :-
-    atom(XE),
-    !,
-    instance_class(XE,CE,Transaction_Object).
-isa(_X^^Type,Type,_Transaction_Object).
-isa(_X@Lang,Lang,_Transaction_Object).
-
 /*
  * csv_term(Path,Has_Header,Header,Indexing,Prog,Options) is det.
  *
@@ -1010,7 +1002,7 @@ compile_wf(like(A,B,F), Isub) -->
     resolve(B,BE),
     resolve(F,FE),
     { marshall_args(isub(AE,BE,true,FE), Isub) }.
-compile_wf(isa(X,C),isa(XE,CE,Transaction_Object)) -->
+compile_wf(isa(X,C),is_instance(Transaction_Object,XE,CE)) -->
     resolve(X,XE),
     resolve(C,CE),
     view(default_collection,Collection_Descriptor),

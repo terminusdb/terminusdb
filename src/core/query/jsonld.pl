@@ -409,7 +409,7 @@ term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
     maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
-term_jsonld(JSON,JSON).
+term_jsonld(URI,URI).
 
 /*
  * Get the ID a json objct
