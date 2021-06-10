@@ -261,7 +261,6 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
 :- use_module(db_create).
 :- use_module(db_branch).
-:- use_module(db_graph).
 
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),

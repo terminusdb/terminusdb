@@ -120,7 +120,6 @@
 :- use_module(api/api_init).
 :- use_module(api/db_create).
 :- use_module(api/db_delete).
-:- use_module(api/db_graph).
 :- use_module(api/db_branch).
 :- use_module(api/db_rebase).
 :- use_module(api/db_fast_forward).

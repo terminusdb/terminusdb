@@ -93,7 +93,6 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-:- use_module(db_graph).
 :- use_module(db_pack).
 
 get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-

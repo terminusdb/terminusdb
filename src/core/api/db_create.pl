@@ -19,7 +19,6 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
-:- use_module(core(api/db_graph)).
 :- use_module(core(document)).
 
 :- use_module(library(terminus_store)).
