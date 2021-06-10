@@ -349,8 +349,8 @@ test(user_update, [
        user_identifier : Identifier,
        comment : Comment },
 
-    update_user(system_descriptor{}, Name, Document,ID),
-    writeq(ID),
+    update_user(system_descriptor{}, Name, Document),
+
     once(ask(system_descriptor{},
              (   t(User_URI, name, Agent_Name^^xsd:string),
                  t(User_URI, key_hash, Hash^^xsd:string)),

@@ -62,6 +62,7 @@ term_var_to_binding(object, Ctx, Options, Pre_Term, Term, Bindings_In, Bindings_
         ->  Bindings_In = Bindings_Out_1,
             Value_Term = v(Value_V)
         ;   gensym('Var',G_Value),
+            Value_Term = v(G_Value),
             Bindings_Out_1 = [var_binding{ var_name : G_Value,
                                            prolog_var: Pre_Value_Term,
                                            woql_var : Pre_Value_Term}|Bindings_In])
@@ -73,6 +74,7 @@ term_var_to_binding(object, Ctx, Options, Pre_Term, Term, Bindings_In, Bindings_
         ->  Bindings_Out_1 = Bindings_Out,
             Type_Term = v(Type_V)
         ;   gensym('Var',G_Type),
+            Type_Term = v(G_Type),
             Bindings_Out = [var_binding{ var_name : G_Type,
                                          prolog_var: Pre_Type_Term,
                                          woql_var : Woql_Type_Term}|Bindings_In],
