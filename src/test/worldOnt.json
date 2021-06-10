@@ -1,0 +1,19 @@
+{ "@type" : "@context",
+  "@base" : "http://example.com/data/world/",
+  "@schema" : "http://example.com/schema/worldOntology#",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
+
+{ "@id" : "Named",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+
+{ "@id" : "City",
+  "@type" : "Class",
+  "@inherits" : "Named" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@inherits" : "Named",
+  "address" : "xsd:string",
+  "birthday" : { "@type" : "Optional",
+                 "@class" : "xsd:dateTime" }}
