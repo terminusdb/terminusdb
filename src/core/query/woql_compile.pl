@@ -277,7 +277,7 @@ resolve(X,XEx) -->
         !,
         expand(X,Prefixes,XEx)
     }.
-resolve(X@L,XS@LE) -->
+resolve(X@L,XS@L) -->
     resolve(X,XE),
     {
         (   ground(XE),
@@ -285,8 +285,7 @@ resolve(X@L,XS@LE) -->
         ->  atom_string(XE,XS)
         ;   XE = XS),
         !
-    },
-    resolve(L,LE).
+    }.
 resolve(X^^T,Lit) -->
     resolve_variable(X,XE),
     resolve(T,TE),
@@ -4882,8 +4881,7 @@ store_get_lit(Data, Literal) :-
             open_descriptor(Descriptor, Transaction),
             [RWO] = (Transaction.instance_objects),
             Layer = (RWO.read),
-
-            once(triple(Layer, a,b,value(Literal)))
+            once(triple(Layer,_,_,value(Literal)))
         ),
         teardown_temp_store(State)).
 
