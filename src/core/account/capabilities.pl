@@ -399,7 +399,7 @@ check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
 
 test(admin_has_access_to_all_dbs, [
          setup((setup_temp_store(State),
-                add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), _),
+                add_user("Gavin", some('password'), _),
                 create_db_without_schema("Gavin", "test1"))
                ),
          cleanup(teardown_temp_store(State))
