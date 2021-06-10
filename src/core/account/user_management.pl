@@ -177,7 +177,7 @@ update_user_transaction(SystemDB, Auth, Name, Document) :-
                      _),
     !.
 update_user_transaction(_SystemDB, _Auth, Name, Document) :-
-    throw(error(user_update_failed_without_error(Name,Document),_)).
+    throw(error(user_cannot_update_as_they_dont_exist(Name,Document),_)).
 
 update_user(Name, Document) :-
     create_context(system_descriptor{},
@@ -195,24 +195,15 @@ update_user(SystemDB, Name, Document) :-
     user_name_uri(SystemDB, Name, User_Uri),
     !,
 
-    (   get_dict(password, Document, Password)
-    ->  crypto_password_hash(Password,Hash),
-        ask(SystemDB,
-            (   t(User_Uri, key_hash, Old_Hash^^xsd:string),
-                delete(User_Uri, key_hash, Old_Hash^^xsd:string),
-                insert(User_Uri, key_hash, Hash^^xsd:string)))
-    ;   true).
-update_user(SystemDB, Name, Document) :-
-    do_or_die((_{ agent_name : Name} :< Document),
-              error(malformed_update_user_document(Document,[agent_name
-                                                            ]),
-                    _)),
-
-    (   _{ password : Password } :< Document
-    ->  Password_Option = some(Password)
-    ;   Password_Option = none),
-
-    add_user(SystemDB, Name, Password_Option, _).
+    do_or_die(
+        (   get_dict(password, Document, Password),
+            crypto_password_hash(Password,Hash),
+            ask(SystemDB,
+                (   t(User_Uri, key_hash, Old_Hash^^xsd:string),
+                    delete(User_Uri, key_hash, Old_Hash^^xsd:string),
+                    insert(User_Uri, key_hash, Hash^^xsd:string)))
+        ),
+        error(user_update_requires_superuser,_)).
 
 delete_user_transaction(SystemDB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),
@@ -338,27 +329,21 @@ test(user_update, [
     Name = "Gavin",
     add_user(Name, some("password"), User_URI),
 
-    Agent_Name = "Bill",
     Password = "my_pass_is_strong",
-    Comment = "Never again bill",
-    Identifier = "gavin@terminusdb.com",
 
     Document =
-    _{ agent_name : Agent_Name,
-       password : Password,
-       user_identifier : Identifier,
-       comment : Comment },
+    _{ password : Password },
 
-    update_user(system_descriptor{}, Name, Document),
+    update_user(Name, Document),
 
     once(ask(system_descriptor{},
-             (   t(User_URI, name, Agent_Name^^xsd:string),
-                 t(User_URI, key_hash, Hash^^xsd:string)),
-             [compress_prefixes(false)]
+             (   t(User_URI, name, Name^^xsd:string),
+                 t(User_URI, key_hash, Hash^^xsd:string))
             )),
 
     atom_string(Hash_Atom, Hash),
-    crypto_password_hash(Password, Hash_Atom).
+
+    crypto_password_hash(Password,Hash_Atom).
 
 test(organization_creation, [
          setup(setup_temp_store(State)),
@@ -402,14 +387,16 @@ test(add_user_organization, [
         "Fantasy"),
 
     agent_name_uri(system_descriptor{}, "Kevin", User_Uri),
+
     organization_name_uri(system_descriptor{}, "Fantasy", Organization_Uri),
+
     once(user_managed_resource(system_descriptor{}, User_Uri, Organization_Uri)).
 
 
 test(bad_add_user_document, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
-         error(malformed_update_user_document(_660{agent_name:'Gavin'},[agent_name]),_)
+         error(user_cannot_update_as_they_dont_exist(gavin,_{agent_name:'Gavin'}),_)
      ]) :-
 
     User_Document = _{ agent_name : 'Gavin' },

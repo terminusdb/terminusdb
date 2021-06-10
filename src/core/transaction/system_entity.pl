@@ -50,7 +50,8 @@ organization_name_uri(Askable,Organization, Uri) :-
     once(ask(Askable,
              (   t(Uri, name, Organization^^xsd:string),
                  t(Uri, rdf:type, '@schema':'Organization')
-             ))).
+             ),
+             [compress_prefixes(false)])).
 
 organization_name_exists(Askable, Name) :-
     organization_name_uri(Askable, Name, _).
@@ -70,7 +71,9 @@ user_name_uri(Askable, User_Name, Uri) :-
  */
 agent_name_uri(Askable, Name, User_URI) :-
     once(ask(Askable,
-             t(User_URI, name, Name^^xsd:string),
+             (   t(User_URI, name, Name^^xsd:string),
+                 t(User_URI, rdf:type, '@schema':'User')
+             ),
              [compress_prefixes(false)]
             )).
 
