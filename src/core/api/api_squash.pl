@@ -60,8 +60,7 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
                                            database_name : Database_Name,
                                            repository_name : Repository_Name,
                                            branch_name : Branch_Name,
-                                           type : Type,
-                                           name : Name },
+                                           type : Type },
                     graph_descriptor_transaction_objects_read_write_object(
                         Graph_Descriptor, [Transaction], RWO),
 

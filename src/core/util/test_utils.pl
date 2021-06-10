@@ -196,7 +196,7 @@ layer_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 layer_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
     layer_ontology(Layer_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
+    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema},
     open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
@@ -210,7 +210,7 @@ ref_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
     ref_ontology(Ref_Label),
-    Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema,name:"ref"},
+    Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema},
     open_read_write_obj(Ref_Descriptor, Ref_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
@@ -224,7 +224,7 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
     repository_ontology(Repo_Label),
-    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema,name:"repo"},
+    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema},
     open_read_write_obj(Repo_Descriptor, Repo_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),

@@ -24,9 +24,8 @@
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] },
   "instance" : { "@type" : "Optional",
-                 "@class" : "Graph" },
-  "schema" : { "@type" : "Optional",
-               "@class" : "Graph" },
+                 "@class" : "layer:Layer" },
+  "schema" : "layer:Layer",
   "author" : "xsd:string",
   "message" : "xsd:string",
   "identifier" : "xsd:string",
@@ -34,17 +33,11 @@
   "parent" : { "@type" : "Optional",
                "@class" : "Commit" } }
 
-{ "@id" : "Graph",
-  "@type" : "Class",
-  "name" : "xsd:string",
-  "layer" : "layer:Layer" }
-
 { "@id" : "ValidCommit",
   "@type" : "Class",
   "@inherits" : "Commit",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] } }
-
 
 { "@id" : "InvalidCommit",
   "@type" : "Class",

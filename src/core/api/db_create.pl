@@ -126,22 +126,14 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
 
     create_ref_layer(Repository_Descriptor),
 
-    create_schema(Auth, Repository_Descriptor, Organization_Name, Database_Name, Schema, Prefixes).
+    create_schema(Repository_Descriptor, Schema, Prefixes).
 
-create_schema(Auth, Repository_Descriptor, Organization_Name, Database_Name, Schema, Prefixes) :-
-    % Create schema graph
-    default_schema_path(Organization_Name, Database_Name, Graph_Path),
-    Commit_Info = _{ author : "TerminusDB",
-                     message : "internal system operation" },
-    create_graph(system_descriptor{}, Auth, Graph_Path, Commit_Info, _),
-
-    Commit_Info = _{ author : "TerminusDB",
-                     message : "internal system operation" },
+create_schema( Repository_Descriptor, Schema, Prefixes) :-
     Branch_Desc = branch_descriptor{
                       repository_descriptor:Repository_Descriptor,
                       branch_name: "main" },
 
-    create_context(Branch_Desc, Commit_Info, Query_Context),
+    create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema"}, Query_Context),
     Prefix_Obj = (Prefixes.put('@type', "@context")),
 
     with_transaction(

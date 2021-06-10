@@ -12,7 +12,6 @@
               read_write_obj_reader/2,
               read_write_obj_builder/2,
               read_write_object_to_name/2,
-              filter_read_write_objects/3,
               make_branch_descriptor/5,
               make_branch_descriptor/4,
               make_branch_descriptor/3,
@@ -187,8 +186,7 @@ open_read_write_obj(Layer, Read_Write_Obj, Map, New_Map) :-
     !,
     layer_to_id(Layer, Id),
     Descriptor = id_graph{id: Id,
-                          type: instance,
-                          name: "main"},
+                          type: instance},
     (   memberchk(Descriptor=Read_Write_Obj, Map)
     ->  New_Map = Map
     ;   graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj),
@@ -197,16 +195,13 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, Map) :-
     memberchk(Descriptor=Read_Write_Obj, Map),
     !.
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
-    Descriptor = system_graph{ type: Type, name: Name},
+    Descriptor = system_graph{ type: Type},
     !,
-    (   Type = instance,
-        Name = "main"
+    (   Type = instance
     ->  system_instance_name(Graph_Name)
-    ;   Type = schema,
-        Name = "main"
+    ;   Type = schema
     ->  system_schema_name(Graph_Name)
     ;   Type = inference,
-        Name = "main",
         system_inference_name(Graph_Name)),
     storage(Store),
     safe_open_named_graph(Store, Graph_Name, Graph),
@@ -214,8 +209,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = labelled_graph{ label: Name,
-                                 type: Type,
-                                 name: _Name},
+                                 type: Type},
     !,
     memberchk(Type, [instance, schema, inferrence]),
     storage(Store),
@@ -224,8 +218,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = id_graph{ layer_id: Layer_Id,
-                           type: Type,
-                           name: "main"},
+                           type: Type},
     !,
     member(Type,[instance,schema]),
     storage(Store),
@@ -234,17 +227,14 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = repo_graph{ organization_name : Organization_Name,
                              database_name: Database_Name,
-                             type : Type,
-                             name : Name},
+                             type : Type},
     !,
-    (   Type = instance,
-        Name = "main"
+    (   Type = instance
     ->  storage(Store),
         organization_database_name(Organization_Name,Database_Name,Composite),
         safe_open_named_graph(Store, Composite, Graph),
         ignore(head(Graph, Layer))
-    ;   Type = schema,
-        Name = "main"
+    ;   Type = schema
     ->  repository_ontology(Repository_Name),
         storage(Store),
         safe_open_named_graph(Store, Repository_Name, Graph),
@@ -258,16 +248,13 @@ open_read_write_obj(Descriptor,
     Descriptor = commit_graph{ organization_name: Organization_Name,
                                database_name: Database_Name,
                                repository_name: Repository_Name,
-                               type: Type,
-                               name: Name},
+                               type: Type},
     !,
     Repo_Descriptor = repo_graph{ organization_name: Organization_Name,
                                   database_name: Database_Name,
-                                  type: instance,
-                                  name: "main"},
+                                  type: instance},
 
-    (   Type = instance,
-        Name = "main"
+    (   Type = instance
     ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
 
 
@@ -286,8 +273,7 @@ open_read_write_obj(Descriptor,
         ignore((   repository_head(Repo_Layer_Desc, Repository_Name, Commit_Layer_Id),
                    storage(Store),
                    store_id_layer(Store, Commit_Layer_Id, Layer)))
-    ;   Type = schema,
-        Name = "main"
+    ;   Type = schema
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
         storage(Store),
@@ -303,26 +289,23 @@ open_read_write_obj(Descriptor,
                                database_name: Database_Name,
                                repository_name: Repository_Name,
                                branch_name: Branch_Name,
-                               type: Type,
-                               name: Graph_Name },
+                               type: Type
+                             },
     !,
-    assertion(member(Type, [instance, schema, inference])),
+    assertion(member(Type, [instance, schema])),
     Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
                                       database_name : Database_Name,
                                       repository_name : Repository_Name,
-                                      type: instance,
-                                      name: "main" },
+                                      type: instance },
 
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
-    (   Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
-                                 variety: repository_descriptor },
-        branch_head_commit(Repo, Branch_Name, Commit_Uri),
-        graph_for_commit(Repo, Commit_Uri, Type, Graph_Name, Graph_Uri),
-        layer_uri_for_graph(Repo, Graph_Uri, Layer_Uri),
-        layer_id_uri(Repo, Layer_Id, Layer_Uri),
-        storage(Store),
-        store_id_layer(Store, Layer_Id, Layer)
-    ->  true
+    Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
+                             variety: repository_descriptor },
+    (   branch_head_commit(Repo, Branch_Name, Commit_Uri)
+    ->  ignore((layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
+                layer_id_uri(Repo, Layer_Id, Layer_Uri),
+                storage(Store),
+                store_id_layer(Store, Layer_Id, Layer)))
     ;   Layer = _),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor,
@@ -333,20 +316,17 @@ open_read_write_obj(Descriptor,
                                       database_name: Database_Name,
                                       repository_name: Repository_Name,
                                       commit_id: Commit_Id,
-                                      type: Type,
-                                      name: Graph_Name },
+                                      type: Type },
     !,
     Commit_Descriptor = commit_graph{ organization_name: Organization_Name,
                                       database_name : Database_Name,
                                       repository_name : Repository_Name,
-                                      type: instance,
-                                      name: "main" },
+                                      type: instance },
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
-        graph_for_commit(Repo, Commit_Uri, Type, Graph_Name, Graph_Uri),
-        layer_uri_for_graph(Repo, Graph_Uri, Layer_Uri),
+        layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
         layer_id_uri(Repo, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
@@ -424,8 +404,8 @@ open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
                  [system_descriptor{}=Transaction_Object|Map_2]) :-
     !,
 
-    Instance_Graph = system_graph{ type: instance, name: "main"},
-    Schema_Graph = system_graph{ type: schema, name: "main"},
+    Instance_Graph = system_graph{ type: instance},
+    Schema_Graph = system_graph{ type: schema},
 
     open_read_write_obj(Schema_Graph, Schema_Object, Map, Map_1),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
@@ -441,14 +421,14 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     id_descriptor{} :< Descriptor,
     !,
     (   get_dict(instance, Descriptor, Instance_ID)
-    ->  Instance_Graph_Descriptor = id_graph{ layer_id : Instance_ID, type: instance, name: "main" },
+    ->  Instance_Graph_Descriptor = id_graph{ layer_id : Instance_ID, type: instance},
         open_read_write_obj(Instance_Graph_Descriptor, Instance_RW, Map, Map1),
         Instance_Objects = [Instance_RW]
     ;   Map = Map1,
         Instance_Objects = []
     ),
     (   get_dict(schema, Descriptor, Schema_ID)
-    ->  Schema_Graph_Descriptor = id_graph{ layer_id : Schema_ID, type: schema, name: "main" },
+    ->  Schema_Graph_Descriptor = id_graph{ layer_id : Schema_ID, type: schema },
         open_read_write_obj(Schema_Graph_Descriptor, Schema_RW, Map1, New_Map),
         Schema_Objects = [Schema_RW]
     ;   Map1 = New_Map,
@@ -483,14 +463,14 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     label_descriptor{} :< Descriptor,
     !,
     (   get_dict(schema, Descriptor, Schema_Label)
-    ->  Schema_Graph_Descriptor = labelled_graph{ label: Schema_Label, type: schema, name: "main" },
+    ->  Schema_Graph_Descriptor = labelled_graph{ label: Schema_Label, type: schema },
         open_read_write_obj(Schema_Graph_Descriptor, Schema_Read_Write_Obj, Map, Map_1),
         Schema_Objects = [Schema_Read_Write_Obj]
     ;   Map = Map_1,
         Schema_Objects = []
     ),
     (   get_dict(instance, Descriptor, Instance_Label)
-    ->  Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema, name: "main" },
+    ->  Instance_Graph_Descriptor = labelled_graph{ label: Instance_Label, type: schema },
         open_read_write_obj(Instance_Graph_Descriptor, Instance_Read_Write_Obj, Map_1, Map_2),
         Instance_Objects = [Instance_Read_Write_Obj]
     ;   Map_1 = Map_2,
@@ -513,14 +493,12 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
 
     Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
                                             database_name: Database_Name,
-                                            type: schema,
-                                            name: "main" },
+                                            type: schema },
 
     open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map, Map_1),
     Instance_Graph = repo_graph{ organization_name: Organization_Name,
                                  database_name: Database_Name,
-                                 type: instance,
-                                 name: "main" },
+                                 type: instance },
     open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
 
     Transaction_Object = transaction_object{
@@ -546,14 +524,12 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
     Ref_Ontology_Graph = commit_graph{ organization_name: Organization_Name,
                                        database_name : Database_Name,
                                        repository_name: Repository_Name,
-                                       type: schema,
-                                       name: "main" },
+                                       type: schema },
 
     Instance_Graph = commit_graph{ organization_name: Organization_Name,
                                    database_name: Database_Name,
                                    repository_name: Repository_Name,
-                                   type: instance,
-                                   name: "main"},
+                                   type: instance},
 
     open_read_write_obj(Ref_Ontology_Graph, Ref_Ontology_Object, Map_1, Map_2),
     open_read_write_obj(Instance_Graph, Instance_Object, Map_2, Map_3),
@@ -565,7 +541,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                                              inference_objects : []
                                            }.
 open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
-                 [Descriptor=Transaction_Object|Map_4]) :-
+                 [Descriptor=Transaction_Object|Map_2]) :-
     branch_descriptor{ repository_descriptor : Repository_Descriptor,
                        branch_name: Branch_Name } = Descriptor,
     !,
@@ -574,35 +550,12 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                     Map, Map_1),
 
-    [Instance_Object] = (Repository_Transaction_Object.instance_objects),
-    Repo = layer_descriptor{ instance: (Instance_Object.read),
+    [Repo_Instance_Object] = (Repository_Transaction_Object.instance_objects),
+    Repo = layer_descriptor{ instance: (Repo_Instance_Object.read),
                              variety: repository_descriptor },
 
-    (   once(ask(Repo,
-                 t(Branch_Uri, name, Branch_Name_String^^xsd:string)))
-    ->  (   once(ask(Repo,
-                 t(Branch_Uri, head, Commit_Uri)))
-        ->  findall(Instance_Graph_Name,
-                    ask(Repo,
-                    (   t(Commit_Uri, instance, Instance_Graph),
-                        t(Instance_Graph, name, Instance_Graph_Name^^xsd:string)
-                    )),
-                    Instance_Names),
-
-            findall(Schema_Graph_Name,
-                    ask(Repo,
-                        (   t(Commit_Uri, schema, Schema_Graph),
-                            t(Schema_Graph, name, Schema_Graph_Name^^xsd:string)
-                        )),
-                    Schema_Names),
-            Inference_Names = []
-        ;   % Note: There has never been a commit! Set up default graph.
-            Instance_Names = ["main"],
-            Inference_Names = [],
-            Schema_Names = []
-        )
-    ;   throw(error(branch_does_not_exist(Descriptor), _Ctx))
-    ),
+    do_or_die(has_branch(Repo, Branch_Name_String),
+              error(branch_does_not_exist(Descriptor), _)),
 
     Prototype = branch_graph{
                     organization_name: Repository_Descriptor.database_descriptor.organization_name,
@@ -610,44 +563,25 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                     repository_name : Repository_Descriptor.repository_name,
                     branch_name: Branch_Name_String
                 },
-    maplist({Prototype}/[Instance_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : instance,
-                                                   name : Instance_Name})),
-            Instance_Names,
-            Instance_Descriptors),
+
+    Instance_Descriptor = (Prototype.put(type, instance)),
+    Schema_Descriptor = (Prototype.put(type, schema)),
 
     mapm(open_read_write_obj,
-         Instance_Descriptors, Instance_Objects,
+         [Instance_Descriptor, Schema_Descriptor],
+         [Instance_Object, Schema_Object],
          Map_1, Map_2),
-
-    maplist({Prototype}/[Schema_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : schema,
-                                                   name : Schema_Name})),
-            Schema_Names,
-            Schema_Descriptors),
-    mapm(open_read_write_obj,
-         Schema_Descriptors, Schema_Objects,
-         Map_2, Map_3),
-
-    maplist({Prototype}/[Inference_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : inference,
-                                                   name : Inference_Name})),
-            Inference_Names,
-            Inference_Descriptors),
-    mapm(open_read_write_obj,
-         Inference_Descriptors, Inference_Objects,
-         Map_3, Map_4),
 
     Transaction_Object = transaction_object{
                              parent : Repository_Transaction_Object,
                              descriptor : Descriptor,
                              commit_info : Commit_Info,
-                             instance_objects : Instance_Objects,
-                             schema_objects : Schema_Objects,
-                             inference_objects : Inference_Objects
+                             instance_objects : [Instance_Object],
+                             schema_objects : [Schema_Object],
+                             inference_objects : []
                          }.
 open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
-                 [Descriptor=Transaction_Object|Map_4]) :-
+                 [Descriptor=Transaction_Object|Map_2]) :-
     commit_descriptor{ repository_descriptor : Repository_Descriptor,
                        commit_id: Commit_Id } = Descriptor,
     !,
@@ -656,28 +590,12 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
     open_descriptor(Repository_Descriptor, _, Repository_Transaction_Object,
                     Map, Map_1),
 
-    [Instance_Object] = Repository_Transaction_Object.instance_objects,
-    Repo = layer_descriptor{ instance: (Instance_Object.read),
+    [Commit_Instance_Object] = Repository_Transaction_Object.instance_objects,
+    Repo = layer_descriptor{ instance: (Commit_Instance_Object.read),
                              variety: repository_descriptor },
 
-    (   commit_id_uri(Repo,
-                      Commit_Id,
-                      Commit_Uri)
-    ->  findall(Instance_Graph_Name,
-                 ask(Repo,
-                 (   t(Commit_Uri, instance, Instance_Graph),
-                     t(Instance_Graph, name, Instance_Graph_Name^^xsd:string)
-                 )),
-            Instance_Names),
-         findall(Schema_Graph_Name,
-                 ask(Repo,
-                     (   t(Commit_Uri, schema, Schema_Graph),
-                         t(Schema_Graph, name, Schema_Graph_Name^^xsd:string)
-                     )),
-                 Schema_Names),
-         Inference_Names = []
-    ;   throw(commit_does_not_exist('commit does not exist', context(Descriptor)))
-    ),
+    do_or_die(has_commit(Repo, Commit_Id),
+              error(commit_does_not_exist(Descriptor), _)),
 
     Prototype = single_commit_graph{
                     organization_name: Repository_Descriptor.database_descriptor.organization_name,
@@ -685,41 +603,21 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                     repository_name : Repository_Descriptor.repository_name,
                     commit_id: Commit_Id_String
                 },
-    maplist({Prototype}/[Instance_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : instance,
-                                                   name : Instance_Name})),
-            Instance_Names,
-            Instance_Descriptors),
 
+    Instance_Descriptor = (Prototype.put(type, instance)),
+    Schema_Descriptor = (Prototype.put(type, schema)),
     mapm(open_read_write_obj,
-         Instance_Descriptors, Instance_Objects,
+         [Instance_Descriptor, Schema_Descriptor],
+         [Instance_Object, Schema_Object],
          Map_1, Map_2),
-
-    maplist({Prototype}/[Schema_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : schema,
-                                                   name : Schema_Name})),
-            Schema_Names,
-            Schema_Descriptors),
-    mapm(open_read_write_obj,
-         Schema_Descriptors, Schema_Objects,
-         Map_2, Map_3),
-
-    maplist({Prototype}/[Inference_Name,Graph_Descriptor]>>(
-                Graph_Descriptor = Prototype.put(_{type : inference,
-                                                   name : Inference_Name})),
-            Inference_Names,
-            Inference_Descriptors),
-    mapm(open_read_write_obj,
-         Inference_Descriptors, Inference_Objects,
-         Map_3, Map_4),
 
     Transaction_Object = transaction_object{
                              parent : Repository_Transaction_Object,
                              descriptor : Descriptor,
                              commit_info : Commit_Info,
-                             instance_objects : Instance_Objects,
-                             schema_objects : Schema_Objects,
-                             inference_objects : Inference_Objects
+                             instance_objects : [Instance_Object],
+                             schema_objects : [Schema_Object],
+                             inference_objects : []
                          }.
 
 open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
@@ -783,14 +681,6 @@ collection_descriptor_transaction_object(Collection_Descriptor, [_Transaction_Ob
 read_write_object_to_name(Object, Name) :-
     Name = Object.descriptor.name.
 
-/*
- * filter_read_write_objects(+Objects, +Names, Filtered) is det.
- */
-filter_read_write_objects(Objects, Names, Filtered) :-
-    include({Names}/[Object]>>(read_write_object_to_name(Object, Name),
-                               memberchk(Name, Names)), Objects, Filtered).
-
-
 make_branch_descriptor(Organization, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
     Database_Descriptor = database_descriptor{ organization_name: Organization,
                                                database_name : DB },
@@ -844,26 +734,23 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
 collection_descriptor_graph_filter_graph_descriptor(
     system_descriptor{},
     type_name_filter{ type : Type,
-                      names : [Name]},
-    system_graph{ type: Type,
-                    name : Name}) :-
+                      names : [_Name]},
+    system_graph{ type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     system_descriptor{},
     type_filter{ types : [Type] },
-    system_graph{ type: Type,
-                    name : "main"}) :-
+    system_graph{ type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
         organization_name: Organization,
         database_name : DB_Name
     },
-    type_name_filter{ type : Type, names : [Name]},
+    type_name_filter{ type : Type, names : [_Name]},
     repo_graph{ organization_name: Organization,
                 database_name : DB_Name,
-                type : Type,
-                name : Name }) :-
+                type : Type }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     database_descriptor{
@@ -873,8 +760,7 @@ collection_descriptor_graph_filter_graph_descriptor(
     type_filter{ types : [Type]},
     repo_graph{ organization_name: Organization,
                 database_name : DB_Name,
-                type : Type,
-                name : "main" }) :-
+                type : Type }) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
@@ -884,12 +770,11 @@ collection_descriptor_graph_filter_graph_descriptor(
                               },
         repository_name : Repo_Name
     },
-    type_name_filter{ type : Type, names : [Name]},
+    type_name_filter{ type : Type, names : [_Name]},
     commit_graph{ organization_name: Organization,
                   database_name : DB_Name,
                   repository_name : Repo_Name,
-                  type: Type,
-                  name : Name}) :-
+                  type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     repository_descriptor{
@@ -903,8 +788,7 @@ collection_descriptor_graph_filter_graph_descriptor(
     commit_graph{ organization_name: Organization,
                   database_name : DB_Name,
                   repository_name : Repo_Name,
-                  type: Type,
-                  name : "main"}) :-
+                  type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     branch_descriptor{
@@ -919,13 +803,12 @@ collection_descriptor_graph_filter_graph_descriptor(
         },
         branch_name : Branch_Name
     },
-    type_name_filter{ type : Type , names : [Name]},
+    type_name_filter{ type : Type , names : [_Name]},
     branch_graph{ organization_name: Organization,
                   database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
-                  type: Type,
-                  name : Name}) :-
+                  type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     branch_descriptor{
@@ -945,8 +828,7 @@ collection_descriptor_graph_filter_graph_descriptor(
                   database_name : DB_Name,
                   repository_name : Repository_Name,
                   branch_name : Branch_Name,
-                  type: Type,
-                  name : "main"}) :-
+                  type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     Label_Descriptor,
@@ -993,8 +875,7 @@ collection_descriptor_prefixes(Descriptor, Prefixes) :-
 collection_descriptor_default_write_graph(system_descriptor{}, Graph_Descriptor) :-
     !,
     Graph_Descriptor = system_graph{
-                           type : instance,
-                           name : "main"
+                           type : instance
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     database_descriptor{ organization_name : Organization,
@@ -1003,8 +884,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     Graph_Descriptor = repo_graph{
                            organization_name : Organization,
                            database_name : Database,
-                           type : instance,
-                           name : "main"
+                           type : instance
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     repository_descriptor{
@@ -1018,8 +898,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            organization_name : Organization,
                            database_name : Database_Name,
                            repository_name : Repository_Name,
-                           type : instance,
-                           name : "main"
+                           type : instance
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     branch_descriptor{ branch_name : Branch_Name,
@@ -1040,16 +919,14 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            branch_name : Branch_Name,
-                           type : instance,
-                           name : "main"
+                           type : instance
                        }.
 collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
     label_descriptor{ label: Label} :< Descriptor,
     !,
     text_to_string(Label, Label_String),
     Graph_Descriptor = labelled_graph{label:Label_String,
-                                      type: instance,
-                                      name:"main"
+                                      type: instance
                                      }.
 collection_descriptor_default_write_graph(_, empty).
 

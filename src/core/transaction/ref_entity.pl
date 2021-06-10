@@ -9,8 +9,7 @@
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
               descriptor_commit_id_uri/4,
-              graph_for_commit/5,
-              layer_uri_for_graph/3,
+              layer_uri_for_commit/4,
               insert_branch_object/3,
               delete_branch_object/2,
               insert_base_commit_object/3,
@@ -25,7 +24,6 @@
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
               reset_branch_head/3,
-              insert_graph_object/7,
               copy_commits/3,
               apply_commit_on_branch/7,
               apply_commit_on_branch/8,
@@ -38,7 +36,8 @@
               commit_uri_to_history_commit_uris/3,
               update_prefixes/2,
               repository_prefixes/2,
-              copy_prefixes/2
+              copy_prefixes/2,
+              attach_layer_to_commit/4
           ]).
 :- use_module(library(terminus_store)).
 
@@ -113,14 +112,9 @@ commit_id_to_parent_uri(Askable, Commit_Id, Parent_Commit_Uri) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
     commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri).
 
-graph_for_commit(Askable, Commit_Uri, Type, Name, Graph_Uri) :-
+layer_uri_for_commit(Askable, Commit_Uri, Type, Layer_Uri) :-
     ask(Askable,
-        (   t(Commit_Uri, Type, Graph_Uri),
-            t(Graph_Uri, name, Name^^xsd:string))).
-
-layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri) :-
-    once(ask(Askable,
-             (   t(Graph_Uri, layer, Layer_Uri)))).
+        (   t(Commit_Uri, Type, Layer_Uri))).
 
 insert_branch_object(Context, Branch_Name, Branch_Uri) :-
     insert_document(
@@ -199,59 +193,17 @@ reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
     link_commit_object_to_branch(Context,Branch_Uri, Commit_Uri).
 
 % Note: We should probably refactor to add this to copy graph / copy new graph
-attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri) :-
+attach_layer_to_commit(Context, Commit_Uri, Graph_Type, Layer_Uri) :-
     once(ask(Context,
-             (   insert(Commit_Uri, '@schema':Graph_Type, Graph_Uri),
-                 insert(Graph_Uri, name, Graph_Name^^xsd:string)))).
+             (   insert(Commit_Uri, '@schema':Graph_Type, Layer_Uri)))).
 
-attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri) :-
-    once(ask(Context,
-             insert(Graph_Uri, layer, Graph_Layer_Uri))).
-
-graph_idgen(Context, Commit_Id, Graph_Type, Graph_Name, Graph_Uri) :-
+graph_idgen(Context, Commit_Id, Graph_Type, Graph_Uri) :-
     once(
         ask(Context,
             idgen('@base':'Graph',
                   [Commit_Id^^xsd:string,
-                   Graph_Type^^xsd:string,
-                   Graph_Name^^xsd:string], Graph_Uri))).
-
-insert_graph_object(Context, Commit_Uri, Commit_Id, Graph_Type, Graph_Name, Graph_Layer_Uri, Graph_Uri) :-
-    graph_idgen(Context,Commit_Id,Graph_Type,Graph_Name,Graph_Uri),
-    once(ask(Context,
-             insert(Graph_Uri, rdf:type, '@schema':'Graph'))),
-    attach_graph_to_commit(Context, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri),
-
-    % also attach a layer if it is there
-    (   ground(Graph_Layer_Uri)
-    ->  attach_layer_to_graph(Context, Graph_Uri, Graph_Layer_Uri)
-    ;   true).
-
-copy_graph_object(Origin_Context, Destination_Context, Graph_Uri) :-
-    once(ask(Destination_Context,
-             insert(Graph_Uri, rdf:type, '@schema':'Graph'))),
-
-    (   layer_uri_for_graph(Origin_Context, Graph_Uri, Layer_Uri)
-    ->  layer_id_uri(Origin_Context, Layer_Id, Layer_Uri),
-        insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
-        attach_layer_to_graph(Destination_Context, Graph_Uri, Layer_Uri)
-    ;   true).
-
-copy_new_graph_object(Origin_Askable, Destination_Context, Old_Graph_Uri,
-                      Commit_Id, New_Graph_Uri) :-
-
-    commit_id_uri(Origin_Askable,Commit_Id,Commit_Uri),
-    once(graph_for_commit(Origin_Askable, Commit_Uri, Graph_Type, Graph_Name,
-                          Old_Graph_Uri)),
-    graph_idgen(Destination_Context,Commit_Id,Graph_Type,Graph_Name,New_Graph_Uri),
-    once(ask(Destination_Context,
-             insert(New_Graph_Uri, rdf:type, '@schema':'Graph'))),
-
-    (   layer_uri_for_graph(Origin_Askable, Old_Graph_Uri, Layer_Uri)
-    ->  layer_id_uri(Origin_Askable, Layer_Id, Layer_Uri),
-        insert_layer_object(Destination_Context, Layer_Id, Layer_Uri),
-        attach_layer_to_graph(Destination_Context, New_Graph_Uri, Layer_Uri)
-    ;   true).
+                   Graph_Type^^xsd:string],
+                  Graph_Uri))).
 
 copy_commit(Origin_Context, Destination_Context, Commit_Id) :-
     commit_id_uri(Origin_Context,

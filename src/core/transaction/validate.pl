@@ -225,6 +225,26 @@ commit_validation_object(Validation_Object, []) :-
 commit_validation_object(Validation_Object, []) :-
     validation_object{
         descriptor: Descriptor,
+        instance_objects: [Instance_Object],
+        schema_objects: [Schema_Object]
+    } :< Validation_Object,
+    label_descriptor{
+        instance: Instance_Label,
+        variety: _Variety
+    } :< Descriptor,
+    !,
+    do_or_die(\+ validation_object_changed(Schema_Object),
+              error(immutable_schema_changed, _)),
+    % super simple case, we just need to set head
+    % That is, assuming anything changed
+    (   validation_object_changed(Instance_Object)
+    ->  storage(Store),
+        safe_open_named_graph(Store, Instance_Label, Instance_Graph),
+        nb_set_head(Instance_Graph, Instance_Object.read)
+    ;   true).
+commit_validation_object(Validation_Object, []) :-
+    validation_object{
+        descriptor: Descriptor,
         instance_objects: [Instance_Object]
     } :< Validation_Object,
     database_descriptor{
@@ -261,36 +281,30 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     validation_object{
         parent : Parent_Transaction,
         descriptor: Descriptor,
-        instance_objects: Instance_Objects,
-        schema_objects: Schema_Objects,
-        inference_objects: Inference_Objects
+        instance_objects: [Instance_Object],
+        schema_objects: [Schema_Object]
     } :< Validation_Object,
 
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
-    append([Instance_Objects,Schema_Objects,Inference_Objects],
-           Union_Objects),
 
-    (   exists(validation_object_changed, Union_Objects)
+    (   exists(validation_object_changed, [Instance_Object, Schema_Object])
     ->  insert_commit_object_on_branch(Parent_Transaction,
                                        Validation_Object.commit_info,
                                        Branch_Name,
-                                       Commit_Id,
+                                       _Commit_Id,
                                        Commit_Uri),
-        forall(member(Graph_Object, Union_Objects),
-               (   ignore((ground(Graph_Object.read),
-                           layer_to_id(Graph_Object.read, Layer_Id),
-                           insert_layer_object(Parent_Transaction, Layer_Id, Graph_Layer_Uri))),
-                   insert_graph_object(Parent_Transaction,
-                                       Commit_Uri,
-                                       Commit_Id,
-                                       Graph_Object.descriptor.type,
-                                       Graph_Object.descriptor.name,
-                                       Graph_Layer_Uri,
-                                       _Graph_Uri)))
+        % instance graph may not exist, so check for that
+        (   var(Instance_Object.read)
+        ->  true
+        ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
+            insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
+            attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
 
-    ;   true
-    ).
+        layer_to_id(Schema_Object.read, Schema_Layer_Id),
+        insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
+        attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
+    ;   true).
 
 commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], New_Commit_Id, New_Commit_Uri) :-
     validation_object{

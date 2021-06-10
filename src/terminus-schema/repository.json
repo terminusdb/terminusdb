@@ -13,7 +13,8 @@
 
 { "@id" : "Repository",
   "@type" : "Class",
-  "head" : "layer:Layer",
+  "head" : { "@type": "Optional",
+             "@class": "layer:Layer"},
   "name" : "xsd:string" }
 
 { "@id" : "Local",

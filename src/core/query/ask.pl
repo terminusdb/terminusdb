@@ -373,8 +373,7 @@ query_default_schema_write_graph(Query_Context, Write_Graph) :-
                            database_name : Database_Name,
                            repository_name : Repository_Name,
                            branch_name : Branch_Name,
-                           type : schema,
-                           name : "main"
+                           type : schema
                        },
     Transaction_Objects = (Query_Context.transaction_objects),
     graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor,

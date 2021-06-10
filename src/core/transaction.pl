@@ -20,7 +20,6 @@
               instance_graph_descriptor_transaction_object/3,
               read_write_obj_reader/2,
               read_write_obj_builder/2,
-              filter_read_write_objects/3,
               make_branch_descriptor/5,
               make_branch_descriptor/4,
               make_branch_descriptor/3,
@@ -54,8 +53,6 @@
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
               descriptor_commit_id_uri/4,
-              graph_for_commit/5,
-              layer_uri_for_graph/3,
               insert_branch_object/3,
               delete_branch_object/2,
               insert_base_commit_object/3,
@@ -70,7 +67,6 @@
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
               reset_branch_head/3,
-              insert_graph_object/7,
               copy_commits/3,
               apply_commit_on_branch/7,
               apply_commit_on_branch/8,
@@ -84,6 +80,7 @@
               update_prefixes/2,
               repository_prefixes/2,
               copy_prefixes/2,
+              attach_layer_to_commit/4,
 
               % repo_entity.pl
               has_repository/2,

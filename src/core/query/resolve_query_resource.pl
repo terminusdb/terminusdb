@@ -661,51 +661,46 @@ resolve_absolute_string_graph_descriptor(String, Graph_Descriptor) :-
 
 % Note: Currently we only have instance/schema/inference updates for normal and terminus graphs.
 % so this resolution is limited to these types.
-resolve_absolute_graph_descriptor([Organization, DB, Repo, "branch", Branch, Type, Name], Graph) :-
+resolve_absolute_graph_descriptor([Organization, DB, Repo, "branch", Branch, Type], Graph) :-
     !,
     Graph = branch_graph{ organization_name: Organization_Str,
                           database_name : DB_Str,
                           repository_name : Repo,
                           branch_name : Branch,
-                          type : Type_Atom,
-                          name : Name},
+                          type : Type_Atom},
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
-resolve_absolute_graph_descriptor([Organization, DB, Repo, "commit", RefID, Type, Name], Graph) :-
+resolve_absolute_graph_descriptor([Organization, DB, Repo, "commit", RefID, Type], Graph) :-
     !,
     Graph = single_commit_graph{ organization_name: Organization_Str,
                                  database_name : DB_Str,
                                  repository_name : Repo,
                                  commit_id : RefID,
-                                 type : Type_Atom,
-                                 name : Name},
+                                 type : Type_Atom},
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
-resolve_absolute_graph_descriptor([Organization, DB, Repo, "_commits", Type, Name], Graph) :-
+resolve_absolute_graph_descriptor([Organization, DB, Repo, "_commits", Type], Graph) :-
     !,
     Graph = commit_graph{ organization_name: Organization_Str,
                           database_name : DB_Str,
                           repository_name : Repo_Str,
-                          type : Type_Atom,
-                          name : Name },
+                          type : Type_Atom },
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     coerce_string(Repo, Repo_Str),
     atom_string(Type_Atom, Type).
-resolve_absolute_graph_descriptor([Organization, DB, "_meta", Type, Name], Graph) :-
+resolve_absolute_graph_descriptor([Organization, DB, "_meta", Type], Graph) :-
     !,
     Graph = repo_graph{ organization_name: Organization_Str,
                         database_name : DB_Str,
-                        type : Type_Atom,
-                        name : Name},
+                        type : Type_Atom},
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
-resolve_absolute_graph_descriptor(["_system", Type, Name], Graph) :-
-    Graph = system_graph{ type : Type_Atom,
-                          name : Name },
+resolve_absolute_graph_descriptor(["_system", Type], Graph) :-
+    Graph = system_graph{ type : Type_Atom },
     atom_string(Type_Atom, Type).
 
 %%
@@ -744,7 +739,6 @@ test(test_full_resolution, []) :-
     Graph = branch_graph{
                 branch_name:"main",
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance}.
@@ -767,7 +761,6 @@ test(test_missing_name_resolution, []) :-
     Graph = branch_graph{
                 branch_name:"main",
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance}.
@@ -790,7 +783,6 @@ test(test_missing_type_and_name_resolution, []) :-
     Graph = branch_graph{
                 branch_name:"main",
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance}.
@@ -813,7 +805,6 @@ test(test_missing_type_and_name_and_branch_resolution, []) :-
     Graph = branch_graph{
                 branch_name:"main",
                 database_name:"db",
-                name:"main",
                 organization_name:"admin",
                 repository_name:"local",
                 type:instance}.
