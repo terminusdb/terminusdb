@@ -1139,12 +1139,17 @@ compile_wf(using(Collection_String,P),Goal) -->
         do_or_die(
             resolve_string_descriptor(Old_Default_Collection,Collection_String,Default_Collection),
             error(invalid_absolute_path(Collection_String),_)),
-        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor),
-
-        collection_descriptor_prefixes(Default_Collection, Prefixes),
-        put_dict(Prefixes, Old_NS, New_NS)
+        collection_descriptor_default_write_graph(Default_Collection, Write_Graph_Descriptor)
     },
     update_descriptor_transactions(Default_Collection),
+    % Setup prefixes for resolution
+    view(transaction_objects,Transaction_Objects),
+    {
+        collection_descriptor_transaction_object(Default_Collection,Transaction_Objects,
+                                                 Transaction_Object),
+        database_context(Transaction_Object, Prefixes),
+        put_dict(Prefixes, Old_NS, New_NS)
+    },
     compile_wf(P, Goal),
     update(prefixes,_,Old_NS),
     update(write_graph,_,Old_Write_Graph),
@@ -1523,8 +1528,7 @@ debug_wf(Fmt, Args) -->
 %
 % Open a new descriptor and put it on the transaction pile
 % making sure not to screw up the uniqueness of each object.
-update_descriptor_transactions(Descriptor)
--->
+update_descriptor_transactions(Descriptor) -->
     update(transaction_objects, Transaction_Objects, New_Transaction_Objects),
     peek(Context),
     {   (   get_dict(commit_info, Context, Commit_Info)
@@ -3859,7 +3863,9 @@ test(using_insert_default_graph, [
                 (insert('a','b','c'))),
 
     create_context(system_descriptor{},Commit_Info,System_Context),
-    branch_create(System_Context,admin,"admin/test/local/branch/new",none,_),
+    % Need to get a "no schema"...
+    branch_create(System_Context,admin,"admin/test/local/branch/new",
+                  some("admin/test"),_),
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
@@ -4306,7 +4312,14 @@ test(using_multiple_prefixes, [
 test(bad_class_vio, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "schema_db"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         error(schema_check_failure(
+                   [
+                       json{'@type':invalid_predicate,
+                            class:_Class,
+                           predicate:_Name,
+                           subject:_Dublin}
+                   ]), _)
      ]) :-
 
     Commit_Info = commit_info{ author : "automated test framework",
@@ -4318,10 +4331,7 @@ test(bad_class_vio, [
     resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    catch(
-        query_response:run_context_ast_jsonld_response(Context, AST, _Result),
-        error(schema_check_failure([Failure]),_),
-        get_dict('@type', Failure, 'vio:InvalidClassViolation')).
+    query_response:run_context_ast_jsonld_response(Context, AST, _Result).
 
 
 test(typeof, [

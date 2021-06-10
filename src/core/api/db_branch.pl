@@ -127,7 +127,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
     ->  Origin_Descriptor = empty
     ;   throw(error(bad_origin_path_option(Origin_Option),_))),
 
-    assert_auth_action_scope(System_DB, Auth, system:branch, Scope_Iri),
+    assert_auth_action_scope(System_DB, Auth, '@schema':'Action_branch', Scope_Iri),
 
     % ensure that we're putting this branch into a local repository
     do_or_die(
