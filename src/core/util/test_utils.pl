@@ -248,7 +248,8 @@ create_db_with_test_schema(Organization, Db_Name) :-
     open(JSON_File, read, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
-    resolve_absolute_string_descriptor("admin/test", Desc),
+    atomic_list_concat([Organization,'/',Db_Name], DB_Path),
+    resolve_absolute_string_descriptor(DB_Path, Desc),
     create_context(Desc, Commit_Info, Context),
 
     with_transaction(

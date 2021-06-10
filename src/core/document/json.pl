@@ -974,10 +974,11 @@ update_json_schema(Transaction, Stream) :-
     !,
     database_schema(Transaction, [Schema]),
     forall(
-        xrdf(Schema, X, Y, Z, schema),
-        delete(Schema, X, Y, Z, schema)
+        xrdf([Schema], X, Y, Z),
+        delete(Schema, X, Y, Z,_)
     ),
-    write_json_stream_to_builder(Stream, Schema, schema).
+    read_write_obj_builder(Schema, RWO),
+    write_json_stream_to_builder(Stream, RWO, schema).
 update_json_schema(Query_Context, Stream) :-
     is_query_context(Query_Context),
     !,
@@ -1065,6 +1066,10 @@ write_json_string_to_instance(Context, String) :-
     open_string(String, Stream),
     write_json_stream_to_instance(Context, Stream).
 
+json_to_database_type(D^^T, _) :-
+    is_list(D),
+    !,
+    throw(error(not_a_valid_datatype(D,T),_)).
 json_to_database_type(D^^T, OC) :-
     (   string(D)
     ;   atom(D)),
@@ -3017,6 +3022,7 @@ test(optional_missing,
          error(
              schema_check_failure(
                  [witness{'@type':instance_not_cardinality_one,
+                          instance:_,
                           class:'http://www.w3.org/2001/XMLSchema#dateTime',
                           predicate:'http://s/timestamp'}
                  ])

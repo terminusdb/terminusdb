@@ -622,92 +622,61 @@ test(double_insert, [
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(document)).
 
 test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      throws(error(schema_check_failure(_),_))])
+      error(not_a_valid_datatype(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
-    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
 
-    Object = _{'@type': "worldOnt:City",
-               'worldOnt:name': [_{'@type' : "xsd:string",
-                                   '@value' : "Dublin"
-                                  },
-                                 _{'@type' : "xsd:string",
-                                   '@value' : "Dubhlinn"
-                                  }]
+    Object = _{'@type': "City",
+               '@id' : "Dublin",
+               'name': ["Dublin",
+                        "Dubhlinn"
+                        ]
               },
 
-    with_transaction(Master_Context1,
-                     ask(Master_Context1,
-                         update_object(Object)),
-                     _).
 
+    with_transaction(
+        Master_Context1,
+        insert_document(Master_Context1, Object, ID),
+        _),
 
-test(casting_error,
-     [setup((setup_temp_store(State),
-             create_db_with_test_schema('admin','test'))),
-      cleanup(teardown_temp_store(State)),
-      error(casting_error("Dubhlinn",'http://www.w3.org/2001/XMLSchema#integer'),_)])
-:-
-
-    resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
-
-    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
-
-    Object = _{'@type': "worldOnt:City",
-               'worldOnt:name': [_{'@type' : "xsd:string",
-                                   '@value' : "Dublin"
-                                  },
-                                 _{'@type' : "xsd:integer",
-                                   '@value' : "Dubhlinn"
-                                  }]
-              },
-
-    with_transaction(Master_Context1,
-                     ask(Master_Context1,
-                         update_object(Object)),
-                     _).
+    writeq(ID).
 
 test(cardinality_min_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
-      cleanup(teardown_temp_store(State))])
+      cleanup(teardown_temp_store(State)),
+      error(not_a_valid_datatype(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
-    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
 
     Master_Context2 = (Master_Context1.put(_{ all_witnesses : true })),
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
-    Object = _{'@type': "worldOnt:Person",
-               'worldOnt:name': [_{'@type' : "xsd:string",
-                                   '@value' : "Duke"
-                                  },
-                                 _{'@type' : "xsd:string",
-                                   '@value' : "Doug"
-                                  }]
+    Object = _{'@type': "Person",
+               '@id' : "Duke",
+               'name': ["Duke",
+                        "Doug"]
               },
 
-    catch(
-        with_transaction(Master_Context2,
-                         ask(Master_Context1,
-                             update_object(Object)),
-                         _),
-        error(schema_check_failure(Witnesses),_),
-        true
-    ),
+    with_transaction(
+        Master_Context2,
+        insert_document(Master_Context2,Object,ID),
+        _),
+
+    writeq(ID),
 
     once((member(Witness0, Witnesses),
           Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',

@@ -81,30 +81,35 @@ card_count(Validation_Object,S,P,O,N) :-
 refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(base_class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(enum(C,_),Validation_Object, S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,0),
     Witness = witness{ '@type': instance_not_cardinality_zero,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
@@ -117,6 +122,7 @@ refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: S,
                        class: C,
                        predicate: P
                      }.
