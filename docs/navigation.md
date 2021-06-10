@@ -6,7 +6,7 @@
       - [Bootstrap - Docker](https://github.com/terminusdb/terminusdb-bootstrap/blob/master/README.md)
       - [JS Client](Install/JS_INSTALL.md)
       - [Python Client](Install/PYTHON_INSTALL.md)
-  - [Community](README?id=community)
+  - [Community](https://terminusdb.com/community/)
   - [Roadmap](ROADMAP.md)
       - [Store](https://github.com/terminusdb/terminusdb-store/blob/master/docs/ROADMAP.md)
       - [Python Client](https://github.com/terminusdb/terminusdb-client-python/projects/1)
