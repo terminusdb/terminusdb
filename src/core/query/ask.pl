@@ -139,6 +139,10 @@ pre_term_to_term_and_bindings(Ctx,Options,Pre_Term,Term,Bindings_In,Bindings_Out
     ;   is_dict(Pre_Term)
     ->  Term = Pre_Term,
         Bindings_In=Bindings_Out
+    ;   Pre_Term = isa(O,T)
+    ->  term_var_to_binding(object, Ctx, Options, O, O_Post, Bindings_In, Bindings_Out_1),
+        term_var_to_binding(predicate, Ctx, Options, T, T_Post, Bindings_Out_1, Bindings_Out),
+        Term = isa(O_Post,T_Post)
     ;   Pre_Term = t(S,P,O)
     ->  term_var_to_binding(subject, Ctx, Options, S, S_Post, Bindings_In, Bindings_Out_1),
         term_var_to_binding(predicate, Ctx, Options, P, P_Post, Bindings_Out_1, Bindings_Out_2),

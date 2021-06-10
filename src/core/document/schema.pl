@@ -82,7 +82,7 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     \+ is_built_in(Predicate),
     do_or_die(
         \+ has_at(Predicate),
-        throw(error(not_a_valid_keyword(Predicate)))),
+        throw(error(not_a_valid_keyword(Predicate), _))),
     type_descriptor(Validation_Object,Range,Type).
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     class_super(Validation_Object,Class,Super),

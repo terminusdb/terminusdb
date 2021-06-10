@@ -65,6 +65,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(core(document)).
 :- use_module(core(api)).
 :- use_module(core(account)).
 
@@ -234,23 +235,26 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context
     create_context(Transaction_Object, Commit_Info, Context).
 
 create_db_with_test_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc  : 'http://example.com/data/world/',
-                  scm : 'http://example.com/schema/worldOntology#'},
+    Prefixes = _{ '@base'  : 'http://example.com/data/world/',
+                  '@schema' : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
     terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
-    read_file_to_string(TTL_File, TTL, []),
+    interpolate([Path, '/test/worldOnt.json'], JSON_File),
 
-    atomic_list_concat([Organization, '/', Db_Name,
-                        '/local/branch/main/schema/main'],
-                       Graph),
-    super_user_authority(Auth),
+    open(JSON_File, read, JSON_Stream),
+
     Commit_Info = commit_info{author: "test", message: "add test schema"},
-    graph_update(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
+    resolve_absolute_string_descriptor("admin/test", Desc),
+    create_context(Desc, Commit_Info, Context),
+
+    with_transaction(
+        Context,
+        update_json_schema(Context, JSON_Stream),
+        _).
 
 create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
     Prefixes = _{ doc  : 'http://example.com/data/world/',

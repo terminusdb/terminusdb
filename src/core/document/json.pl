@@ -14,7 +14,8 @@
               write_json_stream_to_schema/2,
               write_json_stream_to_instance/2,
               write_json_string_to_schema/2,
-              write_json_string_to_instance/2
+              write_json_string_to_instance/2,
+              update_json_schema/2
           ]).
 
 :- use_module(instance).
@@ -967,6 +968,22 @@ create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
     nb_set_head(Graph_Obj, Layer).
+
+update_json_schema(Transaction, Stream) :-
+    is_transaction(Transaction),
+    !,
+    database_schema(Transaction, [Schema]),
+    forall(
+        xrdf(Schema, X, Y, Z, schema),
+        delete(Schema, X, Y, Z, schema)
+    ),
+    write_json_stream_to_builder(Stream, Schema, schema).
+update_json_schema(Query_Context, Stream) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    update_json_schema(TO, Stream).
+
 
 write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     !,
