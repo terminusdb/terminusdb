@@ -14,10 +14,6 @@
               initialize_database/2,
               initialize_database_with_store/2,
 
-              % db_graph.pl
-              create_graph/5,
-              delete_graph/5,
-
               % db_branch.pl
               branch_create/5,
               branch_delete/3,
