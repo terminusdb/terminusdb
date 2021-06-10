@@ -936,6 +936,15 @@ test(get_bad_descriptor, [
 
 :- end_tests(triples_endpoint).
 
+%%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(document/Path), cors_handler(Method, document_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete,get])]).
+
+document_handler(post, _Path, _Request, _System_DB, _Auth) :-
+    throw(error(not_implemented)).
+
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),
