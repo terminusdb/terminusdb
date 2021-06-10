@@ -34,6 +34,7 @@
               prefix_expand/3,
               compress/3,
               term_jsonld/2,
+              term_jsonld/3,
 %              jsonld_triples/3,
               jsonld_id/2,
               get_key_document/4,

@@ -5,6 +5,7 @@
               prefix_expand/3,
               compress/3,
               term_jsonld/2,
+              term_jsonld/3,
               jsonld_id/2,
               jsonld_type/2,
               get_key_document/4,
@@ -285,6 +286,7 @@ compress_uri(URI, '@base', Prefix, Rest) :-
     sub_atom(URI, Length, After, _, Rest).
 compress_uri(_URI, Key, _Prefix, _Rest) :-
     is_at(Key),
+    Key \= '@schema',
     !,
     fail.
 compress_uri(URI, Key, Prefix, Comp) :-
@@ -300,7 +302,8 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
 
 compress_dict_uri(URI, Dict, Folded_URI) :-
     dict_pairs(Dict, _, Pairs),
-    compress_pairs_uri(URI, Pairs, Folded_URI).
+    exclude([_-B]>>is_dict(B), Pairs, Filtered),
+    compress_pairs_uri(URI, Filtered, Folded_URI).
 
 is_at(Key) :-
     sub_string(Key,0,1,_,"@").
@@ -410,6 +413,23 @@ term_jsonld(Term,JSON) :-
     !,
     maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
 term_jsonld(URI,URI).
+
+/* With prefix compression */
+term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
+    (   compound(D) % check if not bool, number, atom, string
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   D=V),
+    !,
+    compress_dict_uri(T, Prefixes, TC).
+term_jsonld(D@L,_,json{'@language' : L, '@value' : D}) :-
+    !.
+term_jsonld(Term,Prefixes,JSON) :-
+    is_list(Term),
+    !,
+    maplist({Prefixes}/[Obj,JSON]>>term_jsonld(Obj,Prefixes,JSON), Term, JSON).
+term_jsonld(URI,Prefixes,URI_Compressed) :-
+    compress_dict_uri(URI, Prefixes, URI_Compressed).
 
 /*
  * Get the ID a json objct

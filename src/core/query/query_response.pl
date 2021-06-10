@@ -44,14 +44,15 @@ context_variable_names(Context, Header) :-
             Bindings, Rev),
     reverse(Rev,Header).
 
-json_transform_binding_set(_Context, Binding, JSON) :-
+json_transform_binding_set(Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context
-    maplist([Record,Var_Name=Term]>>(
+    Prefixes = (Context.prefixes),
+    maplist({Prefixes}/[Record,Var_Name=Term]>>(
                 get_dict(var_name, Record, Var_Name),
                 get_dict(woql_var, Record, Prolog_Var),
                 (   var(Prolog_Var)
                 ->  Term = "system:unknown"
-                ;   term_jsonld(Prolog_Var, Term))),
+                ;   term_jsonld(Prolog_Var, Prefixes, Term))),
             Binding,
             Data),
     dict_create(JSON, _, Data).
