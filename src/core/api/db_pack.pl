@@ -144,7 +144,8 @@ unpack(Pack) :-
 test(context_repository_head_pack,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State))
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)
      ]
     ) :-
 

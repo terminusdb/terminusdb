@@ -35,7 +35,8 @@ graph_dump(System_DB, Auth, Path, Format, String) :-
 test(worlds_graph, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme(document_refactor)
      ]) :-
 
     expand_file_search_path(test('world.ttl'), File),

@@ -74,7 +74,6 @@ refute(Validation_Object, _Witness) :-
     !,
     fail.
 refute(Validation_Object, Witness) :-
-    % Pre Schema
     needs_schema_validation(Validation_Object),
     refute_schema(Validation_Object, Witness),
     % Do not proceed if we have a broken schema
