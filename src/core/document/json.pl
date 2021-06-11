@@ -196,7 +196,6 @@ json_idgen(JSON,DB,Context,ID_Ex) :-
     ),
     prefix_expand(ID, Context, ID_Ex).
 
-
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(optional(C),Image) :-
@@ -285,8 +284,10 @@ json_elaborate(DB,JSON,JSON_ID) :-
     json_elaborate(DB,JSON,Context,JSON_ID).
 
 prefix_expand_schema(Node,Context,NodeEx) :-
-    get_dict('@schema', Context, Schema),
-    put_dict(_{'@base' : Schema}, Context, New_Context),
+    (   get_dict('@schema', Context, Schema),
+        put_dict(_{'@base' : Schema}, Context, New_Context)
+    ->  true
+    ;   Context = New_Context),
     prefix_expand(Node, New_Context, NodeEx).
 
 property_expand_key_value(Prop,Value,DB,Context,P,V) :-
@@ -882,9 +883,13 @@ type_id_predicate_iri_value(base_class(_),_,_,O,_,_,S) :-
     typecast(O,'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
-    get_dict('@schema',Prefixes,Schema),
-    put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
-    compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp).
+    (   get_dict('@schema',Prefixes,Schema),
+        put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes)
+    ->  true
+    ;   Prefixes = Schema_Prefixes),
+    compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp),
+    !.
+compress_schema_uri(IRI,_Prefixes,IRI).
 
 get_document(Query_Context, Document) :-
     is_query_context(Query_Context),
@@ -936,9 +941,13 @@ get_document(Desc, Id, Document) :-
     get_document(Transaction, Id, Document).
 get_document(DB, Id, Document) :-
     database_context(DB,Prefixes),
+    get_document(DB, Prefixes, Id, Document).
+
+get_document(DB, Prefixes, Id, Document) :-
     database_instance(DB,Instance),
 
     prefix_expand(Id,Prefixes,Id_Ex),
+
     xrdf(Instance, Id_Ex, rdf:type, Class),
     findall(
         Prop-Value,
@@ -958,12 +967,22 @@ get_document(DB, Id, Document) :-
                                '@type'-Class_comp
                                |Data]).
 
-key_descriptor_json(lexical(_, Fields), json{ '@type' : "Lexical",
-                                              '@fields' : Fields }).
-key_descriptor_json(hash(_, Fields), json{ '@type' : "Hash",
-                                           '@fields' : Fields }).
-key_descriptor_json(value_hash(_), json{ '@type' : "ValueHash" }).
-key_descriptor_json(random(_), json{ '@type' : "Random" }).
+key_descriptor_json(lexical(_, Fields), Prefixes, json{ '@type' : "Lexical",
+                                                        '@fields' : Fields_Compressed }) :-
+    maplist(
+        {Prefixes}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed),
+        Fields,
+        Fields_Compressed
+    ).
+key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
+                                                     '@fields' : Fields_Compressed }) :-
+    maplist(
+        {Prefixes}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed),
+        Fields,
+        Fields_Compressed
+    ).
+key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
+key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
 type_descriptor_json(unit, _Prefix, "Unit").
 type_descriptor_json(class(C), Prefixes, Class_Comp) :-
@@ -987,43 +1006,79 @@ type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp) :-
 type_descriptor_json(enum(C,_),Prefixes, Class_Comp) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
 
-schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@base',O) :-
+schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
     !.
-schema_subject_predicate_object_key_value(_,_Id,P,O^^_,'@schema',O) :-
+schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@inherits',V) :-
+    global_prefix_expand(sys:inherits,P),
+    database_schema(DB,Schema),
+    findall(Parent,
+            (   xrdf(Schema, Id, sys:inherits, O),
+                compress_schema_uri(O, Prefixes, Parent)
+            ),
+            Parent_List),
+    (   Parent_List = [V]
+    ->  true
+    ;   Parent_List = V),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@schema',O) :-
     global_prefix_expand(sys:schema,P),
     !.
-schema_subject_predicate_object_key_value(_,_Id,P,O,'@class',O) :-
+schema_subject_predicate_object_key_value(_,_,_Id,P,O,'@class',O) :-
     global_prefix_expand(sys:class,P),
     !.
-schema_subject_predicate_object_key_value(DB,_Id,P,O,'@value',L) :-
+schema_subject_predicate_object_key_value(DB,_,Id,P,O,'@value',Enum_List) :-
     global_prefix_expand(sys:value,P),
     !,
     database_schema(DB,Schema),
-    rdf_list_list(Schema, O, L).
-schema_subject_predicate_object_key_value(DB,_Id,P,O,'@key',V) :-
+    rdf_list_list(Schema, O, L),
+    maplist({Id}/[V,Enum]>>(
+                atom_concat(Id,'_',Prefix),
+                atom_concat(Prefix,Enum,V)
+            ), L, Enum_List).
+schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@key',V) :-
     global_prefix_expand(sys:key,P),
     !,
-    key_descriptor(DB, O, Key),
-    key_descriptor_json(Key,V).
-schema_subject_predicate_object_key_value(DB,_Id,P,O,P,JSON) :-
+    key_descriptor(DB, Id, Key),
+    key_descriptor_json(Key,Prefixes,V).
+schema_subject_predicate_object_key_value(DB,Prefixes,_Id,P,O,K,JSON) :-
+    compress_schema_uri(P, Prefixes, K),
     type_descriptor(DB, O, Descriptor),
-    database_context(DB, Prefixes),
     type_descriptor_json(Descriptor,Prefixes,JSON).
 
+get_schema_document(DB, Id, Document) :-
+    database_context(DB, DB_Prefixes),
+    default_prefixes(Defaults),
+    Prefixes = (Defaults.put(DB_Prefixes)),
+    id_schema_json(DB, Prefixes, Id, Document).
+
 id_schema_json(DB, Id, JSON) :-
+    default_prefixes(Defaults),
+    id_schema_json(DB, Defaults, Id, JSON).
+
+id_schema_json(DB, Prefixes, Id, JSON) :-
     database_schema(DB,Schema),
-    xrdf(Schema, Id, rdf:type, Class),
+    (   ground(Id)
+    ->  prefix_expand_schema(Id, Prefixes, Id_Ex)
+    ;   Id = Id_Ex
+    ),
+
+    xrdf(Schema, Id_Ex, rdf:type, Class),
 
     findall(
         K-V,
-        (   distinct([P],xrdf(Schema,Id,P,O)),
-            schema_subject_predicate_object_key_value(DB,Id,P,O,K,V)
+        (   distinct([P],xrdf(Schema,Id_Ex,P,O)),
+            schema_subject_predicate_object_key_value(DB,Prefixes,Id_Ex,P,O,K,V)
         ),
         Data),
     !,
-    dict_create(JSON,json,['@id'-Id,
-                           '@type'-Class
+    compress_schema_uri(Id_Ex, Prefixes, Id_Compressed),
+    compress_schema_uri(Class, Prefixes, Class_Compressed),
+    (   atom_concat('sys:',Small_Class, Class_Compressed)
+    ->  true
+    ;   Small_Class = Class_Compressed),
+    dict_create(JSON,json,['@id'-Id_Compressed,
+                           '@type'-Small_Class
                            |Data]).
 
 validate_created_graph(schema, Layer) :-
@@ -2800,6 +2855,7 @@ test(binary_tree_context,
 
     open_descriptor(Desc, DB),
     type_context(DB,'BinaryTree', Binary_Context),
+
     Binary_Context = json{ leaf:json{'@id':'http://s/leaf'},
                            node:json{'@id':'http://s/node','@type':"@id"}
                          },
@@ -3155,6 +3211,97 @@ test(optional_missing,
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, _Id).
 
+
+test(extract_schema_person,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Person', JSON),
+
+    JSON = json{'@base':"Person_",
+                '@id':'Person',
+                '@key':json{'@fields':[name,birthdate],
+                            '@type':"Lexical"},
+                '@type':'Class',
+                birthdate:'xsd:date',
+                friends:json{'@class':'Person','@type':"Set"},
+                name:'xsd:string'}.
+
+test(extract_schema_employee,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Employee', JSON),
+    JSON = json{'@base':"Employee_",
+                '@id':'Employee',
+                '@inherits':'Person',
+                '@key':json{'@fields':[name,birthdate],
+                            '@type':"Hash"},
+                '@type':'Class',
+                boss:json{'@class':'Employee','@type':"Optional"},
+                staff_number:'xsd:string',
+                tasks:json{'@class':'Task',
+                           '@type':"List"}}.
+
+test(extract_schema_colour,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Colour', JSON),
+    JSON = json{'@id':'Colour',
+                '@type':'Enum',
+                '@value':[red,blue,green]}.
+
+test(extract_schema_binary_tree,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'BinaryTree', JSON),
+
+    JSON = json{'@base':"binary_tree_",
+                '@id':'BinaryTree',
+                '@key':json{'@type':"ValueHash"},
+                '@type':'TaggedUnion',
+                leaf:"Unit",
+                node:'Node'}.
+
+
 :- end_tests(json).
 
 
@@ -3318,6 +3465,26 @@ test(diamond_ok,
                 top_face:json{'@class':'Top','@type':"Array"}
             }.
 
+test(extract_bottom,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema4(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Bottom', JSON),
+    JSON = json{'@id':'Bottom',
+                '@inherits':['Left','Right'],
+                '@type':'Class',
+                top_face:json{'@class':'Top',
+                              '@type':"Array"}}.
+
 % NOTE: We need to check diamond properties at schema creation time
 schema5('
 { "@type" : "@context",
@@ -3347,8 +3514,7 @@ schema5('
   "@type" : "Class",
   "@inherits" : [ "Right", "Left"],
   "top_face" : { "@type" : "Array",
-                 "@class" : "Top" }  }
-
+                 "@class" : "Top" } }
 ').
 
 write_schema5(Desc) :-
@@ -3382,5 +3548,6 @@ test(diamond_bad,
      ]) :-
 
     write_schema5(Desc).
+
 
 :- end_tests(schema_checker).
