@@ -18,8 +18,6 @@
                "instance_write_access",
                "schema_read_access",
                "schema_write_access",
-               "inference_read_access",
-               "inference_write_access",
                "meta_read_access",
                "meta_write_access",
                "commit_read_access",
