@@ -177,7 +177,7 @@ test(create_db_and_check_master_branch, [
                database_context(Branch_Descriptor,
                                 _{'@base':"http://somewhere/document",
                                   '@schema':"http://somewhere/schema",
-                                  '@type':'http://terminusdb.com/schema/sys#Context'})))
+                                  '@type':_})))
      ])
 :-
     Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
