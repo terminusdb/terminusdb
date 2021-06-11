@@ -47,6 +47,14 @@ is_instance(Validation_Object, X, C) :-
     class_subsumed(Validation_Object, Class,C),
     !.
 % NOTE: Need a clause here for enumerated types!
+is_instance(Validation_Object, X, C) :-
+    is_enum(Validation_Object, C),
+    !,
+    % This would be faster with set or even array!
+    % probably also faster to use the database!
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, C, sys:value, Cons),
+    graph_member_list(Schema, X, Cons).
 
 is_instance2(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
@@ -70,15 +78,15 @@ array_object(Validation_Object, S,I,O) :-
             xrdf(Instance, S,sys:object,O),
             [t(S,object,O)]).
 
-member_list_(Instance, O,L) :-
+graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:first, O).
-member_list_(Instance, O,L) :-
+graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:rest, Cdr),
-    member_list_(Instance,O,Cdr).
+    graph_member_list(Instance,O,Cdr).
 
 member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
-    member_list_(Instance, O, L).
+    graph_member_list(Instance, O, L).
 
 card_count(Validation_Object,S,P,O,N) :-
     % choose as existential anything free
