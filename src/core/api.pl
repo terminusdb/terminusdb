@@ -114,7 +114,10 @@
               bundle/5,
 
               % api_unbundle.pl
-              unbundle/4
+              unbundle/4,
+
+              % api_document.pl
+              api_get_document/5
           ]).
 
 :- use_module(api/api_init).
@@ -145,3 +148,4 @@
 :- use_module(api/api_rollup).
 :- use_module(api/api_bundle).
 :- use_module(api/api_unbundle).
+:- use_module(api/api_document).

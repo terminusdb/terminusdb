@@ -942,8 +942,15 @@ test(get_bad_descriptor, [
                  prefix,
                  methods([options,post,delete,get])]).
 
-document_handler(post, _Path, _Request, _System_DB, _Auth) :-
-    throw(error(not_implemented)).
+document_handler(get, Path, Request, System_DB, Auth) :-
+    memberchk(search(Search), Request),
+    http_log("Hallo ~q~n", [Search]),
+    do_or_die(memberchk(id=Id, Search),
+              error(id_not_found(Search), _)),
+    api_get_document(System_DB, Auth, Path, Id, Document),
+    
+    write_cors_headers(Request),
+    reply_json(Document).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
