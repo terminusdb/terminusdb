@@ -1026,6 +1026,35 @@ id_schema_json(DB, Id, JSON) :-
                            '@type'-Class
                            |Data]).
 
+validate_created_graph(schema, Layer) :-
+    Validation_Object = validation_object{
+                            descriptor: fake{},
+                            instance_objects: [],
+                            schema_objects: [graph_validation_obj{
+                                                 descriptor: fake{},
+                                                 read: Layer,
+                                                 changed: true
+                                             }]
+                        },
+
+    (   refute_schema(Validation_Object, Witness)
+    ->  throw(error(schema_validation_error(Witness), _))
+    ;   true).
+validate_created_graph(instance(Transaction), Layer) :-
+    Validation_Object = validation_object{
+                            descriptor: fake{},
+                            schema_objects: (Transaction.schema_objects),
+                            instance_objects: [graph_validation_obj{
+                                                 descriptor: fake{},
+                                                 read: Layer,
+                                                 changed: true
+                                             }]
+                        },
+
+    (   refute_instance(Validation_Object, Witness)
+    ->  throw(error(instance_validation_error(Witness), _))
+    ;   true).
+
 %%
 % create_graph_from_json(+Store,+Graph_ID,+JSON_Stream,+Type:graph_type,-Layer) is det.
 %
@@ -1038,6 +1067,7 @@ create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
     write_json_stream_to_builder(JSON_Stream, Builder, Type),
     % commit this builder to a temporary layer to perform a diff.
     nb_commit(Builder,Layer),
+    validate_created_graph(Type, Layer),
     nb_set_head(Graph_Obj, Layer).
 
 update_json_schema(Transaction, Stream) :-
