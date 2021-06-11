@@ -34,11 +34,24 @@ is_rdf_list(Validation_Object, Type) :-
     database_instance(Validation_Object, Instance),
     is_rdf_list_(Instance, Type).
 
-% This looks dubious
-is_instance(_Validation_Object, _^^T,T) :-
+is_instance(_Validation_Object, Literal, T) :-
+    nonvar(Literal),
+    Literal = _^^T,
     !.
-is_instance(_Validation_Object, _@_, T) :-
+is_instance(_Validation_Object, Literal, T) :-
+    ground(T),
+    is_base_type(T),
+    Literal = _^^T,
+    !.
+is_instance(_Validation_Object, Literal, T) :-
+    nonvar(Literal),
+    Literal = _@_,
     global_prefix_expand(rdf:literal,T),
+    !.
+is_instance(_Validation_Object, Literal, T) :-
+    ground(T),
+    global_prefix_expand(rdf:literal,T),
+    Literal = _@_,
     !.
 is_instance(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),

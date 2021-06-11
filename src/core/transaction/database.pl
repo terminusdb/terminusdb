@@ -386,7 +386,7 @@ test(partial_transaction_commit, [
                             }),
 
     ask(Context,
-        insert(doc:a, doc:b, doc:c)),
+        insert(a, b, c)),
 
     query_context_transaction_objects(Context,Transaction_Objects),
     run_transactions(Transaction_Objects, true, _),

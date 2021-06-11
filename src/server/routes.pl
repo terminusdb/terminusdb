@@ -77,11 +77,12 @@ http:location(api, '/api', []).
  */
 /* NOTE: Need to return list of databases and access rights */
 connect_handler(get, Request, System_DB, Auth) :-
-    user_object(System_DB, Auth, User_Obj),
-    User_Obj2 = (User_Obj.put('system:user_key_hash', "")),
+    findall(Database,
+            user_accessible_database(System_DB, Auth, Database),
+            Databases),
 
     write_cors_headers(Request),
-    reply_json(User_Obj2).
+    reply_json(Databases).
 
 :- begin_tests(jwt_auth, [
                    condition(config:jwt_enabled)
@@ -136,11 +137,7 @@ test(connection_result_dbs, [
     atomic_list_concat([Server, '/api'], URL),
     http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
-    * json_write_dict(current_output, Result, []),
-
-    _{ '@id' : "admin",
-       '@type':"User"
-     } :< Result.
+    Result = [].
 
 :- end_tests(connect_handler).
 
@@ -248,8 +245,8 @@ test(db_create, [
          cleanup(teardown_temp_server(State))
      ]) :-
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
+    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
+                           '@schema' : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
              label : "A label"
            },
@@ -310,6 +307,7 @@ test(db_create_in_unknown_organization_errors, [
               Result, [json_object(dict),
                        authorization(basic(admin, Key)),
                        status_code(Status)]),
+
     Status = 400,
     _{'api:status' : "api:failure"} :< Result.
 
@@ -345,9 +343,8 @@ test(db_create_unauthorized_errors, [
               Result, [json_object(dict),
                        authorization(basic("TERMINUSQA", "password")),
                        status_code(Status)]),
-
-    Status = 403,
-    _{'api:status' : "api:forbidden"} :< Result.
+    Status = 401,
+    _{'api:status' : "api:failure"} :< Result.
 
 test(db_delete, [
          setup(setup_temp_server(State, Server)),
@@ -393,7 +390,12 @@ test(db_force_delete_unfinalized_system_and_label, [
     organization_database_name("admin","foo",Label),
     triple_store(Store),
 
-    db_create:create_db_unfinalized(system_descriptor{}, Auth, "admin", "foo", "dblabel", "db comment", false, _{}, _),
+    db_create:create_db_unfinalized(system_descriptor{},
+                                    Auth, "admin", "foo",
+                                    "dblabel", "db comment", false, true,
+                                    _{'@base' : "http://foo/",
+                                      '@schema' : "http://foo/s#"},
+                                    _),
     database_exists("admin", "foo"),
     safe_open_named_graph(Store, Label, _),
 
@@ -451,7 +453,7 @@ test(db_auth_test, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
      ]) :-
-    add_user('TERMINUS_QA','user@example.com','comment', some('password'),_User_ID),
+    add_user('TERMINUS_QA',some('password'),_User_ID),
 
     atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
@@ -4135,7 +4137,7 @@ authenticate(System_Askable, Request, Auth) :-
     fetch_jwt_data(Token, Username),
     do_or_die(username_auth(System_Askable, Username, Auth),
               error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
-authenticate(_, _, doc:anonymous).
+authenticate(_, _, anonymous).
 
 /*
  * write_cors_headers(Request) is det.
