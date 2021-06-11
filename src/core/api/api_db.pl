@@ -29,8 +29,14 @@ get_all_databases(System_DB, Databases) :-
 get_user_databases(System_DB, Auth, User_Databases) :-
     create_context(System_DB, Context),
     findall(
-        Database,
-        user_accessible_database(Context, Auth, Database),
+        Path,
+        (   user_accessible_database(Context, Auth, Database),
+            ID = (Database.'@id'),
+            Name = (Database.name),
+            ask(System_DB,
+                (   t(Organization_ID,database,ID),
+                    t(Organization_ID,name,Organization^^xsd:string))),
+            format(string(Path),"~s/~s",[Organization,Name])),
         User_Databases).
 
 list_databases(System_DB, Auth, Database_Objects) :-

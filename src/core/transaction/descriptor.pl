@@ -220,7 +220,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     Descriptor = id_graph{ layer_id: Layer_Id,
                            type: Type},
     !,
-    member(Type,[instance,schema]),
+    memberchk(Type,[instance,schema]),
     storage(Store),
     store_id_layer(Store, Layer_Id, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
@@ -322,9 +322,11 @@ open_read_write_obj(Descriptor,
                                       database_name : Database_Name,
                                       repository_name : Repository_Name,
                                       type: instance },
+
+    open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
-    open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
+
     (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
         layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
         layer_id_uri(Repo, Layer_Id, Layer_Uri),
@@ -606,6 +608,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
 
     Instance_Descriptor = (Prototype.put(type, instance)),
     Schema_Descriptor = (Prototype.put(type, schema)),
+
     mapm(open_read_write_obj,
          [Instance_Descriptor, Schema_Descriptor],
          [Instance_Object, Schema_Object],
@@ -957,17 +960,43 @@ test(transactions_to_map,[
 
     maplist([Desc=_,Desc]>>true, Map, Descriptors),
     list_to_ord_set(Descriptors, Desc_Set),
+
     list_to_ord_set(
-        [branch_descriptor{branch_name:"main",repository_descriptor:repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin", database_name:"test"},repository_name:"local"}},
-         branch_graph{branch_name:"main",organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
-         repository_descriptor{database_descriptor:database_descriptor{organization_name:"admin",database_name:"test"},repository_name:"local"},
-         commit_graph{organization_name:"admin",database_name:"test",name:"main",repository_name:"local",type:instance},
-         commit_graph{organization_name:"admin",database_name:"test",name:"layer",repository_name:"local",type:schema},
-         commit_graph{organization_name:"admin",database_name:"test",name:"ref",repository_name:"local",type:schema},
-         database_descriptor{organization_name:"admin",database_name:"test"},
-         repo_graph{organization_name:"admin",database_name:"test",name:"main",type:instance},
-         repo_graph{organization_name:"admin",database_name:"test",name:"layer",type:schema},
-         repo_graph{organization_name:"admin",database_name:"test",name:"repository",type:schema}], Expected_Set),
+        [branch_descriptor{branch_name:"main",
+                           repository_descriptor:
+                           repository_descriptor{
+                               database_descriptor:
+                               database_descriptor{
+                                   database_name:"test",
+                                   organization_name:"admin"},
+                               repository_name:"local"}},
+         database_descriptor{database_name:"test",
+                             organization_name:"admin"},
+         repository_descriptor{database_descriptor:
+                               database_descriptor{
+                                   database_name:"test",
+                                   organization_name:"admin"},
+                               repository_name:"local"},
+         repo_graph{database_name:"test",organization_name:"admin",type:instance},
+         repo_graph{database_name:"test",organization_name:"admin",type:schema},
+         commit_graph{database_name:"test",
+                      organization_name:"admin",
+                      repository_name:"local",
+                      type:instance},
+         commit_graph{database_name:"test",
+                      organization_name:"admin",
+                      repository_name:"local",
+                      type:schema},
+         branch_graph{branch_name:"main",
+                      database_name:"test",
+                      organization_name:"admin",
+                      repository_name:"local",
+                      type:instance},
+         branch_graph{branch_name:"main",
+                      database_name:"test",
+                      organization_name:"admin",
+                      repository_name:"local",
+                      type:schema}], Expected_Set),
 
     ord_seteq(Desc_Set, Expected_Set).
 
@@ -978,17 +1007,17 @@ test(terminus, [
 :-
     Descriptor = system_descriptor{},
     open_descriptor(Descriptor, Transaction),
-    % check for things we know should exist in the instance, schema and inference
-    once(ask(Transaction, t(doc:system, rdf:type, system:'SystemDatabase', "instance/main"))),
-    once(ask(Transaction, t('http://terminusdb.com/schema/system', rdf:type, owl:'Ontology', "schema/main"))),
-    once(ask(Transaction, t(system:capability_scope, owl:propertyChainAxiom, _, "inference/main"))).
+
+    once(ask(Transaction, isa(system, 'SystemDatabase'))).
 
 test(label, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme(document_refactor)
      ])
 :-
-    Descriptor = label_descriptor{label: "test"},
+    Descriptor = label_descriptor{instance: "test",
+                                  variety: system_descriptor},
 
     triple_store(Store),
     create_named_graph(Store, test, Graph),
@@ -998,11 +1027,13 @@ test(label, [
     nb_set_head(Graph, Layer),
 
     open_descriptor(Descriptor, Transaction),
-    once(ask(Transaction, t(foo, bar, baz))).
+    once(ask(Transaction, t(X, Y, Z))),
+    X = foo, Y = bar, Z = baz.
 
 test(id, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme(document_refactor)
      ])
 :-
     triple_store(Store),
@@ -1011,11 +1042,12 @@ test(id, [
     nb_commit(Builder, Layer),
     layer_to_id(Layer, Id),
 
-    Descriptor = id_descriptor{variety: branch_descriptor,
+    Descriptor = id_descriptor{variety: system_descriptor,
                                instance: Id},
 
     open_descriptor(Descriptor, Transaction),
-    once(ask(Transaction, t(foo, bar, baz))).
+    once(ask(Transaction, t(X, Y, Z))),
+    X = foo, Y = bar, Z = baz.
 
 test(open_database_descriptor_as_atom, [
          setup((setup_temp_store(State),
@@ -1180,10 +1212,12 @@ test(open_commit_descriptor_with_string, [
     branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
     commit_id_uri(Repo_Descriptor, Commit_Id, Commit_Uri),
 
-    Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: Commit_Id },
+    Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor,
+                                    commit_id: Commit_Id },
     open_descriptor(Descriptor, Transaction),
 
-    once(ask(Transaction, t(foo, bar, baz))).
+    once(ask(Transaction, t(X, Y, Z))),
+    X = foo, Y = bar, Z = baz.
 
 test(open_commit_descriptor_with_nonexistent, [
          setup((setup_temp_store(State),
@@ -1196,9 +1230,10 @@ test(open_commit_descriptor_with_nonexistent, [
     Repo_Descriptor = repository_descriptor{ database_descriptor: Database_Descriptor, repository_name: "local" },
     Descriptor = commit_descriptor{ repository_descriptor: Repo_Descriptor, commit_id: "I do not exist" },
     catch(open_descriptor(Descriptor, _Transaction),
-          E,
+          error(E,_),
           true),
-    E = commit_does_not_exist(_,_).
+
+    E = commit_does_not_exist(_).
 
 
 :- end_tests(open_descriptor).

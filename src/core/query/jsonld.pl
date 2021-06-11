@@ -265,10 +265,11 @@ test(expand_path, [])
     server(Server),
     atomic_list_concat([Server, '/api/prefixes/_system'], Context),
     Document = json{'@context' : Context,
-                 'test' : json{'@id' : 'doc:test'}},
+                    'test' : json{'@id' : 'test'}},
     expand(Document, Context, JSON_LD),
     Result = (JSON_LD.'@context'),
-    json{ doc:'terminusdb:///system/data/'} :< Result.
+
+    json{ '@base':'terminusdb:///system/data/'} :< Result.
 
 :- end_tests(jsonld_expand).
 

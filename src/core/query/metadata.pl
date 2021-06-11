@@ -108,7 +108,7 @@ test(count_and_size, [
             )),
         _Meta_Data
     ),
-
+    writeq(Transaction),
     open_descriptor(Descriptor, Transaction),
     transaction_object_size(Transaction, Size),
     transaction_object_triple_count(Transaction, 6),
