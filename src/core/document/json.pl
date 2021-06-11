@@ -4,7 +4,9 @@
               json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
+              get_document/2,
               get_document/3,
+              get_document_by_type/3,
               delete_document/2,
               insert_document/3,
               update_document/3,
@@ -883,6 +885,44 @@ compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     get_dict('@schema',Prefixes,Schema),
     put_dict(_{'@base' : Schema}, Prefixes, Schema_Prefixes),
     compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp).
+
+get_document(Query_Context, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document(TO, Document).
+get_document(Desc, Document) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document(Transaction, Document).
+get_document(DB, Document) :-
+    is_simple_class(DB, Class),
+    instance_of(DB, Document_Uri, Class),
+
+    get_document(DB, Document_Uri, Document).
+
+get_document_by_type(Query_Context, Type, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document_by_type(TO, Type, Document).
+get_document_by_type(Desc, Type, Document) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document_by_type(Transaction, Type, Document).
+get_document_by_type(DB, Type, Document) :-
+    database_context(DB,Prefixes),
+    (   sub_atom(Type, _, _, _, ':')
+    ->  Prefixed_Type = Type
+    ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
+    http_log("~q ~q~n", [Type, Prefixed_Type]),
+    prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
+
+    is_instance2(DB, Document_Uri, Type_Ex),
+
+    get_document(DB, Document_Uri, Document).
 
 get_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),

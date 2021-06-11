@@ -943,14 +943,21 @@ test(get_bad_descriptor, [
                  methods([options,post,delete,get])]).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
-    memberchk(search(Search), Request),
-    http_log("Hallo ~q~n", [Search]),
-    do_or_die(memberchk(id=Id, Search),
-              error(id_not_found(Search), _)),
-    api_get_document(System_DB, Auth, Path, Id, Document),
-    
-    write_cors_headers(Request),
-    reply_json(Document).
+    (   memberchk(search(Search), Request)
+    ->  write_cors_headers(Request),
+        (   memberchk(id=Id, Search)
+        ->  api_get_document(System_DB, Auth, Path, Id, Document),
+            reply_json(Document)
+        ;   memberchk(type=Type, Search)
+        ->  format("Content-type: application/json; charset=UTF-8~n~n", []),
+            forall(api_generate_documents_by_type(System_DB, Auth, Path, Type, Document),
+                   (   json_write(current_output, Document),
+                       nl))
+        ;   throw(error(unknown_option(Search), _)))
+    ;   format("Content-type: application/json; charset=UTF-8~n~n", []),
+        forall(api_generate_documents(System_DB, Auth, Path, Document),
+               (   json_write(current_output, Document),
+                   nl))).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),

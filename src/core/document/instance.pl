@@ -1,7 +1,9 @@
 :- module('document/instance', [
               refute_instance/2,
               refute_instance_schema/2,
-              is_instance/3
+              is_instance/3,
+              is_instance2/3,
+              instance_of/3
           ]).
 
 /*
@@ -46,6 +48,11 @@ is_instance(Validation_Object, X, C) :-
     !.
 % NOTE: Need a clause here for enumerated types!
 
+is_instance2(Validation_Object, X, C) :-
+    database_instance(Validation_Object, Instance),
+    xrdf(Instance, X, rdf:type, Class),
+    is_simple_class(Validation_Object, Class),
+    class_subsumed(Validation_Object, Class,C).
 
 instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
