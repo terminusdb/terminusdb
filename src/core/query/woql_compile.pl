@@ -893,36 +893,30 @@ turtle_term(Path,Vars,Prog,Options) :-
             literals:normalise_triple(Triple, rdf(X,P,Y)),
             Vars = [X,P,Y]).
 
-compile_wf(read_object(Doc_ID,N,Doc),
-           frame:document_jsonld(S0,URI,N,JSON)) -->
+compile_wf(get_document(Doc_ID,Doc),
+           get_document(S0, URI, JSON)) -->
     assert_read_access,
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
-compile_wf(read_object(Doc_ID,Doc),
-           frame:document_jsonld(S0,URI,JSON)) -->
-    assert_read_access,
-    resolve(Doc_ID,URI),
-    resolve(Doc,JSON),
-    peek(S0).
-compile_wf(update_object(Doc),(
+compile_wf(update_document(Doc),(
                freeze(Guard,
-                      frame:update_object(DocE,S0)))) -->
+                      update_document(S0, DocE, _)))) -->
     assert_write_access,
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
-compile_wf(update_object(X,Doc),(
+compile_wf(update_document(X,Doc),(
                freeze(Guard,
-                      frame:update_object(URI,DocE,S0)))) -->
+                      update_document(S0, DocE, URI)))) -->
     assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
-compile_wf(delete_object(X),(
+compile_wf(delete_document(X),(
                freeze(Guard,
-                      frame:delete_object(URI,S0)))) -->
+                      delete_document(S0, URI)))) -->
     assert_write_access,
     resolve(X,URI),
     view(update_guard, Guard),
@@ -1003,7 +997,7 @@ compile_wf(like(A,B,F), Isub) -->
     { marshall_args(isub(AE,BE,true,FE), Isub) }.
 compile_wf(isa(X,C),is_instance(Transaction_Object,XE,CE)) -->
     resolve(X,XE),
-    resolve(C,CE),
+    resolve_predicate(C,CE),
     view(default_collection,Collection_Descriptor),
     view(transaction_objects, Transaction_Objects),
     {
@@ -1086,6 +1080,8 @@ compile_wf(t(X,P,Y,G),Goal) -->
     update(filter, Old_Filter, Filter),
     compile_wf(t(X,P,Y), Goal),
     update(filter, _Filter, Old_Filter).
+compile_wf(path(X,Pattern,Y),Goal) -->
+    compile_wf(path(X,Pattern,Y,_),Goal).
 compile_wf(path(X,Pattern,Y,Path),Goal) -->
     assert_read_access,
     resolve(X,XE),

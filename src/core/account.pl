@@ -13,7 +13,7 @@
               assert_write_access/2,
               assert_write_access/3,
               authorisation_object/3,
-              user_object/3,
+              user_accessible_database/3,
               super_user_authority/1,
               check_descriptor_auth/4,
               is_super_user/1,

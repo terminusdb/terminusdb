@@ -138,8 +138,8 @@ test(connection_result_dbs, [
 
     * json_write_dict(current_output, Result, []),
 
-    _{ '@id' : "doc:admin",
-       '@type':"system:User"
+    _{ '@id' : "admin",
+       '@type':"User"
      } :< Result.
 
 :- end_tests(connect_handler).
@@ -996,13 +996,14 @@ frame_handler(post, Path, Request, System_DB, Auth) :-
 
 test(get_frame, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         fixme(document_refactor)
      ])
 :-
     atomic_list_concat([Server, '/api/frame/_system'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{ class : "system:Agent"
+              json(_{ class : "User"
                     }),
               JSON, [json_object(dict),
                      authorization(basic(admin, Key))]),
@@ -1011,7 +1012,8 @@ test(get_frame, [
 
 test(get_filled_frame, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         fixme(document_refactor)
      ])
 :-
     atomic_list_concat([Server, '/api/frame/_system'], URI),

@@ -12,7 +12,7 @@
               assert_write_access/2,
               assert_write_access/3,
               authorisation_object/3,
-              user_object/3,
+              user_accessible_database/3,
               super_user_authority/1,
               check_descriptor_auth/4,
               is_super_user/1,
@@ -48,8 +48,8 @@
 username_user_id(DB, Username, User_ID) :-
     ask(DB,
         (
-            t(User_ID, rdf:type, system:'User'),
-            t(User_ID, system:agent_name, Username^^xsd:string)
+            isa(User_ID,'User'),
+            t(User_ID, name, Username^^xsd:string)
         )
        ).
 
@@ -63,9 +63,9 @@ user_key_user_id(DB, Username, Key, User_ID) :-
     coerce_literal_string(Key, K),
     ask(DB,
         (
-            t(User_ID, rdf:type, system:'User'),
-            t(User_ID, system:agent_name, Username^^xsd:string),
-            t(User_ID, system:user_key_hash, Hash^^xsd:string)
+            isa(User_ID, 'User'),
+            t(User_ID, name, Username^^xsd:string),
+            t(User_ID, key_hash, Hash^^xsd:string)
         ),
         [compress_prefixes(false)]
        ),
@@ -78,8 +78,7 @@ user_key_user_id(DB, Username, Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(Database, User_ID, User) :-
-    document_jsonld(Database,User_ID,3,User).
-
+    get_document(Database,User_ID,User).
 
 /**
  * user_key_auth(DB, Key, Auth_URI) is det.
@@ -124,7 +123,7 @@ auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
     ask(DB,
         (   t(anonymous, capability, Capability),
-            t(Capability, rdf:type, '@schema':'Capability'),
+            isa(Capability, 'Capability'),
             t(Capability, scope, Scope_Iri),
             t(Capability, role, anonymous_role),
             t(anonymous_role, action, Action)
@@ -345,29 +344,33 @@ assert_auth_action_scope(DB, Auth, Action, Scope) :-
     ;   throw(error(access_not_authorised(Auth,Action,Scope)))).
 
 /**
- * authorisation_object(DB,Auth_ID,Auth_Obj) is det.
+ * authorisation_capabilities(DB,Auth_ID,Capabilities) is det.
  *
- * Finds all database objects accessible to a user.
+ * Finds all capabilities
  */
-authorisation_object(DB, Auth_ID, Auth_Obj) :-
-    once(ask(DB,
-             (  t(Auth_ID, system:action, _), % Some action to look at...
-                read_object(Auth_ID, 2, Auth_Obj)
-             )
-            )).
+authorisation_object(DB, Auth_ID, Capabilities) :-
+    findall(
+        Capability,
+        ask(DB,
+            (  t(Auth_ID, capability, Capability_ID), % Some action to look at...
+               get_document(Capability_ID, Capability)
+            )
+           ),
+        Capabilities
+    ).
 
 /**
- * user_object(DB,User_ID,User_Obj) is det.
+ * user_accessible_database(DB,User_ID,Database) is det.
  *
  * Finds all database objects accessible to a user.
  */
-user_object(DB, User_ID, User_Obj) :-
-    once(ask(DB,
-             (  t(User_ID, rdf:type, system:'User'), % Some action to look at...
-                read_object(User_ID, 4, User_Obj)
-             )
-            )).
-
+user_accessible_database(DB, User_ID, Database) :-
+    ask(DB,
+        (   t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            isa(Database_ID, 'UserDatabase'),
+            get_document(Database_ID, Database)
+        )).
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
     assert_auth_action_scope(System_DB,Auth,Action,system).
