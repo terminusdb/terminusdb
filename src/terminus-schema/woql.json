@@ -56,7 +56,7 @@
 
 { "@id" : "From",
   "@type" : "Class",
-  "@inherits" : "Query"
+  "@inherits" : "Query",
   "query" : "Query",
   "graph_filter" : "xsd:string" }
 
@@ -144,7 +144,7 @@
              "@class" : "xsd:string" } }
 
 { "@id" : "Source",
-  "@class" : "TaggedUnion"
+  "@class" : "TaggedUnion",
   "file" : "xsd:string",
   "url" : "xsd:string" }
 
