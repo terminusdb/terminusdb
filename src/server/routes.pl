@@ -2258,7 +2258,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
                             Response,
                             [status(200)]))).
 
-:- begin_tests(push_endpoint, []).
+:- begin_tests(push_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 :- use_module(core(api)).
@@ -2275,7 +2275,7 @@ test(push_empty_to_empty_does_nothing_succesfully,
              (
                  teardown_temp_unattached_server(State_Origin),
                  teardown_temp_unattached_server(State_Destination))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
@@ -2323,7 +2323,7 @@ test(push_empty_with_prefix_change_to_empty_changes_prefixes,
              (
                  teardown_temp_unattached_server(State_Origin),
                  teardown_temp_unattached_server(State_Destination))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
@@ -2381,7 +2381,7 @@ test(push_nonempty_to_empty_advances_remote_head,
              (
                  teardown_temp_unattached_server(State_Origin),
                  teardown_temp_unattached_server(State_Destination))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
@@ -2426,7 +2426,8 @@ test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination)))
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
@@ -2479,7 +2480,8 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination)))
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     with_triple_store(
@@ -2582,7 +2584,7 @@ test(pull_from_empty_to_empty,
              (
                  teardown_temp_unattached_server(State_Local),
                  teardown_temp_unattached_server(State_Remote))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
@@ -2628,7 +2630,7 @@ test(pull_from_something_to_empty,
              (
                  teardown_temp_unattached_server(State_Local),
                  teardown_temp_unattached_server(State_Remote))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -2692,7 +2694,7 @@ test(pull_from_something_to_something,
              (
                  teardown_temp_unattached_server(State_Local),
                  teardown_temp_unattached_server(State_Remote))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -2762,7 +2764,7 @@ test(pull_from_something_to_something_equal,
              (
                  teardown_temp_unattached_server(State_Local),
                  teardown_temp_unattached_server(State_Remote))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -2816,7 +2818,7 @@ test(pull_from_something_to_something_equal_other_branch,
              (
                  teardown_temp_unattached_server(State_Local),
                  teardown_temp_unattached_server(State_Remote))),
-         fixme(document_refactor)
+         blocked(document_refactor)
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
