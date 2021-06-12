@@ -61,10 +61,11 @@ username_user_id(DB, Username, User_ID) :-
  */
 user_key_user_id(DB, Username, Key, User_ID) :-
     coerce_literal_string(Key, K),
+    coerce_literal_string(Username, U),
     ask(DB,
         (
+            t(User_ID, name, U^^xsd:string),
             isa(User_ID, 'User'),
-            t(User_ID, name, Username^^xsd:string),
             t(User_ID, key_hash, Hash^^xsd:string)
         ),
         [compress_prefixes(false)]

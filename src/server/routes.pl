@@ -193,17 +193,11 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
             label : Label } :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label]),_)),
 
+    Default_Prefixes = _{ '@base' : "terminusdb:///data/",
+                          '@schema' : "terminusdb:///schema#" },
     (   _{ prefixes : Input_Prefixes } :< Database_Document
-    ->  (   _{ doc : Doc} :< Input_Prefixes
-        ->  true
-        ;   Doc = "terminusdb:///data/"),
-        (   _{ scm : Scm} :< Input_Prefixes
-        ->  true
-        ;   Scm = "terminusdb:///schema#"),
-        Prefixes = Input_Prefixes.put(_{ doc : Doc,
-                                         scm : Scm })
-    ;   Prefixes = _{ doc : "terminusdb:///data/",
-                      scm : "terminusdb:///schema#" }),
+    ->  Prefixes = (Default_Prefixes.put(Input_Prefixes))
+    ;   Prefixes = Default_Prefixes),
 
     (   _{ public : Public } :< Database_Document
     ->  true
@@ -343,8 +337,9 @@ test(db_create_unauthorized_errors, [
               Result, [json_object(dict),
                        authorization(basic("TERMINUSQA", "password")),
                        status_code(Status)]),
-    Status = 401,
-    _{'api:status' : "api:failure"} :< Result.
+
+    Status = 403,
+    _{'api:status' : "api:forbidden"} :< Result.
 
 test(db_delete, [
          setup(setup_temp_server(State, Server)),
@@ -456,8 +451,8 @@ test(db_auth_test, [
     add_user('TERMINUS_QA',some('password'),_User_ID),
 
     atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
+    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
+                           '@schema' : "https://terminushub.com/schema"},
              comment : "A quality assurance test",
              label : "A label"
            },
@@ -1588,7 +1583,7 @@ test(bad_cast, [
     _{ '@type' : "AddTriple",
        subject : "doc:test_subject",
        predicate : "rdf:type",
-       object : "scm:BS"
+       object : "BS"
      },
 
     Second_Insert =
