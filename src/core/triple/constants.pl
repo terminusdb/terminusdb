@@ -101,5 +101,5 @@ ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri')
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
-admin_organization_uri('terminusdb:///system/data/admin_organization').
-super_user_authority('terminusdb:///system/data/admin').
+admin_organization_uri('terminusdb://system/data/admin_organization').
+super_user_authority('terminusdb://system/data/admin').
