@@ -1375,6 +1375,28 @@ class_frame(Validation_Object, Class, Frame) :-
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
 
+insert_schema_document(Transaction, Document) :-
+    is_transaction(Transaction),
+    !,
+    % Is this a context? If so do something else.
+    database_context(Transaction, Context),
+    database_schema(Transaction, [Schema]),
+    (   get_dict('@id', Document, _)
+    ->  true
+    ;   throw(error(no_id_in_schema_document(Document)))),
+
+    default_prefixes(Prefixes),
+    put_dict(Context,Prefixes,Expanded_Context),
+    forall(
+        json_schema_triple(Document, Expanded_Context, t(S,P,O)),
+        insert(Schema, S, P, O, _)
+    ).
+insert_schema_document(Query_Context, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_schema_document(TO, Document).
+
 :- begin_tests(json_stream).
 :- use_module(core(util)).
 :- use_module(library(terminus_store)).
@@ -3333,6 +3355,50 @@ test(extract_schema_binary_tree,
                 node:'Node'}.
 
 
+test(insert_schema_object,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    get_schema_document(DB2, 'Squash', JSON),
+    JSON = json{'@id':'Squash',
+                '@key':json{'@fields':[genus,species],
+                            '@type':"Lexical"},
+                '@type':'Class',
+                colour:'xsd:string',
+                genus:'xsd:string',
+                name:'xsd:string',
+                shape:'xsd:string',
+                species:'xsd:string'}.
+
 :- end_tests(json).
 
 
@@ -3622,7 +3688,8 @@ test(substring_insert, [
              )),
          cleanup(
              teardown_temp_store(State)
-         )
+         ),
+         blocked('Something wrong with the definition of Substring')
      ]) :-
 
     JSON = _{'@type' : "Substring",

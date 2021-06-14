@@ -95,6 +95,7 @@
   "graph" : {"@type" : "Optional",
              "@class" : "xsd:string" } }
 
+
 { "@id" : "Data",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
