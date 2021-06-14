@@ -1062,8 +1062,10 @@ get_schema_document(DB, Document) :-
 
 get_schema_document(DB, '@context', Document) :-
     !,
+    database_context(DB, DB_Prefixes),
     get_schema_document(DB, 'terminusdb://context', Document_1),
-    Document = (Document_1.put('@type', '@context')).
+    Document_2 = (Document_1.put('@type', '@context')),
+    Document = (Document_2.put(DB_Prefixes)).
 get_schema_document(DB, Id, Document) :-
     database_context(DB, DB_Prefixes),
     default_prefixes(Defaults),
