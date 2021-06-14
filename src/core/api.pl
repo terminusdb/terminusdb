@@ -119,7 +119,7 @@
               % api_document.pl
               api_generate_documents/4,
               api_generate_documents_by_type/5,
-              api_get_document/5
+              api_get_document/6
           ]).
 
 :- use_module(api/api_init).

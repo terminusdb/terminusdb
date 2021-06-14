@@ -951,16 +951,25 @@ test(get_bad_descriptor, [
 
 document_handler(get, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
-    ->  write_cors_headers(Request),
-        (   memberchk(id=Id, Search)
-        ->  api_get_document(System_DB, Auth, Path, Id, Document),
-            reply_json(Document)
-        ;   memberchk(type=Type, Search)
+    ->  true
+    ;   Search = []),
+
+    write_cors_headers(Request),
+
+    (   memberchk(graph_type=Graph_Type, Search)
+    ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
+                  error(unknown_graph_type(Graph_Type),_))
+    ;   Graph_Type = schema),
+
+    (   memberchk(id=Id, Search)
+    ->  api_get_document(System_DB, Auth, Path, Graph_Type, Id, Document),
+        reply_json(Document),
+        nl
+    ;   memberchk(type=Type, Search)
         ->  format("Content-type: application/json; charset=UTF-8~n~n", []),
             forall(api_generate_documents_by_type(System_DB, Auth, Path, Type, Document),
                    (   json_write(current_output, Document),
                        nl))
-        ;   throw(error(unknown_option(Search), _)))
     ;   format("Content-type: application/json; charset=UTF-8~n~n", []),
         forall(api_generate_documents(System_DB, Auth, Path, Document),
                (   json_write(current_output, Document),
