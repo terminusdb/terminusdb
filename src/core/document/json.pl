@@ -6,8 +6,10 @@
               json_schema_elaborate/3,
               get_document/2,
               get_document/3,
+              get_schema_document/2,
               get_schema_document/3,
               get_document_by_type/3,
+              get_schema_document_by_type/3,
               delete_document/2,
               insert_document/3,
               update_document/3,
@@ -926,7 +928,6 @@ get_document_by_type(DB, Type, Document) :-
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
-    http_log("~q ~q~n", [Type, Prefixed_Type]),
     prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
 
     is_instance2(DB, Document_Uri, Type_Ex),
@@ -1053,11 +1054,31 @@ schema_subject_predicate_object_key_value(DB,Prefixes,_Id,P,O,K,JSON) :-
     type_descriptor(DB, O, Descriptor),
     type_descriptor_json(Descriptor,Prefixes,JSON).
 
+get_schema_document(DB, Document) :-
+    get_schema_document(DB, '@context', Document).
+get_schema_document(DB, Document) :-
+    is_simple_class(DB, Class),
+    get_schema_document(DB, Class, Document).
+
+get_schema_document(DB, '@context', Document) :-
+    !,
+    get_schema_document(DB, 'terminusdb://context', Document).
 get_schema_document(DB, Id, Document) :-
     database_context(DB, DB_Prefixes),
     default_prefixes(Defaults),
     Prefixes = (Defaults.put(DB_Prefixes)),
     id_schema_json(DB, Prefixes, Id, Document).
+
+get_schema_document_by_type(DB, Type, Document) :-
+    default_prefixes(Prefixes),
+    database_schema(DB,Schema),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type = Type_Ex
+    ),
+
+    xrdf(Schema, Id_Ex, rdf:type, Type_Ex),
+    id_schema_json(DB, Prefixes, Id_Ex, Document).
 
 id_schema_json(DB, Id, JSON) :-
     default_prefixes(Defaults),

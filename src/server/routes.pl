@@ -949,12 +949,15 @@ test(get_bad_descriptor, [
                  prefix,
                  methods([options,post,delete,get])]).
 
-json_write_with_header(Document, Header_Written) :-
+ensure_json_header_written(Header_Written) :-
     Header_Written = written(Written),
     (   var(Written)
     ->  nb_setarg(1, Header_Written, true),
         format("Content-type: application/json; charset=UTF-8~n~n", [])
-    ;   true),
+    ;   true).
+
+json_write_with_header(Document, Header_Written) :-
+    ensure_json_header_written(Header_Written),
 
     json_write(current_output, Document),
     nl.
@@ -969,20 +972,20 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     (   memberchk(graph_type=Graph_Type, Search)
     ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
                   error(unknown_graph_type(Graph_Type),_))
-    ;   Graph_Type = schema),
+    ;   Graph_Type = instance),
 
     Header_Written = written(_),
     (   memberchk(id=Id, Search)
     ->  api_get_document(System_DB, Auth, Path, Graph_Type, Id, Document),
         json_write_with_header(Document, Header_Written)
     ;   memberchk(type=Type, Search)
-        ->  format("Content-type: application/json; charset=UTF-8~n~n", []),
-            forall(api_generate_documents_by_type(System_DB, Auth, Path, Type, Document),
-                   json_write_with_header(Document, Header_Written))
-    ;   format("Content-type: application/json; charset=UTF-8~n~n", []),
-        forall(api_generate_documents(System_DB, Auth, Path, Document),
+    ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Type, Document),
+               json_write_with_header(Document, Header_Written))
+    ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Document),
+               json_write_with_header(Document, Header_Written))),
 
-               json_write_with_header(Document, Header_Written))).
+    % ensure the header has been written by now.
+    ensure_json_header_written(Header_Written).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
