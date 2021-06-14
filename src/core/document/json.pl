@@ -1326,15 +1326,8 @@ run_insert_document(Desc, Commit, Document, ID) :-
         insert_document(Context, Document, ID),
         _).
 
-update_document(Transaction, Document) :-
-    is_transaction(Transaction),
-    !,
-    update_document(Transaction, Document, _).
-update_document(Query_Context, Document) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    update_document(TO, Document).
+update_document(DB, Document) :-
+    update_document(DB, Document, _).
 
 update_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
@@ -1396,6 +1389,48 @@ insert_schema_document(Query_Context, Document) :-
     !,
     query_default_collection(Query_Context, TO),
     insert_schema_document(TO, Document).
+
+% NOTE: This leaves garbage! We need a way to collect the leaves which
+% link to array elements or lists.
+delete_schema_document(Transaction, Id) :-
+    is_transaction(Transaction),
+    !,
+    database_context(Transaction, Context),
+    database_schema(Transaction, [Schema]),
+
+    get_schema_document(Transaction, Id, Document),
+
+    default_prefixes(Prefixes),
+    put_dict(Context,Prefixes,Expanded_Context),
+
+    forall(
+        (   json_schema_triple(Document, Expanded_Context, t(S,P,O)),
+            xrdf([Schema], S, P, O)),
+        delete(Schema, S, P, O, _)
+    ).
+delete_schema_document(Query_Context, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    delete_schema_document(TO, Id).
+
+update_schema_document(DB, Document) :-
+    update_schema_document(DB, Document, _Id).
+
+update_schema_document(Transaction, Document, Id) :-
+    is_transaction(Transaction),
+    !,
+    get_dict('@id', Document, Id),
+
+    delete_schema_document(Transaction, Id),
+    insert_schema_document(Transaction, Document).
+update_schema_document(Query_Context, Document, Id) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    update_schema_document(TO, Document, Id).
+
+
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -3354,7 +3389,6 @@ test(extract_schema_binary_tree,
                 leaf:"Unit",
                 node:'Node'}.
 
-
 test(insert_schema_object,
      [
          setup(
@@ -3398,6 +3432,127 @@ test(insert_schema_object,
                 name:'xsd:string',
                 shape:'xsd:string',
                 species:'xsd:string'}.
+
+test(delete_schema_document,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    create_context(DB2,
+                   _{ author : "me",
+                      message : "Have you tried bitcoin?"
+                    },
+                   Context2),
+
+    with_transaction(
+        Context2,
+        delete_schema_document(Context2, 'Squash'),
+        _
+    ),
+
+    open_descriptor(Desc, DB3),
+    \+ get_schema_document(DB3, 'Squash', _).
+
+test(update_schema_document,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    create_context(DB2,
+                   _{ author : "me",
+                      message : "Have you tried bitcoin?"
+                    },
+                   Context2),
+
+    New_Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Hash",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string",
+       is_a_pumpkin : "xsd:boolean"
+     },
+
+    with_transaction(
+        Context2,
+        update_schema_document(Context2, New_Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB3),
+    get_schema_document(DB3, 'Squash', JSON),
+
+    JSON =
+    json{
+        '@id':'Squash',
+        '@key':json{'@fields':[genus,species],'@type':"Hash"},
+        '@type':'Class',
+        colour:'xsd:string',
+        genus:'xsd:string',
+        is_a_pumpkin:'xsd:boolean',
+        name:'xsd:string',
+        shape:'xsd:string',
+        species:'xsd:string'}.
 
 :- end_tests(json).
 
