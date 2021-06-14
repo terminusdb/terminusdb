@@ -37,7 +37,9 @@
               setup_cloned_situation/4,
               setup_cloned_nonempty_situation/4,
               test_document_label_descriptor/1,
-              test_document_label_descriptor/2
+              test_document_label_descriptor/2,
+              test_woql_label_descriptor/1,
+              test_woql_label_descriptor/2
           ]).
 
 /** <module> Test Utilities
@@ -571,6 +573,7 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
 
 test_document_label_descriptor(Descriptor) :-
     test_document_label_descriptor(test, Descriptor).
+
 test_document_label_descriptor(Name, Descriptor) :-
     triple_store(Store),
     atom_concat(Name, '_schema', Schema_Name),
@@ -581,5 +584,20 @@ test_document_label_descriptor(Name, Descriptor) :-
     Descriptor = label_descriptor{
                      variety: branch_descriptor,
                      schema: Schema_Name,
+                     instance: Instance_Name
+                 }.
+
+test_woql_label_descriptor(Descriptor) :-
+    test_woql_label_descriptor(woql, Descriptor).
+
+test_woql_label_descriptor(Name, Descriptor) :-
+    triple_store(Store),
+    atom_concat(Name, '_instance', Instance_Name),
+    woql_ontology(WOQL_Name),
+    create_named_graph(Store, Instance_Name, _),
+
+    Descriptor = label_descriptor{
+                     variety: branch_descriptor,
+                     schema: WOQL_Name,
                      instance: Instance_Name
                  }.

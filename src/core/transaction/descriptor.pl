@@ -28,11 +28,11 @@
  * Types:
  *
  * graph_descriptor --> labelled_graph{ label : atom
-                                        type: atom,
-                                        name: main }
+ *                                      type: atom,
+ *                                      name: main }
  *                    | id_graph{ layer_id : atom,
-                                  type: atom,
-                                  name: string } % for debugging
+ *                                type: atom,
+ *                                name: string } % for debugging
  *                    | system_graph{ type : atom,
  *                                    name : atom }
  *                    | repo_graph { organization_name: string,

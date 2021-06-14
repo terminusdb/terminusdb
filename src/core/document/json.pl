@@ -594,6 +594,9 @@ json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     json_schema_elaborate_key(V,Context,Elab),
     key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
+json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:abstract, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -1024,6 +1027,9 @@ schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@inherits',V) :-
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@schema',O) :-
     global_prefix_expand(sys:schema,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@abstract',[]) :-
+    global_prefix_expand(sys:abstract,P),
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,O,'@class',O) :-
     global_prefix_expand(sys:class,P),
@@ -3552,3 +3558,63 @@ test(diamond_bad,
 
 
 :- end_tests(schema_checker).
+
+
+:- begin_tests(woql_document).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+test(subsumption_insert,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_woql_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = _{'@type' : "Subsumption",
+             'child' : _{ '@type' : "NodeValue",
+                          'node' : "system:Organization"},
+             'parent' : _{'@type' : "NodeValue",
+                          'variable' : "Parent"} },
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+
+    get_document(Desc, Id, JSON2),
+
+    JSON2 = json{'@id':'Subsumption_5894f172e060e3787b8045c17099266d55e3ffb1',
+                 '@type':'Subsumption',
+                 child:'terminusdb://woql/data/NodeValue_06b4d0fa679ceabdee9afa804863c88676f742f2',
+                 parent:'terminusdb://woql/data/NodeValue_7aa5900abf5ed338b866b67bbcb1983dbda01b54'}.
+
+test(substring_insert, [
+         setup(
+             (   setup_temp_store(State),
+                 test_woql_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = _{'@type' : "Substring",
+             string : _{ data : _{'@type' : "xsd:string",
+                                  '@value' : "Test"}},
+             before : _{ data : _{'@type' : "xsd:integer",
+                                  '@value' : 1}},
+             length : _{ variable : "Length"},
+             after : _{ data : _{'@type' : "xsd:integer",
+                                 '@value' : 1}},
+             substring : _{ variable : "Substring" }},
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+
+    get_document(Desc, Id, JSON2),
+    writeq(JSON2).
+
+:- end_tests(woql_document).

@@ -49,6 +49,7 @@
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
+              woql_ontology/1,
 
               rdf_type_uri/1,
               xsd_string_type_uri/1,

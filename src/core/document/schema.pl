@@ -13,7 +13,8 @@
               key_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
-              class_subsumed/3
+              class_subsumed/3,
+              is_abstract/2
           ]).
 
 /*
@@ -238,10 +239,15 @@ is_built_in(P) :-
             sys:base,
             sys:value,
             sys:class,
-            sys:index
+            sys:index,
+            sys:abstract
         ],
         List),
     memberchk(P,List).
+
+is_abstract(Validation_Object, C) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, C, sys:abstract, rdf:nil).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).

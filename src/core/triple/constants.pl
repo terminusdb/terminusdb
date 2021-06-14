@@ -4,6 +4,7 @@
               system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
+              woql_ontology/1,
               ref_ontology/1,
 
               rdf_type_uri/1,
@@ -60,6 +61,8 @@ layer_ontology('http://terminusdb.com/schema/layer').
 repository_ontology('http://terminusdb.com/schema/repository').
 
 ref_ontology('http://terminusdb.com/schema/ref').
+
+woql_ontology('http://terminusdb.com/schema/woql').
 
 %%% various URIs that we use often
 rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').

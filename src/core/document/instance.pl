@@ -379,12 +379,20 @@ refute_built_in(Validation_Object,Subject,Predicate,Witness) :-
     xrdf_added(Instance,Subject,Predicate,Value),
     refute_built_in_value(Validation_Object,Predicate,Value,Witness).
 
+refute_abstract(Subject, Class, Witness) :-
+    Witness = witness{
+                  '@type': reifying_abstract_class,
+                  class: Class,
+                  subject: Subject
+              }.
 
 refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     subject_predicate_changed(Validation_Object,Subject,Predicate),
     % We also need to check arrays / lists for coherence here?
     (   is_built_in(Predicate)
     ->  refute_built_in(Validation_Object,Subject,Predicate,Witness)
+    ;   is_abstract(Validation_Object,Class)
+    ->  refute_abstract(Subject, Class, Witness)
     ;   refute_subject_deletion(Validation_Object,Subject,Witness)
     ;   refute_subject_type_change(Validation_Object,Subject,Witness)
     ;   refute_key(Validation_Object,Subject,Predicate,Class,Witness)
