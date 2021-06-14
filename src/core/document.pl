@@ -26,6 +26,7 @@
               get_schema_document_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_schema_document/2,
               update_document/3,
 
               % instance.pl

@@ -944,20 +944,21 @@ test(get_bad_descriptor, [
 :- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(document/Path), cors_handler(Method, document_handler(Path)),
+:- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,post,delete,get])]).
 
-ensure_json_header_written(Header_Written) :-
+ensure_json_header_written(Request, Header_Written) :-
     Header_Written = written(Written),
     (   var(Written)
     ->  nb_setarg(1, Header_Written, true),
+        write_cors_headers(Request),
         format("Content-type: application/json; charset=UTF-8~n~n", [])
     ;   true).
 
-json_write_with_header(Document, Header_Written) :-
-    ensure_json_header_written(Header_Written),
+json_write_with_header(Request, Document, Header_Written) :-
+    ensure_json_header_written(Request, Header_Written),
 
     json_write(current_output, Document),
     nl.
@@ -967,8 +968,6 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ->  true
     ;   Search = []),
 
-    write_cors_headers(Request),
-
     (   memberchk(graph_type=Graph_Type, Search)
     ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
                   error(unknown_graph_type(Graph_Type),_))
@@ -977,15 +976,38 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     Header_Written = written(_),
     (   memberchk(id=Id, Search)
     ->  api_get_document(System_DB, Auth, Path, Graph_Type, Id, Document),
-        json_write_with_header(Document, Header_Written)
+        json_write_with_header(Request, Document, Header_Written)
     ;   memberchk(type=Type, Search)
     ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Type, Document),
-               json_write_with_header(Document, Header_Written))
+               json_write_with_header(Request, Document, Header_Written))
     ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Document),
-               json_write_with_header(Document, Header_Written))),
+               json_write_with_header(Request, Document, Header_Written))),
 
     % ensure the header has been written by now.
-    ensure_json_header_written(Header_Written).
+    ensure_json_header_written(Request, Header_Written).
+
+document_handler(post, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    (   memberchk(graph_type=Graph_Type, Search)
+    ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
+                  error(unknown_graph_type(Graph_Type),_))
+    ;   Graph_Type = instance),
+
+    do_or_die(memberchk(author=Author, Search),
+              error(no_commit_author, _)),
+    do_or_die(memberchk(message=Message, Search),
+              error(no_commit_message, _)),
+
+
+    http_read_data(Request, Data, [to(string)]),
+    open_string(Data, Stream),
+    api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Ids),
+
+    reply_json(Ids),
+    nl.
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
@@ -3905,12 +3927,16 @@ test(console_route_home, [
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
-cors_handler(options, _Goal, Request) :-
+:- meta_predicate cors_handler(+,2,?,+).
+cors_handler(Method, Goal, Request) :-
+    cors_handler(Method, Goal, [], Request).
+cors_handler(options, _Goal, _Options, Request) :-
     !,
     write_cors_headers(Request),
     format('~n').
-cors_handler(Method, Goal, R) :-
-    (   memberchk(Method, [post, put, delete])
+cors_handler(Method, Goal, Options, R) :-
+    (   memberchk(Method, [post, put, delete]),
+        \+ memberchk(add_payload(false), Options)
     ->  add_payload_to_request(R,Request)
     ;   Request = R),
 
@@ -3929,7 +3955,7 @@ cors_handler(Method, Goal, R) :-
                           },
                          [status(401)]))),
     !.
-cors_handler(_Method, Goal, R) :-
+cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
     format(string(Msg), "Failed to run the API endpoint goal ~q", Goal),
     reply_json(_{'@type' : 'api:ErrorResponse',
