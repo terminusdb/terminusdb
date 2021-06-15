@@ -1295,11 +1295,37 @@ delete_document(Query_Context, Id) :-
     query_default_collection(Query_Context, TO),
     delete_document(TO, Id).
 
+
+check_existing_document_status(Transaction, Document, Status) :-
+    get_dict('@type', Document, Type),
+    get_dict('@id', Document, Id),
+    database_instance(Transaction, Instance),
+    (   key_descriptor(Transaction, Type, value_hash(_))
+    ->  (   xrdf(Instance, Id, _, _)
+        ->  Status = equivalent
+        ;   Status = not_present)
+    ;   (   xrdf(Instance, Id, _, _)
+        ->  Status = present
+        ;   Status = not_present)
+    ).
+
 insert_document(Transaction, Document, ID) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
-    insert_document_expanded(Transaction, Elaborated, ID).
+    (   get_dict('@id', Elaborated, ID)
+    ->  true
+    ;   throw(error(no_id_in_schema_document(Elaborated), _))
+    ),
+
+    check_existing_document_status(Transaction, Elaborated, Status),
+    (   Status = not_present
+    ->  insert_document_expanded(Transaction, Elaborated, ID)
+    ;   Status = equivalent
+    ->  true
+    ;   Status = present
+    ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
+    ).
 insert_document(Query_Context, Document, ID) :-
     is_query_context(Query_Context),
     !,
@@ -1376,8 +1402,10 @@ insert_schema_document(Transaction, Document) :-
     ),
     database_schema(Transaction, Schema),
 
+    database_context(Transaction, Context),
+    prefix_expand_schema(Id,Context,Id_Ex),
     do_or_die(
-        xrdf(Schema, Id, _, _),
+        \+ xrdf(Schema, Id_Ex, _, _),
         error(can_not_insert_existing_object_with_id(Id), _)),
 
     insert_schema_document_unsafe(Transaction, Document).
@@ -1436,7 +1464,7 @@ update_schema_document(DB, Document) :-
 update_schema_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
-    (   get_dict('@id', Document, _)
+    (   get_dict('@id', Document, Id)
     ->  true
     ;   throw(error(no_id_in_schema_document(Document)))
     ),
@@ -1839,6 +1867,55 @@ test(extract_json,
                   name:"jane",
                   staff_number:"12"
                 }.
+
+test(double_insert_document,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema1(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             can_not_insert_existing_object_with_id('http://i/jane')
+         )
+     ]) :-
+
+    Document = json{
+                   '@id' : gavin,
+                   '@type' : 'Employee',
+                   name : "gavin",
+                   staff_number : "13",
+                   birthdate : "1977-05-24",
+                   tasks : [],
+                   boss : json{
+                              '@id' : jane,
+                              '@type' : 'Employee',
+                              name : "jane",
+                              tasks : [],
+                              staff_number : "12",
+                              birthdate : "1979-12-28"
+                          }
+               },
+
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _Id1),
+
+    Jane_Again =
+    json{
+        '@id' : jane,
+        '@type' : 'Employee',
+        name : "jane",
+        tasks : [],
+        staff_number : "12",
+        birthdate : "1979-12-28"
+    },
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "bar" },
+                        Jane_Again, _Id2).
 
 test(get_value,
      [
@@ -3607,7 +3684,7 @@ test(double_insert_schema,
         insert_schema_document(Context, Document),
         _
     ),
-    writeq(i_am_here),nl,nl,nl,
+
     open_descriptor(Desc, DB2),
     create_context(DB2,
                    _{ author : "me",
@@ -3627,15 +3704,12 @@ test(double_insert_schema,
        shape : "xsd:string",
        is_a_pumpkin : "xsd:boolean"
      },
-    nl,nl,
-    writeq(i_am_here),nl,nl,nl,
+
     with_transaction(
         Context2,
         insert_schema_document(Context2, New_Document),
         _
-    ),
-
-    writeq(New_Document).
+    ).
 
 :- end_tests(json).
 
