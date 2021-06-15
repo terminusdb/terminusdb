@@ -1369,12 +1369,30 @@ class_frame(Validation_Object, Class, Frame) :-
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
+
+    (   get_dict('@id', Document, Id)
+    ->  true
+    ;   throw(error(no_id_in_schema_document(Document), _))
+    ),
+    database_schema(Transaction, Schema),
+
+    do_or_die(
+        xrdf(Schema, Id, _, _),
+        error(can_not_insert_existing_object_with_id(Id), _)),
+
+    insert_schema_document_unsafe(Transaction, Document).
+insert_schema_document(Query_Context, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_schema_document(TO, Document).
+
+insert_schema_document_unsafe(Transaction, Document) :-
+    is_transaction(Transaction),
+    !,
     % Is this a context? If so do something else.
     database_context(Transaction, Context),
     database_schema(Transaction, [Schema]),
-    (   get_dict('@id', Document, _)
-    ->  true
-    ;   throw(error(no_id_in_schema_document(Document)))),
 
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
@@ -1382,11 +1400,11 @@ insert_schema_document(Transaction, Document) :-
         json_schema_triple(Document, Expanded_Context, t(S,P,O)),
         insert(Schema, S, P, O, _)
     ).
-insert_schema_document(Query_Context, Document) :-
+insert_schema_document_unsafe(Query_Context, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_schema_document(TO, Document).
+    insert_schema_document_unsafe(TO, Document).
 
 % NOTE: This leaves garbage! We need a way to collect the leaves which
 % link to array elements or lists.
@@ -1418,10 +1436,13 @@ update_schema_document(DB, Document) :-
 update_schema_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
-    get_dict('@id', Document, Id),
+    (   get_dict('@id', Document, _)
+    ->  true
+    ;   throw(error(no_id_in_schema_document(Document)))
+    ),
 
     delete_schema_document(Transaction, Id),
-    insert_schema_document(Transaction, Document).
+    insert_schema_document_unsafe(Transaction, Document).
 update_schema_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
     !,
@@ -3551,6 +3572,70 @@ test(update_schema_document,
         name:'xsd:string',
         shape:'xsd:string',
         species:'xsd:string'}.
+
+test(double_insert_schema,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             can_not_insert_existing_object_with_id("Squash")
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+    writeq(i_am_here),nl,nl,nl,
+    open_descriptor(Desc, DB2),
+    create_context(DB2,
+                   _{ author : "me",
+                      message : "Have you tried bitcoin?"
+                    },
+                   Context2),
+
+    New_Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Hash",
+                   '@fields' : ["genus", "species"] },
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string",
+       is_a_pumpkin : "xsd:boolean"
+     },
+    nl,nl,
+    writeq(i_am_here),nl,nl,nl,
+    with_transaction(
+        Context2,
+        insert_schema_document(Context2, New_Document),
+        _
+    ),
+
+    writeq(New_Document).
 
 :- end_tests(json).
 
