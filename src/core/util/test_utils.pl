@@ -256,7 +256,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
 
     with_transaction(
         Context,
-        update_json_schema(Context, JSON_Stream),
+        replace_json_schema(Context, JSON_Stream),
         _).
 
 create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-

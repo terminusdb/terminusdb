@@ -1012,6 +1012,49 @@ document_handler(post, Path, Request, System_DB, Auth) :-
     reply_json(Ids),
     nl.
 
+document_handler(delete, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    (   memberchk(graph_type=Graph_Type, Search)
+    ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
+                  error(unknown_graph_type(Graph_Type),_))
+    ;   Graph_Type = instance),
+
+    do_or_die(memberchk(author=Author, Search),
+              error(no_commit_author, _)),
+    do_or_die(memberchk(message=Message, Search),
+              error(no_commit_message, _)),
+
+    (   memberchk(nuke=true, Search)
+    ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
+    ;   memberchk(id=Id, Search)
+    ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
+    ;   http_read_data(Request, Data, [to(string)]),
+        open_string(Data, Stream),
+        api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
+    ).
+
+document_handler(put, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    (   memberchk(graph_type=Graph_Type, Search)
+    ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
+                  error(unknown_graph_type(Graph_Type),_))
+    ;   Graph_Type = instance),
+
+    do_or_die(memberchk(author=Author, Search),
+              error(no_commit_author, _)),
+    do_or_die(memberchk(message=Message, Search),
+              error(no_commit_message, _)),
+
+    http_read_data(Request, Data, [to(string)]),
+    open_string(Data, Stream),
+    api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream).
+
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
                 [method(Method),

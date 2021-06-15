@@ -345,7 +345,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL
                                 ['@id'|Path],
                                 Doc), _)),
     */
-    WOQL = update_document(Doc).
+    WOQL = replace_document(Doc).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteObject',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#document_uri' : Doc
      } :< JSON,

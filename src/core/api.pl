@@ -120,7 +120,10 @@
               api_generate_documents/5,
               api_generate_documents_by_type/6,
               api_get_document/6,
-              api_insert_documents/9
+              api_insert_documents/9,
+              api_delete_documents/7,
+              api_delete_document/7,
+              api_replace_documents/7
           ]).
 
 :- use_module(api/api_init).

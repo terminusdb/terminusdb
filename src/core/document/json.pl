@@ -12,8 +12,13 @@
               get_schema_document_by_type/3,
               delete_document/2,
               insert_document/3,
+              replace_document/3,
+              nuke_documents/1,
               insert_schema_document/2,
-              update_document/3,
+              delete_schema_document/2,
+              replace_schema_document/2,
+              replace_schema_document/3,
+              nuke_schema_documents/1,
               database_context/2,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
@@ -21,7 +26,7 @@
               write_json_stream_to_instance/2,
               write_json_string_to_schema/2,
               write_json_string_to_instance/2,
-              update_json_schema/2,
+              replace_json_schema/2,
               class_frame/3
           ]).
 
@@ -1157,18 +1162,18 @@ create_graph_from_json(Store, Graph_ID, JSON_Stream, Type, Layer) :-
     validate_created_graph(Type, Layer),
     nb_set_head(Graph_Obj, Layer).
 
-update_json_schema(Transaction, Stream) :-
+replace_json_schema(Transaction, Stream) :-
     is_transaction(Transaction),
     !,
     database_schema(Transaction, [Schema]),
     delete_all(Schema),
     read_write_obj_builder(Schema, RWO),
     write_json_stream_to_builder(Stream, RWO, schema).
-update_json_schema(Query_Context, Stream) :-
+replace_json_schema(Query_Context, Stream) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    update_json_schema(TO, Stream).
+    replace_json_schema(TO, Stream).
 
 
 write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
@@ -1295,6 +1300,31 @@ delete_document(Query_Context, Id) :-
     query_default_collection(Query_Context, TO),
     delete_document(TO, Id).
 
+nuke_documents(Transaction) :-
+    is_transaction(Transaction),
+    !,
+    database_instance(Transaction, Instance),
+    delete_all(Instance).
+nuke_documents(Query_Context) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    nuke_documents(TO).
+
+nuke_schema_documents(Transaction) :-
+    is_transaction(Transaction),
+    !,
+    database_schema(Transaction, Schema),
+    forall(
+        (   xrdf(Schema, Id, rdf:type, Type),
+            is_system_class(Type)),
+        delete_schema_document(Transaction, Id)
+    ).
+nuke_schema_documents(Query_Context) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    nuke_documents(TO).
 
 check_existing_document_status(Transaction, Document, Status) :-
     get_dict('@type', Document, Type),
@@ -1350,27 +1380,27 @@ run_insert_document(Desc, Commit, Document, ID) :-
         insert_document(Context, Document, ID),
         _).
 
-update_document(DB, Document) :-
-    update_document(DB, Document, _).
+replace_document(DB, Document) :-
+    replace_document(DB, Document, _).
 
-update_document(Transaction, Document, Id) :-
+replace_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
     get_dict('@id', Elaborated, Id),
     delete_document(Transaction, Id),
     insert_document_expanded(Transaction, Elaborated, Id).
-update_document(Query_Context, Document, Id) :-
+replace_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    update_document(TO, Document, Id).
+    replace_document(TO, Document, Id).
 
-run_update_document(Desc, Commit, Document, Id) :-
+run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        update_document(Context, Document, Id),
+        replace_document(Context, Document, Id),
         _).
 
 class_frame(Validation_Object, Class, Frame) :-
@@ -1458,10 +1488,10 @@ delete_schema_document(Query_Context, Id) :-
     query_default_collection(Query_Context, TO),
     delete_schema_document(TO, Id).
 
-update_schema_document(DB, Document) :-
-    update_schema_document(DB, Document, _Id).
+replace_schema_document(DB, Document) :-
+    replace_schema_document(DB, Document, _Id).
 
-update_schema_document(Transaction, Document, Id) :-
+replace_schema_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
     (   get_dict('@id', Document, Id)
@@ -1471,11 +1501,11 @@ update_schema_document(Transaction, Document, Id) :-
 
     delete_schema_document(Transaction, Id),
     insert_schema_document_unsafe(Transaction, Document).
-update_schema_document(Query_Context, Document, Id) :-
+replace_schema_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    update_schema_document(TO, Document, Id).
+    replace_schema_document(TO, Document, Id).
 
 
 
@@ -3203,7 +3233,7 @@ test(document_update,
                     hair_colour: "green"
                    },
 
-    run_update_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Id),
+    run_replace_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Id),
 
     get_document(Desc, Id, Updated_JSON),
 
@@ -3237,7 +3267,7 @@ test(auto_id_update,
                     hair_colour: "green"
                    },
 
-    run_update_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Same_Id),
+    run_replace_document(Desc, commit_object{ author : "me", message : "boo"}, New_JSON, Same_Id),
 
     get_document(Desc, Same_Id, Updated_JSON),
 
@@ -3577,7 +3607,7 @@ test(delete_schema_document,
     open_descriptor(Desc, DB3),
     \+ get_schema_document(DB3, 'Squash', _).
 
-test(update_schema_document,
+test(replace_schema_document,
      [
          setup(
              (   setup_temp_store(State),
@@ -3631,7 +3661,7 @@ test(update_schema_document,
 
     with_transaction(
         Context2,
-        update_schema_document(Context2, New_Document),
+        replace_schema_document(Context2, New_Document),
         _
     ),
 
@@ -4021,3 +4051,75 @@ test(substring_insert, [
     writeq(JSON2).
 
 :- end_tests(woql_document).
+
+:- begin_tests(arithmetic_document).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema5('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "ArithmeticExpression",
+  "@type" : "Class",
+  "@abstract" : [] }
+
+{ "@id": "Plus",
+  "@type" : "Class",
+  "@inherits" : "ArithmeticExpression",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression"
+}
+
+{ "@id" : "Value",
+  "@type" : "Class",
+  "@inherits" : "ArithmeticExpression",
+  "@key" : { "@type" : "ValueHash" },
+  "number" : "xsd:integer" }').
+
+write_schema5(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema5(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+
+test(plus_doc_extract, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = _{'@type' : "Plus",
+             left : _{'@type' : "Value",
+                      number : 3},
+             right : _{'@type' : "Plus",
+                       left : _{'@type' : "Value",
+                                number : 2},
+                       right : _{'@type' : "Value",
+                                 number : 1}}
+            },
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+
+    get_document(Desc, Id, JSON2),
+    writeq(JSON2).
+
+
+:- end_tests(arithmetic_document).

@@ -90,7 +90,7 @@ add_user_organization(Context, Nick, Org, Organization_URI) :-
                            'role': ["admin_role"]}
                         |Capabilities],
     New_User_Document = (User_Document.put(capability, New_Capabilities)),
-    update_document(Context, New_User_Document, _).
+    replace_document(Context, New_User_Document, _).
 
 add_organization_transaction(System_DB, Auth, Name) :-
     do_or_die(is_super_user(Auth, _{}),

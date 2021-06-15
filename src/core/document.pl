@@ -16,7 +16,7 @@
               write_json_stream_to_instance/2,
               write_json_string_to_schema/2,
               write_json_string_to_instance/2,
-              update_json_schema/2,
+              replace_json_schema/2,
 
               get_document/2,
               get_document/3,
@@ -26,8 +26,11 @@
               get_schema_document_by_type/3,
               delete_document/2,
               insert_document/3,
+              replace_document/3,
               insert_schema_document/2,
-              update_document/3,
+              delete_schema_document/2,
+              replace_schema_document/2,
+              replace_schema_document/3,
 
               % instance.pl
               is_instance/3,

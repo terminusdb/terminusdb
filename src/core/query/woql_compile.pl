@@ -899,16 +899,16 @@ compile_wf(get_document(Doc_ID,Doc),
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
-compile_wf(update_document(Doc),(
+compile_wf(replace_document(Doc),(
                freeze(Guard,
-                      update_document(S0, DocE, _)))) -->
+                      replace_document(S0, DocE, _)))) -->
     assert_write_access,
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
-compile_wf(update_document(X,Doc),(
+compile_wf(replace_document(X,Doc),(
                freeze(Guard,
-                      update_document(S0, DocE, URI)))) -->
+                      replace_document(S0, DocE, URI)))) -->
     assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
