@@ -5,22 +5,22 @@
           ]).
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(document)).
 
 has_layer(Askable, Layer_Id) :-
     ask(Askable,
-        t(_, layer:layer_id, Layer_Id^^xsd:string)).
+        t(_, layer:identifier, Layer_Id^^xsd:string)).
 
 layer_id_uri(Askable, Layer_Id, Layer_Uri) :-
     once(ask(Askable,
-             t(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string))).
+             t(Layer_Uri, layer:identifier, Layer_Id^^xsd:string))).
 
 insert_layer_object(Context, Layer_Id, Layer_Uri) :-
-    (   var(Layer_Uri)
-    ->  once(ask(Context, idgen(doc:'Layer', [Layer_Id^^xsd:string], Layer_Uri)))
-    ;   true),
-    once(ask(Context,
-             (   insert(Layer_Uri, rdf:type, layer:'Layer'),
-                 insert(Layer_Uri, layer:layer_id, Layer_Id^^xsd:string)))).
+    Document = json{
+                   '@type' : "layer:Layer",
+                   'layer:identifier' : Layer_Id
+               },
+    insert_document(Context, Document, Layer_Uri).
 
 :- begin_tests(layer_objects).
 :- use_module(core(util/test_utils)).
@@ -29,7 +29,8 @@ test(insert_layer_object,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{label:"testlabel"},
+    Descriptor = label_descriptor{instance:"testlabel",
+                                  variety: repository_descriptor},
     ref_schema_context_from_label_descriptor(Descriptor, Context),
 
     Layer_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",

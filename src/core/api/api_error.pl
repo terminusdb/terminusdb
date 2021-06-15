@@ -36,6 +36,11 @@ api_error_jsonld(create_db,error(database_in_inconsistent_state,_), JSON) :-
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
              'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'}.
+api_error_jsonld(create_db,error(no_base_prefix_specified,_), JSON) :-
+    JSON = _{'@type' : 'api:DbCreateErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:NoBasePrefixSpecified'},
+             'api:message' : 'The database requires a base prefix ("@base")'}.
 %% DB Delete
 api_error_jsonld(delete_db,error(unknown_organization(Organization_Name),_), JSON) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
@@ -894,7 +899,7 @@ api_error_jsonld(info,error(access_not_authorized(Auth),_),JSON) :-
              'api:message' : Msg,
              'auth' : Auth_String,
              'action' : 'info',
-             'scope' : 'system:system'
+             'scope' : 'system'
             }.
 api_error_jsonld(remote,error(invalid_absolute_path(Repo_Path),_), JSON) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Repo_Path]),

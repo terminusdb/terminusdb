@@ -111,7 +111,8 @@ test(count_and_size, [
 
     open_descriptor(Descriptor, Transaction),
     transaction_object_size(Transaction, Size),
-    transaction_object_triple_count(Transaction, 6),
+    transaction_object_triple_count(Transaction, 14),
+
     Size > 0,
     Size < 10000.
 

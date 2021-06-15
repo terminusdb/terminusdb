@@ -6,6 +6,7 @@
               askable_prefixes/2,
               create_context/2,
               create_context/3,
+              is_query_context/1,
               askable_context/4,
               askable_context/5,
               askable_settings_context/3,
@@ -16,38 +17,6 @@
               query_default_collection/2,
               query_default_write_graph/2,
               query_default_schema_write_graph/2,
-
-              % frame.pl
-              class_frame/3,
-              all_documents/2,
-              all_classes/2,
-              class_properties/3,
-              class_property_frame/4,
-              fill_class_frame/4,
-              document_filled_frame/3,
-              all_document_instances/2,
-              all_document_iris/2,
-              document_jsonld/3,
-              document_jsonld/4,
-              class_frame_jsonld/3,
-              filled_frame_jsonld/3,
-              object_edges/3,
-              delete_object/2,
-              update_object/2,
-              update_object/3,
-              document_filled_class_frame_jsonld/4,
-              object_instance_graph/3,
-
-              % frame_types.pl
-              is_property_restriction/1,
-              is_property_frame/1,
-              is_class_choice_frame/1,
-              is_logical_frame/1,
-              is_one_of_frame/1,
-              is_and_frame/1,
-              is_xor_frame/1,
-              is_document_frame/1,
-              is_frame/1,
 
               % global_prefixes.pl
               global_prefixes/2,
@@ -65,10 +34,13 @@
               prefix_expand/3,
               compress/3,
               term_jsonld/2,
-              jsonld_triples/3,
+              term_jsonld/3,
+%              jsonld_triples/3,
               jsonld_id/2,
               get_key_document/4,
               compress_dict_uri/3,
+              has_at/1,
+              compress_uri/4,
 
               % json_woql.pl
               woql_context/1,
@@ -115,8 +87,6 @@
           ]).
 
 :- use_module(query/expansions).
-:- use_module(query/frame).
-:- use_module(query/frame_types).
 :- use_module(query/inference).
 :- use_module(query/jsonld).
 :- use_module(query/json_woql).

@@ -17,6 +17,7 @@
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
+:- use_module(core(document)).
 
 :- use_module(descriptor).
 
@@ -29,27 +30,28 @@ database_exists(Askable, Organization, DB) :-
 db_uri_organization(Askable, Db_Uri, Organization) :-
     once(ask(Askable,
              (
-                 t(Organization_Uri, system:resource_includes, Db_Uri),
-                 t(Organization_Uri, rdf:type, system:'Organization'),
-                 t(Organization_Uri, system:resource_name, Organization^^xsd:string)
+                 t(Organization_Uri, database, Db_Uri),
+                 t(Organization_Uri, rdf:type, '@schema':'Organization'),
+                 t(Organization_Uri, name, Organization^^xsd:string)
              ))).
 
 organization_database_name_uri(Askable, Organization, DB, Db_Uri) :-
     once(ask(Askable,
              (
-                 t(Organization_Uri, system:resource_name, Organization^^xsd:string),
-                 t(Organization_Uri, rdf:type, system:'Organization'),
-                 t(Organization_Uri, system:resource_includes, Db_Uri),
-                 t(Db_Uri, system:resource_name, DB^^xsd:string),
-                 t(Db_Uri, rdf:type, system:'Database')
+                 t(Organization_Uri, name, Organization^^xsd:string),
+                 t(Organization_Uri, rdf:type, '@schema':'Organization'),
+                 t(Organization_Uri, database, Db_Uri),
+                 t(Db_Uri, name, DB^^xsd:string),
+                 t(Db_Uri, rdf:type, '@schema':'UserDatabase')
              ))).
 
 
 organization_name_uri(Askable,Organization, Uri) :-
     once(ask(Askable,
-             (   t(Uri, system:organization_name, Organization^^xsd:string),
-                 t(Uri, rdf:type, system:'Organization')
-             ))).
+             (   t(Uri, name, Organization^^xsd:string),
+                 t(Uri, rdf:type, '@schema':'Organization')
+             ),
+             [compress_prefixes(false)])).
 
 organization_name_exists(Askable, Name) :-
     organization_name_uri(Askable, Name, _).
@@ -57,19 +59,21 @@ organization_name_exists(Askable, Name) :-
 database_finalized(Askable,Organization,Database) :-
     organization_database_name_uri(Askable,Organization,Database,Db_Uri),
     once(ask(Askable,
-             t(Db_Uri, system:database_state, system:finalized))).
+             t(Db_Uri, state, '@schema':'DatabaseState_finalized'))).
 
 user_name_uri(Askable, User_Name, Uri) :-
     once(ask(Askable,
-             (   t(Uri, system:agent_name, User_Name^^xsd:string),
-                 t(Uri, rdf:type, system:'User')))).
+             (   t(Uri, name, User_Name^^xsd:string),
+                 t(Uri, rdf:type, '@schema':'User')))).
 
 /*
  * agent_name_uri(Askable, Name, User_URI) is semidet.
  */
 agent_name_uri(Askable, Name, User_URI) :-
     once(ask(Askable,
-             t(User_URI, system:agent_name, Name^^xsd:string),
+             (   t(User_URI, name, Name^^xsd:string),
+                 t(User_URI, rdf:type, '@schema':'User')
+             ),
              [compress_prefixes(false)]
             )).
 
@@ -77,14 +81,17 @@ agent_name_exists(Askable, Name) :-
     agent_name_uri(Askable, Name, _).
 
 insert_db_object(System_Transaction, Organization_Name, Database_Name, Label, Comment, DB_Uri) :-
-    ask(System_Transaction,
-        (
-            t(Organization_Uri, system:organization_name, Organization_Name^^xsd:string),
-            random_idgen(doc:'Database', [Organization_Name^^xsd:string, Database_Name^^xsd:string], DB_Uri),
-            insert(DB_Uri, rdf:type, system:'Database'),
-            insert(DB_Uri, system:resource_name, Database_Name^^xsd:string),
-            insert(DB_Uri, rdfs:label, Label@en),
-            insert(DB_Uri, rdfs:comment, Comment@en),
+    organization_name_uri(System_Transaction, Organization_Name, Organization_Uri),
 
-            insert(Organization_Uri, system:organization_database, DB_Uri)
-        )).
+    insert_document(
+        System_Transaction,
+        _{ '@type' : 'UserDatabase',
+           'name' : Database_Name,
+           'label' : Label,
+           'state' : "creating",
+           'comment' : Comment},
+        DB_Uri),
+
+    ask(System_Transaction,
+        insert(Organization_Uri, database, DB_Uri)
+       ).

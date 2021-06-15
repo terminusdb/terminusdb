@@ -334,7 +334,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#ReadObject',JSON,WOQL,P
                                    |Path]),
     json_to_woql_ast(Doc, WDoc, ['http://terminusdb.com/schema/woql#document'
                                  |Path]),
-    WOQL = read_object(WID,WDoc).
+    WOQL = get_document(WID,WDoc).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL,_) :-
     _{'http://terminusdb.com/schema/woql#document' : Doc
      } :< JSON,
@@ -345,7 +345,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL
                                 ['@id'|Path],
                                 Doc), _)),
     */
-    WOQL = update_object(Doc).
+    WOQL = update_document(Doc).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteObject',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#document_uri' : Doc
      } :< JSON,
@@ -356,7 +356,7 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteObject',JSON,WOQL
         error(woql_syntax_error(JSON,
                                 ['http://terminusdb.com/schema/woql#document_uri'|Path],
                                 Doc), _)),
-    WOQL = delete_object(ID).
+    WOQL = delete_document(ID).
 json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddTriple',JSON,WOQL,Path) :-
     _{'http://terminusdb.com/schema/woql#subject' : Subject,
       'http://terminusdb.com/schema/woql#predicate' : Predicate,

@@ -14,7 +14,10 @@
               gmonth_day_string/2,
               gday_string/2,
               uri_to_prefixed/3,
-              prefixed_to_uri/3
+              schema_uri_to_prefixed/3,
+              instance_uri_to_prefixed/3,
+              prefixed_to_uri/3,
+              prefixed_to_property/3
           ]).
 
 /** <module> Literals
@@ -27,7 +30,7 @@
 :- use_module(library(pcre)).
 :- use_module(core(util)).
 :- use_module(core(triple/casting), [typecast/4]).
-:- use_module(core(validation), [basetype_subsumption_of/2]).
+:- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
 /*
  * date_time_string(-Date_Time,+String) is det.
@@ -458,20 +461,52 @@ length_comp((>),A-_,B-_) :-
     !.
 length_comp((=),_,_).
 
+is_special_context_element(A-_) :-
+    atom_concat('@', _, A).
+
 uri_to_prefixed(URI, Ctx, Prefixed) :-
     dict_pairs(Ctx,_,Pairs),
-    predsort(length_comp, Pairs, Sorted_Pairs),
+    exclude(is_special_context_element, Pairs, Normal_Pairs),
+    predsort(length_comp, Normal_Pairs, Sorted_Pairs),
     try_prefix_uri(URI,Sorted_Pairs,Prefixed).
 
+schema_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    Schema_URI = (Ctx.'@schema'),
+    atom_concat(Schema_URI, Prefixed, URI),
+    !.
+schema_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    uri_to_prefixed(URI, Ctx, Prefixed).
+
+instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    Instance_URI = (Ctx.'@base'),
+    atom_concat(Instance_URI, Prefixed, URI),
+    !.
+instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
+    uri_to_prefixed(URI, Ctx, Prefixed).
+
+
 prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
-    (    Base = Ctx.get(Prefix)
-    ->   true
-    ;    format(atom(M), "Could not convert prefix to URI: ~w", [Prefix]),
-         throw(prefix_error(M))),
+    (   get_dict(Prefix, Ctx, Base)
+    ->  true
+    ;   throw(error(prefix_error(Prefix, Suffix), _))
+    ),
     !,
     atomic_list_concat([Base, Suffix], URI).
+prefixed_to_uri(X, Ctx, URI) :-
+    atom(X),
+    \+ uri_has_protocol(X),
+    !,
+    (   get_dict('@base', Ctx, Base)
+    ->  true
+    ;   throw(error(prefix_error('@base', X), _))
+    ),
+    atomic_list_concat([Base, X], URI).
 prefixed_to_uri(URI, _, URI).
 
+prefixed_to_property(Term, Ctx, URI) :-
+    get_dict('@schema', Ctx, Schema),
+    put_dict('@base', Ctx, Schema, New_Ctx),
+    prefixed_to_uri(Term, New_Ctx, URI).
 
 :- begin_tests(turtle_literal_marshalling).
 

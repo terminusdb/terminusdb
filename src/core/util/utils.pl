@@ -61,7 +61,8 @@
               chunk/3,
               member_last/3,
               time_to_internal_time/2,
-              datetime_to_internal_datetime/2
+              datetime_to_internal_datetime/2,
+              json_read_dict_stream/2
           ]).
 
 /** <module> Utils
@@ -74,7 +75,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-
+:- use_module(library(http/json)).
 
 /*
  * Forget the next phrase.
@@ -873,3 +874,11 @@ time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
     HN is HH + HHOff mod 24,
     MN is MM + MMOff mod 60,
     SN is SS + SSOff mod 60.
+
+json_read_dict_stream(Stream,Term) :-
+    repeat,
+    json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),
+    (   Term = eof
+    ->  !,
+        fail
+    ;   true).

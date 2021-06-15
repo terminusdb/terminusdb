@@ -1,0 +1,25 @@
+{ "@id" : "rome",
+  "@type" : "City",
+  "name" : "Rome" }
+
+{ "@id" : "scipio",
+  "name" : "Scipio Africanus",
+  "address" : "3 Palace Street, Rome" }
+
+{ "@id" : "carthage",
+  "@type" : "City",
+  "name" : "Carthage" }
+
+{ "@id" : "hannibal",
+  "@type" : "Person",
+  "name" : "Hannibal Barca",
+  "address" : "45 Temple Road, Carthage" }
+
+{ "@id" : "scipio_jr",
+  "name" : "Scipio Junior",
+  "address" : "3 Palace Street, Rome" }
+
+{ "@id" : "scipio_jrs",
+  "name" : "Scipio Junioress",
+  "address" : "3 Palace Street, Rome",
+  "birthday" : "-0228-10-10T00:00:00Z" }

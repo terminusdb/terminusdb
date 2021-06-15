@@ -15,7 +15,6 @@
 
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
-:- use_module(core(validation)).
 
 /**
  * runChain(?X,?P:list(uri),?Y,+Instance:atom,+Database:database) is nondet.

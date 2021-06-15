@@ -12,7 +12,7 @@
               assert_write_access/2,
               assert_write_access/3,
               authorisation_object/3,
-              user_object/3,
+              user_accessible_database/3,
               super_user_authority/1,
               check_descriptor_auth/4,
               is_super_user/1,
@@ -48,8 +48,8 @@
 username_user_id(DB, Username, User_ID) :-
     ask(DB,
         (
-            t(User_ID, rdf:type, system:'User'),
-            t(User_ID, system:agent_name, Username^^xsd:string)
+            isa(User_ID,'User'),
+            t(User_ID, name, Username^^xsd:string)
         )
        ).
 
@@ -61,11 +61,12 @@ username_user_id(DB, Username, User_ID) :-
  */
 user_key_user_id(DB, Username, Key, User_ID) :-
     coerce_literal_string(Key, K),
+    coerce_literal_string(Username, U),
     ask(DB,
         (
-            t(User_ID, rdf:type, system:'User'),
-            t(User_ID, system:agent_name, Username^^xsd:string),
-            t(User_ID, system:user_key_hash, Hash^^xsd:string)
+            t(User_ID, name, U^^xsd:string),
+            isa(User_ID, 'User'),
+            t(User_ID, key_hash, Hash^^xsd:string)
         ),
         [compress_prefixes(false)]
        ),
@@ -78,8 +79,7 @@ user_key_user_id(DB, Username, Key, User_ID) :-
  * Gets back a full user object which includes all authorities
  */
 get_user(Database, User_ID, User) :-
-    document_jsonld(Database,User_ID,3,User).
-
+    get_document(Database,User_ID,User).
 
 /**
  * user_key_auth(DB, Key, Auth_URI) is det.
@@ -113,18 +113,21 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ground(Auth),
     ask(DB,
         (
-            t(Auth, system:role, Role),
-            t(Role, system:capability, Capability),
-            t(Capability, system:action, Action),
-            t(Capability, system:capability_scope, Scope_Iri)
+            t(Auth, capability, Capability),
+            t(Capability, role, Role),
+            t(Capability, scope, Intermediate_Scope_Iri),
+            path(Intermediate_Scope_Iri, (star((p(child);p(database)))), Scope_Iri, _),
+            t(Role, action, Action)
         )
        ).
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
     ask(DB,
-        (   t(doc:anonymous_role, system:capability, Capability),
-            t(Capability, system:action, Action),
-            t(Capability, system:capability_scope, Scope_Iri)
+        (   t(anonymous, capability, Capability),
+            isa(Capability, 'Capability'),
+            t(Capability, scope, Scope_Iri),
+            t(Capability, role, anonymous_role),
+            t(anonymous_role, action, Action)
         )
        ).
 
@@ -152,12 +155,11 @@ assert_write_access(G, Context, Context) :-
     New_Context = Context.put(write_graph,G),
     assert_write_access(New_Context, _).
 
-write_type_access(instance,system:instance_write_access).
-write_type_access(schema,system:schema_write_access).
-write_type_access(inference,system:inference_write_access).
+write_type_access(instance,'@schema':'Action_instance_write_access').
+write_type_access(schema,'@schema':'Action_schema_write_access').
 
 is_super_user(Auth) :-
-    is_super_user(Auth, _{ doc : 'terminusdb:///system/data/' }).
+    is_super_user(Auth, _{ '@base' : 'terminusdb://system/data/' }).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
@@ -194,7 +196,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:meta_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_meta_write_access', Scope_Iri).
 assert_write_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -208,7 +210,7 @@ assert_write_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:commit_write_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_commit_write_access', Scope_Iri).
 assert_write_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -241,9 +243,8 @@ assert_read_access(Filter,Context,Context) :-
     New_Context = Context.put(filter,Filter),
     assert_read_access(New_Context, _).
 
-read_type_access(instance,system:instance_read_access).
-read_type_access(schema,system:schema_read_access).
-read_type_access(inference,system:inference_read_access).
+read_type_access(instance,'@schema':'Action_instance_read_access').
+read_type_access(schema,'@schema':'Action_schema_read_access').
 
 filter_types(type_filter{types:Types}, Types).
 filter_types(type_name_filter{type : Type, names : _}, [Type]).
@@ -271,7 +272,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:meta_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_meta_read_access', Scope_Iri).
 assert_read_access(Context) :-
     repository_descriptor{
         database_descriptor :
@@ -285,7 +286,7 @@ assert_read_access(Context) :-
     Auth = (Context.authorization),
     DB = (Context.system),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, system:commit_read_access, Scope_Iri).
+    assert_auth_action_scope(DB, Auth, '@schema':'Action_commit_read_access', Scope_Iri).
 assert_read_access(Context) :-
     branch_descriptor{
         repository_descriptor :
@@ -344,32 +345,36 @@ assert_auth_action_scope(DB, Auth, Action, Scope) :-
     ;   throw(error(access_not_authorised(Auth,Action,Scope)))).
 
 /**
- * authorisation_object(DB,Auth_ID,Auth_Obj) is det.
+ * authorisation_capabilities(DB,Auth_ID,Capabilities) is det.
  *
- * Finds all database objects accessible to a user.
+ * Finds all capabilities
  */
-authorisation_object(DB, Auth_ID, Auth_Obj) :-
-    once(ask(DB,
-             (  t(Auth_ID, system:action, _), % Some action to look at...
-                read_object(Auth_ID, 2, Auth_Obj)
-             )
-            )).
+authorisation_object(DB, Auth_ID, Capabilities) :-
+    findall(
+        Capability,
+        ask(DB,
+            (  t(Auth_ID, capability, Capability_ID), % Some action to look at...
+               get_document(Capability_ID, Capability)
+            )
+           ),
+        Capabilities
+    ).
 
 /**
- * user_object(DB,User_ID,User_Obj) is det.
+ * user_accessible_database(DB,User_ID,Database) is det.
  *
  * Finds all database objects accessible to a user.
  */
-user_object(DB, User_ID, User_Obj) :-
-    once(ask(DB,
-             (  t(User_ID, rdf:type, system:'User'), % Some action to look at...
-                read_object(User_ID, 4, User_Obj)
-             )
-            )).
-
+user_accessible_database(DB, User_ID, Database) :-
+    ask(DB,
+        (   t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            isa(Database_ID, 'UserDatabase'),
+            get_document(Database_ID, Database)
+        )).
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
-    assert_auth_action_scope(System_DB,Auth,Action,doc:system).
+    assert_auth_action_scope(System_DB,Auth,Action,system).
 check_descriptor_auth_(database_descriptor{ database_name : Database,
                                             organization_name : Organization},
                        Action, Auth, System_DB) :-
@@ -398,7 +403,7 @@ check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
 
 test(admin_has_access_to_all_dbs, [
          setup((setup_temp_store(State),
-                add_user("Gavin", "gavin@terminusdb.com", "here.i.am", some('password'), _),
+                add_user("Gavin", some('password'), _),
                 create_db_without_schema("Gavin", "test1"))
                ),
          cleanup(teardown_temp_store(State))

@@ -6,17 +6,13 @@
 
               % db_create.pl
               create_db/9,
-              create_ref_layer/2,
+              create_ref_layer/1,
 
               % init.pl
               initialize_config/4,
               initialize_registry/0,
               initialize_database/2,
               initialize_database_with_store/2,
-
-              % db_graph.pl
-              create_graph/5,
-              delete_graph/5,
 
               % db_branch.pl
               branch_create/5,
@@ -118,13 +114,18 @@
               bundle/5,
 
               % api_unbundle.pl
-              unbundle/4
+              unbundle/4,
+
+              % api_document.pl
+              api_generate_documents/5,
+              api_generate_documents_by_type/6,
+              api_get_document/6,
+              api_insert_documents/9
           ]).
 
 :- use_module(api/api_init).
 :- use_module(api/db_create).
 :- use_module(api/db_delete).
-:- use_module(api/db_graph).
 :- use_module(api/db_branch).
 :- use_module(api/db_rebase).
 :- use_module(api/db_fast_forward).
@@ -150,3 +151,4 @@
 :- use_module(api/api_rollup).
 :- use_module(api/api_bundle).
 :- use_module(api/api_unbundle).
+:- use_module(api/api_document).

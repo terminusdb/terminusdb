@@ -13,15 +13,15 @@
               assert_write_access/2,
               assert_write_access/3,
               authorisation_object/3,
-              user_object/3,
+              user_accessible_database/3,
               super_user_authority/1,
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2,
 
               % user_management.pl
-              add_user/5,
-              add_user/6,
+              add_user/3,
+              add_user/4,
               delete_user/1,
               delete_user/2,
               delete_user_transaction/3,
@@ -31,18 +31,10 @@
               update_user/2,
               update_user/3,
               update_user_transaction/4,
-              update_organization/2,
-              update_organization/3,
-              update_organization_transaction/4,
               add_organization/2,
               add_organization/3,
               add_organization_transaction/3,
-              add_user_organization_transaction/4,
-              add_role/6,
-              update_role/6,
-              update_role_transaction/6,
-              get_role/4,
-              exists_role/4
+              add_user_organization_transaction/4
 
           ]).
 

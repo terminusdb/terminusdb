@@ -93,7 +93,6 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-:- use_module(db_graph).
 :- use_module(db_pack).
 
 get_pack_from_store(Store, URL, Repository_Head_Option, Payload_Option) :-
@@ -116,7 +115,8 @@ test(fetch_something,
              create_db_without_schema(admin,test),
              resolve_absolute_string_descriptor('admin/test',Branch_Descriptor)
              )),
-      cleanup(teardown_temp_store(State))
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)
      ]
     ) :-
     create_context(Branch_Descriptor,commit_info{author: "tester", message: "testing"}, Branch_Context),

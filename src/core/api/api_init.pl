@@ -8,11 +8,13 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
+:- use_module(core(document)).
+:- use_module(core(query), [expand/2, default_prefixes/1]).
+:- use_module(core(transaction), [open_descriptor/2]).
 
 :- use_module(library(semweb/turtle)).
-
 :- use_module(library(terminus_store)).
-
+:- use_module(library(http/json)).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -38,46 +40,36 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
     nb_set_head(Graph_Obj, Layer).
 
 :- dynamic template_system_instance/1.
-:- dynamic system_inference/1.
 :- dynamic system_schema/1.
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
 bootstrap_files :-
-    template_system_instance_ttl(InstancePath),
+    template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
-    system_inference_ttl(InferencePath),
-    file_to_predicate(InferencePath, system_inference),
-    system_schema_ttl(SchemaPath),
+    system_schema_json(SchemaPath),
     file_to_predicate(SchemaPath, system_schema),
-    repository_schema_ttl(RepoPath),
+    repository_schema_json(RepoPath),
     file_to_predicate(RepoPath, repo_schema),
-    layer_schema_ttl(LayerSchemaPath),
-    file_to_predicate(LayerSchemaPath, layer_schema),
-    ref_schema_ttl(RefSchemaPath),
-    file_to_predicate(RefSchemaPath, ref_schema).
+    ref_schema_json(RefSchemaPath),
+    file_to_predicate(RefSchemaPath, ref_schema),
+    woql_schema_json(WOQLSchemaPath),
+    file_to_predicate(WOQLSchemaPath, woql_schema).
 
-example_registry_path(Path) :-
-    once(expand_file_search_path(template('example_registry.pl'), Path)).
+template_system_instance_json(Path) :-
+    once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
 
-template_system_instance_ttl(Path) :-
-    once(expand_file_search_path(template('system_instance_template.ttl'), Path)).
+system_schema_json(Path) :-
+    once(expand_file_search_path(ontology('system_schema.json'), Path)).
 
+repository_schema_json(Path) :-
+    once(expand_file_search_path(ontology('repository.json'), Path)).
 
-system_inference_ttl(Path) :-
-    once(expand_file_search_path(ontology('system_inference.owl.ttl'), Path)).
+ref_schema_json(Path) :-
+    once(expand_file_search_path(ontology('ref.json'), Path)).
 
-system_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('system_schema.owl.ttl'), Path)).
-
-repository_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('repository.owl.ttl'), Path)).
-
-layer_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('layer.owl.ttl'), Path)).
-
-ref_schema_ttl(Path) :-
-    once(expand_file_search_path(ontology('ref.owl.ttl'), Path)).
+woql_schema_json(Path) :-
+    once(expand_file_search_path(ontology('woql.json'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
@@ -168,35 +160,32 @@ initialize_storage_version(DB_Path) :-
 initialize_database_with_store(Key, Store) :-
     crypto_password_hash(Key,Hash, [cost(15)]),
 
-    template_system_instance(Template_Instance_String),
-    format(string(Instance_String), Template_Instance_String, [Hash]),
-    open_string(Instance_String, Instance_Stream),
-
-    system_instance_name(Instance_Name),
-    create_graph_from_turtle(Store,Instance_Name,Instance_Stream),
-
     system_schema(System_Schema_String),
     open_string(System_Schema_String, System_Schema_Stream),
     system_schema_name(Schema_Name),
-    create_graph_from_turtle(Store,Schema_Name,System_Schema_Stream),
+    create_graph_from_json(Store,Schema_Name,System_Schema_Stream,schema,Schema),
 
-    system_inference(System_Inference_String),
-    open_string(System_Inference_String, System_Inference_Stream),
-    system_inference_name(Inference_Name),
-    create_graph_from_turtle(Store,Inference_Name,System_Inference_Stream),
-
-    layer_schema(Layer_Schema_String),
-    open_string(Layer_Schema_String, Layer_Schema_Stream),
-    layer_ontology(Layer_Name),
-    create_graph_from_turtle(Store,Layer_Name,Layer_Schema_Stream),
+    Descriptor = layer_descriptor{ schema: Schema, variety: system_descriptor},
+    open_descriptor(Descriptor, Transaction_Object),
+    template_system_instance(Template_Instance_String),
+    format(string(Instance_String), Template_Instance_String, [Hash]),
+    open_string(Instance_String, Instance_Stream),
+    system_instance_name(Instance_Name),
+    create_graph_from_json(Store,Instance_Name,Instance_Stream,
+                           instance(Transaction_Object),_),
 
     ref_schema(Ref_Schema_String),
     open_string(Ref_Schema_String, Ref_Schema_Stream),
     ref_ontology(Ref_Name),
-    create_graph_from_turtle(Store,Ref_Name,Ref_Schema_Stream),
+    create_graph_from_json(Store,Ref_Name,Ref_Schema_Stream,schema,_),
 
     repo_schema(Repo_Schema_String),
     open_string(Repo_Schema_String, Repo_Schema_Stream),
     repository_ontology(Repository_Name),
-    create_graph_from_turtle(Store,Repository_Name,Repo_Schema_Stream).
+    create_graph_from_json(Store,Repository_Name,Repo_Schema_Stream,schema,_),
+
+    woql_schema(WOQL_Schema_String),
+    open_string(WOQL_Schema_String, WOQL_Schema_Stream),
+    woql_ontology(WOQL_Name),
+    create_graph_from_json(Store,WOQL_Name,WOQL_Schema_Stream,schema,_).
 

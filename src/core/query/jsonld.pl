@@ -5,11 +5,14 @@
               prefix_expand/3,
               compress/3,
               term_jsonld/2,
-              jsonld_triples/3,
+              term_jsonld/3,
               jsonld_id/2,
               jsonld_type/2,
               get_key_document/4,
-              compress_dict_uri/3
+              compress_dict_uri/3,
+              compress_uri/4,
+              context_prefix_expand/3,
+              has_at/1
           ]).
 
 /** <module> JSON-LD
@@ -45,7 +48,7 @@
  * Expands from JSON_LD prefixed format to fully expanded form.
  */
 expand(JSON_LD, JSON) :-
-    expand(JSON_LD, _{}, JSON).
+    expand(JSON_LD, json{}, JSON).
 
 /**
  * expand(+JSON_LD, +Context:dict, -JSON) is det.
@@ -57,7 +60,7 @@ expand(JSON_LD, Context, JSON) :-
     % Law of recursion: Something must be getting smaller...
     % This "something" is the removal of the context
     % from the object to be expanded.
-    select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
+    select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
     expand_context(New_Context,Context_Expanded),
     (   is_dict(Context)
@@ -65,17 +68,18 @@ expand(JSON_LD, Context, JSON) :-
     ;   Local_Context = Context_Expanded),
     expand(JSON_Ctx_Free, Local_Context, JSON_Ex),
     put_dict('@context',JSON_Ex,Local_Context,JSON).
-expand(_{'@type' : Type, '@value' : Value}, Context, JSON) :-
+expand(json{'@type' : Type, '@value' : Value}, Context, JSON) :-
     !,
     prefix_expand(Type,Context,TypeX),
-    JSON = _{'@type' : TypeX, '@value' : Value}.
-expand(_{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
+    JSON = json{'@type' : TypeX, '@value' : Value}.
+expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     !,
-    JSON = _{'@language' : Lang, '@value' : Value}.
+    JSON = json{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
-    % \+ select_dict(_{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
+    % \+ select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
+    select_dict(json{}, JSON_LD, _),
     dict_keys(JSON_LD,Keys),
     findall(Key-Value,
             (
@@ -90,7 +94,7 @@ expand(JSON_LD, Context, JSON) :-
                 )
             ),
             Data),
-    dict_create(JSON,_,Data).
+    dict_create(JSON,json,Data).
 expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
@@ -109,30 +113,30 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,Key_Ctx,Ctx,Value) :-
     string(V),
     !,
-    (   _{'@type' : "@id"} = Key_Ctx
+    (   json{'@type' : "@id"} = Key_Ctx
     %   Type ID distribution
     ->  prefix_expand(V, Ctx, Expanded),
-        Value = _{'@id' : Expanded}
-    ;   _{'@type' : "@id", '@id' : ID} = Key_Ctx
+        Value = json{'@id' : Expanded}
+    ;   json{'@type' : "@id", '@id' : ID} = Key_Ctx
     %   Fixed ID distribution
-    ->  Value = _{'@id' : ID}
-    ;   _{'@type' : Type} = Key_Ctx
+    ->  Value = json{'@id' : ID}
+    ;   json{'@type' : Type} = Key_Ctx
     ->  prefix_expand(Type,Ctx,EType),
-        Value = _{'@value' : V,
+        Value = json{'@value' : V,
                   '@type' : EType}
-    ;   _{'@language' : Lang} = Key_Ctx
-    ->  Value = _{'@value' : V,
+    ;   json{'@language' : Lang} = Key_Ctx
+    ->  Value = json{'@value' : V,
                   '@language' : Lang}
-    ;   _{} = Key_Ctx
+    ;   json{} = Key_Ctx
     ->  V = Value
     ;   throw(error('Invalid key context in expand_value/4'))
     ).
 expand_value(V,Key_Ctx,Ctx,Value) :-
     is_dict(V),
     !,
-    (   _{'@type' : "@id", '@id' : _} :< Key_Ctx
+    (   json{'@type' : "@id", '@id' : _} :< Key_Ctx
     ->  expand(V,Ctx,Value)
-    ;   _{'@type' : "@id"} :< Key_Ctx
+    ;   json{'@type' : "@id"} :< Key_Ctx
     ->  expand(V,Ctx,Value)
     ;   is_dict(Key_Ctx)
     ->  merge_dictionaries(V,Key_Ctx,V2),
@@ -239,32 +243,33 @@ expand_key(K,Context,Key,Value) :-
         ->  Key = Key_Candidate,
             Value = R
         ;   atom_string(Key,R),
-            Value = _{})
+            Value = json{})
     ;   Key = Key_Candidate,
-        Value = _{}).
+        Value = json{}).
 
 :- begin_tests(jsonld_expand).
 :- use_module(core(util/test_utils)).
 
 test(expand_inner, [])
 :-
-    Context = _{doc : 'http://outer_document/'},
-    Document = _{'@context' : _{ doc : 'http://inner_document/'},
-                 'test' : _{'@id' : 'doc:test'}},
+    Context = json{doc : 'http://outer_document/'},
+    Document = json{'@context' : json{ doc : 'http://inner_document/'},
+                 'test' : json{'@id' : 'doc:test'}},
     expand(Document, Context, JSON_LD),
 
-    _{ test:_{'@id':'http://inner_document/test'}} :< JSON_LD.
+    json{ test:json{'@id':'http://inner_document/test'}} :< JSON_LD.
 
 
 test(expand_path, [])
 :-
     server(Server),
     atomic_list_concat([Server, '/api/prefixes/_system'], Context),
-    Document = _{'@context' : Context,
-                 'test' : _{'@id' : 'doc:test'}},
+    Document = json{'@context' : Context,
+                    'test' : json{'@id' : 'test'}},
     expand(Document, Context, JSON_LD),
     Result = (JSON_LD.'@context'),
-    _{ doc:'terminusdb:///system/data/'} :< Result.
+
+    json{ '@base':'terminusdb:///system/data/'} :< Result.
 
 :- end_tests(jsonld_expand).
 
@@ -276,6 +281,15 @@ test(expand_path, [])
  * URI = 'http://example.com/bar'
  * compresses to => foo:bar
  */
+compress_uri(URI, '@base', Prefix, Rest) :-
+    !,
+    sub_atom(URI, _, Length, After, Prefix),
+    sub_atom(URI, Length, After, _, Rest).
+compress_uri(_URI, Key, _Prefix, _Rest) :-
+    is_at(Key),
+    Key \= '@schema',
+    !,
+    fail.
 compress_uri(URI, Key, Prefix, Comp) :-
     sub_atom(URI, _, Length, After, Prefix),
     sub_atom(URI, Length, After, _, Rest),
@@ -289,7 +303,8 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
 
 compress_dict_uri(URI, Dict, Folded_URI) :-
     dict_pairs(Dict, _, Pairs),
-    compress_pairs_uri(URI, Pairs, Folded_URI).
+    exclude([_-B]>>is_dict(B), Pairs, Filtered),
+    compress_pairs_uri(URI, Filtered, Folded_URI).
 
 is_at(Key) :-
     sub_string(Key,0,1,_,"@").
@@ -301,19 +316,14 @@ is_at(Key) :-
  */
 compress(JSON,Context,JSON_LD) :-
     dict_pairs(Context, _, Pairs),
-    include([A-B]>>(\+ is_at(A), % exclude @type, @vocab, etc. from expansions
-                    (   atom(B)
-                    ->  true
-                    ;   string(B))),
-            Pairs, Valid_Pairs),
-    compress_aux(JSON,Valid_Pairs,JSON_Pre),
+    compress_aux(JSON,Pairs,JSON_Pre),
 
     extend_with_context(JSON_Pre,Context,JSON_LD).
 
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_dict(JSON_Pre),
     !,
-    put_dict(_{'@context' : Context}, JSON_Pre, JSON_LD).
+    put_dict(json{'@context' : Context}, JSON_Pre, JSON_LD).
 extend_with_context(JSON_Pre,Context,JSON_LD) :-
     is_list(JSON_Pre),
 
@@ -358,14 +368,25 @@ compress_aux(JSON,_Ctx_Pairs,JSON) :-
 % Note: This needs to treat "base", "vocab", as well.
 test(compress_prefix, [])
 :-
-    Context = _{ ex : "http://example.com/document/",
+    Context = json{ ex : "http://example.com/document/",
                  scm : "http://example.com/schema#"},
-    Document = _{ '@type' : "http://example.com/schema#Fact",
+    Document = json{ '@type' : "http://example.com/schema#Fact",
                   'http://example.com/schema#your_face' :
-                  _{ '@id' : "http://example.com/document/is_ugly" }},
+                  json{ '@id' : "http://example.com/document/is_ugly" }},
     compress(Document, Context, Compressed),
 
-    _{'@type':'scm:Fact','scm:your_face':_{'@id':'ex:is_ugly'}} :< Compressed.
+    json{'@type':'scm:Fact','scm:your_face':json{'@id':'ex:is_ugly'}} :< Compressed.
+
+test(compress_base, [])
+:-
+    Context = json{ '@base' : "http://example.com/document/",
+                    scm : "http://example.com/schema#"},
+    Document = json{ '@type' : "http://example.com/schema#Fact",
+                     'http://example.com/schema#your_face' :
+                     json{ '@id' : "http://example.com/document/is_ugly" }},
+    compress(Document, Context, Compressed),
+
+    json{'@type':'scm:Fact','scm:your_face':json{'@id':'is_ugly'}} :< Compressed.
 
 :- end_tests(jsonld_compress).
 
@@ -374,13 +395,13 @@ test(compress_prefix, [])
  *
  * expand a prolog internal json representation to dicts.
  */
-term_jsonld(D^^T,_{'@type' : T, '@value' : V}) :-
+term_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
     (   compound(D)
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
                  [], V^^_)
     ;   D=V),
     !.
-term_jsonld(D@L,_{'@language' : L, '@value' : D}) :-
+term_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
     !.
 term_jsonld(Term,JSON) :-
     is_list(Term),
@@ -392,7 +413,33 @@ term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
     maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
-term_jsonld(JSON,JSON).
+term_jsonld(URI,URI).
+
+/* With prefix compression */
+term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
+    (   compound(D) % check if not bool, number, atom, string
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   D=V),
+    !,
+    compress_dict_uri(T, Prefixes, TC).
+term_jsonld(D@L,_,json{'@language' : L, '@value' : D}) :-
+    !.
+term_jsonld(Term,Prefixes,JSON) :-
+    is_list(Term),
+    !,
+    maplist({Prefixes}/[Obj,JSON]>>term_jsonld(Obj,Prefixes,JSON), Term, JSON).
+term_jsonld(JSON,Prefixes,JSON_Compressed) :-
+    is_dict(JSON),
+    !,
+    dict_pairs(JSON, _, Pairs),
+    maplist({Prefixes}/[Key-Value,Compressed_Key-Compressed_Value]>>(
+                term_jsonld(Key,Prefixes,Compressed_Key),
+                term_jsonld(Value,Prefixes,Compressed_Value)
+            ), Pairs, New_Pairs),
+    dict_create(JSON_Compressed, _, New_Pairs).
+term_jsonld(URI,Prefixes,URI_Compressed) :-
+    compress_dict_uri(URI, Prefixes, URI_Compressed).
 
 /*
  * Get the ID a json objct
@@ -413,236 +460,6 @@ jsonld_type(Obj,Type) :-
     !,
     get_dict('@type',Obj,Type).
 
-/* Debug
- * This should not exist.... We should already be expanded.
- *
- * jsonld_predicate_value(P,Val,Ctx,Expanded_Value) is det.
- *
- * Look up the predicate in the context to see if we should expand our information
- * about the value.
- */
-jsonld_predicate_value(P,Val,Ctx,Expanded_Value) :-
-    get_dict(P,Ctx,Expanded),
-
-    (   is_dict(Expanded)
-    ->  (   is_dict(Val)
-        ->  merge_dictionaries(Expanded,Val,Expanded_Value)
-        ;   is_list(Val)
-        % definitely do something here which isn't this!!
-        ->  true
-        ;   get_dict('@type', Expanded, '@id')
-        ->  (   \+ atom(Val)
-            ->  throw(error(malformed_jsonld_id(Val),_))),
-            (   get_dict('@id', Expanded, Type)
-            ->  Expanded_Value = _{'@id' : Val,
-                                   '@type' : Type}
-            ;   Expanded_Value = _{'@id' : Val})
-        ;   merge_dictionaries(Expanded, _{'@value' : Val}, Expanded_Value))
-    ;   Val = Expanded_Value).
-jsonld_predicate_value(_P,Val,_Ctx,Val).
-
-/*
- * jsonld_triples(+Dict,+Ctx,-Triples) is det.
- *
- * Return the triples associated with a JSON-LD structure.
- */
-jsonld_triples(JSON, Ctx, Triples) :-
-    get_dict_default('@context', JSON, Internal,_{}),
-    merge_dictionaries(Ctx, Internal, New_Ctx),
-    expand_context(New_Ctx,New_Expanded),
-    expand(JSON,New_Expanded,JSON_Ex),
-    jsonld_triples_aux(JSON_Ex, New_Ctx, Triples_Unsorted),
-    sort(Triples_Unsorted,Triples).
-
-/*
- * jsonld_triples_aux(Dict, Ctx, Tuples) is det.
- *
- * Create a list of triples which provide a representation for the objects
- * in the graph.
- */
-jsonld_triples_aux(Dict, Ctx, Triples) :-
-    is_dict(Dict),
-    !,
-
-    (   get_dict('@id', Dict, ID)
-    ->  jsonld_id_triples(ID,Dict,Ctx,Triples)
-    ;   dict_pairs(Dict, _, JSON_Pairs),
-        maplist({Ctx}/[ID-PV,Triples]>>(
-                    (   memberchk(ID,['@context','@id'])
-                    ->  Triples = []
-                    ;   jsonld_id_triples(ID,PV,Ctx,Triples))
-                ),
-                JSON_Pairs, Triples_List),
-        append(Triples_List,Triples)).
-% what could this be? A list?
-jsonld_triples_aux(List, Ctx, Triples) :-
-    is_list(List),
-    !,
-
-    maplist({Ctx}/[Obj,Ts]>>
-                jsonld_triples_aux(Obj,Ctx,Ts),
-            List,
-            Ts_List),
-    append(Ts_List, Triples).
-
-/*
- * jsonld_id_triples(ID,PV,Ctx,Triples) is det.
- *
- * We have the id and are looking for the edge and values.
- */
-jsonld_id_triples(ID,PV,Ctx,Triples) :-
-    is_dict(PV),
-    !,
-
-    dict_pairs(PV, _, JSON_Pairs),
-    maplist({ID,Ctx}/[P-V,Triples]>>(
-                (   memberchk(P,['@context','@id'])
-                ->  Triples = []
-                ;   P = '@type'
-                ->  Pred = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                    Triples = [(ID,Pred,V)]
-                ;   P = Pred,
-                    %jsonld_predicate_value(P,V,Ctx,EV),
-                    json_value_triples(ID,Pred,V,Ctx,Triples)
-                )
-            ),
-            JSON_Pairs, Triples_List),
-
-    append(Triples_List, Triples).
-
-json_value_triples(ID,Pred,V,Ctx,Triples) :-
-    (   is_dict(V)
-    ->  (   V = _{'@type' : Type,
-                  '@value' : Data
-                 }
-        ->  atom_string(Atom_Type,Type),
-            once(typecast(Data^^'http://www.w3.org/2001/XMLSchema#string',
-                          Atom_Type, [], Val)),
-            Triples = [(ID,Pred,Val)]
-        ;   V = _{'@language' : Lang,
-                  '@value' : Data}
-        ->  atom_string(Atom_Lang,Lang),
-            Triples = [(ID,Pred,Data@Atom_Lang)]
-        ;   jsonld_id(V,Val),
-            jsonld_triples_aux(V,Ctx,Rest),
-            Triples = [(ID,Pred,Val)|Rest])
-    ;   is_list(V)
-    ->  maplist({ID,Pred,Ctx}/[V,Triples]>>(
-                    json_value_triples(ID,Pred,V,Ctx,Triples)
-                ), V, Triples_List),
-        append(Triples_List, Triples)
-    ;   string(V)
-    ->  atom_string(A,V),
-        Triples = [(ID,Pred,A)]
-    ;   atom(V)
-    ->  Triples = [(ID,Pred,V)]
-    ;   Triples = [(ID,Pred,V)]).
-
-
-:- begin_tests(jsonld_triples).
-:- use_module(core(util/test_utils)).
-
-test(test_jsonld_string, []) :-
-    JSON = _464{'@context':
-                _310{
-                    api:'http://terminusdb.com/schema/api#',
-                    system:'http://terminusdb.com/schema/system#',
-                    doc:'terminusdb:///system/data/',
-                    rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-                    rdfs:'http://www.w3.org/2000/01/rdf-schema#',
-                    xsd:'http://www.w3.org/2001/XMLSchema#'},
-                '@id':'terminusdb:///system/data/new_user',
-                '@type':"system:User",
-                'rdfs:comment':_544{'@language':"en",
-                                    '@value':"This is a test user."},
-                'rdfs:label':_572{'@language':"en",
-                                  '@value':"Test User"},
-                'system:agent_name':_656{'@type':"xsd:string",
-                                         '@value':"test"}},
-    jsonld_triples(JSON, _{}, Triples),
-
-    Expected = [('terminusdb:///system/data/new_user','http://terminusdb.com/schema/system#agent_name',"test"^^'http://www.w3.org/2001/XMLSchema#string'),
-     ('terminusdb:///system/data/new_user','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#User'),
-     ('terminusdb:///system/data/new_user','http://www.w3.org/2000/01/rdf-schema#comment',"This is a test user."@en),
-     ('terminusdb:///system/data/new_user','http://www.w3.org/2000/01/rdf-schema#label',"Test User"@en)],
-    forall(member(Triple, Triples),
-           member(Triple, Expected)).
-
-
-test(jsonld_long, []) :-
-    Document = _{'@id':'terminusdb:///data/My_doc_vc25bd1608035634029',
-                 '@type':'terminusdb:///schema#My_doc',
-                 'http://www.w3.org/2000/01/rdf-schema#comment':
-                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                   '@value':"23423"},
-                 'http://www.w3.org/2000/01/rdf-schema#label':
-                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                   '@value':"This is my name"},
-                 'terminusdb:///schema#my_prop':
-                 _{'@type':"http://www.w3.org/2001/XMLSchema#long",
-                   '@value':"234234234"},
-                 'terminusdb:///schema#prop':
-                 _{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                   '@value':"asdf"}},
-
-    jsonld_triples(Document,_{},Triples),
-
-    Expected = [('terminusdb:///data/My_doc_vc25bd1608035634029',
-                 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                 'terminusdb:///schema#My_doc'),
-                ('terminusdb:///data/My_doc_vc25bd1608035634029',
-                 'http://www.w3.org/2000/01/rdf-schema#comment',
-                 "23423"^^'http://www.w3.org/2001/XMLSchema#string'),
-                ('terminusdb:///data/My_doc_vc25bd1608035634029',
-                 'http://www.w3.org/2000/01/rdf-schema#label',
-                 "This is my name"^^'http://www.w3.org/2001/XMLSchema#string'),
-                ('terminusdb:///data/My_doc_vc25bd1608035634029',
-                 'terminusdb:///schema#my_prop',
-                 234234234^^'http://www.w3.org/2001/XMLSchema#long'),
-                ('terminusdb:///data/My_doc_vc25bd1608035634029',
-                 'terminusdb:///schema#prop',
-                 "asdf"^^'http://www.w3.org/2001/XMLSchema#string')], 
-    forall(member(T, Triples),
-           member(T, Expected)).
-
-:- use_module(core(query/json_woql)).
-test(hub_json, []) :-
-    woql_context(Context),
-
-    Document = _{'@id':'terminusdb:///data/Database_test00_hubtest0061611314927.557',
-                 '@type':'http://terminusdb.com/schema/system#Database',
-                 'http://terminusdb.com/schema/system#database_name':
-                 _11332{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                        '@value':"hubtest006"},
-                 'http://terminusdb.com/schema/system#public':
-                 _11308{'@type':'http://www.w3.org/2001/XMLSchema#boolean',
-                        '@value':true},
-                 'http://terminusdb.com/schema/system#status':
-                 _19714{'@id':'http://terminusdb.com/schema/system#active',
-                        '@type':'http://terminusdb.com/schema/system#Status'},
-                 'http://www.w3.org/2000/01/rdf-schema#label':
-                 _11252{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                        '@value':"hubtest006"}},
-
-    jsonld_triples(
-        Document,
-        Context,
-        Result),
-
-    Expected = [('http://terminusdb.com/schema/system#active','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#Status'),
-                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#database_name',"hubtest006"^^'http://www.w3.org/2001/XMLSchema#string'),
-                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#public',true^^'http://www.w3.org/2001/XMLSchema#boolean'),
-                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://terminusdb.com/schema/system#status','http://terminusdb.com/schema/system#active'),
-                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/system#Database'),
-                ('terminusdb:///data/Database_test00_hubtest0061611314927.557','http://www.w3.org/2000/01/rdf-schema#label',"hubtest006"^^'http://www.w3.org/2001/XMLSchema#string')],
-
-    forall(member(Triple, Result),
-           member(Triple, Expected)).
-
-
-:- end_tests(jsonld_triples).
-
-
 /*
  * get_key_document(Key,Ctx,Document,Value)
  */
@@ -651,7 +468,7 @@ get_key_document(Key,Ctx,Document,Value) :-
     % Law of recursion: Something must be getting smaller...
     % This "something" is the removal of the context
     % from the object to be expanded.
-    select_dict(_{'@context' : New_Ctx}, Document, Document_Ctx_Free),
+    select_dict(json{'@context' : New_Ctx}, Document, Document_Ctx_Free),
     !,
     expand_context(New_Ctx,Ctx_Expanded),
     merge_dictionaries(Ctx,Ctx_Expanded,Local_Ctx),

@@ -28,7 +28,8 @@ test(get_prefixes,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     Path = "admin/testdb",

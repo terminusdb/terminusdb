@@ -311,7 +311,8 @@ test(csv_load,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),
@@ -357,7 +358,8 @@ test(csv_update,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),
@@ -414,7 +416,8 @@ test(csv_update_change_column,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),
@@ -468,7 +471,8 @@ test(csv_dump,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),
@@ -497,7 +501,8 @@ test(csv_load_multiple,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     Path = 'admin/testdb',
@@ -573,7 +578,8 @@ test(csv_update_multiple,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     Path = 'admin/testdb',
@@ -661,7 +667,8 @@ test(csv_load_with_schema,
      [setup((setup_temp_store(State),
              create_db_with_test_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     tmp_file_stream(Filename, Stream, [encoding(utf8)]),

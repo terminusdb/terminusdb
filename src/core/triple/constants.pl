@@ -4,6 +4,7 @@
               system_inference_name/1,
               layer_ontology/1,
               repository_ontology/1,
+              woql_ontology/1,
               ref_ontology/1,
 
               rdf_type_uri/1,
@@ -61,6 +62,8 @@ repository_ontology('http://terminusdb.com/schema/repository').
 
 ref_ontology('http://terminusdb.com/schema/ref').
 
+woql_ontology('http://terminusdb.com/schema/woql').
+
 %%% various URIs that we use often
 rdf_type_uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type').
 xsd_string_type_uri('http://www.w3.org/2001/XMLSchema#string').
@@ -101,5 +104,5 @@ ref_branch_base_uri_prop_uri('http://terminusdb.com/schema/ref#branch_base_uri')
 ref_branch_name_prop_uri('http://terminusdb.com/schema/ref#branch_name').
 
 %%% URIs from terminus instance
-admin_organization_uri('terminusdb:///system/data/admin_organization').
-super_user_authority('terminusdb:///system/data/admin').
+admin_organization_uri('terminusdb://system/data/admin_organization').
+super_user_authority('terminusdb://system/data/admin').

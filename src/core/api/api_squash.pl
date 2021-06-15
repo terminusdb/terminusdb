@@ -60,8 +60,7 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
                                            database_name : Database_Name,
                                            repository_name : Repository_Name,
                                            branch_name : Branch_Name,
-                                           type : Type,
-                                           name : Name },
+                                           type : Type },
                     graph_descriptor_transaction_objects_read_write_object(
                         Graph_Descriptor, [Transaction], RWO),
 
@@ -99,7 +98,8 @@ test(squash_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State))]
+      cleanup(teardown_temp_store(State)),
+      fixme(document_refactor)]
     ) :-
 
     Path = "admin/testdb",

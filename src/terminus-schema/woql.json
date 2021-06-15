@@ -1,0 +1,641 @@
+{ "@type" : "@context",
+  "@schema" : "http://terminusdb.com/schema/woql#",
+  "@base" : "terminusdb://woql/data/" }
+
+{ "@id" : "Value",
+  "@type" : "TaggedUnion",
+  "@key" : { "@type" : "ValueHash" },
+  "node" : "xsd:string",
+  "variable" : "xsd:string",
+  "data" : "xsd:anySimpleType" }
+
+{ "@id" : "NodeValue",
+  "@type" : "TaggedUnion",
+  "@key" : { "@type" : "ValueHash" },
+  "node" : "xsd:string",
+  "variable" : "xsd:string" }
+
+{ "@id" : "DataValue",
+  "@type" : "TaggedUnion",
+  "@key" : { "@type" : "ValueHash" },
+  "data" : "xsd:anySimpleType",
+  "variable" : "xsd:string" }
+
+{ "@id" : "Query",
+  "@type" : "Class",
+  "@abstract" : [] }
+
+{ "@id" : "Using",
+  "@type" : "Class",
+  "@inherits" : "Query",
+  "@key" : { "@type" : "ValueHash" },
+  "query" : "Query",
+  "collection" : "xsd:string"}
+
+{ "@id" : "Select",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "variables" : { "@type" : "List",
+                  "@class" : "xsd:string" } }
+
+{ "@id" : "Distinct",
+  "@type" : "Class",
+  "@inherits" : "Query",
+  "query" : "Query",
+  "variables" : { "@type" : "List",
+                  "@class" : "xsd:string" } }
+
+{ "@id" : "And",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "and" : { "@type" : "List",
+            "@class" : "Query" } }
+
+{ "@id" : "Or",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "or" : { "@type" : "List",
+           "@class" : "Query" } }
+
+{ "@id" : "From",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "graph_filter" : "xsd:string" }
+
+{ "@id" : "Into",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "graph" : "xsd:string" }
+
+{ "@id" : "Triple",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "Value",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "Link",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "NodeValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+
+{ "@id" : "Data",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "DataValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "Subsumption",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "child" : "NodeValue",
+  "parent" : "NodeValue" }
+
+{ "@id" : "Equals",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "left" : "DataValue",
+  "right" : "DataValue"}
+
+{ "@id" : "Substring",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "string" : "DataValue",
+  "length" : "DataValue",
+  "before" : "DataValue",
+  "after" : "DataValue",
+  "substring" : "DataValue" }
+
+{ "@id" : "ReadDocument",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "document" : "DataValue",
+  "identifier" : "NodeValue" }
+
+{ "@id" : "UpdateDocument",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "document" : "DataValue",
+  "identifier" : { "@type" : "Optional",
+                   "@class" : "NodeValue" } }
+
+{ "@id" : "DeleteDocument",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "identifier" : "NodeValue" }
+
+{ "@id" : "Indicator",
+  "@type" : "TaggedUnion",
+  "@key" : { "@type" : "ValueHash" },
+  "name" : "xsd:string",
+  "index" : "xsd:nonNegativeInteger" }
+
+{ "@id" : "Column",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "indicator" : "Indicator",
+  "identifier" : "xsd:string",
+  "type" : { "@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "Source",
+  "@type" : "TaggedUnion",
+  "@key" : { "@type" : "ValueHash" },
+  "file" : "xsd:string",
+  "url" : "xsd:string" }
+
+{ "@id" : "FormatType",
+  "@type" : "Enum",
+  "@key" : { "@type" : "ValueHash" },
+  "@value" : [ "csv" ] }
+
+{ "@id" : "QueryResource",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "source" : "Source",
+  "format" : "FormatType" }
+
+{ "@id" : "Get",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "columns" : { "@type" : "List",
+                "@class" : "Column" },
+  "resource" : "QueryResource",
+  "has_header" : { "@type" : "Optional",
+                   "@class" : "xsd:boolean" } }
+
+{ "@id" : "Put",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "columns" : { "@type" : "List",
+                "@class" : "Column" },
+  "resource" : "QueryResource",
+  "has_header" : { "@type" : "Optional",
+                   "@class" : "xsd:boolean" } }
+
+{ "@id" : "AddData",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "DataValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "AddedData",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "DataValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "AddLink",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "NodeValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "AddedLink",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "NodeValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "AddData",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "DataValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "AddedData",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "DataValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "DeleteLink",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "NodeValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "DeletedLink",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "NodeValue",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "If",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "test" : "Query",
+  "then" : "Query",
+  "else" : "Query" }
+
+{ "@id" : "Trim",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "untrimmed" : "DataValue",
+  "trimmed" : "DataValue" }
+
+{ "@id" : "Eval",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "expression" : "ArithmeticExpression",
+  "result" : "DataValue" }
+
+{ "@id" : "ArithmeticExpression",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@abstract" : [] }
+
+{ "@id" : "Plus",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+{ "@id" : "Minus",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+{ "@id" : "Times",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+{ "@id" : "Divide",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+ { "@id" : "Div",
+  "@type" : "Class",
+   "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+{ "@id" : "Exp",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "left" : "ArithmeticExpression",
+  "right" : "ArithmeticExpression" }
+
+{ "@id" : "Floor",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "argument" : "ArithmeticExpression" }
+
+{ "@id" : "IsA",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "element" : "NodeValue",
+  "type" : "NodeValue" }
+
+{ "@id" : "Like",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "left" : "DataValue",
+  "right" : "DataValue",
+  "similarity" : "DataValue" }
+
+{ "@id" : "Less",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "left" : "DataValue",
+  "right" : "DataValue" }
+
+{ "@id" : "Greater",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "left" : "DataValue",
+  "right" : "DataValue" }
+
+{ "@id" : "Optional",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query" }
+
+{ "@id" : "LexicalKey",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "base" : "DataValue",
+  "key_list" : { "@type" : "List",
+                 "@class" : "DataValue" },
+  "uri" : "NodeValue" }
+
+{ "@id" : "RandomKey",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "base" : "DataValue",
+  "uri" : "NodeValue" }
+
+{ "@id" : "HashKey",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "base" : "DataValue",
+  "key_list" : { "@type" : "List",
+                 "@class" : "DataValue" },
+  "uri" : "NodeValue" }
+
+{ "@id" : "Upper",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "mixed" : "DataValue",
+  "upper" : "DataValue" }
+
+{ "@id" : "Lower",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "mixed" : "DataValue",
+  "lower" : "DataValue" }
+
+{ "@id" : "Pad",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "string" : "DataValue",
+  "char" : "DataValue",
+  "times" : "DataValue",
+  "result" : "DataValue" }
+
+{ "@id" : "Split",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "string" : "DataValue",
+  "pattern" : "DataValue",
+  "list" : "DataValue" }
+
+{ "@id" : "Member",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "member" : "DataValue",
+  "list" : "DataValue" }
+
+{ "@id" : "Concatenate",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "member" : "DataValue",
+  "list" : "DataValue",
+  "result" : "DataValue" }
+
+{ "@id" : "Join",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "member" : "DataValue",
+  "list" : "DataValue",
+  "separator" : "DataValue",
+  "result" : "DataValue" }
+
+{ "@id" : "Sum",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "list" : "DataValue",
+  "result" : "DataValue" }
+
+{ "@id" : "Start",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "start" : "xsd:nonNegativeInteger" }
+
+{ "@id" : "Limit",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "start" : "xsd:nonNegativeInteger" }
+
+{ "@id" : "Regexp",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "pattern" : "DataValue",
+  "string" : "DataValue",
+  "result" : { "@type" : "Optional",
+               "@class" : "DataValue"} }
+
+{ "@id" : "True",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query"}
+
+{ "@id" : "OrderBy",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "ordering" : { "@type" : "List",
+                 "@class" : "xsd:string" },
+  "ascending" : { "@type" : "Optional",
+                  "@class" : "Unit" } }
+
+{ "@id" : "GroupBy",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "template" : { "@type" : "List",
+                 "@class" : "xsd:string" },
+  "group_by" : { "@type" : "List",
+                 "@class" : "xsd:string" },
+  "query" : "Query",
+  "grouped" : "DataValue" }
+
+{ "@id" : "Length",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "list" : "DataValue",
+  "length" : "DataValue" }
+
+{ "@id" : "Not",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query" }
+
+{ "@id" : "Once",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query" }
+
+{ "@id" : "Immediately",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query" }
+
+{ "@id" : "Count",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "query" : "Query",
+  "count" : "DataValue" }
+
+{ "@id" : "Typecast",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "value" : "Value",
+  "type" : "DataValue",
+  "result" : "DataValue" }
+
+{ "@id" : "PathPattern",
+  "@type" : "Class",
+  "@abstract" : [] }
+
+{ "@id" : "Path",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "Value",
+  "pattern" : "PathPattern",
+  "object" : "Value" }
+
+{ "@id" : "PathPredicate",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "predicate" : "xsd:string" }
+
+{ "@id" : "InversePathPredicate",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "inverse" : "xsd:string" }
+
+{ "@id" : "PathSequence",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "sequence" : { "@type" : "List",
+                 "@class" : "PathPattern" } }
+
+{ "@id" : "PathOr",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "or" : { "@type" : "List",
+           "@class" : "PathPattern" } }
+
+{ "@id" : "PathPlus",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "plus" : "PathPattern" }
+
+{ "@id" : "PathStar",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "star" : "PathPattern" }
+
+{ "@id" : "PathTimes",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "PathPattern",
+  "times" : "PathPattern",
+  "from" : "xsd:nonNegativeInteger",
+  "to" : "xsd:nonNegativeInteger" }
+
+{ "@id" : "Dot",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "document" : "DataValue",
+  "key" : "DataValue",
+  "value" : "DataValue" }
+
+{ "@id" : "Size",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "resource" : "xsd:string",
+  "size" : "DataValue" }
+
+{ "@id" : "TripleCount",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "resource" : "xsd:string",
+  "count" : "DataValue" }

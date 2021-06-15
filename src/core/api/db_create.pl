@@ -1,7 +1,7 @@
 :- module(db_create, [
-              create_db_unfinalized/9,
+              create_db_unfinalized/10,
               create_db/9,
-              create_ref_layer/2,
+              create_ref_layer/1,
               finalize_db/1
           ]).
 
@@ -19,7 +19,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
-:- use_module(core(api/db_graph)).
+:- use_module(core(document)).
 
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
@@ -45,13 +45,11 @@ create_repo_graph(Organization,Database) :-
                      insert_local_repository(Context, "local", _),
                      _).
 
-create_ref_layer(Descriptor,Prefixes) :-
+create_ref_layer(Descriptor) :-
     create_context(Descriptor, Context),
     with_transaction(
         Context,
-        (   insert_branch_object(Context, "main", _),
-            update_prefixes(Context, Prefixes)
-        ),
+        insert_branch_object(Context, "main", _),
         _).
 
 finalize_db(DB_Uri) :-
@@ -59,31 +57,32 @@ finalize_db(DB_Uri) :-
     with_transaction(
         Context,
         (   ask(Context, (
-                    t(DB_Uri, rdf:type, system:'Database'),
-                    not(t(DB_Uri, system:database_state, _))
-                ))
+                    t(DB_Uri, rdf:type, '@schema':'UserDatabase'),
+                    t(DB_Uri, state, '@schema':'DatabaseState_creating')
+                )
+               )
         ->  ask(Context,
-                insert(DB_Uri, system:database_state, system:finalized))
+                (   delete(DB_Uri, state, '@schema':'DatabaseState_creating'),
+                    insert(DB_Uri, state, '@schema':'DatabaseState_finalized')
+                )
+               )
         ;   throw(error(database_in_inconsistent_state))),
         _).
 
 make_db_public(System_Context,DB_Uri) :-
-    ask(System_Context,
-        (   random_idgen(doc:'Capability', ["anonymous"^^xsd:string], Capability_Uri),
-            insert(doc:anonymous_role, system:capability, Capability_Uri),
-            insert(Capability_Uri, rdf:type, system:'Capability'),
-            insert(Capability_Uri, system:capability_scope, DB_Uri),
-            insert(Capability_Uri, system:action, system:class_frame),
-            insert(Capability_Uri, system:action, system:clone),
-            insert(Capability_Uri, system:action, system:fetch),
-            insert(Capability_Uri, system:action, system:branch),
-            insert(Capability_Uri, system:action, system:instance_read_access),
-            insert(Capability_Uri, system:action, system:schema_read_access),
-            insert(Capability_Uri, system:action, system:inference_read_access),
-            insert(Capability_Uri, system:action, system:commit_read_access),
-            insert(Capability_Uri, system:action, system:meta_read_access))).
+    insert_document(
+        System_Context,
+        _{
+            '@type' : 'Capability',
+            'scope' : DB_Uri,
+            'role' : [ 'consumer_role' ]
+        },
+        Capability_Uri),
 
-create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, Comment, Public, Prefixes, Db_Uri) :-
+    ask(System_Context,
+        (   insert(anonymous, capability, Capability_Uri))).
+
+create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),
@@ -93,7 +92,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, C
             % don't create if already exists
             do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
                       error(unknown_organization(Organization_Name),_)),
-            assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_create_database', Organization_Uri),
 
             do_or_die(
                 not(database_exists(Organization_Name, Database_Name)),
@@ -104,7 +103,6 @@ create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, C
 
             % insert new db object into the terminus db
             insert_db_object(System_Context, Organization_Name_String, Database_Name_String, Label, Comment, Db_Uri),
-
             (   Public = true
             ->  make_db_public(System_Context, Db_Uri)
             ;   true)
@@ -124,21 +122,44 @@ create_db_unfinalized(System_DB, Auth, Organization_Name,Database_Name, Label, C
                                 },
                                 repository_name: "local"
                             },
-    create_ref_layer(Repository_Descriptor,Prefixes).
+
+    create_ref_layer(Repository_Descriptor),
+
+    create_schema(Repository_Descriptor, Schema, Prefixes).
+
+create_schema( Repository_Descriptor, Schema, Prefixes) :-
+    Branch_Desc = branch_descriptor{
+                      repository_descriptor:Repository_Descriptor,
+                      branch_name: "main" },
+
+    create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema"}, Query_Context),
+    Prefix_Obj = (Prefixes.put('@type', "@context")),
+
+    with_transaction(
+        Query_Context,
+        (   forall(
+                context_triple(Prefix_Obj, t(S,P,O)),
+                ask(Query_Context,
+                    insert(S,P,O,schema))),
+
+            (   Schema = true
+            ->  true
+            ;   ask(Query_Context,
+                    insert('terminusdb://data/Schema', rdf:type, rdf:nil, schema)))
+        ),
+        _).
 
 default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
     atomic_list_concat([Organization_Name, '/', Database_Name, '/',
                         "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes) :-
-    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Prefixes, Db_Uri),
-    % Create schema graph
-    (   Schema = true
-    ->  default_schema_path(Organization_Name, Database_Name, Graph_Path),
-        Commit_Info = _{ author : "TerminusDB",
-                         message : "internal system operation" },
-        create_graph(system_descriptor{}, Auth, Graph_Path, Commit_Info, _)
-    ;   true),
+    do_or_die(get_dict('@base', Prefixes, _),
+              error(no_base_prefix_specified, _)),
+    do_or_die(get_dict('@schema', Prefixes, _),
+              error(no_schema_prefix_specified, _)),
+    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Public, Schema, Prefixes, Db_Uri),
+
     % update system with finalized
     % This reopens system graph internally, as it was advanced
     finalize_db(Db_Uri).
@@ -151,13 +172,17 @@ test(create_db_and_check_master_branch, [
          setup(setup_temp_store(State)),
          cleanup(teardown_temp_store(State)),
 
-         true((once(ask(Repo_Descriptor, t(_,ref:branch_name,"main"^^xsd:string))),
-               \+ ask(Branch_Descriptor, t(_,_,_))))
-         ])
+         true((once(ask(Repo_Descriptor, t(_,name,"main"^^xsd:string))),
+               \+ ask(Branch_Descriptor, t(_,_,_)),
+               database_context(Branch_Descriptor,
+                                _{'@base':"http://somewhere/document",
+                                  '@schema':"http://somewhere/schema",
+                                  '@type':_})))
+     ])
 :-
-    Prefixes = _{ doc : 'http://somewhere/document', scm : 'http://somewhere/schema' },
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
     open_descriptor(system_descriptor{}, System),
-    create_db(System, doc:admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
+    create_db(System, admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
     Database_Descriptor = database_descriptor{
                               organization_name: "admin",
                               database_name: "testdb" },

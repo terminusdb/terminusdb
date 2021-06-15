@@ -21,8 +21,8 @@
 begin_deleting_db_from_system(System, Organization,DB_Name) :-
     organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
     ask(System,
-        (   delete(Db_Uri, system:database_state, system:finalized, "instance/main"),
-            insert(Db_Uri, system:database_state, system:deleting, "instance/main"))).
+        (   delete(Db_Uri, state, '@schema':'DatabaseState_finalized'),
+            insert(Db_Uri, state, '@schema':'DatabaseState_finalized'))).
 
 delete_db_from_system(Organization,DB) :-
     create_context(system_descriptor{}, System),
@@ -30,10 +30,10 @@ delete_db_from_system(Organization,DB) :-
         System,
         once((  organization_database_name_uri(System,Organization,DB,Db_Uri),
                 ignore(ask(System,
-                           (   t(Cap_Uri,system:direct_capability_scope,Db_Uri),
-                               delete_object(Cap_Uri)))),
+                           (   t(Cap_Uri,scope,Db_Uri),
+                               delete_document(Cap_Uri)))),
                 ask(System,
-                    delete_object(Db_Uri))
+                    delete_document(Db_Uri))
             )),
         _Meta_Data).
 
@@ -50,8 +50,8 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
             do_or_die(organization_name_uri(System_Context, Organization, Organization_Uri),
                       error(unknown_organization(Organization), _)),
 
-            assert_auth_action_scope(System_Context, Auth, system:create_database, Organization_Uri),
-            assert_auth_action_scope(System_Context, Auth, system:delete_database, Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_create_database', Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_delete_database', Organization_Uri),
 
             do_or_die(database_exists(System_Context,Organization,DB_Name),
                       error(database_does_not_exist(Organization,DB_Name), _)),
@@ -61,7 +61,7 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
             ->  do_or_die(
                     database_finalized(System_Context,Organization,DB_Name),
                     error(database_not_finalized(Organization,DB_Name),
-                          context(delete_db/2))),
+                          _)),
 
                 begin_deleting_db_from_system(System_Context, Organization,DB_Name)
             ;   true)
@@ -83,7 +83,7 @@ delete_database_label(Organization,Db) :-
     (   exists_file(File_Path)
     ->  delete_file(File_Path)
     ;   throw(error(database_files_do_not_exist(Organization,Db),
-                    context(delete_database_label/2)))
+                    _))
     ).
 
 /* Force deletion of databases in an inconsistent state */

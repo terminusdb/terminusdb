@@ -1,0 +1,84 @@
+{ "@type" : "@context",
+  "@schema" : "http://terminusdb.com/schema/system#",
+  "@base" :  "terminusdb://system/data/",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
+
+{ "@id" : "User",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : ["name"]},
+  "name" : "xsd:string",
+  "key_hash" : { "@type" : "Optional",
+                 "@class": "xsd:string"},
+  "capability" : { "@type" : "Set",
+                   "@class" : "Capability" } }
+
+{ "@id" : "Resource",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+
+{ "@id" : "Organization",
+  "@type" : "Class",
+  "@inherits" : "Resource",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "child" : { "@type" : "Set",
+              "@class" : "Organization" },
+  "database" : { "@type" : "Set",
+                 "@class" : "Database" } }
+
+{ "@id" : "Role",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "action" : { "@type" : "Set",
+               "@class" : "Action" } }
+
+{ "@id" : "Capability",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "scope" : "Resource",
+  "role" : { "@type" : "Set",
+             "@class" : "Role" } }
+
+{ "@id" : "Action",
+  "@type" : "Enum",
+  "@value" : [ "create_database",
+               "delete_database",
+               "class_frame",
+               "clone",
+               "fetch",
+               "push",
+               "branch",
+               "rebase",
+               "instance_read_access",
+               "instance_write_access",
+               "schema_read_access",
+               "schema_write_access",
+               "meta_read_access",
+               "meta_write_access",
+               "commit_read_access",
+               "commit_write_access",
+               "manage_capabilities" ] }
+
+{ "@id" : "Database",
+  "@type" : "Class",
+  "@inherits" : "Resource" }
+
+{ "@id" : "SystemDatabase",
+  "@type" : "Class",
+  "@inherits" : "Database" }
+
+{ "@id" : "UserDatabase",
+  "@type" : "Class",
+  "@inherits" : "Database",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "label" : "xsd:string",
+  "comment" : "xsd:string",
+  "state" : "DatabaseState" }
+
+{ "@id" : "DatabaseState",
+  "@type" : "Enum",
+  "@value" : [ "creating",
+               "deleting",
+               "finalized" ] }

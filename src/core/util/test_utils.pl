@@ -35,7 +35,11 @@
               setup_temp_unattached_server/4,
               teardown_temp_unattached_server/1,
               setup_cloned_situation/4,
-              setup_cloned_nonempty_situation/4
+              setup_cloned_nonempty_situation/4,
+              test_document_label_descriptor/1,
+              test_document_label_descriptor/2,
+              test_woql_label_descriptor/1,
+              test_woql_label_descriptor/2
           ]).
 
 /** <module> Test Utilities
@@ -63,6 +67,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(core(document)).
 :- use_module(core(api)).
 :- use_module(core(account)).
 
@@ -194,7 +199,7 @@ layer_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 layer_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
     layer_ontology(Layer_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
+    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema},
     open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
@@ -207,17 +212,13 @@ ref_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 ref_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
-    layer_ontology(Layer_Label),
     ref_ontology(Ref_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
-    Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema,name:"ref"},
-    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+    Ref_Descriptor = labelled_graph{label:Ref_Label,type:schema},
     open_read_write_obj(Ref_Descriptor, Ref_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
     Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
-                                                           [Layer_Read_Write_Object,
-                                                            Ref_Read_Write_Object]),
+                                                           [Ref_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
 
@@ -225,38 +226,38 @@ repo_schema_context_from_label_descriptor(Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context).
 repo_schema_context_from_label_descriptor(Label_Descriptor, Commit_Info, Context) :-
-    layer_ontology(Layer_Label),
     repository_ontology(Repo_Label),
-    Layer_Descriptor = labelled_graph{label:Layer_Label,type:schema,name:"layer"},
-    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema,name:"ref"},
-    open_read_write_obj(Layer_Descriptor, Layer_Read_Write_Object),
+    Repo_Descriptor = labelled_graph{label:Repo_Label,type:schema},
     open_read_write_obj(Repo_Descriptor, Repo_Read_Write_Object),
 
     open_descriptor(Label_Descriptor, Commit_Info, Incomplete_Transaction_Object),
     Transaction_Object = Incomplete_Transaction_Object.put(schema_objects,
-                                                           [Layer_Read_Write_Object,
-                                                            Repo_Read_Write_Object]),
+                                                           [Repo_Read_Write_Object]),
 
     create_context(Transaction_Object, Commit_Info, Context).
 
 create_db_with_test_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc  : 'http://example.com/data/world/',
-                  scm : 'http://example.com/schema/worldOntology#'},
+    Prefixes = _{ '@base'  : 'http://example.com/data/world/',
+                  '@schema' : 'http://example.com/schema/worldOntology#'},
 
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
     terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.ttl'], TTL_File),
-    read_file_to_string(TTL_File, TTL, []),
+    interpolate([Path, '/test/worldOnt.json'], JSON_File),
 
-    atomic_list_concat([Organization, '/', Db_Name,
-                        '/local/branch/main/schema/main'],
-                       Graph),
-    super_user_authority(Auth),
+    open(JSON_File, read, JSON_Stream),
+
     Commit_Info = commit_info{author: "test", message: "add test schema"},
-    graph_update(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
+    atomic_list_concat([Organization,'/',Db_Name], DB_Path),
+    resolve_absolute_string_descriptor(DB_Path, Desc),
+    create_context(Desc, Commit_Info, Context),
+
+    with_transaction(
+        Context,
+        update_json_schema(Context, JSON_Stream),
+        _).
 
 create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
     Prefixes = _{ doc  : 'http://example.com/data/world/',
@@ -278,25 +279,25 @@ create_db_with_ttl_schema(Organization, Db_Name, TTL_Schema) :-
     graph_update(system_descriptor{}, Auth, Graph, Commit_Info, "turtle", TTL).
 
 create_db_without_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, false, Prefixes).
 
 create_db_with_empty_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
-    open_descriptor(system_descriptor{}, System),
-    super_user_authority(Admin),
-    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
-
-create_public_db_without_schema(Organization, Db_Name) :-
-    Prefixes = _{ doc : 'http://somewhere.for.now/document/',
-                  scm : 'http://somewhere.for.now/schema#' },
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", true, false, Prefixes).
+
+create_public_db_without_schema(Organization, Db_Name) :-
+    Prefixes = _{ '@base' : 'http://somewhere.for.now/document/',
+                  '@schema' : 'http://somewhere.for.now/schema#' },
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes).
 
 delete_user_and_organization(User_Name) :-
     do_or_die(delete_user(User_Name),
@@ -506,13 +507,13 @@ setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_De
     %% Setup: create a database on the remote server, clone it on the local server
     with_triple_store(
         Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+        (   add_user("KarlKautsky", some('password_destination'), _),
             create_db_without_schema("KarlKautsky", "foo"))
     ),
 
     with_triple_store(
         Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+        add_user("RosaLuxemburg", some('password_origin'), _)),
 
     atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
     atomic_list_concat([Server_Destination, '/KarlKautsky/foo'], Remote_URL),
@@ -531,7 +532,7 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
     %% Setup: create a database with content on the remote server, clone it on the local server
     with_triple_store(
         Store_Destination,
-        (   add_user("KarlKautsky", 'karl@kautsky.org', 'a comment', some('password_destination'), _),
+        (   add_user("KarlKautsky", some('password_destination'), _),
             create_db_without_schema("KarlKautsky", "foo"),
 
             resolve_absolute_string_descriptor("KarlKautsky/foo", Descriptor),
@@ -550,7 +551,7 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
 
     with_triple_store(
         Store_Origin,
-        add_user("RosaLuxemburg", 'rosa@luxemburg.org', 'a comment', some('password_origin'), _)),
+        add_user("RosaLuxemburg", some('password_origin'), _)),
 
 
     atomic_list_concat([Server_Origin, '/api/clone/RosaLuxemburg/bar'], Clone_URL),
@@ -565,3 +566,34 @@ setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, 
               _,
               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
                request_header('Authorization-Remote'=Authorization_Remote)]).
+
+test_document_label_descriptor(Descriptor) :-
+    test_document_label_descriptor(test, Descriptor).
+
+test_document_label_descriptor(Name, Descriptor) :-
+    triple_store(Store),
+    atom_concat(Name, '_schema', Schema_Name),
+    atom_concat(Name, '_instance', Instance_Name),
+    create_named_graph(Store, Schema_Name, _),
+    create_named_graph(Store, Instance_Name, _),
+
+    Descriptor = label_descriptor{
+                     variety: branch_descriptor,
+                     schema: Schema_Name,
+                     instance: Instance_Name
+                 }.
+
+test_woql_label_descriptor(Descriptor) :-
+    test_woql_label_descriptor(woql, Descriptor).
+
+test_woql_label_descriptor(Name, Descriptor) :-
+    triple_store(Store),
+    atom_concat(Name, '_instance', Instance_Name),
+    woql_ontology(WOQL_Name),
+    create_named_graph(Store, Instance_Name, _),
+
+    Descriptor = label_descriptor{
+                     variety: branch_descriptor,
+                     schema: WOQL_Name,
+                     instance: Instance_Name
+                 }.

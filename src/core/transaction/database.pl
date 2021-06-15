@@ -16,7 +16,6 @@
 
 :- use_module(core(transaction/descriptor)).
 :- use_module(core(transaction/validate)).
-:- use_module(core(validation)).
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
@@ -30,10 +29,11 @@
 descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
     !.
+% NOTE: Do these two make any sense?
 descriptor_database_name(Descriptor, ID) :-
-    id_descriptor{ id : ID } = Descriptor.
+    id_descriptor{ instance : ID } = Descriptor.
 descriptor_database_name(Descriptor, Label) :-
-    label_descriptor{ label : Label } = Descriptor.
+    label_descriptor{ instance : Label } = Descriptor.
 descriptor_database_name(Descriptor, Name) :-
     database_descriptor{ organization_name : _,
                          database_name : Name } = Descriptor,
@@ -205,11 +205,7 @@ with_transaction(Query_Context,
     setup_call_cleanup(
         true,
         with_transaction_(Query_Context,Body,Meta_Data),
-        (   abolish_module_tables(validate_schema),
-            abolish_module_tables(frame),
-            get_dict(transaction_objects,Query_Context,Databases),
-            maplist(invalidate_schema,Databases)
-        )
+        true % Do some cleanup of schema compilation etc.
     ).
 
 :- meta_predicate with_transaction(?,0,?).
@@ -390,7 +386,7 @@ test(partial_transaction_commit, [
                             }),
 
     ask(Context,
-        insert(doc:a, doc:b, doc:c)),
+        insert(a, b, c)),
 
     query_context_transaction_objects(Context,Transaction_Objects),
     run_transactions(Transaction_Objects, true, _),

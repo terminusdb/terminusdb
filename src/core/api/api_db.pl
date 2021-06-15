@@ -17,31 +17,25 @@ get_all_databases(System_DB, Databases) :-
         (
             ask(Context,
                 (
-                    t(Organization_Uri, system:resource_name, Organization^^xsd:string),
-                    t(Organization_Uri, rdf:type, system:'Organization'),
-                    t(Organization_Uri, system:resource_includes, Db_Uri),
-                    t(Db_Uri, rdf:type, system:'Database'),
-                    t(Db_Uri, system:resource_name, Name^^xsd:string)
+                    isa(Organization_Uri, 'Organization'),
+                    t(Organization_Uri, name, Organization^^xsd:string),
+                    t(Organization_Uri, database, Db_Uri),
+                    isa(Db_Uri, 'UserDatabase'),
+                    t(Db_Uri, name, Name^^xsd:string)
             )),
             format(string(Path),"~s/~s",[Organization,Name])),
         Databases).
 
 get_user_databases(System_DB, Auth, User_Databases) :-
     create_context(System_DB, Context),
-    user_object(Context, Auth, User_Obj),
-    Role = (User_Obj.'system:role'),
-    Capability = (Role.'system:capability'),
-    Scope = (Capability.'system:capability_scope'),
-    askable_prefixes(Context,Prefixes),
-
     findall(
         Path,
-        (   member(DB,Scope),
-            get_dict('@type',DB,'system:Database'),
-            get_dict('@id',DB,ID),
-            Name = DB.'system:resource_name'.'@value',
-            prefix_expand(ID, Prefixes, Ex_ID),
-            db_uri_organization(Context, Ex_ID, Organization),
+        (   user_accessible_database(Context, Auth, Database),
+            ID = (Database.'@id'),
+            Name = (Database.name),
+            ask(System_DB,
+                (   t(Organization_ID,database,ID),
+                    t(Organization_ID,name,Organization^^xsd:string))),
             format(string(Path),"~s/~s",[Organization,Name])),
         User_Databases).
 

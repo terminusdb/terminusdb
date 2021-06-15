@@ -2,6 +2,7 @@
               % base_type.pl
               base_type/1,
               base_type_parent/2,
+              basetype_subsumption_of/2,
 
               % casting.pl
               typecast/4,
@@ -33,7 +34,10 @@
               gmonth_day_string/2,
               gday_string/2,
               uri_to_prefixed/3,
+              schema_uri_to_prefixed/3,
+              instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
+              prefixed_to_property/3,
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,
@@ -45,6 +49,7 @@
               layer_ontology/1,
               repository_ontology/1,
               ref_ontology/1,
+              woql_ontology/1,
 
               rdf_type_uri/1,
               xsd_string_type_uri/1,
@@ -92,6 +97,7 @@
               xrdf_added/4,
               insert/5,
               delete/5,
+              delete_all/1,
               storage/1,
               triple_store/1,
               global_triple_store/1,

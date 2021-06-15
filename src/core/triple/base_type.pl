@@ -1,6 +1,7 @@
 :- module(base_type,[
               base_type/1,
-              base_type_parent/2
+              base_type_parent/2,
+              basetype_subsumption_of/2
           ]).
 
 /** <module> Datatypes for XSD and extensions
@@ -198,3 +199,13 @@ base_type_parent('http://terminusdb.com/schema/xdd#dateRange','http://www.w3.org
 base_type_parent('http://terminusdb.com/schema/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
+
+/**
+ * basetype_subsumption_of(?Sub,?Super) is nondet.
+ *
+ * Implements the subsumption latice for concrete base types by making use of reflexivity and
+ * base_type_parent\2.
+ */
+basetype_subsumption_of(T,T) :- base_type(T).
+basetype_subsumption_of(Sub,Super) :-
+    base_type_parent(Sub,Parent), basetype_subsumption_of(Parent,Super).
