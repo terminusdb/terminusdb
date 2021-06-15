@@ -200,4 +200,4 @@
 :- use_module(util/xsd_parser).
 :- use_module(util/benchmark).
 :- use_module(util/http_utils).
-:- use_module(util/plunit_patch).
+%:- use_module(util/plunit_patch).

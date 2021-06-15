@@ -46,7 +46,7 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(library(http/http_log)).
 
-:- set_test_options([run(manual),concurrent(true)]).
+:- set_test_options([run(manual)]). % ,concurrent(true)]).
 
 :- use_module(cli(main)).
 
