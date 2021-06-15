@@ -2,11 +2,12 @@
               api_generate_documents/5,
               api_generate_documents_by_type/6,
               api_get_document/6,
-              api_insert_documents/8
+              api_insert_documents/9
           ]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 
@@ -70,7 +71,15 @@ api_insert_document_(instance, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, Document),
     insert_document(Transaction, Document, Id).
 
-api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
+replace_existing_graph(schema, Transaction, Stream) :-
+    update_json_schema(Transaction, Stream).
+replace_existing_graph(instance, Transaction, Stream) :-
+    [RWO] = (Transaction.instance_objects),
+    delete_all(RWO),
+    forall(api_insert_document_(instance, Transaction, Stream, _),
+           true).
+
+api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -80,8 +89,12 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(resource_does_not_exist(Path), _)),
     query_default_collection(Context, Transaction),
+
     with_transaction(Context,
-                     findall(Id,
-                             api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
-                             Ids),
+                     (   Full_Replace = true
+                     ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
+                         Ids = []
+                     ;   findall(Id,
+                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
+                                 Ids)),
                      _).

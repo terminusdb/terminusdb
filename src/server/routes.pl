@@ -1001,10 +1001,13 @@ document_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die(memberchk(message=Message, Search),
               error(no_commit_message, _)),
 
+    (   memberchk(full_replace=Full_Replace, Search)
+    ->  true
+    ;   Full_Replace = false),
 
     http_read_data(Request, Data, [to(string)]),
     open_string(Data, Stream),
-    api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Ids),
+    api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Ids),
 
     reply_json(Ids),
     nl.

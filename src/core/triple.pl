@@ -97,6 +97,7 @@
               xrdf_added/4,
               insert/5,
               delete/5,
+              delete_all/1,
               storage/1,
               triple_store/1,
               global_triple_store/1,

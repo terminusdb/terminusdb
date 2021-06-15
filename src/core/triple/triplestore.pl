@@ -8,6 +8,7 @@
               xrdf_added/4,
               insert/5,
               delete/5,
+              delete_all/1,
               storage/1,
               triple_store/1,
               global_triple_store/1,
@@ -231,6 +232,10 @@ delete(G,X,Y,Z,Changed) :-
     (   nb_remove_triple(Builder, X, Y, S)
     ->  Changed = 1
     ;   Changed = 0).
+
+delete_all(G) :-
+    forall(xrdf([G], S, P, O),
+           delete(G, S, P, O, _)).
 
 /*
  * xrdf_added(+Gs:list(read_write_obj),+X,+Y,+Z) is nondet.

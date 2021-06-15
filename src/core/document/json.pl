@@ -1161,10 +1161,7 @@ update_json_schema(Transaction, Stream) :-
     is_transaction(Transaction),
     !,
     database_schema(Transaction, [Schema]),
-    forall(
-        xrdf([Schema], X, Y, Z),
-        delete(Schema, X, Y, Z,_)
-    ),
+    delete_all(Schema),
     read_write_obj_builder(Schema, RWO),
     write_json_stream_to_builder(Stream, RWO, schema).
 update_json_schema(Query_Context, Stream) :-
