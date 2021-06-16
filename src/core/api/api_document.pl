@@ -1,6 +1,6 @@
 :- module(api_document, [
-              api_generate_documents/5,
-              api_generate_documents_by_type/6,
+              api_generate_documents/7,
+              api_generate_documents_by_type/8,
               api_get_document/6,
               api_insert_documents/9,
               api_delete_documents/7,
@@ -17,34 +17,60 @@
 
 :- use_module(library(http/json)).
 
-api_generate_documents_(instance, Transaction, Document) :-
-    get_document(Transaction, Document).
+api_generate_document_uris_(instance, Transaction, Skip, Count, Uri) :-
+    skip_generate_nsols(
+        get_document_uri(Transaction, Uri),
+        Skip,
+        Count).
+api_generate_document_uris_(schema, Transaction, Skip, Count, Uri) :-
+    skip_generate_nsols(
+        get_schema_document_uri(Transaction, Uri),
+        Skip,
+        Count).
 
-api_generate_documents_(schema, Transaction, Document) :-
-    get_schema_document(Transaction, Document).
+api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri) :-
+    skip_generate_nsols(
+        get_document_uri_by_type(Transaction, Type, Uri),
+        Skip,
+        Count).
+api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri) :-
+    skip_generate_nsols(
+        get_schema_document_uri_by_type(Transaction, Type, Uri),
+        Skip,
+        Count).
 
-api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Document) :-
+api_generate_documents_(instance, Transaction, Skip, Count, Document) :-
+    api_generate_document_uris_(instance, Transaction, Skip, Count, Uri),
+    get_document(Transaction, Uri, Document).
+
+api_generate_documents_(schema, Transaction, Skip, Count, Document) :-
+    api_generate_document_uris_(schema, Transaction, Skip, Count, Uri),
+    get_schema_document(Transaction, Uri, Document).
+
+api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(resource_does_not_exist(Path), _)),
 
-    api_generate_documents_(Schema_Or_Instance, Transaction, Document).
+    api_generate_documents_(Schema_Or_Instance, Transaction, Skip, Count, Document).
 
-api_generate_documents_by_type_(schema, Transaction, Type, Document) :-
-    get_schema_document_by_type(Transaction, Type, Document).
-api_generate_documents_by_type_(instance, Transaction, Type, Document) :-
-    get_document_by_type(Transaction, Type, Document).
+api_generate_documents_by_type_(schema, Transaction, Type, Skip, Count, Document) :-
+    api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri),
+    get_schema_document(Transaction, Uri, Document).
+api_generate_documents_by_type_(instance, Transaction, Type, Skip, Count, Document) :-
+    api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri),
+    get_document(Transaction, Uri, Document).
 
-api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Type, Document) :-
+api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Type, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(resource_does_not_exist(Path), _)),
 
-    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Document).
+    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Skip, Count, Document).
 
 api_get_document_(instance, Transaction, Id, Document) :-
     do_or_die(get_document(Transaction, Id, Document),
@@ -164,7 +190,7 @@ api_nuke_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message)
                     _).
 
 api_replace_document_(schema, Transaction, Document) :-
-    replace_schema_document(Transaction, Document),
+    replace_schema_document(Transaction, Document).
 api_replace_document_(instance, Transaction, Document) :-
     replace_document(Transaction, Document).
 

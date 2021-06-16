@@ -77,6 +77,7 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 :- use_module(library(http/json)).
+:- use_module(library(solution_sequences)).
 
 /*
  * Forget the next phrase.

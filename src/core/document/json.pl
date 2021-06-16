@@ -6,10 +6,14 @@
               json_schema_elaborate/3,
               get_document/2,
               get_document/3,
+              get_document_uri/2,
               get_schema_document/2,
               get_schema_document/3,
+              get_schema_document_uri/2,
               get_document_by_type/3,
+              get_document_uri_by_type/3,
               get_schema_document_by_type/3,
+              get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
               replace_document/3,
@@ -903,6 +907,20 @@ compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     !.
 compress_schema_uri(IRI,_Prefixes,IRI).
 
+get_document_uri(Query_Context, ID) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document_uri(TO, ID).
+get_document_uri(Desc, ID) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document_uri(Transaction, ID).
+get_document_uri(DB, Uri) :-
+    is_simple_class(DB, Class),
+    instance_of(DB, Uri, Class).
+
 get_document(Query_Context, Document) :-
     is_query_context(Query_Context),
     !,
@@ -918,6 +936,25 @@ get_document(DB, Document) :-
     instance_of(DB, Document_Uri, Class),
 
     get_document(DB, Document_Uri, Document).
+
+get_document_uri_by_type(Query_Context, Type, Uri) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document_uri_by_type(TO, Type, Uri).
+get_document_uri_by_type(Desc, Type, Uri) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document_by_type(Transaction, Type, Uri).
+get_document_uri_by_type(DB, Type, Uri) :-
+    database_context(DB,Prefixes),
+    (   sub_atom(Type, _, _, _, ':')
+    ->  Prefixed_Type = Type
+    ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
+    prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
+
+    is_instance2(DB, Uri, Type_Ex).
 
 get_document_by_type(Query_Context, Type, Document) :-
     is_query_context(Query_Context),
@@ -1060,6 +1097,20 @@ schema_subject_predicate_object_key_value(DB,Prefixes,_Id,P,O,K,JSON) :-
     type_descriptor(DB, O, Descriptor),
     type_descriptor_json(Descriptor,Prefixes,JSON).
 
+get_schema_document_uri(Query_Context, ID) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_schema_document_uri(TO, ID).
+get_schema_document_uri(Desc, ID) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_schema_document_uri(Transaction, ID).
+get_schema_document_uri(_DB, '@context').
+get_schema_document_uri(DB, Uri) :-
+    is_simple_class(DB, Uri).
+
 get_schema_document(DB, Document) :-
     get_schema_document(DB, '@context', Document).
 get_schema_document(DB, Document) :-
@@ -1077,6 +1128,16 @@ get_schema_document(DB, Id, Document) :-
     default_prefixes(Defaults),
     Prefixes = (Defaults.put(DB_Prefixes)),
     id_schema_json(DB, Prefixes, Id, Document).
+
+get_schema_document_uri_by_type(DB, Type, Uri) :-
+    default_prefixes(Prefixes),
+    database_schema(DB,Schema),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type = Type_Ex
+    ),
+
+    xrdf(Schema, Uri, rdf:type, Type_Ex).
 
 get_schema_document_by_type(DB, Type, Document) :-
     default_prefixes(Prefixes),
