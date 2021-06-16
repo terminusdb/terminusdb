@@ -31,10 +31,12 @@
               delete_document/2,
               insert_document/3,
               replace_document/3,
+              nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
+              nuke_schema_documents/1,
 
               % instance.pl
               is_instance/3,

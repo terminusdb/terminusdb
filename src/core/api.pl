@@ -123,7 +123,8 @@
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
-              api_replace_documents/7
+              api_replace_documents/7,
+              api_nuke_documents/6
           ]).
 
 :- use_module(api/api_init).

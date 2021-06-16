@@ -1367,7 +1367,7 @@ delete_document(Query_Context, Id) :-
 nuke_documents(Transaction) :-
     is_transaction(Transaction),
     !,
-    database_instance(Transaction, Instance),
+    database_instance(Transaction, [Instance]),
     delete_all(Instance).
 nuke_documents(Query_Context) :-
     is_query_context(Query_Context),

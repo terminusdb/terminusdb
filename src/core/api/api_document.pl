@@ -181,7 +181,7 @@ api_delete_document(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message
 
 api_nuke_documents_(schema, Transaction) :-
     nuke_schema_documents(Transaction).
-api_delete_document_(instance, Transaction) :-
+api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
 api_nuke_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message) :-
