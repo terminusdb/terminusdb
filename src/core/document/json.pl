@@ -192,15 +192,43 @@ idgen_random(Base,ID) :-
     md5_hash(S,Hash,[]),
     format(string(ID),'~w~w',[Base,Hash]).
 
-json_idgen(JSON,DB,Context,ID_Ex) :-
+path_strings_([], _Prefixes, []).
+path_strings_([node(X)|Path], Prefixes, [URI|Strings]) :-
+    % We have *very* late binding of IDs, need to do this after its done.
+    when(ground(X),
+         (   compress_dict_uri(X, Prefixes, Compressed),
+             (   (   uri_has_protocol(Compressed)
+                 ;   uri_has_prefix(Compressed))
+             ->  prefix_expand(X, Prefixes, URI)
+             ;   Compressed = URI))),
+    path_strings_(Path, Prefixes, Strings).
+path_strings_([predicate(X)|Path], Prefixes, [URI|Strings]) :-
+    % We have *very* late binding of IDs, need to do this after its done.
+    when(ground(X),
+         (   compress_schema_uri(X, Prefixes, Compressed),
+             (   (   uri_has_protocol(Compressed)
+                 ;   uri_has_prefix(Compressed))
+             ->  prefix_expand_schema(X, Prefixes, URI)
+             ;   Compressed = URI))),
+    path_strings_(Path, Prefixes, Strings).
+
+path_strings(Elts, Prefixes, Strings) :-
+    reverse(Elts, Descending),
+    path_strings_(Descending, Prefixes, Strings).
+
+json_idgen(JSON,DB,Context,Path,ID_Ex) :-
     get_dict('@type',JSON,Type),
     key_descriptor(DB,Type,Descriptor),
     (   Descriptor = lexical(Base,Fields)
     ->  get_field_values(JSON, Context, Fields, Values),
-        idgen_lexical(Base,Values,ID)
+        path_strings(Path, Context, Strings),
+        append(Strings, Values, Full),
+        idgen_lexical(Base,Full,ID)
     ;   Descriptor = hash(Base,Fields),
+        path_strings(Path, Context, Strings),
+        append(Strings, Values, Full),
         get_field_values(JSON, Context, Fields, Values),
-        idgen_hash(Base,Values,ID)
+        idgen_hash(Base,Full,ID)
     ;   Descriptor = value_hash(Base)
     ->  get_all_path_values(JSON,Path_Values),
         idgen_path_values_hash(Base,Path_Values,ID)
@@ -303,30 +331,40 @@ prefix_expand_schema(Node,Context,NodeEx) :-
     ;   Context = New_Context),
     prefix_expand(Node, New_Context, NodeEx).
 
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+property_expand_key_value(Prop,Value,DB,Context,Path,P,V) :-
     get_dict(Prop, Context, Full_Expansion),
     is_dict(Full_Expansion),
     !,
     expansion_key(Prop,Full_Expansion,P,Expansion),
-    context_value_expand(DB,Context,Value,Expansion,V).
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+    context_value_expand(DB,Context,Path,Value,Expansion,V).
+property_expand_key_value(Prop,Value,DB,Context,Path,P,V) :-
     prefix_expand_schema(Prop, Context, Prop_Ex),
     Prop \= Prop_Ex,
-    property_expand_key_value(Prop_Ex,Value,DB,Context,P,V).
+    property_expand_key_value(Prop_Ex,Value,DB,Context,Path,P,V).
 
 json_elaborate(DB,JSON,Context,JSON_ID) :-
+    json_elaborate(DB,JSON,Context,[],JSON_ID).
+
+json_elaborate(DB,JSON,Context,Path,JSON_ID) :-
     is_dict(JSON),
     !,
     do_or_die(get_dict('@type',JSON,Type),
               error(document_has_no_type(JSON), _)),
     prefix_expand_schema(Type,Context,TypeEx),
+
+
     do_or_die(
         type_context(DB,TypeEx,Type_Context),
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,JSON,New_Context,Elaborated),
-    json_assign_id(Elaborated,DB,Context,JSON_ID).
+    json_context_elaborate(DB,JSON,New_Context,[node(JSON_ID)|Path],Elaborated),
+
+    (   is_subdocument(DB, TypeEx)
+    ->  Id_Path = Path
+    ;   Id_Path = []),
+
+    json_assign_id(Elaborated,DB,Context,Id_Path,JSON_ID).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -336,8 +374,8 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
     ).
 
 
-value_expand_list([], _DB, _Context, _Elt_Type, []).
-value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
+value_expand_list([], _DB, _Path, _Context, _Elt_Type, []).
+value_expand_list([Value|Vs], DB, Path, Context, Elt_Type, [Expanded|Exs]) :-
     (   is_enum(DB,Elt_Type)
     ->  enum_value(Elt_Type,Value,Enum_Value),
         prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
@@ -350,13 +388,13 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
                         '@type': Elt_Type}
     ;   Prepared = json{'@id' : Value,
                         '@type': "@id"}),
-    json_elaborate(DB, Prepared, Expanded),
-    value_expand_list(Vs, DB, Context, Elt_Type, Exs).
+    json_elaborate(DB, Prepared, Context, Path, Expanded),
+    value_expand_list(Vs, DB, Path, Context, Elt_Type, Exs).
 
 % Unit type expansion
-context_value_expand(_,_,[],json{},[]) :-
+context_value_expand(_,_,_Path,[],json{},[]) :-
     !.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
     % Container type
@@ -366,24 +404,24 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     ;   string(Value)
     ->  Value_List = [Value]
     ;   get_dict('@value',Value,Value_List)),
-    value_expand_list(Value_List, DB, Context, Elt_Type, Expanded_List),
+    value_expand_list(Value_List, DB, Path, Context, Elt_Type, Expanded_List),
     V = (Expansion.put(json{'@value' : Expanded_List})).
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
     !,
     (   is_dict(Value)
-    ->  json_elaborate(DB, Value, Context, V)
+    ->  json_elaborate(DB, Value, Context, Path, V)
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
-context_value_expand(_,_Context, Value,_Expansion,V) :-
+context_value_expand(_,_Context,_Path,Value,_Expansion,V) :-
     % An already expanded typed value
     is_dict(Value),
     get_dict('@value',Value,_),
     !,
     V = Value.
-context_value_expand(DB,_Context,Value,Expansion,V) :-
+context_value_expand(DB,_Context,_Path,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
     json_elaborate(DB,New_Expansion, V).
@@ -391,7 +429,7 @@ context_value_expand(DB,_Context,Value,Expansion,V) :-
 enum_value(Type,Value,ID) :-
     atomic_list_concat([Type, '_', Value], ID).
 
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, _Path, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     prefix_expand_schema(Type,Context,Type_Ex),
@@ -401,14 +439,14 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
     enum_value(Type,Value,Full_ID),
     Expanded = json{ '@type' : "@id",
                      '@id' : Full_ID }.
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Path, Expanded) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
     findall(
         P-V,
         (   member(Prop-Value,Pairs),
-            (   property_expand_key_value(Prop,Value,DB,Context,P,V)
+            (   property_expand_key_value(Prop,Value,DB,Context,[property(Prop)|Path],P,V)
             ->  true
             ;   Prop = '@type'
             ->  P = Prop,
@@ -424,7 +462,7 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
         PVs),
     dict_pairs(Expanded,json,PVs).
 
-json_assign_id(JSON,DB,Context,JSON_ID) :-
+json_assign_id(JSON,DB,Context,Path,JSON_ID) :-
     % Set up the ID
     (   get_dict('@id',JSON,ID)
     ->  prefix_expand(ID, Context, ID_Ex),
@@ -433,7 +471,7 @@ json_assign_id(JSON,DB,Context,JSON_ID) :-
     ->  JSON_ID = JSON
     ;   get_dict('@value', JSON, _)
     ->  JSON_ID = JSON
-    ;   json_idgen(JSON,DB,Context,ID)
+    ;   json_idgen(JSON,DB,Context,Path,ID)
     ->  JSON_ID = (JSON.put(json{'@id' : ID}))
     ;   throw(error(no_id(JSON),_))
     ).
@@ -894,13 +932,13 @@ type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,L) :-
 type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Id, Value)
+    ->  get_document(DB, Prefixes, Id, Value, [])
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
 type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Id, Value)
+    ->  get_document(DB, Prefixes, Id, Value, [])
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
@@ -992,6 +1030,7 @@ get_document(DB, Document) :-
 
 get_document(Resource, Id, Document) :-
     get_document(Resource, Id, Document, []).
+
 get_document(Query_Context, Id, Document, Options) :-
     is_query_context(Query_Context),
     !,
@@ -1359,6 +1398,16 @@ run_delete_document(Desc, Commit, ID) :-
         delete_document(Context, ID),
         _).
 
+delete_subdocument(DB, V) :-
+    (   atom(V),
+        instance_of(DB, V, C)
+    ->  is_subdocument(DB, C),
+        key_descriptor(DB, C, Descriptor),
+        (   memberchk(Descriptor,[lexical(_,_),hash(_,_),random(_)])
+        ->  delete_document(DB, V)
+        ;   true)
+    ;   true).
+
 delete_document(DB, Id) :-
     is_transaction(DB),
     !,
@@ -1371,7 +1420,9 @@ delete_document(DB, Id) :-
     ),
     forall(
         xquad(Instance, G, Id_Ex, P, V),
-        delete(G, Id_Ex, P, V, _)
+        (   delete(G, Id_Ex, P, V, _),
+            delete_subdocument(DB,V)
+        )
     ).
 delete_document(Query_Context, Id) :-
     is_query_context(Query_Context),
@@ -4140,12 +4191,12 @@ schema5('
   "@base" : "http://i/",
   "@schema" : "http://s/" }
 
-{ "@id" : "NamedQuery",
+{ "@id" : "NamedExpression",
   "@type" : "Class",
   "@key" : { "@type" : "Lexical",
-             "@value" : ["name"] },
+             "@fields" : ["name"] },
   "name" : "xsd:string",
-  "query" : "ArithmeticExpression" }
+  "expression" : "ArithmeticExpression" }
 
 { "@id" : "ArithmeticExpression",
   "@type" : "Class",
@@ -4163,6 +4214,30 @@ schema5('
   "@type" : "Class",
   "@inherits" : "ArithmeticExpression",
   "@key" : { "@type" : "ValueHash" },
+  "number" : "xsd:integer" }
+
+{ "@id" : "NamedExpression2",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "name" : "xsd:string",
+  "expression" : "ArithmeticExpression2" }
+
+{ "@id" : "ArithmeticExpression2",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@abstract" : [] }
+
+{ "@id": "Plus2",
+  "@type" : "Class",
+  "@inherits" : "ArithmeticExpression2",
+  "@key" : { "@type" : "Random" },
+  "left" : "ArithmeticExpression2",
+  "right" : "ArithmeticExpression2" }
+
+{ "@id" : "Value2",
+  "@type" : "Class",
+  "@inherits" : "ArithmeticExpression2",
+  "@key" : { "@type" : "Random" },
   "number" : "xsd:integer" }
 ').
 
@@ -4197,7 +4272,6 @@ test(get_value_schema, [
     Document = json{'@id':'Value',
                     '@inherits':'ArithmeticExpression',
                     '@key':json{'@type':"ValueHash"},
-                    '@subdocument':[],
                     '@type':'Class',
                     number:'xsd:integer'}.
 
@@ -4211,36 +4285,79 @@ test(plus_doc_extract, [
              teardown_temp_store(State)
          )
      ]) :-
-    print_all_triples(Desc, schema),
-    JSON = json{'@type' : "Plus",
+
+    JSON =
+    json{'@type': "NamedExpression",
+         name: "3+(2+1)",
+         expression:
+         json{'@type' : "Plus",
              left : json{'@type' : "Value",
-                      number : 3},
+                         number : 3},
              right : json{'@type' : "Plus",
-                       left : json{'@type' : "Value",
-                                number : 2},
-                       right : json{'@type' : "Value",
-                                 number : 1}}
-            },
+                          left : json{'@type' : "Value",
+                                      number : 2},
+                          right : json{'@type' : "Value",
+                                       number : 1}}
+             }
+        },
 
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
     get_document(Desc, Id, JSON2),
-
     JSON2 =
-    json{'@id':'Plus_4fbc40cb94f715fb9f72638b71cbcdbaf9c4755e',
-         '@type':'Plus',
-         left:json{'@id':'Value_b8c41433b5361b38d6f1995aed6f7e10e168df73',
-                   '@type':'Value',
-                   number:"3"},
-         right:json{'@id':'Plus_27ff79b26675132195d938869ddb9f3c6ecc7968',
-                    '@type':'Plus',
-                    left:json{'@id':'Value_61ff2bb5df7172d27b758a2bf7376552798e951d',
-                              '@type':'Value',
-                              number:"2"},
-                    right:json{'@id':'Value_b6bb94b947749d042a0f8cfc020851388d441ea6',
-                               '@type':'Value',
-                               number:"1"}}}.
+    json{'@id':'NamedExpression_3+(2+1)',
+         '@type':'NamedExpression',
+         expression:
+         json{'@id':'Plus_4fbc40cb94f715fb9f72638b71cbcdbaf9c4755e',
+              '@type':'Plus',
+              left:json{'@id':'Value_b8c41433b5361b38d6f1995aed6f7e10e168df73',
+                        '@type':'Value',
+                        number:"3"},
+              right:json{'@id':'Plus_27ff79b26675132195d938869ddb9f3c6ecc7968',
+                         '@type':'Plus',
+                         left:json{'@id':'Value_61ff2bb5df7172d27b758a2bf7376552798e951d',
+                                   '@type':'Value',
+                                   number:"2"},
+                         right:json{'@id':'Value_b6bb94b947749d042a0f8cfc020851388d441ea6',
+                                    '@type':'Value',
+                                    number:"1"}}},
+         name:"3+(2+1)"}.
+
+
+test(plus_doc_delete, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON =
+    json{'@type': "NamedExpression2",
+         name: "3+(2+1)",
+         expression:
+         json{'@type' : "Plus2",
+             left : json{'@type' : "Value2",
+                         number : 3},
+             right : json{'@type' : "Plus2",
+                          left : json{'@type' : "Value2",
+                                      number : 2},
+                          right : json{'@type' : "Value2",
+                                       number : 1}}
+             }
+        },
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+
+    run_delete_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, Id),
+
+    \+ get_document_uri(Desc, Id).
 
 
 :- end_tests(arithmetic_document).

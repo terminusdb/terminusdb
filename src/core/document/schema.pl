@@ -66,15 +66,12 @@ is_base_type(Type) :-
 
 class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
-    class_super(Validation_Object,Class,Super),
-    class_subsumed(Validation_Object,Super, Subsumed).
+    class_super(Validation_Object,Class,Subsumed).
 
 class_super(Validation_Object,Class,Super) :-
-    database_schema(Validation_Object, Schema),
-    xrdf(Schema, Class, sys:inherits, Super).
+    subclass_of(Validation_Object, Class, Super).
 class_super(Validation_Object,Class,Super) :-
-    database_schema(Validation_Object,Schema),
-    xrdf(Schema, Class, sys:inherits, Intermediate),
+    subclass_of(Validation_Object, Class, Intermediate),
     class_super(Validation_Object,Intermediate,Super).
 
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
@@ -200,7 +197,7 @@ refute_schema(Validation_Object,Witness) :-
  */
 is_circular_hasse_diagram(Validation_Object,Witness) :-
     is_simple_class(Validation_Object, Class),
-    transitive_sub_class_of(Validation_Object, Class, Subclass, Path),
+    transitive_subclass_of(Validation_Object, Class, Subclass, Path),
     repeats(Path),
     Witness = witness{
                   '@type': cycle_in_class,
@@ -209,7 +206,7 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
                   path : Path
               }.
 
-sub_class_of(Validation_Object,Subclass,Class) :-
+subclass_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema,Subclass,sys:inherits,Class).
 
@@ -220,11 +217,11 @@ repeats([_|T]) :-
     repeats(T).
 
 /* Needs to check 'seen' classes so as not to loop infinitely */
-transitive_sub_class_of(Validation_Object, Subclass, Class, [Subclass,Class]) :-
-    sub_class_of(Validation_Object, Subclass,Class).
-transitive_sub_class_of(Validation_Object, Subclass, Super, [Subclass|Path]) :-
-    sub_class_of(Validation_Object, Subclass, Class),
-    transitive_sub_class_of(Validation_Object, Class, Super, Path).
+transitive_subclass_of(Validation_Object, Subclass, Class, [Subclass,Class]) :-
+    subclass_of(Validation_Object, Subclass,Class).
+transitive_subclass_of(Validation_Object, Subclass, Super, [Subclass|Path]) :-
+    subclass_of(Validation_Object, Subclass, Class),
+    transitive_subclass_of(Validation_Object, Class, Super, Path).
 
 refute_class_definition(Validation_Object,Class,Witness) :-
     refute_property(Validation_Object,Class, Witness).
@@ -251,9 +248,13 @@ is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, C, sys:abstract, rdf:nil).
 
-is_subdocument(Validation_Object, C) :-
+is_direct_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, C, sys:subdocument, rdf:nil).
+
+is_subdocument(Validation_Object, C) :-
+    class_subsumed(Validation_Object, C, D),
+    is_direct_subdocument(Validation_Object, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
