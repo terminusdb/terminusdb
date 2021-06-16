@@ -14,7 +14,8 @@
               type_family_constructor/1,
               is_schemaless/1,
               class_subsumed/3,
-              is_abstract/2
+              is_abstract/2,
+              is_subdocument/2
           ]).
 
 /*
@@ -240,7 +241,8 @@ is_built_in(P) :-
             sys:value,
             sys:class,
             sys:index,
-            sys:abstract
+            sys:abstract,
+            sys:subdocument
         ],
         List),
     memberchk(P,List).
@@ -248,6 +250,10 @@ is_built_in(P) :-
 is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, C, sys:abstract, rdf:nil).
+
+is_subdocument(Validation_Object, C) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, C, sys:subdocument, rdf:nil).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).

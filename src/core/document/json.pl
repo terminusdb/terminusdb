@@ -610,6 +610,9 @@ json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
 json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:abstract, P).
+json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:subdocument, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -888,9 +891,18 @@ type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(class(_),_,_,Id,_,Prefixes,Id_Comp) :-
-    compress_dict_uri(Id, Prefixes, Id_Comp).
-type_id_predicate_iri_value(tagged_union(_,_),_,_,V,_,_,V).
+type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Value) :-
+    (   instance_of(DB, Id, C),
+        is_subdocument(DB, C)
+    ->  get_document(DB, Prefixes, Id, Value)
+    ;   compress_dict_uri(Id, Prefixes, Value)
+    ).
+type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
+    (   instance_of(DB, Id, C),
+        is_subdocument(DB, C)
+    ->  get_document(DB, Prefixes, Id, Value)
+    ;   compress_dict_uri(Id, Prefixes, Value)
+    ).
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
@@ -1059,6 +1071,9 @@ type_descriptor_json(enum(C,_),Prefixes, Class_Comp) :-
 
 schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
+    global_prefix_expand(sys:subdocument,P),
     !.
 schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@inherits',V) :-
     global_prefix_expand(sys:inherits,P),
@@ -4125,8 +4140,16 @@ schema5('
   "@base" : "http://i/",
   "@schema" : "http://s/" }
 
+{ "@id" : "NamedQuery",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@value" : ["name"] },
+  "name" : "xsd:string",
+  "query" : "ArithmeticExpression" }
+
 { "@id" : "ArithmeticExpression",
   "@type" : "Class",
+  "@subdocument" : [],
   "@abstract" : [] }
 
 { "@id": "Plus",
@@ -4134,14 +4157,14 @@ schema5('
   "@inherits" : "ArithmeticExpression",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression"
-}
+  "right" : "ArithmeticExpression" }
 
 { "@id" : "Value",
   "@type" : "Class",
   "@inherits" : "ArithmeticExpression",
   "@key" : { "@type" : "ValueHash" },
-  "number" : "xsd:integer" }').
+  "number" : "xsd:integer" }
+').
 
 write_schema5(Desc) :-
     create_context(Desc,commit{
@@ -4157,6 +4180,26 @@ write_schema5(Desc) :-
         write_json_string_to_schema(Context, Schema1),
         _Meta).
 
+test(get_value_schema, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, 'Value', Document),
+
+    Document = json{'@id':'Value',
+                    '@inherits':'ArithmeticExpression',
+                    '@key':json{'@type':"ValueHash"},
+                    '@subdocument':[],
+                    '@type':'Class',
+                    number:'xsd:integer'}.
 
 test(plus_doc_extract, [
          setup(
@@ -4168,14 +4211,14 @@ test(plus_doc_extract, [
              teardown_temp_store(State)
          )
      ]) :-
-
-    JSON = _{'@type' : "Plus",
-             left : _{'@type' : "Value",
+    print_all_triples(Desc, schema),
+    JSON = json{'@type' : "Plus",
+             left : json{'@type' : "Value",
                       number : 3},
-             right : _{'@type' : "Plus",
-                       left : _{'@type' : "Value",
+             right : json{'@type' : "Plus",
+                       left : json{'@type' : "Value",
                                 number : 2},
-                       right : _{'@type' : "Value",
+                       right : json{'@type' : "Value",
                                  number : 1}}
             },
 
@@ -4183,7 +4226,21 @@ test(plus_doc_extract, [
                                              message : "boo"}, JSON, Id),
 
     get_document(Desc, Id, JSON2),
-    writeq(JSON2).
+
+    JSON2 =
+    json{'@id':'Plus_4fbc40cb94f715fb9f72638b71cbcdbaf9c4755e',
+         '@type':'Plus',
+         left:json{'@id':'Value_b8c41433b5361b38d6f1995aed6f7e10e168df73',
+                   '@type':'Value',
+                   number:"3"},
+         right:json{'@id':'Plus_27ff79b26675132195d938869ddb9f3c6ecc7968',
+                    '@type':'Plus',
+                    left:json{'@id':'Value_61ff2bb5df7172d27b758a2bf7376552798e951d',
+                              '@type':'Value',
+                              number:"2"},
+                    right:json{'@id':'Value_b6bb94b947749d042a0f8cfc020851388d441ea6',
+                               '@type':'Value',
+                               number:"1"}}}.
 
 
 :- end_tests(arithmetic_document).
