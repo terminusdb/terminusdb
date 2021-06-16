@@ -62,7 +62,8 @@
               member_last/3,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
-              json_read_dict_stream/2
+              json_read_dict_stream/2,
+              skip_generate_nsols/3
           ]).
 
 /** <module> Utils
@@ -882,3 +883,9 @@ json_read_dict_stream(Stream,Term) :-
     ->  !,
         fail
     ;   true).
+
+:- meta_predicate skip_generate_nsols(:, +, +).
+skip_generate_nsols(Goal, Skip, Count) :-
+    (   Count = unlimited
+    ->  offset(Skip, Goal)
+    ;   limit(Count, offset(Skip, Goal))).

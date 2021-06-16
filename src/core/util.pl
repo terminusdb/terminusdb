@@ -125,6 +125,7 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              skip_generate_nsols/3,
 
               % speculative_parse.pl
               %guess_date/2,
