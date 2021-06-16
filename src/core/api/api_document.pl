@@ -92,14 +92,22 @@ api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Id, Document) :-
     api_get_document_(Schema_Or_Instance, Transaction, Id, Document).
 
 api_insert_document_(schema, Transaction, Stream, Id) :-
-    json_read_dict_stream(Stream, Document),
+    json_read_dict_stream(Stream, JSON),
+    (   is_list(JSON)
+    ->  !,
+        member(Document, JSON)
+    ;   Document = JSON),
     do_or_die(insert_schema_document(Transaction, Document),
               error(document_insertion_failed_unexpectedly(Document), _)),
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
 api_insert_document_(instance, Transaction, Stream, Id) :-
-    json_read_dict_stream(Stream, Document),
+    json_read_dict_stream(Stream, JSON),
+    (   is_list(JSON)
+    ->  !,
+        member(Document, JSON)
+    ;   Document = JSON),
     do_or_die(insert_document(Transaction, Document, Id),
               error(document_insertion_failed_unexpectedly(Document), _)).
 
