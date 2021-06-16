@@ -949,16 +949,19 @@ test(get_bad_descriptor, [
                  prefix,
                  methods([options,post,delete,get])]).
 
-ensure_json_header_written(Request, Header_Written) :-
+ensure_json_header_written(Request, As_List, Header_Written) :-
     Header_Written = written(Written),
     (   var(Written)
     ->  nb_setarg(1, Header_Written, true),
         write_cors_headers(Request),
-        format("Content-type: application/json; charset=UTF-8~n~n", [])
+        format("Content-type: application/json; charset=UTF-8~n~n", []),
+        (   As_List = true
+        ->  format("[~n")
+        ;   true)
     ;   true).
 
-json_write_with_header(Request, Document, Header_Written, JSON_Options) :-
-    ensure_json_header_written(Request, Header_Written),
+json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options) :-
+    ensure_json_header_written(Request, As_List, Header_Written),
 
     json_write(current_output, Document, JSON_Options),
     nl.
@@ -986,18 +989,26 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ->  JSON_Options = [width(0)]
     ;   JSON_Options = []),
 
+    (   memberchk(as_list=true, Search)
+    ->  As_List = true
+    ;   As_List = false),
+
     Header_Written = written(_),
     (   memberchk(id=Id, Search)
     ->  api_get_document(System_DB, Auth, Path, Graph_Type, Id, Document),
-        json_write_with_header(Request, Document, Header_Written, JSON_Options)
+        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
     ;   memberchk(type=Type, Search)
     ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Type, Skip, Count, Document),
-               json_write_with_header(Request, Document, Header_Written, JSON_Options))
+               json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
     ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Skip, Count, Document),
-               json_write_with_header(Request, Document, Header_Written, JSON_Options))),
+               json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))),
 
     % ensure the header has been written by now.
-    ensure_json_header_written(Request, Header_Written).
+    ensure_json_header_written(Request, As_List, Header_Written),
+
+    (   As_List = true
+    ->  format("]~n")
+    ;   true).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
