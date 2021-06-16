@@ -93,13 +93,15 @@ api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Id, Document) :-
 
 api_insert_document_(schema, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, Document),
-    insert_schema_document(Transaction, Document),
+    do_or_die(insert_schema_document(Transaction, Document),
+              error(document_insertion_failed_unexpectedly(Document), _)),
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
 api_insert_document_(instance, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, Document),
-    insert_document(Transaction, Document, Id).
+    do_or_die(insert_document(Transaction, Document, Id),
+              error(document_insertion_failed_unexpectedly(Document), _)).
 
 replace_existing_graph(schema, Transaction, Stream) :-
     replace_json_schema(Transaction, Stream).

@@ -921,22 +921,6 @@ get_document_uri(DB, Uri) :-
     is_simple_class(DB, Class),
     instance_of(DB, Uri, Class).
 
-get_document(Query_Context, Document) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    get_document(TO, Document).
-get_document(Desc, Document) :-
-    is_descriptor(Desc),
-    !,
-    open_descriptor(Desc,Transaction),
-    get_document(Transaction, Document).
-get_document(DB, Document) :-
-    is_simple_class(DB, Class),
-    instance_of(DB, Document_Uri, Class),
-
-    get_document(DB, Document_Uri, Document).
-
 get_document_uri_by_type(Query_Context, Type, Uri) :-
     is_query_context(Query_Context),
     !,
@@ -977,21 +961,39 @@ get_document_by_type(DB, Type, Document) :-
 
     get_document(DB, Document_Uri, Document).
 
-get_document(Query_Context, Id, Document) :-
+get_document(Query_Context, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document(TO, Id, Document).
-get_document(Desc, Id, Document) :-
+    get_document(TO, Document).
+get_document(Desc, Document) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document(Transaction, Id, Document).
-get_document(DB, Id, Document) :-
-    database_context(DB,Prefixes),
-    get_document(DB, Prefixes, Id, Document).
+    get_document(Transaction, Document).
+get_document(DB, Document) :-
+    is_simple_class(DB, Class),
+    instance_of(DB, Document_Uri, Class),
 
-get_document(DB, Prefixes, Id, Document) :-
+    get_document(DB, Document_Uri, Document).
+
+get_document(Resource, Id, Document) :-
+    get_document(Resource, Id, Document, []).
+get_document(Query_Context, Id, Document, Options) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_document(TO, Id, Document, Options).
+get_document(Desc, Id, Document, Options) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc,Transaction),
+    get_document(Transaction, Id, Document, Options).
+get_document(DB, Id, Document, Options) :-
+    database_context(DB,Prefixes),
+    get_document(DB, Prefixes, Id, Document, Options).
+
+get_document(DB, Prefixes, Id, Document, _Options) :-
     database_instance(DB,Instance),
 
     prefix_expand(Id,Prefixes,Id_Ex),
