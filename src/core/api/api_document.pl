@@ -217,6 +217,10 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
 
     with_transaction(Context,
                      forall(
-                         json_read_dict_stream(Stream,Document),
+                         (   json_read_dict_stream(Stream,JSON),
+                             (   is_list(JSON)
+                             ->  !,
+                                 member(Document, JSON)
+                             ;   Document = JSON)),
                          api_replace_document_(Schema_Or_Instance, Transaction, Document)),
                      _).
