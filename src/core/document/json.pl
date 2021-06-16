@@ -317,7 +317,8 @@ property_expand_key_value(Prop,Value,DB,Context,P,V) :-
 json_elaborate(DB,JSON,Context,JSON_ID) :-
     is_dict(JSON),
     !,
-    get_dict('@type',JSON,Type),
+    do_or_die(get_dict('@type',JSON,Type),
+              error(document_has_no_type(JSON), _)),
     prefix_expand_schema(Type,Context,TypeEx),
     do_or_die(
         type_context(DB,TypeEx,Type_Context),

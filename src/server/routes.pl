@@ -957,7 +957,7 @@ ensure_json_header_written(Request, As_List, Header_Written) :-
         (   As_List = true
         ->  format("Content-type: application/json; charset=UTF-8~n~n", []),
             format("[~n")
-        ;   format("Content-type: application/json; stream=true;charset=UTF-8~n~n", []))
+        ;   format("Content-type: application/json; stream=true; charset=UTF-8~n~n", []))
     ;   true).
 
 json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options) :-
@@ -1075,7 +1075,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
     ),
 
     write_cors_headers(Request),
-    nl.
+    nl,nl.
 
 document_handler(put, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -1096,7 +1096,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     open_string(Data, Stream),
     api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream),
     write_cors_headers(Request),
-    nl.
+    nl,nl.
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
