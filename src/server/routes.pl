@@ -961,10 +961,24 @@ ensure_json_header_written(Request, As_List, Header_Written) :-
     ;   true).
 
 json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options) :-
+    % pretty hairy stuff just to support dumb parsers that can't deal with streaming json
+    Header_Written = written(Written),
+    (   var(Written)
+    ->  First_Element = true
+    ;   First_Element = false),
     ensure_json_header_written(Request, As_List, Header_Written),
 
+    (   First_Element = false,
+        As_List = true
+    ->  format(",~n")
+    ;   true),
     json_write(current_output, Document, JSON_Options),
-    nl.
+
+    % only print the newline here if we're not printing as a list.
+    % In the case of list printing, the separators handle the newlines.
+    (   As_List = true
+    ->  true
+    ;   nl).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -1007,7 +1021,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ensure_json_header_written(Request, As_List, Header_Written),
 
     (   As_List = true
-    ->  format("]~n")
+    ->  format("~n]~n")
     ;   true).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
