@@ -163,21 +163,29 @@ get_field_values(JSON,Context,Fields,Values) :-
         ),
         Values).
 
-raw(JValue,Value) :- get_dict('@value',JValue,Value).
+raw(JValue,Value) :-
+    is_dict(JValue),
+    !,
+    get_dict('@value',JValue,Value).
+raw(JValue,JValue).
 
 idgen_lexical(Base,Values,ID) :-
-    maplist(raw,Values,Raw),
-    maplist(uri_encoded(path),Raw,Encoded),
-    merge_separator_split(Suffix, '_', Encoded),
-    format(string(ID), '~w~w', [Base,Suffix]).
+    when(ground(Values),
+         (   maplist(raw,Values,Raw),
+             maplist(uri_encoded(path),Raw,Encoded),
+             merge_separator_split(Suffix, '_', Encoded),
+             format(string(ID), '~w~w', [Base,Suffix])
+         )).
 
 idgen_hash(Base,Values,ID) :-
-    maplist(raw,Values,Raw),
-    maplist(uri_encoded(path),Raw,Encoded),
-    merge_separator_split(String, '_', Encoded),
-    sha_hash(String, Octets, []),
-    hash_atom(Octets, Hash),
-    format(string(ID), "~w~w", [Base,Hash]).
+    when(ground(Values),
+         (   maplist(raw,Values,Raw),
+             maplist(uri_encoded(path),Raw,Encoded),
+             merge_separator_split(String, '_', Encoded),
+             sha_hash(String, Octets, []),
+             hash_atom(Octets, Hash),
+             format(string(ID), "~w~w", [Base,Hash])
+         )).
 
 idgen_path_values_hash(Base,Path,ID) :-
     format(string(A), '~q', [Path]),
@@ -201,7 +209,7 @@ path_strings_([node(X)|Path], Prefixes, [URI|Strings]) :-
              ->  prefix_expand(X, Prefixes, URI)
              ;   Compressed = URI))),
     path_strings_(Path, Prefixes, Strings).
-path_strings_([predicate(X)|Path], Prefixes, [URI|Strings]) :-
+path_strings_([property(X)|Path], Prefixes, [URI|Strings]) :-
     % We have *very* late binding of IDs, need to do this after its done.
     when(ground(X),
          (   compress_schema_uri(X, Prefixes, Compressed),
@@ -234,7 +242,8 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
     ;   Descriptor = random(Base)
     ->  idgen_random(Base,ID)
     ),
-    prefix_expand(ID, Context, ID_Ex).
+    when(ground(ID),
+         prefix_expand(ID, Context, ID_Ex)).
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
@@ -1384,11 +1393,15 @@ run_delete_document(Desc, Commit, ID) :-
 delete_subdocument(DB, V) :-
     (   atom(V),
         instance_of(DB, V, C)
-    ->  is_subdocument(DB, C),
-        key_descriptor(DB, C, Descriptor),
-        (   memberchk(Descriptor,[lexical(_,_),hash(_,_),random(_)])
+    ->  (   is_subdocument(DB, C)
+        ->  key_descriptor(DB, C, Descriptor),
+            (   memberchk(Descriptor,[lexical(_,_),hash(_,_),random(_)])
+            ->  delete_document(DB, V)
+            ;   true)
+        ;   is_list_type(C)
         ->  delete_document(DB, V)
-        ;   true)
+        ;   true
+        )
     ;   true).
 
 delete_document(DB, Id) :-
@@ -4222,6 +4235,24 @@ schema5('
   "@inherits" : "ArithmeticExpression2",
   "@key" : { "@type" : "Random" },
   "number" : "xsd:integer" }
+
+{ "@id" : "Outer",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields": ["name"] },
+  "name" : "xsd:string",
+  "inner" : "Inner",
+  "number" : "xsd:integer" }
+
+{ "@id" : "Inner",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Random" },
+  "things" : { "@type" : "List",
+               "@class" : "xsd:integer" },
+  "name" : "xsd:string",
+  "number" : "xsd:integer" }
+
 ').
 
 write_schema5(Desc) :-
@@ -4337,10 +4368,76 @@ test(plus_doc_delete, [
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
+
+    print_all_triples(Desc),
+    get_document(Desc, Id, Document),
+
+    Document =
+    json{'@id':'NamedExpression2_fdcde010874ce49905bb9aec59b4fe93',
+         '@type':'NamedExpression2',
+         expression:json{'@id':'Plus2_41897c22d8af7e3e6cf1751fa5d4ac1b',
+                         '@type':'Plus2',
+                         left:json{'@id':'Value2_3a1dd53ff2891b571ec2233620c36b75',
+                                   '@type':'Value2',
+                                   number:3},
+                         right:json{'@id':'Plus2_1060169a8da1a3e32e98483a8a17dff7',
+                                    '@type':'Plus2',
+                                    left:json{'@id':'Value2_9103f413ca66963de152a650ee7f8ea9',
+                                              '@type':'Value2',
+                                              number:2},
+                                    right:json{'@id':'Value2_b244ea895592fdfe16dcb1d4429d5dbf',
+                                               '@type':'Value2',
+                                               number:1}}},
+         name:"3+(2+1)"},
+
     run_delete_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, Id),
 
     \+ get_document_uri(Desc, Id).
+
+test(subdocument_deletes_lists, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+
+    JSON =
+    json{'@type': "Outer",
+         name: "Outer",
+         inner:
+         json{'@type' : "Inner",
+              name: "Inner",
+              number: 10,
+              things: [1,2,3]},
+         number: 1},
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+    get_document(Desc, Id, JSON2),
+
+    JSON2 = json{'@id':'Outer_Outer',
+                 '@type':'Outer',
+                 inner:json{'@id':_,
+                            '@type':'Inner',
+                            name:"Inner",
+                            number:"10",
+                            things:[1,1,2]},
+                 name:"Outer",
+                 number:1},
+
+    run_delete_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, Id),
+
+    open_descriptor(Desc, Trans),
+    print_all_triples(Desc),
+    database_instance(Trans, Inst),
+    \+ xrdf(Inst, _, _, _).
 
 
 :- end_tests(arithmetic_document).
