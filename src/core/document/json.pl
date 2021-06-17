@@ -527,6 +527,24 @@ key_id(JSON,Context,Path,ID) :-
     merge_separator_split(Merged,'_',Encoded),
     prefix_expand_schema(Merged,Context,ID).
 
+property_part(JSON,Key) :-
+    get_dict(Key, JSON, _),
+    \+ memberchk(Key, ['@id', '@type']),
+    !.
+
+property_id(JSON,Context,Path,ID) :-
+    property_part(JSON,Property),
+    reverse([Property|Path],Rev),
+    maplist(uri_encoded(path),Rev,Encoded),
+    merge_separator_split(Merged,'_',Encoded),
+    prefix_expand_schema(Merged,Context,ID).
+
+documentation_id(Context,Path,ID) :-
+    reverse(['Documentation'|Path],Full_Path),
+    maplist(uri_encoded(path),Full_Path,Encoded),
+    merge_separator_split(Merged,'_',Encoded),
+    prefix_expand_schema(Merged,Context,ID).
+
 maybe_expand_schema_type(Type, Expanded) :-
     (   re_match('.*:.*', Type)
     ->  Type = Expanded
@@ -599,6 +617,16 @@ wrap_id(ID, json{'@type' : "@id",
     !.
 wrap_id(ID, ID).
 
+wrap_text(Text, json{'@type' : XSD,
+                     '@value' : String}) :-
+    global_prefix_expand(xsd:string, XSD),
+    (   atom(Text)
+    ;   string(Text)),
+    !,
+    atom_string(Text,String).
+wrap_text(Text, Text) :-
+    is_dict(Text).
+
 expand_match_system(Key,Term,Key_Ex) :-
     global_prefixes(sys,Prefix),
     global_prefix_expand(sys:Term,Key_Ex),
@@ -638,6 +666,73 @@ json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     expand_match_system(Random, 'Random', Type),
     !.
 
+json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
+    global_prefix_expand(sys:'PropertyDocumentation',Property_Ex),
+    property_id(Dict, Context, Path, Id),
+    dict_pairs(Dict, json, In_Pairs),
+    findall(
+        Key-Value,
+        (
+            member(K-V, In_Pairs),
+            (   K = '@id'
+            ->  fail
+            ;   K = '@type'
+            ->  fail
+            ;   is_dict(V)
+            ->  prefix_expand_schema(K, Context, Key),
+                Value = V
+            ;   prefix_expand_schema(K, Context, Key),
+                wrap_text(V,Value)
+            )
+        ),
+        Pairs),
+    dict_pairs(Out, json, ['@id'-Id,'@type'-Property_Ex|Pairs]).
+
+json_schema_elaborate_documenation(V,Context,Path,json{'@type' : Documentation_Ex,
+                                                 '@id' : ID,
+                                                 '@comment' :
+                                                 json{ '@type' : XSD,
+                                                       '@value' : V}}) :-
+    string(V),
+    !,
+    global_prefix_expand(xsd:string, XSD),
+    global_prefix_expand(sys:'Documentation',Documentation_Ex),
+    documentation_id(Context,Path,ID).
+json_schema_elaborate_documentation(V,Context,Path,Result2) :-
+    is_dict(V),
+    !,
+    global_prefix_expand(sys:'Documentation',Documentation_Ex),
+
+    documentation_id(Context,Path,Doc_Id),
+    Result = json{'@id' : Doc_Id,
+                   '@type' : Documentation_Ex},
+    global_prefix_expand(sys:'properties',PropertiesP),
+    Result1 = (Result.put(PropertiesP, Properties)),
+
+    (   get_dict('@comment', V, Comment_Text)
+    ->  wrap_text(Comment_Text, Comment),
+        global_prefix_expand(sys:'comment',CommentP),
+        Result2 = Result1.put(CommentP, Comment)
+    ;   Result2 = Result1
+    ),
+
+    (   get_dict('@properties',V,List)
+    ->  maplist(
+            json_schema_elaborate_property_documentation(Context,['PropertyDocumentation',
+                                                                  'Documentation'
+                                                                  |Path]),
+            List, Properties_List),
+        Properties  = json{
+                          '@container' : "@set",
+                          '@type' : "@id",
+                          '@value' : Properties_List
+                      }
+    ;   Properties  = json{
+                          '@container' : "@set",
+                          '@type' : "@id",
+                          '@value' : []
+                      }).
+
 json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     !,
     prefix_expand_schema(V,Context,V_Ex).
@@ -652,6 +747,10 @@ json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     json_schema_elaborate_key(V,Context,Elab),
     key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
+json_schema_predicate_value('@documentation',V,Context,Path,P,Value) :-
+    !,
+    global_prefix_expand(sys:documentation, P),
+    json_schema_elaborate_documentation(V,Context,Path,Value).
 json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:abstract, P).
@@ -1083,6 +1182,19 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
+documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Result) :-
+    Template = json{ '@comment' : Comment},
+    (   Properties = []
+    ->  Result = Template
+    ;   maplist({Prefixes}/[Prop-Comment,JSON]>>(
+                    compress_schema_uri(Prop, Prefixes, Small),
+                    dict_pairs(JSON,json,[Small-Comment])
+                ),
+                Properties,
+                JSONs),
+        Result = (Template.put('@properties', JSONs))
+    ).
+
 type_descriptor_json(unit, _Prefix, "Unit").
 type_descriptor_json(class(C), Prefixes, Class_Comp) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
@@ -1146,6 +1258,11 @@ schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@key',V) :-
     !,
     key_descriptor(DB, Id, Key),
     key_descriptor_json(Key,Prefixes,V).
+schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@documentation',V) :-
+    global_prefix_expand(sys:documentation,P),
+    !,
+    documentation_descriptor(DB, Id, Documentation_Desc),
+    documentation_descriptor_json(Documentation_Desc,Prefixes,V).
 schema_subject_predicate_object_key_value(DB,Prefixes,_Id,P,O,K,JSON) :-
     compress_schema_uri(P, Prefixes, K),
     type_descriptor(DB, O, Descriptor),
@@ -3867,9 +3984,121 @@ test(double_insert_schema,
         _
     ).
 
+test(comment_elaborate,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus", "species"] },
+       '@documentation' :
+       _{ '@comment' : "Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
+          '@properties' : [
+              _{ genus : "The genus of the Cucurtiba is always Cucurtiba"},
+              _{ species : "There are between 13 and 30 species of Cucurtiba"},
+              _{ colour: "Red, Green, Brown, Yellow, lots of things here."},
+              _{ shape: "Round, Silly, or very silly!" }
+          ]},
+       genus : "xsd:string",
+       species : "xsd:string",
+       name : "xsd:string",
+       colour : "xsd:string",
+       shape : "xsd:string"
+     },
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Document, Context, Elaborated),
+
+    Elaborated =
+    json{'@id':'https://s/Squash',
+         '@type':'http://terminusdb.com/schema/sys#Class',
+         'http://terminusdb.com/schema/sys#documentation':
+         json{'http://terminusdb.com/schema/sys#comment':
+              json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica."},
+              '@id':'https://s/Squash_Documentation',
+              'http://terminusdb.com/schema/sys#properties'
+              :json{'@container':"@set",
+                    '@type':"@id",
+                    '@value':[json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_genus','@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+                                   'https://s/genus':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                                          '@value':"The genus of the Cucurtiba is always Cucurtiba"}},
+                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_species',
+                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+                                   'https://s/species':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                                            '@value':"There are between 13 and 30 species of Cucurtiba"}},
+                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_colour',
+                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+                                   'https://s/colour':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                                           '@value':"Red, Green, Brown, Yellow, lots of things here."}},
+                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_shape',
+                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+                                   'https://s/shape':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                                          '@value':"Round, Silly, or very silly!"}}
+                             ]},
+              '@type':'http://terminusdb.com/schema/sys#Documentation'},
+         'http://terminusdb.com/schema/sys#key':
+         json{'@id':'https://s/Squash_Lexical_genus_species',
+              '@type':'http://terminusdb.com/schema/sys#Lexical',
+              'http://terminusdb.com/schema/sys#fields':
+              json{'@container':"@list",
+                   '@type':"@id",
+                   '@value':[json{'@id':'https://s/genus',
+                                  '@type':"@id"},
+                             json{'@id':'https://s/species',
+                                  '@type':"@id"}]}},
+         'https://s/colour':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                 '@type':"@id"},
+         'https://s/genus':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                '@type':"@id"},
+         'https://s/name':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                               '@type':"@id"},
+         'https://s/shape':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                '@type':"@id"},
+         'https://s/species':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                  '@type':"@id"}},
+
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
+    with_transaction(
+        Context2,
+        insert_schema_document(Context2, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    get_schema_document(DB2, 'Squash', New),
+
+    New = json{'@documentation':
+               json{'@comment':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
+                    '@properties':[json{colour:"Red, Green, Brown, Yellow, lots of things here."},
+                                   json{genus:"The genus of the Cucurtiba is always Cucurtiba"},
+                                   json{shape:"Round, Silly, or very silly!"},
+                                   json{species:"There are between 13 and 30 species of Cucurtiba"}]},
+               '@id':'Squash',
+               '@key':json{'@fields':[genus,species],
+                           '@type':"Lexical"},
+               '@type':'Class',
+               colour:'xsd:string',
+               genus:'xsd:string',
+               name:'xsd:string',
+               shape:'xsd:string',
+               species:'xsd:string'}.
+
 :- end_tests(json).
-
-
 
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
@@ -4440,5 +4669,47 @@ test(subdocument_deletes_lists, [
     database_instance(Trans, Inst),
     \+ xrdf(Inst, _, _, _).
 
+test(subdocument_deletes_lists, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+
+    JSON =
+    json{'@type': "Outer",
+         name: "Outer",
+         inner:
+         json{'@type' : "Inner",
+              name: "Inner",
+              number: 10,
+              things: [1,2,3]},
+         number: 1},
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, JSON, Id),
+    get_document(Desc, Id, JSON2),
+
+    JSON2 = json{'@id':'Outer_Outer',
+                 '@type':'Outer',
+                 inner:json{'@id':_,
+                            '@type':'Inner',
+                            name:"Inner",
+                            number:10,
+                            things:[1,2,3]},
+                 name:"Outer",
+                 number:1},
+
+    run_delete_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, Id),
+
+    open_descriptor(Desc, Trans),
+    database_instance(Trans, Inst),
+    \+ xrdf(Inst, _, _, _).
 
 :- end_tests(arithmetic_document).

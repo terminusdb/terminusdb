@@ -11,6 +11,7 @@
               type_descriptor/3,
               class_subsumed/3,
               key_descriptor/3,
+              documentation_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
               class_subsumed/3,
@@ -232,6 +233,8 @@ is_built_in(P) :-
         [
             rdf:type,
             sys:comment,
+            sys:properties,
+            sys:documentation,
             sys:inherits,
             sys:key,
             sys:base,
@@ -506,6 +509,23 @@ key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
+
+documentation_descriptor(Validation_Object, Type, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, Type, sys:documentation, Obj),
+    documentation_descriptor_(Validation_Object,Obj,Descriptor).
+
+documentation_property_list(Validation_Object, Obj, Pairs) :-
+    database_schema(Validation_Object, Schema),
+    findall(Key-Value,
+            (   xrdf(Schema, Obj, sys:properties, Property),
+                xrdf(Schema, Property, Key, Value^^xsd:string)),
+            Pairs).
+
+documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Properties)) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    documentation_property_list(Validation_Object,Obj,Properties).
 
 refute_diamond_property(Validation_Object, Class, Witness) :-
     catch(
