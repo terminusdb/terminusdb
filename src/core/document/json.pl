@@ -11,7 +11,6 @@
               get_schema_document_uri/2,
               get_document_by_type/3,
               get_document_uri_by_type/3,
-              get_schema_document_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
@@ -940,13 +939,13 @@ type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,L) :-
 type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Id, Value, [])
+    ->  get_document(DB, Prefixes, true, Id, Value)
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
 type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Id, Value, [])
+    ->  get_document(DB, Prefixes, true, Id, Value)
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
@@ -1021,7 +1020,7 @@ get_document_by_type(DB, Type, Document) :-
     get_document(DB, Document_Uri, Document).
 
 get_document(Resource, Id, Document) :-
-    get_document(Resource, false, Id, Document).
+    get_document(Resource, true, Id, Document).
 
 get_document(Query_Context, Compress, Id, Document) :-
     is_query_context(Query_Context),
@@ -4146,8 +4145,8 @@ test(subsumption_insert,
 
     JSON2 = json{'@id':'Subsumption_5894f172e060e3787b8045c17099266d55e3ffb1',
                  '@type':'Subsumption',
-                 child:'terminusdb://woql/data/NodeValue_06b4d0fa679ceabdee9afa804863c88676f742f2',
-                 parent:'terminusdb://woql/data/NodeValue_7aa5900abf5ed338b866b67bbcb1983dbda01b54'}.
+                 child:'NodeValue_06b4d0fa679ceabdee9afa804863c88676f742f2',
+                 parent:'NodeValue_7aa5900abf5ed338b866b67bbcb1983dbda01b54'}.
 
 test(substring_insert, [
          setup(
