@@ -954,7 +954,9 @@ type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
 type_id_predicate_iri_value(base_class(_),_,_,O,_,_,S) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
-    typecast(O,'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
+    O = X^^T,
+    writeq(O),
+    value_type_json_type(X,T,S,_).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     (   get_dict('@schema',Prefixes,Schema),
@@ -2004,6 +2006,7 @@ test(extract_json,
     !, % NOTE: why does rolling back over this go mental?
 
     get_document(DB,Id,JSON1),
+    writeq(JSON1),
     !,
     JSON1 = json{'@id':gavin,
                  '@type':'Employee',
