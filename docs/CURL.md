@@ -156,9 +156,11 @@ Rebase a branch on a path
 curl -X POST "https://127.0.0.1:6363/api/rebase/admin/foo/local/branch/main" -d '{ "author" : "gavin@terminusdb.com", "rebase_from" : "admin/foo/local/branch/other" }' -u "admin:root" -k -H "Content-Type: application/json"
 ```
 
-# Class Frame
+# Elaborated Class
 
-Obtain the class frame of a class in a schema.
+Obtain the class elaborated with all inherited traits
+
+NOTE: Completely wrong.
 
 ```bash
 curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "class" : "scm:SomeClass" }' -u "admin:root" -k -H "Content-Type: application/json"
@@ -168,4 +170,10 @@ Obtain the class frame of an instance
 
 ```bash
 curl -X POST "https://127.0.0.1:6363/api/frame/admin/foo" -d '{ "instance" : "doc:InstanceOfSomeClass" }' -u "admin:root" -k -H "Content-Type: application/json"
+```
+
+Something like:
+
+```bash
+curl -X POST "https://127.0.0.1:6363/api/schema/admin/foo?class=SomeClass" -u "admin:root" -k -H "Content-Type: application/json"
 ```
