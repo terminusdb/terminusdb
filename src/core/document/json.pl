@@ -951,11 +951,9 @@ type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
-type_id_predicate_iri_value(base_class(_),_,_,O,_,_,S) :-
+type_id_predicate_iri_value(base_class(_),_,_,X^^T,_,_,S) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
-    O = X^^T,
-    writeq(O),
     value_type_json_type(X,T,S,_).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
@@ -2006,7 +2004,7 @@ test(extract_json,
     !, % NOTE: why does rolling back over this go mental?
 
     get_document(DB,Id,JSON1),
-    writeq(JSON1),
+
     !,
     JSON1 = json{'@id':gavin,
                  '@type':'Employee',
@@ -4321,6 +4319,7 @@ test(plus_doc_extract, [
                                              message : "boo"}, JSON, Id),
 
     get_document(Desc, Id, JSON2),
+
     JSON2 =
     json{'@id':'NamedExpression_3+(2+1)',
          '@type':'NamedExpression',
@@ -4329,15 +4328,15 @@ test(plus_doc_extract, [
               '@type':'Plus',
               left:json{'@id':'Value_b8c41433b5361b38d6f1995aed6f7e10e168df73',
                         '@type':'Value',
-                        number:"3"},
+                        number:3},
               right:json{'@id':'Plus_27ff79b26675132195d938869ddb9f3c6ecc7968',
                          '@type':'Plus',
                          left:json{'@id':'Value_61ff2bb5df7172d27b758a2bf7376552798e951d',
                                    '@type':'Value',
-                                   number:"2"},
+                                   number:2},
                          right:json{'@id':'Value_b6bb94b947749d042a0f8cfc020851388d441ea6',
                                     '@type':'Value',
-                                    number:"1"}}},
+                                    number:1}}},
          name:"3+(2+1)"}.
 
 
@@ -4349,8 +4348,7 @@ test(plus_doc_delete, [
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         blocked('failing on integer marshalling')
+         )
      ]) :-
 
     JSON =
@@ -4372,26 +4370,27 @@ test(plus_doc_delete, [
                                              message : "boo"}, JSON, Id),
 
 
-    print_all_triples(Desc),
+
     get_document(Desc, Id, Document),
 
     Document =
-    json{'@id':'NamedExpression2_fdcde010874ce49905bb9aec59b4fe93',
+    json{'@id':_,
          '@type':'NamedExpression2',
-         expression:json{'@id':'Plus2_41897c22d8af7e3e6cf1751fa5d4ac1b',
+         expression:json{'@id':_,
                          '@type':'Plus2',
-                         left:json{'@id':'Value2_3a1dd53ff2891b571ec2233620c36b75',
+                         left:json{'@id':_,
                                    '@type':'Value2',
                                    number:3},
-                         right:json{'@id':'Plus2_1060169a8da1a3e32e98483a8a17dff7',
+                         right:json{'@id':_,
                                     '@type':'Plus2',
-                                    left:json{'@id':'Value2_9103f413ca66963de152a650ee7f8ea9',
+                                    left:json{'@id':_,
                                               '@type':'Value2',
                                               number:2},
-                                    right:json{'@id':'Value2_b244ea895592fdfe16dcb1d4429d5dbf',
+                                    right:json{'@id':_,
                                                '@type':'Value2',
                                                number:1}}},
          name:"3+(2+1)"},
+
 
     run_delete_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, Id),
@@ -4406,8 +4405,7 @@ test(subdocument_deletes_lists, [
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         blocked('failing on integer marshalling')
+         )
      ]) :-
 
 
@@ -4430,8 +4428,8 @@ test(subdocument_deletes_lists, [
                  inner:json{'@id':_,
                             '@type':'Inner',
                             name:"Inner",
-                            number:"10",
-                            things:[1,1,2]},
+                            number:10,
+                            things:[1,2,3]},
                  name:"Outer",
                  number:1},
 
@@ -4439,7 +4437,6 @@ test(subdocument_deletes_lists, [
                                              message : "boo"}, Id),
 
     open_descriptor(Desc, Trans),
-    print_all_triples(Desc),
     database_instance(Trans, Inst),
     \+ xrdf(Inst, _, _, _).
 
