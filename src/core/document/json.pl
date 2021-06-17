@@ -4,10 +4,9 @@
               json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
-              get_document/2,
               get_document/3,
+              get_document/4,
               get_document_uri/2,
-              get_schema_document/2,
               get_schema_document/3,
               get_schema_document_uri/2,
               get_document_by_type/3,
@@ -1012,40 +1011,24 @@ get_document_by_type(DB, Type, Document) :-
 
     get_document(DB, Document_Uri, Document).
 
-get_document(Query_Context, Document) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    get_document(TO, Document).
-get_document(Desc, Document) :-
-    is_descriptor(Desc),
-    !,
-    open_descriptor(Desc,Transaction),
-    get_document(Transaction, Document).
-get_document(DB, Document) :-
-    is_simple_class(DB, Class),
-    instance_of(DB, Document_Uri, Class),
-
-    get_document(DB, Document_Uri, Document).
-
 get_document(Resource, Id, Document) :-
-    get_document(Resource, Id, Document, []).
+    get_document(Resource, false, Id, Document).
 
-get_document(Query_Context, Id, Document, Options) :-
+get_document(Query_Context, Compress, Id, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document(TO, Id, Document, Options).
-get_document(Desc, Id, Document, Options) :-
+    get_document(TO, Compress, Id, Document).
+get_document(Desc, Compress, Id, Document) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document(Transaction, Id, Document, Options).
-get_document(DB, Id, Document, Options) :-
+    get_document(Transaction, Compress, Id, Document).
+get_document(DB, Compress, Id, Document) :-
     database_context(DB,Prefixes),
-    get_document(DB, Prefixes, Id, Document, Options).
+    get_document(DB, Prefixes, Compress, Id, Document).
 
-get_document(DB, Prefixes, Id, Document, _Options) :-
+get_document(DB, Prefixes, Compress, Id, Document) :-
     database_instance(DB,Instance),
 
     prefix_expand(Id,Prefixes,Id_Ex),
@@ -1059,15 +1042,21 @@ get_document(DB, Prefixes, Id, Document, _Options) :-
             once(class_predicate_type(DB,Class,P,Type)),
             type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Value),
 
-            compress_schema_uri(P, Prefixes, Prop)
+            (   Compress = true
+            ->  compress_schema_uri(P, Prefixes, Prop)
+            ;   Prop=P)
         ),
         Data),
     !,
-    compress_dict_uri(Id_Ex, Prefixes, Id_comp),
-    compress_schema_uri(Class, Prefixes, Class_comp),
-    dict_create(Document,json,['@id'-Id_comp,
-                               '@type'-Class_comp
-                               |Data]).
+    (   Compress = true
+    ->  compress_dict_uri(Id_Ex, Prefixes, Id_comp),
+        compress_schema_uri(Class, Prefixes, Class_comp),
+        dict_create(Document,json,['@id'-Id_comp,
+                                   '@type'-Class_comp
+                                   |Data])
+    ;   dict_create(Document,json,['@id'-Id_Ex,
+                                   '@type'-Class
+                                   |Data])).
 
 key_descriptor_json(lexical(_, Fields), Prefixes, json{ '@type' : "Lexical",
                                                         '@fields' : Fields_Compressed }) :-
@@ -1167,12 +1156,6 @@ get_schema_document_uri(Desc, ID) :-
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
     is_simple_class(DB, Uri).
-
-get_schema_document(DB, Document) :-
-    get_schema_document(DB, '@context', Document).
-get_schema_document(DB, Document) :-
-    is_simple_class(DB, Class),
-    get_schema_document(DB, Class, Document).
 
 get_schema_document(DB, '@context', Document) :-
     !,

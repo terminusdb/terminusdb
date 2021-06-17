@@ -18,10 +18,9 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
 
-              get_document/2,
               get_document/3,
+              get_document/4,
               get_document_uri/2,
-              get_schema_document/2,
               get_schema_document/3,
               get_schema_document_uri/2,
               get_document_by_type/3,

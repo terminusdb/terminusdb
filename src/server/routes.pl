@@ -1007,14 +1007,18 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ->  As_List = true
     ;   As_List = false),
 
+    (   memberchk(prefixed=false, Search)
+    ->  Prefixed = false
+    ;   Prefixed = true),
+
     Header_Written = written(_),
     (   memberchk(id=Id, Search)
-    ->  api_get_document(System_DB, Auth, Path, Graph_Type, Id, Document),
+    ->  api_get_document(System_DB, Auth, Path, Graph_Type, Prefixed, Id, Document),
         json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
     ;   memberchk(type=Type, Search)
-    ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Type, Skip, Count, Document),
+    ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Prefixed, Type, Skip, Count, Document),
                json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
-    ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Skip, Count, Document),
+    ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Prefixed, Skip, Count, Document),
                json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))),
 
     % ensure the header has been written by now.

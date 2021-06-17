@@ -1,7 +1,7 @@
 :- module(api_document, [
-              api_generate_documents/7,
-              api_generate_documents_by_type/8,
-              api_get_document/6,
+              api_generate_documents/8,
+              api_generate_documents_by_type/9,
+              api_get_document/7,
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
@@ -39,48 +39,48 @@ api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri)
         Skip,
         Count).
 
-api_generate_documents_(instance, Transaction, Skip, Count, Document) :-
+api_generate_documents_(instance, Transaction, Prefixed, Skip, Count, Document) :-
     api_generate_document_uris_(instance, Transaction, Skip, Count, Uri),
-    get_document(Transaction, Uri, Document).
+    get_document(Transaction, Prefixed, Uri, Document).
 
-api_generate_documents_(schema, Transaction, Skip, Count, Document) :-
+api_generate_documents_(schema, Transaction, _Prefixed, Skip, Count, Document) :-
     api_generate_document_uris_(schema, Transaction, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
 
-api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Skip, Count, Document) :-
+api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(resource_does_not_exist(Path), _)),
 
-    api_generate_documents_(Schema_Or_Instance, Transaction, Skip, Count, Document).
+    api_generate_documents_(Schema_Or_Instance, Transaction, Prefixed, Skip, Count, Document).
 
-api_generate_documents_by_type_(schema, Transaction, Type, Skip, Count, Document) :-
+api_generate_documents_by_type_(schema, Transaction, Type, _Prefixed, Skip, Count, Document) :-
     api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
-api_generate_documents_by_type_(instance, Transaction, Type, Skip, Count, Document) :-
+api_generate_documents_by_type_(instance, Transaction, Type, Prefixed, Skip, Count, Document) :-
     api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri),
-    get_document(Transaction, Uri, Document).
+    get_document(Transaction, Prefixed, Uri, Document).
 
-api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Type, Skip, Count, Document) :-
+api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Prefixed, Type, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(resource_does_not_exist(Path), _)),
 
-    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Skip, Count, Document).
+    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Prefixed, Skip, Count, Document).
 
-api_get_document_(instance, Transaction, Id, Document) :-
-    do_or_die(get_document(Transaction, Id, Document),
+api_get_document_(instance, Transaction, Prefixed, Id, Document) :-
+    do_or_die(get_document(Transaction, Prefixed, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document_(schema, Transaction, Id, Document) :-
+api_get_document_(schema, Transaction, _Prefixed, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Id, Document) :-
+api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Id, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -89,7 +89,7 @@ api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Id, Document) :-
 
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(resource_does_not_exist(Path), _)),
-    api_get_document_(Schema_Or_Instance, Transaction, Id, Document).
+    api_get_document_(Schema_Or_Instance, Transaction, Prefixed, Id, Document).
 
 api_insert_document_(schema, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, JSON),
