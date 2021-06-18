@@ -192,6 +192,9 @@ refute_schema(Validation_Object, Witness) :-
 refute_schema(Validation_Object,Witness) :-
     is_simple_class(Validation_Object,Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
+    ;   refute_class_documentation(Validation_Object,Class,Witness)
+    ;   refute_class_key(Validation_Object,Class,Witness)
+    ;   refute_class_meta(Validation_Object,Class,Witness)
     ;   refute_diamond_property(Validation_Object,Class,Witness)).
 
 /* O(n^3)
@@ -281,6 +284,90 @@ is_type_family(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema,Class,rdf:type,Type_Constructor),
     type_family_constructor(Type_Constructor).
+
+refute_class_documentation(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:documentation, Doc),
+    \+ xrdf(Schema, Doc, rdf:type, sys:'Documentation'),
+    Witness = witness{'@type' : not_a_valid_documenation_object,
+                      class: Class,
+                      subject: Doc }.
+refute_class_documentation(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:documentation, Doc),
+    xrdf(Schema, Doc, rdf:type, sys:'Documentation'),
+    xrdf(Schema, Doc, Prop, _),
+    prefix_list([sys:comment, sys:properties, rdf:type], List),
+    (   \+ memberchk(Prop, List)
+    ->  Witness = witness{ '@type' : not_a_valid_documenation_object,
+                           predicate: Prop,
+                           class: Class,
+                           subject: Doc }
+    ;   xrdf(Schema, Doc, sys:properties, Prop_Obj),
+        xrdf(Schema, Prop_Obj, Key, Result),
+        \+ global_prefix_expand(rdf:type, Key),
+        global_prefix_expand(xsd:string, XSD),
+        Result \= _^^XSD,
+        Witness = witness{ '@type' : not_a_valid_property_documentation_object,
+                           predicate: Key,
+                           class: Class,
+                           subject: Prop_Obj }
+    ).
+
+refute_class_key(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:key, Key_Obj),
+    refute_key_obj(Validation_Object,Class,Key_Obj, Witness).
+
+refute_key_obj(Validation_Object,Class,Obj,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Obj, rdf:type, Type),
+    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
+    \+ memberchk(Type, List),
+    Witness = witness{ '@type' : bad_key_type,
+                       class: Class,
+                       key: Obj,
+                       type: Type }.
+refute_key_obj(Validation_Object,Class,Obj,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Obj, rdf:type, Type),
+    prefix_list([sys:'Lexical', sys:'Hash'], List),
+    memberchk(Type, List),
+    (   xrdf(Schema, Obj, sys:fields, List_Obj)
+    ->  (   rdf_list(Validation_Object,List_Obj,Fields)
+        ->  member(Field,Fields),
+            \+ class_predicate_type(Validation_Object, Class, Field, _),
+            Witness = witness{ '@type' : key_field_does_not_exist,
+                               field: Field,
+                               class: Class,
+                               key: Obj,
+                               type: Type }
+        ;   Witness = witness{ '@type' : fields_not_a_valid_list_in_key,
+                               class: Class,
+                               key: Obj,
+                               type: Type })
+    ;   Witness = witness{ '@type' : no_fields_in_key,
+                           class: Class,
+                           key: Obj,
+                           type: Type }
+    ).
+
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:abstract, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_abstract_value,
+                       class: Class,
+                       value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:subdocument, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_subdocument_value,
+                       class: Class,
+                       value: Result }.
 
 refute_property(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
