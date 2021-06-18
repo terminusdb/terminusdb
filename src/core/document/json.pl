@@ -389,7 +389,9 @@ value_expand_list([Value|Vs], DB, Path, Context, Elt_Type, [Expanded|Exs]) :-
         Prepared = json{'@id' : Enum_Value_Ex,
                         '@type' : "@id"}
     ;   is_dict(Value)
-    ->  put_dict(json{'@type':Elt_Type}, Value, Prepared)
+    ->  (   get_dict('@type', Value, _)
+        ->  Value = Prepared % existing type could be more specific
+        ;   put_dict(json{'@type':Elt_Type}, Value, Prepared))
     ;   is_base_type(Elt_Type)
     ->  Prepared = json{'@value' : Value,
                         '@type': Elt_Type}
@@ -1053,10 +1055,15 @@ type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
 type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
-type_id_predicate_iri_value(base_class(_),_,_,X^^T,_,_,S) :-
+type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,Prefixes,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
-    value_type_json_type(X,T,S,_).
+    (   C = T % The type is not just subsumed but identical - no ambiguity.
+    ->  value_type_json_type(X,T,V,_)
+    ;   value_type_json_type(X,T,D,T2),
+        compress_dict_uri(T2,Prefixes,T2C),
+        V = json{ '@type' : T2C, '@value' : D}
+    ).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     (   get_dict('@schema',Prefixes,Schema),
@@ -4416,10 +4423,15 @@ test(subsumption_insert,
 
     get_document(Desc, Id, JSON2),
 
-    JSON2 = json{'@id':'Subsumption_5894f172e060e3787b8045c17099266d55e3ffb1',
-                 '@type':'Subsumption',
-                 child:'NodeValue_06b4d0fa679ceabdee9afa804863c88676f742f2',
-                 parent:'NodeValue_7aa5900abf5ed338b866b67bbcb1983dbda01b54'}.
+    JSON2 =
+    json{'@id':'Subsumption_5894f172e060e3787b8045c17099266d55e3ffb1',
+         '@type':'Subsumption',
+         child:json{'@id':'NodeValue_06b4d0fa679ceabdee9afa804863c88676f742f2',
+                    '@type':'NodeValue',
+                    node:"system:Organization"},
+         parent:json{'@id':'NodeValue_7aa5900abf5ed338b866b67bbcb1983dbda01b54',
+                     '@type':'NodeValue',
+                     variable:"Parent"}}.
 
 test(substring_insert, [
          setup(
@@ -4428,8 +4440,7 @@ test(substring_insert, [
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         fixme('still not wrapping upcasted values')
+         )
      ]) :-
 
     JSON = _{'@type' : "Substring",
@@ -4450,27 +4461,90 @@ test(substring_insert, [
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
-    print_all_triples(Desc),
-
     get_document(Desc, Id, JSON2),
     JSON2 =
     json{'@id':'Substring_76855fec5024f7283ca349d703b6d8b9625ad6ec',
          '@type':'Substring',
          after:json{'@id':'DataValue_c6cad64a9ce466e1446690f74a034ff7153a4639',
                     '@type':'DataValue',
-                    data: json{ '@type' : "xsd:integer", '@value' : 1}},
+                    data:json{'@type':'xsd:integer',
+                              '@value':1}},
          before:json{'@id':'DataValue_c6cad64a9ce466e1446690f74a034ff7153a4639',
                      '@type':'DataValue',
-                     data: json{ '@type' : "xsd:integer", '@value' : 1}},
+                     data:json{'@type':'xsd:integer',
+                               '@value':1}},
          length:json{'@id':'DataValue_1e4318564a1db6dac877ee9497689ab0511cb324',
                      '@type':'DataValue',
                      variable:"Length"},
          string:json{'@id':'DataValue_8995245f7d5bdcd9ea99110575f9144c589eb997',
                      '@type':'DataValue',
-                     data: json{ '@type' : "xsd:string", '@value' : "Test"}},
+                     data:json{'@type':'xsd:string',
+                               '@value':"Test"}},
          substring:json{'@id':'DataValue_8361dd40f8b523a0243ebf7f2b55e19ce68a752d',
                         '@type':'DataValue',
                         variable:"Substring"}}.
+
+test(named_parametric_query, [
+         setup(
+             (   setup_temp_store(State),
+                 test_woql_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Query = _{ '@type': "NamedParametricQuery",
+               name: "user_name_uri",
+               parameters: ["User_Name", "URI"],
+               query: _{ '@type': "And",
+                         and: [_{'@type' : "Data",
+                                 subject: _{'@type' : "NodeValue",
+                                            variable: "URI"},
+                                 predicate: _{'@type' : "NodeValue",
+                                              node: name},
+                                 object: _{'@type' : "DataValue",
+                                           variable: "User_Name"}},
+                               _{'@type': "IsA",
+                                 element: _{'@type': "NodeValue",
+                                            variable: "URI"},
+                                 type: _{'@type': "NodeValue",
+                                         node : "User"}}]}},
+
+    run_insert_document(Desc, commit_object{ author : "me",
+                                             message : "boo"}, Query, Id),
+
+    get_document(Desc, Id, JSON2),
+
+    JSON2 = json{'@id':'NamedParametricQuery_user_name_uri',
+                 '@type':'NamedParametricQuery',
+                 name:"user_name_uri",
+                 parameters:["User_Name","URI"],
+                 query:
+                 json{'@id':'And_baaf3afcb1550fca6f056c2320ac1985a788e880',
+                      '@type':'And',
+                      and:[json{'@id':'Data_5bede08c2f7d67926360a3354506e3185abb4289',
+                                '@type':'Data',
+                                object:
+                                json{'@id':'DataValue_d297b13d259bb2907ab4ee4765630d16c70dbbd0',
+                                     '@type':'DataValue',
+                                     variable:"User_Name"},
+                                predicate:
+                                json{'@id':'NodeValue_6c8cfac7a2f90775aef8d87c3b8bff1cf5b785dd',
+                                     '@type':'NodeValue',
+                                     node:"name"},
+                                subject:
+                                json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
+                                     '@type':'NodeValue',
+                                     variable:"URI"}},
+                           json{'@id':'IsA_455780e860a42ee2fc5d079dd421cacaeed85197',
+                                '@type':'IsA',
+                                element:json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
+                                             '@type':'NodeValue',
+                                             variable:"URI"},
+                                type:json{'@id':'NodeValue_aa894772405b3e0a4d2e86351103d65a7b906b17',
+                                          '@type':'NodeValue',
+                                          node:"User"}}]}}.
+
 
 :- end_tests(woql_document).
 
