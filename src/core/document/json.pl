@@ -4098,6 +4098,42 @@ test(comment_elaborate,
                shape:'xsd:string',
                species:'xsd:string'}.
 
+
+test(bad_documentation,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure([witness{'@type':invalid_property_in_property_documentation_object,class:'http://s/Not_A_Squash',predicate:'http://s/shape',subject:'http://s/Not_A_Squash_Documentation_PropertyDocumentation_shape'}])
+         )
+     ]) :-
+
+    Document =
+    _{ '@id' : "Not_A_Squash",
+       '@type' : "Class",
+       '@documentation' :
+       _{ '@comment' : "Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
+          '@properties' : [
+              _{ genus : "The genus of the Cucurtiba is always Cucurtiba"},
+              _{ shape: "Round, Silly, or very silly!" }
+          ]},
+       genus : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
+    with_transaction(
+        Context2,
+        insert_schema_document(Context2, Document),
+        _
+    ).
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).

@@ -307,11 +307,17 @@ refute_class_documentation(Validation_Object,Class,Witness) :-
         xrdf(Schema, Prop_Obj, Key, Result),
         \+ global_prefix_expand(rdf:type, Key),
         global_prefix_expand(xsd:string, XSD),
-        Result \= _^^XSD,
-        Witness = witness{ '@type' : not_a_valid_property_documentation_object,
-                           predicate: Key,
-                           class: Class,
-                           subject: Prop_Obj }
+        (   Result \= _^^XSD
+        ->  Witness = witness{ '@type' : not_a_valid_property_documentation_object,
+                               predicate: Key,
+                               class: Class,
+                               subject: Prop_Obj }
+        ;   \+ class_predicate_type(Validation_Object,Class,Key,_),
+            Witness = witness{ '@type' : invalid_property_in_property_documentation_object,
+                               predicate: Key,
+                               class: Class,
+                               subject: Prop_Obj }
+        )
     ).
 
 refute_class_key(Validation_Object,Class,Witness) :-
