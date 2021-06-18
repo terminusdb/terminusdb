@@ -422,12 +422,14 @@ context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
-context_value_expand(_,_Context,_Path,Value,_Expansion,V) :-
+context_value_expand(_,Context,_Path,Value,_Expansion,V) :-
     % An already expanded typed value
     is_dict(Value),
-    get_dict('@value',Value,_),
+    get_dict('@value',Value, Elt),
+    get_dict('@type',Value, Type),
+    prefix_expand(Type,Context,Type_Ex),
     !,
-    V = Value.
+    V = json{'@value' : Elt, '@type' : Type_Ex}.
 context_value_expand(DB,_Context,_Path,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
@@ -1016,7 +1018,8 @@ list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,[V|L]) :-
     list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,L).
 
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,O) :-
-    merge_separator_split(V, '_', [C,O]).
+    atom_concat(C, Rest, V),
+    atom_concat('_', O, Rest).
 type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
@@ -4110,7 +4113,11 @@ test(bad_documentation,
              teardown_temp_store(State)
          ),
          error(
-             schema_check_failure([witness{'@type':invalid_property_in_property_documentation_object,class:'http://s/Not_A_Squash',predicate:'http://s/shape',subject:'http://s/Not_A_Squash_Documentation_PropertyDocumentation_shape'}])
+             schema_check_failure(
+                 [witness{'@type':invalid_property_in_property_documentation_object,
+                          class:'http://s/Not_A_Squash',
+                          predicate:'http://s/shape',
+                          subject:'http://s/Not_A_Squash_Documentation_PropertyDocumentation_shape'}])
          )
      ]) :-
 
@@ -4422,24 +4429,48 @@ test(substring_insert, [
          cleanup(
              teardown_temp_store(State)
          ),
-         blocked('Something wrong with the definition of Substring')
+         fixme('still not wrapping upcasted values')
      ]) :-
 
     JSON = _{'@type' : "Substring",
-             string : _{ data : _{'@type' : "xsd:string",
+             string : _{ '@type' : "DataValue",
+                         data : _{'@type' : "xsd:string",
                                   '@value' : "Test"}},
-             before : _{ data : _{'@type' : "xsd:integer",
+             before : _{ '@type' : "DataValue",
+                         data : _{'@type' : "xsd:integer",
                                   '@value' : 1}},
-             length : _{ variable : "Length"},
-             after : _{ data : _{'@type' : "xsd:integer",
+             length : _{ '@type' : "DataValue",
+                         variable : "Length"},
+             after : _{ '@type' : "DataValue",
+                        data : _{'@type' : "xsd:integer",
                                  '@value' : 1}},
-             substring : _{ variable : "Substring" }},
+             substring : _{ '@type' : "DataValue",
+                            variable : "Substring" }},
 
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
+    print_all_triples(Desc),
+
     get_document(Desc, Id, JSON2),
-    writeq(JSON2).
+    JSON2 =
+    json{'@id':'Substring_76855fec5024f7283ca349d703b6d8b9625ad6ec',
+         '@type':'Substring',
+         after:json{'@id':'DataValue_c6cad64a9ce466e1446690f74a034ff7153a4639',
+                    '@type':'DataValue',
+                    data: json{ '@type' : "xsd:integer", '@value' : 1}},
+         before:json{'@id':'DataValue_c6cad64a9ce466e1446690f74a034ff7153a4639',
+                     '@type':'DataValue',
+                     data: json{ '@type' : "xsd:integer", '@value' : 1}},
+         length:json{'@id':'DataValue_1e4318564a1db6dac877ee9497689ab0511cb324',
+                     '@type':'DataValue',
+                     variable:"Length"},
+         string:json{'@id':'DataValue_8995245f7d5bdcd9ea99110575f9144c589eb997',
+                     '@type':'DataValue',
+                     data: json{ '@type' : "xsd:string", '@value' : "Test"}},
+         substring:json{'@id':'DataValue_8361dd40f8b523a0243ebf7f2b55e19ce68a752d',
+                        '@type':'DataValue',
+                        variable:"Substring"}}.
 
 :- end_tests(woql_document).
 
