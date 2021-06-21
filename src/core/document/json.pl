@@ -1014,53 +1014,56 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
-list_type_id_predicate_value([],_,_,_,_,_,[]).
-list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,[V|L]) :-
-    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,V),
-    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,L).
+list_type_id_predicate_value([],_,_,_,_,_,_,[]).
+list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Compress,[V|L]) :-
+    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Compress,V),
+    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Compress,L).
 
-type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,O) :-
+type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,O) :-
     atom_concat(C, Rest, V),
     atom_concat('_', O, Rest).
-type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,L) :-
+type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,Compress,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
     rdf_list_list(Instance,O,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
+type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,Compress,L) :-
     array_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
+type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Compress,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
+type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,Compress,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,L).
-type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Value) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
+type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Compress,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, true, Id, Value)
+    ->  get_document(DB, Prefixes, Compress, Id, Value)
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
-type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Value) :-
+type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Compress,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, true, Id, Value)
+    ->  get_document(DB, Prefixes, Compress, Id, Value)
     ;   compress_dict_uri(Id, Prefixes, Value)
     ).
-type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,V) :-
+type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,Compress,V) :-
     type_descriptor(DB,C,Desc),
-    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,V).
-type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,Prefixes,V) :-
+    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,Compress,V).
+type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,Prefixes,_Compress,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = T % The type is not just subsumed but identical - no ambiguity.
     ->  value_type_json_type(X,T,V,_)
     ;   value_type_json_type(X,T,D,T2),
+        % NOTE: We're always compressing, even if Compress is false
+        % The reason here is that this is a datatype property, not a node of our own.
+        % We may want to revisit this logic though.
         compress_dict_uri(T2,Prefixes,T2C),
         V = json{ '@type' : T2C, '@value' : D}
     ).
@@ -1157,7 +1160,7 @@ get_document(DB, Prefixes, Compress, Id, Document) :-
             \+ is_built_in(P),
 
             once(class_predicate_type(DB,Class,P,Type)),
-            type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Value),
+            type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Compress,Value),
 
             (   Compress = true
             ->  compress_schema_uri(P, Prefixes, Prop)
