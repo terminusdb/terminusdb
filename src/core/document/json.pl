@@ -1304,9 +1304,8 @@ get_schema_document_uri(DB, Uri) :-
 get_schema_document(DB, '@context', Document) :-
     !,
     database_context(DB, DB_Prefixes),
-    get_schema_document(DB, 'terminusdb://context', Document_1),
-    Document_2 = (Document_1.put('@type', '@context')),
-    Document = (Document_2.put(DB_Prefixes)).
+    % TODO: should database_context even return an object where type is Context instead of @context?
+    Document = (DB_Prefixes.put('@type', '@context')).
 get_schema_document(DB, Id, Document) :-
     database_context(DB, DB_Prefixes),
     default_prefixes(Defaults),
