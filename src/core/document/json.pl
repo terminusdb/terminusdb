@@ -6,7 +6,7 @@
               json_schema_elaborate/3,
               get_document/3,
               get_document/5,
-              get_document_uri/2,
+              get_document_uri/3,
               get_schema_document/3,
               get_schema_document_uri/2,
               get_document_by_type/3,
@@ -1083,18 +1083,21 @@ compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     !.
 compress_schema_uri(IRI,_Prefixes,IRI).
 
-get_document_uri(Query_Context, ID) :-
+get_document_uri(Query_Context, Include_Subdocuments, ID) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document_uri(TO, ID).
-get_document_uri(Desc, ID) :-
+    get_document_uri(TO, Include_Subdocuments, ID).
+get_document_uri(Desc, Include_Subdocuments, ID) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document_uri(Transaction, ID).
-get_document_uri(DB, Uri) :-
+    get_document_uri(Transaction, Include_Subdocuments, ID).
+get_document_uri(DB, Include_Subdocuments, Uri) :-
     is_simple_class(DB, Class),
+    (   Include_Subdocuments = true
+    ->  true
+    ;   \+ is_subdocument(DB, Class)),
     instance_of(DB, Uri, Class).
 
 get_document_uri_by_type(Query_Context, Type, Uri) :-

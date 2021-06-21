@@ -19,7 +19,7 @@
 
 api_generate_document_uris_(instance, Transaction, Skip, Count, Uri) :-
     skip_generate_nsols(
-        get_document_uri(Transaction, Uri),
+        get_document_uri(Transaction, false, Uri),
         Skip,
         Count).
 api_generate_document_uris_(schema, Transaction, Skip, Count, Uri) :-
