@@ -7,7 +7,6 @@
 
 { "@id" : "layer:Layer",
   "@type" : "Class",
-  "@subdocument" : [],
   "@base" : "layer_data:Layer_",
   "@key" : { "@type" : "ValueHash" },
   "layer:identifier" : "xsd:string" }
