@@ -1423,7 +1423,16 @@ replace_json_schema(Query_Context, Stream) :-
 
 write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     !,
-    json_read_dict(JSON_Stream, Context, [default_tag(json),end_of_file(eof)]),
+    json_read_dict(JSON_Stream, JSON, [default_tag(json),end_of_file(eof)]),
+
+    % First object could be a list, in which case we treat the list as the full schema
+    (   JSON = eof
+    ->  Context =eof
+    ;   JSON = []
+    ->  Context = eof
+    ;   is_list(JSON)
+    ->  [Context|Rest] = JSON
+    ;   Context = JSON),
 
     (   Context = eof
     ;   is_dict(Context),
@@ -1444,7 +1453,9 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     put_dict(Context,Prefixes,Expanded_Context),
 
     forall(
-        json_read_dict_stream(JSON_Stream, Dict),
+        (   var(Rest)
+        ->  json_read_dict_stream(JSON_Stream, Dict)
+        ;   member(Dict, Rest)),
         (
             forall(
                 json_schema_triple(Dict,Expanded_Context,t(S,P,O)),
