@@ -19,7 +19,7 @@
               replace_json_schema/2,
 
               get_document/3,
-              get_document/4,
+              get_document/5,
               get_document_uri/2,
               get_schema_document/3,
               get_schema_document_uri/2,

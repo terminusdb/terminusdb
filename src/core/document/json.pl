@@ -5,7 +5,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
-              get_document/4,
+              get_document/5,
               get_document_uri/2,
               get_schema_document/3,
               get_schema_document_uri/2,
@@ -1014,48 +1014,54 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
-list_type_id_predicate_value([],_,_,_,_,_,_,[]).
-list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Compress,[V|L]) :-
-    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Compress,V),
-    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Compress,L).
+list_type_id_predicate_value([],_,_,_,_,_,_,_,[]).
+list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Compress,Unfold,[V|L]) :-
+    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Compress,Unfold,V),
+    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Compress,Unfold,L).
 
-type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,O) :-
+type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,O) :-
     atom_concat(C, Rest, V),
     atom_concat('_', O, Rest).
-type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,Compress,L) :-
+type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,Compress,Unfold,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
     rdf_list_list(Instance,O,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
-type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,Compress,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,Unfold,L).
+type_id_predicate_iri_value(array(C),Id,P,_,DB,Prefixes,Compress,Unfold,L) :-
     array_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
-type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Compress,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,Unfold,L).
+type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Compress,Unfold,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
-type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,Compress,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,Unfold,L).
+type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,Compress,Unfold,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,L).
-type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Compress,Value) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Compress,Unfold,L).
+type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Compress,Unfold,Value) :-
     (   instance_of(DB, Id, C),
-        is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Compress, Id, Value)
-    ;   compress_dict_uri(Id, Prefixes, Value)
+        is_subdocument(DB, C),
+        Unfold = true
+    ->  get_document(DB, Prefixes, Compress, Unfold, Id, Value)
+    ;   Compress = true
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
     ).
-type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Compress,Value) :-
+type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Compress,Unfold,Value) :-
     (   instance_of(DB, Id, C),
-        is_subdocument(DB, C)
-    ->  get_document(DB, Prefixes, Compress, Id, Value)
-    ;   compress_dict_uri(Id, Prefixes, Value)
+        is_subdocument(DB, C),
+        Unfold = true
+    ->  get_document(DB, Prefixes, Compress, Unfold, Id, Value)
+    ;   Compress = true
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
     ).
-type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,Compress,V) :-
+type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,Compress,Unfold,V) :-
     type_descriptor(DB,C,Desc),
-    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,Compress,V).
-type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,Prefixes,_Compress,V) :-
+    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,Compress,Unfold,V).
+type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,Prefixes,_Compress,_Unfold,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = T % The type is not just subsumed but identical - no ambiguity.
@@ -1132,23 +1138,23 @@ get_document_by_type(DB, Type, Document) :-
     get_document(DB, Document_Uri, Document).
 
 get_document(Resource, Id, Document) :-
-    get_document(Resource, true, Id, Document).
+    get_document(Resource, true, true, Id, Document).
 
-get_document(Query_Context, Compress, Id, Document) :-
+get_document(Query_Context, Compress, Unfold, Id, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document(TO, Compress, Id, Document).
-get_document(Desc, Compress, Id, Document) :-
+    get_document(TO, Compress, Unfold, Id, Document).
+get_document(Desc, Compress, Unfold, Id, Document) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document(Transaction, Compress, Id, Document).
-get_document(DB, Compress, Id, Document) :-
+    get_document(Transaction, Compress, Unfold, Id, Document).
+get_document(DB, Compress, Unfold, Id, Document) :-
     database_context(DB,Prefixes),
-    get_document(DB, Prefixes, Compress, Id, Document).
+    get_document(DB, Prefixes, Compress, Unfold, Id, Document).
 
-get_document(DB, Prefixes, Compress, Id, Document) :-
+get_document(DB, Prefixes, Compress, Unfold, Id, Document) :-
     database_instance(DB,Instance),
 
     prefix_expand(Id,Prefixes,Id_Ex),
@@ -1160,7 +1166,7 @@ get_document(DB, Prefixes, Compress, Id, Document) :-
             \+ is_built_in(P),
 
             once(class_predicate_type(DB,Class,P,Type)),
-            type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Compress,Value),
+            type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Compress,Unfold,Value),
 
             (   Compress = true
             ->  compress_schema_uri(P, Prefixes, Prop)

@@ -117,9 +117,9 @@
               unbundle/4,
 
               % api_document.pl
-              api_generate_documents/8,
-              api_generate_documents_by_type/9,
-              api_get_document/7,
+              api_generate_documents/9,
+              api_generate_documents_by_type/10,
+              api_get_document/8,
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
