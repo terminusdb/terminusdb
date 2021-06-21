@@ -17,12 +17,15 @@
 
 :- use_module(library(http/json)).
 
-api_generate_document_uris_(instance, Transaction, Skip, Count, Uri) :-
+api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri) :-
+    (   Unfold = true
+    ->  Include_Subdocuments = false
+    ;   Include_Subdocuments = true),
     skip_generate_nsols(
-        get_document_uri(Transaction, false, Uri),
+        get_document_uri(Transaction, Include_Subdocuments, Uri),
         Skip,
         Count).
-api_generate_document_uris_(schema, Transaction, Skip, Count, Uri) :-
+api_generate_document_uris_(schema, Transaction, _Unfold, Skip, Count, Uri) :-
     skip_generate_nsols(
         get_schema_document_uri(Transaction, Uri),
         Skip,
@@ -40,11 +43,11 @@ api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri)
         Count).
 
 api_generate_documents_(instance, Transaction, Prefixed, Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_(instance, Transaction, Skip, Count, Uri),
+    api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri),
     get_document(Transaction, Prefixed, Unfold, Uri, Document).
 
-api_generate_documents_(schema, Transaction, _Prefixed, _Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_(schema, Transaction, Skip, Count, Uri),
+api_generate_documents_(schema, Transaction, _Prefixed, Unfold, Skip, Count, Document) :-
+    api_generate_document_uris_(schema, Unfold, Transaction, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
 
 api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Skip, Count, Document) :-
