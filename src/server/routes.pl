@@ -981,45 +981,75 @@ json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
     ;   nl).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
+    % TODO This possibly throws a json error, which gets reinterpreted
+    % as a schema check failure for some reason. gotta fix that.
+    (   json_content_type(Request),
+        memberchk(content_length(_), Request)
+    ->  http_read_data(Request, Posted, [json_object(dict)])
+    ;   Posted = {}),
+
+    do_or_die(is_dict(Posted),
+              error(posted_data_is_not_a_dictionary(Posted),_)),
+
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
 
-    (   memberchk(graph_type=Graph_Type, Search)
+    (   get_dict(graph_type, Posted, Graph_Type)
+    ->  true
+    ;   memberchk(graph_type=Graph_Type, Search)
     ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
                   error(unknown_graph_type(Graph_Type),_))
     ;   Graph_Type = instance),
 
-    (   memberchk(skip=Skip_Atom, Search)
+    (   (   get_dict(skip, Posted, Skip_Atom)
+        ->  true
+        ;   memberchk(skip=Skip_Atom, Search))
     ->  do_or_die(atom_number(Skip_Atom, Skip),
                   error(skip_is_not_a_number(Skip_Atom), _))
     ;   Skip = 0),
-    (   memberchk(count=Count_Atom, Search)
+    (   (   get_dict(count, Posted, Count_Atom)
+        ->  true
+        ;   memberchk(count=Count_Atom, Search))
     ->  do_or_die(atom_number(Count_Atom, Count),
                   error(count_is_not_a_number(Count_Atom), _))
     ;   Count = unlimited),
 
-    (   memberchk(minimized=true, Search)
+    (   (   get_dict(minimized, Posted, true)
+        ->  true
+        ;   memberchk(minimized=true, Search))
     ->  JSON_Options = [width(0)]
     ;   JSON_Options = []),
 
-    (   memberchk(as_list=true, Search)
+    (   (   get_dict(as_list, Posted, true)
+        ->  true
+        ;   memberchk(as_list=true, Search))
     ->  As_List = true
     ;   As_List = false),
 
-    (   memberchk(prefixed=false, Search)
+    (   (   get_dict(prefixed, Posted, false)
+        ->  true
+        ;   memberchk(prefixed=false, Search))
     ->  Prefixed = false
     ;   Prefixed = true),
 
-    (   memberchk(unfold=false, Search)
+    (   (   get_dict(unfold, Posted, false)
+        ->  true
+        ;   memberchk(unfold=false, Search))
     ->  Unfold = false
     ;   Unfold = true),
 
+    ignore((   get_dict(id, Posted, Id)
+           ;   memberchk(id=Id, Search))),
+
+    ignore((   get_dict(type, Posted, Type)
+           ;   memberchk(type=Type, Search))),
+
     Header_Written = written(_),
-    (   memberchk(id=Id, Search)
+    (   ground(Id)
     ->  api_get_document(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Id, Document),
         json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
-    ;   memberchk(type=Type, Search)
+    ;   ground(Type)
     ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document),
                json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
     ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Skip, Count, Document),
@@ -1032,6 +1062,10 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ->  format("~n]~n")
     ;   true).
 
+document_handler(post, Path, Request, System_DB, Auth) :-
+    memberchk(x_http_method_override('GET'), Request),
+    !,
+    document_handler(get, Path, Request, System_DB, Auth).
 document_handler(post, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
