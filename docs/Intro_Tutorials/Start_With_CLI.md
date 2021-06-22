@@ -2,7 +2,7 @@
 
 The TerminusDB command line tool allows you to access much of the
 functionality of the API directly from a shell. The complete man page
-for the CLI tool is (here)[../CLI.md].
+for the CLI tool is [here](../CLI.md).
 
 The TerminusDB CLI executable `terminusdb` is structured into 'commands' and 'sub
 commands'. Assuming that the executable is in your path you can
@@ -100,7 +100,7 @@ $ ./terminusdb branch create admin/foo/local/branch/new -o admin/foo/local/branc
 
 When we create a new branch, we need to specify the full path
 `<organisation>/<dbid>/<repository>/branch/<branchid>`. (For more on
-resource paths see: (Graphs)[../Explanation/GRAPHS.md]).
+resource paths see: [Graphs](../Explanation/GRAPHS.md)).
 
 The `local` repository is the one we're interested in, so we use that
 in the path. We then specify the name of the new branch we are
