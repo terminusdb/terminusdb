@@ -986,7 +986,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     (   json_content_type(Request),
         memberchk(content_length(_), Request)
     ->  http_read_data(Request, Posted, [json_object(dict)])
-    ;   Posted = {}),
+    ;   Posted = _{}),
 
     do_or_die(is_dict(Posted),
               error(posted_data_is_not_a_dictionary(Posted),_)),
