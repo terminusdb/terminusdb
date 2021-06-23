@@ -4787,7 +4787,7 @@ test(plus_doc_delete, [
     run_delete_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, Id),
 
-    \+ get_document_uri(Desc, Id).
+    \+ get_document_uri(Desc, true, Id).
 
 test(subdocument_deletes_lists, [
          setup(
