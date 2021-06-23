@@ -47,7 +47,7 @@ api_generate_documents_(instance, Transaction, Prefixed, Unfold, Skip, Count, Do
     get_document(Transaction, Prefixed, Unfold, Uri, Document).
 
 api_generate_documents_(schema, Transaction, _Prefixed, Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_(schema, Unfold, Transaction, Skip, Count, Uri),
+    api_generate_document_uris_(schema, Transaction, Unfold, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
 
 api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Skip, Count, Document) :-
