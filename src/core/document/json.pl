@@ -531,14 +531,14 @@ key_id(JSON,Context,Path,ID) :-
     merge_separator_split(Merged,'_',Encoded),
     prefix_expand_schema(Merged,Context,ID).
 
-property_part(JSON,Key) :-
-    get_dict(Key, JSON, _),
-    \+ memberchk(Key, ['@id', '@type']),
-    !.
+property_part(JSON,Keys) :-
+    dict_pairs(JSON, _, Pairs),
+    convlist([Key-_,Key]>>(\+ memberchk(Key, ['@id', '@type'])), Pairs, Keys).
 
 property_id(JSON,Context,Path,ID) :-
-    property_part(JSON,Property),
-    reverse([Property|Path],Rev),
+    property_part(JSON,Keys),
+    append(Keys,Path,Res),
+    reverse(Res,Rev),
     maplist(uri_encoded(path),Rev,Encoded),
     merge_separator_split(Merged,'_',Encoded),
     prefix_expand_schema(Merged,Context,ID).
@@ -710,32 +710,24 @@ json_schema_elaborate_documentation(V,Context,Path,Result2) :-
     documentation_id(Context,Path,Doc_Id),
     Result = json{'@id' : Doc_Id,
                    '@type' : Documentation_Ex},
-    global_prefix_expand(sys:'properties',PropertiesP),
-    Result1 = (Result.put(PropertiesP, Properties)),
 
     (   get_dict('@comment', V, Comment_Text)
     ->  wrap_text(Comment_Text, Comment),
         global_prefix_expand(sys:'comment',CommentP),
-        Result2 = Result1.put(CommentP, Comment)
-    ;   Result2 = Result1
+        Result1 = Result.put(CommentP, Comment)
+    ;   Result1 = Result
     ),
 
-    (   get_dict('@properties',V,List)
-    ->  maplist(
-            json_schema_elaborate_property_documentation(Context,['PropertyDocumentation',
-                                                                  'Documentation'
-                                                                  |Path]),
-            List, Properties_List),
-        Properties  = json{
-                          '@container' : "@set",
-                          '@type' : "@id",
-                          '@value' : Properties_List
-                      }
-    ;   Properties  = json{
-                          '@container' : "@set",
-                          '@type' : "@id",
-                          '@value' : []
-                      }).
+    (   get_dict('@properties',V,Property_Obj)
+    ->  global_prefix_expand(sys:'properties',PropertiesP),
+        json_schema_elaborate_property_documentation(Context,
+                                                     ['PropertyDocumentation',
+                                                      'Documentation'
+                                                      |Path],
+                                                     Property_Obj,
+                                                     Property_Obj2),
+        Result2 = (Result1.put(PropertiesP,Property_Obj2))
+    ;   Result2 = Result1).
 
 json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     !,
@@ -1206,14 +1198,15 @@ key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
 documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Result) :-
     Template = json{ '@comment' : Comment},
-    (   Properties = []
+    (   Properties = json{}
     ->  Result = Template
-    ;   maplist({Prefixes}/[Prop-Comment,JSON]>>(
-                    compress_schema_uri(Prop, Prefixes, Small),
-                    dict_pairs(JSON,json,[Small-Comment])
+    ;   dict_pairs(Properties, _, Pairs),
+        maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
+                    compress_schema_uri(Prop, Prefixes, Small)
                 ),
-                Properties,
-                JSONs),
+                Pairs,
+                JSON_Pairs),
+        dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@properties', JSONs))
     ).
 
@@ -4035,12 +4028,11 @@ test(comment_elaborate,
                    '@fields' : ["genus", "species"] },
        '@documentation' :
        _{ '@comment' : "Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
-          '@properties' : [
-              _{ genus : "The genus of the Cucurtiba is always Cucurtiba"},
-              _{ species : "There are between 13 and 30 species of Cucurtiba"},
-              _{ colour: "Red, Green, Brown, Yellow, lots of things here."},
-              _{ shape: "Round, Silly, or very silly!" }
-          ]},
+          '@properties' : _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
+                             species : "There are between 13 and 30 species of Cucurtiba",
+                             colour: "Red, Green, Brown, Yellow, lots of things here.",
+                             shape: "Round, Silly, or very silly!" }
+        },
        genus : "xsd:string",
        species : "xsd:string",
        name : "xsd:string",
@@ -4057,51 +4049,36 @@ test(comment_elaborate,
     json{'@id':'https://s/Squash',
          '@type':'http://terminusdb.com/schema/sys#Class',
          'http://terminusdb.com/schema/sys#documentation':
-         json{'http://terminusdb.com/schema/sys#comment':
+         json{'@id':'https://s/Squash_Documentation',
+              '@type':'http://terminusdb.com/schema/sys#Documentation',
+              'http://terminusdb.com/schema/sys#comment':
               json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                    '@value':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica."},
-              '@id':'https://s/Squash_Documentation',
-              'http://terminusdb.com/schema/sys#properties'
-              :json{'@container':"@set",
-                    '@type':"@id",
-                    '@value':[json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_genus','@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
-                                   'https://s/genus':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                          '@value':"The genus of the Cucurtiba is always Cucurtiba"}},
-                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_species',
-                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
-                                   'https://s/species':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                            '@value':"There are between 13 and 30 species of Cucurtiba"}},
-                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_colour',
-                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
-                                   'https://s/colour':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                           '@value':"Red, Green, Brown, Yellow, lots of things here."}},
-                              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_shape',
-                                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
-                                   'https://s/shape':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                                          '@value':"Round, Silly, or very silly!"}}
-                             ]},
-              '@type':'http://terminusdb.com/schema/sys#Documentation'},
-         'http://terminusdb.com/schema/sys#key':
-         json{'@id':'https://s/Squash_Lexical_genus_species',
-              '@type':'http://terminusdb.com/schema/sys#Lexical',
-              'http://terminusdb.com/schema/sys#fields':
-              json{'@container':"@list",
-                   '@type':"@id",
-                   '@value':[json{'@id':'https://s/genus',
-                                  '@type':"@id"},
-                             json{'@id':'https://s/species',
-                                  '@type':"@id"}]}},
-         'https://s/colour':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-                                 '@type':"@id"},
-         'https://s/genus':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-                                '@type':"@id"},
-         'https://s/name':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-                               '@type':"@id"},
-         'https://s/shape':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-                                '@type':"@id"},
-         'https://s/species':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-                                  '@type':"@id"}},
-
+              'http://terminusdb.com/schema/sys#properties':
+              json{'@id':'https://s/Squash_Documentation_PropertyDocumentation_species_shape_genus_colour',
+                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+                   'https://s/colour':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                           '@value':"Red, Green, Brown, Yellow, lots of things here."},
+                   'https://s/genus':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                          '@value':"The genus of the Cucurtiba is always Cucurtiba"},
+                   'https://s/shape':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                          '@value':"Round, Silly, or very silly!"},
+                   'https://s/species':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                            '@value':"There are between 13 and 30 species of Cucurtiba"}}},
+         'http://terminusdb.com/schema/sys#key':json{'@id':'https://s/Squash_Lexical_genus_species',
+                                                     '@type':'http://terminusdb.com/schema/sys#Lexical',
+                                                     'http://terminusdb.com/schema/sys#fields':
+                                                     json{'@container':"@list",
+                                                          '@type':"@id",
+                                                          '@value':[json{'@id':'https://s/genus',
+                                                                         '@type':"@id"},
+                                                                    json{'@id':'https://s/species',
+                                                                         '@type':"@id"}]}},
+         'https://s/colour':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
+         'https://s/genus':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
+         'https://s/name':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
+         'https://s/shape':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
+         'https://s/species':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"}},
 
     open_descriptor(Desc, DB),
     create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
@@ -4116,10 +4093,11 @@ test(comment_elaborate,
 
     New = json{'@documentation':
                json{'@comment':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
-                    '@properties':[json{colour:"Red, Green, Brown, Yellow, lots of things here."},
-                                   json{genus:"The genus of the Cucurtiba is always Cucurtiba"},
-                                   json{shape:"Round, Silly, or very silly!"},
-                                   json{species:"There are between 13 and 30 species of Cucurtiba"}]},
+                    '@properties':json{colour:"Red, Green, Brown, Yellow, lots of things here.",
+                                       genus:"The genus of the Cucurtiba is always Cucurtiba",
+                                       shape:"Round, Silly, or very silly!",
+                                       species:"There are between 13 and 30 species of Cucurtiba"}
+                   },
                '@id':'Squash',
                '@key':json{'@fields':[genus,species],
                            '@type':"Lexical"},
@@ -4146,7 +4124,7 @@ test(bad_documentation,
                  [witness{'@type':invalid_property_in_property_documentation_object,
                           class:'http://s/Not_A_Squash',
                           predicate:'http://s/shape',
-                          subject:'http://s/Not_A_Squash_Documentation_PropertyDocumentation_shape'}])
+                          subject:'http://s/Not_A_Squash_Documentation_PropertyDocumentation_shape_genus'}])
          )
      ]) :-
 
@@ -4155,10 +4133,10 @@ test(bad_documentation,
        '@type' : "Class",
        '@documentation' :
        _{ '@comment' : "Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
-          '@properties' : [
-              _{ genus : "The genus of the Cucurtiba is always Cucurtiba"},
-              _{ shape: "Round, Silly, or very silly!" }
-          ]},
+          '@properties' :
+              _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
+                 shape: "Round, Silly, or very silly!" }
+        },
        genus : "xsd:string"
      },
 

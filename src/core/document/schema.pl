@@ -608,17 +608,18 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     xrdf(Schema, Type, sys:documentation, Obj),
     documentation_descriptor_(Validation_Object,Obj,Descriptor).
 
-documentation_property_list(Validation_Object, Obj, Pairs) :-
+documentation_property_obj(Validation_Object, Obj, Properties) :-
     database_schema(Validation_Object, Schema),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
-            Pairs).
+            Pairs),
+    dict_pairs(Properties,json,Pairs).
 
-documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Properties)) :-
+documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Property_Obj)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
-    documentation_property_list(Validation_Object,Obj,Properties).
+    documentation_property_obj(Validation_Object,Obj,Property_Obj).
 
 refute_diamond_property(Validation_Object, Class, Witness) :-
     catch(

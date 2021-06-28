@@ -7,8 +7,8 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "A named query names a specific query for later retrieval and re-use",
-      "@properties" : [{ "name" : "The name of the NamedQuery to be retrieved" },
-                       { "query" : "The query AST as WOQL JSON" }]
+      "@properties" : { "name" : "The name of the NamedQuery to be retrieved",
+                        "query" : "The query AST as WOQL JSON" }
   },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
@@ -19,9 +19,9 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.",
-      "@properties" : [{ "name" : "The name of the NamedParametricQuery to be retrieved." },
-                       { "parameters" : "Variable name list for auxilliary bindings." },
-                       { "query" : "The query AST as WOQL JSON." }]
+      "@properties" : { "name" : "The name of the NamedParametricQuery to be retrieved.",
+                       "parameters" : "Variable name list for auxilliary bindings.",
+                        "query" : "The query AST as WOQL JSON." }
   },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
@@ -42,9 +42,9 @@
   "@type" : "TaggedUnion",
   "@documentation" : {
       "@comment" : "A variable, node or data point.",
-      "@properties" : [{ "node" : "A URI representing a resource." },
-                       { "variable" : "A variable." },
-                       { "data" : "An xsd data type value." }]
+      "@properties" : { "node" : "A URI representing a resource.",
+                        "variable" : "A variable.",
+                        "data" : "An xsd data type value." }
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
@@ -56,8 +56,8 @@
   "@type" : "TaggedUnion",
   "@documentation" : {
       "@comment" : "A variable or node.",
-      "@properties" : [{ "node" : "A URI representing a resource." },
-                       { "variable" : "A variable." }]
+      "@properties" : { "node" : "A URI representing a resource.",
+                        "variable" : "A variable." }
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
@@ -68,8 +68,8 @@
   "@type" : "TaggedUnion",
   "@documentation" : {
       "@comment" : "A variable or node.",
-      "@properties" : [{ "data" : "An xsd data type value." },
-                       { "variable" : "A variable." }]
+      "@properties" : { "data" : "An xsd data type value.",
+                        "variable" : "A variable." }
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
@@ -80,8 +80,8 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "Select a specific collection for query.",
-      "@properties" : [{ "collection" : "The resource over which to run the query." },
-                       { "query" : "The query which will be run on the selected collection." }]
+      "@properties" : { "collection" : "The resource over which to run the query." ,
+                        "query" : "The query which will be run on the selected collection." }
   },
   "@inherits" : "Query",
   "@key" : { "@type" : "ValueHash" },
@@ -92,8 +92,8 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "Select specific variables from a query to return.",
-      "@properties" : [{ "variables" : "The variables to select from the query." },
-                       { "query" : "The query which will be run prior to selection." }]
+      "@properties" : { "variables" : "The variables to select from the query.",
+                        "query" : "The query which will be run prior to selection." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
