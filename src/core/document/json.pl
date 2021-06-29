@@ -29,7 +29,9 @@
               write_json_string_to_schema/2,
               write_json_string_to_instance/2,
               replace_json_schema/2,
-              class_frame/3
+              class_frame/3,
+              prefix_expand_schema/3,
+              prefix_expand/3
           ]).
 
 :- use_module(instance).
