@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - dev
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -10,9 +11,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2.3.1
 
+      - name: Extract branch name
+        shell: bash
+        run: |
+          if [[ $(echo ${GITHUB_REF#refs/heads/} == 'master') ]]
+            echo "##[set-output name=branch;]$(echo "")"
+          else
+            echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+          fi
+        id: extract_branch
+
+
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@4.0.0
         with:
           branch: gh-pages
-          folder: docs
+          folder: docs/${{ steps.extract_branch.outputs.branch }}
           clean-exclude: dev/bench
