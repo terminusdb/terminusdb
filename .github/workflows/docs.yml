@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - master
+      - rc
+      - canary
       - dev
 jobs:
   build-and-deploy:
@@ -11,11 +13,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2.3.1
 
+      - name: Copy readme over
+        run: sed 's,docs/,,' README.md > docs/README.md
+
       - name: Extract branch name
         shell: bash
         run: |
-          if [[ ${GITHUB_REF#refs/heads/} == 'master') ]];
-            echo "##[set-output name=branch;]$(echo "")"
+          if [[ $GITHUB_REF == 'refs/heads/master' ]]; then
+            echo "##[set-output name=branch;]$(echo '')"
           else
             echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
           fi
@@ -26,5 +31,6 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@4.0.0
         with:
           branch: gh-pages
-          folder: docs/${{ steps.extract_branch.outputs.branch }}
+          folder: docs/
+          target-folder: ${{ steps.extract_branch.outputs.branch }}
           clean-exclude: dev/bench
