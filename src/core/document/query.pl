@@ -64,8 +64,11 @@ expand_query_document_for_type(base_class(_), _, _{}, _{}) :- !.
 expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
     atomic(Query),
     !,
+    catch(typecast(Query^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Casted),
+          error(casting_error(_,_),_),
+          throw(error(query_error(casting_error(Query, Type)), _))),
     % todo check that the given value actually matches what we need here
-    Query_Ex = base_class_match_value(Type, Query).
+    Query_Ex = base_class_match_value(Casted).
 expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
     Query = _{'@regex': Regex},
     !,
@@ -167,10 +170,10 @@ match_query_document_against_uri_property(type_subsumed(Type), DB, URI, '@type')
     database_instance(DB, Instance),
     xrdf(Instance, URI, rdf:type, Retrieved_Type),
     class_subsumed(DB, Type, Retrieved_Type).
-match_query_document_against_uri_property(base_class_match_value(Type, Value), DB, URI, Property) :-
+match_query_document_against_uri_property(base_class_match_value(Value), DB, URI, Property) :-
     !,
     database_instance(DB, Instance),
-    xrdf(Instance, URI, Property, Value^^Type).
+    xrdf(Instance, URI, Property, Value).
 match_query_document_against_uri_property(string_match_regex(Regex), DB, URI, Property) :-
     !,
     database_instance(DB, Instance),
