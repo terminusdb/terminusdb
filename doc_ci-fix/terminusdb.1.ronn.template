@@ -1,0 +1,177 @@
+terminusdb -- command line interface to the terminusdb Graph DBMS
+=============================================
+
+## SYNOPSIS
+
+`terminusdb [command subcommand positional_arguments] flags`
+
+## DESCRIPTION
+
+The terminusdb(1) command line tool allows users to interact with a database,
+allowing common operations such as querying (and updating), database creation,
+data ingestion and maintainence.
+
+## COMMANDS
+
+terminusdb accepts a command, sometimes followed by a subcommand. The
+accepted commands are given here, along with their arguments.
+
+${HELP}
+
+## SYNTAX
+
+The designation of databases, repositories, the associated commit
+graph of a database, and various graphs as used in the above command
+requires the use of an appropriate descriptor path.
+
+  * `_system`:
+  This is the system meta-data, which contains the user information,
+  organization information and database records.
+
+  * `<organization>/<database>`:
+  This is the most basic descriptor path and actually refers to
+  the more specific default path `<organization>/<database>/local/branch/main`.
+
+  * `<organization>/<database>/_meta`:
+  This is the repository graph associated with `database`. It contains
+  information about the local repository and all known remotes.
+
+  * `<organization>/<database>/<repository>`:
+  This is a longer form database designator which specifies which
+  respository we would like to address. It refers implicitly to
+  `<organization>/<database>/<repository>/branch/main`.
+
+  * `<organization>/<database>/<repository>/_commits`:
+  The commit graph associated with a given database. This graph
+  contains metadata about branch histories with their commit objects
+  including the authorship and time.
+
+  * `<organization>/<database>/<repository>/branch/<branch>`:
+  The most specific branch descriptor, allows you to address a
+  branch other than main.
+
+  * `<organization>/<database>/<repository>/commit/<commit>`:
+  The descriptor which allows an individual commit to be addressed
+  directly.
+
+## ENVIRONMENT
+
+  * `TERMINUSDB_SERVER_NAME`:
+  Set the servername to use for` terminusdb serve`. Default is
+  `127.0.0.1`.
+
+  * `TERMINUSDB_SERVER_PORT`:
+  Set the port to use for` terminusdb serve`. Default is `6363`.
+
+  * `TERMINUSDB_SERVER_WORKERS`:
+  Set the number of worker threads to use for `terminusdb serve`.
+  Default is `8`.
+
+  * `TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES`:
+  Set the transaction retry count. Default is `3`.
+
+  * `TERMINUSDB_SERVER_DB_PATH`:
+  Set the location of the storage volume to be used by `terminusdb`
+  operations. Can be addressed relative to current path using
+  `./`<path>. Default is `./storage/db`.
+
+  * `TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH`:
+  Set the public key path for JWT. Default is `''`.
+
+  * `TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID`:
+  Set the public key identifier for JWT. Default is `''`.
+
+  * `TERMINUSDB_CONSOLE_BASE_URL`:
+  Set the console javascript load URL. Default is
+  `https://dl.bintray.com/terminusdb/terminusdb/dev`.
+
+  * `TERMINUSDB_HTTPS_ENABLED`:
+  If `true` then use HTTPS for all API operations. Default is `true`.
+
+  * `TERMINUSDB_SSL_CERT`:
+  Path to SSL certificate if using HTTPS.
+
+  * `TERMINUSDB_SSL_CERT_KEY`:
+  Path to SSL certificate key if using HTTPS.
+
+  * `TERMINUSDB_AUTOLOGIN_ENABLED`:
+  If `true` then attempt to login automatically with default
+  password. Default is `true`.
+
+  * `TERMINUSDB_SERVER_PACK_DIR`:
+  Location of the prolog pack directory if loading third party
+  modules.
+
+  * `TERMINUSDB_SERVER_TMP_PATH`:
+  Path to use for temporary files.
+
+  * `TERMINUSDB_IGNORE_REF_AND_REPO_SCHEMA`:
+  Assume that ref and repo operations are inherently correct.
+
+## EXIT STATUS
+
+  * 0:
+  Successfully program execution.  Associated with `api:success`.
+
+  * 1:
+  A generic failure of the API to carry out the operation.  Associated
+  with `api:failure`.
+
+  * 2:
+  The resource which was being requested was not found.  Associated
+  with  `api:not_found`.
+
+  * 13:
+  The user attempted to carry out an operation without appropriately
+  authorizing or without permission.  Associated with
+  `api:unauthorized` or `api:forbidden`.
+
+  * 13:
+  Unauthorized access attempted.  Associated with `api:unauthorized`.
+
+  * 126:
+  An api command was attempted which is not possible.  Associated with
+   `api:method_not_allowed`.
+
+  * 131:
+  Internal server error. Associated with `api:server_error`.
+
+## EXAMPLES
+
+  * `terminusdb db create admin/foo`:
+  Create a database in the organization `admin` with the identifier `foo`.
+
+  * `terminusdb db create admin/foo --label="Foo"`:
+  Create a database in the organization `admin` with the identifier
+  `foo` and name `Foo`.
+
+## COPYRIGHT
+
+Copyright 2021 TerminusDB
+
+Licensed under the Apache License, Version 2.0 (the "License"); you
+may not use this file except in compliance with the License. You may
+obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License.
+
+## AUTHORS
+
+Gavin Mendel-Gleason <gavin@terminusdb.com>
+
+Matthijs van Otterdijk <matthijs@terminusdb.com>
+
+Robin de Rooij <robin@terminusdb.com>
+
+Anne Ogborn <anne@swi-prolog.org>
+
+Dmytri Kleiner <dk@terminusdb.com>
+
+[Paulo Moura](https://github.com/pmoura)
+

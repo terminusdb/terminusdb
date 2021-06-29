@@ -1,0 +1,93 @@
+<mxfile host="www.draw.io" modified="2020-01-16T14:18:05.993Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36" etag="UQ4HlYSP0pF-QIfhLlJP" version="12.5.5" type="github">
+  <diagram id="DiHW2JVI0iZqQplOBpY-" name="Page-1">
+    <mxGraphModel dx="1104" dy="571" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="BVri8iUSmkrGGl_odF36-1" value="" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="130" y="365" width="210" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-1" target="gOmB3InGyIlORl4Rzgmf-4" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="239" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-1" value="&lt;div&gt;push &lt;br&gt;&lt;/div&gt;&lt;div&gt;request&lt;/div&gt;&lt;div&gt;with remote, local branch, and remote branch&lt;/div&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="185" y="59" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-4" target="gOmB3InGyIlORl4Rzgmf-5" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-4" value="&lt;div&gt;look up remote URL in repo management graph&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="200" y="179" width="90" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="BVri8iUSmkrGGl_odF36-3" target="gOmB3InGyIlORl4Rzgmf-9" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-5" value="contact remote server" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="205" y="300" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-8" target="gOmB3InGyIlORl4Rzgmf-15" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-8" value="&lt;div&gt;upload layers&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="350" y="635" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-12" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-9" target="gOmB3InGyIlORl4Rzgmf-11" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-13" value="&lt;div&gt;Yes&lt;/div&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="OEiHIxjR4SKAd7jAaT1R-3" target="gOmB3InGyIlORl4Rzgmf-8" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-9" value="we have HEAD?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="205" y="500" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-11" value="error, pull first" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="40" y="500" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-14" value="&lt;div&gt;report&lt;/div&gt;&lt;div&gt;success to user&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="750" y="592.5" width="80" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-16" value="&lt;div&gt;on remote&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="450" y="570" width="120" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-18" value="&lt;div&gt;yes&lt;/div&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="gOmB3InGyIlORl4Rzgmf-15" target="gOmB3InGyIlORl4Rzgmf-21" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-15" target="gOmB3InGyIlORl4Rzgmf-19" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-15" value="&lt;div&gt;commit?&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="470" y="640" width="80" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-19" value="errror, pull first" style="shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="450" y="750" width="120" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-21" target="gOmB3InGyIlORl4Rzgmf-14" edge="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="gOmB3InGyIlORl4Rzgmf-21" value="update repo graph with&amp;nbsp; label of pushed data and branch&amp;nbsp; pushed to" style="whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="590" y="585" width="95" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="BVri8iUSmkrGGl_odF36-3" value="&lt;span style=&quot;white-space: normal&quot;&gt;get repo graph HEAD&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="212.5" y="410" width="65" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="BVri8iUSmkrGGl_odF36-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="gOmB3InGyIlORl4Rzgmf-5" target="BVri8iUSmkrGGl_odF36-3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="245.0000000000001" y="380" as="sourcePoint"/>
+            <mxPoint x="245.0000000000001" y="500" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="OEiHIxjR4SKAd7jAaT1R-3" value="Pack the layers" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="330" y="510" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="OEiHIxjR4SKAd7jAaT1R-4" value="&lt;div&gt;Yes&lt;/div&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="gOmB3InGyIlORl4Rzgmf-9" target="OEiHIxjR4SKAd7jAaT1R-3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="285" y="540" as="sourcePoint"/>
+            <mxPoint x="380" y="620" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
