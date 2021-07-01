@@ -2,12 +2,12 @@ name: Publish
 
 on:
   push:
-    # Publish `master` as Docker `latest` image.
+    # Publish `stable` as Docker `latest` image.
     branches:
-      - dev
+      - main
       - canary
       - rc
-      - master
+      - stable
 
     # Publish `v1.2.3` tags as releases.
     tags:
@@ -51,7 +51,8 @@ jobs:
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
 
           # Use Docker `latest` tag convention
-          [ "$VERSION" == "master" ] && VERSION=latest
+          [ "$VERSION" == "stable" ] && VERSION=latest
+          [ "$VERSION" == "main" ] && VERSION=dev
 
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
@@ -123,7 +124,8 @@ jobs:
             curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb/pool/terminusdb_${VERSION}_amd64.deb;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
           # Upload to dev/canary/rc/production repo
-          if [ $(echo "$BRANCH" | grep -P "dev|canary|rc") ]; then
+          if [ $(echo "$BRANCH" | grep -P "main|canary|rc") ]; then
+            [[ "$BRANCH" == "main" ]] && BRANCH="dev" # If branch is main, use dev deb
             curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb-$BRANCH/pool/terminusdb_${VERSION}_amd64;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
 
@@ -173,7 +175,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [test_and_push_docker, appimage, deb_and_rpm]
-    if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/master' }}
+    if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/stable' }}
 
     steps:
     - uses: actions/checkout@v2
