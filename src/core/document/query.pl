@@ -189,7 +189,7 @@ match_query_document_against_uri_property(Query, DB, URI, Property) :-
     !,
     database_instance(DB, Instance),
     xrdf(Instance, URI, Property, Object),
-    match_query_document_(Query, DB, Object),
+    match_query_document_uri_(Query, DB, Object),
     !.
 
 match_query_document_uri_(class_one_of(Queries), DB, Uri) :-
