@@ -170,7 +170,7 @@ match_query_document_against_uri_property(type_subsumed(Type), DB, URI, '@type')
     !,
     database_instance(DB, Instance),
     xrdf(Instance, URI, rdf:type, Retrieved_Type),
-    class_subsumed(DB, Type, Retrieved_Type).
+    class_subsumed(DB, Retrieved_Type, Type).
 match_query_document_against_uri_property(base_class_match_value(Value), DB, URI, Property) :-
     !,
     database_instance(DB, Instance),
@@ -180,6 +180,10 @@ match_query_document_against_uri_property(string_match_regex(Regex), DB, URI, Pr
     database_instance(DB, Instance),
     xrdf(Instance, URI, Property, String^^'http://www.w3.org/2001/XMLSchema#string'),
     re_match(Regex, String).
+match_query_document_against_uri_property(null, DB, URI, Property) :-
+    !,
+    database_instance(DB, Instance),
+    \+ xrdf(Instance, URI, Property, _).
 match_query_document_against_uri_property(Query, DB, URI, Property) :-
     is_dict(Query),
     !,
@@ -209,6 +213,7 @@ match_query_document_uri_(Query, DB, Uri) :-
     
 match_query_document_uri(DB, Type, Query, Uri) :-
     expand_query_document(DB, Type, Query, Query_Ex),
+    http_log("~n~n~q~n~n", [Query_Ex]),
     (   (   is_dict(Query_Ex)
         ->  (   get_dict('@id', Query_Ex, id_exact(_,Uri))
             ->  true
