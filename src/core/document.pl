@@ -40,7 +40,10 @@
 
               % schema.pl
               class_subsumed/3,
-              class_frame/3
+              class_frame/3,
+
+              % query.pl
+              match_query_document_uri/4
           ]).
 
 :- use_module('document/validation').

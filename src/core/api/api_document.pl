@@ -1,6 +1,7 @@
 :- module(api_document, [
               api_generate_documents/9,
               api_generate_documents_by_type/10,
+              api_generate_documents_by_query/11,
               api_get_document/8,
               api_insert_documents/9,
               api_delete_documents/7,
@@ -74,6 +75,22 @@ api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Prefixed, Un
               error(resource_does_not_exist(Path), _)),
 
     api_generate_documents_by_type_(Graph_Type, Transaction, Type, Prefixed, Unfold, Skip, Count, Document).
+
+api_generate_documents_by_query(_System_DB, _Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path),_)),
+    do_or_die(open_descriptor(Descriptor, Transaction),
+              error(resource_does_not_exist(Path), _)),
+
+    do_or_die(Graph_Type = instance,
+              error(query_is_only_supported_for_instance_graphs, _)),
+
+    skip_generate_nsols(
+        match_query_document_uri(Transaction, Type, Query, Uri),
+        Skip,
+        Count),
+    get_document(Transaction, Prefixed, Unfold, Uri, Document).
 
 api_get_document_(instance, Transaction, Prefixed, Unfold, Id, Document) :-
     do_or_die(get_document(Transaction, Prefixed, Unfold, Id, Document),

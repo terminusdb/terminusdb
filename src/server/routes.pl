@@ -1045,8 +1045,13 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     ignore((   get_dict(type, Posted, Type)
            ;   memberchk(type=Type, Search))),
 
+    ignore(get_dict(query, Posted, Query)),
+
     Header_Written = written(_),
-    (   ground(Id)
+    (   nonvar(Query)
+    ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document),
+               json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
+    ;   ground(Id)
     ->  api_get_document(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Id, Document),
         json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
     ;   ground(Type)

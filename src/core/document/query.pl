@@ -1,4 +1,5 @@
 :- module('document/query', [
+              match_query_document_uri/4
           ]).
 
 :- use_module(instance).
@@ -187,17 +188,17 @@ match_query_document_against_uri_property(Query, DB, URI, Property) :-
     match_query_document_(Query, DB, Object),
     !.
 
-match_query_document_(class_one_of(Queries), DB, Uri) :-
+match_query_document_uri_(class_one_of(Queries), DB, Uri) :-
     !,
     member(Inner_Query, Queries),
-    match_query_document_(Inner_Query, DB, Uri),
+    match_query_document_uri_(Inner_Query, DB, Uri),
     !.
-match_query_document_(class_all(Queries), DB, Uri) :-
+match_query_document_uri_(class_all(Queries), DB, Uri) :-
     !,
     forall(member(Inner_Query, Queries),
-           match_query_document_(Inner_Query, DB, Uri)).
+           match_query_document_uri_(Inner_Query, DB, Uri)).
 
-match_query_document_(Query, DB, Uri) :-
+match_query_document_uri_(Query, DB, Uri) :-
     do_or_die(is_dict(Query),
               error(query_error(not_a_dict(Query)), _)),
 
@@ -206,7 +207,7 @@ match_query_document_(Query, DB, Uri) :-
            match_query_document_against_uri_property(V, DB, Uri, P)),
     !.
     
-match_query_document(DB, Type, Query, Compress, Unfold, Document) :-
+match_query_document_uri(DB, Type, Query, Uri) :-
     expand_query_document(DB, Type, Query, Query_Ex),
     (   (   is_dict(Query_Ex)
         ->  (   get_dict('@id', Query_Ex, id_exact(_,Uri))
@@ -215,5 +216,4 @@ match_query_document(DB, Type, Query, Compress, Unfold, Document) :-
             ->  member(Uri, Uris)))
     *->  true
     ;   get_document_uri(DB, Type, Uri)),
-    match_query_document_(Query_Ex, DB, Uri),
-    get_document(DB, Compress, Unfold, Uri, Document).
+    match_query_document_uri_(Query_Ex, DB, Uri).
