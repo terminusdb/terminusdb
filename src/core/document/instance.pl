@@ -57,10 +57,10 @@ is_instance(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X, rdf:type, Class),
     is_simple_class(Validation_Object, Class),
-    class_subsumed(Validation_Object, Class,C),
-    !.
+    class_subsumed(Validation_Object, Class, C).
 % NOTE: Need a clause here for enumerated types!
 is_instance(Validation_Object, X, C) :-
+    ground(C),
     is_enum(Validation_Object, C),
     !,
     % This would be faster with set or even array!
