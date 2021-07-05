@@ -4584,6 +4584,53 @@ test(gyear_cast, [
     Binding = _{'V':_{'@type':'xsd:gYear',
                       '@value':"1999"}}.
 
+test(schema_prefix, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, rdf:type, '@schema':test))),
+        _Meta_Data
+    ),
+
+
+    Atom = '{
+  "@type": "woql:Using",
+  "woql:collection": {
+    "@type": "xsd:string",
+    "@value": "_commits"
+  },
+  "woql:query": {
+    "@type": "woql:Triple",
+    "woql:subject": {
+      "@type": "woql:Variable",
+      "woql:variable_name": {
+        "@value": "a",
+        "@type": "xsd:string"
+      }
+    },
+    "woql:predicate": {
+      "@type": "woql:Node",
+      "woql:node": "type"
+    },
+    "woql:object": {
+      "@type": "woql:Node",
+      "woql:node": "@schema:Branch"
+    }
+  }
+}',
+
+    atom_json_dict(Atom, Query, []),
+    writeq(Query),
+    query_test_response(Descriptor, Query, JSON),
+    writeq(JSON).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data).
