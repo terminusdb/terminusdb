@@ -12,7 +12,7 @@ password is `root` or that the enviroment variable
 
 ## Submitting changes
 
-Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb-server/pull/new/dev) to the main branch.
+Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb-server/pull/new/main) to the main branch.
 
 Please write clear log messages with your commits. Small changes can be a one line message, 
 but big changes should have a descriptive paragraph with a newline after the title in the message.
