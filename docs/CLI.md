@@ -528,7 +528,7 @@ requires the use of an appropriate descriptor path.
 
   * `TERMINUSDB_CONSOLE_BASE_URL`:
   Set the console javascript load URL. Default is
-  `https://dl.bintray.com/terminusdb/terminusdb/dev`.
+  `https://cdn.terminusdb.com/js_libs/terminusdb_hub_console/dev`.
 
   * `TERMINUSDB_HTTPS_ENABLED`:
   If `true` then use HTTPS for all API operations. Default is `true`.
