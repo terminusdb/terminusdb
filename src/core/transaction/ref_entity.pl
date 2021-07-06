@@ -156,7 +156,13 @@ insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Commit_Id, C
 insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
     insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri),
     once(ask(Context,
-             insert(Commit_Uri, parent, Parent_Commit_Uri))).
+             insert(Commit_Uri, parent, Parent_Commit_Uri))),
+    once(ask(Context,
+             (   t(Parent_Commit_Uri, schema, Schema),
+                 insert(Commit_Uri, schema, Schema)))),
+    ignore(ask(Context,
+               (   t(Parent_Commit_Uri, instance, Instance),
+                   insert(Commit_Uri, instance, Instance)))).
 
 insert_commit_object_on_branch(Context, Branch_Name, Commit_Id, Commit_Uri) :-
     insert_commit_object_on_branch(Context, Context.commit_info, Branch_Name, Commit_Id, Commit_Uri).
@@ -244,11 +250,10 @@ copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
 test(branch_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
 
     with_transaction(Context,
                      (   insert_branch_object(Context, "foo", _),
@@ -274,21 +279,26 @@ test(branch_insert,
 test(base_commit_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
 
-    with_transaction(Context,
-                     insert_base_commit_object(Context,
-                                               commit_info{author:"author",
-                                                           message:"message"},
-                                               1234.567,
-                                               Commit_Id,
-                                               _Commit_Uri),
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
 
-                     _),
+    with_transaction(
+        Context,
+        (   insert_base_commit_object(Context,
+                                      commit_info{author:"author",
+                                                  message:"message"},
+                                      1234.567,
+                                           Commit_Id,
+                                           Commit_Uri),
+            insert_layer_object(Context,
+                                "a3a29522ec767aa1a1cf321122f833726c102749",
+                                Layer_Uri),
+            attach_layer_to_commit(Context, Commit_Uri, schema, Layer_Uri)
+        ),
+        _),
 
     commit_id_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
 
@@ -299,11 +309,11 @@ test(base_commit_insert,
 test(child_commit_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
+
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
 
     with_transaction(Context,
                      (   insert_base_commit_object(Context,
@@ -312,13 +322,20 @@ test(child_commit_insert,
                                                    1234.567,
                                                    _Parent_Commit_Id,
                                                    Parent_Commit_Uri),
+                         insert_layer_object(Context,
+                                             "a3a29522ec767aa1a1cf321122f833726c102749",
+                                             Layer_Uri),
+                         attach_layer_to_commit(Context, Parent_Commit_Uri, schema, Layer_Uri),
+
                          insert_child_commit_object(Context,
                                                     Parent_Commit_Uri,
                                                     commit_info{author:"author2",
                                                                 message:"message2"},
                                                     2345.678,
                                                     Commit_Id,
-                                                    _Commit_Uri)),
+                                                    Commit_Uri),
+                         attach_layer_to_commit(Context, Commit_Uri, schema, Layer_Uri)
+                     ),
                      _),
 
     commit_id_to_metadata(Descriptor, Commit_Id, Author, Message, Timestamp),
@@ -332,25 +349,30 @@ test(child_commit_insert,
 test(commit_on_branch_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
 
     % first set up the branch
-    ref_schema_context_from_label_descriptor(Descriptor, Context1),
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context1),
     with_transaction(Context1,
                      insert_branch_object(Context1, "foo", _),
                      _),
 
     % then add a commit
-    ref_schema_context_from_label_descriptor(Descriptor, Context2),
-    with_transaction(Context2,
-                     insert_commit_object_on_branch(Context2,
-                                                    "foo",
-                                                    Commit_Id,
-                                                    Commit_Uri),
-                     _),
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context2),
+    with_transaction(
+        Context2,
+        (   insert_commit_object_on_branch(Context2,
+                                           "foo",
+                                           Commit_Id,
+                                           Commit_Uri),
+            insert_layer_object(Context2,
+                                "a3a29522ec767aa1a1cf321122f833726c102749",
+                                Layer_Uri),
+            attach_layer_to_commit(Context2, Commit_Uri, schema, Layer_Uri)
+        ),
+        _),
 
     % ensure our commit can be found
     commit_id_uri(Descriptor, Commit_Id, Commit_Uri),
@@ -361,144 +383,73 @@ test(commit_on_branch_insert,
     ;   true),
 
     % now make a second commit
-    ref_schema_context_from_label_descriptor(Descriptor, Context3),
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor2, Context3),
 
-    with_transaction(Context3,
-                     insert_commit_object_on_branch(Context3,
-                                                    "foo",
-                                                    Commit2_Id,
-                                                    Commit2_Uri),
-                     _),
-
-
+    with_transaction(
+        Context3,
+        (   insert_commit_object_on_branch(Context3,
+                                           "foo",
+                                           Commit2_Id,
+                                           Commit2_Uri),
+            insert_layer_object(Context3,
+                                "f3dfc8d0d103b0be9428938174326e6256ad1beb",
+                                Layer2_Uri),
+            attach_layer_to_commit(Context3, Commit2_Uri, schema, Layer2_Uri)
+        ),
+        _),
 
     % ensure our commit can be found
-    commit_id_uri(Descriptor, Commit2_Id, Commit2_Uri),
+    commit_id_uri(Descriptor2, Commit2_Id, Commit2_Uri),
 
     % ensure it does have a parent
-    commit_id_to_parent_uri(Descriptor, Commit2_Id, _).
+    commit_id_to_parent_uri(Descriptor2, Commit2_Id, _).
 
 :- end_tests(commit_objects).
 
-:- begin_tests(graph_objects).
+:- begin_tests(commit_layer_objects).
 :- use_module(core(util/test_utils)).
 :- use_module(database).
-test(insert_graph_object_without_layer,
+test(insert_commit_object_with_layer,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
+
+    ref_schema_context_from_label_descriptor("testlabel",Descriptor, Context),
 
     with_transaction(Context,
                      (   insert_base_commit_object(Context,
                                                    commit_info{author:"author",
                                                                message:"message"},
                                                    1234.567,
-                                                   Commit_Id,
-                                                   Commit_Uri),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             schema,
-                                             "foo",
-                                             _,
-                                             _),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             instance,
-                                             "foo",
-                                             _,
-                                             _),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             schema,
-                                             "bar",
-                                             _,
-                                             _)),
-                     _),
-
-    findall(Type-Name,
-            graph_for_commit(Descriptor, Commit_Uri, Type, Name, _Graph_Uri),
-            Graphs),
-
-
-    Expected = [schema-"foo",
-                instance-"foo",
-                schema-"bar"],
-    union(Graphs, Expected, Union),
-    intersection(Graphs, Expected, Intersection),
-    subtract(Union, Intersection, []).
-
-test(insert_graph_object_with_layer,
-     [setup((setup_temp_store(State),
-             ensure_label(testlabel))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
-    ) :-
-    Descriptor = label_descriptor{label:"testlabel"},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
-
-    with_transaction(Context,
-                     (   insert_base_commit_object(Context,
-                                                   commit_info{author:"author",
-                                                               message:"message"},
-                                                   1234.567,
-                                                   Commit_Id,
+                                                   _Commit_Id,
                                                    Commit_Uri),
                          insert_layer_object(Context,
                                              "f3dfc8d0d103b0be9428938174326e6256ad1beb",
                                              Layer1_Uri),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             schema,
-                                             "foo",
-                                             Layer1_Uri,
-                                             _),
-
-                         insert_layer_object(Context,
-                                             "461ccac7287ac5712cf98445b385ee44bf64e474",
-                                             Layer2_Uri),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             instance,
-                                             "foo",
-                                             Layer2_Uri,
-                                             _),
+                         attach_layer_to_commit(Context, Commit_Uri, instance, Layer1_Uri),
 
                          insert_layer_object(Context,
                                              "a3a29522ec767aa1a1cf321122f833726c102749",
-                                             Layer3_Uri),
-                         insert_graph_object(Context,
-                                             Commit_Uri,
-                                             Commit_Id,
-                                             schema,
-                                             "bar",
-                                             Layer3_Uri,
-                                             _)),
+                                             Layer2_Uri),
+                         attach_layer_to_commit(Context, Commit_Uri, schema, Layer2_Uri)
+                     ),
                      _),
 
-    findall(Type-Name-Layer_Id,
-            (   graph_for_commit(Descriptor, Commit_Uri, Type, Name, Graph_Uri),
-                layer_uri_for_graph(Descriptor, Graph_Uri, Layer_Uri),
+    findall(Type-Layer_Id,
+            (   layer_uri_for_commit(Descriptor, Commit_Uri, Type, Layer_Uri),
                 layer_id_uri(Descriptor, Layer_Id, Layer_Uri)),
             Graphs),
 
-    Expected = [schema-"foo"-"f3dfc8d0d103b0be9428938174326e6256ad1beb",
-                instance-"foo"-"461ccac7287ac5712cf98445b385ee44bf64e474",
-                schema-"bar"-"a3a29522ec767aa1a1cf321122f833726c102749"
+    Expected = [instance-"f3dfc8d0d103b0be9428938174326e6256ad1beb",
+                schema-"a3a29522ec767aa1a1cf321122f833726c102749"
                ],
     union(Graphs, Expected, Union),
     intersection(Graphs, Expected, Intersection),
     subtract(Union, Intersection, []).
 
-:- end_tests(graph_objects).
+:- end_tests(commit_layer_objects).
 
 :- begin_tests(copy_commits).
 :- use_module(core(util/test_utils)).
@@ -508,12 +459,11 @@ test(copy_base_commit,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),
              ensure_label(testlabel2))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % set up a chain
-    Descriptor1 = label_descriptor{ label: "testlabel1" },
-    Descriptor2 = label_descriptor{ label: "testlabel2" },
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
+
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_1),
     Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
     with_transaction(Context1_1,
@@ -525,37 +475,35 @@ test(copy_base_commit,
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", instance, "graph_1", Layer1_Uri, Graph1_Uri),
-                         insert_graph_object(Context1_1, Commit_Uri, "commit_id", schema, "graph_2", Layer2_Uri, Graph2_Uri)
+                         attach_layer_to_commit(Context1_1, Commit_Uri, instance, Layer1_Uri),
+                         attach_layer_to_commit(Context1_1, Commit_Uri, schema, Layer2_Uri)
                      ),
                      _),
 
 
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_2),
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2),
 
     with_transaction(Context2,
                      copy_commits(Context1_2, Context2, "commit_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_1),
     commit_id_uri(Context2_1, "commit_id", Commit_Uri),
 
-    findall(Type-Name-Graph_Uri-Layer_Uri-Layer_Id,
-            (   graph_for_commit(Context2_1, Commit_Uri, Type, Name, Graph_Uri),
-                layer_uri_for_graph(Context2_1, Graph_Uri, Layer_Uri),
+    findall(Type-Layer_Uri-Layer_Id,
+            (   layer_uri_for_commit(Context2_1, Commit_Uri, Type, Layer_Uri),
                 layer_id_uri(Context2_1, Layer_Id, Layer_Uri)
             ),
             Graphs),
 
     Expected = [
-        'http://terminusdb.com/schema/ref#instance'-"graph_1"-Graph1_Uri-Layer1_Uri-Layer1_Id,
-        'http://terminusdb.com/schema/ref#schema'-"graph_2"-Graph2_Uri-Layer2_Uri-Layer2_Id
+        instance-Layer1_Uri-Layer1_Id,
+        schema-Layer2_Uri-Layer2_Id
     ],
 
     list_to_ord_set(Graphs, Graph_Set),
     list_to_ord_set(Expected, Expected_Set),
-    print_term(here, []),nl,
 
     ord_seteq(Graph_Set, Expected_Set).
 
@@ -563,12 +511,11 @@ test(copy_child_commit_with_no_shared_ancestors,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),
              ensure_label(testlabel2))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % set up a chain
-    Descriptor1 = label_descriptor{ label: "testlabel1" },
-    Descriptor2 = label_descriptor{ label: "testlabel2" },
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
+
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_1),
     Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
     Layer3_Id = "a3a29522ec767aa1a1cf321122f833726c102749",
@@ -579,40 +526,39 @@ test(copy_child_commit_with_no_shared_ancestors,
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         insert_graph_object(Context1_1, Commit1_Uri, "commit1_id", instance, "main", Layer1_Uri, _Graph1_Uri),
+                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
 
                          % second commit
                          insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         insert_graph_object(Context1_1, Commit2_Uri, "commit2_id", instance, "main", Layer2_Uri, _Graph2_Uri),
+                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
 
                          % third commit
                          insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         insert_graph_object(Context1_1, Commit3_Uri, "commit3_id", instance, "main", Layer3_Uri, _Graph3_Uri)
+                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
                      ),
                      _),
 
 
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_2),
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2),
 
     with_transaction(Context2,
                      copy_commits(Context1_2, Context2, "commit3_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_1),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Context2_1, Commit_Id),
+            (   member(Commit_Uri, [Commit1_Uri, Commit2_Uri, Commit3_Uri]),
                 commit_id_uri(Context2_1, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
-    length(Commits_Unsorted, 3),
-    sort(Commits_Unsorted, Commits),
 
+    sort(Commits_Unsorted, Commits),
     Expected = ["commit1_id"-Commit1_Uri,
                 "commit2_id"-Commit2_Uri,
                 "commit3_id"-Commit3_Uri],
@@ -622,12 +568,10 @@ test(copy_child_commit_with_some_shared_ancestors,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),
              ensure_label(testlabel2))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % set up a chain
-    Descriptor1 = label_descriptor{ label: "testlabel1" },
-    Descriptor2 = label_descriptor{ label: "testlabel2" },
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_1),
     Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
     Layer3_Id = "a3a29522ec767aa1a1cf321122f833726c102749",
@@ -638,44 +582,44 @@ test(copy_child_commit_with_some_shared_ancestors,
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         insert_graph_object(Context1_1, Commit1_Uri, "commit1_id", instance, "main", Layer1_Uri, _Graph1_Uri),
+                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
 
                          % second commit
                          insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         insert_graph_object(Context1_1, Commit2_Uri, "commit2_id", instance, "main", Layer2_Uri, _Graph2_Uri),
+                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
 
                          % third commit
                          insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         insert_graph_object(Context1_1, Commit3_Uri, "commit3_id", instance, "main", Layer3_Uri, _Graph3_Uri)
+                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
                      ),
                      _),
 
 
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_2),
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_1),
 
     with_transaction(Context2_1,
                      copy_commits(Context1_2, Context2_1, "commit2_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_2),
 
     with_transaction(Context2_2,
                      copy_commits(Context1_2, Context2_2, "commit3_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_3),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_3),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Context2_3, Commit_Id),
+            (   member(Commit_Uri, [Commit1_Uri, Commit2_Uri, Commit3_Uri]),
                 commit_id_uri(Context2_3, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
-    length(Commits_Unsorted, 3),
+
     sort(Commits_Unsorted, Commits),
 
     Expected = ["commit1_id"-Commit1_Uri,
@@ -687,12 +631,11 @@ test(copy_child_commit_that_already_exists,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),
              ensure_label(testlabel2))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
     % set up a chain
-    Descriptor1 = label_descriptor{ label: "testlabel1" },
-    Descriptor2 = label_descriptor{ label: "testlabel2" },
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_1),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_1),
     Layer1_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
     Layer3_Id = "a3a29522ec767aa1a1cf321122f833726c102749",
@@ -703,44 +646,43 @@ test(copy_child_commit_that_already_exists,
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         insert_graph_object(Context1_1, Commit1_Uri, "commit1_id", instance, "main", Layer1_Uri, _Graph1_Uri),
+                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
 
                          % second commit
                          insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         insert_graph_object(Context1_1, Commit2_Uri, "commit2_id", instance, "main", Layer2_Uri, _Graph2_Uri),
+                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
 
                          % third commit
                          insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         insert_graph_object(Context1_1, Commit3_Uri, "commit3_id", instance, "main", Layer3_Uri, _Graph3_Uri)
+                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
                      ),
                      _),
 
 
-    ref_schema_context_from_label_descriptor(Descriptor1, Context1_2),
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_1),
+    ref_schema_context_from_label_descriptor("testlabel1", _, Context1_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_1),
 
     with_transaction(Context2_1,
                      copy_commits(Context1_2, Context2_1, "commit3_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_2),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_2),
 
     with_transaction(Context2_2,
                      copy_commits(Context1_2, Context2_2, "commit3_id"),
                      _),
 
-    ref_schema_context_from_label_descriptor(Descriptor2, Context2_3),
+    ref_schema_context_from_label_descriptor("testlabel2", _, Context2_3),
     findall(Commit_Id-Commit_Uri,
-            (   has_commit(Context2_3, Commit_Id),
+            (   member(Commit_Uri, [Commit1_Uri, Commit2_Uri, Commit3_Uri]),
                 commit_id_uri(Context2_3, Commit_Id, Commit_Uri)),
             Commits_Unsorted),
-    length(Commits_Unsorted, 3),
     sort(Commits_Unsorted, Commits),
 
     Expected = ["commit1_id"-Commit1_Uri,
@@ -750,72 +692,6 @@ test(copy_child_commit_that_already_exists,
 
 
 :- end_tests(copy_commits).
-
-read_write_obj_for_graph(Askable, Commit_Uri, Graph_Type, Graph_Name, Read_Write_Obj) :-
-    (   graph_for_commit(Askable, Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)
-    ->  true
-    ;   throw(error(graph_does_not_exist(Commit_Uri, Graph_Type, Graph_Name)))),
-
-
-    (   layer_uri_for_graph(Askable, Graph_Uri, Layer_Uri),
-        layer_id_uri(Askable, Layer_Id, Layer_Uri)
-    ->  Graph_Descriptor = id_graph{
-                               layer_id: Layer_Id,
-                               type: instance,
-                               name: "main"
-                           },
-        open_read_write_obj(Graph_Descriptor, Read_Write_Obj)
-    ;   Read_Write_Obj = read_write_obj{
-                             descriptor: empty{},
-                             read: _,
-                             write: _
-                         }).
-
-apply_graph_change(Us_Repo_Context, Them_Repo_Askable, New_Commit_Uri, New_Commit_Id, Us_Commit_Uri, Them_Commit_Uri, Graph_Type, Graph_Name, New_Graph_Uri) :-
-    % find current head layer for the given graph
-    read_write_obj_for_graph(Us_Repo_Context, Us_Commit_Uri, Graph_Type, Graph_Name, Us_Read_Write_Obj),
-    read_write_obj_for_graph(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Them_Read_Write_Obj),
-
-    read_write_obj_builder(Us_Read_Write_Obj, Builder),
-    read_write_obj_reader(Them_Read_Write_Obj, Layer),
-    nb_apply_delta(Builder,Layer),
-
-    read_write_obj_to_graph_validation_obj(Us_Read_Write_Obj, Us_Validation_Obj, [], _),
-    (   ground(Us_Validation_Obj.read)
-    ->  layer_to_id(Us_Validation_Obj.read, Layer_Id),
-        insert_layer_object(Us_Repo_Context, Layer_Id, Layer_Uri)
-    ;   Layer_Uri = _
-    ),
-
-    % in both cases, we need to write a graph object and return its URI
-    insert_graph_object(Us_Repo_Context, New_Commit_Uri, New_Commit_Id, Graph_Type, Graph_Name, Layer_Uri, New_Graph_Uri).
-
-ensure_graph_sets_equal(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri) :-
-    findall(Type-Name,
-            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type, Name, _),
-            Us_Graphs),
-    findall(Type-Name,
-            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type, Name, _),
-            Them_Graphs),
-    list_to_ord_set(Us_Graphs, Us_Graph_Set),
-    list_to_ord_set(Them_Graphs, Them_Graph_Set),
-    (   ord_seteq(Us_Graph_Set, Them_Graph_Set)
-    ->  true
-    ;   throw(error(graph_sets_not_equal(Us_Commit_Uri, Them_Commit_Uri)))).
-
-ensure_graph_sets_included(Us_Repo_Askable, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs) :-
-    findall(Type1-Name1,
-            graph_for_commit(Us_Repo_Askable, Us_Commit_Uri, Type1, Name1, _),
-            Us_Graphs),
-    findall(Type2-Name2,
-            graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type2, Name2, _),
-            Them_Graphs),
-    list_to_ord_set(Us_Graphs, Us_Graph_Set),
-    list_to_ord_set(Them_Graphs, Them_Graph_Set),
-    ord_subtract(Them_Graph_Set, Us_Graph_Set, New_Graphs),
-    (   ord_subtract(Us_Graph_Set, Them_Graph_Set, [])
-    ->  true
-    ;   throw(error(graph_sets_not_included(Us_Commit_Uri, Them_Commit_Uri)))).
 
 apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
     get_time(Now),
@@ -947,8 +823,8 @@ test(apply_single_addition,
              create_db_without_schema("admin", "testdb1"),
              create_db_without_schema("admin", "testdb2")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
@@ -979,12 +855,18 @@ test(apply_single_addition,
                      _),
 
     Repo_Descriptor = (Descriptor1.repository_descriptor),
+
     create_context(Repo_Descriptor, Context5),
+    print_all_documents(Repo_Descriptor),
     commit_uri_to_parent_uri(Context5, New_Commit_B_Uri, Commit_A_Uri),
     commit_uri_to_metadata(Context5, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Context5, New_Commit_B_Uri, _, "commit b", _),
-
-    once(ask(Context5,
+    findall(X-Y-Z,
+            ask(Descriptor1,
+                t(X,Y,Z)),
+            Triples),
+    writeq(Triples),
+    once(ask(Descriptor1,
              (   t(a,b,c),
                  t(d,e,f),
                  addition(d,e,f)))).
