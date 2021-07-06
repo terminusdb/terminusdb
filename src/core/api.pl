@@ -11,7 +11,6 @@
 
               % init.pl
               initialize_config/4,
-              initialize_registry/0,
               initialize_database/2,
               initialize_database_with_store/2,
 
@@ -73,13 +72,6 @@
 
               % api_optimize.pl
               api_optimize/3,
-
-              % api_csv
-              csv_load/6,
-              csv_update/6,
-              csv_dump/6,
-              csv_delete/6,
-              csv_list/5,
 
               % api_prefixes
               get_prefixes/4,
@@ -148,7 +140,6 @@
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).
 :- use_module(api/api_optimize).
-:- use_module(api/api_csv).
 :- use_module(api/api_prefixes).
 :- use_module(api/api_db).
 :- use_module(api/api_error).
