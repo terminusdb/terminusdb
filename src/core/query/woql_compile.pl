@@ -4599,7 +4599,6 @@ test(schema_prefix, [
         _Meta_Data
     ),
 
-
     Atom = '{
   "@type": "woql:Using",
   "woql:collection": {
@@ -4617,19 +4616,18 @@ test(schema_prefix, [
     },
     "woql:predicate": {
       "@type": "woql:Node",
-      "woql:node": "type"
+      "woql:node": "rdf:type"
     },
     "woql:object": {
       "@type": "woql:Node",
-      "woql:node": "@schema:Branch"
+      "woql:node": "ref:Branch"
     }
   }
 }',
 
     atom_json_dict(Atom, Query, []),
-    writeq(Query),
     query_test_response(Descriptor, Query, JSON),
-    writeq(JSON).
+    JSON = false.
 
 :- end_tests(woql).
 
