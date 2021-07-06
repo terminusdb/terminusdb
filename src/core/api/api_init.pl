@@ -1,7 +1,6 @@
 :- module(api_init, [
               bootstrap_files/0,
               initialize_config/4,
-              initialize_registry/0,
               initialize_database/2,
               initialize_database_with_store/2
           ]).
@@ -119,14 +118,6 @@ initialize_config(PUBLIC_URL, Server, Port, Workers) :-
     config_path(Config_Path),
     write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
                       Port, Workers).
-
-initialize_registry :-
-    config:registry_path(Registry_Path),
-    (   exists_file(Registry_Path)
-    ->  true
-    ;   example_registry_path(Example_Registry_Path),
-        copy_file(Example_Registry_Path, Registry_Path)
-    ).
 
 initialize_database(Key,Force) :-
     db_path(DB_Path),
