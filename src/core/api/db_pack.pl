@@ -85,9 +85,13 @@ child_until_parents(Child, _Until, [Child]).
 % Include self!
 layer_layerids(Layer, [Self_Layer_Id|Layer_Ids]) :-
     layer_to_id(Layer,Self_Layer_Id),
+    Descriptor = layer_descriptor{
+                     variety: repository_descriptor,
+                     instance: Layer
+                 },
     findall(Layer_Id,
-            ask(Layer,
-                addition(_, layer:layer_id, Layer_Id^^xsd:string)),
+            ask(Descriptor,
+                addition(_, layer:identifier, Layer_Id^^xsd:string)),
             Layer_Ids).
 
 repository_head_layerid(Repository,Layer_ID) :-
@@ -144,8 +148,7 @@ unpack(Pack) :-
 test(context_repository_head_pack,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ]
     ) :-
 

@@ -239,8 +239,8 @@ test_pusher(Expected, _Remote_URL, Payload) :-
 test(push_on_empty,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))
+     ])
 :-
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -269,7 +269,7 @@ test(push_on_empty,
     super_user_authority(Auth),
 
     once(ask(Descriptor.repository_descriptor,
-                        t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
+                        t(_,layer:identifier, Expected_Layer_Id^^(xsd:string)))),
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), _Result),
 
