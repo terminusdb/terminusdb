@@ -1,6 +1,7 @@
 :- module(db_create, [
               create_db_unfinalized/10,
               create_db/9,
+              create_schema/3,
               create_ref_layer/1,
               finalize_db/1
           ]).
@@ -125,13 +126,12 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
 
     create_ref_layer(Repository_Descriptor),
 
-    create_schema(Repository_Descriptor, Schema, Prefixes).
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor:Repository_Descriptor,
+                            branch_name: "main" },
+    create_schema(Branch_Descriptor, Schema, Prefixes).
 
-create_schema( Repository_Descriptor, Schema, Prefixes) :-
-    Branch_Desc = branch_descriptor{
-                      repository_descriptor:Repository_Descriptor,
-                      branch_name: "main" },
-
+create_schema(Branch_Desc, Schema, Prefixes) :-
     create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema"}, Query_Context),
     Prefix_Obj = (Prefixes.put('@type', "@context")),
 
