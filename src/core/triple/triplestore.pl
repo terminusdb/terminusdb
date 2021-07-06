@@ -119,7 +119,10 @@ local_triple_store(Triple_Store) :-
 local_triple_store(Triple_Store) :-
     % Triple_Store is non-var, so this is a set
     % Note that we're only asserting here, not retracting.
-    asserta(local_triple_store_var(Triple_Store)).
+    (   local_triple_store_var(X),
+        nonvar(X)
+    ->  X = Triple_Store
+    ;   asserta(local_triple_store_var(Triple_Store))).
 
 /**
  * retract_local_triple_store(+Triple_Store) is det.
@@ -127,7 +130,7 @@ local_triple_store(Triple_Store) :-
  * ensures a particular triple store won't be returned (anymore) by local_triple_store/1.
  */
 retract_local_triple_store(Triple_Store) :-
-    retract(local_triple_store_var(Triple_Store)).
+    retractall(local_triple_store_var(Triple_Store)).
 
 /**
  * with_triple_store(+Triple_Store, :Goal) is nondet.

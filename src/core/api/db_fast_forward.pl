@@ -55,8 +55,7 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
 test(fast_forward_empty_branch_on_empty_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Origin_Path = "admin/foo",
@@ -74,14 +73,15 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
     Applied_Commit_Ids == [],
 
     % check history
-    Repo_Descriptor = (Master_Descriptor.repository_descriptor),
-    \+ branch_head_commit(Repo_Descriptor, "main", _Head_Commit_Uri).
+    Master_Repo_Descriptor = (Master_Descriptor.repository_descriptor),
+    branch_head_commit(Master_Repo_Descriptor, "main", Head_Commit_Uri),
+    Second_Repo_Descriptor = (Second_Descriptor.repository_descriptor),
+    branch_head_commit(Second_Repo_Descriptor, "main", Head_Commit_Uri).
 
 test(fast_forward_empty_branch_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Origin_Path = "admin/foo",
@@ -113,8 +113,9 @@ test(fast_forward_empty_branch_from_same_repo,
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
-    History = [Commit_A, Commit_B],
-    History = Applied_Commit_Ids,
+
+    History = [_Schema_Commit, Commit_A, Commit_B],
+    Applied_Commit_Ids = [Commit_A,Commit_B],
 
     commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_B, _, "commit b", _).
@@ -122,8 +123,7 @@ test(fast_forward_empty_branch_from_same_repo,
 test(fast_forward_nonempty_branch_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
 
@@ -164,9 +164,8 @@ test(fast_forward_nonempty_branch_from_same_repo,
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
-    History = [Commit_A, Commit_B, Commit_C],
+    History = [_Schema_Commit, Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids = [Commit_B, Commit_C],
-
 
     commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
     commit_id_to_metadata(Repo_Descriptor, Commit_B, _, "commit b", _),
@@ -176,7 +175,6 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      fixme(document_refactor),
       throws(error(divergent_history(Commit_A_Id,[Commit_B_Id],[Commit_C_Id]), _))
      ])
 :-
@@ -213,14 +211,14 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
                      _),
 
     once(ask((Master_Descriptor.repository_descriptor),
-             (   t(Commit_A_Uri, ref:commit_message, "commit a"^^xsd:string),
-                 t(Commit_A_Uri, ref:commit_id, Commit_A_Id^^xsd:string)))),
+             (   t(Commit_A_Uri, message, "commit a"^^xsd:string),
+                 t(Commit_A_Uri, identifier, Commit_A_Id^^xsd:string)))),
     once(ask((Master_Descriptor.repository_descriptor),
-             (   t(Commit_B_Uri, ref:commit_message, "commit b"^^xsd:string),
-                 t(Commit_B_Uri, ref:commit_id, Commit_B_Id^^xsd:string)))),
+             (   t(Commit_B_Uri, message, "commit b"^^xsd:string),
+                 t(Commit_B_Uri, identifier, Commit_B_Id^^xsd:string)))),
     once(ask((Master_Descriptor.repository_descriptor),
-             (   t(Commit_C_Uri, ref:commit_message, "commit c"^^xsd:string),
-                 t(Commit_C_Uri, ref:commit_id, Commit_C_Id^^xsd:string)))),
+             (   t(Commit_C_Uri, message, "commit c"^^xsd:string),
+                 t(Commit_C_Uri, identifier, Commit_C_Id^^xsd:string)))),
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
@@ -229,7 +227,6 @@ test(fast_forward_branch_from_empty_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      fixme(document_refactor),
       throws(error(no_common_history, _))
      ])
 :-
@@ -258,8 +255,7 @@ test(fast_forward_branch_from_unrelated_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(no_common_history, _)),
-      fixme(document_refactor)
+      throws(error(no_common_history, _))
      ])
 :-
     Origin_Path = "admin/foo",
@@ -276,14 +272,14 @@ test(fast_forward_branch_from_unrelated_branch,
     % create a branch off the master branch
     super_user_authority(Auth),
     branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
-
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
+    create_schema(Second_Descriptor, false, Prefixes),
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context),
     with_transaction(Second_Context,
                      ask(Second_Context,
                          insert(d,e,f)),
                      _),
-
 
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, _Applied_Commit_Ids).
@@ -291,8 +287,7 @@ test(fast_forward_branch_from_unrelated_branch,
 test(fast_forward_empty_branch_from_empty_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Origin_Path = "admin/foo",
@@ -308,15 +303,12 @@ test(fast_forward_empty_branch_from_empty_branch,
     % fast forward master with second
     fast_forward_branch(Master_Descriptor, Second_Descriptor, Applied_Commit_Ids),
 
-    Applied_Commit_Ids == [],
-    Repository_Descriptor = (Master_Descriptor.repository_descriptor),
-    \+ branch_head_commit(Repository_Descriptor, "main", _Head_Commit).
+    Applied_Commit_Ids == [].
 
 test(fast_forward_nonempty_branch_from_equal_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Origin_Path = "admin/foo",
@@ -347,8 +339,7 @@ test(fast_forward_branch_from_other_repo,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo),
              create_db_without_schema(admin,bar))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
 
@@ -375,6 +366,7 @@ test(fast_forward_branch_from_other_repo,
                      ask(Bar_Context_1,
                          insert(d,e,f)),
                      _),
+
     create_context(Bar_Descriptor, commit_info{author:"test",message:"commit c"}, Bar_Context_2),
     with_transaction(Bar_Context_2,
                      ask(Bar_Context_2,
@@ -382,16 +374,15 @@ test(fast_forward_branch_from_other_repo,
                      _),
 
     Repo_Descriptor = (Foo_Descriptor.repository_descriptor),
-    commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
+    commit_uri_to_metadata(Repo_Descriptor, Commit_A_Uri, _, "commit a", _),
+    commit_id_uri(Repo_Descriptor, Commit_A, Commit_A_Uri),
 
     % fast forward master with second
     fast_forward_branch(Foo_Descriptor, Bar_Descriptor, Applied_Commit_Ids),
-
     % check history
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
-
-    History = [Commit_A, Commit_B, Commit_C],
+    History = [_Schema_Commit, Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids == [Commit_B, Commit_C],
 
 

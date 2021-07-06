@@ -257,13 +257,11 @@ open_read_write_obj(Descriptor,
     Repo_Descriptor = repo_graph{ organization_name: Organization_Name,
                                   database_name: Database_Name,
                                   type: instance},
-
+    storage(Store),
     (   Type = instance
     ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
 
-
         repository_ontology(Repo_Name),
-        storage(Store),
         safe_open_named_graph(Store, Repo_Name, Repo_Graph),
         head(Repo_Graph, Repo_Layer),
 
@@ -275,12 +273,10 @@ open_read_write_obj(Descriptor,
         },
         once(has_repository(Repo_Layer_Desc, Repository_Name)),
         ignore((   repository_head(Repo_Layer_Desc, Repository_Name, Commit_Layer_Id),
-                   storage(Store),
                    store_id_layer(Store, Commit_Layer_Id, Layer)))
     ;   Type = schema
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
-        storage(Store),
         safe_open_named_graph(Store, Ref_Name, Graph),
         head(Graph, Layer)
     ),

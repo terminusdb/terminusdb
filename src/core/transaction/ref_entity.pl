@@ -844,7 +844,8 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
     % ensure graph sets are equivalent. if not, error
-    ensure_graph_sets_included(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs),
+    % NOTE: This should be dead code...
+    % ensure_graph_sets_included(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs),
 
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
@@ -859,31 +860,6 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
         Timestamp,
         New_Commit_Id,
         New_Commit_Uri),
-
-    forall(graph_for_commit(Us_Repo_Context,
-                            Us_Commit_Uri,
-                            Type,
-                            Name,
-                            _Graph_Uri),
-           apply_graph_change(Us_Repo_Context,
-                              Them_Repo_Askable,
-                              New_Commit_Uri,
-                              New_Commit_Id,
-                              Us_Commit_Uri,
-                              Them_Commit_Uri,
-                              Type,
-                              Name,
-                              _New_Graph_Uri)),
-
-    forall(member(Graph_Type-Graph_Name,
-                  New_Graphs),
-           (   once(graph_for_commit(Them_Repo_Askable, Them_Commit_Uri, Graph_Type, Graph_Name, Graph_Uri)),
-               copy_new_graph_object(Them_Repo_Askable, Us_Repo_Context, Graph_Uri,
-                                     Them_Commit_Id, New_Graph_Uri),
-               attach_graph_to_commit(Us_Repo_Context, New_Commit_Uri,
-                                      Graph_Type, Graph_Name, New_Graph_Uri)
-           )
-          ),
 
     % Note, this doesn't yet commit the commit graph.
     % We may actually have written an invalid commit here.
@@ -1149,10 +1125,10 @@ test(apply_nonexisting_removal,
 most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Final_Commit_Id, Commit1_Path, Commit2_Path) :-
     commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
     commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
-    
+
     % Note: this isn't great time complexity
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(ref:commit_parent)), p(ref:commit_id)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
 
     Final_Commit_Id = Final_Commit_Id_2,
 
