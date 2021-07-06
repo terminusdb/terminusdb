@@ -1,6 +1,7 @@
 :- module(triplestore, [
               safe_create_named_graph/3,
               safe_open_named_graph/3,
+              safe_delete_named_graph/2,
               xrdf/4,
               xquad/5,
               xrdf_db/4,
@@ -192,6 +193,14 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     terminus_store:open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
+/*
+ * safe_delete_named_graph(+Store, +Graph_ID) is det.
+ *
+ * delete the named graph, encoded for file-name safety
+ */
+safe_delete_named_graph(Store, Graph_ID) :-
+    www_form_encode(Graph_ID, Safe_Graph_ID),
+    terminus_store:delete_named_graph(Store, Safe_Graph_ID).
 
 /**
  * import_graph(+File,+DB_ID,+Graph_ID) is det.

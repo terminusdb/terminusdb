@@ -24,6 +24,9 @@ begin_deleting_db_from_system(System, Organization,DB_Name) :-
         (   delete(Db_Uri, state, '@schema':'DatabaseState_finalized'),
             insert(Db_Uri, state, '@schema':'DatabaseState_finalized'))).
 
+/**
+* Deletes the database from the system. Fails if the database does not exist.
+*/
 delete_db_from_system(Organization,DB) :-
     create_context(system_descriptor{}, System),
     with_transaction(
@@ -70,26 +73,25 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 
     (   Force = true
     ->  force_delete_db(Organization, DB_Name)
-    ;   delete_database_label(Organization,DB_Name),
+    ;   do_or_die(delete_database_label(Organization, DB_Name),
+                  error(database_files_do_not_exist(Organization, DB_Name), _)),
+        delete_db_from_system(Organization, DB_Name)).
 
-        delete_db_from_system(Organization,DB_Name)).
+/**
+* Deletes the database label for the global store. Fails if the label does not
+* exist.
+*/
+delete_database_label(Organization, DB_Name) :-
+    triple_store(Store),
+    organization_database_name(Organization, DB_Name, Named_Graph_Name),
+    safe_delete_named_graph(Store, Named_Graph_Name).
 
-delete_database_label(Organization,Db) :-
-    db_path(Path),
-    organization_database_name(Organization,Db,Composite_Name),
-    www_form_encode(Composite_Name,Composite_Name_Safe),
-    atomic_list_concat([Path,Composite_Name_Safe,'.label'], File_Path),
-
-    (   exists_file(File_Path)
-    ->  delete_file(File_Path)
-    ;   throw(error(database_files_do_not_exist(Organization,Db),
-                    _))
-    ).
-
-/* Force deletion of databases in an inconsistent state */
-force_delete_db(Organization,DB) :-
-    ignore(delete_db_from_system(Organization,DB)),
-    catch(
-        delete_database_label(Organization,DB),
-        error(database_files_do_not_exist(_,_), _),
-        true).
+/**
+ * force_delete_db(+Organization, +DB_Name) is semidet.
+ *
+ * Deletes a database label and deletes a database from the system. Does
+ * not first check the database state. Does not fail.
+ */
+force_delete_db(Organization, DB_Name) :-
+    ignore(delete_database_label(Organization, DB_Name)),
+    ignore(delete_db_from_system(Organization, DB_Name)).
