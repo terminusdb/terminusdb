@@ -2849,8 +2849,7 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
 
 test(create_empty_branch, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2870,8 +2869,7 @@ test(create_empty_branch, [
 
 test(create_branch_from_local_without_prefixes, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2889,8 +2887,7 @@ test(create_branch_from_local_without_prefixes, [
 
 test(create_branch_from_local_with_prefixes, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2911,8 +2908,7 @@ test(create_branch_from_local_with_prefixes, [
 
 test(create_branch_that_already_exists_error, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2930,8 +2926,7 @@ test(create_branch_that_already_exists_error, [
 
 test(create_branch_from_nonexisting_origin_error, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2953,8 +2948,7 @@ test(create_branch_from_nonexisting_origin_error, [
 
 test(create_branch_from_commit_graph_error, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2978,8 +2972,7 @@ test(create_branch_from_commit_graph_error, [
 
 test(delete_empty_branch, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
 
@@ -3579,8 +3572,7 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 
 test(remote_add, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),
@@ -3604,8 +3596,7 @@ test(remote_add, [
 
 test(remote_remove, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),
@@ -3636,8 +3627,7 @@ test(remote_remove, [
 
 test(remote_set, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),
@@ -3671,8 +3661,7 @@ test(remote_set, [
 
 test(remote_get, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),
@@ -3699,8 +3688,7 @@ test(remote_get, [
 
 test(remote_list, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),

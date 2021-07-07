@@ -29,9 +29,7 @@ test(insert_layer_object,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
-    ref_schema_context_from_label_descriptor(Descriptor, Context),
+    ref_schema_context_from_label_descriptor("testlabel",Descriptor, Context),
 
     Layer_Id = "f3dfc8d0d103b0be9428938174326e6256ad1beb",
     with_transaction(Context,

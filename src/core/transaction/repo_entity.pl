@@ -140,9 +140,7 @@ test(local_repo_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
-    repo_schema_context_from_label_descriptor(Descriptor, Context),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context),
 
     with_transaction(Context,
                      (   insert_local_repository(Context, "foo", _),
@@ -151,7 +149,7 @@ test(local_repo_insert,
                      _),
 
     % We need to get a valid schema+context and so can not use the bare descriptor!
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
 
     findall(Name, has_repository(Context2, Name), Repositories),
     findall(Name, has_local_repository(Context2, Name), Repositories),
@@ -165,16 +163,13 @@ test(local_repo_insert_with_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
-
-    repo_schema_context_from_label_descriptor(Descriptor, Context),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context),
 
     with_transaction(Context,
                      insert_local_repository(Context, "foo", "245cf1f533d691a031205b7bd21025076b31ee35", _),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
     repository_head(Context2, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
 
 :- end_tests(local_repo_objects).
@@ -186,10 +181,8 @@ test(remote_repo_insert,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context),
 
     with_transaction(Context,
                      (   insert_remote_repository(Context, "foo", "http://remote1/", _),
@@ -197,7 +190,7 @@ test(remote_repo_insert,
                          insert_remote_repository(Context, "baz", "http://remote3/", _)),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
     findall(Name, has_repository(Context2, Name), Repositories),
     findall(Name, has_remote_repository(Context2, Name), Repositories),
 
@@ -217,16 +210,14 @@ test(remote_repo_insert_with_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context),
 
     with_transaction(Context,
                      insert_remote_repository(Context, "foo", "http://remote/", "245cf1f533d691a031205b7bd21025076b31ee35", _),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
     repository_head(Context2, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
 :- end_tests(remote_repo_objects).
 
@@ -237,16 +228,14 @@ test(repo_update_unset_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context1),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context1),
 
     with_transaction(Context1,
                      insert_local_repository(Context1, "foo", _),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
 
     \+ repository_head(Context2, "foo", _),
 
@@ -254,49 +243,44 @@ test(repo_update_unset_head,
                      update_repository_head(Context2, "foo", "245cf1f533d691a031205b7bd21025076b31ee35"),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context3),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context3),
     repository_head(Context3, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
 
 test(repo_update_set_head,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
-
-    repo_schema_context_from_label_descriptor(Descriptor, Context1),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context1),
 
     with_transaction(Context1,
                      insert_local_repository(Context1, "foo", "df96c0a9f2262116ed3d106e4b8c1f125d4f54ef", _),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
     with_transaction(Context2,
                      update_repository_head(Context2, "foo", "245cf1f533d691a031205b7bd21025076b31ee35"),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context3),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context3),
     repository_head(Context3, "foo", "245cf1f533d691a031205b7bd21025076b31ee35").
 
 test(repo_update_remote_url,
      [setup((setup_temp_store(State),
              ensure_label(testlabel))),
       cleanup(teardown_temp_store(State))]) :-
-    Descriptor = label_descriptor{instance:"testlabel",
-                                  variety: repository_descriptor},
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context1),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context1),
 
     with_transaction(Context1,
                      insert_remote_repository(Context1, "foo", "http://remote1/", _),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context2),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context2),
     with_transaction(Context2,
                      update_repository_remote_url(Context2, "foo", "http://remote2/"),
                      _),
 
-    repo_schema_context_from_label_descriptor(Descriptor, Context3),
+    repo_schema_context_from_label_descriptor("testlabel", _, Context3),
     repository_remote_url(Context3, "foo", "http://remote2/").
 
 :- end_tests(repo_update).
