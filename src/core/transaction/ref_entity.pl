@@ -157,13 +157,7 @@ insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Commit_Id, C
 insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
     insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri),
     once(ask(Context,
-             insert(Commit_Uri, parent, Parent_Commit_Uri))),
-    once(ask(Context,
-             (   t(Parent_Commit_Uri, schema, Schema),
-                 insert(Commit_Uri, schema, Schema)))),
-    ignore(ask(Context,
-               (   t(Parent_Commit_Uri, instance, Instance),
-                   insert(Commit_Uri, instance, Instance)))).
+             insert(Commit_Uri, parent, Parent_Commit_Uri))).
 
 insert_commit_object_on_branch(Context, Branch_Name, Commit_Id, Commit_Uri) :-
     insert_commit_object_on_branch(Context, Context.commit_info, Branch_Name, Commit_Id, Commit_Uri).
@@ -202,7 +196,7 @@ reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
 % Note: We should probably refactor to add this to copy graph / copy new graph
 attach_layer_to_commit(Context, Commit_Uri, Graph_Type, Layer_Uri) :-
     once(ask(Context,
-             (   insert(Commit_Uri, '@schema':Graph_Type, Layer_Uri)))).
+             (   insert(Commit_Uri, Graph_Type, Layer_Uri)))).
 
 graph_idgen(Context, Commit_Id, Graph_Type, Graph_Uri) :-
     once(
