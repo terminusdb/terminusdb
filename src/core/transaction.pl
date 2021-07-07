@@ -81,6 +81,7 @@
               repository_prefixes/2,
               copy_prefixes/2,
               attach_layer_to_commit/4,
+              layer_uri_for_commit/4,
 
               % repo_entity.pl
               has_repository/2,

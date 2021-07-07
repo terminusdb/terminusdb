@@ -50,10 +50,8 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
     with_transaction(
         Context,
         (   insert_base_commit_object(Context, Commit_Info, Commit_Id, Commit_Uri),
-
             forall(
-                graph_for_commit(Repository_Descriptor, Old_Commit_Uri,
-                                 Type, Name, _Graph_Uri),
+                layer_uri_for_commit(Repository_Descriptor, Old_Commit_Uri, Type, _Layer_Uri),
                 (
                     Graph_Descriptor = branch_graph{
                                            organization_name: Organization_Name,
@@ -63,14 +61,12 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
                                            type : Type },
                     graph_descriptor_transaction_objects_read_write_object(
                         Graph_Descriptor, [Transaction], RWO),
-
                     get_dict(read,RWO,Layer),
                     (   ground(Layer)
                     ->  squash(Layer,New_Layer),
                         layer_to_id(New_Layer,Layer_Id),
-                        insert_layer_object(Context, Layer_Id, Layer_Uri),
-                        insert_graph_object(Context, Commit_Uri, Commit_Id, Type, Name, Layer_Uri, New_Graph_Uri),
-                        ref_entity:attach_graph_to_commit(Context,Commit_Uri,Type,Name, New_Graph_Uri)
+                        insert_layer_object(Context, Layer_Id, New_Layer_Uri),
+                        attach_layer_to_commit(Context, Commit_Uri, Type, New_Layer_Uri)
                     ;   true
                     )
                 )
@@ -98,8 +94,8 @@ test(squash_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))
+     ]
     ) :-
 
     Path = "admin/testdb",
@@ -140,6 +136,7 @@ test(squash_branch,
             ask(Commit_Askable,
                 t(X,Y,Z)),
             Triples),
+
     sort(Triples,Sorted),
     sort([a-b-c,e-f-g],Correct),
     ord_seteq(Sorted, Correct),

@@ -1613,9 +1613,10 @@ insert_document(Transaction, Document, ID) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
+
     (   get_dict('@id', Elaborated, ID)
     ->  true
-    ;   throw(error(no_id_in_schema_document(Elaborated), _))
+    ;   throw(error(no_id_in_document(Elaborated), _))
     ),
 
     check_existing_document_status(Transaction, Elaborated, Status),

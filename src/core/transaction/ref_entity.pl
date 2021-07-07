@@ -113,8 +113,9 @@ commit_id_to_parent_uri(Askable, Commit_Id, Parent_Commit_Uri) :-
     commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri).
 
 layer_uri_for_commit(Askable, Commit_Uri, Type, Layer_Uri) :-
+    member(Type, [instance, schema]),
     ask(Askable,
-        (   t(Commit_Uri, Type, Layer_Uri))).
+        t(Commit_Uri, Type, Layer_Uri)).
 
 insert_branch_object(Context, Branch_Name, Branch_Uri) :-
     insert_document(
