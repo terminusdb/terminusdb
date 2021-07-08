@@ -729,16 +729,34 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
         New_Commit_Id,
         New_Commit_Uri),
 
-    (   layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, instance, Instance_Layer_Uri)
-    ->  layer_id_uri(Them_Repo_Askable, Instance_Layer_Id, Instance_Layer_Uri),
-        insert_layer_object(Us_Repo_Context, Instance_Layer_Id, Instance_Layer_Uri),
-        attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, instance, Instance_Layer_Uri)
-    ;   true),
+    ignore(
+        apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,instance)
+    ),
 
-    layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, schema, Schema_Layer_Uri),
-    layer_id_uri(Them_Repo_Askable, Schema_Layer_Id, Schema_Layer_Uri),
-    insert_layer_object(Us_Repo_Context, Schema_Layer_Id, Schema_Layer_Uri),
-    attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, schema, Schema_Layer_Uri).
+    apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,schema).
+
+apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,Type) :-
+
+    layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type, Them_Layer_Uri),
+    layer_id_uri(Them_Repo_Askable, Them_Layer_Id, Them_Layer_Uri),
+
+    triple_store(Store),
+    store_id_layer(Store, Them_Layer_Id, Them_Layer),
+
+    (   layer_uri_for_commit(Us_Repo_Context, Us_Commit_Uri, Type, Us_Layer_Uri)
+    ->  layer_id_uri(Them_Repo_Askable, Us_Layer_Id, Us_Layer_Uri),
+        store_id_layer(Store, Us_Layer_Id, Us_Layer),
+        open_write(Us_Layer,Builder)
+    ;   open_write(Store,Builder)
+    ),
+
+    % commit new layer to store..
+    nb_apply_delta(Builder,Them_Layer),
+    nb_commit(Builder,New_Layer),
+    store_id_layer(Store, New_Layer_Id, New_Layer),
+
+    insert_layer_object(Us_Repo_Context, New_Layer_Id, New_Layer_Uri),
+    attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, Type, New_Layer_Uri).
 
 repository_prefixes(Repository_Askable, Prefixes) :-
     findall(Key-Value,
