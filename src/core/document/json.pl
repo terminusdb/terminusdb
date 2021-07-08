@@ -1875,7 +1875,7 @@ schema1('
   "@inherits" : "Person",
   "staff_number" : "xsd:string",
   "boss" : { "@type" : "Optional",
-                 "@class" : "Employee" },
+             "@class" : "Employee" },
   "tasks" : { "@type" : "List",
               "@class" : "Task" } }
 
@@ -4858,3 +4858,123 @@ test(subdocument_deletes_lists, [
     \+ xrdf(Inst, _, _, _).
 
 :- end_tests(arithmetic_document).
+
+:- begin_tests(employee_documents).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema6('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@documentation": {"@comment": "This is address", "@properties": {}},
+  "@id": "Address",
+  "@key": {"@fields": ["street", "postal_code"],
+           "@type": "Lexical"},
+  "@subdocument": [],
+  "@type": "Class",
+  "country": "Country",
+  "postal_code": "xsd:string",
+  "street": "xsd:string"}
+
+{ "@id": "Country",
+  "@key": {"@type": "ValueHash"},
+  "@type": "Class",
+  "name": "xsd:string",
+  "perimeter": {"@class": "Coordinate",
+                "@type": "List"}}
+
+{ "@id": "Coordinate",
+  "@key": {"@type": "Random"},
+  "@type": "Class",
+  "x": "xsd:decimal",
+  "y": "xsd:decimal"}
+
+{ "@id": "Team", "@type": "Enum",
+  "@value": ["IT", "Marketing"]}
+
+{ "@id": "Employee",
+  "@inherits": "Person",
+  "@key": {"@type": "Random"},
+  "@type": "Class",
+  "address_of": "Address",
+  "contact_number": {"@class": "xsd:string",
+                     "@type": "Optional"},
+  "managed_by": "Employee"}
+
+{ "@documentation": { "@comment": "This is a person",
+                      "@properties": { "age": "Age of the person.",
+                                       "name": "Name of the person." }},
+  "@id": "Person",
+  "@key": {"@type": "Random"},
+  "@type": "Class",
+  "age": "xsd:integer",
+  "friend_of": {"@class": "Person",
+                "@type": "Set"},
+  "name": "xsd:string"}
+').
+
+write_schema6(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema6(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(insert_employee, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema6(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    D1 = _{'@type': "Country",
+           name: "United Kingdom"},
+    D2 = _{'@type': "Address",
+           country: _{'@type': "Country",
+                      name: "United Kingdom"},
+           postal_code: "A12 345",
+           street: "123 Abc Street"},
+    D3 = _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
+           '@type': "Employee",
+           address_of: _{'@type': "Address",
+                         country: _{'@type': 'Country',
+                                    name: "United Kingdom"},
+                         postal_code: "A12 345",
+                         street: "123 Abc Street"},
+           contact_number: "07777123456",
+           managed_by: _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
+                         '@type': "@id"}},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (
+            insert_document(Context, D1, ID1),
+            writeq(ID1),nl,
+            insert_document(Context, D2, ID2),
+            writeq(ID2),nl,
+            insert_document(Context, D3, ID3),
+            writeq(ID3)
+        ),
+        _),
+
+    get_document(Desc, ID1, JSON1),
+    get_document(Desc, ID2, _JSON2),
+    get_document(Desc, ID3, _JSON3),
+
+    print_term(JSON1,[]).
+
+:- end_tests(employee_documents).
