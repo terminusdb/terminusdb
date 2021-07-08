@@ -8,19 +8,10 @@
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),
-    xrdf(Transaction_Object,X,P,Y).
-hop(type_name_filter{ type : instance , names : _Names}, X, P, Y, Transaction_Object) :-
-    xrdf(Transaction_Object,X,P,Y).
+    xrdf(Transaction_Object.instance_objects,X,P,Y).
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(schema,Types),
     xrdf(Transaction_Object.schema_objects, X, P, Y).
-hop(type_name_filter{ type : schema , names : _Names}, X, P, Y, Transaction_Object) :-
-    xrdf(Transaction_Object.schema_objects, X, P, Y).
-hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
-    memberchk(inference,Types),
-    xrdf(Transaction_Object.inference_objects, X, P, Y).
-hop(type_name_filter{ type : inference , names : _Names}, X, P, Y, Transaction_Object) :-
-    xrdf(Transaction_Object.inference_objects, X, P, Y).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
     run_pattern(Pattern,XE,YE,Path,Filter,Transaction_Object).
