@@ -714,9 +714,6 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
     apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
-    % ensure graph sets are equivalent. if not, error
-    % NOTE: This should be dead code...
-    % ensure_graph_sets_included(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, New_Graphs),
 
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
@@ -732,10 +729,16 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
         New_Commit_Id,
         New_Commit_Uri),
 
-    % Note, this doesn't yet commit the commit graph.
-    % We may actually have written an invalid commit here.
+    (   layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, instance, Instance_Layer_Uri)
+    ->  layer_id_uri(Them_Repo_Askable, Instance_Layer_Id, Instance_Layer_Uri),
+        insert_layer_object(Us_Repo_Context, Instance_Layer_Id, Instance_Layer_Uri),
+        attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, instance, Instance_Layer_Uri)
+    ;   true),
 
-    true.
+    layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, schema, Schema_Layer_Uri),
+    layer_id_uri(Them_Repo_Askable, Schema_Layer_Id, Schema_Layer_Uri),
+    insert_layer_object(Us_Repo_Context, Schema_Layer_Id, Schema_Layer_Uri),
+    attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, schema, Schema_Layer_Uri).
 
 repository_prefixes(Repository_Askable, Prefixes) :-
     findall(Key-Value,

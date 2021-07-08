@@ -310,38 +310,31 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
     validation_object{
         parent : Parent_Transaction,
         descriptor: Descriptor,
-        instance_objects: Instance_Objects,
-        schema_objects: Schema_Objects,
-        inference_objects: Inference_Objects
+        instance_objects: [Instance_Object],
+        schema_objects: [Schema_Object]
     } :< Commit_Validation_Object,
 
     commit_descriptor{commit_id : Commit_Id} :< Descriptor,
     !,
     commit_id_uri(Parent_Transaction, Commit_Id, Commit_Uri),
 
-    append([Instance_Objects,Schema_Objects,Inference_Objects],
-           Union_Objects),
-
-    (   exists(validation_object_changed, Union_Objects)
+    (   exists(validation_object_changed, [Instance_Object, Schema_Object])
     ->  insert_child_commit_object(Parent_Transaction,
                                    Commit_Uri,
                                    (Commit_Validation_Object.commit_info),
                                    New_Commit_Id,
                                    New_Commit_Uri),
-        forall(member(Graph_Object, Union_Objects),
-               (   ignore((ground(Graph_Object.read),
-                           layer_to_id(Graph_Object.read, Layer_Id),
-                           insert_layer_object(Parent_Transaction, Layer_Id, Graph_Layer_Uri))),
-                   insert_graph_object(Parent_Transaction,
-                                       New_Commit_Uri,
-                                       New_Commit_Id,
-                                       Graph_Object.descriptor.type,
-                                       Graph_Object.descriptor.name,
-                                       Graph_Layer_Uri,
-                                       _Graph_Uri)))
 
-    ;   true
-    ).
+        (   var(Instance_Object.read)
+        ->  true
+        ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
+            insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
+            attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
+
+        layer_to_id(Schema_Object.read, Schema_Layer_Id),
+        insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
+        attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
+    ;   true).
 
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
