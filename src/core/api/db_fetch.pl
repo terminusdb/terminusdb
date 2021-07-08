@@ -115,8 +115,7 @@ test(fetch_something,
              create_db_without_schema(admin,test),
              resolve_absolute_string_descriptor('admin/test',Branch_Descriptor)
              )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ]
     ) :-
     create_context(Branch_Descriptor,commit_info{author: "tester", message: "testing"}, Branch_Context),
@@ -138,7 +137,6 @@ test(fetch_something,
             resolve_absolute_string_descriptor(
                 "admin/test_local/_meta", Database_Descriptor),
             create_context(Database_Descriptor, Database_Context),
-
             % Wrong URI
             Remote_URL = "http://fake_destination/pack/admin/test",
             with_transaction(
@@ -150,7 +148,6 @@ test(fetch_something,
                                          _Repo_URI
                                         ),
                 _),
-
             Remote_Repository = "admin/test_local/terminus_remote/_commits",
             super_user_authority(Auth),
             remote_fetch(system_descriptor{}, Auth,
@@ -158,7 +155,6 @@ test(fetch_something,
                          get_pack_from_store(Old_Store),
                          Remote_Repository_Layer_Id,
                          Head_Has_Updated),
-
             Local_Repository_Layer_Id = Remote_Repository_Layer_Id,
             Head_Has_Updated = true,
 

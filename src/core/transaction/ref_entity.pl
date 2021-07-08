@@ -34,9 +34,6 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
-              update_prefixes/2,
-              repository_prefixes/2,
-              copy_prefixes/2,
               attach_layer_to_commit/4
           ]).
 :- use_module(library(terminus_store)).
@@ -744,7 +741,7 @@ apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Ur
     store_id_layer(Store, Them_Layer_Id, Them_Layer),
 
     (   layer_uri_for_commit(Us_Repo_Context, Us_Commit_Uri, Type, Us_Layer_Uri)
-    ->  layer_id_uri(Them_Repo_Askable, Us_Layer_Id, Us_Layer_Uri),
+    ->  layer_id_uri(Us_Repo_Context, Us_Layer_Id, Us_Layer_Uri),
         store_id_layer(Store, Us_Layer_Id, Us_Layer),
         open_write(Us_Layer,Builder)
     ;   open_write(Store,Builder)
@@ -757,77 +754,6 @@ apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Ur
 
     insert_layer_object(Us_Repo_Context, New_Layer_Id, New_Layer_Uri),
     attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, Type, New_Layer_Uri).
-
-repository_prefixes(Repository_Askable, Prefixes) :-
-    findall(Key-Value,
-            (   ask(Repository_Askable,
-                    (   t(PrefixPair, ref:prefix, Key_String^^xsd:string),
-                        t(PrefixPair, ref:prefix_uri, Value_String^^xsd:string))),
-                atom_string(Key,Key_String),
-                atom_string(Value,Value_String)),
-            Key_Value_Pairs),
-    dict_create(Prefixes,_,Key_Value_Pairs).
-
-insert_prefix(Context, Key, URI) :-
-    ask(Context,
-        (   idgen('terminusdb:///repository/data/PrefixPair',[Key], Pair),
-            insert(Pair, rdf:type, ref:'PrefixPair'),
-            insert(ref:default_prefixes, ref:prefix_pair, Pair),
-            insert(Pair, ref:prefix, Key^^xsd:string),
-            insert(Pair, ref:prefix_uri, URI^^xsd:string)
-        )
-       ).
-
-remove_prefix(Context, Key) :-
-    ask(Context,
-        (   t(Pair, ref:prefix, Key^^xsd:string),
-            t(Pair, ref:prefix_uri, URI^^xsd:string),
-            delete(Pair, rdf:type, ref:'PrefixPair'),
-            delete(ref:default_prefixes, ref:prefix_pair, Pair),
-            delete(Pair, ref:prefix, Key^^xsd:string),
-            delete(Pair, ref:prefix_uri, URI^^xsd:string))).
-
-update_prefix(Context, Key, URI) :-
-    ask(Context,
-        (   t(Pair, ref:prefix, Key^^xsd:string),
-            t(Pair, ref:prefix_uri, Old_URI^^xsd:string),
-            delete(Pair, ref:prefix_uri, Old_URI^^xsd:string),
-            insert(Pair, ref:prefix_uri, URI^^xsd:string))).
-
-update_prefixes(Context, Prefixes) :-
-    repository_prefixes(Context, Old_Prefixes),
-
-    dict_keys(Prefixes, Prefixes_Keys),
-    list_to_ord_set(Prefixes_Keys, Prefixes_Keys_Set),
-    dict_keys(Old_Prefixes, Old_Prefixes_Keys),
-    list_to_ord_set(Old_Prefixes_Keys, Old_Prefixes_Keys_Set),
-
-    ord_subtract(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Add),
-    ord_subtract(Old_Prefixes_Keys_Set, Prefixes_Keys_Set, Keys_To_Remove),
-    ord_intersect(Prefixes_Keys_Set, Old_Prefixes_Keys_Set, Keys_To_Potentially_Update),
-
-    exclude({Old_Prefixes, Prefixes}/[X]>>(get_dict(X, Old_Prefixes, Result),
-                                           get_dict(X, Prefixes, Result)),
-            Keys_To_Potentially_Update,
-            Keys_To_Update),
-
-    % first, delete all prefixes that are no longer needed
-    forall(member(Key, Keys_To_Add),
-           (   get_dict(Key, Prefixes, URI),
-               insert_prefix(Context, Key, URI))),
-
-    % second, insert prefixes that are new
-    forall(member(Key, Keys_To_Remove),
-           remove_prefix(Context, Key)),
-
-    % third, update existing prefixes that have changed
-    forall(member(Key, Keys_To_Update),
-           (   get_dict(Key, Prefixes, URI),
-               update_prefix(Context, Key, URI))).
-
-copy_prefixes(Repo_From_Askable, Repo_To_Context) :-
-    repository_prefixes(Repo_From_Askable, Prefixes),
-    update_prefixes(Repo_To_Context, Prefixes).
 
 :- begin_tests(commit_application).
 :- use_module(core(util/test_utils)).
@@ -873,15 +799,11 @@ test(apply_single_addition,
     Repo_Descriptor = (Descriptor1.repository_descriptor),
 
     create_context(Repo_Descriptor, Context5),
-    print_all_documents(Repo_Descriptor),
+
     commit_uri_to_parent_uri(Context5, New_Commit_B_Uri, Commit_A_Uri),
     commit_uri_to_metadata(Context5, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Context5, New_Commit_B_Uri, _, "commit b", _),
-    findall(X-Y-Z,
-            ask(Descriptor1,
-                t(X,Y,Z)),
-            Triples),
-    writeq(Triples),
+
     once(ask(Descriptor1,
              (   t(a,b,c),
                  t(d,e,f),
@@ -892,8 +814,8 @@ test(apply_single_removal,
              create_db_without_schema("admin", "testdb1"),
              create_db_without_schema("admin", "testdb2")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
@@ -938,8 +860,8 @@ test(apply_existing_addition,
              create_db_without_schema("admin", "testdb1"),
              create_db_without_schema("admin", "testdb2")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
@@ -978,8 +900,8 @@ test(apply_nonexisting_removal,
              create_db_without_schema("admin", "testdb1"),
              create_db_without_schema("admin", "testdb2")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     % create single commit on both databases with the same single main graph
     % rebase one commit on the other
     % query to ensure all triples are now reachable
@@ -1055,8 +977,8 @@ test(common_ancestor_after_branch_and_some_commits,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
 
     Origin_Path = "admin/testdb",
     resolve_absolute_string_descriptor(Origin_Path, Descriptor),
@@ -1161,8 +1083,8 @@ test(commit_history_ids,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,
@@ -1190,8 +1112,8 @@ test(commit_history_uris,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]) :-
+      cleanup(teardown_temp_store(State))
+     ]) :-
     resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     create_context(Descriptor, commit_info{author:"test",message: "commit a"}, Commit_A_Context),
     with_transaction(Commit_A_Context,

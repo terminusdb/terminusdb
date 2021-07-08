@@ -1012,8 +1012,7 @@ test(terminus, [
 
 test(label, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_store(State))
      ])
 :-
     Descriptor = label_descriptor{instance: "test",
@@ -1032,8 +1031,7 @@ test(label, [
 
 test(id, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_store(State))
      ])
 :-
     triple_store(Store),

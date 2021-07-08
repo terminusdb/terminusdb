@@ -77,9 +77,6 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
-              update_prefixes/2,
-              repository_prefixes/2,
-              copy_prefixes/2,
               attach_layer_to_commit/4,
               layer_uri_for_commit/4,
 

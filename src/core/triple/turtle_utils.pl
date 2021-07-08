@@ -2,8 +2,7 @@
               graph_to_turtle/3,
               update_turtle_graph/2,
               insert_turtle_graph/2,
-              dump_turtle_graph/2,
-              dump_md/2
+              dump_turtle_graph/2
           ]).
 
 /** <module> Turtle utilities
@@ -130,18 +129,6 @@ dump_turtle_graph(Context,String) :-
             dict_pairs(Context.prefixes, _, Pairs),
             graph_to_turtle(Pairs, Graph, Stream)
         )
-    ).
-
-dump_md(Context,String) :-
-    Graph_Filter = (Context.filter),
-    do_or_die((Graph_Filter.type = schema),
-              error(unimplemented('Only schema graph supported for MD dump'))),
-    [Transaction_Object] = (Context.transaction_objects),
-    Prefixes = (Context.prefixes),
-    with_output_to(
-        string(String),
-        (   current_output(Stream),
-            dump_md_stream(Transaction_Object,Prefixes,Stream))
     ).
 
 /**

@@ -46,20 +46,11 @@ clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predica
                                 ),
         _Meta_Data),
 
-    resolve_absolute_descriptor([Account,DB,"local","_commits"], To_Descriptor),
     From_Path_List = [Account,DB,"origin","_commits"],
-    resolve_absolute_descriptor(From_Path_List, From_Descriptor),
     merge_separator_split(From_Path, '/', From_Path_List),
 
     % Fetch remote
     remote_fetch(System_DB2, Auth, From_Path, Fetch_Predicate, _New_Head, _Has_Updated),
-
-    create_context(To_Descriptor, To_Context),
-    with_transaction(
-        To_Context,
-        % Copy Prefixes
-        copy_prefixes(From_Descriptor, To_Context),
-        _),
 
     resolve_absolute_descriptor([Account,DB,"local","branch", "main"], To_Branch_Descriptor),
     resolve_absolute_descriptor([Account,DB,"origin","branch", "main"], From_Branch_Descriptor),

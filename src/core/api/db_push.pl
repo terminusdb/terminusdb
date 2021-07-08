@@ -12,6 +12,7 @@
 :- use_module(db_create).
 :- use_module(core(account)).
 :- use_module(library(http/http_client)).
+:- use_module(core(document)).
 
 :- use_module(library(tus)).
 
@@ -29,7 +30,7 @@
 % - communication error while talking to the remote
 
 :- meta_predicate push(+, +, +, +, +, +, 2, -).
-push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
+push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
      Push_Predicate, Result) :-
 
     do_or_die(
@@ -56,10 +57,6 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
     do_or_die(
         Type = remote,
         error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name),_)),
-
-    (   memberchk(prefixes(true), Options)
-    ->  Push_Prefixes = true
-    ;   Push_Prefixes = false),
 
     repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
 
@@ -120,11 +117,6 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, Options,
         ;   insert_branch_object(Remote_Repository_Context_With_Prefixes, Remote_Branch, _)
         )
     ),
-
-    %% add prefixes if desired
-    (   Push_Prefixes = true
-    ->  copy_prefixes(Repository_Context, Remote_Repository_Context)
-    ;   true),
 
     cycle_context(Remote_Repository_Context, Final_Context, Remote_Transaction_Object, _),
     pack_from_context(Final_Context, some(Last_Head_Id), Payload_Option),
@@ -281,8 +273,7 @@ test(push_on_empty,
 test(push_twice,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -310,8 +301,11 @@ test(push_twice,
 
     super_user_authority(Auth),
 
-    once(ask(Descriptor.repository_descriptor,
-                        t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
+    Repo = (Descriptor.repository_descriptor),
+
+    once(ask(Repo,
+             t(_,layer:identifier, Expected_Layer_Id^^(xsd:string)))),
+
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), _Result),
 
@@ -331,13 +325,13 @@ test(push_twice,
 
     resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote_Branch),
     findall(X-Y-Z, ask(Remote_Branch, t(X,Y,Z)), Triples),
+
     sort(Triples, [a-b-c,c-d-e,h-i-j,k-l-m]).
 
 test(push_twice_with_second_push_changing_nothing,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -366,11 +360,10 @@ test(push_twice_with_second_push_changing_nothing,
     super_user_authority(Auth),
 
     once(ask(Descriptor.repository_descriptor,
-                        t(_,layer:layer_id, Expected_Layer_Id^^(xsd:string)))),
+                        t(_,layer:identifier, Expected_Layer_Id^^(xsd:string)))),
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(Expected_Layer_Id), Result),
     Result = new(Head),
-    
 
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_Expected_Layer_Id_2), Result_2),
 
@@ -379,8 +372,7 @@ test(push_twice_with_second_push_changing_nothing,
 test(push_empty_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -404,8 +396,8 @@ test(push_empty_branch,
 test(push_new_nonmaster_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))
+     ])
 :-
 
     Destination_Path = "admin/foo/local/branch/work",
@@ -435,15 +427,18 @@ test(push_new_nonmaster_branch,
 test(push_new_nonmaster_branch_with_content,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))
+     ])
 :-
 
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
     branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
-
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
+    Prefixes = _{'@base' : 'http://somewhere_else/',
+                 '@schema': 'http://somewhere/schema#',
+                 foo: 'http://the_foo_place/'},
+    create_schema(Work_Branch_Descriptor, [], Prefixes),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -477,8 +472,8 @@ test(push_without_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      error(branch_does_not_exist(_)),
-      fixme(document_refactor)])
+      error(branch_does_not_exist(_))
+     ])
 :-
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
@@ -502,8 +497,8 @@ test(push_without_repository,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      error(no_repository_with_name(_,_)),
-      fixme(document_refactor)])
+      error(no_repository_with_name(_,_))
+     ])
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
@@ -525,14 +520,18 @@ test(push_local,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      error(push_attempted_on_non_remote(_,_)),
-      fixme(document_refactor)])
+      error(push_attempted_on_non_remote(_,_))
+     ])
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
     branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
+    Prefixes = _{'@base' : 'http://somewhere_else/',
+                 '@schema': 'http://somewhere/schema#',
+                 foo: 'http://the_foo_place/'},
+    create_schema(Work_Branch_Descriptor, [], Prefixes),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -566,14 +565,18 @@ test(push_headless_remote,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      error(push_has_no_repository_head(_)),
-      fixme(document_refactor)])
+      error(push_has_no_repository_head(_))
+     ])
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
     branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
 
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
+    Prefixes = _{'@base' : 'http://somewhere_else/',
+                 '@schema': 'http://somewhere/schema#',
+                 foo: 'http://the_foo_place/'},
+    create_schema(Work_Branch_Descriptor, [], Prefixes),
 
     create_context(Work_Branch_Descriptor, commit_info{author:"test", message:"test"}, Work_Branch_Context),
     with_transaction(Work_Branch_Context,
@@ -601,11 +604,11 @@ test(push_headless_remote,
 
     true.
 
-test(push_prefixes, 
+test(push_prefixes,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))
+     ])
 :-
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -622,18 +625,14 @@ test(push_prefixes,
 
     super_user_authority(Auth),
 
+    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_), _Result),
 
-    create_context((Descriptor.repository_descriptor), Local_Repository_Context),
-    with_transaction(
-        Local_Repository_Context,
-        update_prefixes(Local_Repository_Context,
-                        _{doc : 'http://somewhere_else/', scm: 'http://somewhere/schema#', foo: 'http://the_foo_place/'}),
-        _),
+    resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote),
+    database_context(Remote, Prefixes),
 
-    push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [prefixes(true)], test_pusher(_), _Result),
-
-    repository_prefixes(Remote_Repository_Descriptor, Prefixes),
-    Prefixes = _{doc : 'http://somewhere_else/', scm: 'http://somewhere/schema#', foo: 'http://the_foo_place/'}.
+    Prefixes = _{'@base' : "http://somewhere.for.now/document/",
+                 '@schema': "http://somewhere.for.now/schema#",
+                 '@type': 'Context'}.
 
 erroring_push_predicate(Error, _Remote_Url, _Payload) :-
     throw(Error).
@@ -666,8 +665,8 @@ test(remote_diverged,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(history_diverged),_)),
-      fixme(document_refactor)])
+      throws(error(remote_unpack_failed(history_diverged),_))
+     ])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -677,8 +676,8 @@ test(remote_does_not_exist,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(remote_unknown),_)),
-      fixme(document_refactor)])
+      throws(error(remote_unpack_failed(remote_unknown),_))
+     ])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -688,8 +687,8 @@ test(remote_authorization_failed,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(authorization_failure(_)),_)),
-      fixme(document_refactor)])
+      throws(error(remote_unpack_failed(authorization_failure(_)),_))
+     ])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -699,8 +698,8 @@ test(remote_communication_failed,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(communication_failure(_)),_)),
-      fixme(document_refactor)])
+      throws(error(remote_unpack_failed(communication_failure(_)),_))
+     ])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -710,8 +709,8 @@ test(remote_gave_unknown_error,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full),_)),_)),
-      fixme(document_refactor)])
+      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full),_)),_))
+     ])
 :-
     generic_setup_for_error_conditions(Branch_Descriptor, Auth),
     resolve_absolute_string_descriptor(Branch, Branch_Descriptor),

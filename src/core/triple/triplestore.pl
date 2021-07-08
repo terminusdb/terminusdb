@@ -14,6 +14,7 @@
               global_triple_store/1,
               local_triple_store/1,
               retract_local_triple_store/1,
+              set_local_triple_store/1,
               default_triple_store/1,
               memory_triple_store/1,
               with_triple_store/2
@@ -112,17 +113,10 @@ global_triple_store(Triple_Store) :-
  * triple store temporarily set to the given store.
  */
 local_triple_store(Triple_Store) :-
-    var(Triple_Store),
-    !,
-    % use of once here is because the thread-local store may have been asserted multiple times, such as in nested with_triple_store scopes.
     once(local_triple_store_var(Triple_Store)).
-local_triple_store(Triple_Store) :-
-    % Triple_Store is non-var, so this is a set
-    % Note that we're only asserting here, not retracting.
-    (   local_triple_store_var(X),
-        nonvar(X)
-    ->  X = Triple_Store
-    ;   asserta(local_triple_store_var(Triple_Store))).
+
+set_local_triple_store(Triple_Store) :-
+    asserta(local_triple_store_var(Triple_Store)).
 
 /**
  * retract_local_triple_store(+Triple_Store) is det.
@@ -130,7 +124,7 @@ local_triple_store(Triple_Store) :-
  * ensures a particular triple store won't be returned (anymore) by local_triple_store/1.
  */
 retract_local_triple_store(Triple_Store) :-
-    retractall(local_triple_store_var(Triple_Store)).
+    retract(local_triple_store_var(Triple_Store)).
 
 /**
  * with_triple_store(+Triple_Store, :Goal) is nondet.
@@ -144,7 +138,7 @@ with_triple_store(Triple_Store, _Goal) :-
     !,
     instantiation_error(Triple_Store).
 with_triple_store(Triple_Store, Goal) :-
-    setup_call_cleanup(local_triple_store(Triple_Store),
+    setup_call_cleanup(set_local_triple_store(Triple_Store),
                        Goal,
                        retract_local_triple_store(Triple_Store)).
 

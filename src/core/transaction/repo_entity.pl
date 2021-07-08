@@ -44,12 +44,13 @@ repository_name_uri(Askable, Repo_Name, Repo_Uri) :-
 
 repository_type(Askable, Repo_Name, Type) :-
     repository_name_uri(Askable, Repo_Name, Repo_Uri),
-    once(ask(Askable,
-             (   opt((t(Repo_Uri, rdf:type, '@schema':'Local'),
-                      Type = local)),
-                 opt((t(Repo_Uri, rdf:type, '@schema':'Remote'),
-                      Type = remote))))),
-    ground(Type).
+    (   ask(Askable,
+            t(Repo_Uri, rdf:type, '@schema':'Local'))
+    ->  Type = local
+    ;   ask(Askable,
+            t(Repo_Uri, rdf:type, '@schema':'Remote'))
+    ->  Type = remote
+    ).
 
 repository_head(Askable, Repo_Name, Layer_Id) :-
     repository_name_uri(Askable, Repo_Name, Repo_Uri),

@@ -175,7 +175,7 @@ setup_unattached_store(Store-Dir) :-
 
 setup_temp_store(Store-Dir) :-
     setup_unattached_store(Store-Dir),
-    local_triple_store(Store).
+    set_local_triple_store(Store).
 
 teardown_unattached_store(_Store-Dir) :-
     delete_directory_and_contents(Dir).

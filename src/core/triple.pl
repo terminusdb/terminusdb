@@ -102,6 +102,7 @@
               triple_store/1,
               global_triple_store/1,
               local_triple_store/1,
+              set_local_triple_store/1,
               retract_local_triple_store/1,
               default_triple_store/1,
               memory_triple_store/1,
@@ -112,7 +113,6 @@
               update_turtle_graph/2,
               insert_turtle_graph/2,
               dump_turtle_graph/2,
-              dump_md/2,
 
               % upgrade_db.pl
               get_db_version/1,
