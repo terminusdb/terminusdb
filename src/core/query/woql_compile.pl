@@ -1735,7 +1735,7 @@ filter_transaction_object_read_write_objects(type_filter{ types : Types}, Transa
     ->  Schema_Objects = Transaction_Object.schema_objects
     ;   Schema_Objects = []),
     append([Instance_Objects,Schema_Objects],Read_Write_Objects).
-filter_transaction_object_read_write_objects(type_name_filter{ type : Type, names : _}, Transaction_Object, Objs) :-
+filter_transaction_object_read_write_objects(type_name_filter{ type : Type}, Transaction_Object, Objs) :-
     (   Type = instance
     ->  Objs = Transaction_Object.instance_objects
     ;   Type = schema
@@ -1750,12 +1750,12 @@ filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object,
     ;   Search_2 = []),
     append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
-filter_transaction_object_goal(type_name_filter{ type : instance , names : _Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, t(XE, PE, YE), Goal) :-
     Goal = xrdf((Transaction_Object.instance_objects), XE, PE, YE).
-filter_transaction_object_goal(type_name_filter{ type : schema , names : _Names}, Transaction_Object, t(XE, PE, YE), Goal) :-
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, t(XE, PE, YE), Goal) :-
     Goal = xrdf((Transaction_Object.schema_objects), XE, PE, YE).
 
-filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name]},Transaction,Graph_Descriptor) :-
+filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
     ->  Objects = Transaction.instance_objects
     ;   Type = schema
@@ -1764,13 +1764,13 @@ filter_transaction_graph_descriptor(type_name_filter{ type : Type, names : [Name
     Graph_Descriptor = Found.get(descriptor).
 
 filter_transaction(type_filter{ types : _Types }, Transaction, Transaction).
-filter_transaction(type_name_filter{ type : instance, names : _Names}, Transaction, New_Transaction) :-
+filter_transaction(type_name_filter{ type : instance}, Transaction, New_Transaction) :-
     New_Transaction = transaction_object{
                           parent : (Transaction.parent),
                           instance_objects : (Transaction.instance_objects),
                           schema_objects : (Transaction.schema_objects)
                       }.
-filter_transaction(type_name_filter{ type : schema, names : _Names}, Transaction, New_Transaction) :-
+filter_transaction(type_name_filter{ type : schema}, Transaction, New_Transaction) :-
     New_Transaction = transaction_object{
                           parent : Transaction.parent,
                           instance_objects : [],

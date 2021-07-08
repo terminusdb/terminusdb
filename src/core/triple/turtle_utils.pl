@@ -1,5 +1,5 @@
 :- module(turtle_utils,[
-              graph_to_turtle/3,
+              graph_to_turtle/4,
               update_turtle_graph/2,
               insert_turtle_graph/2,
               dump_turtle_graph/2
@@ -123,24 +123,50 @@ dump_turtle_graph(Context,String) :-
     [Transaction_Object] = (Context.transaction_objects),
     filter_transaction_object_read_write_objects(Graph_Filter, Transaction_Object, [Graph]),
 
+    Prefixes = (Context.prefixes),
+
+    (   (Graph.descriptor.type) = instance,
+        get_dict('@base',Prefixes,Instance_Base_String)
+    ->  atom_string(Instance_Base,Instance_Base_String),
+        Base = [base(Instance_Base)],
+        ignore(
+            (   get_dict('@schema',Prefixes,Schema_Base_String),
+                Prefixes2 = (Prefixes.put('scm',Schema_Base_String))
+            )
+        )
+    ;   (Graph.descriptor.type) = schema,
+        get_dict('@schema',Prefixes,Schema_Base_String)
+    ->  atom_string(Schema_Base,Schema_Base_String),
+        Base = [base(Schema_Base)],
+        ignore(
+            (   get_dict('@base',Prefixes,Instance_Base_String),
+                Prefixes2 = (Prefixes.put('doc',Instance_Base_String))
+            )
+        )
+    ;   Base = [],
+        Prefixes = Prefixes2
+    ),
+
     with_output_to(
         string(String),
         (   current_output(Stream),
-            dict_pairs(Context.prefixes, _, Pairs),
-            graph_to_turtle(Pairs, Graph, Stream)
+            dict_pairs(Prefixes2, _, Pairs),
+            exclude([X-_]>>member(X,['@schema','@base','@type']), Pairs, Prefix_String_List),
+            maplist([P-V,P-A]>>atom_string(A,V), Prefix_String_List, Prefix_List),
+            graph_to_turtle(Base, Prefix_List, Graph, Stream)
         )
     ).
 
 /**
- * graph_to_turtle(+Prefixes,+G,+Output_Stream) is det.
+ * graph_to_turtle(+Base,+Prefixes,+G,+Output_Stream) is det.
  *
  * Create a ttl representation of the graph G in the
  * database named N.
  */
-graph_to_turtle(Prefixes,G,Out_Stream) :-
+graph_to_turtle(Base,Prefixes,G,Out_Stream) :-
     (   var(G.read)
     ->  true
-    ;   layer_to_turtle(G.read,Prefixes,Out_Stream)).
+    ;   layer_to_turtle(G.read,Base,Prefixes,Out_Stream)).
 
 /**
  * turtle_triples(Layer,Graph,X,P,Y) is nondet.
@@ -152,12 +178,12 @@ turtle_triples(Layer,X,P,Y,_) :-
     ;   Y = YO).
 
 /**
- * layer_to_turtle(Layer,Prefixes,Out_Stream) is det.
+ * layer_to_turtle(Layer,Base,Prefixes,Out_Stream) is det.
  *
  * Write out triples from Layer to Out_Stream, using turtle_triples/5
  * as the generator, with prefixes, Prefixes.
  */
-layer_to_turtle(Layer,Prefixes,Out_Stream) :-
+layer_to_turtle(Layer,Base,Prefixes,Out_Stream) :-
    rdf_save_canonical_turtle(
         Out_Stream,
         [prefixes(Prefixes),
@@ -166,6 +192,7 @@ layer_to_turtle(Layer,Prefixes,Out_Stream) :-
          inline_bnodes(true),
          group(true),
          indent(2),
-         silent(true)]
+         silent(true)
+         |Base]
     ).
 

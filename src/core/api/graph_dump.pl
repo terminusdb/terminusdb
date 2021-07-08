@@ -14,8 +14,7 @@ graph_dump(System_DB, Auth, Path, Format, String) :-
         Descriptor,
         _{ system : System_DB,
            authorization : Auth,
-           filter : type_name_filter{ type: (Graph.type),
-                                      names : [Graph.name]}},
+           filter : type_name_filter{ type: (Graph.type)}},
         Context),
 
     assert_read_access(Context),
@@ -34,14 +33,14 @@ test(worlds_graph, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "test"))),
          cleanup(teardown_temp_store(State)),
-         fixme(document_refactor)
+         fixme('no longer use the same ontology as the world.ttl can support')
      ]) :-
 
     expand_file_search_path(test('world.ttl'), File),
     read_file_to_string(File, String, []),
     super_user_authority(Auth),
     System_DB = system_descriptor{},
-    Path = "admin/test/local/branch/main/instance/main",
+    Path = "admin/test/local/branch/main/instance",
     Commit_Info = commit_info{ author : "Me", message : "none" },
     Format = "turtle",
     graph_insert(System_DB, Auth, Path, Commit_Info, Format, String),

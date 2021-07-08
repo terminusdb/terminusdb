@@ -109,7 +109,7 @@
               with_triple_store/2,
 
               % turtle_utils.pl
-              graph_to_turtle/3,
+              graph_to_turtle/4,
               update_turtle_graph/2,
               insert_turtle_graph/2,
               dump_turtle_graph/2,

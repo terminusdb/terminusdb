@@ -1,0 +1,79 @@
+@base <terminusdb://system/data/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix scm: <http://terminusdb.com/schema/system#> .
+@prefix woql: <http://terminusdb.com/schema/woql#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
+@prefix sys: <http://terminusdb.com/schema/sys#> .
+@prefix api: <http://terminusdb.com/schema/api#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<UserDatabase_bar>
+  a scm:UserDatabase ;
+  scm:comment "a test db" ;
+  scm:label "test" ;
+  scm:name "bar" ;
+  scm:state scm:DatabaseState_finalized .
+
+<UserDatabase_foo>
+  a scm:UserDatabase ;
+  scm:comment "a test db" ;
+  scm:label "test" ;
+  scm:name "foo" ;
+  scm:state scm:DatabaseState_finalized .
+
+<admin>
+  a scm:User ;
+  scm:capability <server_access> ;
+  scm:key_hash "fake" ;
+  scm:name "admin" .
+
+<admin_organization>
+  a scm:Organization ;
+  scm:database <UserDatabase_bar> ,
+               <UserDatabase_foo> ,
+               <system> ;
+  scm:name "admin" .
+
+<admin_role>
+  a scm:Role ;
+  scm:action scm:Action_branch ,
+             scm:Action_class_frame ,
+             scm:Action_clone ,
+             scm:Action_commit_read_access ,
+             scm:Action_commit_write_access ,
+             scm:Action_create_database ,
+             scm:Action_delete_database ,
+             scm:Action_fetch ,
+             scm:Action_instance_read_access ,
+             scm:Action_instance_write_access ,
+             scm:Action_manage_capabilities ,
+             scm:Action_meta_read_access ,
+             scm:Action_meta_write_access ,
+             scm:Action_push ,
+             scm:Action_rebase ,
+             scm:Action_schema_read_access ,
+             scm:Action_schema_write_access ;
+  scm:name "Admin Role" .
+
+<anonymous>
+  a scm:User ;
+  scm:name "anyonymous" .
+
+<consumer_role>
+  a scm:Role ;
+  scm:action scm:Action_class_frame ,
+             scm:Action_instance_read_access ,
+             scm:Action_schema_read_access ;
+  scm:name "Consumer Role" .
+
+<server_access>
+  a scm:Capability ;
+  scm:role <admin_role> ;
+  scm:scope <admin_organization> .
+
+<system>
+  a scm:SystemDatabase ;
+  scm:name "_system" .

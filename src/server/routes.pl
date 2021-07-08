@@ -555,7 +555,7 @@ test(triples_get, [
          fixme(document_refactor)
      ])
 :-
-    atomic_list_concat([Server, '/api/triples/_system/schema/main'], URI),
+    atomic_list_concat([Server, '/api/triples/_system/schema'], URI),
     admin_pass(Key),
     http_get(URI, In, [json_object(dict),
                        authorization(basic(admin, Key))]),
@@ -1792,8 +1792,7 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 
 test(pack_stuff, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
     add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_',foo),
@@ -1852,8 +1851,7 @@ test(pack_stuff, [
 
 test(pack_nothing, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
     add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_','foo'),
