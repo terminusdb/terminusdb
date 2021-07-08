@@ -258,6 +258,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(document)).
 
 :- use_module(db_create).
 :- use_module(db_branch).
@@ -265,8 +266,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Master_Path = "admin/foo",
@@ -330,8 +330,7 @@ test(rebase_fast_forward,
 test(rebase_fast_forward_from_commit,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Master_Path = "admin/foo",
@@ -403,8 +402,7 @@ test(rebase_fast_forward_from_commit,
 test(rebase_divergent_history,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)
+      cleanup(teardown_temp_store(State))
      ])
 :-
     Master_Path = "admin/foo",
@@ -484,29 +482,22 @@ test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema("admin","test"))),
       cleanup(teardown_temp_store(State)),
-      fixme(document_refactor),
       throws(error(rebase_commit_application_failed(schema_validation_error(Failure_Commit_Id,_),[Failure_Commit_Id]), _))
      ])
 :-
     Master_Path = "admin/test",
     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
-    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1_),
-    context_extend_prefixes(Master_Context1_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context1),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    City_Uri_String = "Dublin",
 
-    Object = _{'@type': "worldOnt:City",
-               'worldOnt:name': _{'@type' : "xsd:string",
-                                  '@value' : "Dublin"
-                                 }
-             },
+    Document = _{'@type': "City",
+                 '@id' : City_Uri_String,
+                 'name': "Dublin"
+                },
     with_transaction(Master_Context1,
-                     ask(Master_Context1,
-                         update_object(Object)),
-                    _),
-    create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context2_),
-    context_extend_prefixes(Master_Context2_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context2),
-
-    once(ask(Master_Context2, t(City_Uri, worldOnt:name, "Dublin"^^xsd:string))),
-    format(string(City_Uri_String), "~w", [City_Uri]),
+                     insert_document(Master_Context1,Document,_),
+                     _
+                    ),
 
     Repository_Descriptor = (Master_Descriptor.repository_descriptor),
 
@@ -519,17 +510,13 @@ test(rebase_conflicting_history_errors,
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit b"}, Master_Context3_),
     context_extend_prefixes(Master_Context3_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Master_Context3),
 
-    Object2 = _{'@type': "worldOnt:City",
-               '@id': City_Uri_String,
-               'worldOnt:name': _{'@type' : "xsd:string",
-                                  '@value' : "Dubhlinn"
-                                 }
-             },
+    Document2 = _{'@type': "City",
+                  '@id': City_Uri_String,
+                  'name': "Dubhlinn"
+                 },
 
     with_transaction(Master_Context3,
-                     ask(Master_Context3,
-                         update_object(Object2)
-                         ),
+                     replace_document(Master_Context3,Document2),
                      _),
 
     branch_head_commit(Repository_Descriptor, "main", Failure_Commit_Uri),
@@ -539,17 +526,14 @@ test(rebase_conflicting_history_errors,
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context_),
     context_extend_prefixes(Second_Context_, _{worldOnt: "http://example.com/schema/worldOntology#"}, Second_Context),
 
-    Object3 = _{'@type': "worldOnt:City",
-               '@id': City_Uri_String,
-               'worldOnt:name': _{'@type' : "xsd:string",
-                                  '@value' : "Baile Átha Cliath"
-                                 }
-             },
+    Document3 = _{'@type': "City",
+                  '@id': City_Uri_String,
+                  'name': "Baile Átha Cliath"
+                 },
 
     with_transaction(Second_Context,
-                     ask(Second_Context,
-                         update_object(Object3)),
-                    _),
+                     replace_document(Second_Context,Document3),
+                     _),
 
     % rebase time!
     super_user_authority(Auth),
@@ -608,8 +592,8 @@ test(rebase_with_new_graph,
 test(rebase_fast_forward_from_nothing,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)])
+      cleanup(teardown_temp_store(State))
+     ])
 :-
     Main_Path = "admin/foo",
     Second_Path = "admin/foo/local/branch/second",
@@ -646,7 +630,7 @@ test(rebase_fast_forward_from_nothing,
     atomic_list_concat(['admin/foo/local/commit/',Commit_Id2], Commit_Path),
 
     rebase_on_branch(system_descriptor{}, Auth, Main_Path, Commit_Path, "rebaser",  [], Optional_Common_Commit_Id, Their_Applied_Commit_Ids, []),
-    Optional_Common_Commit_Id = none,
+    Optional_Common_Commit_Id = some(_Schema_Commit),
     [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
 
 :- end_tests(rebase).

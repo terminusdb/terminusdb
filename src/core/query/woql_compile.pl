@@ -476,18 +476,18 @@ partition(delete(A,B,C,D), Reads, Writes) :-
     !,
     Reads = [],
     Writes = [delete(A,B,C,D)].
-partition(update_object(A,B), Reads, Writes) :-
+partition(replace_document(A,B), Reads, Writes) :-
     !,
     Reads = [],
-    Writes = [update_object(A,B)].
-partition(update_object(A,B,C), Reads, Writes) :-
+    Writes = [replace_document(A,B)].
+partition(replace_document(A,B,C), Reads, Writes) :-
     !,
     Reads = [],
-    Writes = [update_object(A,B,C)].
-partition(delete_object(A), Reads, Writes) :-
+    Writes = [replace_document(A,B,C)].
+partition(delete_document(A), Reads, Writes) :-
     !,
     Reads = [],
-    Writes = [delete_object(A)].
+    Writes = [delete_document(A)].
 partition(T,[T],[]) :-
     /* Everything else should be read only
      * Note: A bit more energy here would remove the default case and need for cuts.
@@ -906,9 +906,17 @@ compile_wf(replace_document(Doc),(
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
-compile_wf(replace_document(X,Doc),(
+compile_wf(replace_document(Doc,X),(
                freeze(Guard,
                       replace_document(S0, DocE, URI)))) -->
+    assert_write_access,
+    resolve(X,URI),
+    resolve(Doc,DocE),
+    view(update_guard, Guard),
+    peek(S0).
+compile_wf(insert_document(Doc,X),(
+               freeze(Guard,
+                      insert_document(S0, DocE, URI)))) -->
     assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
