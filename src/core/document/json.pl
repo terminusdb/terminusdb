@@ -4937,7 +4937,8 @@ test(insert_employee, [
              )),
          cleanup(
              teardown_temp_store(State)
-         )
+         ),
+         blocked(unable_to_do_lexical_subdocuments)
      ]) :-
 
     D1 = _{'@type': "Country",
@@ -4963,18 +4964,13 @@ test(insert_employee, [
         Context,
         (
             insert_document(Context, D1, ID1),
-            writeq(ID1),nl,
             insert_document(Context, D2, ID2),
-            writeq(ID2),nl,
-            insert_document(Context, D3, ID3),
-            writeq(ID3)
+            insert_document(Context, D3, ID3)
         ),
         _),
 
-    get_document(Desc, ID1, JSON1),
+    get_document(Desc, ID1, _JSON1),
     get_document(Desc, ID2, _JSON2),
-    get_document(Desc, ID3, _JSON3),
-
-    print_term(JSON1,[]).
+    get_document(Desc, ID3, _JSON3).
 
 :- end_tests(employee_documents).

@@ -29,7 +29,7 @@ clone_cleanup_required(remote_pack_unpexected_failure(_)).
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,3,-).
 clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
     % Create DB
-    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, Public, _{}, Db_Uri),
+    create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{}, Db_Uri),
 
     open_descriptor(system_descriptor{}, System_DB2),
 

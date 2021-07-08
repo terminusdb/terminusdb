@@ -24,8 +24,6 @@
               literal_expand/2,
               default_prefixes/1,
 
-              % inference.pl
-              inferredEdge/4,
 
               % jsonld.pl
               expand/2,
@@ -87,7 +85,6 @@
           ]).
 
 :- use_module(query/expansions).
-:- use_module(query/inference).
 :- use_module(query/jsonld).
 :- use_module(query/json_woql).
 :- use_module(query/ask).

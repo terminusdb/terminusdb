@@ -14,7 +14,6 @@
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(inference).
 :- use_module(jsonld).
 :- use_module(json_woql).
 % We may need to patch this in again...
@@ -1769,22 +1768,13 @@ filter_transaction(type_name_filter{ type : instance, names : _Names}, Transacti
     New_Transaction = transaction_object{
                           parent : (Transaction.parent),
                           instance_objects : (Transaction.instance_objects),
-                          inference_objects : (Transaction.inference_objects),
                           schema_objects : (Transaction.schema_objects)
                       }.
 filter_transaction(type_name_filter{ type : schema, names : _Names}, Transaction, New_Transaction) :-
     New_Transaction = transaction_object{
                           parent : Transaction.parent,
                           instance_objects : [],
-                          inference_objects : [],
                           schema_objects : (Transaction.schema_objects)
-                      }.
-filter_transaction(type_name_filter{ type : inference, names : _Names}, Transaction, New_Transaction) :-
-    New_Transaction = transaction_object{
-                          parent : Transaction.parent,
-                          instance_objects : [],
-                          inference_objects : (Transaction.inference_objects),
-                          schema_objects : []
                       }.
 
 :- begin_tests(woql).
@@ -3427,7 +3417,7 @@ test(ast_when_test, [
     findall(t(X,P,Y),
             ask(Descriptor, t(X, P, Y)),
             Triples),
-    writeq(Triples),
+
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
 
 test(ast_when_update, [
@@ -4548,7 +4538,8 @@ test(gyear_cast, [
 test(schema_prefix, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Need to process Using prefixes')
      ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),

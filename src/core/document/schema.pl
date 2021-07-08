@@ -1,4 +1,5 @@
 :- module('document/schema', [
+              is_system_class/1,
               refute_schema/2,
               is_enum/2,
               is_simple_class/2,
@@ -30,11 +31,6 @@
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(json). % This feels very circular.
-
-check_schema :-
-    (   schema_not_wf(Witness)
-    ->  throw(error(schema_check_failure(Witness), _))
-    ;   true).
 
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
@@ -422,7 +418,7 @@ refute_list(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:first, _Car),
     xrdf(Schema, Type, rdf:rest, Cdr),
-    refute_list(Cdr, Witness).
+    refute_list(Validation_Object, Cdr, Witness).
 
 refute_simple_class(Validation_Object,Class,_Witness) :-
     is_simple_class(Validation_Object,Class),

@@ -8,9 +8,9 @@
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),
-    inference:inferredEdge(X,P,Y,Transaction_Object).
+    xrdf(Transaction_Object,X,P,Y).
 hop(type_name_filter{ type : instance , names : _Names}, X, P, Y, Transaction_Object) :-
-    inference:inferredEdge(X,P,Y,Transaction_Object).
+    xrdf(Transaction_Object,X,P,Y).
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(schema,Types),
     xrdf(Transaction_Object.schema_objects, X, P, Y).
