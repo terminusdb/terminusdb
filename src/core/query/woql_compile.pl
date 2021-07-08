@@ -2333,53 +2333,6 @@ test(named_get_two, [
       'Start_Time':_{'@type':'xsd:string',
                      '@value':"2011-01-01 00:01:29"}} :< Res.
 
-
-test(turtle_get, [
-         setup((setup_temp_store(State),
-                create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
-     ]
-    )
-:-
-    terminus_path(Path),
-    atomic_list_concat([Path,'/terminus-schema/system_schema.owl.ttl'], File),
-    Query =
-    _{
-        '@type': "woql:Get",
-        'woql:as_vars': [
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{ '@type' : "xsd:integer",
-                              '@value' : 0},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "First"}},
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{ '@type' : "xsd:integer",
-                              '@value' : 1},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Second"}},
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{ '@type' : "xsd:integer",
-                              '@value' : 2},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Third"}}],
-        'woql:query_resource':
-        _{ '@type': "woql:FileResource",
-           'woql:format' : _{'@type' : "woql:Format",
-                             'woql:format_type' : _{'@type' : "xsd:string",
-                                                    '@value' : "turtle"}},
-           'woql:file': _{'@type': "xsd:string",
-                          '@value': File }
-         }
-    },
-
-    query_test_response_test_branch(Query, JSON),
-    ['First','Second','Third'] = (JSON.'api:variable_names'),
-    [One|_] = (JSON.'bindings'),
-
-    One = _{'First':'http://terminusdb.com/schema/system',
-            'Second':'rdf:type',
-            'Third':'owl:Ontology'}.
-
 test(concat, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3466,7 +3419,7 @@ test(ast_when_test, [
     findall(t(X,P,Y),
             ask(Descriptor, t(X, P, Y)),
             Triples),
-
+    writeq(Triples),
     Triples = [t(a,b,c),t(a,b,d),t(a,b,e),t(e,f,c),t(e,f,d),t(e,f,e)].
 
 test(ast_when_update, [
