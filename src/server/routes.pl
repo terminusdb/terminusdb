@@ -99,7 +99,7 @@ test(connection_authorized_user_jwt, [
          cleanup(teardown_temp_server(State))
      ]) :-
     atomic_list_concat([Server, '/api'], URL),
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
+    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.FMQtO1JS5QHoaOMDzex-zO-PNN6mG4Mqj1kEb-W0k-8J8qvETDIp-vq4vOBZV1OEtF6mxffwNdoZU7_xpL9yZujomRtWRM21CGVUyM1OO3mwsPRpCwbxAM3wCuzo-P7XEVirOJrMjBfx92-XjDxSJ3iJb6bcDuySM_uCLBMjO8e0ne6jczvTuihJg1tUjYfzlH2d0ULGeAQ8BHPwq8D4j7IeYEsKg4CMgL_oIb71zbJfRmEhwtnLfg3FGreLl-kJUCz0EeRxgv9HUS-DUi-nshTm5dhgEllM8I9F6j9AJC9AG0ld94hVR-yvfR3sjP9O10eBK4PT_eAw5tqCLV_wVw',
     http_get(URL, _, [authorization(bearer(Bearer))]).
 
 test(connection_unauthorized_user_jwt, [
@@ -3970,7 +3970,7 @@ fetch_jwt_data(Token, Username) :-
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
             % replace with dict key get (or whatever it is called)
-            get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
+            get_dict('sub', PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
         error(malformed_jwt_payload(Payload))).
 :- else.
