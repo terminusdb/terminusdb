@@ -718,7 +718,7 @@ resolve_filter(Filter_String,Filter) :-
     atom_string(Type,Filter_String),
     (   Type = '*'
     ->  Filter = type_filter{ types : [instance,schema] }
-    ;   Filter = type_name_filter{ type : Type, names: ["main"] }).
+    ;   Filter = type_name_filter{ type : Type }).
 
 :- begin_tests(resolution).
 

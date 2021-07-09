@@ -736,8 +736,7 @@ transaction_to_map(Transaction, Map_In, Map_Out) :-
  */
 collection_descriptor_graph_filter_graph_descriptor(
     system_descriptor{},
-    type_name_filter{ type : Type,
-                      names : [_Name]},
+    type_name_filter{ type : Type},
     system_graph{ type: Type}) :-
     !.
 collection_descriptor_graph_filter_graph_descriptor(
@@ -750,7 +749,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         organization_name: Organization,
         database_name : DB_Name
     },
-    type_name_filter{ type : Type, names : [_Name]},
+    type_name_filter{ type : Type},
     repo_graph{ organization_name: Organization,
                 database_name : DB_Name,
                 type : Type }) :-
@@ -773,7 +772,7 @@ collection_descriptor_graph_filter_graph_descriptor(
                               },
         repository_name : Repo_Name
     },
-    type_name_filter{ type : Type, names : [_Name]},
+    type_name_filter{ type : Type},
     commit_graph{ organization_name: Organization,
                   database_name : DB_Name,
                   repository_name : Repo_Name,
@@ -806,7 +805,7 @@ collection_descriptor_graph_filter_graph_descriptor(
         },
         branch_name : Branch_Name
     },
-    type_name_filter{ type : Type , names : [_Name]},
+    type_name_filter{ type : Type},
     branch_graph{ organization_name: Organization,
                   database_name : DB_Name,
                   repository_name : Repository_Name,
@@ -835,11 +834,9 @@ collection_descriptor_graph_filter_graph_descriptor(
     !.
 collection_descriptor_graph_filter_graph_descriptor(
     Label_Descriptor,
-    type_name_filter{ type : Type,
-                      names : [Name]},
+    type_name_filter{ type : Type },
     labelled_graph{ label: Label,
-                    type: Type,
-                    name : Name}) :-
+                    type: Type }) :-
     label_descriptor{} :< Label_Descriptor,
     get_dict(Type,Label_Descriptor,Label).
 
