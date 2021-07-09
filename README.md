@@ -79,7 +79,7 @@ you to use a pythonic syntax to query the database.
 
 In order to use your TerminusDB through the console rather than
 directly through clients, you should look at the documentation on our
-[TerminusDB documentation](https://terminusdb.com/documentation/) website.
+[TerminusDB documentation](https://terminusdb.github.io/terminusdb/) website.
 
 ## Community
 
