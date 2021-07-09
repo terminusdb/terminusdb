@@ -521,7 +521,8 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 
 test(triples_update, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         fixme(document_refactor)
      ])
 :-
     create_db_without_schema(admin, 'TEST_DB'),

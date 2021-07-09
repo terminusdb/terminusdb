@@ -5,6 +5,7 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+:- use_module(core(document)).
 
 get_prefixes(Path, System_DB, Auth, JSON) :-
 
@@ -14,7 +15,7 @@ get_prefixes(Path, System_DB, Auth, JSON) :-
 
     check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
 
-    collection_descriptor_prefixes(Descriptor, Prefixes),
+    database_context(Descriptor,Prefixes),
 
     JSON = _{'@context' : Prefixes}.
 
@@ -28,16 +29,17 @@ test(get_prefixes,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")
             )),
-      cleanup(teardown_temp_store(State)),
-      fixme(document_refactor)]
+      cleanup(teardown_temp_store(State))]
     ) :-
 
     Path = "admin/testdb",
 
     super_user_authority(Auth),
     get_prefixes(Path,system_descriptor{},Auth,Prefixes),
+
     Result = (Prefixes.'@context'),
-    _{doc:'http://somewhere.for.now/document/',
-      scm:'http://somewhere.for.now/schema#'} :< Result.
+    _{'@base':"http://somewhere.for.now/document/",
+      '@schema':"http://somewhere.for.now/schema#",
+      '@type':'Context'} :< Result.
 
 :- end_tests(api_prefixes).
