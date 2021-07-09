@@ -517,22 +517,29 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+:- use_module(core(document)).
 
 test(triples_update, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema(admin, 'TEST_DB'),
-
+    terminus_path(Path),
+    interpolate([Path, '/terminus-schema/system_instance.ttl'], TTL_File),
+    interpolate([Path, '/terminus-schema/system_schema.json'], Schema_TTL_File),
+    open(Schema_TTL_File, read, Stream),
+    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
+    create_context(Branch_Descriptor, commit_info{ author: "me", message: "something"}, Ctx),
+    with_transaction(Ctx,
+                     replace_json_schema(Ctx,Stream),
+                     _),
+    close(Stream),
     % We actually have to create the graph before we can post to it!
     % First make the schema graph
-    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
 
-    terminus_path(Path),
-    interpolate([Path, '/terminus-schema/system_schema.owl.ttl'], TTL_File),
     read_file_to_string(TTL_File, TTL, []),
+
     atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/schema'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
