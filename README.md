@@ -34,7 +34,7 @@ Data collaboration is facilitated through [TerminusHub](https://terminusdb.com/h
 
 ## Getting Started
 
-We encourage you to read our [Quick Start](https://terminusdb.com/docs/quickstart/) guide to better understand how to get started with TerminusDB.
+We encourage you to read our [Quick Start](https://terminusdb.com/docs/terminushub/quickstart/) guide to better understand how to get started with TerminusDB.
 
 Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download).
 
@@ -70,7 +70,7 @@ help you get started:
 The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programmatic access.
 
-The [TerminusDB Console](https://github.com/terminusdb/terminusdb-dashboard) allows low-code manipulation of the database.
+The [TerminusDB Console](https://github.com/terminusdb/terminusdb-console) allows low-code manipulation of the database.
 
 The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allows
 you to use a pythonic syntax to query the database.
