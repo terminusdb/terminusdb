@@ -1,6 +1,6 @@
 # Debian and Ubuntu
 
-Debian and Ubuntu users can also install our deb repo. It needs the Bintray gpg key to be
+Debian and Ubuntu users can also install our deb repo. It needs the JFrog GPG key to be
 imported first.
 
 ```
