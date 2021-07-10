@@ -27,7 +27,7 @@
 <admin>
   a scm:User ;
   scm:capability <server_access> ;
-  scm:key_hash "fake" ;
+  scm:key_hash "fake"^^xsd:string ;
   scm:name "admin" .
 
 <admin_organization>

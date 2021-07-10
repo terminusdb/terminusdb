@@ -521,8 +521,7 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 
 test(triples_update, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema(admin, 'TEST_DB'),
@@ -541,26 +540,35 @@ test(triples_update, [
 
     read_file_to_string(TTL_File, TTL, []),
 
-    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/schema'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/instance'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
                           turtle : TTL}),
               _In, [json_object(dict),
                     authorization(basic(admin, Key)),
+                    cert_verify_hook(cert_accept_any),
                     reply_header(_)]),
 
     findall(A-B-C,
             ask(Branch_Descriptor,
-                t(A, B, C, "schema/*")),
+                t(A, B, C, "schema")),
             Triples),
-    memberchk('http://terminusdb.com/schema/system'-(rdf:type)-(owl:'Ontology'), Triples).
+
+    memberchk('http://terminusdb.com/schema/system#Capability'-(rdf:type)-(sys:'Class'), Triples),
+
+
+    findall(A-B-C,
+            ask(Branch_Descriptor,
+                t(A, B, C)),
+            Triples2),
+
+    memberchk(system-(rdf:type)-'http://terminusdb.com/schema/system#SystemDatabase', Triples2).
 
 
 test(triples_get, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     atomic_list_concat([Server, '/api/triples/_system/schema'], URI),
@@ -570,41 +578,9 @@ test(triples_get, [
     string(In).
 
 
-test(triples_post_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    create_db_without_schema("admin", "Jumanji"),
-
-    TTL = "
-@prefix layer: <http://terminusdb.com/schema/layer#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-layer:LayerIdRestriction a owl:Restriction.",
-
-    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema'], URI),
-    admin_pass(Key),
-
-    http_post(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" },
-                          turtle : TTL}),
-              _In, [json_object(dict),
-                   authorization(basic(admin, Key))]),
-
-    http_get(URI, Result, [json_object(dict),
-                           authorization(basic(admin, Key))]),
-
-    once(sub_string(Result, _Before, _Length, _After,
-                    "layer:LayerIdRestriction\n  a owl:Restriction")).
-
-
-
 test(triples_put_two, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "Jumanji"),
@@ -615,9 +591,8 @@ test(triples_put_two, [
 
 layer:LayerIdRestriction a owl:Restriction.",
 
-    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/schema'], URI),
+    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/instance'], URI),
     admin_pass(Key),
-
 
     http_put(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
@@ -641,16 +616,15 @@ layer:LayerIdRestriction2 a owl:Restriction.",
                            authorization(basic(admin, Key))]),
 
     once(sub_string(Result, _, _, _,
-                    "layer:LayerIdRestriction\n  a owl:Restriction")),
+                    "LayerIdRestriction>\n  a owl:Restriction")),
 
     once(sub_string(Result, _, _, _,
-                    "layer:LayerIdRestriction2\n  a owl:Restriction")).
+                    "LayerIdRestriction2>\n  a owl:Restriction")).
 
 
 test(get_invalid_descriptor, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     atomic_list_concat([Server, '/api/triples/nonsense'], URI),
@@ -666,8 +640,7 @@ test(get_invalid_descriptor, [
 
 test(get_bad_descriptor, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
