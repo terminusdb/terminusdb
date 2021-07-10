@@ -8,6 +8,7 @@
               % descriptor.pl
               is_descriptor/1,
               is_transaction/1,
+              is_validation_object/1,
               open_read_write_obj/2,
               open_read_write_obj/4,
               open_descriptor/2,

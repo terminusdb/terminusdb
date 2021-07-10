@@ -1674,14 +1674,18 @@ run_replace_document(Desc, Commit, Document, Id) :-
         replace_document(Context, Document, Id),
         _).
 
-class_frame(Validation_Object, Class, Frame) :-
-    database_context(Validation_Object, DB_Prefixes),
+class_frame(Transaction, Class, Frame) :-
+    (   is_transaction(Transaction)
+    ;   is_validation_object(Transaction)
+    ),
+    !,
+    database_context(Transaction, DB_Prefixes),
     default_prefixes(Default_Prefixes),
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     findall(
         Predicate_Comp-Type,
-        (   class_predicate_type(Validation_Object, Class_Ex, Predicate, Type_Desc),
+        (   class_predicate_type(Transaction, Class_Ex, Predicate, Type_Desc),
             type_descriptor_json(Type_Desc, Prefixes, Type),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
@@ -1692,6 +1696,11 @@ class_frame(Validation_Object, Class, Frame) :-
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
+class_frame(Query_Context, Class, Frame) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    class_frame(TO, Class, Frame).
 
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
@@ -4395,7 +4404,8 @@ test(diamond_bad,
                           predicate:thing}]),_)
      ]) :-
 
-    write_schema5(Desc).
+    write_schema5(Desc),
+    print_all_documents(Desc, schema).
 
 
 :- end_tests(schema_checker).

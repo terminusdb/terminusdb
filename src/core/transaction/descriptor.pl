@@ -1,6 +1,7 @@
 :- module(descriptor,[
               is_descriptor/1,
               is_transaction/1,
+              is_validation_object/1,
               open_read_write_obj/2,
               open_read_write_obj/4,
               open_descriptor/2,
@@ -175,6 +176,10 @@ is_descriptor(Descriptor) :-
 is_transaction(Transaction) :-
     is_dict(Transaction),
     transaction_object{} :< Transaction.
+
+is_validation_object(VO) :-
+    is_dict(VO),
+    validation_object{} :< VO.
 
 graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
                                                                 descriptor: Descriptor,

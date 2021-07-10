@@ -16,13 +16,7 @@ api_class_frame(System_DB, Auth, Path, Class_Uri, Frame) :-
 
     assert_read_access(Context),
 
-    catch(
-        prefix_expand(Class_Uri, Context.prefixes, ClassEx),
-        error(key_has_unknown_prefix(K), _),
-        throw(error(class_uri_has_unknown_prefix(K),_))),
-
-    throw(error(unimplemented,_)),
-    do_or_die(class_frame_jsonld(Context,ClassEx,Frame),
+    do_or_die(class_frame(Context,Class_Uri,Frame),
               error(could_not_create_class_frame(Class_Uri))).
 
 api_filled_frame(System_DB, Auth, Path, Instance_Uri, Filled_Frame) :-

@@ -886,30 +886,36 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     nl,nl.
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path)),
+:- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 methods([options,post])]).
+                 methods([options,get,post])]).
 
 /**
  * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
  *
  * Establishes frame responses
  */
-frame_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Doc,Request),
+frame_handler(get, Path, Request, System_DB, Auth) :-
+    % TODO This possibly throws a json error, which gets reinterpreted
+    % as a schema check failure for some reason. gotta fix that.
+    (   json_content_type(Request),
+        memberchk(content_length(_), Request)
+    ->  http_read_data(Request, Posted, [json_object(dict)])
+    ;   Posted = _{}),
 
-    (   get_dict(class,Doc,Class_URI)
-    ->  api_report_errors(
-            frame,
-            Request,
-            api_class_frame(System_DB, Auth, Path, Class_URI, Frame))
-    ;   get_dict(instance,Doc,Instance_URI)
-    ->  api_report_errors(
-            frame,
-            Request,
-            api_filled_frame(System_DB, Auth, Path, Instance_URI, Frame))
-    ),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    (   get_dict(class, Posted, Class_Uri)
+    ->  true
+    ;   memberchk(class=Class_Uri, Search)),
+
+    api_report_errors(
+        frame,
+        Request,
+        api_class_frame(System_DB, Auth, Path, Class_Uri, Frame)),
 
     write_cors_headers(Request),
     reply_json(Frame).
@@ -922,8 +928,7 @@ frame_handler(post, Path, Request, System_DB, Auth) :-
 
 test(get_frame, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     atomic_list_concat([Server, '/api/frame/_system'], URI),
@@ -931,62 +936,24 @@ test(get_frame, [
     http_post(URI,
               json(_{ class : "User"
                     }),
-              JSON, [json_object(dict),
-                     authorization(basic(admin, Key))]),
-    _{'@type':"system:Frame"} :< JSON.
+              JSON,
+              [json_object(dict),
+               authorization(basic(admin,Key)),
+               request_header('X-HTTP-Method-Override'='GET')
+              ]),
+    JSON = _{
+               capability:_{
+                              '@class':"Capability",
+                              '@type':"Set"},
+               key_hash:_{
+                            '@class':"xsd:string",
+                            '@type':"Optional"
+                        },
+               name:"xsd:string"
+           }.
+%
+%    _{'@type':"system:Frame"} :< JSON.
 
-
-test(get_filled_frame, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    atomic_list_concat([Server, '/api/frame/_system'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ instance : "doc:admin"
-                    }),
-              JSON, [json_object(dict),
-                     authorization(basic(admin, Key))]),
-    _{'@type':"system:FilledFrame"} :< JSON.
-
-
-test(bad_path_filled_frame, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    atomic_list_concat([Server, '/api/frame/garbage'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ instance : "doc:admin"
-                    }),
-              JSON, [json_object(dict),
-                     authorization(basic(admin, Key)),
-                     status_code(Status)]),
-    \+ Status = 200,
-    JSON.'api:error'.'@type' = "api:BadAbsoluteDescriptor".
-
-
-test(unresolvable_path_filled_frame, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    atomic_list_concat([Server, '/api/frame/believable/garbage'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ instance : "doc:admin"
-                    }),
-              JSON, [json_object(dict),
-                     authorization(basic(admin, Key)),
-                     status_code(Status)]),
-
-    \+ Status = 200,
-    JSON.'api:error'.'@type' = "api:UnresolvableAbsoluteDescriptor".
 
 :- end_tests(frame_endpoint).
 
@@ -3540,6 +3507,11 @@ cors_handler(options, _Goal, _Options, Request) :-
     !,
     write_cors_headers(Request),
     format('~n').
+cors_handler(_Old_Method, Goal, Options, Request) :-
+    select(x_http_method_override(Method), Request, New_Request),
+    !,
+    downcase_atom(Method,Mapped),
+    cors_handler(Mapped, Goal, Options, New_Request).
 cors_handler(Method, Goal, Options, R) :-
     (   memberchk(Method, [post, put, delete]),
         \+ memberchk(add_payload(false), Options)
