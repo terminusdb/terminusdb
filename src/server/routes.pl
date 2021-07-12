@@ -659,7 +659,7 @@ test(get_bad_descriptor, [
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 methods([options,post,delete,get])]).
+                 methods([options,post,delete,get,put])]).
 
 ensure_json_header_written(Request, As_List, Header_Written) :-
     Header_Written = written(Written),
