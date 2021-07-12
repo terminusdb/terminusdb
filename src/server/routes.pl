@@ -907,7 +907,7 @@ test(get_frame, [
     atomic_list_concat([Server, '/api/schema/_system'], URI),
     admin_pass(Key),
     http_post(URI,
-              json(_{ class : "User"
+              json(_{ type : "User"
                     }),
               JSON,
               [json_object(dict),
