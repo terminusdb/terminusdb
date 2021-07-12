@@ -859,7 +859,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     nl,nl.
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(frame/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
+:- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,get,post])]).
@@ -881,9 +881,9 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     ->  true
     ;   Search = []),
 
-    (   get_dict(class, Posted, Class_Uri)
+    (   get_dict(type, Posted, Class_Uri)
     ->  true
-    ;   memberchk(class=Class_Uri, Search)),
+    ;   memberchk(type=Class_Uri, Search)),
 
     api_report_errors(
         frame,
@@ -904,7 +904,7 @@ test(get_frame, [
          cleanup(teardown_temp_server(State))
      ])
 :-
-    atomic_list_concat([Server, '/api/frame/_system'], URI),
+    atomic_list_concat([Server, '/api/schema/_system'], URI),
     admin_pass(Key),
     http_post(URI,
               json(_{ class : "User"
