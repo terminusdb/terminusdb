@@ -1439,6 +1439,10 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     ;   true
     ),
 
+    % TODO: if people submit garbage, this is the place we first encounter said garbage.
+    % If it's not valid json, or somewhat valid json but not json of the expected format, this will most likely give a very cryptic error.
+    % This error needs to be less cryptic.
+
     forall(
         context_triple(Context,t(S,P,O)),
         (
