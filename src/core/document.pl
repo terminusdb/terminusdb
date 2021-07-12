@@ -10,6 +10,7 @@
               json_schema_elaborate/3,
               context_triple/2,
               database_context/2,
+              insert_context_document/2,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
               write_json_stream_to_schema/2,

@@ -1,4 +1,4 @@
-:- module(api_prefixes, [get_prefixes/4]).
+:- module(api_prefixes, [get_prefixes/4, update_prefixes/5]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -15,9 +15,21 @@ get_prefixes(Path, System_DB, Auth, JSON) :-
 
     check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
 
-    database_context(Descriptor,Prefixes),
+    database_context(Descriptor,JSON).
 
-    JSON = _{'@context' : Prefixes}.
+update_prefixes(Path, System_DB, Auth, Commit_Info, Document) :-
+
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
+
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        insert_context_document(Context, Document),
+        _).
 
 :- begin_tests(api_prefixes).
 :- use_module(core(util/test_utils)).
@@ -37,9 +49,8 @@ test(get_prefixes,
     super_user_authority(Auth),
     get_prefixes(Path,system_descriptor{},Auth,Prefixes),
 
-    Result = (Prefixes.'@context'),
     _{'@base':"http://somewhere.for.now/document/",
       '@schema':"http://somewhere.for.now/schema#",
-      '@type':'Context'} :< Result.
+      '@type':'Context'} :< Prefixes.
 
 :- end_tests(api_prefixes).

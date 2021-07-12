@@ -75,6 +75,7 @@
 
               % api_prefixes
               get_prefixes/4,
+              update_prefixes/5,
 
               % api_db
               list_databases/3,
