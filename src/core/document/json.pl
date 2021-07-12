@@ -1776,7 +1776,7 @@ replace_schema_document(Transaction, Document, Id) :-
     !,
     (   get_dict('@id', Document, Id)
     ->  true
-    ;   throw(error(no_id_in_schema_document(Document)))
+    ;   throw(error(no_id_in_schema_document(Document), _))
     ),
 
     delete_schema_document(Transaction, Id),
