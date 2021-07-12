@@ -138,9 +138,9 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
 
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:commit_read_access, Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:schema_write_access, Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, system:instance_write_access, Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_commit_read_access', Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_schema_write_access', Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_instance_write_access', Auth),
 
     do_or_die(
         (branch_descriptor{} :< Our_Branch_Descriptor),
