@@ -2693,7 +2693,7 @@ test(create_graph, [
 
     _{'@base':"http://somewhere.for.now/document/",
       '@schema':"http://somewhere.for.now/schema#",
-      '@type':"Context"} :< (JSON.'@context').
+      '@type':"Context"} :< JSON.
 
 :- end_tests(prefixes_endpoint).
 
