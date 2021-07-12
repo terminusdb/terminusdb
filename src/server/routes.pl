@@ -1001,81 +1001,6 @@ test(db_not_there, [
       _{'@type' : "api:UnresolvableAbsoluteDescriptor",
         'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/main"}} :< JSON.
 
-test(indexed_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    Query =
-    _{'@type' : 'woql:Get',
-      'woql:as_vars' : [
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{'@type' : "xsd:integer",
-                             '@value' : 0},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "First"}},
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{'@type' : "xsd:integer",
-                             '@value' : 1},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Second"}}],
-      'woql:query_resource' :
-      _{'@type' : 'woql:RemoteResource',
-        'woql:remote_uri' : _{ '@type' : "xsd:anyURI",
-                               '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
-
-    atomic_list_concat([Server, '/api/woql'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{query : Query}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    writeq(JSON),
-    (   _{'bindings' : _} :< JSON
-    ->  true
-    ;   fail).
-
-test(named_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ])
-:-
-    Query =
-    _{'@type' : 'woql:Get',
-      'woql:as_vars' : [
-          _{'@type' : 'woql:NamedAsVar',
-            'woql:var_type' : _{ '@type' : "woql:Node",
-                                 'woql:node' : "xsd:integer"},
-            'woql:identifier' : _{ '@type' : "xsd:string",
-                                   '@value' : "Duration"},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Duration"}},
-          _{'@type' : 'woql:NamedAsVar',
-            'woql:identifier' : _{ '@type' : "xsd:string",
-                                   '@value' : "Bike number"},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Bike_Number"}}
-      ],
-      'woql:query_resource' :
-      _{'@type' : 'woql:RemoteResource',
-        'woql:remote_uri' : _{ '@type' : "xsd:anyURI",
-                               '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
-
-    atomic_list_concat([Server, '/api/woql'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{query : Query}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    [First|_] = JSON.bindings,
-    _{'Bike_Number':_{'@type':"http://www.w3.org/2001/XMLSchema#string",
-                      '@value':"W21477"},
-      'Duration':_{'@type':"http://www.w3.org/2001/XMLSchema#integer",
-                   '@value':790}} :< First.
-
 test(branch_db, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
@@ -1230,6 +1155,7 @@ test(clone_local, [
     atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
     base64("TERMINUSQA1:password1", Base64_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+
     http_post(URL,
               json(_{comment: "hai hello",
                      label: "bar",
@@ -1239,7 +1165,7 @@ test(clone_local, [
               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
                request_header('Authorization-Remote'=Authorization_Remote)]),
 
-    * json_write_dict(current_output, JSON, []),
+    json_write_dict(current_output, JSON, []),
 
     _{
         'api:status' : "api:success"
@@ -1285,6 +1211,7 @@ test(clone_remote, [
     atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
     base64("TERMINUSQA1:password1", Base64_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+
     http_post(URL,
               json(_{comment: "hai hello",
                      label: "bar",
@@ -2753,8 +2680,7 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
 
 test(create_graph, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     create_db_without_schema("admin", "test"),
@@ -2764,9 +2690,10 @@ test(create_graph, [
     http_get(URI,
              JSON,
              [json_object(dict),authorization(basic(admin,Key))]),
-    _{ doc:"http://somewhere.for.now/document/",
-       scm:"http://somewhere.for.now/schema#"
-     } :< (JSON.'@context').
+
+    _{'@base':"http://somewhere.for.now/document/",
+      '@schema':"http://somewhere.for.now/schema#",
+      '@type':"Context"} :< (JSON.'@context').
 
 :- end_tests(prefixes_endpoint).
 
@@ -2987,29 +2914,6 @@ test(squash_a_branch, [
 
     resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
     commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
-
-
-test(squash_empty_branch, [
-         setup((setup_temp_server(State, Server),
-                create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
-     ]) :-
-
-    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
-
-    Commit_Info = commit_info{
-                      author : "me",
-                      message: "Squash"
-                  },
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ commit_info: Commit_Info}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    JSON.'@type' = "api:EmptySquashResponse".
 
 :- end_tests(squash_endpoint).
 
