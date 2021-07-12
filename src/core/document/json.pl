@@ -1443,13 +1443,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     % If it's not valid json, or somewhat valid json but not json of the expected format, this will most likely give a very cryptic error.
     % This error needs to be less cryptic.
 
-    forall(
-        context_triple(Context,t(S,P,O)),
-        (
-            object_storage(O,OS),
-            nb_add_triple(Builder, S, P, OS)
-        )
-    ),
+    insert_into_builder_context_document(Builder, Context),
 
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
@@ -1706,6 +1700,22 @@ class_frame(Query_Context, Class, Frame) :-
     query_default_collection(Query_Context, TO),
     class_frame(TO, Class, Frame).
 
+insert_into_builder_context_document(Builder, Document) :-
+    forall(
+        context_triple(Document,t(S,P,O)),
+        (
+            object_storage(O,OS),
+            nb_add_triple(Builder, S, P, OS)
+        )
+    ).
+
+insert_context_document(Transaction, Document) :-
+    is_transaction(Transaction),
+    !,
+    database_schema(Transaction, [Schema]),
+    read_write_obj_builder(Schema, Builder),
+    insert_into_builder_context_document(Builder, Document).
+
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
@@ -1779,12 +1789,13 @@ replace_schema_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
     (   get_dict('@id', Document, Id)
-    ->  true
-    ;   throw(error(no_id_in_schema_document(Document), _))
-    ),
-
-    delete_schema_document(Transaction, Id),
-    insert_schema_document_unsafe(Transaction, Document).
+    ->  delete_schema_document(Transaction, Id),
+        insert_schema_document_unsafe(Transaction, Document)
+    ;   get_dict('@type', Document, "@context")
+    ->  delete_schema_document(Transaction, 'terminusdb://context'),
+        insert_context_document(Transaction, Document)
+    ;   throw(error(no_id_in_schema_document(Document),_))
+    ).
 replace_schema_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
     !,
