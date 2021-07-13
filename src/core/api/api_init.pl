@@ -182,7 +182,9 @@ initialize_system_instance(Store, Schema_Layer, Key, Force) :-
     system_instance_name(Instance_Name),
     (   Force = true
     ->  safe_delete_named_graph(Store, Instance_Name)
-    ;   throw(error(instance_graph_already_exists(system), _))),
+    ;   safe_named_graph_exists(Store, Instance_Name)
+    ->  throw(error(instance_graph_already_exists(system), _))
+    ;   true),
 
     Descriptor = layer_descriptor{ schema: Schema_Layer, variety: system_descriptor},
     open_descriptor(Descriptor, Transaction_Object),
